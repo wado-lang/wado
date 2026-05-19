@@ -175,10 +175,8 @@ fn "wado-compiler/tests/fixtures/pattern_match_non_exhaustive_keeps_fallback.wad
     let __local_28: ref "core:prelude/format.wado//Formatter";
     let __local_29: ref "core:prelude/string.wado//String";
     let __local_30: ref "core:prelude/format.wado//Formatter";
-    let self_37: ref "core:prelude/string.wado//String";
     let other_38: ref "core:prelude/string.wado//String";
     let len_a_39: i32;
-    let self_46: ref "core:prelude/string.wado//String";
     let other_47: ref "core:prelude/string.wado//String";
     let len_a_48: i32;
     let c_55: "wado-compiler/tests/fixtures/pattern_match_non_exhaustive_keeps_fallback.wado//enum:Color";
@@ -238,13 +236,12 @@ condition: guarded(0) matches { Ok(_) }
     __cond_2 = (if ref.is_null(__match_scrut_1) == 0 -> bool {
         e_1 = ref.as_non_null(__match_scrut_1);
         __inline_String_Eq__eq_4: block -> bool {
-            self_37 = e_1.message;
             other_38 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("suppressed"), used: 10 };
-            len_a_39 = self_37.used;
+            len_a_39 = e_1.message.used;
             if len_a_39 != other_38.used {
                 break __inline_String_Eq__eq_4: 0;
             }
-            break __inline_String_Eq__eq_4: "core:prelude/string.wado/String^Eq::eq_bytes"(self_37.repr, other_38.repr, len_a_39);
+            break __inline_String_Eq__eq_4: "core:prelude/string.wado/String^Eq::eq_bytes"(e_1.message.repr, other_38.repr, len_a_39);
             unreachable;
         };
     } else {
@@ -283,13 +280,12 @@ condition: guarded(50) matches { Err(e) && e.message == \"suppressed\" }
     __cond_4 = (if ref.is_null(__match_scrut_2) == 0 -> bool {
         e_3 = ref.as_non_null(__match_scrut_2);
         __inline_String_Eq__eq_9: block -> bool {
-            self_46 = e_3.message;
             other_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("boom"), used: 4 };
-            len_a_48 = self_46.used;
+            len_a_48 = e_3.message.used;
             if len_a_48 != other_47.used {
                 break __inline_String_Eq__eq_9: 0;
             }
-            break __inline_String_Eq__eq_9: "core:prelude/string.wado/String^Eq::eq_bytes"(self_46.repr, other_47.repr, len_a_48);
+            break __inline_String_Eq__eq_9: "core:prelude/string.wado/String^Eq::eq_bytes"(e_3.message.repr, other_47.repr, len_a_48);
             unreachable;
         };
     } else {

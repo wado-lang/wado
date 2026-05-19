@@ -287,17 +287,13 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"
 }
 
 fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Container^Eq::eq"(self, other) {
-    let self_2: ref "core:prelude/string.wado//String";
-    let other_3: ref "core:prelude/string.wado//String";
     let len_a: i32;
     return (if __inline_String_Eq__eq_0: block -> bool {
-        self_2 = self.label;
-        other_3 = other.label;
-        len_a = self_2.used;
-        if len_a != other_3.used {
+        len_a = self.label.used;
+        if len_a != other.label.used {
             break __inline_String_Eq__eq_0: 0;
         }
-        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(self_2.repr, other_3.repr, len_a);
+        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(self.label.repr, other.label.repr, len_a);
         unreachable;
     } -> i32 {
         "core:prelude/types.wado/Option<i32>^Eq::eq"(self.value, other.value);

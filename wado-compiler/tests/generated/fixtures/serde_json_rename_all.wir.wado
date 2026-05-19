@@ -2168,7 +2168,6 @@ fn "core:json/core/json/from_string<wado-compiler/tests/fixtures/serde_json_rena
     let __qm_v: ref "wado-compiler/tests/fixtures/serde_json_rename_all.wado//Config";
     let __qm_e: ref "core:serde//DeserializeError";
     let v: ref "wado-compiler/tests/fixtures/serde_json_rename_all.wado//Config";
-    let self: ref "core:prelude/string.wado//String";
     let offset: i64;
     de = struct.new "core:json//JsonDeserializer" { input: input, pos: 0 };
     let __match_scrut_0: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_rename_all.wado/Config,core:serde/DeserializeError>";
@@ -2181,11 +2180,7 @@ fn "core:json/core/json/from_string<wado-compiler/tests/fixtures/serde_json_rena
         return 1, ref.null none, __qm_e;
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);
-    if de.pos < __inline_String__len_0: block -> i32 {
-        self = de.input;
-        break __inline_String__len_0: self.used;
-        unreachable;
-    } {
+    if de.pos < de.input.used {
         return 1, ref.null none, ref.as_non_null(__inline_DeserializeError__trailing_1: block -> ref "core:serde//DeserializeError" {
             offset = builtin::i64_extend_i32_s(de.pos);
             break __inline_DeserializeError__trailing_1: struct.new "core:serde//DeserializeError" { kind: 7, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("trailing data after value"), used: 25 }, offset: offset };
@@ -2646,18 +2641,12 @@ fn "core:json/JsonDeserializer::expect_char"(self, c) {
     let b: i32;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
-    let self_5: ref "core:prelude/string.wado//String";
     let offset_6: i64;
-    let self_7: ref "core:prelude/string.wado//String";
     let index: i32;
     let msg: ref "core:prelude/string.wado//String";
     let offset_13: i64;
     "core:json/JsonDeserializer::skip_whitespace"(self);
-    if self.pos >= __inline_String__len_0: block -> i32 {
-        self_5 = self.input;
-        break __inline_String__len_0: self_5.used;
-        unreachable;
-    } {
+    if self.pos >= self.input.used {
         return ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde//DeserializeError" {
             offset_6 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_1: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_6 };
@@ -2665,9 +2654,8 @@ fn "core:json/JsonDeserializer::expect_char"(self, c) {
         });
     }
     b = __inline_String__get_byte_unchecked_2: block -> u8 {
-        self_7 = self.input;
         index = self.pos;
-        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self_7.repr, index);
+        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self.input.repr, index);
         unreachable;
     };
     if b != c {
@@ -2710,23 +2698,15 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
     let __qm_e: ref "core:serde//DeserializeError";
     let __local_15: ref "core:prelude/string.wado//String";
     let __local_16: ref "core:prelude/format.wado//Formatter";
-    let self_17: ref "core:prelude/string.wado//String";
     let offset_18: i64;
-    let self_19: ref "core:prelude/string.wado//String";
     let index_20: i32;
     let msg_21: ref "core:prelude/string.wado//String";
     let offset_22: i64;
-    let self_25: ref "core:prelude/string.wado//String";
-    let index_26: i32;
     let capacity_28: i32;
     let index_31: i32;
-    let self_32: ref "core:prelude/string.wado//String";
     let offset_33: i64;
-    let self_34: ref "core:prelude/string.wado//String";
     let index_35: i32;
-    let self_36: ref "core:prelude/string.wado//String";
     let offset_37: i64;
-    let self_38: ref "core:prelude/string.wado//String";
     let index_39: i32;
     let msg_42: ref "core:prelude/string.wado//String";
     let offset_43: i64;
@@ -2738,11 +2718,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
     let __hfs_pos_49: i32;
     let __hfs_pos_50: i32;
     "core:json/JsonDeserializer::skip_whitespace"(self);
-    input_len = __inline_String__len_0: block -> i32 {
-        self_17 = self.input;
-        break __inline_String__len_0: self_17.used;
-        unreachable;
-    };
+    input_len = self.input.used;
     if self.pos >= input_len {
         return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde//DeserializeError" {
             offset_18 = builtin::i64_extend_i32_s(self.pos);
@@ -2751,9 +2727,8 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
         }) };
     }
     if __inline_String__get_byte_unchecked_2: block -> u8 {
-        self_19 = self.input;
         index_20 = self.pos;
-        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self_19.repr, index_20);
+        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self.input.repr, index_20);
         unreachable;
     } != 34 {
         return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_3: block -> ref "core:serde//DeserializeError" {
@@ -2787,12 +2762,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
     };
     prefix_len = scan_pos - prefix_start;
     if (if scan_pos < input_len -> i32 {
-        __inline_String__get_byte_unchecked_5: block -> u8 {
-            self_25 = self.input;
-            index_26 = scan_pos;
-            break __inline_String__get_byte_unchecked_5: builtin::array_get_u8(self_25.repr, index_26);
-            unreachable;
-        } == 34;
+        builtin::array_get_u8(self.input.repr, scan_pos) == 34;
     } else {
         0;
     }) {
@@ -2843,11 +2813,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             if chunk_len > 0 {
                 "core:prelude/string.wado/String::push_str_range_unchecked"(result_7, self.input, chunk_start, __hfs_pos_50);
             }
-            if __hfs_pos_50 >= __inline_String__len_10: block -> i32 {
-                self_32 = self.input;
-                break __inline_String__len_10: self_32.used;
-                unreachable;
-            } {
+            if __hfs_pos_50 >= self.input.used {
                 self.pos = __hfs_pos_50;
                 return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_11: block -> ref "core:serde//DeserializeError" {
                     offset_33 = builtin::i64_extend_i32_s(__hfs_pos_50);
@@ -2856,9 +2822,8 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
                 }) };
             }
             b_11 = __inline_String__get_byte_unchecked_12: block -> u8 {
-                self_34 = self.input;
                 index_35 = __hfs_pos_50;
-                break __inline_String__get_byte_unchecked_12: builtin::array_get_u8(self_34.repr, index_35);
+                break __inline_String__get_byte_unchecked_12: builtin::array_get_u8(self.input.repr, index_35);
                 unreachable;
             };
             if b_11 == 34 {
@@ -2867,11 +2832,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
                 return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: result_7 };
             }
             __hfs_pos_50 = __hfs_pos_50 + 1;
-            if __hfs_pos_50 >= __inline_String__len_13: block -> i32 {
-                self_36 = self.input;
-                break __inline_String__len_13: self_36.used;
-                unreachable;
-            } {
+            if __hfs_pos_50 >= self.input.used {
                 self.pos = __hfs_pos_50;
                 return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_14: block -> ref "core:serde//DeserializeError" {
                     offset_37 = builtin::i64_extend_i32_s(__hfs_pos_50);
@@ -2880,9 +2841,8 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
                 }) };
             }
             esc = __inline_String__get_byte_unchecked_15: block -> u8 {
-                self_38 = self.input;
                 index_39 = __hfs_pos_50;
-                break __inline_String__get_byte_unchecked_15: builtin::array_get_u8(self_38.repr, index_39);
+                break __inline_String__get_byte_unchecked_15: builtin::array_get_u8(self.input.repr, index_39);
                 unreachable;
             } & 255;
             if esc == 34 {
@@ -2941,23 +2901,18 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {
     let i: i32;
     let c_4: char;
     let c_5: char;
-    let self_6: ref "core:prelude/string.wado//String";
     let offset_7: i64;
     let index: i32;
     let msg_10: ref "core:prelude/string.wado//String";
     let offset_11: i64;
     let msg_12: ref "core:prelude/string.wado//String";
     let offset_13: i64;
-    let _licm_input_14: ref "core:prelude/string.wado//String";
-    let _licm_pos_15: i32;
+    let _licm_pos_14: i32;
+    let _licm_input_15: ref "core:prelude/string.wado//String";
     let _licm_repr_16: ref builtin::array<u8>;
     self.pos = self.pos + 1;
     start = self.pos;
-    if (self.pos + 4) > __inline_String__len_0: block -> i32 {
-        self_6 = self.input;
-        break __inline_String__len_0: self_6.used;
-        unreachable;
-    } {
+    if (self.pos + 4) > self.input.used {
         return struct.new "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde//DeserializeError" {
             offset_7 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_1: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_7 };
@@ -2967,16 +2922,16 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {
     code = 0;
     __for_2: block {
         i = 0;
-        _licm_input_14 = self.input;
-        _licm_pos_15 = self.pos;
-        _licm_repr_16 = _licm_input_14.repr;
+        _licm_pos_14 = self.pos;
+        _licm_input_15 = self.input;
+        _licm_repr_16 = _licm_input_15.repr;
         block {
             l328: loop {
                 if i >= 4 {
                     break __for_2;
                 }
                 c_4 = __inline_String__get_byte_unchecked_2: block -> u8 {
-                    index = _licm_pos_15 + i;
+                    index = _licm_pos_14 + i;
                     break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(_licm_repr_16, index);
                     unreachable;
                 } & 255;
@@ -3131,19 +3086,11 @@ fn "core:json/JsonDeserializer::skip_number"(self) {
     let b_3: i32;
     let sign: i32;
     let b2: i32;
-    let self_6: ref "core:prelude/string.wado//String";
-    let self_7: ref "core:prelude/string.wado//String";
     let index_8: i32;
     let index_11: i32;
-    let self_12: ref "core:prelude/string.wado//String";
-    let self_13: ref "core:prelude/string.wado//String";
     let index_14: i32;
     let index_17: i32;
-    let self_18: ref "core:prelude/string.wado//String";
-    let self_19: ref "core:prelude/string.wado//String";
     let index_20: i32;
-    let self_21: ref "core:prelude/string.wado//String";
-    let self_22: ref "core:prelude/string.wado//String";
     let index_23: i32;
     let index_26: i32;
     let _licm_input_27: ref "core:prelude/string.wado//String";
@@ -3158,15 +3105,10 @@ fn "core:json/JsonDeserializer::skip_number"(self) {
     let __hfs_pos_36: i32;
     let __hfs_pos_37: i32;
     let __hfs_pos_38: i32;
-    if (if self.pos < __inline_String__len_0: block -> i32 {
-        self_6 = self.input;
-        break __inline_String__len_0: self_6.used;
-        unreachable;
-    } -> i32 {
+    if (if self.pos < self.input.used -> i32 {
         __inline_String__get_byte_unchecked_1: block -> u8 {
-            self_7 = self.input;
             index_8 = self.pos;
-            break __inline_String__get_byte_unchecked_1: builtin::array_get_u8(self_7.repr, index_8);
+            break __inline_String__get_byte_unchecked_1: builtin::array_get_u8(self.input.repr, index_8);
             unreachable;
         } == 45;
     } else {
@@ -3201,15 +3143,10 @@ fn "core:json/JsonDeserializer::skip_number"(self) {
             continue l351;
         };
     };
-    if (if self.pos < __inline_String__len_4: block -> i32 {
-        self_12 = self.input;
-        break __inline_String__len_4: self_12.used;
-        unreachable;
-    } -> i32 {
+    if (if self.pos < self.input.used -> i32 {
         __inline_String__get_byte_unchecked_5: block -> u8 {
-            self_13 = self.input;
             index_14 = self.pos;
-            break __inline_String__get_byte_unchecked_5: builtin::array_get_u8(self_13.repr, index_14);
+            break __inline_String__get_byte_unchecked_5: builtin::array_get_u8(self.input.repr, index_14);
             unreachable;
         } == 46;
     } else {
@@ -3244,15 +3181,10 @@ fn "core:json/JsonDeserializer::skip_number"(self) {
             };
         };
     }
-    if self.pos < __inline_String__len_8: block -> i32 {
-        self_18 = self.input;
-        break __inline_String__len_8: self_18.used;
-        unreachable;
-    } {
+    if self.pos < self.input.used {
         b_3 = __inline_String__get_byte_unchecked_9: block -> u8 {
-            self_19 = self.input;
             index_20 = self.pos;
-            break __inline_String__get_byte_unchecked_9: builtin::array_get_u8(self_19.repr, index_20);
+            break __inline_String__get_byte_unchecked_9: builtin::array_get_u8(self.input.repr, index_20);
             unreachable;
         };
         if (if b_3 == 101 -> i32 {
@@ -3261,15 +3193,10 @@ fn "core:json/JsonDeserializer::skip_number"(self) {
             b_3 == 69;
         }) {
             self.pos = self.pos + 1;
-            if self.pos < __inline_String__len_10: block -> i32 {
-                self_21 = self.input;
-                break __inline_String__len_10: self_21.used;
-                unreachable;
-            } {
+            if self.pos < self.input.used {
                 sign = __inline_String__get_byte_unchecked_11: block -> u8 {
-                    self_22 = self.input;
                     index_23 = self.pos;
-                    break __inline_String__get_byte_unchecked_11: builtin::array_get_u8(self_22.repr, index_23);
+                    break __inline_String__get_byte_unchecked_11: builtin::array_get_u8(self.input.repr, index_23);
                     unreachable;
                 };
                 if (if sign == 43 -> i32 {
@@ -3327,12 +3254,8 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     let b3: i32;
     let v: f64;
     let v_signed: f64;
-    let self_16: ref "core:prelude/string.wado//String";
-    let self_18: ref "core:prelude/string.wado//String";
     let index_19: i32;
-    let self_20: ref "core:prelude/string.wado//String";
     let offset_21: i64;
-    let self_22: ref "core:prelude/string.wado//String";
     let index_23: i32;
     let msg_24: ref "core:prelude/string.wado//String";
     let offset_25: i64;
@@ -3351,28 +3274,19 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     let __hfs_pos_51: i32;
     "core:json/JsonDeserializer::skip_whitespace"(self);
     start = builtin::i64_extend_i32_s(self.pos);
-    if self.pos >= __inline_String__len_0: block -> i32 {
-        self_16 = self.input;
-        break __inline_String__len_0: self_16.used;
-        unreachable;
-    } {
+    if self.pos >= self.input.used {
         return struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: start } };
     }
     neg = 0;
     if __inline_String__get_byte_unchecked_2: block -> u8 {
-        self_18 = self.input;
         index_19 = self.pos;
-        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self_18.repr, index_19);
+        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self.input.repr, index_19);
         unreachable;
     } == 45 {
         neg = 1;
         self.pos = self.pos + 1;
     }
-    if self.pos >= __inline_String__len_3: block -> i32 {
-        self_20 = self.input;
-        break __inline_String__len_3: self_20.used;
-        unreachable;
-    } {
+    if self.pos >= self.input.used {
         return struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_4: block -> ref "core:serde//DeserializeError" {
             offset_21 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_4: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_21 };
@@ -3380,9 +3294,8 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
         }) };
     }
     first = __inline_String__get_byte_unchecked_5: block -> u8 {
-        self_22 = self.input;
         index_23 = self.pos;
-        break __inline_String__get_byte_unchecked_5: builtin::array_get_u8(self_22.repr, index_23);
+        break __inline_String__get_byte_unchecked_5: builtin::array_get_u8(self.input.repr, index_23);
         unreachable;
     };
     if (if first < 48 -> i32 {
@@ -3579,12 +3492,8 @@ fn "core:json/JsonDeserializer::parse_i64_direct"(self) {
     let b3: i32;
     let v: f64;
     let v_signed: f64;
-    let self_16: ref "core:prelude/string.wado//String";
-    let self_18: ref "core:prelude/string.wado//String";
     let index_19: i32;
-    let self_20: ref "core:prelude/string.wado//String";
     let offset_21: i64;
-    let self_22: ref "core:prelude/string.wado//String";
     let index_23: i32;
     let msg_24: ref "core:prelude/string.wado//String";
     let offset_25: i64;
@@ -3602,28 +3511,19 @@ fn "core:json/JsonDeserializer::parse_i64_direct"(self) {
     let __hfs_pos_49: i32;
     "core:json/JsonDeserializer::skip_whitespace"(self);
     start = builtin::i64_extend_i32_s(self.pos);
-    if self.pos >= __inline_String__len_0: block -> i32 {
-        self_16 = self.input;
-        break __inline_String__len_0: self_16.used;
-        unreachable;
-    } {
+    if self.pos >= self.input.used {
         return struct.new "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: start } };
     }
     neg = 0;
     if __inline_String__get_byte_unchecked_2: block -> u8 {
-        self_18 = self.input;
         index_19 = self.pos;
-        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self_18.repr, index_19);
+        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self.input.repr, index_19);
         unreachable;
     } == 45 {
         neg = 1;
         self.pos = self.pos + 1;
     }
-    if self.pos >= __inline_String__len_3: block -> i32 {
-        self_20 = self.input;
-        break __inline_String__len_3: self_20.used;
-        unreachable;
-    } {
+    if self.pos >= self.input.used {
         return struct.new "core:prelude/types.wado//Result<i64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_4: block -> ref "core:serde//DeserializeError" {
             offset_21 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_4: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_21 };
@@ -3631,9 +3531,8 @@ fn "core:json/JsonDeserializer::parse_i64_direct"(self) {
         }) };
     }
     first = __inline_String__get_byte_unchecked_5: block -> u8 {
-        self_22 = self.input;
         index_23 = self.pos;
-        break __inline_String__get_byte_unchecked_5: builtin::array_get_u8(self_22.repr, index_23);
+        break __inline_String__get_byte_unchecked_5: builtin::array_get_u8(self.input.repr, index_23);
         unreachable;
     };
     if (if first < 48 -> i32 {
@@ -3866,42 +3765,31 @@ fn "core:json/JsonDeserializer::skip_string"(self) {
 }
 
 fn "core:json/JsonDeserializer::expect_true"(self) {
-    let self_1: ref "core:prelude/string.wado//String";
-    let self_2: ref "core:prelude/string.wado//String";
     let index_3: i32;
-    let self_4: ref "core:prelude/string.wado//String";
     let index_5: i32;
-    let self_6: ref "core:prelude/string.wado//String";
     let index_7: i32;
     let msg: ref "core:prelude/string.wado//String";
     let offset: i64;
-    if (if (if (if (self.pos + 4) <= __inline_String__len_0: block -> i32 {
-        self_1 = self.input;
-        break __inline_String__len_0: self_1.used;
-        unreachable;
-    } -> i32 {
+    if (if (if (if (self.pos + 4) <= self.input.used -> i32 {
         __inline_String__get_byte_unchecked_1: block -> u8 {
-            self_2 = self.input;
             index_3 = self.pos + 1;
-            break __inline_String__get_byte_unchecked_1: builtin::array_get_u8(self_2.repr, index_3);
+            break __inline_String__get_byte_unchecked_1: builtin::array_get_u8(self.input.repr, index_3);
             unreachable;
         } == 114;
     } else {
         0;
     }) -> i32 {
         __inline_String__get_byte_unchecked_2: block -> u8 {
-            self_4 = self.input;
             index_5 = self.pos + 2;
-            break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self_4.repr, index_5);
+            break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self.input.repr, index_5);
             unreachable;
         } == 117;
     } else {
         0;
     }) -> i32 {
         __inline_String__get_byte_unchecked_3: block -> u8 {
-            self_6 = self.input;
             index_7 = self.pos + 3;
-            break __inline_String__get_byte_unchecked_3: builtin::array_get_u8(self_6.repr, index_7);
+            break __inline_String__get_byte_unchecked_3: builtin::array_get_u8(self.input.repr, index_7);
             unreachable;
         } == 101;
     } else {
@@ -3919,53 +3807,40 @@ fn "core:json/JsonDeserializer::expect_true"(self) {
 }
 
 fn "core:json/JsonDeserializer::expect_false"(self) {
-    let self_1: ref "core:prelude/string.wado//String";
-    let self_2: ref "core:prelude/string.wado//String";
     let index_3: i32;
-    let self_4: ref "core:prelude/string.wado//String";
     let index_5: i32;
-    let self_6: ref "core:prelude/string.wado//String";
     let index_7: i32;
-    let self_8: ref "core:prelude/string.wado//String";
     let index_9: i32;
     let msg: ref "core:prelude/string.wado//String";
     let offset: i64;
-    if (if (if (if (if (self.pos + 5) <= __inline_String__len_0: block -> i32 {
-        self_1 = self.input;
-        break __inline_String__len_0: self_1.used;
-        unreachable;
-    } -> i32 {
+    if (if (if (if (if (self.pos + 5) <= self.input.used -> i32 {
         __inline_String__get_byte_unchecked_1: block -> u8 {
-            self_2 = self.input;
             index_3 = self.pos + 1;
-            break __inline_String__get_byte_unchecked_1: builtin::array_get_u8(self_2.repr, index_3);
+            break __inline_String__get_byte_unchecked_1: builtin::array_get_u8(self.input.repr, index_3);
             unreachable;
         } == 97;
     } else {
         0;
     }) -> i32 {
         __inline_String__get_byte_unchecked_2: block -> u8 {
-            self_4 = self.input;
             index_5 = self.pos + 2;
-            break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self_4.repr, index_5);
+            break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self.input.repr, index_5);
             unreachable;
         } == 108;
     } else {
         0;
     }) -> i32 {
         __inline_String__get_byte_unchecked_3: block -> u8 {
-            self_6 = self.input;
             index_7 = self.pos + 3;
-            break __inline_String__get_byte_unchecked_3: builtin::array_get_u8(self_6.repr, index_7);
+            break __inline_String__get_byte_unchecked_3: builtin::array_get_u8(self.input.repr, index_7);
             unreachable;
         } == 115;
     } else {
         0;
     }) -> i32 {
         __inline_String__get_byte_unchecked_4: block -> u8 {
-            self_8 = self.input;
             index_9 = self.pos + 4;
-            break __inline_String__get_byte_unchecked_4: builtin::array_get_u8(self_8.repr, index_9);
+            break __inline_String__get_byte_unchecked_4: builtin::array_get_u8(self.input.repr, index_9);
             unreachable;
         } == 101;
     } else {
@@ -3983,42 +3858,31 @@ fn "core:json/JsonDeserializer::expect_false"(self) {
 }
 
 fn "core:json/JsonDeserializer::expect_null"(self) {
-    let self_1: ref "core:prelude/string.wado//String";
-    let self_2: ref "core:prelude/string.wado//String";
     let index_3: i32;
-    let self_4: ref "core:prelude/string.wado//String";
     let index_5: i32;
-    let self_6: ref "core:prelude/string.wado//String";
     let index_7: i32;
     let msg: ref "core:prelude/string.wado//String";
     let offset: i64;
-    if (if (if (if (self.pos + 4) <= __inline_String__len_0: block -> i32 {
-        self_1 = self.input;
-        break __inline_String__len_0: self_1.used;
-        unreachable;
-    } -> i32 {
+    if (if (if (if (self.pos + 4) <= self.input.used -> i32 {
         __inline_String__get_byte_unchecked_1: block -> u8 {
-            self_2 = self.input;
             index_3 = self.pos + 1;
-            break __inline_String__get_byte_unchecked_1: builtin::array_get_u8(self_2.repr, index_3);
+            break __inline_String__get_byte_unchecked_1: builtin::array_get_u8(self.input.repr, index_3);
             unreachable;
         } == 117;
     } else {
         0;
     }) -> i32 {
         __inline_String__get_byte_unchecked_2: block -> u8 {
-            self_4 = self.input;
             index_5 = self.pos + 2;
-            break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self_4.repr, index_5);
+            break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self.input.repr, index_5);
             unreachable;
         } == 108;
     } else {
         0;
     }) -> i32 {
         __inline_String__get_byte_unchecked_3: block -> u8 {
-            self_6 = self.input;
             index_7 = self.pos + 3;
-            break __inline_String__get_byte_unchecked_3: builtin::array_get_u8(self_6.repr, index_7);
+            break __inline_String__get_byte_unchecked_3: builtin::array_get_u8(self.input.repr, index_7);
             unreachable;
         } == 108;
     } else {
@@ -4044,41 +3908,25 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
     let __qm_e_10: ref "core:serde//DeserializeError";
     let c_11: i32;
     let c_12: char;
-    let self_13: ref "core:prelude/string.wado//String";
     let offset_14: i64;
-    let self_15: ref "core:prelude/string.wado//String";
     let index_16: i32;
-    let self_17: ref "core:prelude/string.wado//String";
-    let self_18: ref "core:prelude/string.wado//String";
     let index_19: i32;
-    let self_20: ref "core:prelude/string.wado//String";
     let offset_21: i64;
-    let self_22: ref "core:prelude/string.wado//String";
     let index_23: i32;
     let msg_24: ref "core:prelude/string.wado//String";
     let offset_25: i64;
-    let self_26: ref "core:prelude/string.wado//String";
-    let self_27: ref "core:prelude/string.wado//String";
     let index_28: i32;
-    let self_29: ref "core:prelude/string.wado//String";
-    let self_30: ref "core:prelude/string.wado//String";
     let index_31: i32;
     let msg_32: ref "core:prelude/string.wado//String";
     let offset_33: i64;
-    let self_34: ref "core:prelude/string.wado//String";
     let offset_35: i64;
-    let self_36: ref "core:prelude/string.wado//String";
     let index_37: i32;
     let msg_38: ref "core:prelude/string.wado//String";
     let offset_39: i64;
     let msg_40: ref "core:prelude/string.wado//String";
     let offset_41: i64;
     "core:json/JsonDeserializer::skip_whitespace"(self);
-    if self.pos >= __inline_String__len_0: block -> i32 {
-        self_13 = self.input;
-        break __inline_String__len_0: self_13.used;
-        unreachable;
-    } {
+    if self.pos >= self.input.used {
         return ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde//DeserializeError" {
             offset_14 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_1: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_14 };
@@ -4086,9 +3934,8 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
         });
     }
     b = __inline_String__get_byte_unchecked_2: block -> u8 {
-        self_15 = self.input;
         index_16 = self.pos;
-        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self_15.repr, index_16);
+        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self.input.repr, index_16);
         unreachable;
     } & 255;
     if b == 34 {
@@ -4102,15 +3949,10 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
     } else if b == 91 {
         self.pos = self.pos + 1;
         "core:json/JsonDeserializer::skip_whitespace"(self);
-        if (if self.pos < __inline_String__len_3: block -> i32 {
-            self_17 = self.input;
-            break __inline_String__len_3: self_17.used;
-            unreachable;
-        } -> i32 {
+        if (if self.pos < self.input.used -> i32 {
             __inline_String__get_byte_unchecked_4: block -> u8 {
-                self_18 = self.input;
                 index_19 = self.pos;
-                break __inline_String__get_byte_unchecked_4: builtin::array_get_u8(self_18.repr, index_19);
+                break __inline_String__get_byte_unchecked_4: builtin::array_get_u8(self.input.repr, index_19);
                 unreachable;
             } == 93;
         } else {
@@ -4129,11 +3971,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
                     return __qm_e_3;
                 }
                 "core:json/JsonDeserializer::skip_whitespace"(self);
-                if self.pos >= __inline_String__len_5: block -> i32 {
-                    self_20 = self.input;
-                    break __inline_String__len_5: self_20.used;
-                    unreachable;
-                } {
+                if self.pos >= self.input.used {
                     return ref.as_non_null(__inline_DeserializeError__eof_6: block -> ref "core:serde//DeserializeError" {
                         offset_21 = builtin::i64_extend_i32_s(self.pos);
                         break __inline_DeserializeError__eof_6: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_21 };
@@ -4141,9 +3979,8 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
                     });
                 }
                 c_4 = __inline_String__get_byte_unchecked_7: block -> u8 {
-                    self_22 = self.input;
                     index_23 = self.pos;
-                    break __inline_String__get_byte_unchecked_7: builtin::array_get_u8(self_22.repr, index_23);
+                    break __inline_String__get_byte_unchecked_7: builtin::array_get_u8(self.input.repr, index_23);
                     unreachable;
                 };
                 if c_4 == 93 {
@@ -4166,15 +4003,10 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
     } else if b == 123 {
         self.pos = self.pos + 1;
         "core:json/JsonDeserializer::skip_whitespace"(self);
-        if (if self.pos < __inline_String__len_9: block -> i32 {
-            self_26 = self.input;
-            break __inline_String__len_9: self_26.used;
-            unreachable;
-        } -> i32 {
+        if (if self.pos < self.input.used -> i32 {
             __inline_String__get_byte_unchecked_10: block -> u8 {
-                self_27 = self.input;
                 index_28 = self.pos;
-                break __inline_String__get_byte_unchecked_10: builtin::array_get_u8(self_27.repr, index_28);
+                break __inline_String__get_byte_unchecked_10: builtin::array_get_u8(self.input.repr, index_28);
                 unreachable;
             } == 125;
         } else {
@@ -4186,17 +4018,12 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
         block {
             l479: loop {
                 "core:json/JsonDeserializer::skip_whitespace"(self);
-                if (if self.pos >= __inline_String__len_11: block -> i32 {
-                    self_29 = self.input;
-                    break __inline_String__len_11: self_29.used;
-                    unreachable;
-                } -> i32 {
+                if (if self.pos >= self.input.used -> i32 {
                     1;
                 } else {
                     __inline_String__get_byte_unchecked_12: block -> u8 {
-                        self_30 = self.input;
                         index_31 = self.pos;
-                        break __inline_String__get_byte_unchecked_12: builtin::array_get_u8(self_30.repr, index_31);
+                        break __inline_String__get_byte_unchecked_12: builtin::array_get_u8(self.input.repr, index_31);
                         unreachable;
                     } != 34;
                 }) {
@@ -4229,11 +4056,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
                     return __qm_e_10;
                 }
                 "core:json/JsonDeserializer::skip_whitespace"(self);
-                if self.pos >= __inline_String__len_14: block -> i32 {
-                    self_34 = self.input;
-                    break __inline_String__len_14: self_34.used;
-                    unreachable;
-                } {
+                if self.pos >= self.input.used {
                     return ref.as_non_null(__inline_DeserializeError__eof_15: block -> ref "core:serde//DeserializeError" {
                         offset_35 = builtin::i64_extend_i32_s(self.pos);
                         break __inline_DeserializeError__eof_15: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_35 };
@@ -4241,9 +4064,8 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
                     });
                 }
                 c_11 = __inline_String__get_byte_unchecked_16: block -> u8 {
-                    self_36 = self.input;
                     index_37 = self.pos;
-                    break __inline_String__get_byte_unchecked_16: builtin::array_get_u8(self_36.repr, index_37);
+                    break __inline_String__get_byte_unchecked_16: builtin::array_get_u8(self.input.repr, index_37);
                     unreachable;
                 };
                 if c_11 == 125 {
@@ -4299,29 +4121,17 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field"(self) {
     let __qm_e_14: ref "core:serde//DeserializeError";
     let i_15: i32;
     let idx_16: i32;
-    let self_17: ref "core:prelude/string.wado//String";
     let offset_18: i64;
-    let self_19: ref "core:prelude/string.wado//String";
     let index_20: i32;
     let msg_21: ref "core:prelude/string.wado//String";
     let offset_22: i64;
-    let self_23: ref "core:prelude/string.wado//String";
-    let self_24: ref "core:prelude/string.wado//String";
     let index_25: i32;
     let msg_26: ref "core:prelude/string.wado//String";
     let offset_27: i64;
-    let self_28: ref "core:prelude/string.wado//String";
-    let self_29: ref "core:prelude/string.wado//String";
     let index_30: i32;
-    let self_31: ref "core:prelude/string.wado//String";
-    let self_32: ref "core:prelude/string.wado//String";
     let index_33: i32;
     "core:json/JsonDeserializer::skip_whitespace"(self.de);
-    if self.de.pos >= __inline_String__len_0: block -> i32 {
-        self_17 = self.de.input;
-        break __inline_String__len_0: self_17.used;
-        unreachable;
-    } {
+    if self.de.pos >= self.de.input.used {
         return 1, ref.null none, ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde//DeserializeError" {
             offset_18 = builtin::i64_extend_i32_s(self.de.pos);
             break __inline_DeserializeError__eof_1: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_18 };
@@ -4329,9 +4139,8 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field"(self) {
         });
     }
     b_1 = __inline_String__get_byte_unchecked_2: block -> u8 {
-        self_19 = self.de.input;
         index_20 = self.de.pos;
-        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self_19.repr, index_20);
+        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self.de.input.repr, index_20);
         unreachable;
     };
     if b_1 == 125 {
@@ -4350,17 +4159,12 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field"(self) {
         "core:json/JsonDeserializer::skip_whitespace"(self.de);
     }
     self.first = 0;
-    if (if self.de.pos >= __inline_String__len_4: block -> i32 {
-        self_23 = self.de.input;
-        break __inline_String__len_4: self_23.used;
-        unreachable;
-    } -> i32 {
+    if (if self.de.pos >= self.de.input.used -> i32 {
         1;
     } else {
         __inline_String__get_byte_unchecked_5: block -> u8 {
-            self_24 = self.de.input;
             index_25 = self.de.pos;
-            break __inline_String__get_byte_unchecked_5: builtin::array_get_u8(self_24.repr, index_25);
+            break __inline_String__get_byte_unchecked_5: builtin::array_get_u8(self.de.input.repr, index_25);
             unreachable;
         } != 34;
     }) {
@@ -4376,17 +4180,12 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field"(self) {
     has_escape = 0;
     b497: block {
         l498: loop {
-            if self.de.pos >= __inline_String__len_7: block -> i32 {
-                self_28 = self.de.input;
-                break __inline_String__len_7: self_28.used;
-                unreachable;
-            } {
+            if self.de.pos >= self.de.input.used {
                 break b497;
             }
             b_4 = __inline_String__get_byte_unchecked_8: block -> u8 {
-                self_29 = self.de.input;
                 index_30 = self.de.pos;
-                break __inline_String__get_byte_unchecked_8: builtin::array_get_u8(self_29.repr, index_30);
+                break __inline_String__get_byte_unchecked_8: builtin::array_get_u8(self.de.input.repr, index_30);
                 unreachable;
             };
             if b_4 == 34 {
@@ -4403,15 +4202,10 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field"(self) {
     if has_escape == 0 {
         key_end = self.de.pos;
         self.de.pos = self.de.pos + 1;
-        if (if self.de.pos < __inline_String__len_9: block -> i32 {
-            self_31 = self.de.input;
-            break __inline_String__len_9: self_31.used;
-            unreachable;
-        } -> i32 {
+        if (if self.de.pos < self.de.input.used -> i32 {
             __inline_String__get_byte_unchecked_10: block -> u8 {
-                self_32 = self.de.input;
                 index_33 = self.de.pos;
-                break __inline_String__get_byte_unchecked_10: builtin::array_get_u8(self_32.repr, index_33);
+                break __inline_String__get_byte_unchecked_10: builtin::array_get_u8(self.de.input.repr, index_33);
                 unreachable;
             } == 58;
         } else {
@@ -4478,20 +4272,13 @@ fn "core:json/JsonDeserializer^Deserializer::deserialize_i64"(self) {
     let __qm_v: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//DeserializeError";
     let s: ref "core:prelude/string.wado//String";
-    let self_5: ref "core:prelude/string.wado//String";
-    let self_6: ref "core:prelude/string.wado//String";
     let index: i32;
     "core:json/JsonDeserializer::skip_whitespace"(self);
     start = builtin::i64_extend_i32_s(self.pos);
-    if (if self.pos < __inline_String__len_0: block -> i32 {
-        self_5 = self.input;
-        break __inline_String__len_0: self_5.used;
-        unreachable;
-    } -> i32 {
+    if (if self.pos < self.input.used -> i32 {
         __inline_String__get_byte_unchecked_1: block -> u8 {
-            self_6 = self.input;
             index = self.pos;
-            break __inline_String__get_byte_unchecked_1: builtin::array_get_u8(self_6.repr, index);
+            break __inline_String__get_byte_unchecked_1: builtin::array_get_u8(self.input.repr, index);
             unreachable;
         } == 34;
     } else {
@@ -4515,18 +4302,12 @@ fn "core:json/JsonDeserializer^Deserializer::deserialize_bool"(self) {
     let b: i32;
     let __qm_e_3: ref "core:serde//DeserializeError";
     let __qm_e_5: ref "core:serde//DeserializeError";
-    let self_6: ref "core:prelude/string.wado//String";
     let offset_7: i64;
-    let self_8: ref "core:prelude/string.wado//String";
     let index: i32;
     let msg: ref "core:prelude/string.wado//String";
     let offset_11: i64;
     "core:json/JsonDeserializer::skip_whitespace"(self);
-    if self.pos >= __inline_String__len_0: block -> i32 {
-        self_6 = self.input;
-        break __inline_String__len_0: self_6.used;
-        unreachable;
-    } {
+    if self.pos >= self.input.used {
         return struct.new "core:prelude/types.wado//Result<bool,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde//DeserializeError" {
             offset_7 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_1: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_7 };
@@ -4534,9 +4315,8 @@ fn "core:json/JsonDeserializer^Deserializer::deserialize_bool"(self) {
         }) };
     }
     b = __inline_String__get_byte_unchecked_2: block -> u8 {
-        self_8 = self.input;
         index = self.pos;
-        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self_8.repr, index);
+        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self.input.repr, index);
         unreachable;
     };
     if b == 116 {

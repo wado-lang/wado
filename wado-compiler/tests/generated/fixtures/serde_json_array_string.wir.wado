@@ -1075,7 +1075,6 @@ fn "core:json/core/json/from_string<i32>"(input) {
     let __qm_v: i32;
     let __qm_e: ref "core:serde//DeserializeError";
     let v: i32;
-    let self_6: ref "core:prelude/string.wado//String";
     let offset: i64;
     de = struct.new "core:json//JsonDeserializer" { input: input, pos: 0 };
     let __match_scrut_0: ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>";
@@ -1088,11 +1087,7 @@ fn "core:json/core/json/from_string<i32>"(input) {
         return 1, 0, __qm_e;
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);
-    if de.pos < __inline_String__len_1: block -> i32 {
-        self_6 = de.input;
-        break __inline_String__len_1: self_6.used;
-        unreachable;
-    } {
+    if de.pos < de.input.used {
         return 1, 0, ref.as_non_null(__inline_DeserializeError__trailing_2: block -> ref "core:serde//DeserializeError" {
             offset = builtin::i64_extend_i32_s(de.pos);
             break __inline_DeserializeError__trailing_2: struct.new "core:serde//DeserializeError" { kind: 7, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("trailing data after value"), used: 25 }, offset: offset };
@@ -1413,12 +1408,8 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     let b3: i32;
     let v: f64;
     let v_signed: f64;
-    let self_16: ref "core:prelude/string.wado//String";
-    let self_18: ref "core:prelude/string.wado//String";
     let index_19: i32;
-    let self_20: ref "core:prelude/string.wado//String";
     let offset_21: i64;
-    let self_22: ref "core:prelude/string.wado//String";
     let index_23: i32;
     let msg_24: ref "core:prelude/string.wado//String";
     let offset_25: i64;
@@ -1437,28 +1428,19 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     let __hfs_pos_51: i32;
     "core:json/JsonDeserializer::skip_whitespace"(self);
     start = builtin::i64_extend_i32_s(self.pos);
-    if self.pos >= __inline_String__len_0: block -> i32 {
-        self_16 = self.input;
-        break __inline_String__len_0: self_16.used;
-        unreachable;
-    } {
+    if self.pos >= self.input.used {
         return struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: start } };
     }
     neg = 0;
     if __inline_String__get_byte_unchecked_2: block -> u8 {
-        self_18 = self.input;
         index_19 = self.pos;
-        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self_18.repr, index_19);
+        break __inline_String__get_byte_unchecked_2: builtin::array_get_u8(self.input.repr, index_19);
         unreachable;
     } == 45 {
         neg = 1;
         self.pos = self.pos + 1;
     }
-    if self.pos >= __inline_String__len_3: block -> i32 {
-        self_20 = self.input;
-        break __inline_String__len_3: self_20.used;
-        unreachable;
-    } {
+    if self.pos >= self.input.used {
         return struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_4: block -> ref "core:serde//DeserializeError" {
             offset_21 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_4: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_21 };
@@ -1466,9 +1448,8 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
         }) };
     }
     first = __inline_String__get_byte_unchecked_5: block -> u8 {
-        self_22 = self.input;
         index_23 = self.pos;
-        break __inline_String__get_byte_unchecked_5: builtin::array_get_u8(self_22.repr, index_23);
+        break __inline_String__get_byte_unchecked_5: builtin::array_get_u8(self.input.repr, index_23);
         unreachable;
     };
     if (if first < 48 -> i32 {

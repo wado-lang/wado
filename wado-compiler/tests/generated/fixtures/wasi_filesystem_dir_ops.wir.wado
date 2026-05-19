@@ -306,16 +306,12 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     let __pattern_temp_2: ref "tuple//[Stream<wasi:filesystem/types.wado/DirectoryEntry>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
     let __pattern_temp_3: ref null "wasi:filesystem/types.wado//DirectoryEntry";
     let v: ref "wasi:filesystem/types.wado//DirectoryEntry";
-    let self_31: ref "core:prelude/string.wado//String";
     let other_32: ref "core:prelude/string.wado//String";
     let len_a_33: i32;
-    let self_34: ref "core:prelude/string.wado//String";
     let other_35: ref "core:prelude/string.wado//String";
     let len_a_36: i32;
-    let self_37: ref "core:prelude/string.wado//String";
     let other_38: ref "core:prelude/string.wado//String";
     let len_a_39: i32;
-    let self_40: ref "core:prelude/string.wado//String";
     let other_41: ref "core:prelude/string.wado//String";
     let len_a_42: i32;
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Preopens_get_directories"();
@@ -373,13 +369,12 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
                 };
                 entry_count = entry_count + 1;
                 if __inline_String_Eq__eq_6: block -> bool {
-                    self_31 = entry.name;
                     other_32 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 };
-                    len_a_33 = self_31.used;
+                    len_a_33 = entry.name.used;
                     if len_a_33 != other_32.used {
                         break __inline_String_Eq__eq_6: 0;
                     }
-                    break __inline_String_Eq__eq_6: "core:prelude/string.wado/String^Eq::eq_bytes"(self_31.repr, other_32.repr, len_a_33);
+                    break __inline_String_Eq__eq_6: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_32.repr, len_a_33);
                     unreachable;
                 } {
                     found_hello = 1;
@@ -390,25 +385,23 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
                     }
                 }
                 if __inline_String_Eq__eq_7: block -> bool {
-                    self_34 = entry.name;
                     other_35 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("binary.dat"), used: 10 };
-                    len_a_36 = self_34.used;
+                    len_a_36 = entry.name.used;
                     if len_a_36 != other_35.used {
                         break __inline_String_Eq__eq_7: 0;
                     }
-                    break __inline_String_Eq__eq_7: "core:prelude/string.wado/String^Eq::eq_bytes"(self_34.repr, other_35.repr, len_a_36);
+                    break __inline_String_Eq__eq_7: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_35.repr, len_a_36);
                     unreachable;
                 } {
                     found_binary = 1;
                 }
                 if __inline_String_Eq__eq_8: block -> bool {
-                    self_37 = entry.name;
                     other_38 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("subdir"), used: 6 };
-                    len_a_39 = self_37.used;
+                    len_a_39 = entry.name.used;
                     if len_a_39 != other_38.used {
                         break __inline_String_Eq__eq_8: 0;
                     }
-                    break __inline_String_Eq__eq_8: "core:prelude/string.wado/String^Eq::eq_bytes"(self_37.repr, other_38.repr, len_a_39);
+                    break __inline_String_Eq__eq_8: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_38.repr, len_a_39);
                     unreachable;
                 } {
                     found_subdir = 1;
@@ -419,13 +412,12 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
                     }
                 }
                 if __inline_String_Eq__eq_9: block -> bool {
-                    self_40 = entry.name;
                     other_41 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 };
-                    len_a_42 = self_40.used;
+                    len_a_42 = entry.name.used;
                     if len_a_42 != other_41.used {
                         break __inline_String_Eq__eq_9: 0;
                     }
-                    break __inline_String_Eq__eq_9: "core:prelude/string.wado/String^Eq::eq_bytes"(self_40.repr, other_41.repr, len_a_42);
+                    break __inline_String_Eq__eq_9: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_41.repr, len_a_42);
                     unreachable;
                 } {
                     found_newdir = 1;
