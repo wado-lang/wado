@@ -13,7 +13,7 @@
 
 use { Element, RepeatElement } from "./ir.wado";
 use { GenContext, is_nullable } from "./gen_context.wado";
-use { first_contains, literal_const_name, str_set_from, str_set_insert_all } from "./gen_util.wado";
+use { first_contains, literal_const_name, str_set_insert_all } from "./gen_util.wado";
 use { TreeSet } from "core:collections";
 
 pub variant PredictionNode {
@@ -549,17 +549,15 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
     let mut all_tokens: Array<String> = [];
     let mut all_tokens_seen = TreeSet::<String>::new();
     let mut config_firsts: Array<Array<String>> = [];
-    let mut config_first_sets: Array<TreeSet<String>> = [];
     for let c of closed {
         let first = sll_config_first(&c, ctx);
-        config_first_sets.push(str_set_from(&first));
-        config_firsts.push(first);
-        for let tk of first {
-            if !all_tokens_seen.contains(tk) {
-                all_tokens_seen.insert(tk);
-                all_tokens.push(tk);
+        for let tk of &first {
+            if !all_tokens_seen.contains(*tk) {
+                all_tokens_seen.insert(*tk);
+                all_tokens.push(*tk);
             }
         }
+        config_firsts.push(first);
     }
 
     // Build dispatch branches.
@@ -572,7 +570,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
         let mut next_configs: Array<SllConfig> = [];
         let mut opaque_alts: Array<i32> = [];
         for let mut i = 0; i < closed.len(); i += 1 {
-            if config_first_sets[i].contains(*tk) {
+            if config_firsts[i].contains(tk) {
                 let advanced = sll_advance(&closed[i], tk, ctx);
                 for let a of advanced {
                     if a.pos == -1 {
@@ -738,17 +736,16 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
     // Compute FIRST for each config at the decision point level.
     let mut all_tokens: Array<String> = [];
     let mut all_tokens_seen = TreeSet::<String>::new();
-    let mut config_first_sets: Array<TreeSet<String>> = [];
+    let mut config_firsts: Array<Array<String>> = [];
     for let c of all_configs {
         let first = sll_config_first(&c, ctx);
-        let first_set = str_set_from(&first);
-        config_first_sets.push(first_set);
-        for let tk of first {
-            if !all_tokens_seen.contains(tk) {
-                all_tokens_seen.insert(tk);
-                all_tokens.push(tk);
+        for let tk of &first {
+            if !all_tokens_seen.contains(*tk) {
+                all_tokens_seen.insert(*tk);
+                all_tokens.push(*tk);
             }
         }
+        config_firsts.push(first);
     }
     // Build flat Dispatch: for each token, find which alt_indices match.
     let mut branches: Array<PredictionBranch> = [];
@@ -757,7 +754,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         let tk = &all_tokens[t];
         let mut token_alts: Array<i32> = [];
         for let mut i = 0; i < all_configs.len(); i += 1 {
-            if config_first_sets[i].contains(*tk) {
+            if config_firsts[i].contains(tk) {
                 if !array_contains_i32(&token_alts, all_configs[i].alt_index) {
                     token_alts.push(all_configs[i].alt_index);
                 }
