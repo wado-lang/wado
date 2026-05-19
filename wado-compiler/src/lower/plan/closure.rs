@@ -1125,10 +1125,12 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
 /// Phase 0 rewriter: turn `FuncRef` values into zero-capture `Closure`
 /// nodes so the rest of the closure pipeline handles them uniformly.
 ///
-/// `&FuncRef` collapses to the converted Closure (function values are GC
-/// references, so `&fn(...) = fn(...)`). `FuncRefs` in callee position of
-/// `Call` / `MethodCall` aren't `TirExprKind::FuncRef`, so they're left
-/// alone by the default walk.
+/// `FuncRefs` in callee position of `Call` / `MethodCall` are not
+/// `TirExprKind::FuncRef` (the call resolver emits a `Call`/`MethodCall`
+/// directly), so they're left alone by the default walk. `&FuncRef` is
+/// just `&` applied to a `fn(...)` value: the inner `FuncRef` becomes a
+/// zero-capture closure and the outer `Unary::Ref` stays put, producing a
+/// genuine `&fn(...)` reference value.
 struct FuncRefToClosureRewriter<'a> {
     func_sigs: &'a IndexMap<String, FuncSig>,
     type_table: &'a mut TypeTable,
@@ -1136,25 +1138,6 @@ struct FuncRefToClosureRewriter<'a> {
 
 impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
-        // `&FuncRef` / `&mut FuncRef` → recurse and collapse the wrapper if
-        // the inner became a Closure.
-        if let TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            expr: inner,
-        } = &mut expr.kind
-            && matches!(inner.kind, TirExprKind::FuncRef { .. })
-        {
-            self.visit_expr(inner);
-            if matches!(inner.kind, TirExprKind::Closure { .. }) {
-                let inner_owned = std::mem::replace(
-                    inner.as_mut(),
-                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
-                );
-                *expr = inner_owned;
-            }
-            return;
-        }
-
         // Bare `FuncRef` → zero-capture Closure if the function is known.
         if let TirExprKind::FuncRef {
             name,
@@ -1172,7 +1155,26 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                 .params
                 .iter()
                 .enumerate()
-                .map(|(i, (_, ty))| (format!("__fn_ref_p{i}"), *ty))
+                .map(|(i, (orig_name, ty))| {
+                    // Reuse the function's declared parameter name so the
+                    // synthetic forwarder's body (`f(name)`) and its
+                    // pretty-printed form keep whatever information the
+                    // source carried — even compiler-synthesised names
+                    // like `__outptr` are useful in WIR dumps. The only
+                    // case that has to rename is a bare `_`, which can't
+                    // appear as an argument expression in the forwarder
+                    // call.
+                    assert!(
+                        !orig_name.is_empty(),
+                        "function parameter name should never be empty (function: {func_name}, index: {i})",
+                    );
+                    let name = if orig_name == "_" {
+                        format!("__fn_{i}")
+                    } else {
+                        orig_name.clone()
+                    };
+                    (name, *ty)
+                })
                 .collect();
 
             let call_args: Vec<CallArg> = closure_params

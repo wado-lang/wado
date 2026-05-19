@@ -832,9 +832,11 @@ fn scan_inspect_signatures_stmt(
                 && info.base_struct_name == "Fn"
                 && let Some(trait_name) = info.base_trait_name.as_deref()
             {
-                // Receiver type is `&Fn(...)` — peel the reference and read
-                // the function's arity + return type out of the type table.
-                let recv_type = self.type_table.peel_refs(receiver.type_id);
+                // Receiver type is `&Fn(...)` — peel the reference and any
+                // `Box<fn(...)>` wrapper introduced by the boxing pass, then
+                // read the function's arity + return type out of the type
+                // table.
+                let recv_type = self.type_table.peel_refs_and_box(receiver.type_id);
                 if let ResolvedType::Function {
                     params,
                     return_type,

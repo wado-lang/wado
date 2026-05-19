@@ -1,0 +1,16 @@
+// A bare reference to `scale` requires the resolver to look up the imported
+// function's `fn(Pixels) -> Pixels` signature in the *definition* module's
+// scope. Resolving "Pixels" against the entry module would fail (or worse,
+// silently pick up an unrelated newtype), so this fixture pins the
+// cross-module type-resolution behaviour.
+
+use { Pixels, scale } from "./sub/fn_ref_cross_module_newtype_helper.wado";
+
+test "imported fn-ref preserves newtype params in its signature" {
+    let f = scale;
+    let r = f(21 as Pixels);
+    assert r as i32 == 42;
+}
+
+__DATA__
+{"test": {}}

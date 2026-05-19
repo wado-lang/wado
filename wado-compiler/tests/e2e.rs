@@ -1029,4 +1029,5 @@ test "passes unexpectedly" {
     );
 }
 // touched to trigger datatest_mini rediscovery
+// fn-ref fixtures added (cross-module newtype)
 // touched

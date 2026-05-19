@@ -1,0 +1,20 @@
+// Symmetric case: bare `double` (type `fn(...)`) does not coerce into a
+// `&fn(...)` parameter slot. The caller must take the reference explicitly.
+
+fn apply_ref(f: &fn(i32) -> i32, _x: i32) -> i32 {
+    return f(0);
+}
+
+fn double(n: i32) -> i32 {
+    return n * 2;
+}
+
+test "bare fn-name rejected at &fn(...) parameter" {
+    let r = apply_ref(double, 21);
+    assert r == 0;
+}
+
+__DATA__
+{
+    "compile_error": "type mismatch: expected '&fn(i32) -> i32', found 'fn(i32) -> i32'"
+}

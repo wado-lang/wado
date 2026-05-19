@@ -586,6 +586,7 @@ fn build_fn_canonical_dispatch_body(
     trait_kind: crate::nir::FnDispatchTrait,
     self_param_name: String,
     formatter_param_name: String,
+    self_box_type_id: Option<TypeId>,
 ) -> Option<Vec<WirInstr>> {
     use crate::nir::FnDispatchTrait;
     use crate::wir::{WirAbstractHeapType, WirType};
@@ -601,6 +602,36 @@ fn build_fn_canonical_dispatch_body(
     let field_name = match trait_kind {
         FnDispatchTrait::Inspect => "inspect",
         FnDispatchTrait::InspectAlt => "inspect_alt",
+    };
+
+    // When the boxing pass rewrote `&fn(...)` to `Box<fn(...)>`, the
+    // self parameter holds a wrapper struct whose `.value` field carries
+    // the actual closure ref. Unwrap before refcasting.
+    let self_load: WirInstr = if let Some(box_type_id) = self_box_type_id {
+        let type_table = ctx.package.type_table.borrow();
+        let wir_box_type = ctx.type_id_to_wir_type(&type_table, box_type_id);
+        drop(type_table);
+        let box_wir_type_id = match wir_box_type {
+            WirType::Ref { ref type_id, .. } => type_id.clone(),
+            _ => return None,
+        };
+        WirInstr::StructGet {
+            type_id: box_wir_type_id.clone(),
+            field_name: "value".to_string(),
+            expr: Box::new(WirInstr::LocalGet {
+                name: self_param_name,
+                result_ty: WirType::Ref {
+                    type_id: box_wir_type_id,
+                    nullable: false,
+                },
+            }),
+            result_ty: abstract_struct_nullable.clone(),
+        }
+    } else {
+        WirInstr::LocalGet {
+            name: self_param_name,
+            result_ty: abstract_struct_nullable.clone(),
+        }
     };
 
     // Local that holds the refcast `self` so we can read both
@@ -619,10 +650,7 @@ fn build_fn_canonical_dispatch_body(
             value: Box::new(WirInstr::RefCast {
                 type_id: base_type_id.clone(),
                 nullable: false,
-                expr: Box::new(WirInstr::LocalGet {
-                    name: self_param_name,
-                    result_ty: abstract_struct_nullable.clone(),
-                }),
+                expr: Box::new(self_load),
             }),
         },
         WirInstr::CallRef {
@@ -689,6 +717,15 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 .get(1)
                 .map(|p| p.name.clone())
                 .unwrap_or_else(|| "f".to_string());
+            // After the boxing pass, the synthesized self parameter type
+            // `&fn(...)` is rewritten to `Box<fn(...)>` (a struct wrapping
+            // a closure ref). When that's happened the dispatch body has
+            // to unwrap `.value` before refcasting; consult the type
+            // table's box-wrapper registry to find out.
+            let self_box_type_id = tir_func
+                .params
+                .first()
+                .and_then(|p| type_table.box_payload_of(p.type_id).map(|_| p.type_id));
             drop(tir_func);
             let _ = type_table;
             let body = build_fn_canonical_dispatch_body(
@@ -696,6 +733,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 trait_kind,
                 self_param_name,
                 formatter_param_name,
+                self_box_type_id,
             );
             if let Some(body) = body {
                 ctx.functions[pending_body.wir_func_index].body = Some(body);

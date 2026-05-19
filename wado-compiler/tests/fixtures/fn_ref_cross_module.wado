@@ -1,0 +1,31 @@
+// An imported function name evaluates to a `fn(...)` value the same way a
+// locally-defined one does. The resolver currently leaves cross-module
+// bare-name references with deferred typing (UNKNOWN) until a use site
+// pins them down via an annotation or an explicit `fn(...)` parameter
+// type; both paths are covered here.
+
+use { double } from "./sub/fn_ref_cross_module_helper.wado";
+
+fn apply_fn(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+fn apply_ref(f: &fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+test "imported bare name to fn parameter" {
+    assert apply_fn(double, 21) == 42;
+}
+
+test "imported &name to &fn parameter" {
+    assert apply_ref(&double, 21) == 42;
+}
+
+test "imported name with fn annotation" {
+    let f: fn(i32) -> i32 = double;
+    assert f(21) == 42;
+}
+
+__DATA__
+{"test": {}}

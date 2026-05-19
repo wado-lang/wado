@@ -1,6 +1,12 @@
-// Function references as parameters: &fn type and &named_function syntax
+// A bare function name evaluates to a `fn(...)` value, and `&fn(...)` is a
+// regular reference type that auto-derefs at call sites — both forms can be
+// used to pass functions around without special syntax.
 
-fn apply(f: &fn(i32) -> i32, x: i32) -> i32 {
+fn apply_fn(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+fn apply_ref(f: &fn(i32) -> i32, x: i32) -> i32 {
     return f(x);
 }
 
@@ -8,9 +14,27 @@ fn double(n: i32) -> i32 {
     return n * 2;
 }
 
-test "function reference parameter" {
-    let result = apply(&double, 21);
-    assert result == 42;
+test "bare name to fn parameter" {
+    assert apply_fn(double, 21) == 42;
+}
+
+test "& reference to &fn parameter" {
+    assert apply_ref(&double, 21) == 42;
+}
+
+test "let binding without annotation" {
+    let f = double;
+    assert f(21) == 42;
+}
+
+test "let binding with fn annotation" {
+    let f: fn(i32) -> i32 = double;
+    assert f(21) == 42;
+}
+
+test "let binding via & with auto-deref call" {
+    let r = &double;
+    assert r(21) == 42;
 }
 
 __DATA__
