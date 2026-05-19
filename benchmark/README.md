@@ -95,10 +95,12 @@ sub-access-struct architecture. See its source for design notes.
 
 Parse 81 SQL statements (13 KB) x 100 iterations. Gale-generated parser vs sqlparser-rs.
 
+Best of three runs per implementation:
+
 | Implementation             |   Time | vs best |
 | -------------------------- | -----: | ------: |
-| sqlparser-rs (Rust native) | 167 ms |   1.00x |
-| **Wado** (Gale)            | 550 ms |   3.30x |
+| sqlparser-rs (Rust native) | 187 ms |   1.00x |
+| **Wado** (Gale)            | 621 ms |   3.32x |
 
 ## Syntax Highlight
 
@@ -118,12 +120,12 @@ Best of three runs per implementation:
 
 | Implementation            |     Time | vs best |
 | ------------------------- | -------: | ------: |
-| Prism.js                  |   175 ms |   1.00x |
-| tree-sitter (Rust native) |   489 ms |   2.79x |
-| Lezer (CodeMirror)        |   525 ms |   3.00x |
-| tree-sitter (JS / WASM)   |   862 ms |   4.93x |
-| **Wado** (Gale)           | 1,472 ms |   8.41x |
-| Shiki (JS engine)         | 2,093 ms |  11.96x |
+| Prism.js                  |   167 ms |   1.00x |
+| Lezer (CodeMirror)        |   492 ms |   2.95x |
+| tree-sitter (Rust native) |   512 ms |   3.07x |
+| tree-sitter (JS / WASM)   |   834 ms |   5.00x |
+| **Wado** (Gale)           | 1,004 ms |   6.02x |
+| Shiki (JS engine)         | 2,123 ms |  12.73x |
 
 Notes:
 
