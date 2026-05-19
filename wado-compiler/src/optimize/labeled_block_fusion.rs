@@ -519,10 +519,7 @@ fn check_fusion_preconditions_if_variant_test(
 /// legacy `If + VariantTest` consumer; the `pattern_payload_binding`
 /// field carries the variant arm's binding so `perform_fusion` can
 /// reuse it as the payload local.
-fn check_fusion_preconditions_match(
-    let_stmt: &NirStmt,
-    if_stmt: &NirStmt,
-) -> Option<FusionInfo> {
+fn check_fusion_preconditions_match(let_stmt: &NirStmt, if_stmt: &NirStmt) -> Option<FusionInfo> {
     use crate::nir::{NirMatchArm, NirPattern};
 
     // --- Stmt 1: Let { value: LabeledBlock { label, block } } ---
@@ -547,11 +544,7 @@ fn check_fusion_preconditions_match(
     let NirStmtKind::Expr(match_expr) = &if_stmt.kind else {
         return None;
     };
-    let NirExprKind::Match {
-        expr: scrut,
-        arms,
-    } = &match_expr.kind
-    else {
+    let NirExprKind::Match { expr: scrut, arms } = &match_expr.kind else {
         return None;
     };
     if arms.len() != 2 {
@@ -571,10 +564,11 @@ fn check_fusion_preconditions_match(
     // and wildcard arm (arm 1). Each must be guard-free; the legacy
     // recognition didn't allow guards either.
     let (variant_arm, else_arm): (&NirMatchArm, &NirMatchArm) = match (&arms[0], &arms[1]) {
-        (v, w) if matches!(&v.pattern, NirPattern::Variant { .. })
-            && matches!(&w.pattern, NirPattern::Wildcard)
-            && v.guard.is_none()
-            && w.guard.is_none() =>
+        (v, w)
+            if matches!(&v.pattern, NirPattern::Variant { .. })
+                && matches!(&w.pattern, NirPattern::Wildcard)
+                && v.guard.is_none()
+                && w.guard.is_none() =>
         {
             (v, w)
         }
@@ -705,13 +699,15 @@ fn find_break_case_index_for_name_in_stmt(
         NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
             find_break_case_index_for_name_in_expr(value, label, variant_name)
         }
-        NirStmtKind::Expr(expr) => find_break_case_index_for_name_in_expr(expr, label, variant_name),
+        NirStmtKind::Expr(expr) => {
+            find_break_case_index_for_name_in_expr(expr, label, variant_name)
+        }
         NirStmtKind::Return { value } => value
             .as_ref()
             .and_then(|v| find_break_case_index_for_name_in_expr(v, label, variant_name)),
-        NirStmtKind::Break {
-            value: Some(v), ..
-        } => find_break_case_index_for_name_in_expr(v, label, variant_name),
+        NirStmtKind::Break { value: Some(v), .. } => {
+            find_break_case_index_for_name_in_expr(v, label, variant_name)
+        }
         NirStmtKind::Break { value: None, .. } | NirStmtKind::Continue => None,
     }
 }

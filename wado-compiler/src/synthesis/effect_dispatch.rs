@@ -857,21 +857,13 @@ fn build_dispatch_wrapper_function(
                 TirMatchArm {
                     pattern,
                     guard: None,
-                    body: TirExpr::new(
-                        TirExprKind::Block(then_block),
-                        TypeTable::UNIT,
-                        then_span,
-                    ),
+                    body: TirExpr::new(TirExprKind::Block(then_block), TypeTable::UNIT, then_span),
                     span: then_span,
                 },
                 TirMatchArm {
                     pattern: TirPattern::Wildcard,
                     guard: None,
-                    body: TirExpr::new(
-                        TirExprKind::Block(else_block),
-                        TypeTable::UNIT,
-                        else_span,
-                    ),
+                    body: TirExpr::new(TirExprKind::Block(else_block), TypeTable::UNIT, else_span),
                     span: else_span,
                 },
             ],

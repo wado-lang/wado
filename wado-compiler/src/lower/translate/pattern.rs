@@ -1299,8 +1299,8 @@ impl<'a> PatternLowerer<'a> {
                 // the value-producing `if … -> T` shape that would
                 // otherwise demand both arms produce `T`; instead
                 // each arm-body's value is dropped after evaluation.
-                let match_type = crate::tir::agree_branch_types(then_type, else_type)
-                    .unwrap_or(TypeTable::UNIT);
+                let match_type =
+                    crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
                 let then_body = TirExpr::new(TirExprKind::Block(then_block), then_type, then_span);
                 let else_body = match else_block {
                     Some(b) => {
