@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779142836410,
+  "lastUpdate": 1779184581669,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23289,6 +23289,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f07f8da5af907003f7f5ea60c30acfab8d71f022"
         },
         "date": 1779142836198,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1906,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10106,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 490666,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "24e975b17bfcd6dc1eb6f7b73bdd0cd3595988e0",
+          "message": "Merge pull request #1120 from wado-lang/claude/cleanup-todo-e2e-fixtures-JnUB2\n\nfix(resolver): disambiguate cross-module same-name dispatch",
+          "timestamp": "2026-05-19T18:49:10+09:00",
+          "tree_id": "c60c050dd1d88609e40881ae9c09cd2b2d43b72a",
+          "url": "https://github.com/wado-lang/wado/commit/24e975b17bfcd6dc1eb6f7b73bdd0cd3595988e0"
+        },
+        "date": 1779184581350,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
