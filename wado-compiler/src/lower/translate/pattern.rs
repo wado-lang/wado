@@ -1254,86 +1254,87 @@ impl<'a> PatternLowerer<'a> {
                 }
             }
             TirStmtKind::IfLet {
-                mut scrutinee,
-                mut pattern,
-                mut then_block,
+                scrutinee,
+                pattern,
+                then_block,
                 else_block,
             } => {
-                // Lower expressions in scrutinee first
-                self.lower_expr(&mut scrutinee, type_table);
-
-                // Check if this is an Option, custom Variant, or Enum pattern that we can lower
-                // Match ergonomics: peel Ref/MutRef to find the underlying type
-                let mut scrutinee_type_id = scrutinee.type_id;
-                while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-                    type_table.get(scrutinee_type_id)
-                {
-                    scrutinee_type_id = *inner;
-                }
-                let scrutinee_type = type_table.get(scrutinee_type_id);
-                let can_lower = matches!(
-                    scrutinee_type,
-                    ResolvedType::Variant { .. }
-                        | ResolvedType::GenericInstance { .. }
-                        | ResolvedType::Enum { .. }
-                );
-
-                // Handle tuple/struct patterns with literal sub-patterns:
-                // Convert `if let [a, 42] = pair` into:
-                //   1. Destructure the tuple/struct (bind all fields)
-                //   2. Check the literal conditions
-                //   3. Execute the then block if conditions match
-                if Self::pattern_has_refutable_sub_patterns(&pattern) {
-                    self.lower_if_let_with_literal_sub_patterns(
-                        scrutinee,
-                        &mut pattern,
-                        then_block,
-                        else_block,
-                        stmt.span,
-                        out,
-                        type_table,
-                    );
-                } else if matches!(pattern, TirPattern::Struct { .. }) {
-                    // Struct patterns are always irrefutable — lower to let bindings + then block
-                    self.lower_if_pattern_struct(
-                        scrutinee, &pattern, then_block, stmt.span, out, type_table,
-                    );
-                } else if matches!(pattern, TirPattern::Binding { .. } | TirPattern::Wildcard) {
-                    // Irrefutable binding pattern (e.g. `if let x = 42`) — assign and run then block
-                    self.lower_let_pattern(&pattern, false, scrutinee, stmt.span, out, type_table);
-                    self.lower_block(&mut then_block, type_table);
-                    out.extend(then_block.stmts);
-                } else if let TirPattern::ConstantValue { expr: const_expr } = &pattern {
-                    let condition = TirExpr::new(
-                        TirExprKind::Binary {
-                            op: TirBinaryOp::Eq,
-                            left: Box::new(scrutinee),
-                            right: const_expr.clone(),
-                        },
-                        TypeTable::BOOL,
-                        stmt.span,
-                    );
-                    self.lower_block(&mut then_block, type_table);
-                    out.push(TirStmt::new(
-                        TirStmtKind::If {
-                            condition,
-                            then_block,
-                            else_block,
-                        },
-                        stmt.span,
-                    ));
-                } else if can_lower {
-                    // Lower Option, Variant, and Enum patterns to Let + If
-                    self.lower_if_pattern_option(
-                        scrutinee, &pattern, then_block, else_block, stmt.span, out, type_table,
-                    );
+                // WEP 2026-05-11 Phase 10 makes `Match` NIR's canonical
+                // pattern-matching shape. Convert `IfLet` to an
+                // equivalent TIR `Match` expression and let the Match
+                // arm in `lower_expr` apply the shared arm preprocessing
+                // (or-pattern expansion, refutable sub-pattern
+                // extraction, top-level literal lowering, Ref / MutRef
+                // scrutinee deref). Downstream passes (`boxing`,
+                // `closure`, the translator) then see one unified
+                // Match shape instead of an `If + VariantTest + Let +
+                // VariantPayload` chain.
+                // The result type carried on the produced Match —
+                // and on each arm's `Block` body — must match the
+                // type the source expression actually produces:
+                // statement-position `if let` is Unit-typed, but
+                // expression-position `if let` (wrapped by
+                // `resolve_if_expr` in a `TirExprKind::Block`) yields
+                // the type of the surrounding `let _ = ...` /
+                // function return. Reading the type off the last
+                // `Expr` statement of each branch preserves the
+                // resolver's per-branch type so wir_build's
+                // `translate_match` produces a value-typed
+                // `if … -> T` for non-Unit results.
+                let then_span = then_block.span;
+                let else_span = else_block.as_ref().map_or(stmt.span, |b| b.span);
+                let then_type = block_result_type(&then_block);
+                let else_type = else_block
+                    .as_ref()
+                    .map_or(TypeTable::UNIT, block_result_type);
+                // Join the two arm types the same way the resolver
+                // does for `if`/`if let` (see
+                // `resolver::expr::resolve_if_expr`): a `Never` arm
+                // is absorbed into the other side; otherwise the
+                // then-branch's type wins (the resolver has already
+                // verified both branches agree at expression
+                // position, and at statement position both branches
+                // are `Unit` so the choice is invariant).
+                let match_type = if then_type == TypeTable::NEVER {
+                    else_type
                 } else {
-                    // All IfLet statements should have Option/Variant/Enum scrutinee types
-                    // after proper type checking. If we reach here, it's a compiler bug.
-                    panic!(
-                        "IfLet with unexpected scrutinee type {scrutinee_type:?} - this should not happen after type checking"
-                    );
-                }
+                    then_type
+                };
+                let then_body =
+                    TirExpr::new(TirExprKind::Block(then_block), then_type, then_span);
+                let else_body = match else_block {
+                    Some(b) => {
+                        let span = b.span;
+                        TirExpr::new(TirExprKind::Block(b), else_type, span)
+                    }
+                    None => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, stmt.span),
+                };
+                let arms = vec![
+                    TirMatchArm {
+                        pattern,
+                        guard: None,
+                        body: then_body,
+                        span: then_span,
+                    },
+                    TirMatchArm {
+                        pattern: TirPattern::Wildcard,
+                        guard: None,
+                        body: else_body,
+                        span: else_span,
+                    },
+                ];
+                let mut match_expr = TirExpr::new(
+                    TirExprKind::Match {
+                        expr: Box::new(scrutinee),
+                        arms,
+                    },
+                    match_type,
+                    stmt.span,
+                );
+                // Drive the Match through the same arm preprocessing
+                // that user-written `match` arms get.
+                self.lower_expr(&mut match_expr, type_table);
+                out.push(TirStmt::new(TirStmtKind::Expr(match_expr), stmt.span));
             }
             TirStmtKind::Let {
                 value,
@@ -1947,742 +1948,6 @@ impl<'a> PatternLowerer<'a> {
             }
         }
     }
-
-    /// Insert deref expressions to peel `Ref`/`MutRef` from a scrutinee expression.
-    fn peel_ref_scrutinee(&self, mut scrutinee: TirExpr, type_table: &TypeTable) -> TirExpr {
-        loop {
-            match type_table.get(scrutinee.type_id) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    let inner = *inner;
-                    let span = scrutinee.span;
-                    scrutinee = TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Deref,
-                            expr: Box::new(scrutinee),
-                        },
-                        inner,
-                        span,
-                    );
-                }
-                _ => return scrutinee,
-            }
-        }
-    }
-
-    /// Lower a struct `IfLet` to let bindings + then block (unconditional).
-    ///
-    /// Struct patterns are always irrefutable, so the else branch is discarded.
-    /// Lower an `IfLet` with tuple/struct pattern containing literal sub-patterns.
-    ///
-    /// Converts `if let [a, 42] = pair { ... }` into:
-    ///   let __temp = pair;
-    ///   let a = __temp.0;
-    ///   let __`lit_N` = __temp.1;
-    ///   if __`lit_N` == 42 { ... }
-    fn lower_if_let_with_literal_sub_patterns(
-        &mut self,
-        scrutinee: TirExpr,
-        pattern: &mut TirPattern,
-        mut then_block: TirBlock,
-        else_block: Option<TirBlock>,
-        span: Span,
-        out: &mut Vec<TirStmt>,
-        type_table: &TypeTable,
-    ) {
-        let scrutinee = self.peel_ref_scrutinee(scrutinee, type_table);
-        let scrutinee_type = scrutinee.type_id;
-
-        // Extract literal sub-patterns into conditions using a temporary match arm
-        let mut temp_arm = TirMatchArm {
-            pattern: pattern.clone(),
-            guard: None,
-            body: TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
-            span,
-        };
-        self.extract_refutable_sub_patterns(&mut temp_arm, scrutinee_type, type_table);
-        *pattern = temp_arm.pattern;
-        let condition = temp_arm.guard;
-
-        // Now the pattern is irrefutable (all literals replaced with bindings).
-        // Lower the destructuring into let statements.
-        self.lower_let_pattern(pattern, false, scrutinee, span, out, type_table);
-
-        // Lower the then block
-        self.lower_block(&mut then_block, type_table);
-
-        if let Some(condition) = condition {
-            // Wrap the then block in an if statement with the extracted conditions
-            let mut else_block = else_block;
-            if let Some(ref mut else_blk) = else_block {
-                self.lower_block(else_blk, type_table);
-            }
-            out.push(TirStmt::new(
-                TirStmtKind::If {
-                    condition,
-                    then_block,
-                    else_block,
-                },
-                span,
-            ));
-        } else {
-            // No literal conditions — just emit the then block directly
-            out.extend(then_block.stmts);
-        }
-    }
-
-    fn lower_if_pattern_struct(
-        &mut self,
-        scrutinee: TirExpr,
-        pattern: &TirPattern,
-        mut then_block: TirBlock,
-        span: Span,
-        out: &mut Vec<TirStmt>,
-        type_table: &TypeTable,
-    ) {
-        // Match ergonomics: dereference Ref/MutRef scrutinee
-        let scrutinee = self.peel_ref_scrutinee(scrutinee, type_table);
-
-        if let TirPattern::Struct { fields, .. } = pattern {
-            // Lower the scrutinee into a temp
-            let struct_temp_index = self.alloc_local(scrutinee.type_id);
-            let struct_temp_name = self.next_temp_name();
-
-            out.push(TirStmt::new(
-                TirStmtKind::Let {
-                    name: struct_temp_name.clone(),
-                    local_index: struct_temp_index,
-                    is_mut: false,
-                    is_reactive: false,
-                    type_id: scrutinee.type_id,
-                    value: scrutinee.clone(),
-                    skip_value_copy: false,
-                },
-                span,
-            ));
-
-            let struct_fields_info = self.get_struct_fields(scrutinee.type_id, type_table);
-
-            for field in fields {
-                let field_type = struct_fields_info
-                    .as_ref()
-                    .and_then(|info| {
-                        info.iter()
-                            .find(|f| f.name == field.field_name)
-                            .map(|f| f.type_id)
-                    })
-                    .unwrap_or(TypeTable::UNKNOWN);
-
-                let field_access = TirExpr::new(
-                    TirExprKind::FieldAccess {
-                        expr: Box::new(TirExpr::new(
-                            TirExprKind::Local {
-                                index: struct_temp_index,
-                                name: struct_temp_name.clone(),
-                            },
-                            scrutinee.type_id,
-                            span,
-                        )),
-                        field_index: field.field_index,
-                        field_name: field.field_name.clone(),
-                    },
-                    field_type,
-                    span,
-                );
-
-                self.lower_pattern_to_lets(
-                    &field.pattern,
-                    false,
-                    field_access,
-                    span,
-                    out,
-                    type_table,
-                );
-            }
-
-            // Emit then block unconditionally (struct patterns are irrefutable)
-            self.lower_block(&mut then_block, type_table);
-            for s in then_block.stmts {
-                out.push(s);
-            }
-        }
-    }
-
-    /// Lower an Option `IfLet` to Let + If
-    ///
-    /// Transforms:
-    ///   `if let Some(x) = opt { then } else { else }`
-    /// To:
-    ///   `let $temp = opt;
-    ///    if VariantTest($temp, case) { let x = VariantPayload($temp); then } else { else }`
-    fn lower_if_pattern_option(
-        &mut self,
-        scrutinee: TirExpr,
-        pattern: &TirPattern,
-        mut then_block: TirBlock,
-        mut else_block: Option<TirBlock>,
-        span: Span,
-        out: &mut Vec<TirStmt>,
-        type_table: &TypeTable,
-    ) {
-        // Match ergonomics: dereference Ref/MutRef scrutinee
-        let scrutinee = self.peel_ref_scrutinee(scrutinee, type_table);
-
-        // Allocate a temp local for the scrutinee to avoid re-evaluation
-        let scrutinee_temp_index = self.alloc_local(scrutinee.type_id);
-        let scrutinee_temp_name = self.next_temp_name();
-
-        // Create Let for the scrutinee temp
-        let scrutinee_let = TirStmt::new(
-            TirStmtKind::Let {
-                name: scrutinee_temp_name.clone(),
-                local_index: scrutinee_temp_index,
-                is_mut: false,
-                is_reactive: false,
-                type_id: scrutinee.type_id,
-                value: scrutinee.clone(),
-                skip_value_copy: false,
-            },
-            span,
-        );
-        out.push(scrutinee_let);
-
-        // Create a reference to the temp local
-        let temp_ref = TirExpr::new(
-            TirExprKind::Local {
-                index: scrutinee_temp_index,
-                name: scrutinee_temp_name,
-            },
-            scrutinee.type_id,
-            span,
-        );
-
-        // Generate condition and binding statements
-        let (condition, mut binding_stmts) =
-            self.pattern_to_condition_and_bindings(pattern, temp_ref, span, type_table);
-
-        // Lower the binding statements (they may contain nested patterns)
-        let mut lowered_bindings = Vec::new();
-        for stmt in binding_stmts.drain(..) {
-            self.lower_stmt(stmt, &mut lowered_bindings, type_table);
-        }
-
-        // Prepend binding statements to the then block
-        let mut new_then_stmts = lowered_bindings;
-        // Lower the then block
-        self.lower_block(&mut then_block, type_table);
-        new_then_stmts.extend(then_block.stmts);
-        then_block.stmts = new_then_stmts;
-
-        // Lower the else block if present
-        if let Some(ref mut else_blk) = else_block {
-            self.lower_block(else_blk, type_table);
-        }
-
-        // Create a regular If statement
-        out.push(TirStmt::new(
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            },
-            span,
-        ));
-    }
-
-    /// Convert a pattern to a condition expression and binding statements
-    fn pattern_to_condition_and_bindings(
-        &mut self,
-        pattern: &TirPattern,
-        scrutinee: TirExpr,
-        span: Span,
-        type_table: &TypeTable,
-    ) -> (TirExpr, Vec<TirStmt>) {
-        let mut binding_stmts = Vec::new();
-
-        match pattern {
-            TirPattern::Variant {
-                variant_name,
-                bindings,
-                payload_type,
-                ..
-            } => {
-                // All variants (including Option) use VariantTest/VariantPayload
-
-                // Get variant type name and its defining module —
-                // both required to disambiguate same-named variants
-                // declared in two modules.
-                let scrutinee_type = type_table.get(scrutinee.type_id);
-                let variant_type_info = match scrutinee_type {
-                    ResolvedType::Variant {
-                        name,
-                        module_source,
-                        ..
-                    }
-                    | ResolvedType::GenericInstance {
-                        name,
-                        module_source,
-                        ..
-                    } => Some((name.clone(), module_source.clone())),
-                    _ => None,
-                };
-
-                let condition = if let Some((ref vt_name, ref vt_module)) = variant_type_info {
-                    let case_index = self
-                        .get_case_index(vt_name, vt_module, variant_name)
-                        .unwrap_or_else(|| {
-                            panic!("Unknown case {variant_name} for variant {vt_name}")
-                        });
-                    TirExpr::new(
-                        TirExprKind::VariantTest {
-                            expr: Box::new(scrutinee.clone()),
-                            case_index,
-                            case_name: variant_name.clone(),
-                        },
-                        TypeTable::BOOL,
-                        span,
-                    )
-                } else {
-                    // Fallback for unknown types - should not happen after monomorphization
-                    TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span)
-                };
-
-                // Generate binding statements for the payload.
-                // Skip when the binding is a wildcard — there is no variable to
-                // extract into, and the VariantPayload WIR translation would emit
-                // a struct.get from the wrong case type in or-patterns.
-                let mut condition = condition;
-                if let Some(binding) = bindings.first()
-                    && !matches!(binding, TirPattern::Wildcard)
-                {
-                    let case_index = variant_type_info
-                        .as_ref()
-                        .and_then(|(vt, ms)| self.get_case_index(vt, ms, variant_name))
-                        .unwrap_or(0);
-
-                    let payload_expr = TirExpr::new(
-                        TirExprKind::VariantPayload {
-                            expr: Box::new(scrutinee),
-                            case_index,
-                            payload_type: *payload_type,
-                        },
-                        *payload_type,
-                        span,
-                    );
-
-                    // When the binding is a refutable pattern (literal, constant,
-                    // range), extract the payload into a temp and AND the equality
-                    // check with the variant-test condition.
-                    if let TirPattern::Literal(lit) = binding {
-                        let temp_index = self.alloc_local(*payload_type);
-                        binding_stmts.push(TirStmt::new(
-                            TirStmtKind::Let {
-                                name: format!("__lit_{temp_index}"),
-                                local_index: temp_index,
-                                is_mut: false,
-                                is_reactive: false,
-                                type_id: *payload_type,
-                                value: payload_expr,
-                                skip_value_copy: false,
-                            },
-                            span,
-                        ));
-                        let lit_cond =
-                            self.literal_eq_condition(temp_index, *payload_type, lit, span);
-                        condition = TirExpr::new(
-                            TirExprKind::Binary {
-                                op: TirBinaryOp::And,
-                                left: Box::new(condition),
-                                right: Box::new(lit_cond),
-                            },
-                            TypeTable::BOOL,
-                            span,
-                        );
-                    } else if let TirPattern::ConstantValue { expr: const_expr } = binding {
-                        let temp_index = self.alloc_local(*payload_type);
-                        let temp_name = format!("__cv_{temp_index}");
-                        binding_stmts.push(TirStmt::new(
-                            TirStmtKind::Let {
-                                name: temp_name.clone(),
-                                local_index: temp_index,
-                                is_mut: false,
-                                is_reactive: false,
-                                type_id: *payload_type,
-                                value: payload_expr,
-                                skip_value_copy: false,
-                            },
-                            span,
-                        ));
-                        let cv_cond = TirExpr::new(
-                            TirExprKind::Binary {
-                                op: TirBinaryOp::Eq,
-                                left: Box::new(TirExpr::new(
-                                    TirExprKind::Local {
-                                        index: temp_index,
-                                        name: temp_name,
-                                    },
-                                    *payload_type,
-                                    span,
-                                )),
-                                right: const_expr.clone(),
-                            },
-                            TypeTable::BOOL,
-                            span,
-                        );
-                        condition = TirExpr::new(
-                            TirExprKind::Binary {
-                                op: TirBinaryOp::And,
-                                left: Box::new(condition),
-                                right: Box::new(cv_cond),
-                            },
-                            TypeTable::BOOL,
-                            span,
-                        );
-                    } else {
-                        self.lower_pattern_to_lets(
-                            binding,
-                            false,
-                            payload_expr,
-                            span,
-                            &mut binding_stmts,
-                            type_table,
-                        );
-                    }
-                }
-
-                (condition, binding_stmts)
-            }
-            TirPattern::Binding {
-                name,
-                local_index,
-                type_id,
-            } => {
-                // Match ergonomics: if binding type is &T or &mut T but value
-                // is a non-reference T, wrap in Ref/MutRef.
-                let value = {
-                    let binding_resolved = type_table.get(*type_id).clone();
-                    let scrutinee_is_ref = matches!(
-                        type_table.get(scrutinee.type_id),
-                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                    );
-                    if scrutinee_is_ref {
-                        scrutinee
-                    } else {
-                        match binding_resolved {
-                            ResolvedType::Ref(_) => TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::Ref,
-                                    expr: Box::new(scrutinee),
-                                },
-                                *type_id,
-                                span,
-                            ),
-                            ResolvedType::MutRef(_) => TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::MutRef,
-                                    expr: Box::new(scrutinee),
-                                },
-                                *type_id,
-                                span,
-                            ),
-                            _ => scrutinee,
-                        }
-                    }
-                };
-                // Always matches, bind the value
-                let let_stmt = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: name.clone(),
-                        local_index: *local_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: *type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                binding_stmts.push(let_stmt);
-
-                (
-                    TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span),
-                    binding_stmts,
-                )
-            }
-            TirPattern::Wildcard => (
-                TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span),
-                binding_stmts,
-            ),
-            TirPattern::Enum {
-                enum_type,
-                case_name,
-                case_index,
-            } => {
-                // Enum pattern: compare i32 discriminant using EnumConstruct
-                let condition = TirExpr::new(
-                    TirExprKind::Binary {
-                        left: Box::new(scrutinee),
-                        op: TirBinaryOp::Eq,
-                        right: Box::new(TirExpr::new(
-                            TirExprKind::EnumConstruct {
-                                enum_type: *enum_type,
-                                case_index: *case_index,
-                                case_name: case_name.clone(),
-                            },
-                            *enum_type,
-                            span,
-                        )),
-                    },
-                    TypeTable::BOOL,
-                    span,
-                );
-                // No bindings for enum patterns (no payload)
-                (condition, binding_stmts)
-            }
-            TirPattern::Struct { fields, .. } => {
-                // Struct patterns are always irrefutable — always match
-                // Extract fields into bindings
-                let struct_fields_info = self.get_struct_fields(scrutinee.type_id, type_table);
-
-                for field in fields {
-                    let field_type = struct_fields_info
-                        .as_ref()
-                        .and_then(|info| {
-                            info.iter()
-                                .find(|f| f.name == field.field_name)
-                                .map(|f| f.type_id)
-                        })
-                        .unwrap_or(TypeTable::UNKNOWN);
-
-                    let field_access = TirExpr::new(
-                        TirExprKind::FieldAccess {
-                            expr: Box::new(scrutinee.clone()),
-                            field_index: field.field_index,
-                            field_name: field.field_name.clone(),
-                        },
-                        field_type,
-                        span,
-                    );
-
-                    self.lower_pattern_to_lets(
-                        &field.pattern,
-                        false,
-                        field_access,
-                        span,
-                        &mut binding_stmts,
-                        type_table,
-                    );
-                }
-
-                (
-                    TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span),
-                    binding_stmts,
-                )
-            }
-            TirPattern::Tuple(sub_patterns, _) => {
-                // Extract tuple element types
-                let scrutinee_type_id = scrutinee.type_id;
-                let element_types = type_table
-                    .as_tuple(scrutinee_type_id)
-                    .unwrap_or_else(|| vec![TypeTable::UNKNOWN; sub_patterns.len()]);
-
-                // Allocate a temp for the scrutinee so we can access fields
-                let tuple_temp_index = self.alloc_local(scrutinee_type_id);
-                let tuple_temp_name = format!("__tuple_scrut_{tuple_temp_index}");
-                binding_stmts.push(TirStmt::new(
-                    TirStmtKind::Let {
-                        name: tuple_temp_name.clone(),
-                        local_index: tuple_temp_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: scrutinee_type_id,
-                        value: scrutinee,
-                        skip_value_copy: false,
-                    },
-                    span,
-                ));
-
-                let mut conditions: Vec<TirExpr> = Vec::new();
-
-                for (i, sub) in sub_patterns.iter().enumerate() {
-                    let elem_type = element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                    let project = TirExpr::new(
-                        TirExprKind::FieldAccess {
-                            expr: Box::new(TirExpr::new(
-                                TirExprKind::Local {
-                                    index: tuple_temp_index,
-                                    name: tuple_temp_name.clone(),
-                                },
-                                scrutinee_type_id,
-                                span,
-                            )),
-                            field_index: i as u32,
-                            field_name: i.to_string(),
-                        },
-                        elem_type,
-                        span,
-                    );
-
-                    let (cond, sub_bindings) =
-                        self.pattern_to_condition_and_bindings(sub, project, span, type_table);
-
-                    // Only add non-trivial conditions
-                    if !matches!(cond.kind, TirExprKind::BoolLiteral(true)) {
-                        conditions.push(cond);
-                    }
-                    binding_stmts.extend(sub_bindings);
-                }
-
-                let combined = if conditions.is_empty() {
-                    TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span)
-                } else {
-                    conditions
-                        .into_iter()
-                        .reduce(|acc, cond| {
-                            TirExpr::new(
-                                TirExprKind::Binary {
-                                    op: TirBinaryOp::And,
-                                    left: Box::new(acc),
-                                    right: Box::new(cond),
-                                },
-                                TypeTable::BOOL,
-                                span,
-                            )
-                        })
-                        .unwrap()
-                };
-
-                (combined, binding_stmts)
-            }
-            TirPattern::Literal(_) => {
-                // These shouldn't appear at the top level
-                (
-                    TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span),
-                    binding_stmts,
-                )
-            }
-            TirPattern::Range {
-                start,
-                end,
-                inclusive,
-                ..
-            } => {
-                // Range pattern: generate scrutinee >= start && scrutinee < end (or <= end if inclusive)
-                let scrut_type = scrutinee.type_id;
-                let upper_op = if *inclusive {
-                    TirBinaryOp::LtEq
-                } else {
-                    TirBinaryOp::Lt
-                };
-                let start_expr = TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: *start as u64,
-                        repr: format!("{start}"),
-                    },
-                    scrut_type,
-                    span,
-                );
-                let end_expr = TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: *end as u64,
-                        repr: format!("{end}"),
-                    },
-                    scrut_type,
-                    span,
-                );
-                let ge_cond = TirExpr::new(
-                    TirExprKind::Binary {
-                        left: Box::new(scrutinee.clone()),
-                        op: TirBinaryOp::GtEq,
-                        right: Box::new(start_expr),
-                    },
-                    TypeTable::BOOL,
-                    span,
-                );
-                let upper_cond = TirExpr::new(
-                    TirExprKind::Binary {
-                        left: Box::new(scrutinee),
-                        op: upper_op,
-                        right: Box::new(end_expr),
-                    },
-                    TypeTable::BOOL,
-                    span,
-                );
-                let condition = TirExpr::new(
-                    TirExprKind::Binary {
-                        op: TirBinaryOp::And,
-                        left: Box::new(ge_cond),
-                        right: Box::new(upper_cond),
-                    },
-                    TypeTable::BOOL,
-                    span,
-                );
-                (condition, binding_stmts)
-            }
-            TirPattern::ConstantValue { .. } => {
-                panic!(
-                    "ConstantValue pattern should have been lowered to binding + guard before pattern_to_condition_and_bindings"
-                );
-            }
-            TirPattern::Or(alternatives) => {
-                // Or pattern: combine conditions with logical OR
-                let mut or_conditions: Vec<TirExpr> = Vec::new();
-                let mut alt_cond_bindings: Vec<(TirExpr, Vec<TirStmt>)> = Vec::new();
-                for alt in alternatives {
-                    let (cond, bindings) = self.pattern_to_condition_and_bindings(
-                        alt,
-                        scrutinee.clone(),
-                        span,
-                        type_table,
-                    );
-                    or_conditions.push(cond.clone());
-                    alt_cond_bindings.push((cond, bindings));
-                }
-                // If any alternative has bindings, generate conditional extraction:
-                // if alt1_cond { alt1_bindings } else if alt2_cond { alt2_bindings } ...
-                let has_bindings = alt_cond_bindings.iter().any(|(_, b)| !b.is_empty());
-                if has_bindings {
-                    // Build nested if-else from the last to the first
-                    let mut else_block: Option<TirBlock> = None;
-                    for (cond, bindings) in alt_cond_bindings.into_iter().rev() {
-                        if bindings.is_empty() && else_block.is_none() {
-                            continue;
-                        }
-                        let then_block = TirBlock::new(bindings, span);
-                        let if_stmt = TirStmt::new(
-                            TirStmtKind::If {
-                                condition: cond,
-                                then_block: then_block.clone(),
-                                else_block,
-                            },
-                            span,
-                        );
-                        else_block = Some(TirBlock::new(vec![if_stmt], span));
-                    }
-                    if let Some(block) = else_block {
-                        binding_stmts.extend(block.stmts);
-                    }
-                }
-                let combined = or_conditions
-                    .into_iter()
-                    .reduce(|acc, cond| {
-                        TirExpr::new(
-                            TirExprKind::Binary {
-                                op: TirBinaryOp::Or,
-                                left: Box::new(acc),
-                                right: Box::new(cond),
-                            },
-                            TypeTable::BOOL,
-                            span,
-                        )
-                    })
-                    .unwrap_or_else(|| {
-                        TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, span)
-                    });
-                (combined, binding_stmts)
-            }
-        }
-    }
-
     /// Lower expressions (recurse into sub-expressions)
     fn lower_expr(&mut self, expr: &mut TirExpr, type_table: &TypeTable) {
         match &mut expr.kind {
@@ -2989,4 +2254,17 @@ impl TypeTableExt for TypeTable {
             .map(|l| l.type_id)
             .unwrap_or(TypeTable::UNKNOWN)
     }
+}
+
+/// Compute the type of a block when used as an expression. Delegates to
+/// `crate::tir::block_result_type` so we share the same statement-shape
+/// → result-type rules with the resolver (handles `If` / `IfLet` stmts
+/// as the block's last stmt, recursive `Block` last stmts, divergent
+/// `Return` / `Break` / `Continue`, …). Unit is returned for blocks
+/// that don't produce a value — that matches the resolver's expected
+/// type for statement-position `if let` and is the right default for
+/// the synthesised Match `match_type` when neither branch yields a
+/// value.
+fn block_result_type(block: &TirBlock) -> TypeId {
+    crate::tir::block_result_type(block)
 }
