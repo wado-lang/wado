@@ -46,14 +46,9 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     b.iterations = 100;
     b.input_size = Option::Some(sql.len());
 
-    // FIXME: ideally `if let Err(e) = sqlite::parse(&sql) { panic(...) }`
-    // inside the closure body, but that combination triggers a TIR-to-WIR
-    // local-index collision when a closure's if-let lowering and a template
-    // string in the same body share the parent function's allocator. Using
-    // `.is_ok()` sidesteps the problematic shape until the deeper fix lands.
-    // Tracked by `tests/fixtures/closure_iflet_template_collision.wado`
-    // (`#![TODO]`) — when that fixture flips to passing, revert this to the
-    // natural `if let Err(e)` form.
-    let last_ok = b.run("", || sqlite::parse(&sql).is_ok());
-    assert last_ok, "sqlite::parse failed";
+    b.run("", || {
+        if let Err(e) = sqlite::parse(&sql) {
+            panic(`sqlite::parse failed: {e.message}`);
+        }
+    });
 }

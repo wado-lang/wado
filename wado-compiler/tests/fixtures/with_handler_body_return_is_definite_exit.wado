@@ -1,0 +1,41 @@
+// `block_always_exits` must see a `return` nested inside a
+// `with … do { … }` body. The `with` expression itself is typed `Unit`
+// (the do-block evaluates to the body's value, but in MVP that's
+// always `Unit`), yet a body that always returns from the surrounding
+// function means control never reaches the end — the validator must
+// accept the function without `MissingReturn`.
+//
+// Reported by Copilot review on PR #1118: `expr_always_exits` /
+// `any_in_expr` previously treated `WithHandler` as an opaque leaf,
+// so a `break` inside the body could escape an outer loop unseen,
+// and an explicit `return` inside the body wouldn't count toward the
+// surrounding function's definite-exit.
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct CounterState {
+    value: i32,
+}
+
+impl Counter for CounterState {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+fn first_count() -> i32 {
+    let mut c = CounterState { value: 0 };
+    with Counter => &mut c do {
+        return Counter::next();
+    }
+}
+
+export fn run() {
+    let _ = first_count;
+}
+
+__DATA__
+{"stdout": ""}
