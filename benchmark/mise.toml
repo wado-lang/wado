@@ -246,7 +246,7 @@ cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sq
 """
 
 [tasks.syntax-highlight]
-description = "Run syntax-highlight benchmark (Gale highlighter vs tree-sitter, highlight.js, Prism.js, Shiki)"
+description = "Run syntax-highlight benchmark (Gale vs tree-sitter native + JS highlighters: Prism, Lezer, web-tree-sitter, Shiki)"
 run = """
 #!/usr/bin/env bash
 set -e
@@ -254,29 +254,11 @@ set -e
 echo "=== Compiling tree-sitter benchmark ==="
 cargo build --release --manifest-path syntax_highlight/Cargo.toml --quiet
 
-echo "=== Compiling tree-sitter Wasm benchmark ==="
-WASI_SDK="$(cd "$(dirname "$(command -v clang)")/.." 2>/dev/null && pwd)"
-if [ -d "$WASI_SDK/share/wasi-sysroot" ]; then
-    CC_wasm32_wasip1="$WASI_SDK/bin/clang" \
-    CFLAGS_wasm32_wasip1="--sysroot=$WASI_SDK/share/wasi-sysroot" \
-    AR_wasm32_wasip1="$WASI_SDK/bin/llvm-ar" \
-    cargo build --release --target wasm32-wasip1 --manifest-path syntax_highlight/Cargo.toml --quiet
-    HAVE_TS_WASM=1
-else
-    echo "SKIP: tree-sitter Wasm (uncomment wasi-sdk in mise.toml + 'mise install')"
-    HAVE_TS_WASM=0
-fi
-
 echo "=== Installing JS highlighter dependencies ==="
 npm install --prefix syntax_highlight --silent --no-audit --no-fund
 
-echo "=== tree-sitter (native) ==="
+echo "=== tree-sitter (Rust native) ==="
 ./syntax_highlight/target/release/syntax_highlight_bench
-
-if [ "$HAVE_TS_WASM" -eq 1 ]; then
-    echo "=== tree-sitter (Wasm/wasmtime) ==="
-    wasmtime --dir . syntax_highlight/target/wasm32-wasip1/release/syntax_highlight_bench.wasm
-fi
 
 echo "=== JavaScript highlighters (Node.js) ==="
 node syntax_highlight/syntax_highlight.js

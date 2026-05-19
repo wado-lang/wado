@@ -2,13 +2,11 @@
 // Comparison baselines for the Gale-generated SQLite highlighter.
 //
 // Highlighters:
-//   - highlight.js  (regex-based, most popular on npm)
-//   - Prism.js      (regex-based, lightweight; often the fastest of the three)
-//   - Shiki         (TextMate grammars; the "VSCode-quality" reference)
-//
-// For Shiki we use its JavaScript regex engine. The Oniguruma (WASM)
-// engine is omitted because it is roughly 2.5x slower than the JS
-// engine on SQL while producing byte-identical output.
+//   - Prism.js          (regex-based, the speed reference)
+//   - Lezer             (pure-JS LR parser; @codemirror/lang-sql + @lezer/highlight)
+//   - tree-sitter (JS)  (web-tree-sitter, the official WASM-via-JS binding,
+//                        using the same SQL grammar as the Rust native row)
+//   - Shiki (JS engine) (TextMate grammars, VSCode-quality reference)
 //
 // How to run:
 //   node syntax_highlight.js
@@ -18,11 +16,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import hljs from "highlight.js/lib/core";
-import hljsSql from "highlight.js/lib/languages/sql";
-
 import Prism from "prismjs";
 import "prismjs/components/prism-sql.js";
+
+import { sql as sqlLang, SQLite } from "@codemirror/lang-sql";
+import { classHighlighter, highlightTree } from "@lezer/highlight";
+
+import { Language, Parser, Query } from "web-tree-sitter";
 
 import { createHighlighter, createJavaScriptRegexEngine } from "shiki";
 
@@ -42,9 +42,7 @@ function report(name, elapsedMs) {
   console.log(
     `Elapsed: ${msInt}.${String(msFrac).padStart(3, "0")} ms (${ITERATIONS} iterations)`,
   );
-  console.log(
-    `Per iteration: ${piInt}.${String(piFrac).padStart(3, "0")} us`,
-  );
+  console.log(`Per iteration: ${piInt}.${String(piFrac).padStart(3, "0")} us`);
 }
 
 function bench(label, run) {
@@ -53,7 +51,6 @@ function bench(label, run) {
     `syntax-highlight (${label}): ${sql.length} bytes, ${ITERATIONS} iterations`,
   );
 
-  // Warm up.
   const warm = run();
   if (!warm || warm.length === 0) {
     throw new Error(`${label}: warm-up produced empty output`);
@@ -72,12 +69,63 @@ function bench(label, run) {
   report(label, elapsed);
 }
 
-// ---------- highlight.js ----------
-hljs.registerLanguage("sql", hljsSql);
-bench("highlight.js", () => hljs.highlight(sql, { language: "sql" }).value);
+const ESC = { "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#x27;" };
+function escapeHtml(s) {
+  return s.replace(/[<>&"']/g, (c) => ESC[c]);
+}
 
 // ---------- Prism.js ----------
 bench("Prism.js", () => Prism.highlight(sql, Prism.languages.sql, "sql"));
+
+// ---------- Lezer (@codemirror/lang-sql + @lezer/highlight) ----------
+{
+  const parser = sqlLang({ dialect: SQLite }).language.parser;
+  bench("Lezer (CodeMirror)", () => {
+    const tree = parser.parse(sql);
+    let html = "";
+    let from = 0;
+    highlightTree(tree, classHighlighter, (start, end, classes) => {
+      if (start > from) html += escapeHtml(sql.slice(from, start));
+      html += `<span class="${classes}">${escapeHtml(sql.slice(start, end))}</span>`;
+      from = end;
+    });
+    if (from < sql.length) html += escapeHtml(sql.slice(from));
+    return html;
+  });
+}
+
+// ---------- tree-sitter (web-tree-sitter, JS WASM binding) ----------
+{
+  await Parser.init();
+  const wasmBytes = readFileSync(join(__dirname, "tree-sitter-sql.wasm"));
+  const lang = await Language.load(wasmBytes);
+  const scm = readFileSync(
+    join(__dirname, "tree-sitter-sql-highlights.scm"),
+    "utf-8",
+  );
+  const query = new Query(lang, scm);
+  const tsParser = new Parser();
+  tsParser.setLanguage(lang);
+
+  bench("tree-sitter (web-tree-sitter)", () => {
+    const tree = tsParser.parse(sql);
+    const captures = query.captures(tree.rootNode);
+    let html = "";
+    let from = 0;
+    for (const cap of captures) {
+      const start = cap.node.startIndex;
+      const end = cap.node.endIndex;
+      if (start < from) continue; // skip overlapping captures (simple resolver)
+      if (start > from) html += escapeHtml(sql.slice(from, start));
+      const cls = cap.name.replace(/\./g, " ");
+      html += `<span class="${cls}">${escapeHtml(sql.slice(start, end))}</span>`;
+      from = end;
+    }
+    if (from < sql.length) html += escapeHtml(sql.slice(from));
+    tree.delete();
+    return html;
+  });
+}
 
 // ---------- Shiki (JS engine) ----------
 {
