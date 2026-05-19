@@ -1,41 +1,12 @@
-#![TODO]
-// TODO: closure body that combines if-let pattern matching with a template
-// string in the same closure exposes a TIR-to-WIR local-index collision.
-//
-// At template-expansion time, `synthesis::template::expand_templates` walks
-// the parent function body and descends into closure bodies using the
-// PARENT function's `local_count` allocator. Closure bodies have their own
-// `local_index` namespace (see the comment on `TirExprKind::Closure`'s
-// `address_taken_locals` field), so any locals injected by the template
-// expander (the `__r` String builder) collide with closure-internal
-// indices that the resolver allocated for `let result`, `let e`, etc.
-//
-// Pattern lowering (`lower::pattern::PatternLowerer::lower_expr`) has the
-// same shape: it descends into closures sharing the parent allocator,
-// so its own `__pattern_temp_N` and irrefutable-binding `let`s also land
-// in the parent index space.
-//
-// At runtime the bug manifests as `if let Err(e) = result` matching when
-// the result is actually `Ok` (because `__variant_test(...)` reads an
-// unrelated local) and the closure traps inside the panic call. At
-// compile time it can also surface as a Wasm validation error
-// ("type mismatch: expected (ref null $type), found (ref $type)") when
-// two locals at the same Wasm index disagree on type.
-//
-// The fix needs both passes (and any future allocator-using pass) to
-// switch to a closure-scoped allocator when descending into a closure
-// body. The closure body should provide its own `local_count` (currently
-// reconstructed at hoist time in `lower::closure::collect_locals_from_block`).
-// A naive "scan body for max local_index + 1" approach was attempted and
-// reverted because the post-hoist closure func ended up with sparse
-// `UNKNOWN`-typed filler locals and the variant-test reference still
-// resolved to the wrong WIR local — the index collision is established
-// at resolve time, not just at synthesis/lower time.
-//
-// When this is fixed, the workaround in
-// `benchmark/sqlite_parse/sqlite_parse.wado` that uses
-// `sqlite::parse(&sql).is_ok()` instead of `if let Err(e) = ...` can be
-// reverted to the natural form.
+// Closure body that combines `if let` pattern matching with a template
+// string. `synthesis::template::expand_templates` switches to a
+// closure-scoped local allocator when descending into the closure body
+// (mirroring `lower::translate::pattern::lower_expr`), so the `__r`
+// String builder no longer collides with the resolver-allocated `result`
+// / `e` locals. The closure's return type also stays `Unit` even though
+// the `if let Err(e)` arm calls `panic(…)`, so the `run_with<T>`
+// monomorphisation binds `T = ()` and execution falls through to
+// `println("ok")` when the parse succeeds.
 
 use { Stdout, println } from "core:cli";
 

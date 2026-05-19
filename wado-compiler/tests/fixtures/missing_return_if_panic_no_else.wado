@@ -1,0 +1,22 @@
+// An `if cond { panic("…"); }` with no `else` is NOT a definite divergence
+// — control falls through when `cond` is false — so a non-Unit return type
+// still requires an explicit `return` (or a tail-divergent body) to satisfy
+// the missing-return check.
+//
+// Locks in a tightening that came with the `find_return_type_in_stmt`
+// cleanup: the previous logic treated any `Expr(Never)` (including those
+// buried inside a conditional branch) as a divergent return path and
+// silently accepted bodies that could fall through to nothing.
+
+fn classify(cond: bool) -> i32 {
+    if cond {
+        panic("oops");
+    }
+}
+
+export fn run() {
+    let _ = classify;
+}
+
+__DATA__
+{"compile_error": "function with return type 'i32' must use explicit `return`"}

@@ -1,0 +1,19 @@
+// `println(`result {r}`)` desugars into a labeled block whose `__r` /
+// `__f` synthetic locals are allocated by template expansion. The pass
+// now switches to the closure's local namespace before descending
+// (`synthesis::template::expand_templates`), so those locals no longer
+// collide with the closure params (`x`, `y`) or the closure-body `let r`
+// and the closure functor's `local_types` table stays coherent.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let test = |x: i32, y: i32| {
+        let r: i32 = x + y;
+        println(`result {r}`);
+    };
+    test(1, 2);
+}
+
+__DATA__
+{"stdout_contains": ["result 3"]}
