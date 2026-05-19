@@ -1908,6 +1908,34 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
     gen_error_fallback(w, rule, type_name, ctx);
 }
 
+/// Peel scalar `Label(...)` wrappers off a surface element for op-dispatch.
+///
+/// Scalar `name=elem` is lowered by `rebind_op_field`: the inner element's
+/// op flows up the lower walker as-is (just with `field` rebound to the
+/// label's name), so an op's shape is independent of any enclosing scalar
+/// Label. The op-driven walker dispatches on op shape, so it must see the
+/// **inner** surface element shape to keep the op↔elem invariant.
+///
+/// `ListLabel` (`name+=elem`) is preserved as `Op::ListLabel`, so list
+/// labels travel through `gen_op_list_label` with the surface Label still
+/// attached — this peel only fires on the scalar form.
+///
+/// The `while` accommodates a theoretical future where lower stacks
+/// multiple scalar labels (`a=b=expr`); the g4 parser does not produce
+/// that today, but the loop is free defensive cost.
+fn peel_scalar_label(elem: &Element) -> &Element {
+    let mut cur = elem;
+    loop {
+        if let Label(lab) = cur {
+            if lab.list { break; }
+            cur = &lab.element;
+        } else {
+            break;
+        }
+    }
+    return cur;
+}
+
 fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<Op>, ctx: &mut GenContext) {
     // gen_alt_elements requires 1:1 correspondence between
     // `elements` and `ops` — full-alt bodies (Simple / MultiAlt /
@@ -1916,12 +1944,21 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
     // calculation; that path never reaches here. Wado's power-assert
     // surfaces the lengths automatically — the contract note in the
     // message points callers at the right entry point.
+    //
+    // The element-side `if let Repeat(...)` and `gen_op_group` paths
+    // require the inner shape, but a surface scalar `name=elem` wraps
+    // the inner in `Label(...)` while lower's `rebind_op_field`
+    // collapses the op back to the inner's shape. `gen_op_group`
+    // peels internally; the Repeat arm here likewise dispatches on
+    // the peeled element so `t=ID*` and friends route correctly
+    // (today's g4 parser keeps the `*` outside the label, so this
+    // arm is defensive — see `peel_scalar_label` for the contract).
     assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies must use gen_alt_body_skip";
     let mut name_counts: Array<[String, i32]> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
         let op = &ops[i];
-        if let Repeat(rep) = elem {
+        if let Repeat(rep) = peel_scalar_label(elem) {
             let rep_op = if let Repeat(r) = op {
                 r;
             } else {
@@ -1953,7 +1990,7 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, o
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
         let op = &ops[i];
-        if let Repeat(rep) = elem {
+        if let Repeat(rep) = peel_scalar_label(elem) {
             let rep_op = if let Repeat(r) = op {
                 r;
             } else {
@@ -2638,14 +2675,15 @@ fn op_leaf_dedup_base(op: &Op) -> String {
 /// surface fallback in `gen_element`'s Group arm remains until every
 /// caller routes through `gen_op_group` (Phase 2-B follow-ups).
 fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    // Scalar `name=(a | b | …)` lowers to `Op::Group` (label rebinds the
-    // inner group op rather than wrapping it), so the surface element
-    // arriving here can be `Label(Group(...))` — unwrap once.
-    // `gen_op_list_label` handles the `name+=(a | b | …)` shape via a
-    // distinct op path; multi-level Label nesting in scalar position is
-    // not produced by lower today, so a single unwrap is sufficient.
-    let unwrapped = if let Label(lab) = elem { &lab.element } else { elem };
-    if let Group(g_elem) = unwrapped {
+    // Scalar `name=(a | b | …)` lowers via `rebind_op_field` so the
+    // resulting op is `Op::Group` even though the surface element is
+    // `Label(Group(...))`. Peel here — the single canonical site —
+    // so every call path (walkers, Repeat-body helpers, LR helpers)
+    // is safe without each caller having to remember to unwrap. The
+    // `peel_scalar_label` helper handles theoretical multi-level
+    // scalar Label nesting; lower does not produce that today, but
+    // the loop costs nothing.
+    if let Group(g_elem) = peel_scalar_label(elem) {
         return match &g_op.shape {
             TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, name_counts),
             SingleAlt(sa) => gen_consume_single_alt_group_op(
@@ -2686,7 +2724,7 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
             },
         };
     } else {
-        panic("gen_op_group: Group op mapped to non-Group element");
+        panic("gen_op_group: Group op mapped to non-Group element (even after peel_scalar_label) — lower produced an Op::Group whose surface element is neither Group nor Label-of-Group");
     }
 }
 
