@@ -589,7 +589,6 @@ impl LocalMethodName {
         self.trait_name.is_some()
     }
 
-
     /// Returns true if this is the synthesized `__call` method on a
     /// `__Closure_N` functor struct.
     ///

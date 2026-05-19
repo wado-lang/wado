@@ -142,8 +142,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // import graph a second time via `canonical_decl_key`.
                     let key = (module_source.clone(), name.clone());
                     let is_known_effect = self.trait_env.effect_decl_index.contains_key(&key);
-                    let is_known_resource =
-                        self.trait_env.resource_decl_index.contains_key(&key);
+                    let is_known_resource = self.trait_env.resource_decl_index.contains_key(&key);
                     if !is_known_effect && !is_known_resource {
                         let _ = self.logger.error(TypeError::NotAnEffect {
                             name: name.clone(),

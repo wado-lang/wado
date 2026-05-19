@@ -655,10 +655,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// When the canonicalised name had an alias (`use { Foo as Bar }`),
     /// the returned key uses the *original* declaration name, so the index
     /// (whose key is `(decl_module, decl_name)`) matches.
-    pub(crate) fn canonical_decl_key(
-        &self,
-        name: &str,
-    ) -> (ModuleSource, String) {
+    pub(crate) fn canonical_decl_key(&self, name: &str) -> (ModuleSource, String) {
         if let Some(src) = self.effect_sources.get(name) {
             // effect_sources never carries an alias mapping, so the local
             // name is the original declaration name. Canonicalise through

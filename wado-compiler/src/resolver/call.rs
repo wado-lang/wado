@@ -1153,8 +1153,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // `pub interface Logger` independently, and only the import graph
         // disambiguates which Logger this call site means.
         let canonical_key = self.canonical_decl_key(effect);
-        let (module_source, item_idx) =
-            self.trait_env.effect_decl_index.get(&canonical_key)?.clone();
+        let (module_source, item_idx) = self
+            .trait_env
+            .effect_decl_index
+            .get(&canonical_key)?
+            .clone();
         let module = self.loaded_modules.get(&module_source)?;
         let crate::ast::Item::Interface(decl) = module.items.get(item_idx)? else {
             return None;

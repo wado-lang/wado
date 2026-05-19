@@ -1600,8 +1600,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // current module's import context so two modules with same-
             // named effects / resources don't get a false negative here.
             let canonical_key = scope.canonical_decl_key(name);
-            if scope.trait_env.effect_decl_index.contains_key(&canonical_key)
-                || scope.trait_env.resource_decl_index.contains_key(&canonical_key)
+            if scope
+                .trait_env
+                .effect_decl_index
+                .contains_key(&canonical_key)
+                || scope
+                    .trait_env
+                    .resource_decl_index
+                    .contains_key(&canonical_key)
             {
                 ctx.in_handler_method = true;
             }

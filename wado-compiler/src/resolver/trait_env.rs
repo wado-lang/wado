@@ -409,7 +409,10 @@ impl TraitEnv {
                     }
                     Item::TupleTypeDecl(_) => {
                         type_decl_index.insert(
-                            (module_source.clone(), TypeTable::TUPLE_TYPE_NAME.to_string()),
+                            (
+                                module_source.clone(),
+                                TypeTable::TUPLE_TYPE_NAME.to_string(),
+                            ),
                             module_source.clone(),
                         );
                     }
@@ -556,10 +559,7 @@ impl TraitEnv {
     /// project-globally unique, so the ambiguity does not matter in
     /// practice.
     pub fn find_trait_decl_key(&self, name: &str) -> Option<DeclKey> {
-        self.decl_index
-            .keys()
-            .find(|(_, n)| n == name)
-            .cloned()
+        self.decl_index.keys().find(|(_, n)| n == name).cloned()
     }
 
     /// Find the canonical `(declaring module, name)` key for any effect
@@ -699,10 +699,7 @@ fn classify_position(
 ///
 /// Sequence: `[self_type, trait_arg1, trait_arg2, ...]`.
 /// Valid if there exists a position with `LocalType` and no `UncoveredTypeParam` before it.
-fn check_orphan_rfc2451(
-    impl_block: &ast::ImplBlock,
-    local_type_names: &IndexSet<String>,
-) -> bool {
+fn check_orphan_rfc2451(impl_block: &ast::ImplBlock, local_type_names: &IndexSet<String>) -> bool {
     let type_params: Vec<String> = impl_block
         .type_params
         .iter()
