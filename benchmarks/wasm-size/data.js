@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779208567831,
+  "lastUpdate": 1779212156253,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23705,6 +23705,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 486702,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "44893a711471ba3dbb61e3228a09ae6ac015db44",
+          "message": "Merge pull request #1126 from wado-lang/claude/fix-package-gale-tests-TWpyl\n\nfix(gale): resolve 7 ANTLR4 compatibility TODO tests",
+          "timestamp": "2026-05-20T02:29:04+09:00",
+          "tree_id": "ed63983faa4bc0f34e3abf4f953edd9f56f55a0a",
+          "url": "https://github.com/wado-lang/wado/commit/44893a711471ba3dbb61e3228a09ae6ac015db44"
+        },
+        "date": 1779212155799,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17156,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 487141,
             "unit": "bytes"
           }
         ]
