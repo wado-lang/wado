@@ -2638,7 +2638,14 @@ fn op_leaf_dedup_base(op: &Op) -> String {
 /// surface fallback in `gen_element`'s Group arm remains until every
 /// caller routes through `gen_op_group` (Phase 2-B follow-ups).
 fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    if let Group(g_elem) = elem {
+    // Scalar `name=(a | b | …)` lowers to `Op::Group` (label rebinds the
+    // inner group op rather than wrapping it), so the surface element
+    // arriving here can be `Label(Group(...))` — unwrap once.
+    // `gen_op_list_label` handles the `name+=(a | b | …)` shape via a
+    // distinct op path; multi-level Label nesting in scalar position is
+    // not produced by lower today, so a single unwrap is sufficient.
+    let unwrapped = if let Label(lab) = elem { &lab.element } else { elem };
+    if let Group(g_elem) = unwrapped {
         return match &g_op.shape {
             TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, name_counts),
             SingleAlt(sa) => gen_consume_single_alt_group_op(

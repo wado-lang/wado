@@ -119,6 +119,12 @@ fn collect_lits_from_element(elem: &Element, seen: &mut Array<String>, result: &
             }
         },
         Label(lab) => collect_lits_from_element(&lab.element, seen, result),
+        // `~ X` is a set-complement transformer. The literal `'x'` inside
+        // still needs to be hoisted to an anonymous lexer token so the
+        // runtime `match_not([TK_LIT_X])` call resolves. Without this arm
+        // any parser-rule `~'x'` / `~('x'|'y')` emits a reference to an
+        // undefined TK_LIT_X (Sets/ParserNotToken, Sets/ParserNotSet, …).
+        Not(n) => collect_lits_from_element(&n.element, seen, result),
         _ => (),
     }
 }
