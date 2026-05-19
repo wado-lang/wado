@@ -1,0 +1,26 @@
+// `&mut fn(...)` is meaningful as an out-parameter: the callee can replace
+// the referenced fn-typed slot via `*p = other_fn`, and the caller sees the
+// new value. This is the same `&mut T` deref-reassign rule applied to a
+// `fn(...)`-typed location — `fn` gets no special treatment.
+
+fn double(n: i32) -> i32 {
+    return n * 2;
+}
+
+fn triple(n: i32) -> i32 {
+    return n * 3;
+}
+
+fn swap_to_triple(slot: &mut fn(i32) -> i32) {
+    *slot = triple;
+}
+
+test "&mut fn replaces the caller's fn-typed slot" {
+    let mut f: fn(i32) -> i32 = double;
+    assert f(10) == 20;
+    swap_to_triple(&mut f);
+    assert f(10) == 30;
+}
+
+__DATA__
+{"test": {}}

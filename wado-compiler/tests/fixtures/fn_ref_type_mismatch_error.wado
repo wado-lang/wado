@@ -1,0 +1,21 @@
+// `&fn(...)` is a regular reference type, NOT a synonym for `fn(...)`.
+// Passing one where the other is expected must be a type error — same rule
+// as `&i32` vs `i32` everywhere else in the language.
+
+fn apply_fn(f: fn(i32) -> i32, _x: i32) -> i32 {
+    return f(0);
+}
+
+fn double(n: i32) -> i32 {
+    return n * 2;
+}
+
+test "explicit &double rejected at fn(...) parameter" {
+    let r = apply_fn(&double, 21);
+    assert r == 0;
+}
+
+__DATA__
+{
+    "compile_error": "type mismatch: expected 'fn(i32) -> i32', found '&fn(i32) -> i32'"
+}

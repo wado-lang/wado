@@ -406,16 +406,30 @@ impl BoxLowerer {
         // Boxing is required for:
         // - Primitives (except i128/u128 which are already GC types)
         // - Variant types (subtype hierarchy prevents field-by-field deref assignment)
+        // - Function types behind `&mut` (the local holds a `ref struct` value;
+        //   deref-assign has to swap that ref atomically, which needs a stable
+        //   heap slot). `&fn(...)` stays as a bare ref — synthesised
+        //   `Fn<N,Ret>^Inspect::inspect(&self, …)` dispatch stubs rely on the
+        //   un-boxed shape, and a read-only `&fn(...)` doesn't need a stable
+        //   slot.
         let mut needs_box_base: IndexSet<TypeId> = IndexSet::default();
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
             match type_table.get(type_id).clone() {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                ResolvedType::Ref(inner) => {
                     let is_prim = matches!(type_table.get(inner), ResolvedType::Primitive(p)
                         if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128));
                     let is_variant = self.is_variant_type(inner, type_table);
-                    let needs_box = is_prim || is_variant;
-                    if needs_box {
+                    if is_prim || is_variant {
+                        needs_box_base.insert(inner);
+                    }
+                }
+                ResolvedType::MutRef(inner) => {
+                    let is_prim = matches!(type_table.get(inner), ResolvedType::Primitive(p)
+                        if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128));
+                    let is_variant = self.is_variant_type(inner, type_table);
+                    let is_fn = matches!(type_table.get(inner), ResolvedType::Function { .. });
+                    if is_prim || is_variant || is_fn {
                         needs_box_base.insert(inner);
                     }
                 }
@@ -441,9 +455,19 @@ impl BoxLowerer {
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
             match type_table.get(type_id).clone() {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                ResolvedType::Ref(inner) => {
+                    // Don't box `&fn(...)` — synthesised inspect/display
+                    // dispatch stubs rely on the un-boxed shape; only
+                    // `&mut fn(...)` triggers boxing (handled below).
+                    if matches!(type_table.get(inner), ResolvedType::Function { .. }) {
+                        continue;
+                    }
                     if let Some(&box_type_id) = self.box_struct_types.get(&inner) {
-                        // Replace Ref(primitive) with the Box struct type
+                        replacements.push((type_id, type_table.get(box_type_id).clone()));
+                    }
+                }
+                ResolvedType::MutRef(inner) => {
+                    if let Some(&box_type_id) = self.box_struct_types.get(&inner) {
                         replacements.push((type_id, type_table.get(box_type_id).clone()));
                     }
                 }

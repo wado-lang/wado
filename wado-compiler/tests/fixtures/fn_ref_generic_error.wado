@@ -1,0 +1,19 @@
+// A bare generic function name cannot be used as a value: the function type
+// depends on type arguments that haven't been provided. The resolver leaves
+// the FuncRef expression with deferred typing and any downstream call against
+// the resulting binding fails to resolve. Workaround: wrap in a closure such
+// as `|x| identity(x)`, which pins `T` at the use site.
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+test "bare generic fn-name without type args is not callable" {
+    let f = identity;
+    assert f(42) == 42;
+}
+
+__DATA__
+{
+    "compile_error": "unknown function 'f'"
+}

@@ -735,16 +735,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Compute the `fn(params) -> ret with effects` type for a top-level
-    /// function reference looked up by bare name in the current module.
+    /// function reference looked up by bare name.
     ///
-    /// Returns `None` when the function is generic, lives in another module
-    /// (cross-module typing requires the definition module's scope and is
-    /// deferred), or otherwise cannot be typed eagerly. Callers fall back
-    /// to `UNKNOWN`, which keeps the existing defer-on-UNKNOWN typecheck
-    /// rule (used at annotated `let`/argument sites).
+    /// Returns `None` when the function is generic or otherwise cannot be
+    /// typed eagerly. Callers fall back to `UNKNOWN`, which keeps the
+    /// existing defer-on-UNKNOWN typecheck rule (used at annotated
+    /// `let`/argument sites).
     fn compute_func_ref_type(&mut self, name: &str) -> Option<TypeId> {
-        let func = self.lookup_current_func(name).cloned()?;
-        self.compute_func_ref_type_from_ast(&func, &self.current_module_source.clone())
+        if let Some(func) = self.lookup_current_func(name).cloned() {
+            return self.compute_func_ref_type_from_ast(&func, &self.current_module_source.clone());
+        }
+        // Imported function — resolve the signature in the defining
+        // module's perspective so type names (newtypes, generics, etc.)
+        // bind correctly.
+        let symbol = self.symbols.lookup(name)?;
+        let src = symbol.module_source().clone();
+        let original = symbol.name.clone();
+        let func = Self::lookup_func_in_loaded_module(
+            self.loaded_modules,
+            &self.loaded_module_func_indices,
+            &src,
+            &original,
+        )
+        .cloned()?;
+        self.compute_func_ref_type_from_ast(&func, &src)
     }
 
     /// Build a function type from an [`ast::Function`] declaration that
