@@ -10,13 +10,13 @@
 #            all (use for genuinely target-language-specific tests,
 #            never for things we just haven't fixed yet).
 #
-#   [stage_a2_todo] — Stage A2: the generated parser fails to accept the
+#   [stage_a_todo] — Stage A: the generated parser fails to accept the
 #            descriptor's [input]. The test is emitted with `#[TODO]` so
 #            it is recorded as expected-to-fail. Drop once the gap is
 #            closed (typically LL prediction, codegen, or a [start] /
 #            first-parser-rule mismatch the test wasn't written to
 #            tolerate).
-#   [stage_a2_skip] — Stage A2: emission is skipped entirely. Use when
+#   [stage_a_skip] — Stage A: emission is skipped entirely. Use when
 #            the grammar cannot be compiled by Gale or running through
 #            it would be meaningless (e.g. [start] rule differs from
 #            Gale's `parse()` entry by design).
@@ -53,13 +53,13 @@
 "ParserErrors/SingleSetInsertionConsumption" = "trailing <! ... !> StringTemplate comment outside any rule — testsuite descriptor artifact, not a self-contained .g4"
 "ParserErrors/SingleTokenDeletionConsumption" = "trailing <! ... !> StringTemplate comment outside any rule — testsuite descriptor artifact, not a self-contained .g4"
 
-[stage_a2_todo]
+[stage_a_todo]
 "LeftRecursion/ReturnValueAndActionsList1_2" = "parse stops at the first comma in the input list — LR rule with returns / list-label combination not yet handled by Stage C-free codegen"
 "LeftRecursion/ReturnValueAndActionsList1_4" = "parse stops at the first comma in the input list — LR rule with returns / list-label combination not yet handled by Stage C-free codegen"
 "ParserExec/OrderingPredicates" = "semantic predicate gates an alt — discarded predicate causes wrong alt to be selected (Stage C territory)"
 "Performance/DropLoopEntryBranchInLRRule_4" = "LR expression rule with operator precedence — Gale picks the wrong precedence chain for or-then-and"
 
-[stage_a2_skip]
+[stage_a_skip]
 "LeftRecursion/WhitespaceInfluence_1" = "Gale codegen produces invalid Wado for the all-binary-op LR `expression` rule (operator alt rewrite bug)"
 "LeftRecursion/WhitespaceInfluence_2" = "Gale codegen produces invalid Wado for the all-binary-op LR `expression` rule (operator alt rewrite bug)"
 "ParserExec/IfIfElseNonGreedyBinding1" = "Gale codegen fails on the non-greedy optional `??` operator in a parser rule"

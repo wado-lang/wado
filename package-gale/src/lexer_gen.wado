@@ -332,30 +332,40 @@ fn gen_lexer_alt_seq(w: &mut CodeWriter, alt: &LexerAlt, all_rules: &Array<Lexer
                 gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action, ci);
                 return;
             }
-            // Greedy Plus/Star followed by remaining elements that the
-            // Plus/Star inner could also consume: a purely greedy loop
-            // would over-shoot and strand the suffix at end-of-input
-            // (`'a' ~('b')+ 'c'` is the canonical ANTLR4 descriptor —
-            // `Sets/UnicodeNegated*`). When the suffix is a single
-            // simple element that consumes one character (Literal of
-            // a single char, CharRange, CharClass, AnyChar, or Not over
-            // any of those), emit a longest-match-with-backtrack form:
-            // record each iter end position, then try the suffix at
-            // each position from longest to shortest. Fragments, rule
-            // refs, groups, and nested Repeats are intentionally out
-            // of scope — their suffix shapes need more analysis and
-            // the descriptor corpus does not exercise them in this
-            // way.
+            // Greedy Plus / Star whose inner is a single-char-consuming
+            // shape (Literal of one char / CharRange / CharClass /
+            // AnyChar / Not over any of those / Group of single-element
+            // alts) and whose entire suffix is also single-char-consuming:
+            // a naive greedy loop can over-shoot and strand the suffix at
+            // end-of-input (`'a' ~('b')+ 'c'` over `abc` is the canonical
+            // ANTLR4 descriptor — `Sets/UnicodeNegated*`). ANTLR4's lexer
+            // obtains the longest match via NFA→DFA simulation; we
+            // replicate that here in a single forward pass with explicit
+            // accept-state tracking (no backtracking). At every iteration
+            // we peek whether the suffix could start at the current
+            // position and record the latest such position; once the
+            // inner stops matching we resume the cursor at that recorded
+            // position and consume the suffix.
+            //
+            // Shapes outside that window (RuleRef inner / suffix, nested
+            // Repeat, multi-element-alt Group) fall through to the
+            // unchanged greedy emit below. The standard lexer algorithm
+            // is correct there as long as the inner cannot consume the
+            // suffix's first character — a property the descriptor
+            // corpus does satisfy outside the simple window. If a future
+            // grammar needs lookahead through a complex shape, generalise
+            // the peek emitters instead of widening this trigger blindly.
             if rep.kind matches { Plus | Star }
                 && i + 1 < alt.elements.len()
-                && lexer_suffix_is_simple(&alt.elements, i + 1)
                 && lexer_element_can_consume_simple(&rep.element) {
                 let mut suffix_elems: Array<LexerElement> = [];
                 for let mut j = i + 1; j < alt.elements.len(); j += 1 {
                     suffix_elems.push(alt.elements[j]);
                 }
-                gen_lexer_repeat_with_backtrack(w, rep, &suffix_elems, all_rules, fail_action, ci);
-                return;
+                if lexer_suffix_is_peekable(&suffix_elems) {
+                    gen_lexer_repeat_lookahead_aware(w, rep, &suffix_elems, all_rules, fail_action, ci);
+                    return;
+                }
             }
         }
         gen_lexer_elem(w, elem, all_rules, fail_action, ci);
@@ -363,11 +373,12 @@ fn gen_lexer_alt_seq(w: &mut CodeWriter, alt: &LexerAlt, all_rules: &Array<Lexer
 }
 
 /// True for lexer elements that consume exactly one char and never
-/// branch into rule references or nested loops. The longest-match
-/// backtracking emitter restricts the suffix to these shapes because
-/// it replays the suffix once per saved iter position; non-simple
-/// suffixes would silently lose state (rule refs) or recurse into
-/// their own backtracking (nested Repeats).
+/// branch into rule references or nested loops. The lookahead-aware
+/// emitter restricts both inner and suffix to these shapes because
+/// it peeks the suffix at every iteration; non-simple shapes would
+/// either escape into a rule call (rule refs), recurse into their own
+/// loop (nested Repeats), or pick an alternation arm that diverges
+/// between peek and the eventual commit (multi-alt Groups).
 fn lexer_element_can_consume_simple(elem: &LexerElement) -> bool {
     return match *elem {
         Literal(text) => text.chars().count() == 1,
@@ -375,83 +386,155 @@ fn lexer_element_can_consume_simple(elem: &LexerElement) -> bool {
         CharClass(_) => true,
         AnyChar => true,
         Not(not_inner) => lexer_element_can_consume_simple(&not_inner.element),
-        // `~('b')` parses as `Not(Group([Alt([Literal("b")])]))`: a
-        // single-alt Group wrapping a single simple element. The
-        // runtime emit consumes exactly one char in that case, so
-        // treat it as simple for the longest-match backtracking
-        // suffix replay.
+        // `~('b')` parses as `Not(Group([Alt([Literal("b")])]))`,
+        // `~('b' | ' ')` as `Not(Group([Alt(['b']), Alt([' '])]))`.
+        // Either shape consumes exactly one char as long as every
+        // alt body is itself a single simple element.
         Group(alts) => {
-            alts.len() == 1 && alts[0].elements.len() == 1 && lexer_element_can_consume_simple(&alts[0].elements[0]);
+            for let alt of alts {
+                if alt.elements.len() != 1 {
+                    return false;
+                }
+                if !lexer_element_can_consume_simple(&alt.elements[0]) {
+                    return false;
+                }
+            }
+            !alts.is_empty();
         },
         _ => false,
     };
 }
 
-fn lexer_suffix_is_simple(elements: &Array<LexerElement>, start: i32) -> bool {
-    if start >= elements.len() {
+/// True when every element in the suffix can be safely peeked via a
+/// `save-pos / try-elem / restore-pos` block. Required by
+/// `gen_lexer_repeat_lookahead_aware` so the per-iteration peek that
+/// records `last_accept` produces the same answer as the post-loop
+/// commit. Multi-char literals are accepted because the peek replays
+/// the same byte-wise comparisons the commit will run.
+fn lexer_suffix_is_peekable(elements: &Array<LexerElement>) -> bool {
+    if elements.is_empty() {
         return false;
     }
-    for let mut i = start; i < elements.len(); i += 1 {
-        if !lexer_element_can_consume_simple(&elements[i]) {
+    for let elem of elements {
+        if !lexer_element_is_peekable(elem) {
             return false;
         }
     }
     return true;
 }
 
-/// Emit a greedy `Plus` / `Star` whose suffix the inner could also
-/// match. Records each successful iteration's end position in
-/// `rep_positions_<id>`, then walks the saved positions from longest
-/// to shortest, replaying the suffix at each one. The first position
-/// whose suffix replay succeeds wins; if none works the whole
-/// element fires `fail_action`. Caller has already verified via
-/// `lexer_suffix_is_simple` that the suffix is replay-safe.
-fn gen_lexer_repeat_with_backtrack(w: &mut CodeWriter, rep: &LexerRepeatElement, suffix: &Array<LexerElement>, all_rules: &Array<LexerRule>, fail_action: &String, ci: bool) {
-    let id = w.next_id();
-    let start_var = `bt_start_{id}`;
-    let positions_var = `bt_positions_{id}`;
-    let try_label = `bt_try_{id}`;
-    let done_var = `bt_done_{id}`;
-    let done_label = `bt_done_{id}_blk`;
-    let loop_label = `bt_rep_{id}`;
+fn lexer_element_is_peekable(elem: &LexerElement) -> bool {
+    return match *elem {
+        Literal(_) => true,
+        CharRange(_) => true,
+        CharClass(_) => true,
+        AnyChar => true,
+        Not(not_inner) => lexer_element_is_peekable(&not_inner.element),
+        Group(alts) => {
+            for let alt of alts {
+                if alt.elements.len() != 1 {
+                    return false;
+                }
+                if !lexer_element_is_peekable(&alt.elements[0]) {
+                    return false;
+                }
+            }
+            !alts.is_empty();
+        },
+        _ => false,
+    };
+}
 
-    w.line(&`let {start_var} = pos;`);
+/// Emit a greedy `Plus` / `Star` whose inner can consume the suffix's
+/// first character, in single-pass forward DFA style. At every
+/// position where the suffix could legally start we record the
+/// position in `accept_<id>`; once the inner stops matching we rewind
+/// the cursor exactly once to the latest recorded position and
+/// consume the suffix normally. This is the standard lexer
+/// longest-match algorithm (NFA→DFA with accept-state tracking),
+/// performed without any try-fail-retry backtracking.
+fn gen_lexer_repeat_lookahead_aware(
+    w: &mut CodeWriter,
+    rep: &LexerRepeatElement,
+    suffix: &Array<LexerElement>,
+    all_rules: &Array<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+) {
+    let id = w.next_id();
+    let accept_var = `accept_{id}`;
+    let loop_label = `la_rep_{id}`;
+
+    w.line(&`let mut {accept_var}: i32 = -1;`);
+
+    // Star: zero iterations is a valid endpoint, so the suffix may
+    // legally start at the current position even before any inner
+    // consumption.
+    if let Star = rep.kind {
+        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci);
+    }
+
+    // Plus: the first iteration is mandatory and may not be skipped.
     if let Plus = rep.kind {
         gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci);
-    }
-    w.line(&`let mut {positions_var}: Array<i32> = [pos];`);
-    w.begin(&"loop");
-    w.line(&`let bt_saved_{id} = pos;`);
-    w.begin(&`{loop_label}:`);
-    gen_lexer_elem(w, &rep.element, all_rules, &`break {loop_label}`, ci);
-    w.line(&`{positions_var}.push(pos);`);
-    w.line(&"continue;");
-    w.end();
-    w.line(&`pos = bt_saved_{id};`);
-    w.line(&"break;");
-    w.end();
-    // For Star, the zero-iteration position (`start_var`) is also a
-    // valid resume point. Plus requires >=1 iter, so its shortest
-    // saved position is already the first-iter end.
-    if let Star = rep.kind {
-        w.line(&`{positions_var}.insert(0, {start_var});`);
+        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci);
     }
 
-    w.line(&`let mut {done_var} = false;`);
-    w.begin(&`{done_label}:`);
-    w.begin(&`for let mut bt_k_{id} = {positions_var}.len() - 1; bt_k_{id} >= 0; bt_k_{id} -= 1`);
-    w.line(&`pos = {positions_var}[bt_k_{id}];`);
-    w.begin(&`{try_label}:`);
-    for let elem of suffix {
-        gen_lexer_elem(w, elem, all_rules, &`break {try_label}`, ci);
-    }
-    w.line(&`{done_var} = true;`);
-    w.line(&`break {done_label};`);
+    // Forward scan: each iteration of the inner advances pos and
+    // re-peeks the suffix. `accept_<id>` always holds the latest
+    // position where the suffix could start; once the inner can no
+    // longer match we exit the loop and resume from that position.
+    w.begin(&"loop");
+    w.line(&`let la_saved_{id} = pos;`);
+    w.begin(&`{loop_label}:`);
+    gen_lexer_elem(w, &rep.element, all_rules, &`break {loop_label}`, ci);
+    gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci);
+    w.line(&"continue;");
     w.end();
+    w.line(&`pos = la_saved_{id};`);
+    w.line(&"break;");
     w.end();
-    w.end();
-    w.begin(&`if !{done_var}`);
+
+    w.begin(&`if {accept_var} < 0`);
     w.line(&`{*fail_action};`);
+    w.end();
+    w.line(&`pos = {accept_var};`);
+
+    // Re-consume the suffix to advance `pos` past it. The peek that
+    // recorded `accept_var` already proved it matches, so the actual
+    // emit cannot fail in well-formed input — the fail_action here is
+    // unreachable but kept for shape symmetry with regular emit.
+    for let elem of suffix {
+        gen_lexer_elem(w, elem, all_rules, fail_action, ci);
+    }
+}
+
+/// Emit a save / try-suffix / restore block that records the current
+/// position in `accept_var` iff every suffix element would match
+/// starting here. Pos is restored unconditionally so the surrounding
+/// forward scan continues without committing the peeked suffix.
+fn gen_lexer_suffix_peek(
+    w: &mut CodeWriter,
+    suffix: &Array<LexerElement>,
+    all_rules: &Array<LexerRule>,
+    accept_var: &String,
+    ci: bool,
+) {
+    let id = w.next_id();
+    let save_var = `peek_save_{id}`;
+    let matched_var = `peek_ok_{id}`;
+    let label = `peek_{id}`;
+    w.line(&`let {save_var} = pos;`);
+    w.line(&`let mut {matched_var} = false;`);
+    w.begin(&`{label}:`);
+    for let elem of suffix {
+        gen_lexer_elem(w, elem, all_rules, &`break {label}`, ci);
+    }
+    w.line(&`{matched_var} = true;`);
+    w.end();
+    w.line(&`pos = {save_var};`);
+    w.begin(&`if {matched_var}`);
+    w.line(&`{*accept_var} = {save_var};`);
     w.end();
 }
 

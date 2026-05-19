@@ -1392,6 +1392,15 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
 /// `gen_scan_group` semantics: ambiguity detection (alts sharing a
 /// first token enter longest-match commit), lenient gate, and the
 /// `sg_<gc>_done` / `sg_<gc>` block structure.
+fn is_wildcard_alt(indices: &Array<i32>, alt_idx: i32) -> bool {
+    for let idx of indices {
+        if *idx == alt_idx {
+            return true;
+        }
+    }
+    return false;
+}
+
 fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContext, fail_stmt: &String, lenient: bool) {
     if ge.alts.len() == 1 {
         // Single alt: outer `done` wraps inner `body`.
@@ -1452,13 +1461,14 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
         }
     }
 
+    let has_wildcard = !ge.wildcard_alt_indices.is_empty();
     let mut union_first: Array<String> = [];
-    if lenient && !ge.has_wildcard_alt {
+    if lenient && !has_wildcard {
         for let fs of first_sets {
             dedup_append_arr(&mut union_first, fs);
         }
     }
-    let gate_emitted = lenient && !ge.has_wildcard_alt && union_first.len() > 0;
+    let gate_emitted = lenient && !has_wildcard && union_first.len() > 0;
     if gate_emitted {
         let sgk_var = `sgk_{gc}`;
         w.line(&`let {sgk_var} = if pos < tokens.len() \{ tokens[pos].kind \} else \{ TK_EOF \};`);
@@ -1470,8 +1480,28 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
         w.line(&`let mut {best_var} = -1;`);
     }
 
-    w.begin(&`{outer}:`);
+    // Iteration order: visit concrete alts before wildcard alts. A
+    // wildcard alt matches any non-EOF token (its scan body is just
+    // `pos += 1`), so trying it before a more specific concrete alt
+    // would always commit to the wildcard and shadow the concrete
+    // alt — independent of source order. Pushing wildcard alts to
+    // the end mirrors `gen_general_group_dispatch`'s
+    // `sort_group_by_mandatory_count_desc` ordering on the parse
+    // side, so scan and parse agree on the winner.
+    let mut iter_order: Array<i32> = [];
     for let mut i = 0; i < n; i += 1 {
+        if !is_wildcard_alt(&ge.wildcard_alt_indices, i) {
+            iter_order.push(i);
+        }
+    }
+    for let mut i = 0; i < n; i += 1 {
+        if is_wildcard_alt(&ge.wildcard_alt_indices, i) {
+            iter_order.push(i);
+        }
+    }
+
+    w.begin(&`{outer}:`);
+    for let i of iter_order {
         let inner = `sg_{gc}_{i}`;
         w.line(&`pos = {gp_var};`);
         w.begin(&`{inner}:`);
@@ -2346,12 +2376,13 @@ fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: 
         gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &scan_label);
     } else {
         let mut alt_first_sets: Array<Array<String>> = [];
-        let mut has_wildcard = false;
-        for let alt of &g_elem.alternatives {
+        let mut wildcard_indices: Array<i32> = [];
+        for let mut ai = 0; ai < g_elem.alternatives.len(); ai += 1 {
+            let alt = &g_elem.alternatives[ai];
             let mut visiting: Array<String> = [];
             alt_first_sets.push(ctx.first_of_alt(alt, &mut visiting));
             if alt_is_wildcard_led(alt) {
-                has_wildcard = true;
+                wildcard_indices.push(ai);
             }
         }
         let scan_elem = ScanGroupElem {
@@ -2359,7 +2390,7 @@ fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: 
             dispatch: g_op.scan_dispatch,
             lenient: false,
             alt_first_sets,
-            has_wildcard_alt: has_wildcard,
+            wildcard_alt_indices: wildcard_indices,
         };
         gen_scan_op_group(w, &scan_elem, ctx, &fail, false);
     }

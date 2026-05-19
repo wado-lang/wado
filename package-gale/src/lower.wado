@@ -1492,12 +1492,16 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array
         }
         let mut visiting: Array<String> = [];
         let alt_first = ctx.first_of_alt(alt, &mut visiting);
+        let mut wildcard_indices: Array<i32> = [];
+        if alt_is_wildcard_led(alt) {
+            wildcard_indices.push(0);
+        }
         return ScanElement::Group(ScanGroupElem {
             alts: [ScanBody { elements }],
             dispatch: empty_direct_dispatch(),
             lenient: false,
             alt_first_sets: [alt_first],
-            has_wildcard_alt: alt_is_wildcard_led(alt),
+            wildcard_alt_indices: wildcard_indices,
         });
     }
     if is_token_only_group(alts) {
@@ -1523,7 +1527,7 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array
             dispatch: build_direct_dispatch(&first_sets),
             lenient: false,
             alt_first_sets: first_sets,
-            has_wildcard_alt: false,
+            wildcard_alt_indices: ([] as Array<i32>),
         });
     }
     if is_simple_cst_group(alts) {
@@ -1558,11 +1562,10 @@ fn lower_general_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, out
         all_indices.push(ai);
     }
     let dispatch = build_overlap_dispatch(&"General group (scan)", alts, &all_indices, &first_sets, ctx);
-    let mut has_wildcard = false;
-    for let alt of alts {
-        if alt_is_wildcard_led(alt) {
-            has_wildcard = true;
-            break;
+    let mut wildcard_indices: Array<i32> = [];
+    for let mut ai = 0; ai < alts.len(); ai += 1 {
+        if alt_is_wildcard_led(&alts[ai]) {
+            wildcard_indices.push(ai);
         }
     }
     return ScanElement::Group(ScanGroupElem {
@@ -1570,7 +1573,7 @@ fn lower_general_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, out
         dispatch: dispatch,
         lenient: true,
         alt_first_sets: first_sets,
-        has_wildcard_alt: has_wildcard,
+        wildcard_alt_indices: wildcard_indices,
     });
 }
 
@@ -2533,7 +2536,7 @@ fn lower_simple_cst_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, 
         dispatch: dispatch,
         lenient: true,
         alt_first_sets: first_sets,
-        has_wildcard_alt: false,
+        wildcard_alt_indices: ([] as Array<i32>),
     });
 }
 

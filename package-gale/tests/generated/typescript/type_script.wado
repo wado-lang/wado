@@ -5039,36 +5039,46 @@ fn try_bigoctalintegerliteral(chars: &Array<char>, start: i32) -> i32 {
     if pos >= chars.len() { return -1; }
     if !(false || '0' <= chars[pos] <= '7') { return -1; }
     pos += 1;
-    let bt_start_36 = pos;
-    let mut bt_positions_36: Array<i32> = [pos];
+    let mut accept_36: i32 = -1;
+    let peek_save_37 = pos;
+    let mut peek_ok_37 = false;
+    peek_37: {
+        if pos >= chars.len() || chars[pos] != 'n' { break peek_37; }
+        pos += 1;
+        peek_ok_37 = true;
+    }
+    pos = peek_save_37;
+    if peek_ok_37 {
+        accept_36 = peek_save_37;
+    }
     loop {
-        let bt_saved_36 = pos;
-        bt_rep_36: {
-            if pos >= chars.len() { break bt_rep_36; }
-            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '7') { break bt_rep_36; }
+        let la_saved_36 = pos;
+        la_rep_36: {
+            if pos >= chars.len() { break la_rep_36; }
+            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '7') { break la_rep_36; }
             pos += 1;
-            bt_positions_36.push(pos);
+            let peek_save_38 = pos;
+            let mut peek_ok_38 = false;
+            peek_38: {
+                if pos >= chars.len() || chars[pos] != 'n' { break peek_38; }
+                pos += 1;
+                peek_ok_38 = true;
+            }
+            pos = peek_save_38;
+            if peek_ok_38 {
+                accept_36 = peek_save_38;
+            }
             continue;
         }
-        pos = bt_saved_36;
+        pos = la_saved_36;
         break;
     }
-    bt_positions_36.insert(0, bt_start_36);
-    let mut bt_done_36 = false;
-    bt_done_36_blk: {
-        for let mut bt_k_36 = bt_positions_36.len() - 1; bt_k_36 >= 0; bt_k_36 -= 1 {
-            pos = bt_positions_36[bt_k_36];
-            bt_try_36: {
-                if pos >= chars.len() || chars[pos] != 'n' { break bt_try_36; }
-                pos += 1;
-                bt_done_36 = true;
-                break bt_done_36_blk;
-            }
-        }
-    }
-    if !bt_done_36 {
+    if accept_36 < 0 {
         return -1;
     }
+    pos = accept_36;
+    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -5082,70 +5092,80 @@ fn try_bigbinaryintegerliteral(chars: &Array<char>, start: i32) -> i32 {
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == '0' || chars[pos] == '1') { return -1; }
     pos += 1;
-    let bt_start_37 = pos;
-    let mut bt_positions_37: Array<i32> = [pos];
+    let mut accept_39: i32 = -1;
+    let peek_save_40 = pos;
+    let mut peek_ok_40 = false;
+    peek_40: {
+        if pos >= chars.len() || chars[pos] != 'n' { break peek_40; }
+        pos += 1;
+        peek_ok_40 = true;
+    }
+    pos = peek_save_40;
+    if peek_ok_40 {
+        accept_39 = peek_save_40;
+    }
     loop {
-        let bt_saved_37 = pos;
-        bt_rep_37: {
-            if pos >= chars.len() { break bt_rep_37; }
-            if !(false || chars[pos] == '_' || chars[pos] == '0' || chars[pos] == '1') { break bt_rep_37; }
+        let la_saved_39 = pos;
+        la_rep_39: {
+            if pos >= chars.len() { break la_rep_39; }
+            if !(false || chars[pos] == '_' || chars[pos] == '0' || chars[pos] == '1') { break la_rep_39; }
             pos += 1;
-            bt_positions_37.push(pos);
+            let peek_save_41 = pos;
+            let mut peek_ok_41 = false;
+            peek_41: {
+                if pos >= chars.len() || chars[pos] != 'n' { break peek_41; }
+                pos += 1;
+                peek_ok_41 = true;
+            }
+            pos = peek_save_41;
+            if peek_ok_41 {
+                accept_39 = peek_save_41;
+            }
             continue;
         }
-        pos = bt_saved_37;
+        pos = la_saved_39;
         break;
     }
-    bt_positions_37.insert(0, bt_start_37);
-    let mut bt_done_37 = false;
-    bt_done_37_blk: {
-        for let mut bt_k_37 = bt_positions_37.len() - 1; bt_k_37 >= 0; bt_k_37 -= 1 {
-            pos = bt_positions_37[bt_k_37];
-            bt_try_37: {
-                if pos >= chars.len() || chars[pos] != 'n' { break bt_try_37; }
-                pos += 1;
-                bt_done_37 = true;
-                break bt_done_37_blk;
-            }
-        }
-    }
-    if !bt_done_37 {
+    if accept_39 < 0 {
         return -1;
     }
+    pos = accept_39;
+    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
+    pos += 1;
     return pos;
 }
 
 fn try_bigdecimalintegerliteral(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_38 = pos;
-    let mut alts_ok_38 = false;
-    alts_38_0: {
-        pos = alts_saved_38;
-        if pos >= chars.len() || chars[pos] != '0' { break alts_38_0; }
+    let alts_saved_42 = pos;
+    let mut alts_ok_42 = false;
+    alts_42_0: {
+        pos = alts_saved_42;
+        if pos >= chars.len() || chars[pos] != '0' { break alts_42_0; }
         pos += 1;
-        alts_ok_38 = true;
+        alts_ok_42 = true;
     }
-    if !alts_ok_38 {
-        alts_38_1: {
-            pos = alts_saved_38;
-            if pos >= chars.len() { break alts_38_1; }
-            if !(false || '1' <= chars[pos] <= '9') { break alts_38_1; }
+    if !alts_ok_42 {
+        alts_42_1: {
+            pos = alts_saved_42;
+            if pos >= chars.len() { break alts_42_1; }
+            if !(false || '1' <= chars[pos] <= '9') { break alts_42_1; }
             pos += 1;
             loop {
-                let rep_saved_39 = pos;
-                rep_39: {
-                    if pos >= chars.len() { break rep_39; }
-                    if !(false || '0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_39; }
+                let rep_saved_43 = pos;
+                rep_43: {
+                    if pos >= chars.len() { break rep_43; }
+                    if !(false || '0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_43; }
                     pos += 1;
                     continue;
                 }
-                pos = rep_saved_39;
+                pos = rep_saved_43;
                 break;
             }
-            alts_ok_38 = true;
+            alts_ok_42 = true;
         }
     }
-    if !alts_ok_38 { return -1; }
+    if !alts_ok_42 { return -1; }
     if pos >= chars.len() || chars[pos] != 'n' { return -1; }
     pos += 1;
     return pos;
@@ -6178,216 +6198,216 @@ fn try_is(chars: &Array<char>, start: i32) -> i32 {
 
 fn try_identifier(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_40 = pos;
-    let mut alts_ok_40 = false;
-    alts_40_0: {
-        pos = alts_saved_40;
-        if pos >= chars.len() { break alts_40_0; }
-        if !(false || 'A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || '\u{c0}' <= chars[pos] <= '\u{d6}' || '\u{d8}' <= chars[pos] <= '\u{f6}' || '\u{f8}' <= chars[pos] <= '\u{ff}' || '\u{100}' <= chars[pos] <= '\u{24f}' || '\u{370}' <= chars[pos] <= '\u{3ff}' || '\u{400}' <= chars[pos] <= '\u{4ff}' || '\u{600}' <= chars[pos] <= '\u{6ff}' || '\u{900}' <= chars[pos] <= '\u{97f}' || '\u{4e00}' <= chars[pos] <= '\u{9fff}' || '\u{3040}' <= chars[pos] <= '\u{309f}' || '\u{30a0}' <= chars[pos] <= '\u{30ff}' || '\u{ac00}' <= chars[pos] <= '\u{d7af}') { break alts_40_0; }
+    let alts_saved_44 = pos;
+    let mut alts_ok_44 = false;
+    alts_44_0: {
+        pos = alts_saved_44;
+        if pos >= chars.len() { break alts_44_0; }
+        if !(false || 'A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || '\u{c0}' <= chars[pos] <= '\u{d6}' || '\u{d8}' <= chars[pos] <= '\u{f6}' || '\u{f8}' <= chars[pos] <= '\u{ff}' || '\u{100}' <= chars[pos] <= '\u{24f}' || '\u{370}' <= chars[pos] <= '\u{3ff}' || '\u{400}' <= chars[pos] <= '\u{4ff}' || '\u{600}' <= chars[pos] <= '\u{6ff}' || '\u{900}' <= chars[pos] <= '\u{97f}' || '\u{4e00}' <= chars[pos] <= '\u{9fff}' || '\u{3040}' <= chars[pos] <= '\u{309f}' || '\u{30a0}' <= chars[pos] <= '\u{30ff}' || '\u{ac00}' <= chars[pos] <= '\u{d7af}') { break alts_44_0; }
         pos += 1;
-        alts_ok_40 = true;
+        alts_ok_44 = true;
     }
-    if !alts_ok_40 {
-        alts_40_1: {
-            pos = alts_saved_40;
-            if pos >= chars.len() { break alts_40_1; }
-            if !(false || chars[pos] == '$' || chars[pos] == '_') { break alts_40_1; }
+    if !alts_ok_44 {
+        alts_44_1: {
+            pos = alts_saved_44;
+            if pos >= chars.len() { break alts_44_1; }
+            if !(false || chars[pos] == '$' || chars[pos] == '_') { break alts_44_1; }
             pos += 1;
-            alts_ok_40 = true;
+            alts_ok_44 = true;
         }
-        if !alts_ok_40 {
-            alts_40_2: {
-                pos = alts_saved_40;
-                if pos >= chars.len() || chars[pos] != '\\' { break alts_40_2; }
-                pos += 1;
-                let alts_saved_41 = pos;
-                let mut alts_ok_41 = false;
-                alts_41_0: {
-                    pos = alts_saved_41;
-                    if pos >= chars.len() || chars[pos] != 'u' { break alts_41_0; }
-                    pos += 1;
-                    if pos >= chars.len() { break alts_41_0; }
-                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_41_0; }
-                    pos += 1;
-                    if pos >= chars.len() { break alts_41_0; }
-                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_41_0; }
-                    pos += 1;
-                    if pos >= chars.len() { break alts_41_0; }
-                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_41_0; }
-                    pos += 1;
-                    if pos >= chars.len() { break alts_41_0; }
-                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_41_0; }
-                    pos += 1;
-                    alts_ok_41 = true;
-                }
-                if !alts_ok_41 {
-                    alts_41_1: {
-                        pos = alts_saved_41;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_41_1; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '{' { break alts_41_1; }
-                        pos += 1;
-                        if pos >= chars.len() { break alts_41_1; }
-                        if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_41_1; }
-                        pos += 1;
-                        if pos >= chars.len() { break alts_41_1; }
-                        if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_41_1; }
-                        pos += 1;
-                        loop {
-                            let rep_saved_42 = pos;
-                            rep_42: {
-                                if pos >= chars.len() { break rep_42; }
-                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_42; }
-                                pos += 1;
-                                continue;
-                            }
-                            pos = rep_saved_42;
-                            break;
-                        }
-                        if pos >= chars.len() || chars[pos] != '}' { break alts_41_1; }
-                        pos += 1;
-                        alts_ok_41 = true;
-                    }
-                }
-                if !alts_ok_41 { break alts_40_2; }
-                alts_ok_40 = true;
-            }
-        }
-    }
-    if !alts_ok_40 { return -1; }
-    loop {
-        let rep_saved_43 = pos;
-        rep_43: {
-            let alts_saved_44 = pos;
-            let mut alts_ok_44 = false;
-            alts_44_0: {
+        if !alts_ok_44 {
+            alts_44_2: {
                 pos = alts_saved_44;
+                if pos >= chars.len() || chars[pos] != '\\' { break alts_44_2; }
+                pos += 1;
                 let alts_saved_45 = pos;
                 let mut alts_ok_45 = false;
                 alts_45_0: {
                     pos = alts_saved_45;
+                    if pos >= chars.len() || chars[pos] != 'u' { break alts_45_0; }
+                    pos += 1;
                     if pos >= chars.len() { break alts_45_0; }
-                    if !(false || 'A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || '\u{c0}' <= chars[pos] <= '\u{d6}' || '\u{d8}' <= chars[pos] <= '\u{f6}' || '\u{f8}' <= chars[pos] <= '\u{ff}' || '\u{100}' <= chars[pos] <= '\u{24f}' || '\u{370}' <= chars[pos] <= '\u{3ff}' || '\u{400}' <= chars[pos] <= '\u{4ff}' || '\u{600}' <= chars[pos] <= '\u{6ff}' || '\u{900}' <= chars[pos] <= '\u{97f}' || '\u{4e00}' <= chars[pos] <= '\u{9fff}' || '\u{3040}' <= chars[pos] <= '\u{309f}' || '\u{30a0}' <= chars[pos] <= '\u{30ff}' || '\u{ac00}' <= chars[pos] <= '\u{d7af}') { break alts_45_0; }
+                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_0; }
+                    pos += 1;
+                    if pos >= chars.len() { break alts_45_0; }
+                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_0; }
+                    pos += 1;
+                    if pos >= chars.len() { break alts_45_0; }
+                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_0; }
+                    pos += 1;
+                    if pos >= chars.len() { break alts_45_0; }
+                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_0; }
                     pos += 1;
                     alts_ok_45 = true;
                 }
                 if !alts_ok_45 {
                     alts_45_1: {
                         pos = alts_saved_45;
+                        if pos >= chars.len() || chars[pos] != 'u' { break alts_45_1; }
+                        pos += 1;
+                        if pos >= chars.len() || chars[pos] != '{' { break alts_45_1; }
+                        pos += 1;
                         if pos >= chars.len() { break alts_45_1; }
-                        if !(false || chars[pos] == '$' || chars[pos] == '_') { break alts_45_1; }
+                        if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_1; }
+                        pos += 1;
+                        if pos >= chars.len() { break alts_45_1; }
+                        if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_1; }
+                        pos += 1;
+                        loop {
+                            let rep_saved_46 = pos;
+                            rep_46: {
+                                if pos >= chars.len() { break rep_46; }
+                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_46; }
+                                pos += 1;
+                                continue;
+                            }
+                            pos = rep_saved_46;
+                            break;
+                        }
+                        if pos >= chars.len() || chars[pos] != '}' { break alts_45_1; }
                         pos += 1;
                         alts_ok_45 = true;
                     }
-                    if !alts_ok_45 {
-                        alts_45_2: {
-                            pos = alts_saved_45;
-                            if pos >= chars.len() || chars[pos] != '\\' { break alts_45_2; }
+                }
+                if !alts_ok_45 { break alts_44_2; }
+                alts_ok_44 = true;
+            }
+        }
+    }
+    if !alts_ok_44 { return -1; }
+    loop {
+        let rep_saved_47 = pos;
+        rep_47: {
+            let alts_saved_48 = pos;
+            let mut alts_ok_48 = false;
+            alts_48_0: {
+                pos = alts_saved_48;
+                let alts_saved_49 = pos;
+                let mut alts_ok_49 = false;
+                alts_49_0: {
+                    pos = alts_saved_49;
+                    if pos >= chars.len() { break alts_49_0; }
+                    if !(false || 'A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || '\u{c0}' <= chars[pos] <= '\u{d6}' || '\u{d8}' <= chars[pos] <= '\u{f6}' || '\u{f8}' <= chars[pos] <= '\u{ff}' || '\u{100}' <= chars[pos] <= '\u{24f}' || '\u{370}' <= chars[pos] <= '\u{3ff}' || '\u{400}' <= chars[pos] <= '\u{4ff}' || '\u{600}' <= chars[pos] <= '\u{6ff}' || '\u{900}' <= chars[pos] <= '\u{97f}' || '\u{4e00}' <= chars[pos] <= '\u{9fff}' || '\u{3040}' <= chars[pos] <= '\u{309f}' || '\u{30a0}' <= chars[pos] <= '\u{30ff}' || '\u{ac00}' <= chars[pos] <= '\u{d7af}') { break alts_49_0; }
+                    pos += 1;
+                    alts_ok_49 = true;
+                }
+                if !alts_ok_49 {
+                    alts_49_1: {
+                        pos = alts_saved_49;
+                        if pos >= chars.len() { break alts_49_1; }
+                        if !(false || chars[pos] == '$' || chars[pos] == '_') { break alts_49_1; }
+                        pos += 1;
+                        alts_ok_49 = true;
+                    }
+                    if !alts_ok_49 {
+                        alts_49_2: {
+                            pos = alts_saved_49;
+                            if pos >= chars.len() || chars[pos] != '\\' { break alts_49_2; }
                             pos += 1;
-                            let alts_saved_46 = pos;
-                            let mut alts_ok_46 = false;
-                            alts_46_0: {
-                                pos = alts_saved_46;
-                                if pos >= chars.len() || chars[pos] != 'u' { break alts_46_0; }
+                            let alts_saved_50 = pos;
+                            let mut alts_ok_50 = false;
+                            alts_50_0: {
+                                pos = alts_saved_50;
+                                if pos >= chars.len() || chars[pos] != 'u' { break alts_50_0; }
                                 pos += 1;
-                                if pos >= chars.len() { break alts_46_0; }
-                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_46_0; }
+                                if pos >= chars.len() { break alts_50_0; }
+                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_50_0; }
                                 pos += 1;
-                                if pos >= chars.len() { break alts_46_0; }
-                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_46_0; }
+                                if pos >= chars.len() { break alts_50_0; }
+                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_50_0; }
                                 pos += 1;
-                                if pos >= chars.len() { break alts_46_0; }
-                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_46_0; }
+                                if pos >= chars.len() { break alts_50_0; }
+                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_50_0; }
                                 pos += 1;
-                                if pos >= chars.len() { break alts_46_0; }
-                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_46_0; }
+                                if pos >= chars.len() { break alts_50_0; }
+                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_50_0; }
                                 pos += 1;
-                                alts_ok_46 = true;
+                                alts_ok_50 = true;
                             }
-                            if !alts_ok_46 {
-                                alts_46_1: {
-                                    pos = alts_saved_46;
-                                    if pos >= chars.len() || chars[pos] != 'u' { break alts_46_1; }
+                            if !alts_ok_50 {
+                                alts_50_1: {
+                                    pos = alts_saved_50;
+                                    if pos >= chars.len() || chars[pos] != 'u' { break alts_50_1; }
                                     pos += 1;
-                                    if pos >= chars.len() || chars[pos] != '{' { break alts_46_1; }
+                                    if pos >= chars.len() || chars[pos] != '{' { break alts_50_1; }
                                     pos += 1;
-                                    if pos >= chars.len() { break alts_46_1; }
-                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_46_1; }
+                                    if pos >= chars.len() { break alts_50_1; }
+                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_50_1; }
                                     pos += 1;
-                                    if pos >= chars.len() { break alts_46_1; }
-                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_46_1; }
+                                    if pos >= chars.len() { break alts_50_1; }
+                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_50_1; }
                                     pos += 1;
                                     loop {
-                                        let rep_saved_47 = pos;
-                                        rep_47: {
-                                            if pos >= chars.len() { break rep_47; }
-                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_47; }
+                                        let rep_saved_51 = pos;
+                                        rep_51: {
+                                            if pos >= chars.len() { break rep_51; }
+                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_51; }
                                             pos += 1;
                                             continue;
                                         }
-                                        pos = rep_saved_47;
+                                        pos = rep_saved_51;
                                         break;
                                     }
-                                    if pos >= chars.len() || chars[pos] != '}' { break alts_46_1; }
+                                    if pos >= chars.len() || chars[pos] != '}' { break alts_50_1; }
                                     pos += 1;
-                                    alts_ok_46 = true;
+                                    alts_ok_50 = true;
                                 }
                             }
-                            if !alts_ok_46 { break alts_45_2; }
-                            alts_ok_45 = true;
+                            if !alts_ok_50 { break alts_49_2; }
+                            alts_ok_49 = true;
                         }
                     }
                 }
-                if !alts_ok_45 { break alts_44_0; }
-                alts_ok_44 = true;
+                if !alts_ok_49 { break alts_48_0; }
+                alts_ok_48 = true;
             }
-            if !alts_ok_44 {
-                alts_44_1: {
-                    pos = alts_saved_44;
-                    if pos >= chars.len() { break alts_44_1; }
-                    if !(false || '\u{300}' <= chars[pos] <= '\u{36f}' || '\u{1ab0}' <= chars[pos] <= '\u{1aff}' || '\u{901}' <= chars[pos] <= '\u{902}' || chars[pos] == '\u{93c}' || '\u{941}' <= chars[pos] <= '\u{948}' || chars[pos] == '\u{94d}') { break alts_44_1; }
+            if !alts_ok_48 {
+                alts_48_1: {
+                    pos = alts_saved_48;
+                    if pos >= chars.len() { break alts_48_1; }
+                    if !(false || '\u{300}' <= chars[pos] <= '\u{36f}' || '\u{1ab0}' <= chars[pos] <= '\u{1aff}' || '\u{901}' <= chars[pos] <= '\u{902}' || chars[pos] == '\u{93c}' || '\u{941}' <= chars[pos] <= '\u{948}' || chars[pos] == '\u{94d}') { break alts_48_1; }
                     pos += 1;
-                    alts_ok_44 = true;
+                    alts_ok_48 = true;
                 }
-                if !alts_ok_44 {
-                    alts_44_2: {
-                        pos = alts_saved_44;
-                        if pos >= chars.len() { break alts_44_2; }
-                        if !(false || '0' <= chars[pos] <= '9' || '\u{660}' <= chars[pos] <= '\u{669}' || '\u{6f0}' <= chars[pos] <= '\u{6f9}' || '\u{966}' <= chars[pos] <= '\u{96f}') { break alts_44_2; }
+                if !alts_ok_48 {
+                    alts_48_2: {
+                        pos = alts_saved_48;
+                        if pos >= chars.len() { break alts_48_2; }
+                        if !(false || '0' <= chars[pos] <= '9' || '\u{660}' <= chars[pos] <= '\u{669}' || '\u{6f0}' <= chars[pos] <= '\u{6f9}' || '\u{966}' <= chars[pos] <= '\u{96f}') { break alts_48_2; }
                         pos += 1;
-                        alts_ok_44 = true;
+                        alts_ok_48 = true;
                     }
-                    if !alts_ok_44 {
-                        alts_44_3: {
-                            pos = alts_saved_44;
-                            if pos >= chars.len() { break alts_44_3; }
-                            if !(false || chars[pos] == '_' || '\u{203f}' <= chars[pos] <= '\u{2040}' || chars[pos] == '\u{2054}' || '\u{fe33}' <= chars[pos] <= '\u{fe34}' || '\u{fe4d}' <= chars[pos] <= '\u{fe4f}' || chars[pos] == '\u{ff3f}') { break alts_44_3; }
+                    if !alts_ok_48 {
+                        alts_48_3: {
+                            pos = alts_saved_48;
+                            if pos >= chars.len() { break alts_48_3; }
+                            if !(false || chars[pos] == '_' || '\u{203f}' <= chars[pos] <= '\u{2040}' || chars[pos] == '\u{2054}' || '\u{fe33}' <= chars[pos] <= '\u{fe34}' || '\u{fe4d}' <= chars[pos] <= '\u{fe4f}' || chars[pos] == '\u{ff3f}') { break alts_48_3; }
                             pos += 1;
-                            alts_ok_44 = true;
+                            alts_ok_48 = true;
                         }
-                        if !alts_ok_44 {
-                            alts_44_4: {
-                                pos = alts_saved_44;
-                                if pos >= chars.len() || chars[pos] != '\u{200c}' { break alts_44_4; }
+                        if !alts_ok_48 {
+                            alts_48_4: {
+                                pos = alts_saved_48;
+                                if pos >= chars.len() || chars[pos] != '\u{200c}' { break alts_48_4; }
                                 pos += 1;
-                                alts_ok_44 = true;
+                                alts_ok_48 = true;
                             }
-                            if !alts_ok_44 {
-                                alts_44_5: {
-                                    pos = alts_saved_44;
-                                    if pos >= chars.len() || chars[pos] != '\u{200d}' { break alts_44_5; }
+                            if !alts_ok_48 {
+                                alts_48_5: {
+                                    pos = alts_saved_48;
+                                    if pos >= chars.len() || chars[pos] != '\u{200d}' { break alts_48_5; }
                                     pos += 1;
-                                    alts_ok_44 = true;
+                                    alts_ok_48 = true;
                                 }
                             }
                         }
                     }
                 }
             }
-            if !alts_ok_44 { break rep_43; }
+            if !alts_ok_48 { break rep_47; }
             continue;
         }
-        pos = rep_saved_43;
+        pos = rep_saved_47;
         break;
     }
     return pos;
@@ -6395,383 +6415,383 @@ fn try_identifier(chars: &Array<char>, start: i32) -> i32 {
 
 fn try_stringliteral(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_48 = pos;
-    let mut alts_ok_48 = false;
-    alts_48_0: {
-        pos = alts_saved_48;
-        if pos >= chars.len() || chars[pos] != '"' { break alts_48_0; }
+    let alts_saved_52 = pos;
+    let mut alts_ok_52 = false;
+    alts_52_0: {
+        pos = alts_saved_52;
+        if pos >= chars.len() || chars[pos] != '"' { break alts_52_0; }
         pos += 1;
         loop {
-            let rep_saved_49 = pos;
-            rep_49: {
-                let alts_saved_50 = pos;
-                let mut alts_ok_50 = false;
-                alts_50_0: {
-                    pos = alts_saved_50;
-                    if pos >= chars.len() { break alts_50_0; }
-                    if false || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == '\r' || chars[pos] == '\n' { break alts_50_0; }
+            let rep_saved_53 = pos;
+            rep_53: {
+                let alts_saved_54 = pos;
+                let mut alts_ok_54 = false;
+                alts_54_0: {
+                    pos = alts_saved_54;
+                    if pos >= chars.len() { break alts_54_0; }
+                    if false || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == '\r' || chars[pos] == '\n' { break alts_54_0; }
                     pos += 1;
-                    alts_ok_50 = true;
+                    alts_ok_54 = true;
                 }
-                if !alts_ok_50 {
-                    alts_50_1: {
-                        pos = alts_saved_50;
-                        if pos >= chars.len() || chars[pos] != '\\' { break alts_50_1; }
+                if !alts_ok_54 {
+                    alts_54_1: {
+                        pos = alts_saved_54;
+                        if pos >= chars.len() || chars[pos] != '\\' { break alts_54_1; }
                         pos += 1;
-                        let alts_saved_51 = pos;
-                        let mut alts_ok_51 = false;
-                        alts_51_0: {
-                            pos = alts_saved_51;
-                            let alts_saved_52 = pos;
-                            let mut alts_ok_52 = false;
-                            alts_52_0: {
-                                pos = alts_saved_52;
-                                if pos >= chars.len() { break alts_52_0; }
-                                if !(false || chars[pos] == '\'' || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == 'b' || chars[pos] == 'f' || chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == 'v') { break alts_52_0; }
+                        let alts_saved_55 = pos;
+                        let mut alts_ok_55 = false;
+                        alts_55_0: {
+                            pos = alts_saved_55;
+                            let alts_saved_56 = pos;
+                            let mut alts_ok_56 = false;
+                            alts_56_0: {
+                                pos = alts_saved_56;
+                                if pos >= chars.len() { break alts_56_0; }
+                                if !(false || chars[pos] == '\'' || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == 'b' || chars[pos] == 'f' || chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == 'v') { break alts_56_0; }
                                 pos += 1;
-                                alts_ok_52 = true;
+                                alts_ok_56 = true;
                             }
-                            if !alts_ok_52 {
-                                alts_52_1: {
-                                    pos = alts_saved_52;
-                                    if pos >= chars.len() { break alts_52_1; }
-                                    if false || chars[pos] == '\'' || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == 'b' || chars[pos] == 'f' || chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == 'v' || '0' <= chars[pos] <= '9' || chars[pos] == 'x' || chars[pos] == 'u' || chars[pos] == '\r' || chars[pos] == '\n' { break alts_52_1; }
+                            if !alts_ok_56 {
+                                alts_56_1: {
+                                    pos = alts_saved_56;
+                                    if pos >= chars.len() { break alts_56_1; }
+                                    if false || chars[pos] == '\'' || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == 'b' || chars[pos] == 'f' || chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == 'v' || '0' <= chars[pos] <= '9' || chars[pos] == 'x' || chars[pos] == 'u' || chars[pos] == '\r' || chars[pos] == '\n' { break alts_56_1; }
                                     pos += 1;
-                                    alts_ok_52 = true;
+                                    alts_ok_56 = true;
                                 }
                             }
-                            if !alts_ok_52 { break alts_51_0; }
-                            alts_ok_51 = true;
+                            if !alts_ok_56 { break alts_55_0; }
+                            alts_ok_55 = true;
                         }
-                        if !alts_ok_51 {
-                            alts_51_1: {
-                                pos = alts_saved_51;
-                                if pos >= chars.len() || chars[pos] != '0' { break alts_51_1; }
+                        if !alts_ok_55 {
+                            alts_55_1: {
+                                pos = alts_saved_55;
+                                if pos >= chars.len() || chars[pos] != '0' { break alts_55_1; }
                                 pos += 1;
-                                alts_ok_51 = true;
+                                alts_ok_55 = true;
                             }
-                            if !alts_ok_51 {
-                                alts_51_2: {
-                                    pos = alts_saved_51;
-                                    if pos >= chars.len() || chars[pos] != 'x' { break alts_51_2; }
+                            if !alts_ok_55 {
+                                alts_55_2: {
+                                    pos = alts_saved_55;
+                                    if pos >= chars.len() || chars[pos] != 'x' { break alts_55_2; }
                                     pos += 1;
-                                    if pos >= chars.len() { break alts_51_2; }
-                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_51_2; }
+                                    if pos >= chars.len() { break alts_55_2; }
+                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_55_2; }
                                     pos += 1;
-                                    if pos >= chars.len() { break alts_51_2; }
-                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_51_2; }
+                                    if pos >= chars.len() { break alts_55_2; }
+                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_55_2; }
                                     pos += 1;
-                                    alts_ok_51 = true;
+                                    alts_ok_55 = true;
                                 }
-                                if !alts_ok_51 {
-                                    alts_51_3: {
-                                        pos = alts_saved_51;
-                                        let alts_saved_53 = pos;
-                                        let mut alts_ok_53 = false;
-                                        alts_53_0: {
-                                            pos = alts_saved_53;
-                                            if pos >= chars.len() || chars[pos] != 'u' { break alts_53_0; }
+                                if !alts_ok_55 {
+                                    alts_55_3: {
+                                        pos = alts_saved_55;
+                                        let alts_saved_57 = pos;
+                                        let mut alts_ok_57 = false;
+                                        alts_57_0: {
+                                            pos = alts_saved_57;
+                                            if pos >= chars.len() || chars[pos] != 'u' { break alts_57_0; }
                                             pos += 1;
-                                            if pos >= chars.len() { break alts_53_0; }
-                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_53_0; }
+                                            if pos >= chars.len() { break alts_57_0; }
+                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_0; }
                                             pos += 1;
-                                            if pos >= chars.len() { break alts_53_0; }
-                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_53_0; }
+                                            if pos >= chars.len() { break alts_57_0; }
+                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_0; }
                                             pos += 1;
-                                            if pos >= chars.len() { break alts_53_0; }
-                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_53_0; }
+                                            if pos >= chars.len() { break alts_57_0; }
+                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_0; }
                                             pos += 1;
-                                            if pos >= chars.len() { break alts_53_0; }
-                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_53_0; }
+                                            if pos >= chars.len() { break alts_57_0; }
+                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_0; }
                                             pos += 1;
-                                            alts_ok_53 = true;
+                                            alts_ok_57 = true;
                                         }
-                                        if !alts_ok_53 {
-                                            alts_53_1: {
-                                                pos = alts_saved_53;
-                                                if pos >= chars.len() || chars[pos] != 'u' { break alts_53_1; }
+                                        if !alts_ok_57 {
+                                            alts_57_1: {
+                                                pos = alts_saved_57;
+                                                if pos >= chars.len() || chars[pos] != 'u' { break alts_57_1; }
                                                 pos += 1;
-                                                if pos >= chars.len() || chars[pos] != '{' { break alts_53_1; }
+                                                if pos >= chars.len() || chars[pos] != '{' { break alts_57_1; }
                                                 pos += 1;
-                                                if pos >= chars.len() { break alts_53_1; }
-                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_53_1; }
+                                                if pos >= chars.len() { break alts_57_1; }
+                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_1; }
                                                 pos += 1;
-                                                if pos >= chars.len() { break alts_53_1; }
-                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_53_1; }
+                                                if pos >= chars.len() { break alts_57_1; }
+                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_1; }
                                                 pos += 1;
                                                 loop {
-                                                    let rep_saved_54 = pos;
-                                                    rep_54: {
-                                                        if pos >= chars.len() { break rep_54; }
-                                                        if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_54; }
+                                                    let rep_saved_58 = pos;
+                                                    rep_58: {
+                                                        if pos >= chars.len() { break rep_58; }
+                                                        if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_58; }
                                                         pos += 1;
                                                         continue;
                                                     }
-                                                    pos = rep_saved_54;
+                                                    pos = rep_saved_58;
                                                     break;
                                                 }
-                                                if pos >= chars.len() || chars[pos] != '}' { break alts_53_1; }
+                                                if pos >= chars.len() || chars[pos] != '}' { break alts_57_1; }
                                                 pos += 1;
-                                                alts_ok_53 = true;
+                                                alts_ok_57 = true;
                                             }
                                         }
-                                        if !alts_ok_53 { break alts_51_3; }
-                                        alts_ok_51 = true;
+                                        if !alts_ok_57 { break alts_55_3; }
+                                        alts_ok_55 = true;
                                     }
-                                    if !alts_ok_51 {
-                                        alts_51_4: {
-                                            pos = alts_saved_51;
-                                            if pos >= chars.len() || chars[pos] != 'u' { break alts_51_4; }
+                                    if !alts_ok_55 {
+                                        alts_55_4: {
+                                            pos = alts_saved_55;
+                                            if pos >= chars.len() || chars[pos] != 'u' { break alts_55_4; }
                                             pos += 1;
-                                            if pos >= chars.len() || chars[pos] != '{' { break alts_51_4; }
+                                            if pos >= chars.len() || chars[pos] != '{' { break alts_55_4; }
                                             pos += 1;
-                                            if pos >= chars.len() { break alts_51_4; }
-                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_51_4; }
+                                            if pos >= chars.len() { break alts_55_4; }
+                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_55_4; }
                                             pos += 1;
                                             loop {
-                                                let rep_saved_55 = pos;
-                                                rep_55: {
-                                                    if pos >= chars.len() { break rep_55; }
-                                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_55; }
+                                                let rep_saved_59 = pos;
+                                                rep_59: {
+                                                    if pos >= chars.len() { break rep_59; }
+                                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_59; }
                                                     pos += 1;
                                                     continue;
                                                 }
-                                                pos = rep_saved_55;
+                                                pos = rep_saved_59;
                                                 break;
                                             }
-                                            if pos >= chars.len() || chars[pos] != '}' { break alts_51_4; }
+                                            if pos >= chars.len() || chars[pos] != '}' { break alts_55_4; }
                                             pos += 1;
-                                            alts_ok_51 = true;
+                                            alts_ok_55 = true;
                                         }
                                     }
                                 }
                             }
                         }
-                        if !alts_ok_51 { break alts_50_1; }
-                        alts_ok_50 = true;
+                        if !alts_ok_55 { break alts_54_1; }
+                        alts_ok_54 = true;
                     }
-                    if !alts_ok_50 {
-                        alts_50_2: {
-                            pos = alts_saved_50;
-                            if pos >= chars.len() || chars[pos] != '\\' { break alts_50_2; }
+                    if !alts_ok_54 {
+                        alts_54_2: {
+                            pos = alts_saved_54;
+                            if pos >= chars.len() || chars[pos] != '\\' { break alts_54_2; }
                             pos += 1;
-                            if pos >= chars.len() { break alts_50_2; }
-                            if !(false || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\u{2028}' || chars[pos] == '\u{2029}') { break alts_50_2; }
+                            if pos >= chars.len() { break alts_54_2; }
+                            if !(false || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\u{2028}' || chars[pos] == '\u{2029}') { break alts_54_2; }
                             pos += 1;
                             loop {
-                                let rep_saved_56 = pos;
-                                rep_56: {
-                                    if pos >= chars.len() { break rep_56; }
-                                    if !(false || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\u{2028}' || chars[pos] == '\u{2029}') { break rep_56; }
+                                let rep_saved_60 = pos;
+                                rep_60: {
+                                    if pos >= chars.len() { break rep_60; }
+                                    if !(false || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\u{2028}' || chars[pos] == '\u{2029}') { break rep_60; }
                                     pos += 1;
                                     continue;
                                 }
-                                pos = rep_saved_56;
+                                pos = rep_saved_60;
                                 break;
                             }
-                            alts_ok_50 = true;
+                            alts_ok_54 = true;
                         }
                     }
                 }
-                if !alts_ok_50 { break rep_49; }
+                if !alts_ok_54 { break rep_53; }
                 continue;
             }
-            pos = rep_saved_49;
+            pos = rep_saved_53;
             break;
         }
-        if pos >= chars.len() || chars[pos] != '"' { break alts_48_0; }
+        if pos >= chars.len() || chars[pos] != '"' { break alts_52_0; }
         pos += 1;
-        alts_ok_48 = true;
+        alts_ok_52 = true;
     }
-    if !alts_ok_48 {
-        alts_48_1: {
-            pos = alts_saved_48;
-            if pos >= chars.len() || chars[pos] != '\'' { break alts_48_1; }
+    if !alts_ok_52 {
+        alts_52_1: {
+            pos = alts_saved_52;
+            if pos >= chars.len() || chars[pos] != '\'' { break alts_52_1; }
             pos += 1;
             loop {
-                let rep_saved_57 = pos;
-                rep_57: {
-                    let alts_saved_58 = pos;
-                    let mut alts_ok_58 = false;
-                    alts_58_0: {
-                        pos = alts_saved_58;
-                        if pos >= chars.len() { break alts_58_0; }
-                        if false || chars[pos] == '\'' || chars[pos] == '\\' || chars[pos] == '\r' || chars[pos] == '\n' { break alts_58_0; }
+                let rep_saved_61 = pos;
+                rep_61: {
+                    let alts_saved_62 = pos;
+                    let mut alts_ok_62 = false;
+                    alts_62_0: {
+                        pos = alts_saved_62;
+                        if pos >= chars.len() { break alts_62_0; }
+                        if false || chars[pos] == '\'' || chars[pos] == '\\' || chars[pos] == '\r' || chars[pos] == '\n' { break alts_62_0; }
                         pos += 1;
-                        alts_ok_58 = true;
+                        alts_ok_62 = true;
                     }
-                    if !alts_ok_58 {
-                        alts_58_1: {
-                            pos = alts_saved_58;
-                            if pos >= chars.len() || chars[pos] != '\\' { break alts_58_1; }
+                    if !alts_ok_62 {
+                        alts_62_1: {
+                            pos = alts_saved_62;
+                            if pos >= chars.len() || chars[pos] != '\\' { break alts_62_1; }
                             pos += 1;
-                            let alts_saved_59 = pos;
-                            let mut alts_ok_59 = false;
-                            alts_59_0: {
-                                pos = alts_saved_59;
-                                let alts_saved_60 = pos;
-                                let mut alts_ok_60 = false;
-                                alts_60_0: {
-                                    pos = alts_saved_60;
-                                    if pos >= chars.len() { break alts_60_0; }
-                                    if !(false || chars[pos] == '\'' || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == 'b' || chars[pos] == 'f' || chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == 'v') { break alts_60_0; }
+                            let alts_saved_63 = pos;
+                            let mut alts_ok_63 = false;
+                            alts_63_0: {
+                                pos = alts_saved_63;
+                                let alts_saved_64 = pos;
+                                let mut alts_ok_64 = false;
+                                alts_64_0: {
+                                    pos = alts_saved_64;
+                                    if pos >= chars.len() { break alts_64_0; }
+                                    if !(false || chars[pos] == '\'' || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == 'b' || chars[pos] == 'f' || chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == 'v') { break alts_64_0; }
                                     pos += 1;
-                                    alts_ok_60 = true;
+                                    alts_ok_64 = true;
                                 }
-                                if !alts_ok_60 {
-                                    alts_60_1: {
-                                        pos = alts_saved_60;
-                                        if pos >= chars.len() { break alts_60_1; }
-                                        if false || chars[pos] == '\'' || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == 'b' || chars[pos] == 'f' || chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == 'v' || '0' <= chars[pos] <= '9' || chars[pos] == 'x' || chars[pos] == 'u' || chars[pos] == '\r' || chars[pos] == '\n' { break alts_60_1; }
+                                if !alts_ok_64 {
+                                    alts_64_1: {
+                                        pos = alts_saved_64;
+                                        if pos >= chars.len() { break alts_64_1; }
+                                        if false || chars[pos] == '\'' || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] == 'b' || chars[pos] == 'f' || chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == 'v' || '0' <= chars[pos] <= '9' || chars[pos] == 'x' || chars[pos] == 'u' || chars[pos] == '\r' || chars[pos] == '\n' { break alts_64_1; }
                                         pos += 1;
-                                        alts_ok_60 = true;
+                                        alts_ok_64 = true;
                                     }
                                 }
-                                if !alts_ok_60 { break alts_59_0; }
-                                alts_ok_59 = true;
+                                if !alts_ok_64 { break alts_63_0; }
+                                alts_ok_63 = true;
                             }
-                            if !alts_ok_59 {
-                                alts_59_1: {
-                                    pos = alts_saved_59;
-                                    if pos >= chars.len() || chars[pos] != '0' { break alts_59_1; }
+                            if !alts_ok_63 {
+                                alts_63_1: {
+                                    pos = alts_saved_63;
+                                    if pos >= chars.len() || chars[pos] != '0' { break alts_63_1; }
                                     pos += 1;
-                                    alts_ok_59 = true;
+                                    alts_ok_63 = true;
                                 }
-                                if !alts_ok_59 {
-                                    alts_59_2: {
-                                        pos = alts_saved_59;
-                                        if pos >= chars.len() || chars[pos] != 'x' { break alts_59_2; }
+                                if !alts_ok_63 {
+                                    alts_63_2: {
+                                        pos = alts_saved_63;
+                                        if pos >= chars.len() || chars[pos] != 'x' { break alts_63_2; }
                                         pos += 1;
-                                        if pos >= chars.len() { break alts_59_2; }
-                                        if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_59_2; }
+                                        if pos >= chars.len() { break alts_63_2; }
+                                        if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_63_2; }
                                         pos += 1;
-                                        if pos >= chars.len() { break alts_59_2; }
-                                        if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_59_2; }
+                                        if pos >= chars.len() { break alts_63_2; }
+                                        if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_63_2; }
                                         pos += 1;
-                                        alts_ok_59 = true;
+                                        alts_ok_63 = true;
                                     }
-                                    if !alts_ok_59 {
-                                        alts_59_3: {
-                                            pos = alts_saved_59;
-                                            let alts_saved_61 = pos;
-                                            let mut alts_ok_61 = false;
-                                            alts_61_0: {
-                                                pos = alts_saved_61;
-                                                if pos >= chars.len() || chars[pos] != 'u' { break alts_61_0; }
+                                    if !alts_ok_63 {
+                                        alts_63_3: {
+                                            pos = alts_saved_63;
+                                            let alts_saved_65 = pos;
+                                            let mut alts_ok_65 = false;
+                                            alts_65_0: {
+                                                pos = alts_saved_65;
+                                                if pos >= chars.len() || chars[pos] != 'u' { break alts_65_0; }
                                                 pos += 1;
-                                                if pos >= chars.len() { break alts_61_0; }
-                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_61_0; }
+                                                if pos >= chars.len() { break alts_65_0; }
+                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_65_0; }
                                                 pos += 1;
-                                                if pos >= chars.len() { break alts_61_0; }
-                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_61_0; }
+                                                if pos >= chars.len() { break alts_65_0; }
+                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_65_0; }
                                                 pos += 1;
-                                                if pos >= chars.len() { break alts_61_0; }
-                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_61_0; }
+                                                if pos >= chars.len() { break alts_65_0; }
+                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_65_0; }
                                                 pos += 1;
-                                                if pos >= chars.len() { break alts_61_0; }
-                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_61_0; }
+                                                if pos >= chars.len() { break alts_65_0; }
+                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_65_0; }
                                                 pos += 1;
-                                                alts_ok_61 = true;
+                                                alts_ok_65 = true;
                                             }
-                                            if !alts_ok_61 {
-                                                alts_61_1: {
-                                                    pos = alts_saved_61;
-                                                    if pos >= chars.len() || chars[pos] != 'u' { break alts_61_1; }
+                                            if !alts_ok_65 {
+                                                alts_65_1: {
+                                                    pos = alts_saved_65;
+                                                    if pos >= chars.len() || chars[pos] != 'u' { break alts_65_1; }
                                                     pos += 1;
-                                                    if pos >= chars.len() || chars[pos] != '{' { break alts_61_1; }
+                                                    if pos >= chars.len() || chars[pos] != '{' { break alts_65_1; }
                                                     pos += 1;
-                                                    if pos >= chars.len() { break alts_61_1; }
-                                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_61_1; }
+                                                    if pos >= chars.len() { break alts_65_1; }
+                                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_65_1; }
                                                     pos += 1;
-                                                    if pos >= chars.len() { break alts_61_1; }
-                                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_61_1; }
+                                                    if pos >= chars.len() { break alts_65_1; }
+                                                    if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_65_1; }
                                                     pos += 1;
                                                     loop {
-                                                        let rep_saved_62 = pos;
-                                                        rep_62: {
-                                                            if pos >= chars.len() { break rep_62; }
-                                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_62; }
+                                                        let rep_saved_66 = pos;
+                                                        rep_66: {
+                                                            if pos >= chars.len() { break rep_66; }
+                                                            if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_66; }
                                                             pos += 1;
                                                             continue;
                                                         }
-                                                        pos = rep_saved_62;
+                                                        pos = rep_saved_66;
                                                         break;
                                                     }
-                                                    if pos >= chars.len() || chars[pos] != '}' { break alts_61_1; }
+                                                    if pos >= chars.len() || chars[pos] != '}' { break alts_65_1; }
                                                     pos += 1;
-                                                    alts_ok_61 = true;
+                                                    alts_ok_65 = true;
                                                 }
                                             }
-                                            if !alts_ok_61 { break alts_59_3; }
-                                            alts_ok_59 = true;
+                                            if !alts_ok_65 { break alts_63_3; }
+                                            alts_ok_63 = true;
                                         }
-                                        if !alts_ok_59 {
-                                            alts_59_4: {
-                                                pos = alts_saved_59;
-                                                if pos >= chars.len() || chars[pos] != 'u' { break alts_59_4; }
+                                        if !alts_ok_63 {
+                                            alts_63_4: {
+                                                pos = alts_saved_63;
+                                                if pos >= chars.len() || chars[pos] != 'u' { break alts_63_4; }
                                                 pos += 1;
-                                                if pos >= chars.len() || chars[pos] != '{' { break alts_59_4; }
+                                                if pos >= chars.len() || chars[pos] != '{' { break alts_63_4; }
                                                 pos += 1;
-                                                if pos >= chars.len() { break alts_59_4; }
-                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_59_4; }
+                                                if pos >= chars.len() { break alts_63_4; }
+                                                if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_63_4; }
                                                 pos += 1;
                                                 loop {
-                                                    let rep_saved_63 = pos;
-                                                    rep_63: {
-                                                        if pos >= chars.len() { break rep_63; }
-                                                        if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_63; }
+                                                    let rep_saved_67 = pos;
+                                                    rep_67: {
+                                                        if pos >= chars.len() { break rep_67; }
+                                                        if !(false || chars[pos] == '_' || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_67; }
                                                         pos += 1;
                                                         continue;
                                                     }
-                                                    pos = rep_saved_63;
+                                                    pos = rep_saved_67;
                                                     break;
                                                 }
-                                                if pos >= chars.len() || chars[pos] != '}' { break alts_59_4; }
+                                                if pos >= chars.len() || chars[pos] != '}' { break alts_63_4; }
                                                 pos += 1;
-                                                alts_ok_59 = true;
+                                                alts_ok_63 = true;
                                             }
                                         }
                                     }
                                 }
                             }
-                            if !alts_ok_59 { break alts_58_1; }
-                            alts_ok_58 = true;
+                            if !alts_ok_63 { break alts_62_1; }
+                            alts_ok_62 = true;
                         }
-                        if !alts_ok_58 {
-                            alts_58_2: {
-                                pos = alts_saved_58;
-                                if pos >= chars.len() || chars[pos] != '\\' { break alts_58_2; }
+                        if !alts_ok_62 {
+                            alts_62_2: {
+                                pos = alts_saved_62;
+                                if pos >= chars.len() || chars[pos] != '\\' { break alts_62_2; }
                                 pos += 1;
-                                if pos >= chars.len() { break alts_58_2; }
-                                if !(false || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\u{2028}' || chars[pos] == '\u{2029}') { break alts_58_2; }
+                                if pos >= chars.len() { break alts_62_2; }
+                                if !(false || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\u{2028}' || chars[pos] == '\u{2029}') { break alts_62_2; }
                                 pos += 1;
                                 loop {
-                                    let rep_saved_64 = pos;
-                                    rep_64: {
-                                        if pos >= chars.len() { break rep_64; }
-                                        if !(false || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\u{2028}' || chars[pos] == '\u{2029}') { break rep_64; }
+                                    let rep_saved_68 = pos;
+                                    rep_68: {
+                                        if pos >= chars.len() { break rep_68; }
+                                        if !(false || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == '\u{2028}' || chars[pos] == '\u{2029}') { break rep_68; }
                                         pos += 1;
                                         continue;
                                     }
-                                    pos = rep_saved_64;
+                                    pos = rep_saved_68;
                                     break;
                                 }
-                                alts_ok_58 = true;
+                                alts_ok_62 = true;
                             }
                         }
                     }
-                    if !alts_ok_58 { break rep_57; }
+                    if !alts_ok_62 { break rep_61; }
                     continue;
                 }
-                pos = rep_saved_57;
+                pos = rep_saved_61;
                 break;
             }
-            if pos >= chars.len() || chars[pos] != '\'' { break alts_48_1; }
+            if pos >= chars.len() || chars[pos] != '\'' { break alts_52_1; }
             pos += 1;
-            alts_ok_48 = true;
+            alts_ok_52 = true;
         }
     }
-    if !alts_ok_48 { return -1; }
+    if !alts_ok_52 { return -1; }
     return pos;
 }
 
@@ -6788,14 +6808,14 @@ fn try_whitespaces(chars: &Array<char>, start: i32) -> i32 {
     if !(false || chars[pos] == '\t' || chars[pos] == '\u{b}' || chars[pos] == '\u{c}' || chars[pos] == ' ' || chars[pos] == '\u{a0}') { return -1; }
     pos += 1;
     loop {
-        let rep_saved_65 = pos;
-        rep_65: {
-            if pos >= chars.len() { break rep_65; }
-            if !(false || chars[pos] == '\t' || chars[pos] == '\u{b}' || chars[pos] == '\u{c}' || chars[pos] == ' ' || chars[pos] == '\u{a0}') { break rep_65; }
+        let rep_saved_69 = pos;
+        rep_69: {
+            if pos >= chars.len() { break rep_69; }
+            if !(false || chars[pos] == '\t' || chars[pos] == '\u{b}' || chars[pos] == '\u{c}' || chars[pos] == ' ' || chars[pos] == '\u{a0}') { break rep_69; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_65;
+        pos = rep_saved_69;
         break;
     }
     return pos;
@@ -6820,21 +6840,21 @@ fn try_htmlcomment(chars: &Array<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_66 = pos;
-        let mut ng_exit_66 = false;
-        ng_66: {
-            if pos >= chars.len() || chars[pos] != '-' { break ng_66; }
+        let ng_saved_70 = pos;
+        let mut ng_exit_70 = false;
+        ng_70: {
+            if pos >= chars.len() || chars[pos] != '-' { break ng_70; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '-' { break ng_66; }
+            if pos >= chars.len() || chars[pos] != '-' { break ng_70; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '>' { break ng_66; }
+            if pos >= chars.len() || chars[pos] != '>' { break ng_70; }
             pos += 1;
-            ng_exit_66 = true;
+            ng_exit_70 = true;
         }
-        if ng_exit_66 {
+        if ng_exit_70 {
             break;
         }
-        pos = ng_saved_66;
+        pos = ng_saved_70;
         if pos >= chars.len() { return -1; }
         pos += 1;
     }
@@ -6862,21 +6882,21 @@ fn try_cdatacomment(chars: &Array<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '[' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_67 = pos;
-        let mut ng_exit_67 = false;
-        ng_67: {
-            if pos >= chars.len() || chars[pos] != ']' { break ng_67; }
+        let ng_saved_71 = pos;
+        let mut ng_exit_71 = false;
+        ng_71: {
+            if pos >= chars.len() || chars[pos] != ']' { break ng_71; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != ']' { break ng_67; }
+            if pos >= chars.len() || chars[pos] != ']' { break ng_71; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '>' { break ng_67; }
+            if pos >= chars.len() || chars[pos] != '>' { break ng_71; }
             pos += 1;
-            ng_exit_67 = true;
+            ng_exit_71 = true;
         }
-        if ng_exit_67 {
+        if ng_exit_71 {
             break;
         }
-        pos = ng_saved_67;
+        pos = ng_saved_71;
         if pos >= chars.len() { return -1; }
         pos += 1;
     }
