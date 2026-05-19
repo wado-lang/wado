@@ -85,6 +85,11 @@ struct DescriptorPair {
 struct ParsedDescriptor {
     grammar: String,
     slave_grammars: Array<String>,
+    /// `[type]` block — `Parser`, `Lexer`, `CompositeParser`, or
+    /// `CompositeLexer`. Stage A2 only emits for `Parser` because Gale's
+    /// generated `parse(&input)` entry point exists only for parser-type
+    /// grammars; lexer-only descriptors are deferred to Stage L.
+    descriptor_type: String,
     /// `[input]` block — the raw test input fed to the generated parser.
     /// Empty when the descriptor declares no `[input]` (lexer-only smoke
     /// tests, etc.).
@@ -94,6 +99,11 @@ struct ParsedDescriptor {
     /// Stage B's `normalize_output_for_stage_b` decides whether this is a
     /// parse-tree shape we can compare against.
     output: String,
+    /// `[errors]` block — non-empty when the descriptor expects the parser
+    /// to report errors. Stage A2 (parse-accepts-input) auto-skips
+    /// error-bearing descriptors because the input is not guaranteed to
+    /// parse to `Ok`; those are Stage E territory.
+    errors: String,
     /// `[start]` field — the rule the upstream runner enters at. Gale's
     /// generated parser always exposes the first parser rule via `parse()`,
     /// so descriptors whose `[start]` differs from the first rule will fail
@@ -139,8 +149,10 @@ fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
 
     let mut grammar: String = "";
     let mut slaves: Array<String> = [];
+    let mut descriptor_type: String = "";
     let mut input: String = "";
     let mut output: String = "";
+    let mut errors: String = "";
     let mut start: String = "";
     for let p of pairs {
         let processed = post_process(&p.value);
@@ -151,11 +163,17 @@ fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
             "slaveGrammar" => {
                 slaves.push(unescape_st_text(&processed));
             },
+            "type" => {
+                descriptor_type = processed.trim();
+            },
             "input" => {
                 input = processed;
             },
             "output" => {
                 output = processed;
+            },
+            "errors" => {
+                errors = processed;
             },
             "start" => {
                 start = processed;
@@ -167,8 +185,10 @@ fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
     return ParsedDescriptor {
         grammar,
         slave_grammars: slaves,
+        descriptor_type,
         input,
         output,
+        errors,
         start,
     };
 }
@@ -288,6 +308,7 @@ impl TriageMap {
 ///   axis never quietly toggles the other.
 struct TriageMaps {
     pub stage_a: TriageMap,
+    pub stage_a2: TriageMap,
     pub stage_b: TriageMap,
 }
 
@@ -305,11 +326,12 @@ struct TriageMaps {
 ///   "Category/Name" = "reason text"
 fn load_triage_maps(content: &Option<String>) -> TriageMaps {
     let mut stage_a = TriageMap::new();
+    let mut stage_a2 = TriageMap::new();
     let mut stage_b = TriageMap::new();
     let text = match content {
         Some(t) => t,
         None => {
-            return TriageMaps { stage_a, stage_b };
+            return TriageMaps { stage_a, stage_a2, stage_b };
         },
     };
     let mut section: String = "";
@@ -334,13 +356,15 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
         match section {
             "todo" => stage_a.entries.push(TriageEntry { key, triage: Triage::Todo(reason) }),
             "skip" => stage_a.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
+            "stage_a2_todo" => stage_a2.entries.push(TriageEntry { key, triage: Triage::Todo(reason) }),
+            "stage_a2_skip" => stage_a2.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
             "stage_b_todo" => stage_b.entries.push(TriageEntry { key, triage: Triage::Todo(reason) }),
             "stage_b_skip" => stage_b.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
             _ => {
             },
         }
     }
-    return TriageMaps { stage_a, stage_b };
+    return TriageMaps { stage_a, stage_a2, stage_b };
 }
 
 /// Stage-A-only convenience wrapper retained so the test blocks at the
@@ -626,6 +650,60 @@ fn emit_stage_b_test_file(category: &String, name: &String, input: &String, expe
     return w.to_string();
 }
 
+/// Emit one Stage A2 (parse-accepts-input) driver test file for a single
+/// descriptor.
+///
+/// Stage A2 sits between Stage A (the `.g4` grammar parses) and Stage B
+/// (tree-shape equivalence): it only checks that Gale's *generated parser*
+/// accepts the descriptor's `[input]` without error. This covers
+/// descriptors whose `[output]` is a host-language artefact (action-print,
+/// token-name stream, `$text` echo, sub-tree print) and therefore
+/// auto-skipped by `normalize_output_for_stage_b`, but for which the
+/// generated parser must still accept the canonical input.
+///
+/// The emitted test:
+///   1. Imports the descriptor's `.g4` through Gale's generator,
+///   2. Runs the generated parser on `[input]`,
+///   3. Asserts that the result is `Ok` (no error message comparison).
+///
+/// Triage (`[stage_a2_todo]` / `[stage_a2_skip]`) decorates the emission
+/// the same way Stage A and Stage B do.
+fn emit_stage_a2_test_file(category: &String, name: &String, input: &String, triage: &Triage) -> String {
+    let mut w = CodeWriter::new();
+    w.line(&generator_attr());
+    w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
+    w.line(&"//");
+    w.line(&`// Source descriptor: {*category}/{*name} (ANTLR4 runtime-testsuite).`);
+    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a2_*]).");
+    w.line(&"//");
+    w.line(&"// Stage A2: the generated parser must accept the descriptor's [input]");
+    w.line(&"// without returning an error. No parse-tree shape comparison.");
+    w.blank();
+    w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
+    w.line(&"    with {");
+    w.line(&"        generator: {");
+    w.line(&`            module: "../../../../src/generator.wado",`);
+    w.line(&"            options: { highlight: false },");
+    w.line(&`            output_dir: "tests/generated/antlr4_compat_a2/{*category}/{*name}",`);
+    w.line(&"        },");
+    w.line(&"    };");
+    w.blank();
+    if let Todo(reason) = triage {
+        w.line(&"#[TODO]");
+        w.line(&`// triage: {escape_for_wado_str(reason)}`);
+    }
+    w.begin(&`test "stage_a2: {*category}/{*name}"`);
+    w.line(&`let input = "{escape_for_wado_str(input)}";`);
+    w.line(&"let result = t::parse(&input);");
+    w.line(&"if let Err(err) = &result {");
+    w.indent();
+    w.line(&"panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);");
+    w.dedent();
+    w.line(&"}");
+    w.end();
+    return w.to_string();
+}
+
 // ===== Main =====
 
 struct CliArgs {
@@ -718,6 +796,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     };
     let triage_maps = load_triage_maps(&status_text);
     let triage_map = triage_maps.stage_a;
+    let stage_a2_triage_map = triage_maps.stage_a2;
     let stage_b_triage_map = triage_maps.stage_b;
 
     let grammars_dir = match ensure_dir(&compat_dir, &grammars_subdir()) {
@@ -736,9 +815,21 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         },
     };
 
+    let stage_a2_dir = match ensure_dir(&compat_dir, &"stage_a2") {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("extract: cannot create or open antlr4-compat/stage_a2/");
+            return;
+        },
+    };
+
     let mut total_emitted = 0;
     let mut total_todo = 0;
     let mut total_skip = 0;
+    let mut stage_a2_emitted = 0;
+    let mut stage_a2_todo = 0;
+    let mut stage_a2_skip = 0;
+    let mut stage_a2_auto_skip = 0;
     let mut stage_b_emitted = 0;
     let mut stage_b_todo = 0;
     let mut stage_b_skip = 0;
@@ -763,6 +854,13 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
             Ok(d) => d,
             Err(_) => {
                 eprintln(`extract: cannot create stage_b/{*category}/, skipping`);
+                continue;
+            },
+        };
+        let stage_a2_cat_dir = match ensure_dir(&stage_a2_dir, category) {
+            Ok(d) => d,
+            Err(_) => {
+                eprintln(`extract: cannot create stage_a2/{*category}/, skipping`);
                 continue;
             },
         };
@@ -836,6 +934,61 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 slave_relpaths,
                 triage,
             });
+
+            // ----- Stage A2: parse-accepts-input. Asserts that the
+            // generated parser accepts the descriptor's [input] without
+            // returning an error. Eligibility:
+            //   * [type] is `Parser` (lexer-only descriptors are Stage L
+            //     territory; CompositeParser is deferred until multi-input
+            //     plumbing for the Stage * emitters lands),
+            //   * non-empty [input],
+            //   * empty [errors] (descriptors that expect parse errors go
+            //     to Stage E, not Stage A2),
+            //   * single grammar (no slave grammars).
+            // Stage A2 is independent of Stage B: even when Stage B can
+            // also be emitted (i.e. [output] is a clean parse tree), Stage
+            // A2 still runs because it exercises a strictly weaker
+            // assertion and a Stage B failure should not mask the Stage A2
+            // smoke test underneath.
+            let a2_eligible = parsed.descriptor_type == "Parser"
+                && !parsed.input.is_empty()
+                && parsed.errors.is_empty()
+                && parsed.slave_grammars.len() == 0;
+            let stage_a2_filename = `{base}_test.wado`;
+            if a2_eligible {
+                let stage_a2_triage = stage_a2_triage_map.lookup(&key);
+                if let Skip(reason) = &stage_a2_triage {
+                    println(`  skipA2: {key} — {*reason}`);
+                    stage_a2_skip += 1;
+                    // Drop any previously-emitted file so triage state is
+                    // idempotent: flipping a descriptor from pass to
+                    // [stage_a2_skip] removes the test on the next run.
+                    if let Err(_) = remove_file(&stage_a2_cat_dir, &stage_a2_filename) {
+                    }
+                } else {
+                    let stage_a2_src = emit_stage_a2_test_file(
+                        category,
+                        &base,
+                        &parsed.input,
+                        &stage_a2_triage,
+                    );
+                    if let Err(_) = write_file_string(&stage_a2_cat_dir, &stage_a2_filename, &stage_a2_src) {
+                        eprintln(`extract: cannot write stage_a2/{*category}/{stage_a2_filename}`);
+                    } else {
+                        if let Todo(_) = &stage_a2_triage {
+                            stage_a2_todo += 1;
+                        }
+                        stage_a2_emitted += 1;
+                    }
+                }
+            } else {
+                stage_a2_auto_skip += 1;
+                // Same idempotency story as Skip: if the descriptor was
+                // previously eligible but a status.toml edit or descriptor
+                // change made it ineligible, sweep the stale file away.
+                if let Err(_) = remove_file(&stage_a2_cat_dir, &stage_a2_filename) {
+                }
+            }
 
             // ----- Stage B: emit a tree-shape equivalence test if eligible.
             // Eligibility (all must hold):
@@ -924,13 +1077,17 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     }
 
     println("");
-    println(`extract: stage A: emitted {total_emitted} descriptor(s) across {categories.len()} categor(ies)`);
-    println(`extract:          {total_todo} marked #[TODO]`);
-    println(`extract:          {total_skip} skipped`);
-    println(`extract: stage B: emitted {stage_b_emitted} tree-shape test(s)`);
-    println(`extract:          {stage_b_todo} marked #[TODO]`);
-    println(`extract:          {stage_b_skip} explicit skip`);
-    println(`extract:          {stage_b_auto_skip} auto-skip (output is not a parse tree)`);
+    println(`extract: stage A:  emitted {total_emitted} descriptor(s) across {categories.len()} categor(ies)`);
+    println(`extract:           {total_todo} marked #[TODO]`);
+    println(`extract:           {total_skip} skipped`);
+    println(`extract: stage A2: emitted {stage_a2_emitted} parse-accepts-input test(s)`);
+    println(`extract:           {stage_a2_todo} marked #[TODO]`);
+    println(`extract:           {stage_a2_skip} explicit skip`);
+    println(`extract:           {stage_a2_auto_skip} auto-skip (lexer / has-errors / composite)`);
+    println(`extract: stage B:  emitted {stage_b_emitted} tree-shape test(s)`);
+    println(`extract:           {stage_b_todo} marked #[TODO]`);
+    println(`extract:           {stage_b_skip} explicit skip`);
+    println(`extract:           {stage_b_auto_skip} auto-skip (output is not a parse tree)`);
 }
 
 // ===== Stage B: descriptor [output] normaliser =====
@@ -1078,9 +1235,16 @@ test "normalize: line-noise output starting with paren but no name is rejected" 
 
 // ===== Stage B: status.toml triage parser =====
 
+fn lookup_for_axis(maps: &TriageMaps, axis: &String, key: &String) -> Triage {
+    return match *axis {
+        "a" => maps.stage_a.lookup(key),
+        "a2" => maps.stage_a2.lookup(key),
+        _ => maps.stage_b.lookup(key),
+    };
+}
+
 fn assert_triage_skip(maps: &TriageMaps, axis: &String, key: &String, expected_reason: &String) {
-    let map = if *axis == "a" { &maps.stage_a } else { &maps.stage_b };
-    if let Skip(reason) = &map.lookup(key) {
+    if let Skip(reason) = &lookup_for_axis(maps, axis, key) {
         assert *reason == *expected_reason, `axis {*axis} key '{*key}': expected Skip('{*expected_reason}'), got Skip('{*reason}')`;
     } else {
         panic(`axis {*axis} key '{*key}': expected Skip, got other`);
@@ -1088,8 +1252,7 @@ fn assert_triage_skip(maps: &TriageMaps, axis: &String, key: &String, expected_r
 }
 
 fn assert_triage_todo(maps: &TriageMaps, axis: &String, key: &String, expected_reason: &String) {
-    let map = if *axis == "a" { &maps.stage_a } else { &maps.stage_b };
-    if let Todo(reason) = &map.lookup(key) {
+    if let Todo(reason) = &lookup_for_axis(maps, axis, key) {
         assert *reason == *expected_reason, `axis {*axis} key '{*key}': expected Todo('{*expected_reason}'), got Todo('{*reason}')`;
     } else {
         panic(`axis {*axis} key '{*key}': expected Todo, got other`);
@@ -1097,15 +1260,31 @@ fn assert_triage_todo(maps: &TriageMaps, axis: &String, key: &String, expected_r
 }
 
 fn assert_triage_pass(maps: &TriageMaps, axis: &String, key: &String) {
-    let map = if *axis == "a" { &maps.stage_a } else { &maps.stage_b };
-    assert map.lookup(key) matches { Pass }, `axis {*axis} key '{*key}': expected Pass, got other`;
+    assert lookup_for_axis(maps, axis, key) matches { Pass }, `axis {*axis} key '{*key}': expected Pass, got other`;
 }
 
-test "triage: missing file yields empty maps on both axes" {
+test "triage: missing file yields empty maps on all axes" {
     let none_text: Option<String> = null;
     let maps = load_triage_maps(&none_text);
     assert maps.stage_a.entries.is_empty();
+    assert maps.stage_a2.entries.is_empty();
     assert maps.stage_b.entries.is_empty();
+}
+
+test "triage: stage A2 skip and todo populate stage_a2 only" {
+    let toml = Option::<String>::Some(
+        "[stage_a2_todo]
+\"ParserExec/Foo\" = \"parse fails on input — gap pending\"
+[stage_a2_skip]
+\"ParserExec/Bar\" = \"start rule differs from first parser rule\"
+",
+    );
+    let maps = load_triage_maps(&toml);
+    assert_triage_todo(&maps, &"a2", &"ParserExec/Foo", &"parse fails on input — gap pending");
+    assert_triage_skip(&maps, &"a2", &"ParserExec/Bar", &"start rule differs from first parser rule");
+    // Stage A and Stage B must not be touched.
+    assert_triage_pass(&maps, &"a", &"ParserExec/Foo");
+    assert_triage_pass(&maps, &"b", &"ParserExec/Foo");
 }
 
 test "triage: stage A skip and todo populate stage_a only" {
@@ -1189,8 +1368,10 @@ test "triage: unknown bucket section is silently ignored" {
     );
     let maps = load_triage_maps(&toml);
     assert maps.stage_a.entries.is_empty();
+    assert maps.stage_a2.entries.is_empty();
     assert maps.stage_b.entries.len() == 1;
     assert_triage_skip(&maps, &"b", &"Baz/Qux", &"present feature");
     assert_triage_pass(&maps, &"a", &"Foo/Bar");
+    assert_triage_pass(&maps, &"a2", &"Foo/Bar");
     assert_triage_pass(&maps, &"b", &"Foo/Bar");
 }
