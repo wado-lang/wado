@@ -103,9 +103,16 @@ All languages are compiled with size optimization and symbol stripping enabled:
 Run `mise install` to install:
 
 - **Zig** - wasm32-wasi target
-- **wasi-sdk** - clang + wasm-ld + wasi-sysroot for C (`github:WebAssembly/wasi-sdk`)
 
 wasmtime is inherited from the root `mise.toml`.
+
+`wasi-sdk` (clang + wasm-ld + wasi-sysroot, used for C and for the
+tree-sitter C parser of the Rust `sqlite_highlight` build) is currently
+commented out in `mise.toml` to avoid GitHub API rate-limit failures
+during artifact install. To enable C and Rust-tree-sitter outputs,
+uncomment the `github:WebAssembly/wasi-sdk` line in `[tools]` and re-run
+`mise install`, or install a wasi-sysroot by other means (apt on
+Linux, Homebrew on macOS).
 
 ### Manual installation
 

@@ -5,8 +5,13 @@
 # C compiler (cc) is expected from the system for native C benchmarks.
 #
 # Optional: wasi-sdk (clang + wasi-sysroot) for the C zlib Wasm benchmark.
-# Install via wasm-size/ (`mise install` there) or apt (Ubuntu/Debian):
-#   apt install wasi-libc libclang-rt-18-dev-wasm32
+# The mise-managed entry is currently commented out below to avoid
+# GitHub API rate-limit failures during artifact install on shared CI
+# runners. To enable C Wasm zlib measurements, either:
+#   * Uncomment the `wasi-sdk` line in `[tools]` and re-run `mise install`
+#     (works when GH artifact attestations are reachable), or
+#   * Install via apt (Ubuntu/Debian):
+#       apt install wasi-libc libclang-rt-18-dev-wasm32
 # The zlib task skips the C Wasm step gracefully if neither is available.
 
 [settings]
@@ -118,7 +123,7 @@ if [ -n "$WASM_CLANG" ]; then
     eval $WASM_CLANG -O3 -I$ZLIB_SRC -o zlib/zlib_c.wasm zlib/zlib_c.c $ZLIB_SRCS $WASI_CRT1 $WASI_LIBC
     HAVE_C_WASM=1
 else
-    echo "SKIP: C Wasm (install wasi-sdk or apt install wasi-libc libclang-rt-dev-wasm32)"
+    echo "SKIP: C Wasm (uncomment wasi-sdk in mise.toml + 'mise install', or apt install wasi-libc libclang-rt-dev-wasm32)"
     HAVE_C_WASM=0
 fi
 
@@ -258,7 +263,7 @@ if [ -d "$WASI_SDK/share/wasi-sysroot" ]; then
     cargo build --release --target wasm32-wasip1 --manifest-path syntax_highlight/Cargo.toml --quiet
     HAVE_TS_WASM=1
 else
-    echo "SKIP: tree-sitter Wasm (install wasi-sdk)"
+    echo "SKIP: tree-sitter Wasm (uncomment wasi-sdk in mise.toml + 'mise install')"
     HAVE_TS_WASM=0
 fi
 

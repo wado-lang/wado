@@ -105,9 +105,16 @@ struct OptConfig {
 /// | O2    | Yes | 10         | 13               |
 /// | O3    | Yes | 30         | 32               |
 /// | Os    | Yes | 10         | 13               |
+///
+/// "Iterations" / "Inline Threshold" describe the fixed-point
+/// optimization loop. Post-loop rewrites that the Wasm backend depends
+/// on (`select_lowering`, multi-value-return classification) always
+/// run, including at `O0`; only the fixed-point loop itself is skipped
+/// there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
-    /// No optimization passes. DCE only.
+    /// No optimization loop. DCE plus the always-on post-optimization
+    /// rewrites required by the Wasm backend.
     O0,
     /// Development optimizations. All passes with fast iteration count.
     /// Iterations: 2, Inline threshold: 4.

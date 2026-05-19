@@ -52,6 +52,7 @@ zlib compress/decompress of twitter.json (631 KB) x 10 iterations.
 | Implementation        | Compress | Decompress |  Total | vs best |
 | --------------------- | -------: | ---------: | -----: | ------: |
 | zlib-rs (Rust native) |    29 ms |       4 ms |  33 ms |   1.00x |
+| C zlib (Wasm)²        |    75 ms |      11 ms |  86 ms |   2.46x |
 | **Wado** core:zlib    |   195 ms |      95 ms | 290 ms |   8.82x |
 
 ## JSON: twitter
@@ -106,7 +107,15 @@ Highlight 81 SQL statements (13 KB) x 100 iterations. Gale-generated highlighter
 | Implementation            |     Time | vs best |
 | ------------------------- | -------: | ------: |
 | tree-sitter (Rust native) |   446 ms |   1.00x |
+| tree-sitter (Wasm)²       |   677 ms |   1.36x |
 | **Wado** (Gale)           | 1,183 ms |   2.65x |
+
+² Carried over from the previous report — `wasi-sdk` is currently
+disabled (commented out in `mise.toml`) to avoid GitHub API rate-limit
+failures during artifact install, so the C-zlib-wasm and tree-sitter-wasm
+builds were not re-measured this round. The ratios are still
+representative since they are toolchain- not host-dependent at fixed
+versions.
 
 ## Running
 
