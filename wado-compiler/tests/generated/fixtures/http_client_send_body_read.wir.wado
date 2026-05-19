@@ -382,35 +382,37 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String^Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(94)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(95)
+type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//Array<u8>";  // TypeId(95)
 
-type "functype//core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>>" = fn(ref "core:prelude//Array<u8>") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>";  // TypeId(96)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(96)
 
-type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(97)
+type "functype//core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>>" = fn(ref "core:prelude//Array<u8>") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>";  // TypeId(97)
 
-type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(98)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(98)
 
-type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(99)
+type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(99)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(100)
+type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(100)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(101)
+type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(101)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(102)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(102)
 
-type "functype//wasi/future-new:transmission-http" = fn() -> i64;  // TypeId(103)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(103)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(104)
+type "functype//wasi/future-new:transmission-http" = fn() -> i64;  // TypeId(104)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(105)
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(105)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(106)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(106)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(107)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(107)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(108)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(108)
 
-type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(109)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(109)
+
+type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(110)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -596,10 +598,6 @@ fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle"() with 
     let __pattern_temp_1: ref "tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let __pattern_temp_3: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]";
     let __pattern_temp_6: ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
-    let self_184: ref "core:prelude/string.wado//StrUtf8ByteIter";
-    let __b_185: ref "core:prelude//Array<u8>";
-    let result: ref "core:prelude//Array<u8>";
-    let byte: u8;
     headers = "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Fields_new"();
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -991,30 +989,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle"() with 
         }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    "core:internal/cm_stream_write_u8"(resp_tx, __inline_StrUtf8ByteIter_Iterator__collect_4: block -> ref "core:prelude//Array<u8>" {
-        self_184 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: body.repr, used: body.used, index: 0 };
-        result = __inline_StrUtf8ByteIter_Iterator__collect_4____seq_lit: block -> ref "core:prelude//Array<u8>" {
-            __b_185 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-            break __inline_StrUtf8ByteIter_Iterator__collect_4____seq_lit: __b_185;
-            unreachable;
-        };
-        b44: block {
-            l45: loop {
-                __fused___inline_StrUtf8ByteIter_Iterator__next_2: block {
-                    if self_184.index >= self_184.used {
-                        break b44;
-                    }
-                    byte = builtin::array_get_u8(self_184.repr, self_184.index);
-                    self_184.index = self_184.index + 1;
-                    "core:prelude/array.wado/Array<u8>::push"(result, byte);
-                    break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
-                };
-                continue l45;
-            };
-        };
-        break __inline_StrUtf8ByteIter_Iterator__collect_4: result;
-        unreachable;
-    });
+    "core:internal/cm_stream_write_u8"(resp_tx, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: body.repr, used: body.used, index: 0 }));
     "wasi/stream-drop-writable"(resp_tx);
     let __fw_write_ptr_6: i32;
     let __fw_handle_6: i32;
@@ -1558,13 +1533,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     __for_0: block {
         i = 0;
         block {
-            l120: loop {
+            l117: loop {
                 if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
                 i = i + 1;
-                continue l120;
+                continue l117;
             };
         };
     };
@@ -1576,13 +1551,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l123: loop {
+            l120: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l123;
+                continue l120;
             };
         };
     };
@@ -1775,6 +1750,39 @@ fn "core:prelude/string.wado/String^Add::add"(self, other) {
     };
     "core:prelude/string.wado/String::push_str"(result, self);
     "core:prelude/string.wado/String::push_str"(result, other);
+    return result;
+}
+
+fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
+    let __b: ref "core:prelude//Array<u8>";
+    let result: ref "core:prelude//Array<u8>";
+    let byte: u8;
+    let _licm_used_11: i32;
+    let _licm_repr_12: ref builtin::array<u8>;
+    let __hfs_index_13: i32;
+    result = __seq_lit: block -> ref "core:prelude//Array<u8>" {
+        __b = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+        break __seq_lit: __b;
+        unreachable;
+    };
+    _licm_used_11 = self.used;
+    _licm_repr_12 = self.repr;
+    __hfs_index_13 = self.index;
+    b129: block {
+        l130: loop {
+            __fused___inline_StrUtf8ByteIter_Iterator__next_3: block {
+                if __hfs_index_13 >= _licm_used_11 {
+                    break b129;
+                }
+                byte = builtin::array_get_u8(_licm_repr_12, __hfs_index_13);
+                __hfs_index_13 = __hfs_index_13 + 1;
+                "core:prelude/array.wado/Array<u8>::push"(result, byte);
+                break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
+            };
+            self.index = __hfs_index_13;
+            continue l130;
+        };
+    };
     return result;
 }
 

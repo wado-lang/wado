@@ -59,11 +59,11 @@ zlib compress/decompress of twitter.json (631 KB) x 10 iterations.
 
 Deserialize twitter.json (631 KB).
 
-| Implementation           |     Time | vs best |
-| ------------------------ | -------: | ------: |
-| serde_json (Rust native) |  0.67 ms |   1.00x |
-| JSON.parse (Node)        |  1.59 ms |   2.36x |
-| **Wado** core:json       |  7.88 ms |  11.73x |
+| Implementation           |    Time | vs best |
+| ------------------------ | ------: | ------: |
+| serde_json (Rust native) | 0.67 ms |   1.00x |
+| JSON.parse (Node)        | 1.59 ms |   2.36x |
+| **Wado** core:json       | 7.88 ms |  11.73x |
 
 ## JSON: canada
 
