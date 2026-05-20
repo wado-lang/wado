@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779284109240,
+  "lastUpdate": 1779313065412,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24037,6 +24037,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ceb40600b5c11aa76476cb6adb0f7cd70ce0ad58"
         },
         "date": 1779284108833,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17206,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 473871,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9170a8c458c166531032d9fe253d80424d2bda03",
+          "message": "Merge pull request #1135 from wado-lang/claude/labeled-block-break-followup\n\nfix: address review feedback on labeled block break unification",
+          "timestamp": "2026-05-21T06:25:18+09:00",
+          "tree_id": "f5c8c5fdec5f553abfba028d55320c30feff332f",
+          "url": "https://github.com/wado-lang/wado/commit/9170a8c458c166531032d9fe253d80424d2bda03"
+        },
+        "date": 1779313065203,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
