@@ -93,7 +93,7 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
 ///
 /// Free blocks are kept in segregated free lists — one doubly-linked
 /// list per size class. Bin `k` (k < 32) holds blocks of size exactly
-/// `24 + 8*k`; bin 32 is the catch-all "large" bin (first-fit).
+/// `32 + 16*k`; bin 32 is the catch-all "large" bin (first-fit).
 /// Allocation goes straight to the size class's bin, so the common case
 /// is O(1) rather than a first-fit scan over every free block.
 ///
