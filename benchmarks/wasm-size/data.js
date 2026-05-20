@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779236763357,
+  "lastUpdate": 1779243616355,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23817,6 +23817,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5c92c7f948217423fd6eff11ea602cb4dccabac7"
         },
         "date": 1779236762909,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17034,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 479481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ae4c885902a127d90ededff15d96af991e7a60aa",
+          "message": "Merge pull request #1129 from wado-lang/claude/optimize-gale-gen-iXSzv\n\nperf(gale): 7.8× faster gale gen by dropping wasteful TreeSet usage",
+          "timestamp": "2026-05-20T11:13:57+09:00",
+          "tree_id": "14806de8d0199483bc63026bc79bd33b9fd886a5",
+          "url": "https://github.com/wado-lang/wado/commit/ae4c885902a127d90ededff15d96af991e7a60aa"
+        },
+        "date": 1779243615905,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
