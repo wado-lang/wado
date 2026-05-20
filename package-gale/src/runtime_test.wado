@@ -132,10 +132,10 @@ test "ParseError::new creates error" {
 
 test "TreeRecorder builds CstNode" {
     let mut rec = TreeRecorder::new();
-    rec.enter_rule(&"root", &Span::new(0, 10));
+    rec.enter_rule(0, &"root", &Span::new(0, 10));
     rec.visit_token(&Token::new(1, ls("hello"), Span::new(0, 5)));
     rec.visit_token(&Token::new(2, ls("world"), Span::new(6, 11)));
-    rec.exit_rule(&"root", &Span::new(0, 10));
+    rec.exit_rule(0, &"root", &Span::new(0, 10));
     let tree = rec.build();
     assert tree.name == "root";
     assert tree.children.len() == 2;
@@ -148,12 +148,12 @@ test "TreeRecorder builds CstNode" {
 
 test "TreeRecorder builds nested tree" {
     let mut rec = TreeRecorder::new();
-    rec.enter_rule(&"parent", &Span::new(0, 20));
-    rec.enter_rule(&"child", &Span::new(0, 5));
+    rec.enter_rule(0, &"parent", &Span::new(0, 20));
+    rec.enter_rule(1, &"child", &Span::new(0, 5));
     rec.visit_token(&Token::new(1, ls("a"), Span::new(0, 1)));
-    rec.exit_rule(&"child", &Span::new(0, 5));
+    rec.exit_rule(1, &"child", &Span::new(0, 5));
     rec.visit_token(&Token::new(2, ls("b"), Span::new(10, 11)));
-    rec.exit_rule(&"parent", &Span::new(0, 20));
+    rec.exit_rule(0, &"parent", &Span::new(0, 20));
     let tree = rec.build();
     assert tree.name == "parent";
     assert tree.children.len() == 2;
@@ -167,34 +167,34 @@ test "TreeRecorder builds nested tree" {
 
 test "to_string_tree leaf token" {
     let mut rec = TreeRecorder::new();
-    rec.enter_rule(&"root", &Span::new(0, 2));
+    rec.enter_rule(0, &"root", &Span::new(0, 2));
     rec.visit_token(&Token::new(1, ls("42"), Span::new(0, 2)));
-    rec.exit_rule(&"root", &Span::new(0, 2));
+    rec.exit_rule(0, &"root", &Span::new(0, 2));
     let tree = rec.build();
     assert tree.to_string_tree() == "(root 42)", `got: {tree.to_string_tree()}`;
 }
 
 test "to_string_tree nested" {
     let mut rec = TreeRecorder::new();
-    rec.enter_rule(&"a", &Span::new(0, 10));
-    rec.enter_rule(&"b", &Span::new(0, 2));
+    rec.enter_rule(0, &"a", &Span::new(0, 10));
+    rec.enter_rule(1, &"b", &Span::new(0, 2));
     rec.visit_token(&Token::new(1, ls("x"), Span::new(0, 1)));
-    rec.exit_rule(&"b", &Span::new(0, 2));
+    rec.exit_rule(1, &"b", &Span::new(0, 2));
     rec.visit_token(&Token::new(2, ls("+"), Span::new(3, 4)));
-    rec.enter_rule(&"b", &Span::new(5, 7));
+    rec.enter_rule(1, &"b", &Span::new(5, 7));
     rec.visit_token(&Token::new(1, ls("y"), Span::new(5, 6)));
-    rec.exit_rule(&"b", &Span::new(5, 7));
-    rec.exit_rule(&"a", &Span::new(0, 10));
+    rec.exit_rule(1, &"b", &Span::new(5, 7));
+    rec.exit_rule(0, &"a", &Span::new(0, 10));
     let tree = rec.build();
     assert tree.to_string_tree() == "(a (b x) + (b y))", `got: {tree.to_string_tree()}`;
 }
 
 test "to_string_tree skips empty text tokens" {
     let mut rec = TreeRecorder::new();
-    rec.enter_rule(&"root", &Span::new(0, 5));
+    rec.enter_rule(0, &"root", &Span::new(0, 5));
     rec.visit_token(&Token::new(1, ls("x"), Span::new(0, 1)));
     rec.visit_token(&Token::new(0, ls(""), Span::new(1, 1)));
-    rec.exit_rule(&"root", &Span::new(0, 5));
+    rec.exit_rule(0, &"root", &Span::new(0, 5));
     let tree = rec.build();
     assert tree.to_string_tree() == "(root x)", `got: {tree.to_string_tree()}`;
 }
@@ -243,14 +243,15 @@ test "highlight_html converts dot-separated captures to CSS classes" {
 test "HighlightVisitor collects captures from tokens" {
     let mapping = HighlightMapping {
         defaults: ["string", "number", ""],
+        rule_names: ["root"],
         overrides: [],
     };
     let mut visitor = HighlightVisitor::new(mapping);
-    visitor.enter_rule(&"root", &Span::new(0, 10));
+    visitor.enter_rule(0, &"root", &Span::new(0, 10));
     visitor.visit_token(&Token::new(0, ls("\"hi\""), Span::new(0, 4)));
     visitor.visit_token(&Token::new(1, ls("42"), Span::new(5, 7)));
     visitor.visit_token(&Token::new(2, ls(" "), Span::new(7, 8)));
-    visitor.exit_rule(&"root", &Span::new(0, 10));
+    visitor.exit_rule(0, &"root", &Span::new(0, 10));
     assert visitor.captures.len() == 2, `expected 2, got {visitor.captures.len()}`;
     assert visitor.captures[0].capture == "string";
     assert visitor.captures[0].start == 0;
@@ -263,15 +264,16 @@ test "HighlightVisitor collects captures from tokens" {
 test "HighlightVisitor applies context overrides" {
     let mapping = HighlightMapping {
         defaults: ["string"],
+        rule_names: ["root", "pair"],
         overrides: [HighlightOverride { rule_name: "pair", token_kind: 0, capture: "string.special.key" }],
     };
     let mut visitor = HighlightVisitor::new(mapping);
-    visitor.enter_rule(&"root", &Span::new(0, 20));
-    visitor.enter_rule(&"pair", &Span::new(0, 10));
+    visitor.enter_rule(0, &"root", &Span::new(0, 20));
+    visitor.enter_rule(1, &"pair", &Span::new(0, 10));
     visitor.visit_token(&Token::new(0, ls("\"key\""), Span::new(0, 5)));
-    visitor.exit_rule(&"pair", &Span::new(0, 10));
+    visitor.exit_rule(1, &"pair", &Span::new(0, 10));
     visitor.visit_token(&Token::new(0, ls("\"val\""), Span::new(11, 16)));
-    visitor.exit_rule(&"root", &Span::new(0, 20));
+    visitor.exit_rule(0, &"root", &Span::new(0, 20));
     assert visitor.captures[0].capture == "string.special.key", `got: {visitor.captures[0].capture}`;
     assert visitor.captures[1].capture == "string", `got: {visitor.captures[1].capture}`;
 }
@@ -279,14 +281,15 @@ test "HighlightVisitor applies context overrides" {
 test "HighlightVisitor handles trivia" {
     let mapping = HighlightMapping {
         defaults: ["comment", "keyword"],
+        rule_names: ["root"],
         overrides: [],
     };
     let mut visitor = HighlightVisitor::new(mapping);
     let trivia: Array<Token> = [Token::new(0, ls("/* hi */"), Span::new(0, 8))];
     let token = Token::with_trivia(1, ls("if"), Span::new(9, 11), trivia);
-    visitor.enter_rule(&"root", &Span::new(0, 11));
+    visitor.enter_rule(0, &"root", &Span::new(0, 11));
     visitor.visit_token(&token);
-    visitor.exit_rule(&"root", &Span::new(0, 11));
+    visitor.exit_rule(0, &"root", &Span::new(0, 11));
     assert visitor.captures.len() == 2;
     assert visitor.captures[0].capture == "comment";
     assert visitor.captures[0].start == 0;

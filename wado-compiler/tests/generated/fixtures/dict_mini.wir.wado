@@ -148,7 +148,6 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/run"() with Stdout {
     let __b_18: ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
     let self_27: ref "core:prelude/types.wado//Box<bool>";
     let self_33: ref "core:prelude/types.wado//Box<bool>";
-    let self_44: ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
     dict = struct.new "wado-compiler/tests/fixtures/dict_mini.wado//MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>" { entries: ref.as_non_null(__inline_MiniDict_core_prelude_string_wado_String_core_prelude_string_wado_String___new_2____seq_lit: block -> ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>" {
         __b_18 = struct.new "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[String, String]">(0), used: 0 };
         break __inline_MiniDict_core_prelude_string_wado_String_core_prelude_string_wado_String___new_2____seq_lit: __b_18;
@@ -236,11 +235,7 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/run"() with Stdout {
         "core:prelude/string.wado/String::push"(__local_11, 58);
         "core:prelude/string.wado/String::push"(__local_11, 32);
         __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_core_prelude_types_wado_Tuple_core_prelude_string_wado_String_core_prelude_string_wado_String____len_0: block -> i32 {
-            self_44 = dict.entries;
-            break __inline_Array_core_prelude_types_wado_Tuple_core_prelude_string_wado_String_core_prelude_string_wado_String____len_0: self_44.used;
-            unreachable;
-        }, __local_12);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(dict.entries.used, __local_12);
         break __tmpl: __local_11;
         unreachable;
     });
@@ -736,25 +731,24 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
     let i: i32;
     let self_7: ref "core:prelude/string.wado//String";
     let len_a: i32;
-    let index_11: i32;
     let value_12: ref "tuple//[String, String]";
     let _licm_entries_13: ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
-    let _licm_used_18: i32;
-    let _licm_repr_19: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
+    let _licm_used_14: i32;
+    let _licm_repr_15: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
     let _licm_used_20: i32;
     __for_0: block {
         i = 0;
         _licm_entries_13 = self;
-        _licm_used_18 = _licm_entries_13.used;
-        _licm_repr_19 = _licm_entries_13.repr;
+        _licm_used_14 = _licm_entries_13.used;
+        _licm_repr_15 = _licm_entries_13.repr;
         _licm_used_20 = key.used;
         block {
             l68: loop {
-                if i >= _licm_used_18 {
+                if i >= _licm_used_14 {
                     break __for_0;
                 }
                 if __inline_String_Eq__eq_2: block -> bool {
-                    self_7 = builtin::array_get<ref "tuple//[String, String]">(_licm_repr_19, i).0;
+                    self_7 = builtin::array_get<ref "tuple//[String, String]">(_licm_repr_15, i).0;
                     len_a = self_7.used;
                     if len_a != _licm_used_20 {
                         break __inline_String_Eq__eq_2: 0;
@@ -762,9 +756,8 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
                     break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_7.repr, key.repr, len_a);
                     unreachable;
                 } {
-                    index_11 = i;
                     value_12 = struct.new "tuple//[String, String]" { 0: key, 1: value };
-                    builtin::array_set<ref "tuple//[String, String]">(_licm_repr_19, index_11, value_12);
+                    builtin::array_set<ref "tuple//[String, String]">(_licm_repr_15, i, value_12);
                     return;
                 }
                 i = i + 1;

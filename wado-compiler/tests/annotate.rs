@@ -9,6 +9,34 @@ use wado_compiler::annotate;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::symbol::{SymbolKey, SymbolKind};
 
+#[test]
+fn annotate_newtype_records_aliased_type() {
+    let source = r"
+type Meters = f64;
+type Pair = [i32, i32];
+type Maybe = Option<i32>;
+";
+    let host = InMemoryHost::new();
+    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+
+    let entry = annotated.interner.borrow_mut().entry_point("entry.wado");
+
+    let expect_aliased = |name: &str, expected: &str| {
+        let sym = annotated
+            .symbols
+            .lookup_in_module(&entry, name)
+            .unwrap_or_else(|| panic!("{name} symbol should be defined"));
+        match &sym.kind {
+            SymbolKind::Newtype(n) => assert_eq!(n.aliased_type, expected, "newtype {name}"),
+            other => panic!("expected Newtype for {name}, got {other:?}"),
+        }
+    };
+
+    expect_aliased("Meters", "f64");
+    expect_aliased("Pair", "[i32, i32]");
+    expect_aliased("Maybe", "Option<i32>");
+}
+
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Runtime::new().unwrap().block_on(future)
 }

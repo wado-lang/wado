@@ -919,6 +919,17 @@ pub struct ScanGroupElem {
     /// and the lenient gate. Cached at lower time so emit's
     /// `gen_scan_op_group` doesn't re-call `ctx.first_of_alt`.
     pub alt_first_sets: Array<Array<String>>,
+    /// Indices into `alts` of every wildcard-led alt (its first
+    /// non-nullable element is `.`). A wildcard alt matches any
+    /// non-EOF token, so the lenient first-set gate must be
+    /// suppressed (otherwise scan-side dispatch would never try
+    /// the wildcard alt on a lookahead that lies outside the
+    /// explicit first set union — the `(assign | .)` pattern from
+    /// the ANTLR4 `ParserExec/Wildcard` descriptor) AND the scan
+    /// iteration order must visit wildcard alts last so a more
+    /// specific concrete alt still wins when its full body
+    /// matches.
+    pub wildcard_alt_indices: Array<i32>,
 }
 
 pub struct ScanOptionalLookaheadElem {

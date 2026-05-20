@@ -56,7 +56,7 @@ All 17 `CompositeLexers` / `CompositeParsers` upstream descriptors auto-skip tod
 
 ## Descriptor importer expansion (no Stage C required)
 
-Stage A2 (parse-accepts-input) landed and covers 206 / 345 descriptors. The remaining importable test modes are:
+The Stage A parse-accepts-input drivers cover 206 / 345 descriptors. The remaining importable test modes are:
 
 - **Stage E (parse-must-error)** for `LexerErrors` / `ParserErrors` (46 descriptors): `g::parse(&input)` must return `Err`. Optionally tighten by matching line/col against `[errors]`.
 - **Stage L (token-stream equivalence)** for lexer-only descriptors (`LexerExec` 42, `Performance` 7, `SemPredEvalLexer` 8, lexer half of `Sets`): add a `to_lexer_string(&Array<Token>) -> String` helper that mimics ANTLR4's `Token.toString()` / token-name-per-line dumps, then assert `g::tokenize(&input).to_lexer_string() == expected` (modulo skip-channel filtering).

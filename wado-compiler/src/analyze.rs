@@ -415,9 +415,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Newtype(newtype) => {
-                    let kind = SymbolKind::Newtype(NewtypeSymbol {
-                        aliased_type: "unknown".to_string(), // TODO: store actual type
-                    });
+                    let mut aliased_type = String::new();
+                    crate::unparse::unparse_type_into(&newtype.ty, &mut aliased_type);
+                    let kind = SymbolKind::Newtype(NewtypeSymbol { aliased_type });
 
                     self.define_unique(
                         module_source,

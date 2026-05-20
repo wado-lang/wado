@@ -18,7 +18,6 @@ use {
     token_group_field_name,
     is_general_group,
     general_group_field_name,
-    str_set_from,
     str_set_insert_all,
     gen_visibility_comment,
     to_snake_case,
@@ -34,7 +33,9 @@ use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wad
 use { TreeSet } from "core:collections";
 use { PredictionNode, build_prediction } from "./prediction.wado";
 use {
+    alt_is_wildcard_led,
     compute_overlap_groups,
+    compute_overlap_groups_with_wildcard,
     has_multi_alt_groups,
     sort_group_by_specificity,
     sort_group_by_mandatory_count_desc,
@@ -253,12 +254,21 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.end();
     w.blank();
 
+    // `p.expect(kind)` matches a single token of the requested kind. EOF
+    // is matched without advancing so that consecutive `EOF` references
+    // in a rule (`prog : ... EOF EOF ;`) all see the same sentinel — the
+    // token stream contains exactly one EOF and `advance` past it would
+    // read out of bounds. This mirrors ANTLR4's `matchedEOF` behaviour
+    // where a second `match(EOF)` observes the same end-of-input slot.
     let mut f7 = FnSpec::new("expect");
     f7.set_receiver(&"&mut self");
     f7.add_param(&"kind", &"i32");
     f7.set_return_type(&"Result<Token, ParseError>");
     f7.emit_begin(w);
     w.begin(&"if self.tokens[self.pos].kind == kind");
+    w.begin(&"if kind == TK_EOF");
+    w.line(&"return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);");
+    w.end();
     w.line(&"return Result::<Token, ParseError>::Ok(self.advance());");
     w.end();
     w.line(&"let tok = &self.tokens[self.pos];");
@@ -730,11 +740,6 @@ fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32)
 /// correct LR alternative — exactly like the parse side, so scan and parse
 /// agree on which alt applies at every position.
 fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, ctx: &mut GenContext) {
-    let mut suffix_sets: Array<TreeSet<String>> = [];
-    for let sfs of suffix_first_sets {
-        suffix_sets.push(str_set_from(sfs));
-    }
-
     let mut emitted = TreeSet::<String>::new();
     let mut first_branch = true;
 
@@ -751,7 +756,7 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
                 if j == k {
                     continue;
                 }
-                if suffix_sets[group[j]].contains(*tk) {
+                if suffix_first_sets[group[j]].contains(tk) {
                     shared = true;
                 }
             }
@@ -799,12 +804,12 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
         let mut sub_first = true;
         let mut last_k = -1;
         for let mut k = 0; k < group.len(); k += 1 {
-            if suffix_sets[group[k]].contains(*shared_tk) {
+            if suffix_first_sets[group[k]].contains(shared_tk) {
                 last_k = k;
             }
         }
         for let mut k = 0; k < group.len(); k += 1 {
-            if !suffix_sets[group[k]].contains(*shared_tk) {
+            if !suffix_first_sets[group[k]].contains(shared_tk) {
                 continue;
             }
             let lr_idx = valid_lr_indices[group[k]];
@@ -1381,6 +1386,15 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
 /// `gen_scan_group` semantics: ambiguity detection (alts sharing a
 /// first token enter longest-match commit), lenient gate, and the
 /// `sg_<gc>_done` / `sg_<gc>` block structure.
+fn is_wildcard_alt(indices: &Array<i32>, alt_idx: i32) -> bool {
+    for let idx of indices {
+        if *idx == alt_idx {
+            return true;
+        }
+    }
+    return false;
+}
+
 fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContext, fail_stmt: &String, lenient: bool) {
     if ge.alts.len() == 1 {
         // Single alt: outer `done` wraps inner `body`.
@@ -1441,13 +1455,14 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
         }
     }
 
+    let has_wildcard = !ge.wildcard_alt_indices.is_empty();
     let mut union_first: Array<String> = [];
-    if lenient {
+    if lenient && !has_wildcard {
         for let fs of first_sets {
             dedup_append_arr(&mut union_first, fs);
         }
     }
-    let gate_emitted = lenient && union_first.len() > 0;
+    let gate_emitted = lenient && !has_wildcard && union_first.len() > 0;
     if gate_emitted {
         let sgk_var = `sgk_{gc}`;
         w.line(&`let {sgk_var} = if pos < tokens.len() \{ tokens[pos].kind \} else \{ TK_EOF \};`);
@@ -1459,8 +1474,28 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
         w.line(&`let mut {best_var} = -1;`);
     }
 
-    w.begin(&`{outer}:`);
+    // Iteration order: visit concrete alts before wildcard alts. A
+    // wildcard alt matches any non-EOF token (its scan body is just
+    // `pos += 1`), so trying it before a more specific concrete alt
+    // would always commit to the wildcard and shadow the concrete
+    // alt — independent of source order. Pushing wildcard alts to
+    // the end mirrors `gen_general_group_dispatch`'s
+    // `sort_group_by_mandatory_count_desc` ordering on the parse
+    // side, so scan and parse agree on the winner.
+    let mut iter_order: Array<i32> = [];
     for let mut i = 0; i < n; i += 1 {
+        if !is_wildcard_alt(&ge.wildcard_alt_indices, i) {
+            iter_order.push(i);
+        }
+    }
+    for let mut i = 0; i < n; i += 1 {
+        if is_wildcard_alt(&ge.wildcard_alt_indices, i) {
+            iter_order.push(i);
+        }
+    }
+
+    w.begin(&`{outer}:`);
+    for let i of iter_order {
         let inner = `sg_{gc}_{i}`;
         w.line(&`pos = {gp_var};`);
         w.begin(&`{inner}:`);
@@ -1717,7 +1752,17 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         f.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
         if has_overlaps {
-            gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices, fn_name);
+            gen_multi_alt_body_bt(
+                w,
+                rule,
+                lowered_rule,
+                &type_name,
+                ctx,
+                &groups,
+                &first_sets,
+                &non_lr_indices,
+                fn_name,
+            );
         } else {
             gen_multi_alt_body(w, rule, lowered_rule, &type_name, ctx, &non_lr_indices);
         }
@@ -1757,7 +1802,17 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         f.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
         if has_overlaps {
-            gen_multi_alt_body_bt(w, rule, lowered_rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices, fn_name);
+            gen_multi_alt_body_bt(
+                w,
+                rule,
+                lowered_rule,
+                &type_name,
+                ctx,
+                &groups,
+                &first_sets,
+                &non_lr_indices,
+                fn_name,
+            );
         } else {
             gen_multi_alt_body(w, rule, lowered_rule, &type_name, ctx, &non_lr_indices);
         }
@@ -1927,7 +1982,9 @@ fn peel_scalar_label(elem: &Element) -> &Element {
     let mut cur = elem;
     loop {
         if let Label(lab) = cur {
-            if lab.list { break; }
+            if lab.list {
+                break;
+            }
             cur = &lab.element;
         } else {
             break;
@@ -2313,15 +2370,21 @@ fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: 
         gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &scan_label);
     } else {
         let mut alt_first_sets: Array<Array<String>> = [];
-        for let alt of &g_elem.alternatives {
+        let mut wildcard_indices: Array<i32> = [];
+        for let mut ai = 0; ai < g_elem.alternatives.len(); ai += 1 {
+            let alt = &g_elem.alternatives[ai];
             let mut visiting: Array<String> = [];
             alt_first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+            if alt_is_wildcard_led(alt) {
+                wildcard_indices.push(ai);
+            }
         }
         let scan_elem = ScanGroupElem {
             alts: g_op.scan_alts,
             dispatch: g_op.scan_dispatch,
             lenient: false,
             alt_first_sets,
+            wildcard_alt_indices: wildcard_indices,
         };
         gen_scan_op_group(w, &scan_elem, ctx, &fail, false);
     }
@@ -2484,11 +2547,17 @@ fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
             &rep_op.k_prefix_mask,
             ctx,
         )),
-        WithFollowSubtraction(s) => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_k_prefix(
-            &ctx.first_check_str(&s.effective_first),
-            &rep_op.k_prefix_mask,
+        WithFollowSubtraction(s) => emit_op_transparent_optional_with_cond(
+            w,
+            g_op,
+            g_elem,
             ctx,
-        )),
+            &gate_cond_with_k_prefix(
+                &ctx.first_check_str(&s.effective_first),
+                &rep_op.k_prefix_mask,
+                ctx,
+            ),
+        ),
         Suppressed | NonGreedy(_) => panic(
             "gen_op_transparent_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
         ),
@@ -2724,7 +2793,9 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
             },
         };
     } else {
-        panic("gen_op_group: Group op mapped to non-Group element (even after peel_scalar_label) — lower produced an Op::Group whose surface element is neither Group nor Label-of-Group");
+        panic(
+            "gen_op_group: Group op mapped to non-Group element (even after peel_scalar_label) — lower produced an Op::Group whose surface element is neither Group nor Label-of-Group",
+        );
     }
 }
 
@@ -3582,10 +3653,9 @@ fn compute_non_greedy_condition(rep_op: &RepeatOp, follow_first: &Array<String>,
 }
 
 fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
-    let b_set = str_set_from(b);
     let mut result: Array<String> = [];
     for let x of a {
-        if !b_set.contains(*x) {
+        if !b.contains(x) {
             result.push(*x);
         }
     }
@@ -3987,7 +4057,7 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
 
-    let groups = compute_overlap_groups(&first_sets);
+    let groups = compute_overlap_groups_with_wildcard(alts, &first_sets);
     let has_overlaps = has_multi_alt_groups(&groups);
 
     if !has_overlaps {
@@ -4022,9 +4092,27 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
         for let mut g = 0; g < groups.len(); g += 1 {
             let group = &groups[g];
 
-            let mut union_first: Array<String> = [];
+            // A group containing a wildcard alt matches any non-EOF
+            // lookahead (its first set is the universal token set
+            // even though `first_of_element` returns `[]`). Emitting
+            // a kind-check against the union of explicit first sets
+            // would skip the dispatch on any token outside that
+            // union, leaving the wildcard alt unreachable. Force the
+            // group's outer condition to `true` so the scan-based
+            // dispatch inside has the final say.
+            let mut group_has_wildcard = false;
             for let idx of group {
-                dedup_append_arr(&mut union_first, &first_sets[*idx]);
+                if alt_is_wildcard_led(&alts[*idx]) {
+                    group_has_wildcard = true;
+                    break;
+                }
+            }
+
+            let mut union_first: Array<String> = [];
+            if !group_has_wildcard {
+                for let idx of group {
+                    dedup_append_arr(&mut union_first, &first_sets[*idx]);
+                }
             }
 
             let cond = ctx.kind_check_str(&union_first, &grp_var);
@@ -4093,7 +4181,7 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: &GeneralShape, g_
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
 
-    let groups = compute_overlap_groups(&first_sets);
+    let groups = compute_overlap_groups_with_wildcard(alts, &first_sets);
 
     let inner_var = dedup_name(&`{var_name}_inner`, name_counts);
     w.line(&`let mut {inner_var}: Option<{type_name}> = null;`);
@@ -4104,9 +4192,22 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: &GeneralShape, g_
     for let mut g = 0; g < groups.len(); g += 1 {
         let group = &groups[g];
 
-        let mut union_first: Array<String> = [];
+        // See `gen_general_group_store_op`: a wildcard-led alt forces
+        // the surrounding group to act as a catch-all so the inner
+        // scan-based dispatch is reached for any non-EOF lookahead.
+        let mut group_has_wildcard = false;
         for let idx of group {
-            dedup_append_arr(&mut union_first, &first_sets[*idx]);
+            if alt_is_wildcard_led(&alts[*idx]) {
+                group_has_wildcard = true;
+                break;
+            }
+        }
+
+        let mut union_first: Array<String> = [];
+        if !group_has_wildcard {
+            for let idx of group {
+                dedup_append_arr(&mut union_first, &first_sets[*idx]);
+            }
         }
 
         let cond = ctx.kind_check_str(&union_first, &grp_var);
@@ -4507,12 +4608,6 @@ fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, scan_suffix_fn:
 }
 
 fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, ctx: &mut GenContext, use_prec: bool) {
-    // Pre-convert suffix_first_sets to TreeSets for efficient lookup.
-    let mut suffix_sets: Array<TreeSet<String>> = [];
-    for let sfs of suffix_first_sets {
-        suffix_sets.push(str_set_from(sfs));
-    }
-
     // For each token in the group, find which alternatives match it.
     // Unique token → dispatch directly. Shared token → sub-dispatch via peek_at(1).
     let mut emitted = TreeSet::<String>::new();
@@ -4531,7 +4626,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &
                 if j == k {
                     continue;
                 }
-                if suffix_sets[group[j]].contains(*tk) {
+                if suffix_first_sets[group[j]].contains(tk) {
                     shared = true;
                 }
             }
@@ -4579,12 +4674,12 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &
         let mut sub_first = true;
         let mut last_k = -1;
         for let mut k = 0; k < group.len(); k += 1 {
-            if suffix_sets[group[k]].contains(*shared_tk) {
+            if suffix_first_sets[group[k]].contains(shared_tk) {
                 last_k = k;
             }
         }
         for let mut k = 0; k < group.len(); k += 1 {
-            if !suffix_sets[group[k]].contains(*shared_tk) {
+            if !suffix_first_sets[group[k]].contains(shared_tk) {
                 continue;
             }
             let lr_idx = valid_lr_indices[group[k]];

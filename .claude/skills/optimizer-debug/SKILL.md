@@ -1,6 +1,6 @@
 ---
 name: optimizer-debug
-description: Debug Wado optimizer (TIR/WIR pass) bugs using WADO_TRACE, WADO_DUMP_PASS_BEFORE/AFTER, and WADO_LIST_PASSES env vars. Use when an optimization pass produces wrong code, ICEs the WIR pipeline ("invalid core Wasm module: type mismatch ..."), or when you need to see how a specific pass transforms the IR.
+description: Debug Wado optimizer (TIR/WIR pass) bugs using WADO_TRACE, WADO_DUMP_PASS_BEFORE/AFTER, WADO_LIST_PASSES, and WADO_SKIP_PASS env vars. Use when an optimization pass produces wrong code, ICEs the WIR pipeline ("invalid core Wasm module: type mismatch ..."), or when you need to see how a specific pass transforms the IR.
 ---
 
 # Optimizer pass debugging
@@ -56,6 +56,26 @@ The variables accept a comma-separated list:
 WADO_DUMP_PASS_AFTER=tir/inline,wir/sroa_multi_value_returns \
   cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm 2>/tmp/dump.log
 ```
+
+### Bisect by skipping a pass
+
+```sh
+WADO_SKIP_PASS=tir/cse cargo run --bin wado --quiet -- compile -O3 file.wado -o /tmp/out.wasm
+```
+
+Same comma-separated list as `WADO_DUMP_PASS_*`, with one extra
+convenience: a `@N` suffix targets the Nth invocation of a pass within
+the fixed-point loop (1-based). `WADO_SKIP_PASS=tir/ref_elim@2` skips
+ref_elim only on the second iteration, which is how the
+ref_elim-rebound-local bug was localised — its failing test passed on
+the first iteration and only diverged once the inliner expanded an
+additional function on the second.
+
+When a pass is the only one whose skipping makes the bug go away that
+just narrows the _participants_ in the buggy interaction — it does not
+prove the pass is itself buggy. Pair the skip-bisection result with
+`WADO_DUMP_PASS_AFTER` on the same pass to compare its output across
+the working vs. broken configuration before concluding.
 
 ### Trace pass-internal decisions
 

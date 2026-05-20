@@ -1,0 +1,99 @@
+// Reproduces a ref_elim soundness bug surfaced by `labeled_block_fusion`
+// reusing a single NIR local for the payload of an `Option<&T>` that gets
+// constructed from multiple match arms.
+//
+// `extract` returns `Option::Some(&g.alternatives)` from two distinct
+// `if let Group(g) = …` arms — one direct, one nested inside an
+// `if let Repeat(rep)`. When the caller is `if let Some(_) = extract(…)`,
+// the inliner expands `extract` and `labeled_block_fusion` collapses the
+// Some-construction-then-destructure into a payload binding
+// `__fused_payload_N`. Both arms write to that same NIR local index but
+// the right-hand sides reference different `g`s.
+//
+// The pre-fix ref_elim registered each `let __fused_payload_N = …` in
+// an `IndexMap<u32, RefInfo>` keyed by local index, so the second arm's
+// RefInfo silently overwrote the first arm's. Every later use of
+// `__fused_payload_N` (or anything that Pattern-2-inherited from it,
+// e.g. an inlined `Array::len`'s shadow) was substituted with the
+// LAST-registered referent — which in the first arm pointed at an
+// uninitialised `g`. The runtime trap surfaces as "out of bounds array
+// access" on whatever junk that `g.alternatives.used` produces.
+use { println, Stdout } from "core:cli";
+
+variant Element {
+    Leaf(i32),
+    Group(GroupElement),
+    Repeat(RepeatElement),
+}
+
+struct GroupElement {
+    alternatives: Array<i32>,
+}
+
+impl GroupElement {
+    fn new(alternatives: Array<i32>) -> GroupElement {
+        return GroupElement { alternatives };
+    }
+}
+
+struct RepeatElement {
+    element: Element,
+}
+
+impl RepeatElement {
+    fn new(element: Element) -> RepeatElement {
+        return RepeatElement { element };
+    }
+}
+
+#[inline(always)]
+fn extract(elem: &Element) -> Option<&Array<i32>> {
+    if let Group(g) = elem {
+        return Option::Some(&g.alternatives);
+    }
+    if let Repeat(rep) = elem {
+        if let Group(g) = &rep.element {
+            return Option::Some(&g.alternatives);
+        }
+    }
+    return null;
+}
+
+fn process(elem: &Element) -> i32 {
+    // The pattern match `if let Some(alts) = extract(elem)` is what the
+    // labeled_block_fusion pass fuses with extract's two Some-returning
+    // arms, so both arms end up writing the same NIR payload local.
+    let alts = extract(elem);
+    if let Some(alts) = alts {
+        // Length read forces a downstream use of the fused payload;
+        // alts.len() inlines as `<self.used>` whose `self` shadow chains
+        // through Pattern 2 to the payload local — that's the path the
+        // wrong substitution corrupts.
+        return alts.len() * 10 + 1;
+    }
+    return -1;
+}
+
+export fn run() with Stdout {
+    // Plain Group: first arm fires, payload is `&g.alternatives` from
+    // the outer `g` (index N1 in NIR).
+    let e1 = Element::Group(GroupElement::new([1, 2, 3]));
+    println(`{process(&e1)}`);
+
+    // Repeat-wrapping-Group: second arm fires, payload is
+    // `&g.alternatives` from the nested `g` (index N2 in NIR, distinct
+    // from N1). The pre-fix bug uses N2 even in the first arm at -O3
+    // because labeled_block_fusion reused the same payload local for
+    // both arms, and ref_elim's last-write-wins substitution wins.
+    let inner_g = GroupElement::new([10, 20]);
+    let e2 = Element::Repeat(RepeatElement::new(Element::Group(inner_g)));
+    println(`{process(&e2)}`);
+
+    // Leaf: neither arm fires.
+    println(`{process(&Element::Leaf(0))}`);
+}
+
+__DATA__
+{
+    "stdout": "31\n21\n-1\n"
+}

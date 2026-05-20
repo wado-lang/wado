@@ -1,0 +1,22 @@
+// `use { double as d }` — non-generic alias-based imports also flow through
+// to function-value positions. The FuncRef must carry the original defining
+// name so downstream lookups (closure forwarder, mangled-name registries)
+// resolve consistently.
+
+use { double as d } from "./sub/fn_ref_cross_module_helper.wado";
+
+fn apply_fn(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+test "aliased bare to fn parameter" {
+    assert apply_fn(d, 21) == 42;
+}
+
+test "aliased let with fn annotation" {
+    let f: fn(i32) -> i32 = d;
+    assert f(21) == 42;
+}
+
+__DATA__
+{"test": {}}

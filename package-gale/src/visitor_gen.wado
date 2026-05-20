@@ -19,30 +19,30 @@ use { CodeWriter } from "./wadopoet.wado";
 
 /// Generate Visitor walk functions and to_tree for a grammar.
 pub fn gen_visitor(w: &mut CodeWriter, grammar: &Grammar) {
-    for let rule of &grammar.parser_rules {
-        gen_walk_fn(w, rule, &rule.name);
+    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        gen_walk_fn(w, &grammar.parser_rules[i], &grammar.parser_rules[i].name, i);
     }
     gen_to_tree_fn(w, grammar);
 }
 
-fn gen_walk_fn(w: &mut CodeWriter, rule: &ParserRule, rule_name: &String) {
+fn gen_walk_fn(w: &mut CodeWriter, rule: &ParserRule, rule_name: &String, rule_id: i32) {
     let type_name = rule_type_name(&rule.name);
     w.begin(&`pub fn walk_{rule.name}<V: Visitor>(v: &mut V, node: &{type_name})`);
 
     let mut group_counter: i32 = 0;
     if rule.alternatives.len() == 1 {
-        w.line(&`v.enter_rule(&"{rule.name}", &node.span);`);
+        w.line(&`v.enter_rule({rule_id}, &"{rule.name}", &node.span);`);
         gen_walk_alt_body(w, &rule.alternatives[0], &"node", rule_name, &mut group_counter);
-        w.line(&`v.exit_rule(&"{rule.name}", &node.span);`);
+        w.line(&`v.exit_rule({rule_id}, &"{rule.name}", &node.span);`);
     } else {
         let case_names = case_names_for_rule(&rule.alternatives);
         w.begin(&"match node");
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
             let alt = &rule.alternatives[i];
             w.begin(&`{case_names[i]}(n) =>`);
-            w.line(&`v.enter_rule(&"{rule.name}", &n.span);`);
+            w.line(&`v.enter_rule({rule_id}, &"{rule.name}", &n.span);`);
             gen_walk_alt_body(w, alt, &"n", rule_name, &mut group_counter);
-            w.line(&`v.exit_rule(&"{rule.name}", &n.span);`);
+            w.line(&`v.exit_rule({rule_id}, &"{rule.name}", &n.span);`);
             w.end();
         }
         w.end();  // match

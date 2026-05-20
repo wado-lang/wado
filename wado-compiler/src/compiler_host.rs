@@ -94,6 +94,10 @@ pub enum Code {
     UnknownType,
     /// Invalid type cast
     InvalidCast,
+    /// Generic function reference cannot be typed at this position:
+    /// missing or mismatching turbofish, no usable expected type, or
+    /// arity mismatch against an expected `fn(...)` signature.
+    GenericFunctionRef,
 
     // Module errors
     /// Module not found
@@ -194,6 +198,7 @@ impl std::fmt::Display for Code {
             Code::KilnGeneratedRegenerated => "KILN_GENERATED_REGENERATED",
             Code::KilnGeneratedStaleOnDisk => "KILN_GENERATED_STALE_ON_DISK",
             Code::CompilerItemAttr => "COMPILER_ITEM_ATTR",
+            Code::GenericFunctionRef => "GENERIC_FUNCTION_REF",
         };
         write!(f, "{name}")
     }

@@ -1,0 +1,22 @@
+// A generic function may take itself as a value through its own type
+// parameter — `rec::<T>` inside `rec<T>` substitutes the outer's `T`
+// through the monomorphizer's normal TypeParam-propagation path.
+
+fn rec<T>(x: T) -> T {
+    if true {
+        return x;
+    }
+    let f = rec::<T>;
+    return f(x);
+}
+
+test "recursive self-reference via turbofish" {
+    assert rec(42) == 42;
+}
+
+test "recursive self-reference threads instantiation" {
+    assert rec(true);
+}
+
+__DATA__
+{"test": {}}

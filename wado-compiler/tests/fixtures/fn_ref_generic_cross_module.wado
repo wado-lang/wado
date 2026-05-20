@@ -1,0 +1,26 @@
+// Cross-module turbofish and expected-type inference both pin a generic
+// function reference to a concrete `fn(...)` value, exactly as for locally
+// declared generics.
+
+use { identity } from "./sub/fn_ref_generic_cross_module_helper.wado";
+
+fn apply_fn(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+test "cross-module turbofish in let" {
+    let f = identity::<i32>;
+    assert f(42) == 42;
+}
+
+test "cross-module bare name with fn annotation" {
+    let f: fn(bool) -> bool = identity;
+    assert f(true);
+}
+
+test "cross-module bare name to fn parameter" {
+    assert apply_fn(identity, 7) == 7;
+}
+
+__DATA__
+{"test": {}}

@@ -1302,7 +1302,19 @@ impl<'a> Unparser<'a> {
 
     fn unparse_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Ident(i) => self.output.push_str(&i.name),
+            Expr::Ident(i) => {
+                self.output.push_str(&i.name);
+                if !i.type_args.is_empty() {
+                    self.output.push_str("::<");
+                    for (idx, ty) in i.type_args.iter().enumerate() {
+                        if idx > 0 {
+                            self.output.push_str(", ");
+                        }
+                        self.unparse_type(ty);
+                    }
+                    self.output.push('>');
+                }
+            }
             Expr::Literal(l) => self.unparse_literal(&l.value),
             Expr::Binary(b) => self.unparse_binary(b),
             Expr::Unary(u) => self.unparse_unary(u),
@@ -2698,7 +2710,19 @@ pub fn unparse_expr_simple(expr: &Expr) -> String {
 /// round-trip fidelity.
 fn unparse_expr_into(expr: &Expr, output: &mut String) {
     match expr {
-        Expr::Ident(i) => output.push_str(&i.name),
+        Expr::Ident(i) => {
+            output.push_str(&i.name);
+            if !i.type_args.is_empty() {
+                output.push_str("::<");
+                for (idx, ty) in i.type_args.iter().enumerate() {
+                    if idx > 0 {
+                        output.push_str(", ");
+                    }
+                    unparse_type_into(ty, output);
+                }
+                output.push('>');
+            }
+        }
         Expr::Literal(l) => unparse_literal_into(&l.value, output),
         Expr::Binary(b) => {
             unparse_expr_into(&b.left, output);
@@ -4081,12 +4105,24 @@ impl<'a> TirUnparser<'a> {
             TirExprKind::FuncRef {
                 name,
                 module_source,
+                type_args,
             } => {
                 if !module_source.is_entry_point() {
                     self.output.push_str(&module_source.to_path().join("::"));
                     self.output.push_str("::");
                 }
                 self.output.push_str(name);
+                if !type_args.is_empty() {
+                    self.output.push_str("::<");
+                    for (i, ty) in type_args.iter().enumerate() {
+                        if i > 0 {
+                            self.output.push_str(", ");
+                        }
+                        let name = self.type_table.type_name(*ty);
+                        self.output.push_str(&name);
+                    }
+                    self.output.push('>');
+                }
             }
             TirExprKind::GlobalVarGet {
                 name,

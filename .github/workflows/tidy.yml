@@ -49,6 +49,14 @@ jobs:
       - run: mise run update-golden-fixtures
       - run: mise run update-golden-format-fixtures
       - run: mise run doc-stdlib
+      # Refresh the Gale kiln caches (package-gale/tests/generated/**/*.kiln.json).
+      # Their generator_source_hash goes stale whenever package-gale/src/* (or a
+      # merge of it) changes; the Gale O1/O2/O3 jobs then cache-miss on every
+      # fixture and run slow without ever failing. Regenerating here keeps the
+      # committed caches in sync, mirroring how WIR golden fixtures are handled.
+      # -O0 minimises compile time; the kiln cache is the generator's output and
+      # is independent of the optimization level used to compile consumers.
+      - run: ./target/debug/wado test -O0 package-gale
       - run: mise run format
 
       - name: Commit and push changes
