@@ -1088,7 +1088,13 @@ fn is_self_derived(expr: &NirExpr, tainted: &HashSet<u32>, tt: &Rc<RefCell<TypeT
 // ---------------------------------------------------------------------------
 
 fn expr_children(expr: &NirExpr) -> Box<dyn Iterator<Item = &NirExpr> + '_> {
-    use NirExprKind::*;
+    use NirExprKind::{
+        Assign, Binary, Block, BoolLiteral, BytesLiteral, Call, Cast, CharLiteral,
+        ClosureToCanonical, CmRawCall, EnumConstruct, FieldAccess, FloatLiteral, GlobalVarGet,
+        GlobalVarSet, If, Index, IndirectCall, IntLiteral, LabeledBlock, Local, Match, MethodCall,
+        Null, StringLiteral, StructLiteral, Switch, TupleLiteral, Unary, Unit, VariantConstruct,
+        VariantPayload, VariantTag, VariantTest,
+    };
     match &expr.kind {
         Binary { left, right, .. } => Box::new([left.as_ref(), right.as_ref()].into_iter()),
         Unary { expr: e, .. }
@@ -1127,7 +1133,9 @@ fn expr_children(expr: &NirExpr) -> Box<dyn Iterator<Item = &NirExpr> + '_> {
         ),
         StructLiteral { fields, .. } => Box::new(fields.iter().map(|f| &f.value)),
         TupleLiteral { elements } => Box::new(elements.iter()),
-        VariantConstruct { payload, .. } => Box::new(payload.iter().map(|p| p.as_ref())),
+        VariantConstruct { payload, .. } => {
+            Box::new(payload.iter().map(std::convert::AsRef::as_ref))
+        }
         Switch {
             scrutinee,
             arms,
@@ -1179,7 +1187,13 @@ fn stmt_exprs(stmt: &NirStmt) -> Box<dyn Iterator<Item = &NirExpr> + '_> {
 }
 
 fn expr_children_mut(expr: &mut NirExpr) -> Vec<&mut NirExpr> {
-    use NirExprKind::*;
+    use NirExprKind::{
+        Assign, Binary, Block, BoolLiteral, BytesLiteral, Call, Cast, CharLiteral,
+        ClosureToCanonical, CmRawCall, EnumConstruct, FieldAccess, FloatLiteral, GlobalVarGet,
+        GlobalVarSet, If, Index, IndirectCall, IntLiteral, LabeledBlock, Local, Match, MethodCall,
+        Null, StringLiteral, StructLiteral, Switch, TupleLiteral, Unary, Unit, VariantConstruct,
+        VariantPayload, VariantTag, VariantTest,
+    };
     match &mut expr.kind {
         Binary { left, right, .. }
         | Assign {
@@ -1231,7 +1245,10 @@ fn expr_children_mut(expr: &mut NirExpr) -> Vec<&mut NirExpr> {
         }
         StructLiteral { fields, .. } => fields.iter_mut().map(|f| &mut f.value).collect(),
         TupleLiteral { elements } => elements.iter_mut().collect(),
-        VariantConstruct { payload, .. } => payload.iter_mut().map(|p| p.as_mut()).collect(),
+        VariantConstruct { payload, .. } => payload
+            .iter_mut()
+            .map(std::convert::AsMut::as_mut)
+            .collect(),
         Switch {
             scrutinee,
             arms,
