@@ -4,6 +4,7 @@
 //! - Dead Code Elimination (DCE) via `dce` module
 //! - Function inlining via `inline` module
 //! - Labeled block fusion via `labeled_block_fusion` module
+//! - Match → Switch rewrite for dense int/enum scrutinees via `match_to_switch` module
 //! - Reference elimination via `ref_elim` module
 //! - Container SROA (AoS→SoA for `Array<Tuple<...>>`) via `container_sroa` module
 //! - Scalar Replacement of Aggregates (SROA) via `sroa` module
@@ -41,6 +42,7 @@ mod field_scalarize;
 mod inline;
 mod labeled_block_fusion;
 mod licm;
+mod match_to_switch;
 mod multi_value_return;
 mod ref_elim;
 mod select_lowering;
@@ -69,6 +71,7 @@ use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;
 use licm::apply_licm;
+use match_to_switch::match_to_switch;
 use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
 use store_load_forward::forward_stores_to_loads;
@@ -163,6 +166,18 @@ pub fn optimize(
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work
             run_dce(&mut project, profiler);
+            // Dense-int / dense-enum `Match` → `Switch` is a codegen-
+            // friendly late lowering. The translator emits a canonical
+            // `Match` (see WEP 2026-05-11). Materialising `Switch` here
+            // — even at -O0 — keeps wir_build's `br_table` path live
+            // for dense matches when the optimizer loop is skipped.
+            // The synthesised default-arm call resolves to
+            // `builtin::unreachable`, which lowers to Wasm
+            // `unreachable` directly and is never DCE'd, so ordering
+            // around DCE is irrelevant.
+            run_pass("tir/match_to_switch", &mut project, profiler, |p| {
+                match_to_switch(p)
+            });
         }
         OptLevel::O1 => {
             let config = OptConfig {
@@ -402,25 +417,26 @@ pub mod pass_dump {
 /// optimization loop re-run container SROA on newly-inlined code that
 /// exposes fresh `Array<Tuple<...>>` locals.
 ///
-///  1. Container SROA (`container_sroa`)
-///  2. Value-copy elision (`value_copy_elide`)
-///  3. Short `push_str` simplification (`string_push`)
-///  4. Function inlining (`inline`)
-///  5. Labeled block fusion (`labeled_block_fusion`)
-///  6. Reference elimination (`ref_elim`)
-///  7. Scalar Replacement of Aggregates (`sroa`)
-///  8. Copy propagation (`copy_prop`)
-///  9. Dead Argument Elimination (`dae`)
-/// 10. Dead Return Value Elimination (`drve`)
-/// 11. Write-only local elimination (`elide_local`)
-/// 12. Common Subexpression Elimination (`cse`)
-/// 13. Store-to-load forwarding (`store_load_forward`)
-/// 14. Constant folding (`const_fold`)
-/// 15. Constant global promotion (`const_global_promotion`)
-/// 16. Constant branch pruning (`branch_prune`)
-/// 17. Loop-invariant code motion (`licm`)
-/// 18. Condition implication elimination (`condition_implication`)
-/// 19. Template buffer hoisting (`tmpl_hoist`)
+///  1. Match → Switch (`match_to_switch`)
+///  2. Container SROA (`container_sroa`)
+///  3. Value-copy elision (`value_copy_elide`)
+///  4. Short `push_str` simplification (`string_push`)
+///  5. Function inlining (`inline`)
+///  6. Labeled block fusion (`labeled_block_fusion`)
+///  7. Reference elimination (`ref_elim`)
+///  8. Scalar Replacement of Aggregates (`sroa`)
+///  9. Copy propagation (`copy_prop`)
+/// 10. Dead Argument Elimination (`dae`)
+/// 11. Dead Return Value Elimination (`drve`)
+/// 12. Write-only local elimination (`elide_local`)
+/// 13. Common Subexpression Elimination (`cse`)
+/// 14. Store-to-load forwarding (`store_load_forward`)
+/// 15. Constant folding (`const_fold`)
+/// 16. Constant global promotion (`const_global_promotion`)
+/// 17. Constant branch pruning (`branch_prune`)
+/// 18. Loop-invariant code motion (`licm`)
+/// 19. Condition implication elimination (`condition_implication`)
+/// 20. Template buffer hoisting (`tmpl_hoist`)
 ///
 /// The `config` parameter controls the number of iterations and inline threshold.
 /// More iterations can find more optimization opportunities but take longer.
@@ -449,6 +465,14 @@ fn run_optimization_passes(
                 }
             }};
         }
+        // Dense-int / dense-enum `Match` → `Switch` is a codegen-
+        // friendly late lowering the optimizer materialises (see WEP
+        // 2026-05-11). Running it first lets every subsequent pass in
+        // the iteration see the `Switch` shape its variant-walking arms
+        // already handle. Subsequent iterations only see fresh `Match`
+        // shapes if `inline` (or a future shape-rewriting pass) plants
+        // them, in which case this pass reconverges on iteration N+1.
+        step!("tir/match_to_switch", match_to_switch);
         // Container SROA must run *before* inline in each iteration: inline
         // expands trait methods like `IndexValue::index_value` into raw
         // `builtin::array_get` + field-access pairs, after which the

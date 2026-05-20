@@ -379,8 +379,10 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/run"() with St
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(read_result) {
         file = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(read_result).payload_0;
         stat_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/__cm_binding__Descriptor_stat"(file));
-        file_size = (if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat_result) -> u64 {
-            stat = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat_result).payload_0;
+        let __match_scrut_1: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";
+        __match_scrut_1 = stat_result;
+        file_size = (if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(__match_scrut_1) -> u64 {
+            stat = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(__match_scrut_1).payload_0;
             stat.size;
         } else {
             14_i64;
@@ -426,13 +428,17 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/run"() with St
         "wasi/stream-drop-writable"(w_tx);
         "wasi/future-drop-readable:transmission-filesystem"(sub);
         sd_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/__cm_binding__Descriptor_sync_data"(wfile));
-        if ref.is_null(sd_result) {
+        let __match_scrut_6: ref null "wasi:filesystem/types.wado//ErrorCode";
+        __match_scrut_6 = sd_result;
+        if ref.is_null(__match_scrut_6) {
             "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sync_data: succeeded"), used: 20 });
         } else {
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sync_data: failed"), used: 17 });
         }
         sync_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/__cm_binding__Descriptor_sync"(wfile));
-        if ref.is_null(sync_result) {
+        let __match_scrut_7: ref null "wasi:filesystem/types.wado//ErrorCode";
+        __match_scrut_7 = sync_result;
+        if ref.is_null(__match_scrut_7) {
             "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sync: succeeded"), used: 15 });
         } else {
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sync: failed"), used: 12 });

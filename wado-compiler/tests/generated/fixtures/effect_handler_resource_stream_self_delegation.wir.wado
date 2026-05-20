@@ -534,39 +534,39 @@ condition: got[1] == 105 as u8
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__effect_dispatch__Stream<u8>__new"() {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_Stream<u8>";
-    let __d: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_Stream<u8>";
-    let __result: ref "tuple//[Stream<u8>, StreamWritable<u8>]";
+    let __local_1: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_Stream<u8>";
+    let __local_2: ref "tuple//[Stream<u8>, StreamWritable<u8>]";
     __saved = global:__effect_Stream<u8>;
     if ref.is_null(__saved) == 0 {
-        __d = ref.as_non_null(__saved);
-        global:__effect_Stream<u8> = __d.outer;
-        __result = block -> ref "tuple//[Stream<u8>, StreamWritable<u8>]" {
-            let __indirect_call_0: ref "canonical//CanonicalClosure_0";
-            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__d.op_new);
-            call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
+        __local_1 = ref.as_non_null(__saved);
+        global:__effect_Stream<u8> = __local_1.outer;
+        __local_2 = block -> ref "tuple//[Stream<u8>, StreamWritable<u8>]" {
+            let __indirect_call_1: ref "canonical//CanonicalClosure_0";
+            __indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"(__local_1.op_new);
+            call_ref "functype/$canonical_closure_fn_0"(__indirect_call_1.func, __indirect_call_1.env);
         };
         global:__effect_Stream<u8> = __saved;
-        return __result;
+        return __local_2;
     } else {
-        return let __pair_temp_2: i64, __pair_temp_2 = "wasi/stream-new"(), let __mv_lo_2: i32, let __mv_hi_2: i32, multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64)), struct.new "tuple//[Stream<u8>, StreamWritable<u8>]" { 0: __mv_lo_2, 1: __mv_hi_2 };
+        return let __pair_temp_1: i64, __pair_temp_1 = "wasi/stream-new"(), let __mv_lo_1: i32, let __mv_hi_1: i32, multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64)), struct.new "tuple//[Stream<u8>, StreamWritable<u8>]" { 0: __mv_lo_1, 1: __mv_hi_1 };
     }
 }
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__effect_dispatch__Stream<u8>__read"(self, max) {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_Stream<u8>";
-    let __d: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_Stream<u8>";
-    let __result: ref "core:prelude//Array<u8>";
+    let __local_3: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_Stream<u8>";
+    let __local_4: ref "core:prelude//Array<u8>";
     __saved = global:__effect_Stream<u8>;
     if ref.is_null(__saved) == 0 {
-        __d = ref.as_non_null(__saved);
-        global:__effect_Stream<u8> = __d.outer;
-        __result = block -> ref "core:prelude//Array<u8>" {
+        __local_3 = ref.as_non_null(__saved);
+        global:__effect_Stream<u8> = __local_3.outer;
+        __local_4 = block -> ref "core:prelude//Array<u8>" {
             let __indirect_call_0: ref "canonical//CanonicalClosure_1";
-            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_1"(__d.op_read);
+            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_1"(__local_3.op_read);
             call_ref "functype/$canonical_closure_fn_1"(__indirect_call_0.func, __indirect_call_0.env, self, max);
         };
         global:__effect_Stream<u8> = __saved;
-        return __result;
+        return __local_4;
     } else {
         return "core:internal/cm_stream_read_u8"(self, max);
     }
@@ -574,13 +574,13 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__effect_dispatch__Stream<u8>__drop"(self) {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_Stream<u8>";
-    let __d: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_Stream<u8>";
+    let __local_2: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_Stream<u8>";
     __saved = global:__effect_Stream<u8>;
     if ref.is_null(__saved) == 0 {
-        __d = ref.as_non_null(__saved);
-        global:__effect_Stream<u8> = __d.outer;
+        __local_2 = ref.as_non_null(__saved);
+        global:__effect_Stream<u8> = __local_2.outer;
         let __indirect_call_0: ref "canonical//CanonicalClosure_2";
-        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_2"(__d.op_drop);
+        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_2"(__local_2.op_drop);
         call_ref "functype/$canonical_closure_fn_2"(__indirect_call_0.func, __indirect_call_0.env, self);
         global:__effect_Stream<u8> = __saved;
         return;
@@ -591,13 +591,13 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__effect_dispatch__StreamWritable<u8>__write"(self, data) {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_StreamWritable<u8>";
-    let __d: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_StreamWritable<u8>";
+    let __local_3: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_StreamWritable<u8>";
     __saved = global:__effect_StreamWritable<u8>;
     if ref.is_null(__saved) == 0 {
-        __d = ref.as_non_null(__saved);
-        global:__effect_StreamWritable<u8> = __d.outer;
+        __local_3 = ref.as_non_null(__saved);
+        global:__effect_StreamWritable<u8> = __local_3.outer;
         let __indirect_call_0: ref "canonical//CanonicalClosure_3";
-        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_3"(__d.op_write);
+        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_3"(__local_3.op_write);
         call_ref "functype/$canonical_closure_fn_3"(__indirect_call_0.func, __indirect_call_0.env, self, struct.new "core:prelude//Array<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(data.repr)), used: data.used });
         global:__effect_StreamWritable<u8> = __saved;
         return;
@@ -608,13 +608,13 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__effect_dispatch__StreamWritable<u8>__write_raw"(self, data, len) {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_StreamWritable<u8>";
-    let __d: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_StreamWritable<u8>";
+    let __local_4: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_StreamWritable<u8>";
     __saved = global:__effect_StreamWritable<u8>;
     if ref.is_null(__saved) == 0 {
-        __d = ref.as_non_null(__saved);
-        global:__effect_StreamWritable<u8> = __d.outer;
+        __local_4 = ref.as_non_null(__saved);
+        global:__effect_StreamWritable<u8> = __local_4.outer;
         let __indirect_call_0: ref "canonical//CanonicalClosure_4";
-        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_4"(__d.op_write_raw);
+        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_4"(__local_4.op_write_raw);
         call_ref "functype/$canonical_closure_fn_4"(__indirect_call_0.func, __indirect_call_0.env, self, data, len);
         global:__effect_StreamWritable<u8> = __saved;
         return;
@@ -625,13 +625,13 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__effect_dispatch__StreamWritable<u8>__drop"(self) {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_StreamWritable<u8>";
-    let __d: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_StreamWritable<u8>";
+    let __local_2: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Dispatch_StreamWritable<u8>";
     __saved = global:__effect_StreamWritable<u8>;
     if ref.is_null(__saved) == 0 {
-        __d = ref.as_non_null(__saved);
-        global:__effect_StreamWritable<u8> = __d.outer;
+        __local_2 = ref.as_non_null(__saved);
+        global:__effect_StreamWritable<u8> = __local_2.outer;
         let __indirect_call_0: ref "canonical//CanonicalClosure_2";
-        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_2"(__d.op_drop);
+        __indirect_call_0 = ref.cast "canonical//CanonicalClosure_2"(__local_2.op_drop);
         call_ref "functype/$canonical_closure_fn_2"(__indirect_call_0.func, __indirect_call_0.env, self);
         global:__effect_StreamWritable<u8> = __saved;
         return;
@@ -981,11 +981,11 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.
     _licm_buf_7 = self;
     b41: block {
         l42: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: u8;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(__iter_3);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                b = __sroa___pattern_temp_0_payload_0;
+            let __sroa___iflet_5_discriminant: i32;
+            let __sroa___iflet_5_payload_0: u8;
+            multivalue_bind [__sroa___iflet_5_discriminant, __sroa___iflet_5_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(__iter_3);
+            if __sroa___iflet_5_discriminant == 0 {
+                b = __sroa___iflet_5_payload_0;
                 "core:prelude/array.wado/Array<u8>::push"(_licm_buf_7, b);
             } else {
                 break b41;

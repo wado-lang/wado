@@ -425,8 +425,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
     let chunk: ref "core:prelude//Array<u8>";
     let unlink_sym: ref null "wasi:filesystem/types.wado//ErrorCode";
     let __local_17: ref "core:prelude/string.wado//String";
-    let __pattern_temp_5: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
-    let v: ref "core:prelude/string.wado//String";
+    let __local_23: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
     let other: ref "core:prelude/string.wado//String";
     let len_a: i32;
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Preopens_get_directories"();
@@ -447,33 +446,32 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
     sym_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_symlink_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_symlink"), used: 12 }));
     if ref.is_null(sym_result) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink_at: created symlink"), used: 27 });
-    } else if ref.is_null(sym_result) == 0 {
-        err = ref.as_non_null(sym_result);
-        let __match_scrut_0: ref "wasi:filesystem/types.wado//ErrorCode";
-        __match_scrut_0 = err;
-        if __match_scrut_0.discriminant == 26 {
-            "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink_at: not supported (skipping symlink tests)"), used: 50 });
-            "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir);
-            "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all symlink tests passed"), used: 24 });
+    } else {
+        if ref.is_null(sym_result) == 0 {
+            err = ref.as_non_null(sym_result);
+            let __match_scrut_2: ref "wasi:filesystem/types.wado//ErrorCode";
+            __match_scrut_2 = err;
+            if __match_scrut_2.discriminant == 26 {
+                "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink_at: not supported (skipping symlink tests)"), used: 50 });
+                "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir);
+                "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all symlink tests passed"), used: 24 });
+                return;
+            }
+            "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink_at: failed with unexpected error"), used: 40 });
             return;
+        } else {
         }
-        "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink_at: failed with unexpected error"), used: 40 });
-        return;
     }
     readlink_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<core:prelude/string.wado/String,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_readlink_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_symlink"), used: 12 }));
     if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,wasi:filesystem/types.wado/ErrorCode>::Ok"(readlink_result) {
-        target = __inline__value_copy_T20_4: block -> ref "core:prelude/string.wado//String" {
-            v = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,wasi:filesystem/types.wado/ErrorCode>::Ok"(readlink_result).payload_0;
-            break __inline__value_copy_T20_4: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
-            unreachable;
-        };
-        if __inline_String_Eq__eq_5: block -> bool {
+        target = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,wasi:filesystem/types.wado/ErrorCode>::Ok"(readlink_result).payload_0;
+        if __inline_String_Eq__eq_4: block -> bool {
             other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 };
             len_a = target.used;
             if len_a != other.used {
-                break __inline_String_Eq__eq_5: 0;
+                break __inline_String_Eq__eq_4: 0;
             }
-            break __inline_String_Eq__eq_5: "core:prelude/string.wado/String^Eq::eq_bytes"(target.repr, other.repr, len_a);
+            break __inline_String_Eq__eq_4: "core:prelude/string.wado/String^Eq::eq_bytes"(target.repr, other.repr, len_a);
             unreachable;
         } {
             "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("readlink_at: target is hello.txt (correct)"), used: 42 });
@@ -495,7 +493,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
         stat_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_stat"(linked_file));
         if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat_result) {
             stat = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat_result).payload_0;
-            if (if let __match_scrut_1: ref "wasi:filesystem/types.wado//DescriptorType"; __match_scrut_1 = stat.type; (if __match_scrut_1.discriminant == 5 -> bool {
+            if (if let __match_scrut_6: ref "wasi:filesystem/types.wado//DescriptorType"; __match_scrut_6 = stat.type; (if __match_scrut_6.discriminant == 5 -> bool {
                 1;
             } else {
                 0;
@@ -508,10 +506,11 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
             } else {
                 "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink follow: unexpected type or size"), used: 39 });
             }
+        } else {
         }
-        __pattern_temp_5 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_read_via_stream"(linked_file, 0_i64);
-        file_rx = __pattern_temp_5.0;
-        read_future = __pattern_temp_5.1;
+        __local_23 = "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_read_via_stream"(linked_file, 0_i64);
+        file_rx = __local_23.0;
+        read_future = __local_23.1;
         let __pair_temp_1: i64;
         __pair_temp_1 = "wasi/stream-new"();
         let __mv_lo_1: i32;
@@ -556,21 +555,27 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir)
     if ref.is_null(link_result) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("link_at: created hard link"), used: 26 });
         link_stat = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_stat_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_hardlink"), used: 13 }));
-        if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(link_stat) {
-            stat = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(link_stat).payload_0;
+        let __match_scrut_3: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";
+        __match_scrut_3 = link_stat;
+        if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(__match_scrut_3) {
+            stat = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(__match_scrut_3).payload_0;
             if stat.size == 14_i64 {
                 "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("link_at: hard link has correct size (correct)"), used: 45 });
             }
+        } else {
         }
         drop("core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_hardlink"), used: 13 })));
-    } else if ref.is_null(link_result) == 0 {
-        err = ref.as_non_null(link_result);
-        let __match_scrut_0: ref "wasi:filesystem/types.wado//ErrorCode";
-        __match_scrut_0 = err;
-        if __match_scrut_0.discriminant == 26 {
-            "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("link_at: not supported (skipping)"), used: 33 });
+    } else {
+        if ref.is_null(link_result) == 0 {
+            err = ref.as_non_null(link_result);
+            let __match_scrut_2: ref "wasi:filesystem/types.wado//ErrorCode";
+            __match_scrut_2 = err;
+            if __match_scrut_2.discriminant == 26 {
+                "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("link_at: not supported (skipping)"), used: 33 });
+            } else {
+                "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("link_at: failed with unexpected error"), used: 37 });
+            }
         } else {
-            "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("link_at: failed with unexpected error"), used: 37 });
         }
     }
 }
