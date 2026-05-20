@@ -262,9 +262,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                     let n = parse_count_arg("--workers", &mut parser, false)?;
                     // Bound by `u32`: `workers` sizes the pooling allocator's
                     // `u32` instance count.
-                    let n = u32::try_from(n).map_err(|_| {
-                        CliExit::error("--workers value is too large".to_string())
-                    })?;
+                    let n = u32::try_from(n)
+                        .map_err(|_| CliExit::error("--workers value is too large".to_string()))?;
                     workers = Some(n as usize);
                 }
                 Opt::RecycleRequests => {
