@@ -24,7 +24,7 @@ use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto;
 use lexopt::Arg::Value;
 use tokio::net::TcpListener;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{Notify, mpsc, oneshot};
 use tokio::task::JoinSet;
 use wasmtime::component::{Accessor, AccessorTask, Component};
 use wasmtime::{AsContextMut, Engine, Store};
@@ -609,6 +609,7 @@ async fn worker_loop(
     mut job_rx: mpsc::Receiver<RequestJob>,
     recycle_requests: u64,
     timeout_secs: u64,
+    fatal: Arc<Notify>,
 ) {
     // Grace over the client-facing timeout; also clears the 1s epoch-tick
     // granularity so the first-byte 504 reliably precedes the epoch trap.
@@ -626,7 +627,14 @@ async fn worker_loop(
         let service = match service_pre.instantiate_async(&mut store).await {
             Ok(service) => Arc::new(service),
             Err(e) => {
+                // Instantiation here happens after `Component::new` and
+                // `linker.instantiate_pre` have already succeeded at
+                // startup, so a failure is a deterministic fault that
+                // would hit every worker identically — the server cannot
+                // serve. Signal a fatal shutdown rather than silently
+                // leaving a dead worker whose channel still accepts jobs.
                 eprintln!("Worker instantiation failed: {e:?}");
+                fatal.notify_one();
                 return;
             }
         };
@@ -740,6 +748,9 @@ async fn run_http_server(
     // request handling fans out across cores; each worker recycles its
     // instance every `recycle_requests` requests.
     let chan_cap = (max_concurrency / workers).max(16);
+    // Notified by a worker that fails to instantiate; the accept loop
+    // treats it as a fatal shutdown (see `worker_loop`).
+    let fatal = Arc::new(Notify::new());
     let mut txs = Vec::with_capacity(workers);
     let mut engine_tasks = Vec::with_capacity(workers);
     for _ in 0..workers {
@@ -752,6 +763,7 @@ async fn run_http_server(
             rx,
             recycle_requests,
             timeout.as_secs().max(1),
+            Arc::clone(&fatal),
         )));
     }
     let dispatch = Arc::new(Dispatch {
@@ -791,7 +803,14 @@ async fn run_http_server(
     eprintln!("Send Ctrl+C to shut down");
 
     let mut connections: JoinSet<()> = JoinSet::new();
-    let mut shutdown = pin!(shutdown_signal());
+    // Resolves to `true` when shutdown was triggered by a fatal worker
+    // failure, `false` for a normal OS signal.
+    let mut shutdown = pin!(async {
+        let sig = pin!(shutdown_signal());
+        let fat = pin!(fatal.notified());
+        matches!(select(sig, fat).await, Either::Right(((), _)))
+    });
+    let fatal_shutdown;
 
     // Accept loop with graceful shutdown. On signal, stop accepting and
     // wait for in-flight connections to drain (with a hard cap so we don't
@@ -799,11 +818,19 @@ async fn run_http_server(
     loop {
         let accept = pin!(listener.accept());
         match select(accept, shutdown.as_mut()).await {
-            Either::Right(((), _accept)) => {
-                eprintln!(
-                    "Shutdown signal received; draining {} in-flight connection(s)…",
-                    connections.len()
-                );
+            Either::Right((is_fatal, _accept)) => {
+                fatal_shutdown = is_fatal;
+                if is_fatal {
+                    eprintln!(
+                        "Fatal: a worker failed to instantiate; shutting down ({} in-flight connection(s))",
+                        connections.len()
+                    );
+                } else {
+                    eprintln!(
+                        "Shutdown signal received; draining {} in-flight connection(s)…",
+                        connections.len()
+                    );
+                }
                 break;
             }
             Either::Left((Err(e), _shutdown)) => {
@@ -864,6 +891,9 @@ async fn run_http_server(
     }
     epoch_ticker.abort();
 
+    if fatal_shutdown {
+        anyhow::bail!("a worker failed to instantiate the component");
+    }
     Ok(())
 }
 
