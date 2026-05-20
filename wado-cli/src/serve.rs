@@ -764,7 +764,11 @@ async fn run_http_server(
     // engine task. Workers run guest code on independent stores, so
     // request handling fans out across cores; each worker recycles its
     // instance every `recycle_requests` requests.
-    let chan_cap = (max_concurrency / workers).max(16);
+    // Per-worker request queue. `workers <= max_concurrency` (enforced in
+    // `parse_args` / clamped in `run`), so the quotient is at least 1 and
+    // the queues sum to at most `max_concurrency` — never more in-flight
+    // work than the pooling allocator's stack pool was sized for.
+    let chan_cap = max_concurrency / workers;
     // Notified by a worker that fails to instantiate; the accept loop
     // treats it as a fatal shutdown (see `worker_loop`).
     let fatal = Arc::new(Notify::new());
