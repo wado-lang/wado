@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779278052396,
+  "lastUpdate": 1779281337641,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23949,6 +23949,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9450a7438cbfa34d3f710c22271facc29c17a19f"
         },
         "date": 1779278052184,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17206,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 473871,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2b6393c0d6b77acc56abd6d8563499ce6dde14e6",
+          "message": "Merge pull request #1131 from wado-lang/claude/review-nir-wep-JYcBX\n\nnir: fold pattern lowering into the translator (Phase 10 Step 2b)",
+          "timestamp": "2026-05-20T21:42:37+09:00",
+          "tree_id": "b49c167b623f197985a55e9b3a65f0fed1e108b5",
+          "url": "https://github.com/wado-lang/wado/commit/2b6393c0d6b77acc56abd6d8563499ce6dde14e6"
+        },
+        "date": 1779281337331,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
