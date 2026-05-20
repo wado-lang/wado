@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779281337641,
+  "lastUpdate": 1779284109240,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23993,6 +23993,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2b6393c0d6b77acc56abd6d8563499ce6dde14e6"
         },
         "date": 1779281337331,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17206,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 473871,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ceb40600b5c11aa76476cb6adb0f7cd70ce0ad58",
+          "message": "Merge pull request #1134 from wado-lang/claude/implement-todo-item-hzc8Y\n\nfix: unify break value types in labeled block expressions",
+          "timestamp": "2026-05-20T22:28:37+09:00",
+          "tree_id": "c04fe98360a814ceb2692c7c0fd78294d26785d4",
+          "url": "https://github.com/wado-lang/wado/commit/ceb40600b5c11aa76476cb6adb0f7cd70ce0ad58"
+        },
+        "date": 1779284108833,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
