@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779243616355,
+  "lastUpdate": 1779257435980,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23881,6 +23881,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 479481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b8bcc881e15c3d5430f7757138f2b2553b94bfeb",
+          "message": "Merge pull request #1130 from wado-lang/claude/nir-lower-phase-review-V5JP2\n\nnir: make Match the canonical pattern form (WEP Phase 10 Steps 1-3, 7)",
+          "timestamp": "2026-05-20T15:04:09+09:00",
+          "tree_id": "6b388d25a8c65a702d1061d7b4555c50039d3b62",
+          "url": "https://github.com/wado-lang/wado/commit/b8bcc881e15c3d5430f7757138f2b2553b94bfeb"
+        },
+        "date": 1779257435529,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17108,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 473871,
             "unit": "bytes"
           }
         ]
