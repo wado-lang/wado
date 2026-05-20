@@ -1038,3 +1038,4 @@ test "passes unexpectedly" {
 // labeled-block break type unification fixtures added
 // labeled-block break null-coercion / shadowed-label fixtures added
 // labeled-block break null-inference error fixtures added
+// match / if all-null inference error fixtures added

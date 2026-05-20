@@ -1,0 +1,13 @@
+// Test error: a match expression whose every arm is a bare `null` has no
+// way to determine its type. Reported instead of letting an unresolved
+// `Option<UNKNOWN>` reach codegen.
+
+export fn run() {
+    let x = match true {
+        true => null,
+        false => null,
+    };
+}
+
+__DATA__
+{"compile_error": "cannot infer the type of this match expression"}

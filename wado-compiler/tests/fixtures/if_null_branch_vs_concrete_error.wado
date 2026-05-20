@@ -1,0 +1,10 @@
+// Test error: a `null` if branch cannot be reconciled with a sibling
+// branch that pins the if to a non-`Option` type. `null` is rejected
+// against the concrete type rather than crashing WIR translation.
+
+export fn run() {
+    let x = if true { null } else { 42 };
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'i32', found 'null'"}
