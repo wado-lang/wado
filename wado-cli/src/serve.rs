@@ -260,9 +260,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                 Opt::Timeout => timeout_secs = parse_timeout_arg(&mut parser)?,
                 Opt::Workers => {
                     let n = parse_count_arg("--workers", &mut parser, false)?;
-                    workers = Some(usize::try_from(n).map_err(|_| {
-                        CliExit::error("--workers value is too large".to_string())
-                    })?);
+                    workers =
+                        Some(usize::try_from(n).map_err(|_| {
+                            CliExit::error("--workers value is too large".to_string())
+                        })?);
                 }
                 Opt::RecycleRequests => {
                     recycle_requests = parse_count_arg("--recycle-requests", &mut parser, true)?;
