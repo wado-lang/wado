@@ -48,6 +48,7 @@ mod sroa;
 mod store_load_forward;
 mod string_push;
 mod tmpl_hoist;
+mod value_copy_demote;
 mod value_copy_elide;
 
 use condition_implication::eliminate_implied_conditions;
@@ -74,6 +75,7 @@ use sroa::scalar_replace_aggregates;
 use store_load_forward::forward_stores_to_loads;
 use string_push::simplify_short_push_str;
 use tmpl_hoist::hoist_template_buffers;
+use value_copy_demote::demote_value_copies;
 use value_copy_elide::elide_synthesized_value_copies;
 
 use crate::compiler_host::SpanEmitter;
@@ -476,6 +478,16 @@ fn run_optimization_passes(
         // wrappers were introduced.
         run_pass("tir/value_copy_elide", project, profiler, |p| {
             elide_synthesized_value_copies(p);
+            false
+        });
+        // Demote deep `$value_copy$T` copies of `Array<E>` to shallow spine
+        // copies when the binding's elements are provably never mutated
+        // through it. Runs alongside `value_copy_elide`: elide removes a
+        // copy whose target is read-only; demote weakens a copy whose target
+        // is only spine-mutated. Both before `tir/inline` for the same
+        // `$value_copy$T(arg)`-shape-visibility reason.
+        run_pass("tir/value_copy_demote", project, profiler, |p| {
+            demote_value_copies(p);
             false
         });
         // Run short-`push_str` simplification *before* inline. Once the

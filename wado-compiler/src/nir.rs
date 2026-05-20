@@ -101,8 +101,16 @@ impl FunctionRef {
             .map(|i| i.generic_name.as_str())?;
 
         match generic_name {
-            "array_get" | "array_set" | "array_new" | "array_len" | "array_copy" | "array_fill"
-            | "array_clone" | "select" | "copy_value" => Some(format!("builtin::{generic_name}")),
+            "array_get"
+            | "array_set"
+            | "array_new"
+            | "array_len"
+            | "array_copy"
+            | "array_fill"
+            | "array_clone"
+            | "array_clone_shallow"
+            | "select"
+            | "copy_value" => Some(format!("builtin::{generic_name}")),
             _ => None,
         }
     }

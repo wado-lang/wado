@@ -30,23 +30,24 @@ The optimizer runs after lowering and before Wasm emission. `optimize.rs` orches
 2. Fixed-point iteration loop (skipped at `-O0`):
    1. Container SROA
    2. Value-Copy Elision
-   3. Short `push_str` Simplification
-   4. Function Inlining
-   5. LabeledBlock Fusion
-   6. Reference Elimination
-   7. SROA
-   8. Copy Propagation
-   9. Dead Argument Elimination
-   10. Dead Return Value Elimination
-   11. Write-Only Local Elimination
-   12. Common Subexpression Elimination
-   13. Store-to-Load Forwarding
-   14. Constant Folding
-   15. Constant Global Promotion
-   16. Constant Branch Pruning
-   17. Loop-Invariant Code Motion
-   18. Condition Implication
-   19. Template String Buffer Hoisting
+   3. Value-Copy Demotion
+   4. Short `push_str` Simplification
+   5. Function Inlining
+   6. LabeledBlock Fusion
+   7. Reference Elimination
+   8. SROA
+   9. Copy Propagation
+   10. Dead Argument Elimination
+   11. Dead Return Value Elimination
+   12. Write-Only Local Elimination
+   13. Common Subexpression Elimination
+   14. Store-to-Load Forwarding
+   15. Constant Folding
+   16. Constant Global Promotion
+   17. Constant Branch Pruning
+   18. Loop-Invariant Code Motion
+   19. Condition Implication
+   20. Template String Buffer Hoisting
 3. Hot Field Scalarization — runs once after the loop converges.
 4. Final DCE — clean up code made dead by optimizations.
 5. Select Lowering — post-optimization rewrite (all levels).
@@ -71,6 +72,16 @@ Runs once per fixed-point iteration, before `tir/inline`. The inliner expands ev
 The strip walker descends through every TIR expression that can syntactically embed a `TirBlock` (`If`, `Match`, `Switch`, `Block`, `LabeledBlock`, calls, struct/tuple/variant literals, …) so wrappers nested inside `let x = if cond { let y = $value_copy$T(...); ... } else { ... };` patterns — common in `parse_*` rule bodies — are reached.
 
 E2E: [value_copy_elide_qmark.wado](../wado-compiler/tests/fixtures/value_copy_elide_qmark.wado).
+
+### Value-Copy Demotion (`value_copy_demote.rs`)
+
+Demotes a deep `$value_copy$T` of an `Array<E>` to a shallow spine copy when the binding's elements are provably never mutated through it. Where `value_copy_elide` removes a copy whose target is fully read-only (aliasing the binding to the source), demotion handles a copy whose target is only *spine*-mutated (`sort`, `push`, …): full elision is unsound, but a shallow copy is still safe — the binding gets its own `repr` spine while sharing the element objects, which are immutable through this handle. The deep per-element copy (`array_clone` over a value-typed element) is rewritten to a shallow `array_clone_shallow` via a synthesized `$value_copy$T<id>$shallow` sibling helper.
+
+The precondition is verified by an element-immutability analysis. A `&mut self` method (`Array::sort`, `push`, …) is *element-immutable* when, by a taint walk over its body, no value derived from `self` (its spine or an element) is field-written, `&mut`-borrowed, or handed to an opaque callee — only spine builtins and `&`-immutable forwarding are allowed. The demote site itself is eligible when every use of the bound handle (and of the source the copy reads from) is element-clean: spine-only methods, index/field reads, by-value or `&` argument passing.
+
+The analysis is conservative — an unrecognized shape rejects demotion (no change), never miscompiles. Naming compiler intrinsics (`builtin::array_*`) is sound because they are not stdlib identifiers; stdlib method behaviour is *derived* from the body, never hardcoded by name.
+
+E2E: [value_copy_demote.wado](../wado-compiler/tests/fixtures/value_copy_demote.wado).
 
 ### Container SROA (`container_sroa.rs`)
 
