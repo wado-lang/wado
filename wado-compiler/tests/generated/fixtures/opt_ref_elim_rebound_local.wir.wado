@@ -136,32 +136,42 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado/process"(elem) {
+    let alts_1: ref null "core:prelude//Array<i32>";
+    let alts_2: ref "core:prelude//Array<i32>";
     let g_5: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
     let rep: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//RepeatElement";
     let g_7: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//GroupElement";
-    let __pattern_temp_0: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
-    let __pattern_temp_1: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
-    let __pattern_temp_2: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
-    let __fused_payload_12: ref "core:prelude//Array<i32>";
-    __fused___inline_extract_0: block {
-        __pattern_temp_0 = elem;
-        if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__pattern_temp_0) {
-            g_5 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__pattern_temp_0).payload_0;
-            __fused_payload_12 = g_5.alternatives;
-            return (__fused_payload_12.used * 10) + 1;
+    let __sroa___iflet_6_value: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
+    alts_1 = __inline_extract_0: block -> ref null "core:prelude//Array<i32>" {
+        let __match_scrut_0: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
+        __match_scrut_0 = elem;
+        if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__match_scrut_0) {
+            g_5 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__match_scrut_0).payload_0;
+            break __inline_extract_0: g_5.alternatives;
+        } else {
         }
-        __pattern_temp_1 = elem;
-        if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(__pattern_temp_1) {
-            rep = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(__pattern_temp_1).payload_0;
-            __pattern_temp_2 = struct.new "core:prelude/types.wado//Box<Element>" { value: rep.element }.value;
-            if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__pattern_temp_2) {
-                g_7 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__pattern_temp_2).payload_0;
-                __fused_payload_12 = g_7.alternatives;
-                return (__fused_payload_12.used * 10) + 1;
+        let __match_scrut_1: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
+        __match_scrut_1 = elem;
+        if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(__match_scrut_1) {
+            rep = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Repeat"(__match_scrut_1).payload_0;
+            __sroa___iflet_6_value = rep.element;
+            let __match_scrut_2: ref "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element";
+            __match_scrut_2 = __sroa___iflet_6_value;
+            if ref.test "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__match_scrut_2) {
+                g_7 = ref.cast "wado-compiler/tests/fixtures/opt_ref_elim_rebound_local.wado//Element::Group"(__match_scrut_2).payload_0;
+                break __inline_extract_0: g_7.alternatives;
+            } else {
             }
+        } else {
         }
-        break __fused___inline_extract_0;
+        break __inline_extract_0: ref.null none;
+        unreachable;
     };
+    if ref.is_null(alts_1) == 0 {
+        alts_2 = ref.as_non_null(alts_1);
+        return (alts_2.used * 10) + 1;
+    } else {
+    }
     return -1;
 }
 
@@ -273,13 +283,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l5: loop {
+            l6: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l5;
+                continue l6;
             };
         };
     };
@@ -331,13 +341,13 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     __for_1: block {
         t = val;
         block {
-            l10: loop {
+            l11: loop {
                 if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
                 t = t / 10_i64;
-                continue l10;
+                continue l11;
             };
         };
     };
@@ -354,14 +364,14 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         __for_2: block {
             temp = abs_val;
             block {
-                l14: loop {
+                l15: loop {
                     if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l14;
+                    continue l15;
                 };
             };
         };
@@ -474,13 +484,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l26: loop {
+            l27: loop {
                 if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l26;
+                continue l27;
             };
         };
     };
