@@ -6,18 +6,21 @@
 //! ported into `wado-compiler/lib/core/allocator.wado` — a `#![no_prelude]`
 //! module that cannot host `test` blocks.
 //!
-//! Block layout (every block is 8-byte aligned, size a multiple of 8):
+//! Block layout (size a multiple of 16):
 //!
 //!   offset 0:        i32  header = size | used-bit
-//!   offset 4:        i32  (padding, keeps the payload 8-byte aligned)
+//!   offset 4:        i32  (padding)
 //!   offset 8:        payload …            (when free: [8]=next, [12]=prev)
 //!   offset size-8:   i32  footer = size | used-bit
 //!   offset size-4:   i32  (padding)
 //!
-//! `alloc` returns `block + 8` (the payload), always 8-byte aligned.
+//! Block sizes are multiples of 16 and `HEAP_START` is congruent to
+//! 8 (mod 16), so `alloc` returns `block + 8` — a payload that is always
+//! 16-byte aligned (satisfying every alignment `realloc` is called with,
+//! up to the 16-byte `v128`).
 //!
 //! Free blocks are kept in **segregated free lists** — one doubly-linked
-//! list per size class. Small blocks (24 .. 24 + 8*31 bytes) have an exact
+//! list per size class. Small blocks (32 .. 32 + 16*31 bytes) have an exact
 //! bin each; everything larger shares one "large" bin. Allocation goes
 //! straight to the size class's bin, so the common case is O(1) instead of
 //! a first-fit scan over every free block. On `free`, physically adjacent
@@ -29,11 +32,11 @@
 /// Per-block boundary-tag overhead (8-byte header + 8-byte footer).
 global OVERHEAD: i32 = 16;
 
-/// Smallest legal block: header + 8-byte payload + footer.
-global MIN_BLOCK: i32 = 24;
+/// Smallest legal block: header + 16-byte payload + footer.
+global MIN_BLOCK: i32 = 32;
 
 /// Number of exact size-class bins. Bin `k` (k < SMALL_BINS) holds blocks
-/// of size exactly `MIN_BLOCK + 8*k`; bin `SMALL_BINS` is the catch-all
+/// of size exactly `MIN_BLOCK + 16*k`; bin `SMALL_BINS` is the catch-all
 /// "large" bin (first-fit).
 global SMALL_BINS: i32 = 32;
 
@@ -43,8 +46,9 @@ global NUM_BINS: i32 = 33;
 /// Byte address of the bin-head table.
 global BIN_BASE: i32 = 8;
 
-/// Byte address of the first block, past the bin-head table.
-global HEAP_START: i32 = 144;
+/// Byte address of the first block: the lowest address past the bin-head
+/// table that is congruent to 8 (mod 16), so payloads land 16-byte aligned.
+global HEAP_START: i32 = 152;
 
 /// Extract the block size from a boundary tag (clears the low 3 bits).
 fn tag_size(tag: i32) -> i32 {
@@ -58,7 +62,7 @@ fn tag_used(tag: i32) -> bool {
 
 /// Size-class bin index for a block of `size` bytes.
 fn bin_index(size: i32) -> i32 {
-    let k = (size - MIN_BLOCK) / 8;
+    let k = (size - MIN_BLOCK) / 16;
     return if k < SMALL_BINS { k } else { SMALL_BINS };
 }
 
@@ -114,7 +118,7 @@ impl Heap {
 
     /// Write the header and footer boundary tags of the block at `block`.
     fn set_tags(&mut self, block: i32, size: i32, used: i32) {
-        // `size` is a multiple of 8 and `used` is 0 or 1, so `+` is `|`.
+        // `size` is a multiple of 16 and `used` is 0 or 1, so `+` is `|`.
         let tag = size + used;
         self.store(block, tag);
         self.store(block + size - 8, tag);
@@ -165,9 +169,9 @@ impl Heap {
 
     /// Allocate `newsize` payload bytes; returns the payload address.
     fn alloc(&mut self, newsize: i32) -> i32 {
-        // Round the payload up to 8 bytes and add the boundary-tag
-        // overhead. The result is always >= MIN_BLOCK.
-        let size = builtin::i32_and(newsize + 7, -8) + OVERHEAD;
+        // Round the payload up to 16 bytes and add the boundary-tag
+        // overhead. The result is a multiple of 16 and always >= MIN_BLOCK.
+        let size = builtin::i32_and(newsize + 15, -16) + OVERHEAD;
 
         // Exact size-class bin first, then larger small bins. Any block in
         // a bin at index >= bin_index(size) is large enough.
@@ -244,16 +248,27 @@ impl Heap {
     }
 }
 
-test "alloc: payloads are 8-byte aligned and laid out back to back" {
+test "alloc: payloads are 16-byte aligned and laid out back to back" {
     let mut h = Heap::new();
     let a = h.alloc(64);
     let b = h.alloc(64);
-    // First block at HEAP_START=144, payload at 152. Block size for a
-    // 64-byte payload is align_up(64,8) + 16 = 80.
-    assert a == 152, `a={a}`;
-    assert b == 232, `b={b}`;
-    assert builtin::i32_and(a, 7) == 0;
-    assert builtin::i32_and(b, 7) == 0;
+    // First block at HEAP_START=152, payload at 160. Block size for a
+    // 64-byte payload is align_up(64,16) + 16 = 80.
+    assert a == 160, `a={a}`;
+    assert b == 240, `b={b}`;
+    assert builtin::i32_and(a, 15) == 0;
+    assert builtin::i32_and(b, 15) == 0;
+}
+
+test "alloc: payloads stay 16-byte aligned for every payload size" {
+    let mut h = Heap::new();
+    // Sweep payload sizes that are not multiples of 16 — the allocator
+    // must still hand back 16-byte-aligned payloads.
+    let sizes: Array<i32> = [1, 7, 8, 15, 17, 24, 33, 100, 257];
+    for let s of sizes {
+        let p = h.alloc(s);
+        assert builtin::i32_and(p, 15) == 0, `payload {p} for size {s} is not 16-aligned`;
+    }
 }
 
 test "free + same-size alloc reuses the block without growing" {
