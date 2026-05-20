@@ -1,9 +1,12 @@
 //! TIR → NIR translator: a single fold that consumes a [`FlatPackage`]
 //! together with a [`LowerPlan`] and produces a [`NirPackage`].
 //!
-//! Pre-lower-only TIR variants (`Closure`, `Capture`, `FuncRef`, `IfLet`,
-//! `TupleSpread`, …) must have been eliminated by earlier lower
+//! Pre-lower-only TIR variants (`Closure`, `Capture`, `FuncRef`,
+//! `TupleSpread`, …) must have been eliminated by `lower::plan`
 //! sub-passes before the translator runs — they `unreachable!()` here.
+//! `IfLet` is eliminated by `translate::pattern`, which `convert_function`
+//! runs as the first step of each function's walk, so the `IfLet` arm
+//! is likewise unreachable by the time the body fold begins.
 //!
 //! Some translator arms consume facts from `plan` to rewrite TIR
 //! markers into resolved NIR forms (the value-copy marker rewrite in
@@ -266,8 +269,7 @@ impl Translator<'_> {
     fn convert_function(&self, func: &mut TirFunction) -> NirFunction {
         // Lower this function's patterns (`IfLet` / `LetDestructure` /
         // or-patterns → explicit `Let` + `Match`) before the body walk.
-        self.pattern
-            .lower_function(func, &self.type_table.borrow());
+        self.pattern.lower_function(func, &self.type_table.borrow());
         let fctx = FunctionTranslator::new(self, func);
         // Walk the body first so any locals allocated by per-arm
         // rewrites (currently only the wide-int `Match` scrutinee
@@ -442,7 +444,7 @@ impl FunctionTranslator<'_, '_> {
                 block: self.convert_block(block),
             },
             TirStmtKind::IfLet { .. } => unreachable!(
-                "TirStmtKind::IfLet should be lowered by lower::pattern before lower::translate runs"
+                "TirStmtKind::IfLet should be lowered by translate::pattern at the start of convert_function"
             ),
             TirStmtKind::LetDestructure {
                 pattern,
