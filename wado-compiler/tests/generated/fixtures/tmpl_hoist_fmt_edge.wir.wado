@@ -202,6 +202,8 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_edge.wado/run"() with Stdout {
     let __local_21: ref "core:prelude/format.wado//Formatter";
     let __local_22: ref "core:prelude/string.wado//String";
     let __local_23: ref "core:prelude/format.wado//Formatter";
+    let __local_24: ref "core:prelude/string.wado//String";
+    let __local_25: ref "core:prelude/format.wado//Formatter";
     let __local_26: ref "core:prelude/string.wado//String";
     let __local_27: ref "core:prelude/format.wado//Formatter";
     let __local_30: ref "core:prelude/string.wado//String";
@@ -213,8 +215,6 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_edge.wado/run"() with Stdout {
     let __fmt_buf_82: ref "core:prelude/format.wado//Formatter";
     let __tmpl_buf_83: ref "core:prelude/string.wado//String";
     let __fmt_buf_84: ref "core:prelude/format.wado//Formatter";
-    let __tmpl_buf_85: ref "core:prelude/string.wado//String";
-    let __fmt_buf_86: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -311,8 +311,6 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_edge.wado/run"() with Stdout {
     total3 = 0;
     __for_3: block {
         i_8 = 0;
-        __tmpl_buf_83 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-        __fmt_buf_84 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __tmpl_buf_83 };
         block {
             l11: loop {
                 if i_8 >= 10 {
@@ -329,13 +327,14 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_edge.wado/run"() with Stdout {
                 if ref.test "core:prelude/types.wado//Option<char>::Some"(c) {
                     ch = ref.cast "core:prelude/types.wado//Option<char>::Some"(c).payload_0;
                     s_11 = __tmpl: block -> ref "core:prelude/string.wado//String" {
-                        __tmpl_buf_83.used = 0;
-                        __fmt_buf_84.indent = 0;
-                        "core:prelude/primitive.wado/char^Display::fmt"(ch, __fmt_buf_84);
-                        break __tmpl: __tmpl_buf_83;
+                        __local_24 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                        __local_25 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
+                        "core:prelude/primitive.wado/char^Display::fmt"(ch, __local_25);
+                        break __tmpl: __local_24;
                         unreachable;
                     };
                     total3 = total3 + s_11.used;
+                } else {
                 }
                 i_8 = i_8 + 1;
                 continue l11;
@@ -357,8 +356,8 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_edge.wado/run"() with Stdout {
     total4 = 0;
     __for_4: block {
         i_13 = 0;
-        __tmpl_buf_85 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-        __fmt_buf_86 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __tmpl_buf_85 };
+        __tmpl_buf_83 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+        __fmt_buf_84 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __tmpl_buf_83 };
         block {
             l16: loop {
                 if i_13 >= 3 {
@@ -366,10 +365,10 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_edge.wado/run"() with Stdout {
                 }
                 p = struct.new "wado-compiler/tests/fixtures/tmpl_hoist_fmt_edge.wado//Pair" { a: i_13, b: i_13 * 10 };
                 s_15 = __tmpl: block -> ref "core:prelude/string.wado//String" {
-                    __tmpl_buf_85.used = 0;
-                    __fmt_buf_86.indent = 0;
-                    "wado-compiler/tests/fixtures/tmpl_hoist_fmt_edge.wado/Pair^InspectAlt::inspect_alt"(p, __fmt_buf_86);
-                    break __tmpl: __tmpl_buf_85;
+                    __tmpl_buf_83.used = 0;
+                    __fmt_buf_84.indent = 0;
+                    "wado-compiler/tests/fixtures/tmpl_hoist_fmt_edge.wado/Pair^InspectAlt::inspect_alt"(p, __fmt_buf_84);
+                    break __tmpl: __tmpl_buf_83;
                     unreachable;
                 };
                 total4 = total4 + s_15.used;

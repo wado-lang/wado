@@ -348,7 +348,7 @@ fn fuse_adjacent_pairs(
         // Check preconditions by borrowing both statements.
         let fusion_info = iter
             .peek()
-            .and_then(|if_stmt| check_fusion_preconditions(&let_stmt, if_stmt));
+            .and_then(|if_stmt| check_fusion_preconditions(&let_stmt, if_stmt, locals.as_slice()));
 
         if let Some(info) = fusion_info {
             let if_stmt = iter.next().unwrap();
@@ -384,10 +384,45 @@ struct FusionInfo {
     case_index: u32,
     /// Type of the payload for case C.
     payload_type: TypeId,
+    /// When the consumer is a `Match` whose variant arm pattern binds
+    /// the payload to a named local, `Some(local_index)` lets
+    /// `perform_fusion` reuse the binding's slot as the payload local
+    /// instead of allocating a fresh `__fused_payload_N`. Without
+    /// this, the Match consumer's pattern binding would be left
+    /// unset after the Match is folded into the labeled block (the
+    /// `wir_build` `emit_pattern_bindings` pass that would normally
+    /// write into it never runs on the consumed Match).
+    /// `None` for the legacy `If + VariantTest` consumer, where the
+    /// binding lives inside `then_block`'s `Let { value:
+    /// VariantPayload(...) }` and gets rewritten via the
+    /// `VariantPayload → fused_payload` substitution.
+    pattern_payload_binding: Option<u32>,
 }
 
 /// Returns `Some(FusionInfo)` when the pair can be fused, `None` otherwise.
-fn check_fusion_preconditions(let_stmt: &NirStmt, if_stmt: &NirStmt) -> Option<FusionInfo> {
+///
+/// Recognises two consumer shapes:
+///
+/// - `If { condition: VariantTest(Local(X), case=C), then, else }` —
+///   the legacy shape synthesis still emits (WEP 2026-05-11 Phase 10
+///   Step 3 will eliminate it).
+/// - `Expr(Match { scrut: Local(X), arms: [Variant(C, [b?]) => then,
+///   _ => else] })` — the canonical shape post-Phase 10 Step 2a, with
+///   the payload binding `b` (when present) carrying the local that
+///   `then` reads from.
+fn check_fusion_preconditions(
+    let_stmt: &NirStmt,
+    if_stmt: &NirStmt,
+    locals: &[NirLocal],
+) -> Option<FusionInfo> {
+    check_fusion_preconditions_if_variant_test(let_stmt, if_stmt)
+        .or_else(|| check_fusion_preconditions_match(let_stmt, if_stmt, locals))
+}
+
+fn check_fusion_preconditions_if_variant_test(
+    let_stmt: &NirStmt,
+    if_stmt: &NirStmt,
+) -> Option<FusionInfo> {
     // --- Stmt 1: Let { value: LabeledBlock { label, block } } ---
     let NirStmtKind::Let {
         local_index: temp_local,
@@ -477,7 +512,305 @@ fn check_fusion_preconditions(let_stmt: &NirStmt, if_stmt: &NirStmt) -> Option<F
         label: label.clone(),
         case_index: *case_index,
         payload_type,
+        pattern_payload_binding: None,
     })
+}
+
+/// Detect the canonical Match shape post WEP 2026-05-11 Phase 10:
+/// `let temp = LabeledBlock { ... };` followed by
+/// `Expr(Match { scrut: Local(temp), arms: [Variant(C, [Binding(b)?]) => then,
+/// Wildcard => else] })`. Returns the `FusionInfo` shared with the
+/// legacy `If + VariantTest` consumer; the `pattern_payload_binding`
+/// field carries the variant arm's binding so `perform_fusion` can
+/// reuse it as the payload local.
+fn check_fusion_preconditions_match(
+    let_stmt: &NirStmt,
+    if_stmt: &NirStmt,
+    locals: &[NirLocal],
+) -> Option<FusionInfo> {
+    use crate::nir::{NirMatchArm, NirPattern};
+
+    // --- Stmt 1: Let { value: LabeledBlock { label, block } } ---
+    let NirStmtKind::Let {
+        local_index: temp_local,
+        value: let_value,
+        ..
+    } = &let_stmt.kind
+    else {
+        return None;
+    };
+    let NirExprKind::LabeledBlock {
+        label,
+        block: lb_block,
+        ..
+    } = &let_value.kind
+    else {
+        return None;
+    };
+
+    // --- Stmt 2: Expr(Match { scrut: Local(temp), arms: [Variant arm, Wildcard arm] }) ---
+    let NirStmtKind::Expr(match_expr) = &if_stmt.kind else {
+        return None;
+    };
+    let NirExprKind::Match { expr: scrut, arms } = &match_expr.kind else {
+        return None;
+    };
+    if arms.len() != 2 {
+        return None;
+    }
+    let NirExprKind::Local {
+        index: tested_idx, ..
+    } = &scrut.kind
+    else {
+        return None;
+    };
+    if *tested_idx != *temp_local {
+        return None;
+    }
+
+    // Identify variant arm (arm 0 by convention from `lower_iflet_to_match`)
+    // and wildcard arm (arm 1). Each must be guard-free; the legacy
+    // recognition didn't allow guards either.
+    let (variant_arm, else_arm): (&NirMatchArm, &NirMatchArm) = match (&arms[0], &arms[1]) {
+        (v, w)
+            if matches!(&v.pattern, NirPattern::Variant { .. })
+                && matches!(&w.pattern, NirPattern::Wildcard)
+                && v.guard.is_none()
+                && w.guard.is_none() =>
+        {
+            (v, w)
+        }
+        _ => return None,
+    };
+
+    let NirPattern::Variant {
+        variant_name,
+        bindings,
+        ..
+    } = &variant_arm.pattern
+    else {
+        return None;
+    };
+
+    // The variant arm's bindings must be at most one slot — multi-payload
+    // variants land here unchanged. For zero bindings (unit variant) or
+    // one `Wildcard` slot, fusion proceeds without a payload binding;
+    // for one `Binding` slot, the binding's `local_index` is reused as
+    // the payload local. Refutable sub-patterns inside the binding slot
+    // (`Literal` / `Variant` / `Enum` / …) bail out — fusion needs the
+    // pattern to be irrefutable so the variant case alone implies the
+    // arm.
+    let pattern_payload_binding: Option<u32> = match bindings.as_slice() {
+        [] => None,
+        [NirPattern::Wildcard] => None,
+        [NirPattern::Binding { local_index, .. }] => Some(*local_index),
+        _ => return None,
+    };
+
+    // Resolve `case_index` from the labeled block's breaks: walk for a
+    // `VariantConstruct { case_name == variant_arm.variant_name }` and
+    // take its `case_index`. The variant table itself isn't accessible
+    // from `optimize::*`, but the constructor at the break site embeds
+    // the resolved index anyway.
+    let case_index = find_break_case_index_for_name(lb_block, label, variant_name)?;
+
+    // --- LabeledBlock only breaks to L with null or VariantConstruct ---
+    let payload_type = check_lb_breaks_and_get_payload(lb_block, label, case_index)?;
+
+    // --- The reused binding slot must already be declared with the
+    // payload's type. `perform_fusion` writes the variant payload into
+    // the binding's local (`let <binding> = <payload>`) and the arm
+    // body reads `Local(<binding>)`; both rely on the binding's
+    // declared type matching `payload_type`. They can diverge when an
+    // earlier pass (e.g. `boxing`) gave the binding local a distinct
+    // but structurally-similar `TypeId` — folding the Match in would
+    // then emit an ill-typed assignment. Bail; the un-fused Match
+    // lowers correctly via `wir_build::emit_pattern_bindings`.
+    if let Some(binding) = pattern_payload_binding
+        && locals
+            .get(binding as usize)
+            .is_none_or(|local| local.type_id != payload_type)
+    {
+        return None;
+    }
+
+    // --- temp must not be read outside the Match scrutinee position.
+    // The `count_local_uses_in_*` walkers count every `Local(temp)`
+    // reference, so we expect zero uses inside the variant arm's body
+    // (the pattern binding takes care of the payload) and zero uses
+    // inside the wildcard arm's body. The Match's scrutinee position
+    // itself contributes one use, which is matched above and not
+    // counted here.
+    if count_local_uses_in_expr(&variant_arm.body, *temp_local) > 0 {
+        return None;
+    }
+    if count_local_uses_in_expr(&else_arm.body, *temp_local) > 0 {
+        return None;
+    }
+
+    // --- THEN/ELSE bodies must not contain free unlabeled break/continue
+    // when the labeled block being fused contains a loop. Same rationale
+    // as the legacy consumer.
+    if block_contains_loop(lb_block) {
+        if arm_body_has_free_unlabeled_loop_exit(&variant_arm.body) {
+            return None;
+        }
+        if arm_body_has_free_unlabeled_loop_exit(&else_arm.body) {
+            return None;
+        }
+    }
+
+    Some(FusionInfo {
+        temp_local: *temp_local,
+        label: label.clone(),
+        case_index,
+        payload_type,
+        pattern_payload_binding,
+    })
+}
+
+/// Walk `block` looking for `break label: VariantConstruct { case_name }`
+/// and return the embedded `case_index`. Stops on the first match. Used
+/// by `check_fusion_preconditions_match` to bridge the gap between
+/// `NirPattern::Variant`'s name-only encoding and the legacy fusion
+/// path's index-based encoding.
+fn find_break_case_index_for_name(
+    block: &NirBlock,
+    label: &str,
+    variant_name: &str,
+) -> Option<u32> {
+    for stmt in &block.stmts {
+        if let Some(idx) = find_break_case_index_for_name_in_stmt(stmt, label, variant_name) {
+            return Some(idx);
+        }
+    }
+    None
+}
+
+fn find_break_case_index_for_name_in_stmt(
+    stmt: &NirStmt,
+    label: &str,
+    variant_name: &str,
+) -> Option<u32> {
+    match &stmt.kind {
+        NirStmtKind::Break {
+            label: Some(l),
+            value: Some(v),
+        } if l == label => {
+            if let NirExprKind::VariantConstruct {
+                case_index,
+                case_name,
+                ..
+            } = &v.kind
+                && case_name == variant_name
+            {
+                return Some(*case_index);
+            }
+            None
+        }
+        NirStmtKind::LabeledBlock { label: l, .. } if l == label => None,
+        NirStmtKind::If {
+            then_block,
+            else_block,
+            ..
+        } => find_break_case_index_for_name(then_block, label, variant_name).or_else(|| {
+            else_block
+                .as_ref()
+                .and_then(|eb| find_break_case_index_for_name(eb, label, variant_name))
+        }),
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
+            find_break_case_index_for_name(body, label, variant_name)
+        }
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+            find_break_case_index_for_name_in_expr(value, label, variant_name)
+        }
+        NirStmtKind::Expr(expr) => {
+            find_break_case_index_for_name_in_expr(expr, label, variant_name)
+        }
+        NirStmtKind::Return { value } => value
+            .as_ref()
+            .and_then(|v| find_break_case_index_for_name_in_expr(v, label, variant_name)),
+        NirStmtKind::Break { value: Some(v), .. } => {
+            find_break_case_index_for_name_in_expr(v, label, variant_name)
+        }
+        NirStmtKind::Break { value: None, .. } | NirStmtKind::Continue => None,
+    }
+}
+
+fn find_break_case_index_for_name_in_expr(
+    expr: &NirExpr,
+    label: &str,
+    variant_name: &str,
+) -> Option<u32> {
+    match &expr.kind {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
+            find_break_case_index_for_name(block, label, variant_name)
+        }
+        NirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => find_break_case_index_for_name_in_expr(condition, label, variant_name)
+            .or_else(|| find_break_case_index_for_name(then_branch, label, variant_name))
+            .or_else(|| {
+                else_branch
+                    .as_ref()
+                    .and_then(|b| find_break_case_index_for_name(b, label, variant_name))
+            }),
+        NirExprKind::Match { expr: scrut, arms } => {
+            find_break_case_index_for_name_in_expr(scrut, label, variant_name).or_else(|| {
+                arms.iter().find_map(|arm| {
+                    find_break_case_index_for_name_in_expr(&arm.body, label, variant_name).or_else(
+                        || {
+                            arm.guard.as_ref().and_then(|g| {
+                                find_break_case_index_for_name_in_expr(g, label, variant_name)
+                            })
+                        },
+                    )
+                })
+            })
+        }
+        // Everything else can't contain a `break label: VariantConstruct`
+        // construct directly — sub-exprs that could contain breaks
+        // (binary / unary / call args / field access / index / cast /
+        // struct fields / tuple elements / assigns / global var sets)
+        // do recurse, but only to fall through to `Block` /
+        // `LabeledBlock` / `If` / `Match` shapes above. For fusion
+        // recognition, that recursion isn't load-bearing — if the
+        // labeled block's first matching break is buried deeper than
+        // the recognition tree above can see, the legacy variant
+        // check (`check_lb_breaks_in_*`) will catch the missing
+        // payload type and bail out the same way.
+        _ => None,
+    }
+}
+
+/// Helper mirroring `block_has_free_unlabeled_loop_exit` but starting
+/// from an `NirExpr` (the arm bodies of Match consumers are `NirExpr`
+/// rather than `NirBlock`). Walks into Block / `LabeledBlock` children
+/// and delegates to the block-level helper for everything else.
+fn arm_body_has_free_unlabeled_loop_exit(body: &NirExpr) -> bool {
+    match &body.kind {
+        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
+            block_has_free_unlabeled_loop_exit(block)
+        }
+        _ => false,
+    }
+}
+
+/// Unwrap a Match arm body to the `NirBlock` it produced. Variant
+/// arms from `lower::translate::pattern::lower`'s `IfLet → Match`
+/// conversion always wrap then/else in `TirExprKind::Block`; the
+/// `_ => Unit` wildcard arm bypasses the wrap when no `else` block
+/// is given (filtered out at the call site).
+fn arm_body_into_block(body: NirExpr, fallback_span: crate::token::Span) -> NirBlock {
+    match body.kind {
+        NirExprKind::Block(block) => block,
+        _ => NirBlock {
+            stmts: vec![NirStmt::new(NirStmtKind::Expr(body), fallback_span)],
+            span: fallback_span,
+        },
+    }
 }
 
 /// Verify that all `break L: v` in `block` have `v` as either `null` or
@@ -957,26 +1290,65 @@ fn perform_fusion(
         unreachable!()
     };
 
-    // Extract the then/else blocks from the If statement.
-    let NirStmtKind::If {
-        then_block,
-        else_block,
-        ..
-    } = if_stmt.kind
-    else {
-        unreachable!()
+    // Extract the then/else blocks from the consumer statement.
+    // Two consumer shapes (see `check_fusion_preconditions`):
+    //
+    // - `NirStmtKind::If { then_block, else_block, .. }` — legacy
+    //   `If + VariantTest` shape. `then_block` already starts with
+    //   `Let { value: VariantPayload(...) }`; the payload binding is
+    //   rewritten by the `VariantPayload → fused_payload` substitution
+    //   inside `transform_lb_stmts`.
+    // - `NirStmtKind::Expr(Match { arms })` — canonical post-Phase 10
+    //   shape. The variant arm's pattern binds the payload to a
+    //   pattern-local slot; that slot's index is carried on
+    //   `info.pattern_payload_binding` and reused as the payload local
+    //   below, so the slot the THEN body reads from gets the value
+    //   the LabeledBlock break would have constructed.
+    let (then_block, else_block) = match if_stmt.kind {
+        NirStmtKind::If {
+            then_block,
+            else_block,
+            ..
+        } => (then_block, else_block),
+        NirStmtKind::Expr(match_expr) => {
+            let NirExprKind::Match { arms, .. } = match_expr.kind else {
+                unreachable!()
+            };
+            let mut arms_iter = arms.into_iter();
+            let variant_arm = arms_iter.next().unwrap();
+            let else_arm = arms_iter.next().unwrap();
+            let then_block = arm_body_into_block(variant_arm.body, span);
+            let else_block = match else_arm.body.kind {
+                NirExprKind::Unit => None,
+                _ => Some(arm_body_into_block(else_arm.body, span)),
+            };
+            (then_block, else_block)
+        }
+        _ => unreachable!(),
     };
 
-    // Allocate a fresh local for the payload value. The pasted-in `Let`
-    // statements created below name the slot `__fused_payload_N`; mirror
-    // that on the `NirLocal` so wir_build's local-name lookup matches.
-    let payload_local = *local_count;
-    *local_count += 1;
-    locals.push(NirLocal {
-        name: format!("__fused_payload_{payload_local}"),
-        type_id: info.payload_type,
-        is_mut: false,
-    });
+    // Pick the payload local. The Match consumer carries the variant
+    // arm's pattern-binding slot on `info.pattern_payload_binding`;
+    // reusing it keeps the THEN body's existing `Local(b)` reads valid
+    // after fusion (the wir_build `emit_pattern_bindings` pass that
+    // would normally write into `b` never runs on the folded Match).
+    // The legacy consumer has no pattern binding to carry; allocate a
+    // fresh `__fused_payload_N` slot, and the
+    // `VariantPayload → fused_payload` substitution in
+    // `transform_lb_stmts` rewrites the THEN body's `Let { value:
+    // VariantPayload(...) }` to read from it.
+    let payload_local = if let Some(b_idx) = info.pattern_payload_binding {
+        b_idx
+    } else {
+        let payload_local = *local_count;
+        *local_count += 1;
+        locals.push(NirLocal {
+            name: format!("__fused_payload_{payload_local}"),
+            type_id: info.payload_type,
+            is_mut: false,
+        });
+        payload_local
+    };
 
     let fused_label = format!("__fused_{}", info.label);
 

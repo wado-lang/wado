@@ -1725,21 +1725,23 @@ pub fn write_escaped_string(s: String, f: &mut Formatter) {
     __for_of_2: {
         let mut __iter_2: StrCharIter = s.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __pattern_temp_0: Option<char> = __iter_2."StrCharIter^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let c: char = __variant_payload(__pattern_temp_0, case=0);
-                match c {
-                    '"' => f.Formatter::write_str(&"\\\""),
-                    '\' => f.Formatter::write_str(&"\\\\"),
-                    '
+            let __iflet_4: Option<char> = __iter_2."StrCharIter^Iterator::next"();
+            match __iflet_4 {
+                Some(c) => {
+                    match c {
+                        '"' => f.Formatter::write_str(&"\\\""),
+                        '\' => f.Formatter::write_str(&"\\\\"),
+                        '
 ' => f.Formatter::write_str(&"\\n"),
-                    '	' => f.Formatter::write_str(&"\\t"),
-                    '' => f.Formatter::write_str(&"\\r"),
-                    _ => f.Formatter::write_char(c),
-                };
-            } else {
-                break;
-            }
+                        '	' => f.Formatter::write_str(&"\\t"),
+                        '' => f.Formatter::write_str(&"\\r"),
+                        _ => f.Formatter::write_char(c),
+                    };
+                },
+                _ => {
+                    break;
+                },
+            };
         }
     }
 }
@@ -2860,177 +2862,67 @@ pub fn unrounded_div(u: u64, d: u64) -> u64 {
 }
 
 fn pow10_coarse(i: i32) -> PmHiLo {
-    return switch i (base=0) {
-        0 => {
-            PmHiLo { hi: 0x8049a4ac0c5811af, lo: 0xdfa4769288829d87 };
-        }
-        1 => {
-            PmHiLo { hi: 0xcf42894a5dce35eb, lo: 0xadf9b3537d798a46 };
-        }
-        2 => {
-            PmHiLo { hi: 0xa76c582338ed2622, lo: 0x50d50d47f5090db1 };
-        }
-        3 => {
-            PmHiLo { hi: 0x873e4f75e2224e69, lo: 0xa588bb5917fb5d6e };
-        }
-        4 => {
-            PmHiLo { hi: 0xda7f5bf590966849, lo: 0x50c65b8aaf957661 };
-        }
-        5 => {
-            PmHiLo { hi: 0xb080392cc4349ded, lo: 0x427286b26955304c };
-        }
-        6 => {
-            PmHiLo { hi: 0x8e938662882af53f, lo: 0xab814b848d7d1163 };
-        }
-        7 => {
-            PmHiLo { hi: 0xe65829b3046b0afb, lo: 0xf34b5a5ceed5aeed };
-        }
-        8 => {
-            PmHiLo { hi: 0xba121a4650e4ddec, lo: 0x6d0cb29d9e931bec };
-        }
-        9 => {
-            PmHiLo { hi: 0x964e858c91ba2656, lo: 0xc595f8072aef0790 };
-        }
-        10 => {
-            PmHiLo { hi: 0xf2d56790ab41c2a3, lo: 0x051d8d66bdc0463c };
-        }
-        11 => {
-            PmHiLo { hi: 0xc428d05aa4751e4d, lo: 0x55681eb3c3d94779 };
-        }
-        12 => {
-            PmHiLo { hi: 0x9e74d1b791e07e49, lo: 0x88a15d9b30aacb82 };
-        }
-        13 => {
-            PmHiLo { hi: 0x8000000000000000, lo: 0x0000000000000000 };
-        }
-        14 => {
-            PmHiLo { hi: 0xcecb8f27f4200f3a, lo: 0x0000000000000000 };
-        }
-        15 => {
-            PmHiLo { hi: 0xa70c3c40a64e6c52, lo: 0x666f6f49a09826dc };
-        }
-        16 => {
-            PmHiLo { hi: 0x86f0ac99b4e8dafe, lo: 0x965fd744c2128e5c };
-        }
-        17 => {
-            PmHiLo { hi: 0xda01ee641a708dea, lo: 0x17f190b7df336b6a };
-        }
-        18 => {
-            PmHiLo { hi: 0xb01ae745b101e9e5, lo: 0xa13fa23008d18070 };
-        }
-        19 => {
-            PmHiLo { hi: 0x8e41ade9fbebc27e, lo: 0xeba770ec417b8cf8 };
-        }
-        20 => {
-            PmHiLo { hi: 0xe5d3ef282a242e82, lo: 0x70e9973757925a05 };
-        }
-        21 => {
-            PmHiLo { hi: 0xb9a74a0637ce2ee2, lo: 0x926ac1d428e8c96d };
-        }
-        22 => {
-            PmHiLo { hi: 0x95f83d0a1fb69cda, lo: 0xb54250efea9b0671 };
-        }
-        23 => {
-            PmHiLo { hi: 0xf24a01a73cf2dcd0, lo: 0x439cc4c698c37313 };
-        }
-        24 => {
-            PmHiLo { hi: 0xc3b8358109e84f08, lo: 0xf579d07f13b8ff37 };
-        }
-        25 => {
-            PmHiLo { hi: 0x9e19db92b4e31baa, lo: 0x93f85d3d957cb92e };
-        }
-        _ => {
-            core::internal::unreachable();
-        }
+    return match i {
+        0 => PmHiLo { hi: 0x8049a4ac0c5811af, lo: 0xdfa4769288829d87 },
+        1 => PmHiLo { hi: 0xcf42894a5dce35eb, lo: 0xadf9b3537d798a46 },
+        2 => PmHiLo { hi: 0xa76c582338ed2622, lo: 0x50d50d47f5090db1 },
+        3 => PmHiLo { hi: 0x873e4f75e2224e69, lo: 0xa588bb5917fb5d6e },
+        4 => PmHiLo { hi: 0xda7f5bf590966849, lo: 0x50c65b8aaf957661 },
+        5 => PmHiLo { hi: 0xb080392cc4349ded, lo: 0x427286b26955304c },
+        6 => PmHiLo { hi: 0x8e938662882af53f, lo: 0xab814b848d7d1163 },
+        7 => PmHiLo { hi: 0xe65829b3046b0afb, lo: 0xf34b5a5ceed5aeed },
+        8 => PmHiLo { hi: 0xba121a4650e4ddec, lo: 0x6d0cb29d9e931bec },
+        9 => PmHiLo { hi: 0x964e858c91ba2656, lo: 0xc595f8072aef0790 },
+        10 => PmHiLo { hi: 0xf2d56790ab41c2a3, lo: 0x051d8d66bdc0463c },
+        11 => PmHiLo { hi: 0xc428d05aa4751e4d, lo: 0x55681eb3c3d94779 },
+        12 => PmHiLo { hi: 0x9e74d1b791e07e49, lo: 0x88a15d9b30aacb82 },
+        13 => PmHiLo { hi: 0x8000000000000000, lo: 0x0000000000000000 },
+        14 => PmHiLo { hi: 0xcecb8f27f4200f3a, lo: 0x0000000000000000 },
+        15 => PmHiLo { hi: 0xa70c3c40a64e6c52, lo: 0x666f6f49a09826dc },
+        16 => PmHiLo { hi: 0x86f0ac99b4e8dafe, lo: 0x965fd744c2128e5c },
+        17 => PmHiLo { hi: 0xda01ee641a708dea, lo: 0x17f190b7df336b6a },
+        18 => PmHiLo { hi: 0xb01ae745b101e9e5, lo: 0xa13fa23008d18070 },
+        19 => PmHiLo { hi: 0x8e41ade9fbebc27e, lo: 0xeba770ec417b8cf8 },
+        20 => PmHiLo { hi: 0xe5d3ef282a242e82, lo: 0x70e9973757925a05 },
+        21 => PmHiLo { hi: 0xb9a74a0637ce2ee2, lo: 0x926ac1d428e8c96d },
+        22 => PmHiLo { hi: 0x95f83d0a1fb69cda, lo: 0xb54250efea9b0671 },
+        23 => PmHiLo { hi: 0xf24a01a73cf2dcd0, lo: 0x439cc4c698c37313 },
+        24 => PmHiLo { hi: 0xc3b8358109e84f08, lo: 0xf579d07f13b8ff37 },
+        25 => PmHiLo { hi: 0x9e19db92b4e31baa, lo: 0x93f85d3d957cb92e },
+        _ => core::internal::unreachable(),
     };
 }
 
 fn pow10_fine(i: i32) -> u64 {
-    return switch i (base=0) {
-        0 => {
-            0x8000000000000000;
-        }
-        1 => {
-            0xa000000000000000;
-        }
-        2 => {
-            0xc800000000000000;
-        }
-        3 => {
-            0xfa00000000000000;
-        }
-        4 => {
-            0x9c40000000000000;
-        }
-        5 => {
-            0xc350000000000000;
-        }
-        6 => {
-            0xf424000000000000;
-        }
-        7 => {
-            0x9896800000000000;
-        }
-        8 => {
-            0xbebc200000000000;
-        }
-        9 => {
-            0xee6b280000000000;
-        }
-        10 => {
-            0x9502f90000000000;
-        }
-        11 => {
-            0xba43b74000000000;
-        }
-        12 => {
-            0xe8d4a51000000000;
-        }
-        13 => {
-            0x9184e72a00000000;
-        }
-        14 => {
-            0xb5e620f480000000;
-        }
-        15 => {
-            0xe35fa931a0000000;
-        }
-        16 => {
-            0x8e1bc9bf04000000;
-        }
-        17 => {
-            0xb1a2bc2ec5000000;
-        }
-        18 => {
-            0xde0b6b3a76400000;
-        }
-        19 => {
-            0x8ac7230489e80000;
-        }
-        20 => {
-            0xad78ebc5ac620000;
-        }
-        21 => {
-            0xd8d726b7177a8000;
-        }
-        22 => {
-            0x878678326eac9000;
-        }
-        23 => {
-            0xa968163f0a57b400;
-        }
-        24 => {
-            0xd3c21bcecceda100;
-        }
-        25 => {
-            0x84595161401484a0;
-        }
-        26 => {
-            0xa56fa5b99019a5c8;
-        }
-        _ => {
-            core::internal::unreachable();
-        }
+    return match i {
+        0 => 0x8000000000000000,
+        1 => 0xa000000000000000,
+        2 => 0xc800000000000000,
+        3 => 0xfa00000000000000,
+        4 => 0x9c40000000000000,
+        5 => 0xc350000000000000,
+        6 => 0xf424000000000000,
+        7 => 0x9896800000000000,
+        8 => 0xbebc200000000000,
+        9 => 0xee6b280000000000,
+        10 => 0x9502f90000000000,
+        11 => 0xba43b74000000000,
+        12 => 0xe8d4a51000000000,
+        13 => 0x9184e72a00000000,
+        14 => 0xb5e620f480000000,
+        15 => 0xe35fa931a0000000,
+        16 => 0x8e1bc9bf04000000,
+        17 => 0xb1a2bc2ec5000000,
+        18 => 0xde0b6b3a76400000,
+        19 => 0x8ac7230489e80000,
+        20 => 0xad78ebc5ac620000,
+        21 => 0xd8d726b7177a8000,
+        22 => 0x878678326eac9000,
+        23 => 0xa968163f0a57b400,
+        24 => 0xd3c21bcecceda100,
+        25 => 0x84595161401484a0,
+        26 => 0xa56fa5b99019a5c8,
+        _ => core::internal::unreachable(),
     };
 }
 
@@ -4211,11 +4103,13 @@ pub fn u128::from_str_radix(s: &String, radix: u32) -> Result<u128, ParseIntErro
 pub fn u128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<u128, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
     let prefix: Result<i32, IntErrorKind> = "core::prelude/intparse.wado::parse_unsigned_prefix_range"(s, start, end);
-    let __pattern_temp_0: Result<i32, IntErrorKind> = prefix;
-    if __variant_test(__pattern_temp_0, case=1, name=Err) {
-        let k: IntErrorKind = __variant_payload(__pattern_temp_0, case=1);
-        return Result<u128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
-    }
+    let __iflet_9: Result<i32, IntErrorKind> = prefix;
+    match __iflet_9 {
+        Err(k) => {
+            return Result<u128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
+        },
+        _ => (),
+    };
     let digit_start: i32 = Box<Result<i32,core:prelude/intparse.wado/IntErrorKind>> { value: prefix }."Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"();
     return match "core::prelude/intparse.wado::parse_u128_digits"(s, digit_start, end, radix) {
         Ok(v) => Result<u128, ParseIntError>::Ok(v),
@@ -9396,13 +9290,15 @@ pub fn "StrUtf8ByteIter^Iterator::collect"(self: &mut StrUtf8ByteIter) -> Array<
         break __seq_lit: __b."Array<u8>^SequenceLiteralBuilder::build"();
     };
     loop {
-        let __pattern_temp_0: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: u8 = __variant_payload(__pattern_temp_0, case=0);
-            result."Array<u8>::push"(item);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                result."Array<u8>::push"(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -9410,69 +9306,80 @@ pub fn "StrUtf8ByteIter^Iterator::collect"(self: &mut StrUtf8ByteIter) -> Array<
 pub fn "StrUtf8ByteIter^Iterator::count"(self: &mut StrUtf8ByteIter) -> i32 {
     let mut n: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            n = (n + 1);
-        } else {
-            break;
-        }
+        let __iflet_2: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __iflet_2 {
+            Some(_) => {
+                n = (n + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return n;
 }
 
 pub fn "StrUtf8ByteIter^Iterator::for_each"(self: &mut StrUtf8ByteIter, f: fn mut(u8) -> ()) {
     loop {
-        let __pattern_temp_0: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: u8 = __variant_payload(__pattern_temp_0, case=0);
-            f(item);
-        } else {
-            break;
-        }
+        let __iflet_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                f(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
 }
 
 pub fn "StrUtf8ByteIter^Iterator::find"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> Option<u8> {
     loop {
-        let __pattern_temp_0: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: u8 = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
-                return Option<u8>::Some(item);
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred(item) {
+                    return Option<u8>::Some(item);
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrUtf8ByteIter^Iterator::any"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: u8 = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
-                return true;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred(item) {
+                    return true;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return false;
 }
 
 pub fn "StrUtf8ByteIter^Iterator::all"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: u8 = __variant_payload(__pattern_temp_0, case=0);
-            if !pred(item) {
-                return false;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if !pred(item) {
+                    return false;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return true;
 }
@@ -9480,13 +9387,15 @@ pub fn "StrUtf8ByteIter^Iterator::all"(self: &mut StrUtf8ByteIter, pred: fn mut(
 pub fn "StrUtf8ByteIter^Iterator::last"(self: &mut StrUtf8ByteIter) -> Option<u8> {
     let mut result: Option<u8> = null;
     loop {
-        let __pattern_temp_0: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: u8 = __variant_payload(__pattern_temp_0, case=0);
-            result = Option<u8>::Some(item);
-        } else {
-            break;
-        }
+        let __iflet_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                result = Option<u8>::Some(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -9494,16 +9403,18 @@ pub fn "StrUtf8ByteIter^Iterator::last"(self: &mut StrUtf8ByteIter) -> Option<u8
 pub fn "StrUtf8ByteIter^Iterator::nth"(self: &mut StrUtf8ByteIter, n: i32) -> Option<u8> {
     let mut remaining: i32 = n;
     loop {
-        let __pattern_temp_0: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: u8 = __variant_payload(__pattern_temp_0, case=0);
-            if (remaining <= 0) {
-                return Option<u8>::Some(item);
-            }
-            remaining = (remaining - 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if (remaining <= 0) {
+                    return Option<u8>::Some(item);
+                }
+                remaining = (remaining - 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
@@ -9511,36 +9422,42 @@ pub fn "StrUtf8ByteIter^Iterator::nth"(self: &mut StrUtf8ByteIter, n: i32) -> Op
 pub fn "StrUtf8ByteIter^Iterator::position"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> Option<i32> {
     let mut idx: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: u8 = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
-                return Option<i32>::Some(idx);
-            }
-            idx = (idx + 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if pred(item) {
+                    return Option<i32>::Some(idx);
+                }
+                idx = (idx + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrUtf8ByteIter^Iterator::reduce"(self: &mut StrUtf8ByteIter, f: fn mut(u8, u8) -> u8) -> Option<u8> {
-    let __pattern_temp_0: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-    if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let first: u8 = __variant_payload(__pattern_temp_0, case=0);
-        let mut acc: u8 = first;
-        loop {
-            let __pattern_temp_1: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-            if __variant_test(__pattern_temp_1, case=0, name=Some) {
-                let item: u8 = __variant_payload(__pattern_temp_1, case=0);
-                acc = f(acc, item);
-            } else {
-                break;
+    let __iflet_5: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+    match __iflet_5 {
+        Some(first) => {
+            let mut acc: u8 = first;
+            loop {
+                let __iflet_6: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+                match __iflet_6 {
+                    Some(item) => {
+                        acc = f(acc, item);
+                    },
+                    _ => {
+                        break;
+                    },
+                };
             }
-        }
-        return Option<u8>::Some(acc);
-    }
+            return Option<u8>::Some(acc);
+        },
+        _ => (),
+    };
     return null;
 }
 
@@ -9596,13 +9513,15 @@ pub fn "StrCharIter^Iterator::collect"(self: &mut StrCharIter) -> Array<char> {
         break __seq_lit: __b."Array<char>^SequenceLiteralBuilder::build"();
     };
     loop {
-        let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: char = __variant_payload(__pattern_temp_0, case=0);
-            result."Array<char>::push"(item);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<char> = self."StrCharIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                result."Array<char>::push"(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -9610,69 +9529,80 @@ pub fn "StrCharIter^Iterator::collect"(self: &mut StrCharIter) -> Array<char> {
 pub fn "StrCharIter^Iterator::count"(self: &mut StrCharIter) -> i32 {
     let mut n: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            n = (n + 1);
-        } else {
-            break;
-        }
+        let __iflet_2: Option<char> = self."StrCharIter^Iterator::next"();
+        match __iflet_2 {
+            Some(_) => {
+                n = (n + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return n;
 }
 
 pub fn "StrCharIter^Iterator::for_each"(self: &mut StrCharIter, f: fn mut(char) -> ()) {
     loop {
-        let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: char = __variant_payload(__pattern_temp_0, case=0);
-            f(item);
-        } else {
-            break;
-        }
+        let __iflet_3: Option<char> = self."StrCharIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                f(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
 }
 
 pub fn "StrCharIter^Iterator::find"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> Option<char> {
     loop {
-        let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: char = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
-                return Option<char>::Some(item);
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<char> = self."StrCharIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred(item) {
+                    return Option<char>::Some(item);
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrCharIter^Iterator::any"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: char = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
-                return true;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<char> = self."StrCharIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred(item) {
+                    return true;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return false;
 }
 
 pub fn "StrCharIter^Iterator::all"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: char = __variant_payload(__pattern_temp_0, case=0);
-            if !pred(item) {
-                return false;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<char> = self."StrCharIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if !pred(item) {
+                    return false;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return true;
 }
@@ -9680,13 +9610,15 @@ pub fn "StrCharIter^Iterator::all"(self: &mut StrCharIter, pred: fn mut(char) ->
 pub fn "StrCharIter^Iterator::last"(self: &mut StrCharIter) -> Option<char> {
     let mut result: Option<char> = null;
     loop {
-        let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: char = __variant_payload(__pattern_temp_0, case=0);
-            result = Option<char>::Some(item);
-        } else {
-            break;
-        }
+        let __iflet_3: Option<char> = self."StrCharIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                result = Option<char>::Some(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -9694,16 +9626,18 @@ pub fn "StrCharIter^Iterator::last"(self: &mut StrCharIter) -> Option<char> {
 pub fn "StrCharIter^Iterator::nth"(self: &mut StrCharIter, n: i32) -> Option<char> {
     let mut remaining: i32 = n;
     loop {
-        let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: char = __variant_payload(__pattern_temp_0, case=0);
-            if (remaining <= 0) {
-                return Option<char>::Some(item);
-            }
-            remaining = (remaining - 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<char> = self."StrCharIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if (remaining <= 0) {
+                    return Option<char>::Some(item);
+                }
+                remaining = (remaining - 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
@@ -9711,36 +9645,42 @@ pub fn "StrCharIter^Iterator::nth"(self: &mut StrCharIter, n: i32) -> Option<cha
 pub fn "StrCharIter^Iterator::position"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> Option<i32> {
     let mut idx: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: char = __variant_payload(__pattern_temp_0, case=0);
-            if pred(item) {
-                return Option<i32>::Some(idx);
-            }
-            idx = (idx + 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<char> = self."StrCharIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if pred(item) {
+                    return Option<i32>::Some(idx);
+                }
+                idx = (idx + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrCharIter^Iterator::reduce"(self: &mut StrCharIter, f: fn mut(char, char) -> char) -> Option<char> {
-    let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-    if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let first: char = __variant_payload(__pattern_temp_0, case=0);
-        let mut acc: char = first;
-        loop {
-            let __pattern_temp_1: Option<char> = self."StrCharIter^Iterator::next"();
-            if __variant_test(__pattern_temp_1, case=0, name=Some) {
-                let item: char = __variant_payload(__pattern_temp_1, case=0);
-                acc = f(acc, item);
-            } else {
-                break;
+    let __iflet_5: Option<char> = self."StrCharIter^Iterator::next"();
+    match __iflet_5 {
+        Some(first) => {
+            let mut acc: char = first;
+            loop {
+                let __iflet_6: Option<char> = self."StrCharIter^Iterator::next"();
+                match __iflet_6 {
+                    Some(item) => {
+                        acc = f(acc, item);
+                    },
+                    _ => {
+                        break;
+                    },
+                };
             }
-        }
-        return Option<char>::Some(acc);
-    }
+            return Option<char>::Some(acc);
+        },
+        _ => (),
+    };
     return null;
 }
 
@@ -10045,17 +9985,19 @@ pub fn String::trim_start(self: &String) -> String {
     let mut iter: StrCharIter = self.String::chars();
     let mut start: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<char> = iter."StrCharIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let c: char = __variant_payload(__pattern_temp_0, case=0);
-            if Box<char> { value: c }.char::is_whitespace() {
-                start = (start + Box<char> { value: c }.char::len_utf8());
-            } else {
+        let __iflet_4: Option<char> = iter."StrCharIter^Iterator::next"();
+        match __iflet_4 {
+            Some(c) => {
+                if Box<char> { value: c }.char::is_whitespace() {
+                    start = (start + Box<char> { value: c }.char::len_utf8());
+                } else {
+                    break;
+                }
+            },
+            _ => {
                 break;
-            }
-        } else {
-            break;
-        }
+            },
+        };
     }
     return self.String::substr_bytes(start, self.used);
 }
@@ -10382,15 +10324,17 @@ pub fn String::contains_char(self: &String, ch: char) -> bool {
     __for_of_2: {
         let mut __iter_2: StrCharIter = self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __pattern_temp_0: Option<char> = __iter_2."StrCharIter^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let c: char = __variant_payload(__pattern_temp_0, case=0);
-                if (c == ch) {
-                    return true;
-                }
-            } else {
-                break;
-            }
+            let __iflet_4: Option<char> = __iter_2."StrCharIter^Iterator::next"();
+            match __iflet_4 {
+                Some(c) => {
+                    if (c == ch) {
+                        return true;
+                    }
+                },
+                _ => {
+                    break;
+                },
+            };
         }
     }
     return false;
@@ -10401,18 +10345,20 @@ pub fn String::find_char(self: &String, pred: fn mut(char) -> bool) -> Option<i3
     __for_9: {
         let mut byte_index: i32 = 0;
         loop {
-            let __pattern_temp_0: Option<char> = iter."StrCharIter^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let c: char = __variant_payload(__pattern_temp_0, case=0);
-                __for_9_body: {
-                    if pred(c) {
-                        return Option<i32>::Some(byte_index);
+            let __iflet_5: Option<char> = iter."StrCharIter^Iterator::next"();
+            match __iflet_5 {
+                Some(c) => {
+                    __for_9_body: {
+                        if pred(c) {
+                            return Option<i32>::Some(byte_index);
+                        }
                     }
-                }
-                byte_index = (byte_index + Box<char> { value: c }.char::len_utf8());
-            } else {
-                break __for_9;
-            }
+                    byte_index = (byte_index + Box<char> { value: c }.char::len_utf8());
+                },
+                _ => {
+                    break __for_9;
+                },
+            };
         }
     }
     return null;
@@ -10808,13 +10754,15 @@ pub fn "StrSplitIter^Iterator::collect"(self: &mut StrSplitIter) -> Array<String
         break __seq_lit: __b."Array<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
     };
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            result."Array<core:prelude/string.wado/String>::push"(item);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<String> = self."StrSplitIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                result."Array<core:prelude/string.wado/String>::push"(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -10822,69 +10770,80 @@ pub fn "StrSplitIter^Iterator::collect"(self: &mut StrSplitIter) -> Array<String
 pub fn "StrSplitIter^Iterator::count"(self: &mut StrSplitIter) -> i32 {
     let mut n: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            n = (n + 1);
-        } else {
-            break;
-        }
+        let __iflet_2: Option<String> = self."StrSplitIter^Iterator::next"();
+        match __iflet_2 {
+            Some(_) => {
+                n = (n + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return n;
 }
 
 pub fn "StrSplitIter^Iterator::for_each"(self: &mut StrSplitIter, f: fn mut(String) -> ()) {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            f("$value_copy$T25"(item));
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                f("$value_copy$T25"(item));
+            },
+            _ => {
+                break;
+            },
+        };
     }
 }
 
 pub fn "StrSplitIter^Iterator::find"(self: &mut StrSplitIter, pred: fn mut(String) -> bool) -> Option<String> {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T25"(item)) {
-                return Option<String>::Some(item);
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred("$value_copy$T25"(item)) {
+                    return Option<String>::Some(item);
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrSplitIter^Iterator::any"(self: &mut StrSplitIter, pred: fn mut(String) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T25"(item)) {
-                return true;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred("$value_copy$T25"(item)) {
+                    return true;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return false;
 }
 
 pub fn "StrSplitIter^Iterator::all"(self: &mut StrSplitIter, pred: fn mut(String) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if !pred("$value_copy$T25"(item)) {
-                return false;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if !pred("$value_copy$T25"(item)) {
+                    return false;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return true;
 }
@@ -10892,13 +10851,15 @@ pub fn "StrSplitIter^Iterator::all"(self: &mut StrSplitIter, pred: fn mut(String
 pub fn "StrSplitIter^Iterator::last"(self: &mut StrSplitIter) -> Option<String> {
     let mut result: Option<String> = null;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            result = Option<String>::Some(item);
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                result = Option<String>::Some(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -10906,16 +10867,18 @@ pub fn "StrSplitIter^Iterator::last"(self: &mut StrSplitIter) -> Option<String> 
 pub fn "StrSplitIter^Iterator::nth"(self: &mut StrSplitIter, n: i32) -> Option<String> {
     let mut remaining: i32 = n;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if (remaining <= 0) {
-                return Option<String>::Some(item);
-            }
-            remaining = (remaining - 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<String> = self."StrSplitIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if (remaining <= 0) {
+                    return Option<String>::Some(item);
+                }
+                remaining = (remaining - 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
@@ -10923,36 +10886,42 @@ pub fn "StrSplitIter^Iterator::nth"(self: &mut StrSplitIter, n: i32) -> Option<S
 pub fn "StrSplitIter^Iterator::position"(self: &mut StrSplitIter, pred: fn mut(String) -> bool) -> Option<i32> {
     let mut idx: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T25"(item)) {
-                return Option<i32>::Some(idx);
-            }
-            idx = (idx + 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<String> = self."StrSplitIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if pred("$value_copy$T25"(item)) {
+                    return Option<i32>::Some(idx);
+                }
+                idx = (idx + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrSplitIter^Iterator::reduce"(self: &mut StrSplitIter, f: fn mut(String, String) -> String) -> Option<String> {
-    let __pattern_temp_0: Option<String> = self."StrSplitIter^Iterator::next"();
-    if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let first: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-        let mut acc: String = "$value_copy$T25"(first);
-        loop {
-            let __pattern_temp_1: Option<String> = self."StrSplitIter^Iterator::next"();
-            if __variant_test(__pattern_temp_1, case=0, name=Some) {
-                let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_1, case=0));
-                acc = f("$value_copy$T25"(acc), "$value_copy$T25"(item));
-            } else {
-                break;
+    let __iflet_5: Option<String> = self."StrSplitIter^Iterator::next"();
+    match __iflet_5 {
+        Some(first) => {
+            let mut acc: String = "$value_copy$T25"(first);
+            loop {
+                let __iflet_6: Option<String> = self."StrSplitIter^Iterator::next"();
+                match __iflet_6 {
+                    Some(item) => {
+                        acc = f("$value_copy$T25"(acc), "$value_copy$T25"(item));
+                    },
+                    _ => {
+                        break;
+                    },
+                };
             }
-        }
-        return Option<String>::Some(acc);
-    }
+            return Option<String>::Some(acc);
+        },
+        _ => (),
+    };
     return null;
 }
 
@@ -11028,13 +10997,15 @@ pub fn "StrSplitNIter^Iterator::collect"(self: &mut StrSplitNIter) -> Array<Stri
         break __seq_lit: __b."Array<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
     };
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            result."Array<core:prelude/string.wado/String>::push"(item);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<String> = self."StrSplitNIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                result."Array<core:prelude/string.wado/String>::push"(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -11042,69 +11013,80 @@ pub fn "StrSplitNIter^Iterator::collect"(self: &mut StrSplitNIter) -> Array<Stri
 pub fn "StrSplitNIter^Iterator::count"(self: &mut StrSplitNIter) -> i32 {
     let mut n: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            n = (n + 1);
-        } else {
-            break;
-        }
+        let __iflet_2: Option<String> = self."StrSplitNIter^Iterator::next"();
+        match __iflet_2 {
+            Some(_) => {
+                n = (n + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return n;
 }
 
 pub fn "StrSplitNIter^Iterator::for_each"(self: &mut StrSplitNIter, f: fn mut(String) -> ()) {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            f("$value_copy$T25"(item));
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitNIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                f("$value_copy$T25"(item));
+            },
+            _ => {
+                break;
+            },
+        };
     }
 }
 
 pub fn "StrSplitNIter^Iterator::find"(self: &mut StrSplitNIter, pred: fn mut(String) -> bool) -> Option<String> {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T25"(item)) {
-                return Option<String>::Some(item);
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitNIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred("$value_copy$T25"(item)) {
+                    return Option<String>::Some(item);
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrSplitNIter^Iterator::any"(self: &mut StrSplitNIter, pred: fn mut(String) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T25"(item)) {
-                return true;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitNIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred("$value_copy$T25"(item)) {
+                    return true;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return false;
 }
 
 pub fn "StrSplitNIter^Iterator::all"(self: &mut StrSplitNIter, pred: fn mut(String) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if !pred("$value_copy$T25"(item)) {
-                return false;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitNIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if !pred("$value_copy$T25"(item)) {
+                    return false;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return true;
 }
@@ -11112,13 +11094,15 @@ pub fn "StrSplitNIter^Iterator::all"(self: &mut StrSplitNIter, pred: fn mut(Stri
 pub fn "StrSplitNIter^Iterator::last"(self: &mut StrSplitNIter) -> Option<String> {
     let mut result: Option<String> = null;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            result = Option<String>::Some(item);
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitNIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                result = Option<String>::Some(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -11126,16 +11110,18 @@ pub fn "StrSplitNIter^Iterator::last"(self: &mut StrSplitNIter) -> Option<String
 pub fn "StrSplitNIter^Iterator::nth"(self: &mut StrSplitNIter, n: i32) -> Option<String> {
     let mut remaining: i32 = n;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if (remaining <= 0) {
-                return Option<String>::Some(item);
-            }
-            remaining = (remaining - 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<String> = self."StrSplitNIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if (remaining <= 0) {
+                    return Option<String>::Some(item);
+                }
+                remaining = (remaining - 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
@@ -11143,36 +11129,42 @@ pub fn "StrSplitNIter^Iterator::nth"(self: &mut StrSplitNIter, n: i32) -> Option
 pub fn "StrSplitNIter^Iterator::position"(self: &mut StrSplitNIter, pred: fn mut(String) -> bool) -> Option<i32> {
     let mut idx: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T25"(item)) {
-                return Option<i32>::Some(idx);
-            }
-            idx = (idx + 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<String> = self."StrSplitNIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if pred("$value_copy$T25"(item)) {
+                    return Option<i32>::Some(idx);
+                }
+                idx = (idx + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrSplitNIter^Iterator::reduce"(self: &mut StrSplitNIter, f: fn mut(String, String) -> String) -> Option<String> {
-    let __pattern_temp_0: Option<String> = self."StrSplitNIter^Iterator::next"();
-    if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let first: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-        let mut acc: String = "$value_copy$T25"(first);
-        loop {
-            let __pattern_temp_1: Option<String> = self."StrSplitNIter^Iterator::next"();
-            if __variant_test(__pattern_temp_1, case=0, name=Some) {
-                let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_1, case=0));
-                acc = f("$value_copy$T25"(acc), "$value_copy$T25"(item));
-            } else {
-                break;
+    let __iflet_5: Option<String> = self."StrSplitNIter^Iterator::next"();
+    match __iflet_5 {
+        Some(first) => {
+            let mut acc: String = "$value_copy$T25"(first);
+            loop {
+                let __iflet_6: Option<String> = self."StrSplitNIter^Iterator::next"();
+                match __iflet_6 {
+                    Some(item) => {
+                        acc = f("$value_copy$T25"(acc), "$value_copy$T25"(item));
+                    },
+                    _ => {
+                        break;
+                    },
+                };
             }
-        }
-        return Option<String>::Some(acc);
-    }
+            return Option<String>::Some(acc);
+        },
+        _ => (),
+    };
     return null;
 }
 
@@ -11225,13 +11217,15 @@ pub fn "StrSplitWhitespaceIter^Iterator::collect"(self: &mut StrSplitWhitespaceI
         break __seq_lit: __b."Array<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
     };
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            result."Array<core:prelude/string.wado/String>::push"(item);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                result."Array<core:prelude/string.wado/String>::push"(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -11239,69 +11233,80 @@ pub fn "StrSplitWhitespaceIter^Iterator::collect"(self: &mut StrSplitWhitespaceI
 pub fn "StrSplitWhitespaceIter^Iterator::count"(self: &mut StrSplitWhitespaceIter) -> i32 {
     let mut n: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            n = (n + 1);
-        } else {
-            break;
-        }
+        let __iflet_2: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
+        match __iflet_2 {
+            Some(_) => {
+                n = (n + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return n;
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::for_each"(self: &mut StrSplitWhitespaceIter, f: fn mut(String) -> ()) {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            f("$value_copy$T25"(item));
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                f("$value_copy$T25"(item));
+            },
+            _ => {
+                break;
+            },
+        };
     }
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::find"(self: &mut StrSplitWhitespaceIter, pred: fn mut(String) -> bool) -> Option<String> {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T25"(item)) {
-                return Option<String>::Some(item);
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred("$value_copy$T25"(item)) {
+                    return Option<String>::Some(item);
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::any"(self: &mut StrSplitWhitespaceIter, pred: fn mut(String) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T25"(item)) {
-                return true;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred("$value_copy$T25"(item)) {
+                    return true;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return false;
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::all"(self: &mut StrSplitWhitespaceIter, pred: fn mut(String) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if !pred("$value_copy$T25"(item)) {
-                return false;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if !pred("$value_copy$T25"(item)) {
+                    return false;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return true;
 }
@@ -11309,13 +11314,15 @@ pub fn "StrSplitWhitespaceIter^Iterator::all"(self: &mut StrSplitWhitespaceIter,
 pub fn "StrSplitWhitespaceIter^Iterator::last"(self: &mut StrSplitWhitespaceIter) -> Option<String> {
     let mut result: Option<String> = null;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            result = Option<String>::Some(item);
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                result = Option<String>::Some(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -11323,16 +11330,18 @@ pub fn "StrSplitWhitespaceIter^Iterator::last"(self: &mut StrSplitWhitespaceIter
 pub fn "StrSplitWhitespaceIter^Iterator::nth"(self: &mut StrSplitWhitespaceIter, n: i32) -> Option<String> {
     let mut remaining: i32 = n;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if (remaining <= 0) {
-                return Option<String>::Some(item);
-            }
-            remaining = (remaining - 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if (remaining <= 0) {
+                    return Option<String>::Some(item);
+                }
+                remaining = (remaining - 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
@@ -11340,36 +11349,42 @@ pub fn "StrSplitWhitespaceIter^Iterator::nth"(self: &mut StrSplitWhitespaceIter,
 pub fn "StrSplitWhitespaceIter^Iterator::position"(self: &mut StrSplitWhitespaceIter, pred: fn mut(String) -> bool) -> Option<i32> {
     let mut idx: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T25"(item)) {
-                return Option<i32>::Some(idx);
-            }
-            idx = (idx + 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if pred("$value_copy$T25"(item)) {
+                    return Option<i32>::Some(idx);
+                }
+                idx = (idx + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::reduce"(self: &mut StrSplitWhitespaceIter, f: fn mut(String, String) -> String) -> Option<String> {
-    let __pattern_temp_0: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
-    if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let first: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-        let mut acc: String = "$value_copy$T25"(first);
-        loop {
-            let __pattern_temp_1: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
-            if __variant_test(__pattern_temp_1, case=0, name=Some) {
-                let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_1, case=0));
-                acc = f("$value_copy$T25"(acc), "$value_copy$T25"(item));
-            } else {
-                break;
+    let __iflet_5: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
+    match __iflet_5 {
+        Some(first) => {
+            let mut acc: String = "$value_copy$T25"(first);
+            loop {
+                let __iflet_6: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
+                match __iflet_6 {
+                    Some(item) => {
+                        acc = f("$value_copy$T25"(acc), "$value_copy$T25"(item));
+                    },
+                    _ => {
+                        break;
+                    },
+                };
             }
-        }
-        return Option<String>::Some(acc);
-    }
+            return Option<String>::Some(acc);
+        },
+        _ => (),
+    };
     return null;
 }
 
@@ -11439,13 +11454,15 @@ pub fn "StrLinesIter^Iterator::collect"(self: &mut StrLinesIter) -> Array<String
         break __seq_lit: __b."Array<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
     };
     loop {
-        let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            result."Array<core:prelude/string.wado/String>::push"(item);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<String> = self."StrLinesIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                result."Array<core:prelude/string.wado/String>::push"(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -11453,69 +11470,80 @@ pub fn "StrLinesIter^Iterator::collect"(self: &mut StrLinesIter) -> Array<String
 pub fn "StrLinesIter^Iterator::count"(self: &mut StrLinesIter) -> i32 {
     let mut n: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            n = (n + 1);
-        } else {
-            break;
-        }
+        let __iflet_2: Option<String> = self."StrLinesIter^Iterator::next"();
+        match __iflet_2 {
+            Some(_) => {
+                n = (n + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return n;
 }
 
 pub fn "StrLinesIter^Iterator::for_each"(self: &mut StrLinesIter, f: fn mut(String) -> ()) {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            f("$value_copy$T25"(item));
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrLinesIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                f("$value_copy$T25"(item));
+            },
+            _ => {
+                break;
+            },
+        };
     }
 }
 
 pub fn "StrLinesIter^Iterator::find"(self: &mut StrLinesIter, pred: fn mut(String) -> bool) -> Option<String> {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T25"(item)) {
-                return Option<String>::Some(item);
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrLinesIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred("$value_copy$T25"(item)) {
+                    return Option<String>::Some(item);
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrLinesIter^Iterator::any"(self: &mut StrLinesIter, pred: fn mut(String) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T25"(item)) {
-                return true;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrLinesIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred("$value_copy$T25"(item)) {
+                    return true;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return false;
 }
 
 pub fn "StrLinesIter^Iterator::all"(self: &mut StrLinesIter, pred: fn mut(String) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if !pred("$value_copy$T25"(item)) {
-                return false;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrLinesIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if !pred("$value_copy$T25"(item)) {
+                    return false;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return true;
 }
@@ -11523,13 +11551,15 @@ pub fn "StrLinesIter^Iterator::all"(self: &mut StrLinesIter, pred: fn mut(String
 pub fn "StrLinesIter^Iterator::last"(self: &mut StrLinesIter) -> Option<String> {
     let mut result: Option<String> = null;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            result = Option<String>::Some(item);
-        } else {
-            break;
-        }
+        let __iflet_3: Option<String> = self."StrLinesIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                result = Option<String>::Some(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -11537,16 +11567,18 @@ pub fn "StrLinesIter^Iterator::last"(self: &mut StrLinesIter) -> Option<String> 
 pub fn "StrLinesIter^Iterator::nth"(self: &mut StrLinesIter, n: i32) -> Option<String> {
     let mut remaining: i32 = n;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if (remaining <= 0) {
-                return Option<String>::Some(item);
-            }
-            remaining = (remaining - 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<String> = self."StrLinesIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if (remaining <= 0) {
+                    return Option<String>::Some(item);
+                }
+                remaining = (remaining - 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
@@ -11554,36 +11586,42 @@ pub fn "StrLinesIter^Iterator::nth"(self: &mut StrLinesIter, n: i32) -> Option<S
 pub fn "StrLinesIter^Iterator::position"(self: &mut StrLinesIter, pred: fn mut(String) -> bool) -> Option<i32> {
     let mut idx: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T25"(item)) {
-                return Option<i32>::Some(idx);
-            }
-            idx = (idx + 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<String> = self."StrLinesIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if pred("$value_copy$T25"(item)) {
+                    return Option<i32>::Some(idx);
+                }
+                idx = (idx + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrLinesIter^Iterator::reduce"(self: &mut StrLinesIter, f: fn mut(String, String) -> String) -> Option<String> {
-    let __pattern_temp_0: Option<String> = self."StrLinesIter^Iterator::next"();
-    if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let first: String = "$value_copy$T25"(__variant_payload(__pattern_temp_0, case=0));
-        let mut acc: String = "$value_copy$T25"(first);
-        loop {
-            let __pattern_temp_1: Option<String> = self."StrLinesIter^Iterator::next"();
-            if __variant_test(__pattern_temp_1, case=0, name=Some) {
-                let item: String = "$value_copy$T25"(__variant_payload(__pattern_temp_1, case=0));
-                acc = f("$value_copy$T25"(acc), "$value_copy$T25"(item));
-            } else {
-                break;
+    let __iflet_5: Option<String> = self."StrLinesIter^Iterator::next"();
+    match __iflet_5 {
+        Some(first) => {
+            let mut acc: String = "$value_copy$T25"(first);
+            loop {
+                let __iflet_6: Option<String> = self."StrLinesIter^Iterator::next"();
+                match __iflet_6 {
+                    Some(item) => {
+                        acc = f("$value_copy$T25"(acc), "$value_copy$T25"(item));
+                    },
+                    _ => {
+                        break;
+                    },
+                };
             }
-        }
-        return Option<String>::Some(acc);
-    }
+            return Option<String>::Some(acc);
+        },
+        _ => (),
+    };
     return null;
 }
 
@@ -11640,13 +11678,15 @@ pub fn "StrCharIndicesIter^Iterator::collect"(self: &mut StrCharIndicesIter) -> 
         break __seq_lit: __b."Array<core:prelude/types.wado/Tuple<i32,char>>^SequenceLiteralBuilder::build"();
     };
     loop {
-        let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = "$value_copy$T282"(__variant_payload(__pattern_temp_0, case=0));
-            result."Array<core:prelude/types.wado/Tuple<i32,char>>::push"(item);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                result."Array<core:prelude/types.wado/Tuple<i32,char>>::push"(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -11654,69 +11694,80 @@ pub fn "StrCharIndicesIter^Iterator::collect"(self: &mut StrCharIndicesIter) -> 
 pub fn "StrCharIndicesIter^Iterator::count"(self: &mut StrCharIndicesIter) -> i32 {
     let mut n: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            n = (n + 1);
-        } else {
-            break;
-        }
+        let __iflet_2: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __iflet_2 {
+            Some(_) => {
+                n = (n + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return n;
 }
 
 pub fn "StrCharIndicesIter^Iterator::for_each"(self: &mut StrCharIndicesIter, f: fn mut([i32, char]) -> ()) {
     loop {
-        let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = "$value_copy$T282"(__variant_payload(__pattern_temp_0, case=0));
-            f("$value_copy$T282"(item));
-        } else {
-            break;
-        }
+        let __iflet_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                f("$value_copy$T282"(item));
+            },
+            _ => {
+                break;
+            },
+        };
     }
 }
 
 pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> Option<[i32, char]> {
     loop {
-        let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = "$value_copy$T282"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T282"(item)) {
-                return Option<[i32, char]>::Some(item);
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred("$value_copy$T282"(item)) {
+                    return Option<[i32, char]>::Some(item);
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = "$value_copy$T282"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T282"(item)) {
-                return true;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if pred("$value_copy$T282"(item)) {
+                    return true;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return false;
 }
 
 pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> bool {
     loop {
-        let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = "$value_copy$T282"(__variant_payload(__pattern_temp_0, case=0));
-            if !pred("$value_copy$T282"(item)) {
-                return false;
-            }
-        } else {
-            break;
-        }
+        let __iflet_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                if !pred("$value_copy$T282"(item)) {
+                    return false;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return true;
 }
@@ -11724,13 +11775,15 @@ pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: f
 pub fn "StrCharIndicesIter^Iterator::last"(self: &mut StrCharIndicesIter) -> Option<[i32, char]> {
     let mut result: Option<[i32, char]> = null;
     loop {
-        let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = "$value_copy$T282"(__variant_payload(__pattern_temp_0, case=0));
-            result = Option<[i32, char]>::Some(item);
-        } else {
-            break;
-        }
+        let __iflet_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __iflet_3 {
+            Some(item) => {
+                result = Option<[i32, char]>::Some(item);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return result;
 }
@@ -11738,16 +11791,18 @@ pub fn "StrCharIndicesIter^Iterator::last"(self: &mut StrCharIndicesIter) -> Opt
 pub fn "StrCharIndicesIter^Iterator::nth"(self: &mut StrCharIndicesIter, n: i32) -> Option<[i32, char]> {
     let mut remaining: i32 = n;
     loop {
-        let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = "$value_copy$T282"(__variant_payload(__pattern_temp_0, case=0));
-            if (remaining <= 0) {
-                return Option<[i32, char]>::Some(item);
-            }
-            remaining = (remaining - 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if (remaining <= 0) {
+                    return Option<[i32, char]>::Some(item);
+                }
+                remaining = (remaining - 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
@@ -11755,36 +11810,42 @@ pub fn "StrCharIndicesIter^Iterator::nth"(self: &mut StrCharIndicesIter, n: i32)
 pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> Option<i32> {
     let mut idx: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let item: [i32, char] = "$value_copy$T282"(__variant_payload(__pattern_temp_0, case=0));
-            if pred("$value_copy$T282"(item)) {
-                return Option<i32>::Some(idx);
-            }
-            idx = (idx + 1);
-        } else {
-            break;
-        }
+        let __iflet_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __iflet_4 {
+            Some(item) => {
+                if pred("$value_copy$T282"(item)) {
+                    return Option<i32>::Some(idx);
+                }
+                idx = (idx + 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
 
 pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: fn mut([i32, char], [i32, char]) -> [i32, char]) -> Option<[i32, char]> {
-    let __pattern_temp_0: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-    if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let first: [i32, char] = "$value_copy$T282"(__variant_payload(__pattern_temp_0, case=0));
-        let mut acc: [i32, char] = "$value_copy$T282"(first);
-        loop {
-            let __pattern_temp_1: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-            if __variant_test(__pattern_temp_1, case=0, name=Some) {
-                let item: [i32, char] = "$value_copy$T282"(__variant_payload(__pattern_temp_1, case=0));
-                acc = f("$value_copy$T282"(acc), "$value_copy$T282"(item));
-            } else {
-                break;
+    let __iflet_5: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+    match __iflet_5 {
+        Some(first) => {
+            let mut acc: [i32, char] = "$value_copy$T282"(first);
+            loop {
+                let __iflet_6: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+                match __iflet_6 {
+                    Some(item) => {
+                        acc = f("$value_copy$T282"(acc), "$value_copy$T282"(item));
+                    },
+                    _ => {
+                        break;
+                    },
+                };
             }
-        }
-        return Option<[i32, char]>::Some(acc);
-    }
+            return Option<[i32, char]>::Some(acc);
+        },
+        _ => (),
+    };
     return null;
 }
 
@@ -14692,38 +14753,40 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
     __for_of_2: {
         let mut __iter_2: StrCharIter = *self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __pattern_temp_0: Option<char> = __iter_2."StrCharIter^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let c: char = __variant_payload(__pattern_temp_0, case=0);
-                if (c == '"') {
-                    f.Formatter::write_char('\\');
-                    f.Formatter::write_char('"');
-                } else {
-                    if (c == '\\') {
+            let __iflet_4: Option<char> = __iter_2."StrCharIter^Iterator::next"();
+            match __iflet_4 {
+                Some(c) => {
+                    if (c == '"') {
                         f.Formatter::write_char('\\');
-                        f.Formatter::write_char('\\');
+                        f.Formatter::write_char('"');
                     } else {
-                        if (c == '\n') {
+                        if (c == '\\') {
                             f.Formatter::write_char('\\');
-                            f.Formatter::write_char('n');
+                            f.Formatter::write_char('\\');
                         } else {
-                            if (c == '\r') {
+                            if (c == '\n') {
                                 f.Formatter::write_char('\\');
-                                f.Formatter::write_char('r');
+                                f.Formatter::write_char('n');
                             } else {
-                                if (c == '\t') {
+                                if (c == '\r') {
                                     f.Formatter::write_char('\\');
-                                    f.Formatter::write_char('t');
+                                    f.Formatter::write_char('r');
                                 } else {
-                                    f.Formatter::write_char(c);
+                                    if (c == '\t') {
+                                        f.Formatter::write_char('\\');
+                                        f.Formatter::write_char('t');
+                                    } else {
+                                        f.Formatter::write_char(c);
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            } else {
-                break;
-            }
+                },
+                _ => {
+                    break;
+                },
+            };
         }
     }
     f.Formatter::write_char('"');
@@ -15078,13 +15141,15 @@ pub fn "String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.w
     __for_of_2: {
         let mut __iter_2: IterMap<core:prelude/string.wado/StrCharIter,char> = iter."IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"();
         loop {
-            let __pattern_temp_0: Option<char> = __iter_2."IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next"();
-            if __variant_test(__pattern_temp_0, case=0, name=Some) {
-                let c: char = __variant_payload(__pattern_temp_0, case=0);
-                s.String::push(c);
-            } else {
-                break;
-            }
+            let __iflet_4: Option<char> = __iter_2."IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next"();
+            match __iflet_4 {
+                Some(c) => {
+                    s.String::push(c);
+                },
+                _ => {
+                    break;
+                },
+            };
         }
     }
     return s;
@@ -15145,11 +15210,13 @@ fn "Array<u8>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<u8> {
 }
 
 pub fn "Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"(self: Box<Result<i32,core:prelude/intparse.wado/IntErrorKind>>) -> i32 {
-    let __pattern_temp_0: Result<i32, IntErrorKind> = self.value;
-    if __variant_test(__pattern_temp_0, case=0, name=Ok) {
-        let v: i32 = __variant_payload(__pattern_temp_0, case=0);
-        return v;
-    }
+    let __iflet_2: Result<i32, IntErrorKind> = self.value;
+    match __iflet_2 {
+        Ok(v) => {
+            return v;
+        },
+        _ => (),
+    };
     core::internal::panic("called Result::unwrap() on an Err value");
 }
 
@@ -15233,11 +15300,13 @@ pub fn "Array<char>::grow"(self: &mut Array<char>) {
 }
 
 fn "IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next"(self: &mut IterMap<core:prelude/string.wado/StrCharIter,char>) -> Option<char> {
-    let __pattern_temp_0: Option<char> = self.inner."StrCharIter^Iterator::next"();
-    if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let item: char = __variant_payload(__pattern_temp_0, case=0);
-        return Option<char>::Some(self.f(item));
-    }
+    let __iflet_2: Option<char> = self.inner."StrCharIter^Iterator::next"();
+    match __iflet_2 {
+        Some(item) => {
+            return Option<char>::Some(self.f(item));
+        },
+        _ => (),
+    };
     return null;
 }
 

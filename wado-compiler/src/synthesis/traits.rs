@@ -21,8 +21,8 @@ use crate::package::Package;
 use crate::resolver::trait_env::TraitEnv;
 use crate::tir::{
     CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
-    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam,
-    TirStmt, TirStmtKind, TirTypeParam, TypeId, TypeTable,
+    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -1430,11 +1430,15 @@ fn build_struct_inspect_body(
 
 /// Generate `VariantName^Inspect::inspect(&self, &mut Formatter)`.
 ///
-/// Body: `VariantTest` dispatch with type-qualified case names.
+/// Body: TIR `Match` over `*self` with one arm per case. Each arm writes
+/// the type-qualified case name and, for payload-bearing cases, inspects
+/// the bound payload:
 /// ```text
-/// if variant_test(self, 0) { f.write_str("Shape::Circle("); payload.inspect(f); f.write_str(")"); }
-/// else if variant_test(self, 1) { f.write_str("Shape::Point"); }
-/// ...
+/// match *self {
+///     Shape::Circle(payload) => { f.write_str("Shape::Circle("); payload.inspect(f); f.write_str(")"); }
+///     Shape::Point          => { f.write_str("Shape::Point"); }
+///     …
+/// }
 /// ```
 ///
 /// Pass an empty `impl_type_params` slice for non-generic variants.
@@ -1458,9 +1462,30 @@ fn generate_variant_inspect_fn(
     let method_info = trait_method_info(variant_name, inspect_trait, inspect_method);
     let qualified_name = method_info.to_mangled_name();
 
+    // Payload-binding locals (one per non-unit case) live after the two
+    // parameter slots (`self`, `f`). Each case carries its binding slot
+    // through to `build_variant_inspect_body` so the arm body can read
+    // the payload off `Local(binding_idx)`.
+    let mut locals = inspect_locals(ref_variant_type, fmt_type);
+    let mut payload_bindings: Vec<Option<u32>> = Vec::with_capacity(cases.len());
+    for (case_name, _, payload_type) in cases {
+        if *payload_type == TypeTable::UNIT {
+            payload_bindings.push(None);
+        } else {
+            let idx = locals.len() as u32;
+            locals.push(param_local(
+                &format!("__inspect_{case_name}_{idx}"),
+                *payload_type,
+                false,
+            ));
+            payload_bindings.push(Some(idx));
+        }
+    }
+
     let stmts = build_variant_inspect_body(
         variant_name,
         cases,
+        &payload_bindings,
         variant_type,
         ref_variant_type,
         fmt_type,
@@ -1483,16 +1508,23 @@ fn generate_variant_inspect_fn(
         inspect_params(ref_variant_type, fmt_type, span),
         TypeTable::UNIT,
         body,
-        inspect_locals(ref_variant_type, fmt_type),
+        locals,
         span,
     )
 }
 
-/// Build the body for variant `Inspect::inspect`: an if-else chain of `VariantTest` checks
-/// that writes either `VariantName::Case` (unit cases) or `VariantName::Case(<payload>)`.
+/// Build the body for variant `Inspect::inspect`: a single TIR `Match`
+/// over `*self` with one arm per case. Each arm writes either
+/// `VariantName::Case` (unit case) or `VariantName::Case(<payload>)`.
+///
+/// `payload_bindings[i]` is `Some(local_index)` for cases whose payload
+/// the arm body needs to read from a binding slot, and `None` for unit
+/// cases. `generate_variant_inspect_fn` allocates the slots so the
+/// emitted `TirPattern::Variant { bindings }` can reference them.
 fn build_variant_inspect_body(
     variant_name: &str,
     cases: &[(String, u32, TypeId)],
+    payload_bindings: &[Option<u32>],
     variant_type: TypeId,
     ref_variant_type: TypeId,
     fmt_type: TypeId,
@@ -1506,64 +1538,73 @@ fn build_variant_inspect_body(
     inspect_method: &str,
     formatter_name: &str,
 ) -> Vec<TirStmt> {
-    let deref_self = || deref_local(0, "self", ref_variant_type, variant_type, span);
+    if cases.is_empty() {
+        return Vec::new();
+    }
+
+    let deref_self = deref_local(0, "self", ref_variant_type, variant_type, span);
     let fmt = || local_expr(1, "f", fmt_type, span);
     let write =
         |s: String| write_str_stmt(s, fmt(), string_type, ref_string_type, span, formatter_name);
 
-    let mut chain: Option<TirExpr> = None;
-    for (case_name, case_index, payload_type) in cases.iter().rev() {
-        let mut then_stmts = Vec::new();
-        if *payload_type == TypeTable::UNIT {
-            then_stmts.push(write(format!("{variant_name}::{case_name}")));
-        } else {
-            then_stmts.push(write(format!("{variant_name}::{case_name}(")));
-            let payload = TirExpr::new(
-                TirExprKind::VariantPayload {
-                    expr: Box::new(deref_self()),
-                    case_index: *case_index,
+    let arms: Vec<TirMatchArm> = cases
+        .iter()
+        .zip(payload_bindings.iter())
+        .map(|((case_name, _, payload_type), binding_idx)| {
+            let mut body_stmts = Vec::new();
+            let bindings: Vec<TirPattern> = if *payload_type == TypeTable::UNIT {
+                body_stmts.push(write(format!("{variant_name}::{case_name}")));
+                Vec::new()
+            } else {
+                body_stmts.push(write(format!("{variant_name}::{case_name}(")));
+                let binding_idx = binding_idx.expect("non-unit case must have a payload binding");
+                let binding_name = format!("__inspect_{case_name}_{binding_idx}");
+                let payload_local = local_expr(binding_idx, &binding_name, *payload_type, span);
+                body_stmts.push(inspect_call(
+                    payload_local,
+                    *payload_type,
+                    fmt(),
+                    trait_env,
+                    module_source,
+                    tt,
+                    span,
+                    inspect_trait,
+                    inspect_method,
+                ));
+                body_stmts.push(write(")".to_string()));
+                vec![TirPattern::Binding {
+                    name: binding_name,
+                    local_index: binding_idx,
+                    type_id: *payload_type,
+                }]
+            };
+            TirMatchArm {
+                pattern: TirPattern::Variant {
+                    enum_type: variant_type,
+                    variant_name: case_name.clone(),
+                    bindings,
                     payload_type: *payload_type,
                 },
-                *payload_type,
+                guard: None,
+                body: TirExpr::new(
+                    TirExprKind::Block(TirBlock::new(body_stmts, span)),
+                    TypeTable::UNIT,
+                    span,
+                ),
                 span,
-            );
-            then_stmts.push(inspect_call(
-                payload,
-                *payload_type,
-                fmt(),
-                trait_env,
-                module_source,
-                tt,
-                span,
-                inspect_trait,
-                inspect_method,
-            ));
-            then_stmts.push(write(")".to_string()));
-        }
+            }
+        })
+        .collect();
 
-        let cond = TirExpr::new(
-            TirExprKind::VariantTest {
-                expr: Box::new(deref_self()),
-                case_index: *case_index,
-                case_name: case_name.clone(),
-            },
-            TypeTable::BOOL,
-            span,
-        );
-        let if_expr = TirExpr::new(
-            TirExprKind::If {
-                condition: Box::new(cond),
-                then_branch: TirBlock::new(then_stmts, span),
-                else_branch: chain
-                    .map(|e| TirBlock::new(vec![TirStmt::new(TirStmtKind::Expr(e), span)], span)),
-            },
-            TypeTable::UNIT,
-            span,
-        );
-        chain = Some(if_expr);
-    }
-
-    chain.map_or_else(Vec::new, |e| vec![TirStmt::new(TirStmtKind::Expr(e), span)])
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(deref_self),
+            arms,
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    vec![TirStmt::new(TirStmtKind::Expr(match_expr), span)]
 }
 
 /// Generate `NewtypeName^Inspect::inspect(&self, &mut Formatter)` for a newtype.
@@ -2464,9 +2505,30 @@ fn generate_variant_inspect_alt_fn(
     let method_info = trait_method_info(variant_name, inspect_alt_trait, inspect_alt_method);
     let qualified_name = method_info.to_mangled_name();
 
+    // Same payload-binding allocation strategy as
+    // `generate_variant_inspect_fn`: each non-unit case reserves a
+    // local slot after the two parameter locals so the synthesised
+    // `TirPattern::Variant { bindings }` arm can refer to it.
+    let mut locals = inspect_locals(ref_variant_type, fmt_type);
+    let mut payload_bindings: Vec<Option<u32>> = Vec::with_capacity(cases.len());
+    for (case_name, _, payload_type) in cases {
+        if *payload_type == TypeTable::UNIT {
+            payload_bindings.push(None);
+        } else {
+            let idx = locals.len() as u32;
+            locals.push(param_local(
+                &format!("__inspect_alt_{case_name}_{idx}"),
+                *payload_type,
+                false,
+            ));
+            payload_bindings.push(Some(idx));
+        }
+    }
+
     let stmts = build_variant_inspect_alt_body(
         variant_name,
         cases,
+        &payload_bindings,
         variant_type,
         ref_variant_type,
         fmt_type,
@@ -2489,15 +2551,17 @@ fn generate_variant_inspect_alt_fn(
         inspect_params(ref_variant_type, fmt_type, span),
         TypeTable::UNIT,
         body,
-        inspect_locals(ref_variant_type, fmt_type),
+        locals,
         span,
     )
 }
 
-/// Build the body for variant `InspectAlt` (shared between generic and non-generic).
+/// Build the body for variant `InspectAlt` (shared between generic and
+/// non-generic) as a single TIR `Match` over `*self`.
 fn build_variant_inspect_alt_body(
     variant_name: &str,
     cases: &[(String, u32, TypeId)],
+    payload_bindings: &[Option<u32>],
     variant_type: TypeId,
     ref_variant_type: TypeId,
     fmt_type: TypeId,
@@ -2511,107 +2575,110 @@ fn build_variant_inspect_alt_body(
     inspect_alt_trait: &str,
     inspect_alt_method: &str,
 ) -> Vec<TirStmt> {
-    let deref_self = || {
-        deref_expr(
-            local_expr(0, "self", ref_variant_type, span),
-            variant_type,
-            span,
-        )
-    };
-    let fmt_local = || local_expr(1, "f", fmt_type, span);
-
-    let mut chain: Option<TirExpr> = None;
-    for (case_name, case_index, payload_type) in cases.iter().rev() {
-        let is_unit = *payload_type == TypeTable::UNIT;
-        let mut then_stmts = Vec::new();
-
-        if is_unit {
-            then_stmts.push(write_str_stmt(
-                format!("{variant_name}::{case_name}"),
-                fmt_local(),
-                string_type,
-                ref_string_type,
-                span,
-                formatter_name,
-            ));
-        } else {
-            // f.open_brace("VariantName::CaseName(")
-            then_stmts.push(formatter_call(
-                "open_brace",
-                fmt_local(),
-                Some((format!("{variant_name}::{case_name}("), string_type)),
-                span,
-                formatter_name,
-            ));
-            // f.write_newline_indent()
-            then_stmts.push(formatter_call(
-                "write_newline_indent",
-                fmt_local(),
-                None::<(&str, TypeId)>,
-                span,
-                formatter_name,
-            ));
-            let payload = TirExpr::new(
-                TirExprKind::VariantPayload {
-                    expr: Box::new(deref_self()),
-                    case_index: *case_index,
-                    payload_type: *payload_type,
-                },
-                *payload_type,
-                span,
-            );
-            then_stmts.push(inspect_alt_call(
-                payload,
-                *payload_type,
-                fmt_local(),
-                trait_env,
-                module_source,
-                tt,
-                span,
-                inspect_alt_trait,
-                inspect_alt_method,
-            ));
-            then_stmts.push(write_str_stmt(
-                ",",
-                fmt_local(),
-                string_type,
-                ref_string_type,
-                span,
-                formatter_name,
-            ));
-            // f.close_brace(")")
-            then_stmts.push(formatter_call(
-                "close_brace",
-                fmt_local(),
-                Some((")", string_type)),
-                span,
-                formatter_name,
-            ));
-        }
-
-        let cond = TirExpr::new(
-            TirExprKind::VariantTest {
-                expr: Box::new(deref_self()),
-                case_index: *case_index,
-                case_name: case_name.clone(),
-            },
-            TypeTable::BOOL,
-            span,
-        );
-        let if_expr = TirExpr::new(
-            TirExprKind::If {
-                condition: Box::new(cond),
-                then_branch: TirBlock::new(then_stmts, span),
-                else_branch: chain
-                    .map(|e| TirBlock::new(vec![TirStmt::new(TirStmtKind::Expr(e), span)], span)),
-            },
-            TypeTable::UNIT,
-            span,
-        );
-        chain = Some(if_expr);
+    if cases.is_empty() {
+        return Vec::new();
     }
 
-    chain.map_or_else(Vec::new, |e| vec![TirStmt::new(TirStmtKind::Expr(e), span)])
+    let deref_self = deref_expr(
+        local_expr(0, "self", ref_variant_type, span),
+        variant_type,
+        span,
+    );
+    let fmt_local = || local_expr(1, "f", fmt_type, span);
+
+    let arms: Vec<TirMatchArm> = cases
+        .iter()
+        .zip(payload_bindings.iter())
+        .map(|((case_name, _, payload_type), binding_idx)| {
+            let is_unit = *payload_type == TypeTable::UNIT;
+            let mut body_stmts = Vec::new();
+            let bindings: Vec<TirPattern> = if is_unit {
+                body_stmts.push(write_str_stmt(
+                    format!("{variant_name}::{case_name}"),
+                    fmt_local(),
+                    string_type,
+                    ref_string_type,
+                    span,
+                    formatter_name,
+                ));
+                Vec::new()
+            } else {
+                body_stmts.push(formatter_call(
+                    "open_brace",
+                    fmt_local(),
+                    Some((format!("{variant_name}::{case_name}("), string_type)),
+                    span,
+                    formatter_name,
+                ));
+                body_stmts.push(formatter_call(
+                    "write_newline_indent",
+                    fmt_local(),
+                    None::<(&str, TypeId)>,
+                    span,
+                    formatter_name,
+                ));
+                let binding_idx = binding_idx.expect("non-unit case must have a payload binding");
+                let binding_name = format!("__inspect_alt_{case_name}_{binding_idx}");
+                let payload_local = local_expr(binding_idx, &binding_name, *payload_type, span);
+                body_stmts.push(inspect_alt_call(
+                    payload_local,
+                    *payload_type,
+                    fmt_local(),
+                    trait_env,
+                    module_source,
+                    tt,
+                    span,
+                    inspect_alt_trait,
+                    inspect_alt_method,
+                ));
+                body_stmts.push(write_str_stmt(
+                    ",",
+                    fmt_local(),
+                    string_type,
+                    ref_string_type,
+                    span,
+                    formatter_name,
+                ));
+                body_stmts.push(formatter_call(
+                    "close_brace",
+                    fmt_local(),
+                    Some((")", string_type)),
+                    span,
+                    formatter_name,
+                ));
+                vec![TirPattern::Binding {
+                    name: binding_name,
+                    local_index: binding_idx,
+                    type_id: *payload_type,
+                }]
+            };
+            TirMatchArm {
+                pattern: TirPattern::Variant {
+                    enum_type: variant_type,
+                    variant_name: case_name.clone(),
+                    bindings,
+                    payload_type: *payload_type,
+                },
+                guard: None,
+                body: TirExpr::new(
+                    TirExprKind::Block(TirBlock::new(body_stmts, span)),
+                    TypeTable::UNIT,
+                    span,
+                ),
+                span,
+            }
+        })
+        .collect();
+
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(deref_self),
+            arms,
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    vec![TirStmt::new(TirStmtKind::Expr(match_expr), span)]
 }
 
 /// Build a `value.inspect_alt(f)` method call statement.
@@ -3981,13 +4048,37 @@ fn generate_variant_eq_fn(
     let method_info = trait_method_info(variant_name, &eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
-    let deref_self = || deref_local(0, "self", ref_variant_type, variant_type, span);
-    let deref_other = || deref_local(1, "other", ref_variant_type, variant_type, span);
+    // Allocate two payload-binding locals (self-side, other-side) for
+    // every non-unit case. They follow the two parameter locals (self,
+    // other) and feed the nested `TirPattern::Variant { bindings }`
+    // arms produced by `variant_eq_body`.
+    let mut locals = binary_method_locals(ref_variant_type);
+    let mut payload_bindings: Vec<Option<(u32, u32)>> = Vec::with_capacity(cases.len());
+    for (case_name, _, payload_type) in cases {
+        if *payload_type == TypeTable::UNIT {
+            payload_bindings.push(None);
+        } else {
+            let self_idx = locals.len() as u32;
+            locals.push(param_local(
+                &format!("__eq_self_{case_name}_{self_idx}"),
+                *payload_type,
+                false,
+            ));
+            let other_idx = locals.len() as u32;
+            locals.push(param_local(
+                &format!("__eq_other_{case_name}_{other_idx}"),
+                *payload_type,
+                false,
+            ));
+            payload_bindings.push(Some((self_idx, other_idx)));
+        }
+    }
 
     let body_stmts = variant_eq_body(
         cases,
-        &deref_self,
-        &deref_other,
+        &payload_bindings,
+        variant_type,
+        ref_variant_type,
         trait_env,
         module_source,
         tt,
@@ -4002,104 +4093,106 @@ fn generate_variant_eq_fn(
         binary_method_params(ref_variant_type, span),
         TypeTable::BOOL,
         body,
-        binary_method_locals(ref_variant_type),
+        locals,
         span,
     )
 }
 
-/// Build the body statements for variant Eq: a chain of if-else testing each case.
-///
-/// For each case:
-/// - If both `self` and `other` are that case, compare payloads (or return true for unit cases)
-/// - Otherwise fall through to the next case
-/// - Final fallback: return false (different cases)
+/// Build the body statements for variant Eq: a nested TIR `Match` —
+/// the outer Match dispatches on `*self`, and each arm runs an inner
+/// Match on `*other` to either compare payloads (matching case) or
+/// return `false` (mismatched case). Variant Match is exhaustive at
+/// TIR level, so no final fallback is needed.
 fn variant_eq_body(
     cases: &[(String, u32, TypeId)],
-    deref_self: &dyn Fn() -> TirExpr,
-    deref_other: &dyn Fn() -> TirExpr,
+    payload_bindings: &[Option<(u32, u32)>],
+    variant_type: TypeId,
+    ref_variant_type: TypeId,
     trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
     span: Span,
 ) -> Vec<TirStmt> {
-    let mut stmts = Vec::new();
-
-    for (case_name, case_index, payload_type) in cases {
-        let is_unit = *payload_type == TypeTable::UNIT;
-
-        // Condition: self is this case
-        let self_test = TirExpr::new(
-            TirExprKind::VariantTest {
-                expr: Box::new(deref_self()),
-                case_index: *case_index,
-                case_name: case_name.clone(),
+    if cases.is_empty() {
+        return vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(TirExpr::new(
+                    TirExprKind::BoolLiteral(true),
+                    TypeTable::BOOL,
+                    span,
+                )),
             },
-            TypeTable::BOOL,
             span,
-        );
+        )];
+    }
 
-        let then_stmts = if is_unit {
-            // Unit case: return whether other is the same case
-            let other_test = TirExpr::new(
-                TirExprKind::VariantTest {
-                    expr: Box::new(deref_other()),
-                    case_index: *case_index,
-                    case_name: case_name.clone(),
-                },
-                TypeTable::BOOL,
-                span,
-            );
-            vec![TirStmt::new(
-                TirStmtKind::Return {
-                    value: Some(other_test),
-                },
-                span,
-            )]
-        } else {
-            // Payload case: if other is the same case, compare payloads; else return false
-            let other_test = TirExpr::new(
-                TirExprKind::VariantTest {
-                    expr: Box::new(deref_other()),
-                    case_index: *case_index,
-                    case_name: case_name.clone(),
-                },
-                TypeTable::BOOL,
-                span,
-            );
+    let deref_self = deref_local(0, "self", ref_variant_type, variant_type, span);
+    let deref_other = || deref_local(1, "other", ref_variant_type, variant_type, span);
 
-            let self_payload = TirExpr::new(
-                TirExprKind::VariantPayload {
-                    expr: Box::new(deref_self()),
-                    case_index: *case_index,
-                    payload_type: *payload_type,
-                },
-                *payload_type,
+    let return_bool = |b: bool| -> TirExpr {
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(
+                vec![TirStmt::new(
+                    TirStmtKind::Return {
+                        value: Some(TirExpr::new(
+                            TirExprKind::BoolLiteral(b),
+                            TypeTable::BOOL,
+                            span,
+                        )),
+                    },
+                    span,
+                )],
                 span,
-            );
-            let other_payload = TirExpr::new(
-                TirExprKind::VariantPayload {
-                    expr: Box::new(deref_other()),
-                    case_index: *case_index,
-                    payload_type: *payload_type,
-                },
-                *payload_type,
-                span,
-            );
+            )),
+            TypeTable::UNIT,
+            span,
+        )
+    };
 
-            let eq_result = eq_call_expr(
-                self_payload,
-                other_payload,
-                *payload_type,
-                trait_env,
-                module_source,
-                tt,
-                span,
-            );
-
-            let inner_if = TirExpr::new(
-                TirExprKind::If {
-                    condition: Box::new(other_test),
-                    then_branch: TirBlock::new(
+    let outer_arms: Vec<TirMatchArm> = cases
+        .iter()
+        .zip(payload_bindings.iter())
+        .map(|((case_name, _, payload_type), binding)| {
+            let is_unit = *payload_type == TypeTable::UNIT;
+            let (self_bindings, inner_arms): (Vec<TirPattern>, Vec<TirMatchArm>) = if is_unit {
+                let inner_arms = vec![
+                    TirMatchArm {
+                        pattern: TirPattern::Variant {
+                            enum_type: variant_type,
+                            variant_name: case_name.clone(),
+                            bindings: Vec::new(),
+                            payload_type: *payload_type,
+                        },
+                        guard: None,
+                        body: return_bool(true),
+                        span,
+                    },
+                    TirMatchArm {
+                        pattern: TirPattern::Wildcard,
+                        guard: None,
+                        body: return_bool(false),
+                        span,
+                    },
+                ];
+                (Vec::new(), inner_arms)
+            } else {
+                let (self_idx, other_idx) =
+                    binding.expect("non-unit case must have payload bindings");
+                let self_name = format!("__eq_self_{case_name}_{self_idx}");
+                let other_name = format!("__eq_other_{case_name}_{other_idx}");
+                let self_payload = local_expr(self_idx, &self_name, *payload_type, span);
+                let other_payload = local_expr(other_idx, &other_name, *payload_type, span);
+                let eq_result = eq_call_expr(
+                    self_payload,
+                    other_payload,
+                    *payload_type,
+                    trait_env,
+                    module_source,
+                    tt,
+                    span,
+                );
+                let matched_body = TirExpr::new(
+                    TirExprKind::Block(TirBlock::new(
                         vec![TirStmt::new(
                             TirStmtKind::Return {
                                 value: Some(eq_result),
@@ -4107,51 +4200,69 @@ fn variant_eq_body(
                             span,
                         )],
                         span,
-                    ),
-                    else_branch: Some(TirBlock::new(
-                        vec![TirStmt::new(
-                            TirStmtKind::Return {
-                                value: Some(TirExpr::new(
-                                    TirExprKind::BoolLiteral(false),
-                                    TypeTable::BOOL,
-                                    span,
-                                )),
-                            },
-                            span,
-                        )],
-                        span,
                     )),
+                    TypeTable::UNIT,
+                    span,
+                );
+                let inner_arms = vec![
+                    TirMatchArm {
+                        pattern: TirPattern::Variant {
+                            enum_type: variant_type,
+                            variant_name: case_name.clone(),
+                            bindings: vec![TirPattern::Binding {
+                                name: other_name,
+                                local_index: other_idx,
+                                type_id: *payload_type,
+                            }],
+                            payload_type: *payload_type,
+                        },
+                        guard: None,
+                        body: matched_body,
+                        span,
+                    },
+                    TirMatchArm {
+                        pattern: TirPattern::Wildcard,
+                        guard: None,
+                        body: return_bool(false),
+                        span,
+                    },
+                ];
+                let self_bindings = vec![TirPattern::Binding {
+                    name: self_name,
+                    local_index: self_idx,
+                    type_id: *payload_type,
+                }];
+                (self_bindings, inner_arms)
+            };
+            let inner_match = TirExpr::new(
+                TirExprKind::Match {
+                    expr: Box::new(deref_other()),
+                    arms: inner_arms,
                 },
                 TypeTable::UNIT,
                 span,
             );
-
-            vec![TirStmt::new(TirStmtKind::Expr(inner_if), span)]
-        };
-
-        let if_expr = TirExpr::new(
-            TirExprKind::If {
-                condition: Box::new(self_test),
-                then_branch: TirBlock::new(then_stmts, span),
-                else_branch: None,
-            },
-            TypeTable::UNIT,
-            span,
-        );
-        stmts.push(TirStmt::new(TirStmtKind::Expr(if_expr), span));
-    }
-
-    // Final fallback: return false (unreachable if all cases are covered)
-    stmts.push(TirStmt::new(
-        TirStmtKind::Return {
-            value: Some(TirExpr::new(
-                TirExprKind::BoolLiteral(false),
-                TypeTable::BOOL,
+            TirMatchArm {
+                pattern: TirPattern::Variant {
+                    enum_type: variant_type,
+                    variant_name: case_name.clone(),
+                    bindings: self_bindings,
+                    payload_type: *payload_type,
+                },
+                guard: None,
+                body: inner_match,
                 span,
-            )),
-        },
-        span,
-    ));
+            }
+        })
+        .collect();
 
-    stmts
+    let outer_match = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(deref_self),
+            arms: outer_arms,
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    vec![TirStmt::new(TirStmtKind::Expr(outer_match), span)]
 }

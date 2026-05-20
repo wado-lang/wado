@@ -185,19 +185,19 @@ fn "wado-compiler/tests/fixtures/effect_handler_with_do.wado/run"() with Stdout 
 
 fn "wado-compiler/tests/fixtures/effect_handler_with_do.wado/__effect_dispatch__MonotonicClock__now"() {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_with_do.wado//__Dispatch_MonotonicClock";
-    let __d: ref "wado-compiler/tests/fixtures/effect_handler_with_do.wado//__Dispatch_MonotonicClock";
-    let __result: u64;
+    let __local_1: ref "wado-compiler/tests/fixtures/effect_handler_with_do.wado//__Dispatch_MonotonicClock";
+    let __local_2: u64;
     __saved = global:__effect_MonotonicClock;
     if ref.is_null(__saved) == 0 {
-        __d = ref.as_non_null(__saved);
-        global:__effect_MonotonicClock = __d.outer;
-        __result = block -> u64 {
+        __local_1 = ref.as_non_null(__saved);
+        global:__effect_MonotonicClock = __local_1.outer;
+        __local_2 = block -> u64 {
             let __indirect_call_0: ref "canonical//CanonicalClosure_0";
-            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__d.op_now);
+            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__local_1.op_now);
             call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
         };
         global:__effect_MonotonicClock = __saved;
-        return __result;
+        return __local_2;
     } else {
         return "wado-compiler/tests/fixtures/effect_handler_with_do.wado/__cm_binding__MonotonicClock_now"();
     }

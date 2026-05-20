@@ -1254,6 +1254,32 @@ impl TirRefVisitor for LocalCollector<'_> {
         }
         self.walk_stmt(stmt);
     }
+
+    /// Pattern bindings (in `Match` arms, `IfLet`, and `LetDestructure`)
+    /// introduce locals exactly like `Let` does — the binding's
+    /// `local_index` is the slot the variant payload / destructured
+    /// field is written into. Before WEP 2026-05-11 Phase 10, pattern
+    /// lowering ran as a separate pre-pass that rewrote every such
+    /// binding into a `Let { ..., value: VariantPayload(..) }`, so
+    /// the `Let` arm above caught every body-introduced local. With
+    /// pattern lowering now folded into the TIR → NIR translator the
+    /// pre-pass is gone, and the pattern binding is the canonical
+    /// declaration site. Record it here so the closure planner's
+    /// locals vector reserves the correct type for that slot — without
+    /// this, `wir_build` falls back to the placeholder UNKNOWN /
+    /// `i32` slot and downstream code emits ref→i32 type-mismatch
+    /// Wasm.
+    fn visit_pattern(&mut self, pattern: &TirPattern) {
+        if let TirPattern::Binding {
+            local_index,
+            type_id,
+            ..
+        } = pattern
+        {
+            self.locals.push((*local_index, *type_id));
+        }
+        self.walk_pattern(pattern);
+    }
 }
 
 /// Phase 2 visitor: decide which closures are safe to specialise.
