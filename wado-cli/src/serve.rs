@@ -44,10 +44,12 @@ use wado_compiler::LogLevel;
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
 /// Default number of requests a worker instance handles before it is
-/// recycled (torn down and re-instantiated). Recycling bounds the
-/// per-request garbage that accumulates in a worker's long-lived Wasm GC
-/// heap. `0` disables recycling.
-const DEFAULT_RECYCLE_REQUESTS: u64 = 1000;
+/// recycled (torn down and re-instantiated). Recycling resets state that
+/// accumulates in a long-lived instance — chiefly the component resource
+/// table (see issue #1133). Measured throughput is flat across recycle
+/// thresholds from ~1k to ~100k requests, so this is sized for infrequent
+/// recycling. `0` disables recycling.
+const DEFAULT_RECYCLE_REQUESTS: u64 = 10000;
 
 /// Default ceiling on concurrently in-flight requests. Each in-flight
 /// request needs an async fiber stack from the pooling allocator, so this
@@ -110,7 +112,7 @@ const RECYCLE_REQUESTS_SPEC: args::OptSpec = args::OptSpec {
     long: Some("recycle-requests"),
     short: None,
     value: Some("<n>"),
-    desc: "Recycle a worker after N requests; 0 disables (default: 1000)",
+    desc: "Recycle a worker after N requests; 0 disables (default: 10000)",
 };
 
 const MAX_CONCURRENCY_SPEC: args::OptSpec = args::OptSpec {
