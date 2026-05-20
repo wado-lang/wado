@@ -236,8 +236,14 @@ pub struct HighlightOverride {
 }
 
 /// Highlight mapping: defaults by token kind + context-aware overrides.
+///
+/// `rule_names` is the canonical name table used to resolve override
+/// `rule_name`s into integer ids that match what the generated walker
+/// passes to `Visitor::enter_rule`. The generator emits the names in
+/// parser-rule declaration order; index = rule id.
 pub struct HighlightMapping {
     pub defaults: Array<String>,
+    pub rule_names: Array<String>,
     pub overrides: Array<HighlightOverride>,
 }
 
@@ -248,49 +254,77 @@ pub struct HighlightCapture {
     pub end: i32,
 }
 
+/// Internal override form with the rule resolved to an integer id so the
+/// per-token classify loop avoids a String compare on every iteration.
+struct ResolvedOverride {
+    rule_id: i32,
+    token_kind: i32,
+    capture: String,
+}
+
 /// HighlightVisitor collects highlight captures during a CST walk.
 pub struct HighlightVisitor {
-    mapping: HighlightMapping,
-    rule_stack: Array<String>,
+    defaults: Array<String>,
+    overrides: Array<ResolvedOverride>,
+    rule_stack: Array<i32>,
     pub captures: Array<HighlightCapture>,
 }
 
 impl HighlightVisitor {
     pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
-        return HighlightVisitor { mapping, rule_stack: [], captures: [] };
+        let mut overrides: Array<ResolvedOverride> = Array::with_capacity(mapping.overrides.len());
+        for let ov of &mapping.overrides {
+            let mut id: i32 = -1;
+            for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
+                if mapping.rule_names[i] == ov.rule_name {
+                    id = i;
+                    break;
+                }
+            }
+            // Skip overrides whose rule_name doesn't match any known rule —
+            // they can never fire (no rule_id on the stack is ever < 0) and
+            // would otherwise waste a comparison on every classify() call.
+            if id < 0 {
+                continue;
+            }
+            overrides.push(ResolvedOverride {
+                rule_id: id,
+                token_kind: ov.token_kind,
+                capture: ov.capture,
+            });
+        }
+        return HighlightVisitor {
+            defaults: mapping.defaults,
+            overrides,
+            rule_stack: [],
+            captures: [],
+        };
     }
 
     fn classify(&self, kind: i32) -> String {
-        for let ov of &self.mapping.overrides {
+        for let ov of &self.overrides {
             if ov.token_kind == kind {
-                for let rule of &self.rule_stack {
-                    if *rule == ov.rule_name {
+                for let rule_id of &self.rule_stack {
+                    if *rule_id == ov.rule_id {
                         return ov.capture;
                     }
                 }
             }
         }
-        if kind >= 0 && kind < self.mapping.defaults.len() {
-            return self.mapping.defaults[kind];
+        if kind >= 0 && kind < self.defaults.len() {
+            return self.defaults[kind];
         }
         return "";
     }
 }
 
 impl Visitor for HighlightVisitor {
-    fn enter_rule(&mut self, name: &String, span: &Span) {
-        self.rule_stack.push(*name);
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.rule_stack.push(rule_id);
     }
 
-    fn exit_rule(&mut self, name: &String, span: &Span) {
-        if !self.rule_stack.is_empty() {
-            let last = self.rule_stack.len() - 1;
-            let mut new_stack: Array<String> = [];
-            for let mut i = 0; i < last; i += 1 {
-                new_stack.push(self.rule_stack[i]);
-            }
-            self.rule_stack = new_stack;
-        }
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.rule_stack.pop();
     }
 
     fn visit_token(&mut self, token: &Token) {
@@ -393,10 +427,16 @@ fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
 
 /// Visitor trait for walking typed CST nodes.
 /// Default methods are no-ops; override to add behavior.
+///
+/// `rule_id` is the parser-rule's index in the grammar's parser_rules array
+/// (0..n in declaration order). It's passed alongside `name` so visitors
+/// that want cheap dispatch (HighlightVisitor's rule stack) can avoid
+/// String compares while visitors that care about the name (TreeRecorder)
+/// can still use it.
 pub trait Visitor {
-    fn enter_rule(&mut self, name: &String, span: &Span) {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
-    fn exit_rule(&mut self, name: &String, span: &Span) {
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
     fn visit_token(&mut self, token: &Token) {
     }
@@ -430,11 +470,11 @@ impl TreeRecorder {
 }
 
 impl Visitor for TreeRecorder {
-    fn enter_rule(&mut self, name: &String, span: &Span) {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
         self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
     }
 
-    fn exit_rule(&mut self, name: &String, span: &Span) {
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
         self.events.push(TreeEvent::Exit);
     }
 
@@ -4468,7 +4508,7 @@ fn classify_keyword(chars: &Array<char>, start: i32, end: i32) -> i32 {
 
 pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
-    let mut tokens: Array<Token> = [];
+    let mut tokens: Array<Token> = Array::with_capacity(lexer.chars.len() / 4 + 1);
     let mut trivia: Array<Token> = [];
     while !lexer.at_end() {
         let start = lexer.pos;
@@ -20813,7 +20853,7 @@ pub fn parse(input: &String) -> Result<ParseNode, ParseError> {
 }
 
 pub fn walk_parse<V: Visitor>(v: &mut V, node: &ParseNode) {
-    v.enter_rule(&"parse", &node.span);
+    v.enter_rule(0, &"parse", &node.span);
     for let item of &node.sql_stmt_list_or_error_list {
         match item {
             SqlStmtList(inner) => {
@@ -20825,17 +20865,17 @@ pub fn walk_parse<V: Visitor>(v: &mut V, node: &ParseNode) {
         }
     }
     v.visit_token(&node.eof);
-    v.exit_rule(&"parse", &node.span);
+    v.exit_rule(0, &"parse", &node.span);
 }
 
 pub fn walk_error<V: Visitor>(v: &mut V, node: &ErrorNode) {
-    v.enter_rule(&"error", &node.span);
+    v.enter_rule(1, &"error", &node.span);
     v.visit_token(&node.unexpected_char);
-    v.exit_rule(&"error", &node.span);
+    v.exit_rule(1, &"error", &node.span);
 }
 
 pub fn walk_sql_stmt_list<V: Visitor>(v: &mut V, node: &SqlStmtListNode) {
-    v.enter_rule(&"sql_stmt_list", &node.span);
+    v.enter_rule(2, &"sql_stmt_list", &node.span);
     for let item of &node.semicolon_list {
         v.visit_token(item);
     }
@@ -20849,11 +20889,11 @@ pub fn walk_sql_stmt_list<V: Visitor>(v: &mut V, node: &SqlStmtListNode) {
     for let item of &node.semicolon_list_2 {
         v.visit_token(item);
     }
-    v.exit_rule(&"sql_stmt_list", &node.span);
+    v.exit_rule(2, &"sql_stmt_list", &node.span);
 }
 
 pub fn walk_sql_stmt<V: Visitor>(v: &mut V, node: &SqlStmtNode) {
-    v.enter_rule(&"sql_stmt", &node.span);
+    v.enter_rule(3, &"sql_stmt", &node.span);
     if let Some(item) = &node.k_explain_item {
         v.visit_token(&item.k_explain);
         if let Some(item) = &item.k_query_k_plan {
@@ -20955,11 +20995,11 @@ pub fn walk_sql_stmt<V: Visitor>(v: &mut V, node: &SqlStmtNode) {
             }
         }
     }
-    v.exit_rule(&"sql_stmt", &node.span);
+    v.exit_rule(3, &"sql_stmt", &node.span);
 }
 
 pub fn walk_alter_table_stmt<V: Visitor>(v: &mut V, node: &AlterTableStmtNode) {
-    v.enter_rule(&"alter_table_stmt", &node.span);
+    v.enter_rule(4, &"alter_table_stmt", &node.span);
     v.visit_token(&node.k_alter);
     v.visit_token(&node.k_table);
     if let Some(item) = &node.database_name_dot {
@@ -20983,11 +21023,11 @@ pub fn walk_alter_table_stmt<V: Visitor>(v: &mut V, node: &AlterTableStmtNode) {
             }
         }
     }
-    v.exit_rule(&"alter_table_stmt", &node.span);
+    v.exit_rule(4, &"alter_table_stmt", &node.span);
 }
 
 pub fn walk_analyze_stmt<V: Visitor>(v: &mut V, node: &AnalyzeStmtNode) {
-    v.enter_rule(&"analyze_stmt", &node.span);
+    v.enter_rule(5, &"analyze_stmt", &node.span);
     v.visit_token(&node.k_analyze);
     if let Some(item) = &node.group_0 {
         match item {
@@ -21004,11 +21044,11 @@ pub fn walk_analyze_stmt<V: Visitor>(v: &mut V, node: &AnalyzeStmtNode) {
             }
         }
     }
-    v.exit_rule(&"analyze_stmt", &node.span);
+    v.exit_rule(5, &"analyze_stmt", &node.span);
 }
 
 pub fn walk_attach_stmt<V: Visitor>(v: &mut V, node: &AttachStmtNode) {
-    v.enter_rule(&"attach_stmt", &node.span);
+    v.enter_rule(6, &"attach_stmt", &node.span);
     v.visit_token(&node.k_attach);
     if let Some(item) = &node.k_database {
         v.visit_token(item);
@@ -21016,11 +21056,11 @@ pub fn walk_attach_stmt<V: Visitor>(v: &mut V, node: &AttachStmtNode) {
     walk_expr(v, &node.expr);
     v.visit_token(&node.k_as);
     walk_database_name(v, &node.database_name);
-    v.exit_rule(&"attach_stmt", &node.span);
+    v.exit_rule(6, &"attach_stmt", &node.span);
 }
 
 pub fn walk_begin_stmt<V: Visitor>(v: &mut V, node: &BeginStmtNode) {
-    v.enter_rule(&"begin_stmt", &node.span);
+    v.enter_rule(7, &"begin_stmt", &node.span);
     v.visit_token(&node.k_begin);
     if let Some(item) = &node.k_deferred_or_k_immediate_or_k_exclusive {
         v.visit_token(item);
@@ -21031,11 +21071,11 @@ pub fn walk_begin_stmt<V: Visitor>(v: &mut V, node: &BeginStmtNode) {
             walk_transaction_name(v, item);
         }
     }
-    v.exit_rule(&"begin_stmt", &node.span);
+    v.exit_rule(7, &"begin_stmt", &node.span);
 }
 
 pub fn walk_commit_stmt<V: Visitor>(v: &mut V, node: &CommitStmtNode) {
-    v.enter_rule(&"commit_stmt", &node.span);
+    v.enter_rule(8, &"commit_stmt", &node.span);
     v.visit_token(&node.k_commit_or_k_end);
     if let Some(item) = &node.k_transaction_transaction_name {
         v.visit_token(&item.k_transaction);
@@ -21043,11 +21083,11 @@ pub fn walk_commit_stmt<V: Visitor>(v: &mut V, node: &CommitStmtNode) {
             walk_transaction_name(v, item);
         }
     }
-    v.exit_rule(&"commit_stmt", &node.span);
+    v.exit_rule(8, &"commit_stmt", &node.span);
 }
 
 pub fn walk_compound_select_stmt<V: Visitor>(v: &mut V, node: &CompoundSelectStmtNode) {
-    v.enter_rule(&"compound_select_stmt", &node.span);
+    v.enter_rule(9, &"compound_select_stmt", &node.span);
     if let Some(item) = &node.with_clause {
         walk_with_clause(v, item);
     }
@@ -21088,11 +21128,11 @@ pub fn walk_compound_select_stmt<V: Visitor>(v: &mut V, node: &CompoundSelectStm
             walk_expr(v, &item.expr);
         }
     }
-    v.exit_rule(&"compound_select_stmt", &node.span);
+    v.exit_rule(9, &"compound_select_stmt", &node.span);
 }
 
 pub fn walk_create_index_stmt<V: Visitor>(v: &mut V, node: &CreateIndexStmtNode) {
-    v.enter_rule(&"create_index_stmt", &node.span);
+    v.enter_rule(10, &"create_index_stmt", &node.span);
     v.visit_token(&node.k_create);
     if let Some(item) = &node.k_unique {
         v.visit_token(item);
@@ -21121,11 +21161,11 @@ pub fn walk_create_index_stmt<V: Visitor>(v: &mut V, node: &CreateIndexStmtNode)
         v.visit_token(&item.k_where);
         walk_expr(v, &item.expr);
     }
-    v.exit_rule(&"create_index_stmt", &node.span);
+    v.exit_rule(10, &"create_index_stmt", &node.span);
 }
 
 pub fn walk_create_table_stmt<V: Visitor>(v: &mut V, node: &CreateTableStmtNode) {
-    v.enter_rule(&"create_table_stmt", &node.span);
+    v.enter_rule(11, &"create_table_stmt", &node.span);
     v.visit_token(&node.k_create);
     if let Some(item) = &node.k_temp_or_k_temporary {
         v.visit_token(item);
@@ -21166,11 +21206,11 @@ pub fn walk_create_table_stmt<V: Visitor>(v: &mut V, node: &CreateTableStmtNode)
             }
         }
     }
-    v.exit_rule(&"create_table_stmt", &node.span);
+    v.exit_rule(11, &"create_table_stmt", &node.span);
 }
 
 pub fn walk_create_trigger_stmt<V: Visitor>(v: &mut V, node: &CreateTriggerStmtNode) {
-    v.enter_rule(&"create_trigger_stmt", &node.span);
+    v.enter_rule(12, &"create_trigger_stmt", &node.span);
     v.visit_token(&node.k_create);
     if let Some(item) = &node.k_temp_or_k_temporary {
         v.visit_token(item);
@@ -21257,11 +21297,11 @@ pub fn walk_create_trigger_stmt<V: Visitor>(v: &mut V, node: &CreateTriggerStmtN
         v.visit_token(&item.semicolon);
     }
     v.visit_token(&node.k_end);
-    v.exit_rule(&"create_trigger_stmt", &node.span);
+    v.exit_rule(12, &"create_trigger_stmt", &node.span);
 }
 
 pub fn walk_create_view_stmt<V: Visitor>(v: &mut V, node: &CreateViewStmtNode) {
-    v.enter_rule(&"create_view_stmt", &node.span);
+    v.enter_rule(13, &"create_view_stmt", &node.span);
     v.visit_token(&node.k_create);
     if let Some(item) = &node.k_temp_or_k_temporary {
         v.visit_token(item);
@@ -21279,11 +21319,11 @@ pub fn walk_create_view_stmt<V: Visitor>(v: &mut V, node: &CreateViewStmtNode) {
     walk_view_name(v, &node.view_name);
     v.visit_token(&node.k_as);
     walk_select_stmt(v, &node.select_stmt);
-    v.exit_rule(&"create_view_stmt", &node.span);
+    v.exit_rule(13, &"create_view_stmt", &node.span);
 }
 
 pub fn walk_create_virtual_table_stmt<V: Visitor>(v: &mut V, node: &CreateVirtualTableStmtNode) {
-    v.enter_rule(&"create_virtual_table_stmt", &node.span);
+    v.enter_rule(14, &"create_virtual_table_stmt", &node.span);
     v.visit_token(&node.k_create);
     v.visit_token(&node.k_virtual);
     v.visit_token(&node.k_table);
@@ -21308,11 +21348,11 @@ pub fn walk_create_virtual_table_stmt<V: Visitor>(v: &mut V, node: &CreateVirtua
         }
         v.visit_token(&item.rparen);
     }
-    v.exit_rule(&"create_virtual_table_stmt", &node.span);
+    v.exit_rule(14, &"create_virtual_table_stmt", &node.span);
 }
 
 pub fn walk_delete_stmt<V: Visitor>(v: &mut V, node: &DeleteStmtNode) {
-    v.enter_rule(&"delete_stmt", &node.span);
+    v.enter_rule(15, &"delete_stmt", &node.span);
     if let Some(item) = &node.with_clause {
         walk_with_clause(v, item);
     }
@@ -21323,11 +21363,11 @@ pub fn walk_delete_stmt<V: Visitor>(v: &mut V, node: &DeleteStmtNode) {
         v.visit_token(&item.k_where);
         walk_expr(v, &item.expr);
     }
-    v.exit_rule(&"delete_stmt", &node.span);
+    v.exit_rule(15, &"delete_stmt", &node.span);
 }
 
 pub fn walk_delete_stmt_limited<V: Visitor>(v: &mut V, node: &DeleteStmtLimitedNode) {
-    v.enter_rule(&"delete_stmt_limited", &node.span);
+    v.enter_rule(16, &"delete_stmt_limited", &node.span);
     if let Some(item) = &node.with_clause {
         walk_with_clause(v, item);
     }
@@ -21355,21 +21395,21 @@ pub fn walk_delete_stmt_limited<V: Visitor>(v: &mut V, node: &DeleteStmtLimitedN
             walk_expr(v, &item.expr);
         }
     }
-    v.exit_rule(&"delete_stmt_limited", &node.span);
+    v.exit_rule(16, &"delete_stmt_limited", &node.span);
 }
 
 pub fn walk_detach_stmt<V: Visitor>(v: &mut V, node: &DetachStmtNode) {
-    v.enter_rule(&"detach_stmt", &node.span);
+    v.enter_rule(17, &"detach_stmt", &node.span);
     v.visit_token(&node.k_detach);
     if let Some(item) = &node.k_database {
         v.visit_token(item);
     }
     walk_database_name(v, &node.database_name);
-    v.exit_rule(&"detach_stmt", &node.span);
+    v.exit_rule(17, &"detach_stmt", &node.span);
 }
 
 pub fn walk_drop_index_stmt<V: Visitor>(v: &mut V, node: &DropIndexStmtNode) {
-    v.enter_rule(&"drop_index_stmt", &node.span);
+    v.enter_rule(18, &"drop_index_stmt", &node.span);
     v.visit_token(&node.k_drop);
     v.visit_token(&node.k_index);
     if let Some(item) = &node.k_if_k_exists {
@@ -21381,11 +21421,11 @@ pub fn walk_drop_index_stmt<V: Visitor>(v: &mut V, node: &DropIndexStmtNode) {
         v.visit_token(&item.dot);
     }
     walk_index_name(v, &node.index_name);
-    v.exit_rule(&"drop_index_stmt", &node.span);
+    v.exit_rule(18, &"drop_index_stmt", &node.span);
 }
 
 pub fn walk_drop_table_stmt<V: Visitor>(v: &mut V, node: &DropTableStmtNode) {
-    v.enter_rule(&"drop_table_stmt", &node.span);
+    v.enter_rule(19, &"drop_table_stmt", &node.span);
     v.visit_token(&node.k_drop);
     v.visit_token(&node.k_table);
     if let Some(item) = &node.k_if_k_exists {
@@ -21397,11 +21437,11 @@ pub fn walk_drop_table_stmt<V: Visitor>(v: &mut V, node: &DropTableStmtNode) {
         v.visit_token(&item.dot);
     }
     walk_table_name(v, &node.table_name);
-    v.exit_rule(&"drop_table_stmt", &node.span);
+    v.exit_rule(19, &"drop_table_stmt", &node.span);
 }
 
 pub fn walk_drop_trigger_stmt<V: Visitor>(v: &mut V, node: &DropTriggerStmtNode) {
-    v.enter_rule(&"drop_trigger_stmt", &node.span);
+    v.enter_rule(20, &"drop_trigger_stmt", &node.span);
     v.visit_token(&node.k_drop);
     v.visit_token(&node.k_trigger);
     if let Some(item) = &node.k_if_k_exists {
@@ -21413,11 +21453,11 @@ pub fn walk_drop_trigger_stmt<V: Visitor>(v: &mut V, node: &DropTriggerStmtNode)
         v.visit_token(&item.dot);
     }
     walk_trigger_name(v, &node.trigger_name);
-    v.exit_rule(&"drop_trigger_stmt", &node.span);
+    v.exit_rule(20, &"drop_trigger_stmt", &node.span);
 }
 
 pub fn walk_drop_view_stmt<V: Visitor>(v: &mut V, node: &DropViewStmtNode) {
-    v.enter_rule(&"drop_view_stmt", &node.span);
+    v.enter_rule(21, &"drop_view_stmt", &node.span);
     v.visit_token(&node.k_drop);
     v.visit_token(&node.k_view);
     if let Some(item) = &node.k_if_k_exists {
@@ -21429,11 +21469,11 @@ pub fn walk_drop_view_stmt<V: Visitor>(v: &mut V, node: &DropViewStmtNode) {
         v.visit_token(&item.dot);
     }
     walk_view_name(v, &node.view_name);
-    v.exit_rule(&"drop_view_stmt", &node.span);
+    v.exit_rule(21, &"drop_view_stmt", &node.span);
 }
 
 pub fn walk_factored_select_stmt<V: Visitor>(v: &mut V, node: &FactoredSelectStmtNode) {
-    v.enter_rule(&"factored_select_stmt", &node.span);
+    v.enter_rule(22, &"factored_select_stmt", &node.span);
     if let Some(item) = &node.with_clause {
         walk_with_clause(v, item);
     }
@@ -21459,11 +21499,11 @@ pub fn walk_factored_select_stmt<V: Visitor>(v: &mut V, node: &FactoredSelectStm
             walk_expr(v, &item.expr);
         }
     }
-    v.exit_rule(&"factored_select_stmt", &node.span);
+    v.exit_rule(22, &"factored_select_stmt", &node.span);
 }
 
 pub fn walk_insert_stmt<V: Visitor>(v: &mut V, node: &InsertStmtNode) {
-    v.enter_rule(&"insert_stmt", &node.span);
+    v.enter_rule(23, &"insert_stmt", &node.span);
     if let Some(item) = &node.with_clause {
         walk_with_clause(v, item);
     }
@@ -21548,11 +21588,11 @@ pub fn walk_insert_stmt<V: Visitor>(v: &mut V, node: &InsertStmtNode) {
             }
         }
     }
-    v.exit_rule(&"insert_stmt", &node.span);
+    v.exit_rule(23, &"insert_stmt", &node.span);
 }
 
 pub fn walk_pragma_stmt<V: Visitor>(v: &mut V, node: &PragmaStmtNode) {
-    v.enter_rule(&"pragma_stmt", &node.span);
+    v.enter_rule(24, &"pragma_stmt", &node.span);
     v.visit_token(&node.k_pragma);
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, &item.database_name);
@@ -21572,11 +21612,11 @@ pub fn walk_pragma_stmt<V: Visitor>(v: &mut V, node: &PragmaStmtNode) {
             }
         }
     }
-    v.exit_rule(&"pragma_stmt", &node.span);
+    v.exit_rule(24, &"pragma_stmt", &node.span);
 }
 
 pub fn walk_reindex_stmt<V: Visitor>(v: &mut V, node: &ReindexStmtNode) {
-    v.enter_rule(&"reindex_stmt", &node.span);
+    v.enter_rule(25, &"reindex_stmt", &node.span);
     v.visit_token(&node.k_reindex);
     if let Some(item) = &node.group_0 {
         match item {
@@ -21601,21 +21641,21 @@ pub fn walk_reindex_stmt<V: Visitor>(v: &mut V, node: &ReindexStmtNode) {
             }
         }
     }
-    v.exit_rule(&"reindex_stmt", &node.span);
+    v.exit_rule(25, &"reindex_stmt", &node.span);
 }
 
 pub fn walk_release_stmt<V: Visitor>(v: &mut V, node: &ReleaseStmtNode) {
-    v.enter_rule(&"release_stmt", &node.span);
+    v.enter_rule(26, &"release_stmt", &node.span);
     v.visit_token(&node.k_release);
     if let Some(item) = &node.k_savepoint {
         v.visit_token(item);
     }
     walk_savepoint_name(v, &node.savepoint_name);
-    v.exit_rule(&"release_stmt", &node.span);
+    v.exit_rule(26, &"release_stmt", &node.span);
 }
 
 pub fn walk_rollback_stmt<V: Visitor>(v: &mut V, node: &RollbackStmtNode) {
-    v.enter_rule(&"rollback_stmt", &node.span);
+    v.enter_rule(27, &"rollback_stmt", &node.span);
     v.visit_token(&node.k_rollback);
     if let Some(item) = &node.k_transaction_transaction_name {
         v.visit_token(&item.k_transaction);
@@ -21630,18 +21670,18 @@ pub fn walk_rollback_stmt<V: Visitor>(v: &mut V, node: &RollbackStmtNode) {
         }
         walk_savepoint_name(v, &item.savepoint_name);
     }
-    v.exit_rule(&"rollback_stmt", &node.span);
+    v.exit_rule(27, &"rollback_stmt", &node.span);
 }
 
 pub fn walk_savepoint_stmt<V: Visitor>(v: &mut V, node: &SavepointStmtNode) {
-    v.enter_rule(&"savepoint_stmt", &node.span);
+    v.enter_rule(28, &"savepoint_stmt", &node.span);
     v.visit_token(&node.k_savepoint);
     walk_savepoint_name(v, &node.savepoint_name);
-    v.exit_rule(&"savepoint_stmt", &node.span);
+    v.exit_rule(28, &"savepoint_stmt", &node.span);
 }
 
 pub fn walk_simple_select_stmt<V: Visitor>(v: &mut V, node: &SimpleSelectStmtNode) {
-    v.enter_rule(&"simple_select_stmt", &node.span);
+    v.enter_rule(29, &"simple_select_stmt", &node.span);
     if let Some(item) = &node.with_clause {
         walk_with_clause(v, item);
     }
@@ -21663,11 +21703,11 @@ pub fn walk_simple_select_stmt<V: Visitor>(v: &mut V, node: &SimpleSelectStmtNod
             walk_expr(v, &item.expr);
         }
     }
-    v.exit_rule(&"simple_select_stmt", &node.span);
+    v.exit_rule(29, &"simple_select_stmt", &node.span);
 }
 
 pub fn walk_select_stmt<V: Visitor>(v: &mut V, node: &SelectStmtNode) {
-    v.enter_rule(&"select_stmt", &node.span);
+    v.enter_rule(30, &"select_stmt", &node.span);
     if let Some(item) = &node.with_clause {
         walk_with_clause(v, item);
     }
@@ -21693,13 +21733,13 @@ pub fn walk_select_stmt<V: Visitor>(v: &mut V, node: &SelectStmtNode) {
             walk_expr(v, &item.expr);
         }
     }
-    v.exit_rule(&"select_stmt", &node.span);
+    v.exit_rule(30, &"select_stmt", &node.span);
 }
 
 pub fn walk_select_or_values<V: Visitor>(v: &mut V, node: &SelectOrValuesNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"select_or_values", &n.span);
+            v.enter_rule(31, &"select_or_values", &n.span);
             v.visit_token(&n.k_select);
             if let Some(item) = &n.k_distinct_or_k_all {
                 v.visit_token(item);
@@ -21743,10 +21783,10 @@ pub fn walk_select_or_values<V: Visitor>(v: &mut V, node: &SelectOrValuesNode) {
                     walk_expr(v, &item.expr);
                 }
             }
-            v.exit_rule(&"select_or_values", &n.span);
+            v.exit_rule(31, &"select_or_values", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"select_or_values", &n.span);
+            v.enter_rule(31, &"select_or_values", &n.span);
             v.visit_token(&n.k_values);
             v.visit_token(&n.lparen);
             walk_expr(v, &n.expr);
@@ -21765,13 +21805,13 @@ pub fn walk_select_or_values<V: Visitor>(v: &mut V, node: &SelectOrValuesNode) {
                 }
                 v.visit_token(&item.rparen);
             }
-            v.exit_rule(&"select_or_values", &n.span);
+            v.exit_rule(31, &"select_or_values", &n.span);
         }
     }
 }
 
 pub fn walk_update_stmt<V: Visitor>(v: &mut V, node: &UpdateStmtNode) {
-    v.enter_rule(&"update_stmt", &node.span);
+    v.enter_rule(32, &"update_stmt", &node.span);
     if let Some(item) = &node.with_clause {
         walk_with_clause(v, item);
     }
@@ -21815,11 +21855,11 @@ pub fn walk_update_stmt<V: Visitor>(v: &mut V, node: &UpdateStmtNode) {
         v.visit_token(&item.k_where);
         walk_expr(v, &item.expr);
     }
-    v.exit_rule(&"update_stmt", &node.span);
+    v.exit_rule(32, &"update_stmt", &node.span);
 }
 
 pub fn walk_update_stmt_limited<V: Visitor>(v: &mut V, node: &UpdateStmtLimitedNode) {
-    v.enter_rule(&"update_stmt_limited", &node.span);
+    v.enter_rule(33, &"update_stmt_limited", &node.span);
     if let Some(item) = &node.with_clause {
         walk_with_clause(v, item);
     }
@@ -21880,17 +21920,17 @@ pub fn walk_update_stmt_limited<V: Visitor>(v: &mut V, node: &UpdateStmtLimitedN
             walk_expr(v, &item.expr);
         }
     }
-    v.exit_rule(&"update_stmt_limited", &node.span);
+    v.exit_rule(33, &"update_stmt_limited", &node.span);
 }
 
 pub fn walk_vacuum_stmt<V: Visitor>(v: &mut V, node: &VacuumStmtNode) {
-    v.enter_rule(&"vacuum_stmt", &node.span);
+    v.enter_rule(34, &"vacuum_stmt", &node.span);
     v.visit_token(&node.k_vacuum);
-    v.exit_rule(&"vacuum_stmt", &node.span);
+    v.exit_rule(34, &"vacuum_stmt", &node.span);
 }
 
 pub fn walk_column_def<V: Visitor>(v: &mut V, node: &ColumnDefNode) {
-    v.enter_rule(&"column_def", &node.span);
+    v.enter_rule(35, &"column_def", &node.span);
     walk_column_name(v, &node.column_name);
     if let Some(item) = &node.type_name {
         walk_type_name(v, item);
@@ -21898,11 +21938,11 @@ pub fn walk_column_def<V: Visitor>(v: &mut V, node: &ColumnDefNode) {
     for let item of &node.column_constraint_list {
         walk_column_constraint(v, item);
     }
-    v.exit_rule(&"column_def", &node.span);
+    v.exit_rule(35, &"column_def", &node.span);
 }
 
 pub fn walk_type_name<V: Visitor>(v: &mut V, node: &TypeNameNode) {
-    v.enter_rule(&"type_name", &node.span);
+    v.enter_rule(36, &"type_name", &node.span);
     for let item of &node.name_list {
         walk_name(v, item);
     }
@@ -21922,11 +21962,11 @@ pub fn walk_type_name<V: Visitor>(v: &mut V, node: &TypeNameNode) {
             }
         }
     }
-    v.exit_rule(&"type_name", &node.span);
+    v.exit_rule(36, &"type_name", &node.span);
 }
 
 pub fn walk_column_constraint<V: Visitor>(v: &mut V, node: &ColumnConstraintNode) {
-    v.enter_rule(&"column_constraint", &node.span);
+    v.enter_rule(37, &"column_constraint", &node.span);
     if let Some(item) = &node.k_constraint_name {
         v.visit_token(&item.k_constraint);
         walk_name(v, &item.name);
@@ -21988,33 +22028,33 @@ pub fn walk_column_constraint<V: Visitor>(v: &mut V, node: &ColumnConstraintNode
             }
         }
     }
-    v.exit_rule(&"column_constraint", &node.span);
+    v.exit_rule(37, &"column_constraint", &node.span);
 }
 
 pub fn walk_conflict_clause<V: Visitor>(v: &mut V, node: &ConflictClauseNode) {
-    v.enter_rule(&"conflict_clause", &node.span);
+    v.enter_rule(38, &"conflict_clause", &node.span);
     if let Some(item) = &node.k_on_k_conflict_item {
         v.visit_token(&item.k_on);
         v.visit_token(&item.k_conflict);
         v.visit_token(&item.k_rollback_or_k_abort_or_k_fail_or_k_ignore_or_k_replace);
     }
-    v.exit_rule(&"conflict_clause", &node.span);
+    v.exit_rule(38, &"conflict_clause", &node.span);
 }
 
 pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_literal_value(v, &n.literal_value);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             v.visit_token(&n.bind_parameter);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             if let Some(item) = &n.item_table_name_dot {
                 if let Some(item) = &item.database_name_dot {
                     walk_database_name(v, &item.database_name);
@@ -22024,58 +22064,58 @@ pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
                 v.visit_token(&item.dot);
             }
             walk_column_name(v, &n.column_name);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt3(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_unary_operator(v, &n.unary_operator);
             walk_expr(v, &n.expr);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt4(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             v.visit_token(&n.lit_pipepipe);
             walk_expr(v, &n.expr_2);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt5(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             v.visit_token(&n.star_or_slash_or_percent);
             walk_expr(v, &n.expr_2);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt6(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             v.visit_token(&n.plus_or_minus);
             walk_expr(v, &n.expr_2);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt7(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             v.visit_token(&n.lit_ltlt_or_lit_gtgt_or_amp_or_pipe);
             walk_expr(v, &n.expr_2);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt8(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             v.visit_token(&n.lt_or_lit_lteq_or_gt_or_lit_gteq);
             walk_expr(v, &n.expr_2);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt9(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             v.visit_token(&n.eq_or_lit_eqeq_or_lit_bangeq_or_lit_ltgt);
             walk_expr(v, &n.expr_2);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt10(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             if let Some(item) = &n.k_not {
                 v.visit_token(item);
@@ -22110,24 +22150,24 @@ pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
                     }
                 }
             }
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt11(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             v.visit_token(&n.k_and);
             walk_expr(v, &n.expr_2);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt12(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             v.visit_token(&n.k_or);
             walk_expr(v, &n.expr_2);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt13(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_function_name(v, &n.function_name);
             v.visit_token(&n.lparen);
             if let Some(item) = &n.group_2 {
@@ -22148,34 +22188,34 @@ pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
                 }
             }
             v.visit_token(&n.rparen);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt14(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             v.visit_token(&n.lparen);
             walk_expr(v, &n.expr);
             v.visit_token(&n.rparen);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt15(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             v.visit_token(&n.k_cast);
             v.visit_token(&n.lparen);
             walk_expr(v, &n.expr);
             v.visit_token(&n.k_as);
             walk_type_name(v, &n.type_name);
             v.visit_token(&n.rparen);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt16(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             v.visit_token(&n.k_collate);
             walk_collation_name(v, &n.collation_name);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt17(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             if let Some(item) = &n.k_not {
                 v.visit_token(item);
@@ -22186,10 +22226,10 @@ pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
                 v.visit_token(&item.k_escape);
                 walk_expr(v, &item.expr);
             }
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt18(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             if let Some(item) = &n.group_3 {
                 match item {
@@ -22205,20 +22245,20 @@ pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
                     }
                 }
             }
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt19(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             v.visit_token(&n.k_is);
             if let Some(item) = &n.k_not {
                 v.visit_token(item);
             }
             walk_expr(v, &n.expr_2);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt20(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, &n.expr);
             if let Some(item) = &n.k_not {
                 v.visit_token(item);
@@ -22227,20 +22267,20 @@ pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
             walk_expr(v, &n.expr_2);
             v.visit_token(&n.k_and);
             walk_expr(v, &n.expr_3);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt21(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             if let Some(item) = &n.item_k_exists {
                 v.visit_token(&item.k_exists);
             }
             v.visit_token(&n.lparen);
             walk_select_stmt(v, &n.select_stmt);
             v.visit_token(&n.rparen);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt22(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             v.visit_token(&n.k_case);
             if let Some(item) = &n.expr {
                 walk_expr(v, item);
@@ -22256,18 +22296,18 @@ pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
                 walk_expr(v, &item.expr);
             }
             v.visit_token(&n.k_end);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
         Alt23(n) => {
-            v.enter_rule(&"expr", &n.span);
+            v.enter_rule(39, &"expr", &n.span);
             walk_raise_function(v, &n.raise_function);
-            v.exit_rule(&"expr", &n.span);
+            v.exit_rule(39, &"expr", &n.span);
         }
     }
 }
 
 pub fn walk_foreign_key_clause<V: Visitor>(v: &mut V, node: &ForeignKeyClauseNode) {
-    v.enter_rule(&"foreign_key_clause", &node.span);
+    v.enter_rule(40, &"foreign_key_clause", &node.span);
     v.visit_token(&node.k_references);
     walk_foreign_table(v, &node.foreign_table);
     if let Some(item) = &node.lparen_column_name_item_rparen {
@@ -22297,11 +22337,11 @@ pub fn walk_foreign_key_clause<V: Visitor>(v: &mut V, node: &ForeignKeyClauseNod
             }
         }
     }
-    v.exit_rule(&"foreign_key_clause", &node.span);
+    v.exit_rule(40, &"foreign_key_clause", &node.span);
 }
 
 pub fn walk_raise_function<V: Visitor>(v: &mut V, node: &RaiseFunctionNode) {
-    v.enter_rule(&"raise_function", &node.span);
+    v.enter_rule(41, &"raise_function", &node.span);
     v.visit_token(&node.k_raise);
     v.visit_token(&node.lparen);
     if let Some(item) = &node.group_0 {
@@ -22317,11 +22357,11 @@ pub fn walk_raise_function<V: Visitor>(v: &mut V, node: &RaiseFunctionNode) {
         }
     }
     v.visit_token(&node.rparen);
-    v.exit_rule(&"raise_function", &node.span);
+    v.exit_rule(41, &"raise_function", &node.span);
 }
 
 pub fn walk_indexed_column<V: Visitor>(v: &mut V, node: &IndexedColumnNode) {
-    v.enter_rule(&"indexed_column", &node.span);
+    v.enter_rule(42, &"indexed_column", &node.span);
     walk_column_name(v, &node.column_name);
     if let Some(item) = &node.k_collate_collation_name {
         v.visit_token(&item.k_collate);
@@ -22330,11 +22370,11 @@ pub fn walk_indexed_column<V: Visitor>(v: &mut V, node: &IndexedColumnNode) {
     if let Some(item) = &node.k_asc_or_k_desc {
         v.visit_token(item);
     }
-    v.exit_rule(&"indexed_column", &node.span);
+    v.exit_rule(42, &"indexed_column", &node.span);
 }
 
 pub fn walk_table_constraint<V: Visitor>(v: &mut V, node: &TableConstraintNode) {
-    v.enter_rule(&"table_constraint", &node.span);
+    v.enter_rule(43, &"table_constraint", &node.span);
     if let Some(item) = &node.k_constraint_name {
         v.visit_token(&item.k_constraint);
         walk_name(v, &item.name);
@@ -22382,11 +22422,11 @@ pub fn walk_table_constraint<V: Visitor>(v: &mut V, node: &TableConstraintNode) 
             }
         }
     }
-    v.exit_rule(&"table_constraint", &node.span);
+    v.exit_rule(43, &"table_constraint", &node.span);
 }
 
 pub fn walk_with_clause<V: Visitor>(v: &mut V, node: &WithClauseNode) {
-    v.enter_rule(&"with_clause", &node.span);
+    v.enter_rule(44, &"with_clause", &node.span);
     v.visit_token(&node.k_with);
     if let Some(item) = &node.k_recursive {
         v.visit_token(item);
@@ -22396,11 +22436,11 @@ pub fn walk_with_clause<V: Visitor>(v: &mut V, node: &WithClauseNode) {
         v.visit_token(&item.comma);
         walk_common_table_expression(v, &item.common_table_expression);
     }
-    v.exit_rule(&"with_clause", &node.span);
+    v.exit_rule(44, &"with_clause", &node.span);
 }
 
 pub fn walk_qualified_table_name<V: Visitor>(v: &mut V, node: &QualifiedTableNameNode) {
-    v.enter_rule(&"qualified_table_name", &node.span);
+    v.enter_rule(45, &"qualified_table_name", &node.span);
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, &item.database_name);
         v.visit_token(&item.dot);
@@ -22419,11 +22459,11 @@ pub fn walk_qualified_table_name<V: Visitor>(v: &mut V, node: &QualifiedTableNam
             }
         }
     }
-    v.exit_rule(&"qualified_table_name", &node.span);
+    v.exit_rule(45, &"qualified_table_name", &node.span);
 }
 
 pub fn walk_ordering_term<V: Visitor>(v: &mut V, node: &OrderingTermNode) {
-    v.enter_rule(&"ordering_term", &node.span);
+    v.enter_rule(46, &"ordering_term", &node.span);
     walk_expr(v, &node.expr);
     if let Some(item) = &node.k_collate_collation_name {
         v.visit_token(&item.k_collate);
@@ -22432,31 +22472,31 @@ pub fn walk_ordering_term<V: Visitor>(v: &mut V, node: &OrderingTermNode) {
     if let Some(item) = &node.k_asc_or_k_desc {
         v.visit_token(item);
     }
-    v.exit_rule(&"ordering_term", &node.span);
+    v.exit_rule(46, &"ordering_term", &node.span);
 }
 
 pub fn walk_pragma_value<V: Visitor>(v: &mut V, node: &PragmaValueNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"pragma_value", &n.span);
+            v.enter_rule(47, &"pragma_value", &n.span);
             walk_signed_number(v, &n.signed_number);
-            v.exit_rule(&"pragma_value", &n.span);
+            v.exit_rule(47, &"pragma_value", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"pragma_value", &n.span);
+            v.enter_rule(47, &"pragma_value", &n.span);
             walk_name(v, &n.name);
-            v.exit_rule(&"pragma_value", &n.span);
+            v.exit_rule(47, &"pragma_value", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"pragma_value", &n.span);
+            v.enter_rule(47, &"pragma_value", &n.span);
             v.visit_token(&n.string_literal);
-            v.exit_rule(&"pragma_value", &n.span);
+            v.exit_rule(47, &"pragma_value", &n.span);
         }
     }
 }
 
 pub fn walk_common_table_expression<V: Visitor>(v: &mut V, node: &CommonTableExpressionNode) {
-    v.enter_rule(&"common_table_expression", &node.span);
+    v.enter_rule(48, &"common_table_expression", &node.span);
     walk_table_name(v, &node.table_name);
     if let Some(item) = &node.lparen_column_name_item_rparen {
         v.visit_token(&item.lparen);
@@ -22471,25 +22511,25 @@ pub fn walk_common_table_expression<V: Visitor>(v: &mut V, node: &CommonTableExp
     v.visit_token(&node.lparen);
     walk_select_stmt(v, &node.select_stmt);
     v.visit_token(&node.rparen);
-    v.exit_rule(&"common_table_expression", &node.span);
+    v.exit_rule(48, &"common_table_expression", &node.span);
 }
 
 pub fn walk_result_column<V: Visitor>(v: &mut V, node: &ResultColumnNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"result_column", &n.span);
+            v.enter_rule(49, &"result_column", &n.span);
             v.visit_token(&n.star);
-            v.exit_rule(&"result_column", &n.span);
+            v.exit_rule(49, &"result_column", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"result_column", &n.span);
+            v.enter_rule(49, &"result_column", &n.span);
             walk_table_name(v, &n.table_name);
             v.visit_token(&n.dot);
             v.visit_token(&n.star);
-            v.exit_rule(&"result_column", &n.span);
+            v.exit_rule(49, &"result_column", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"result_column", &n.span);
+            v.enter_rule(49, &"result_column", &n.span);
             walk_expr(v, &n.expr);
             if let Some(item) = &n.k_as_column_alias {
                 if let Some(item) = &item.k_as {
@@ -22497,7 +22537,7 @@ pub fn walk_result_column<V: Visitor>(v: &mut V, node: &ResultColumnNode) {
                 }
                 walk_column_alias(v, &item.column_alias);
             }
-            v.exit_rule(&"result_column", &n.span);
+            v.exit_rule(49, &"result_column", &n.span);
         }
     }
 }
@@ -22505,7 +22545,7 @@ pub fn walk_result_column<V: Visitor>(v: &mut V, node: &ResultColumnNode) {
 pub fn walk_table_or_subquery<V: Visitor>(v: &mut V, node: &TableOrSubqueryNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"table_or_subquery", &n.span);
+            v.enter_rule(50, &"table_or_subquery", &n.span);
             if let Some(item) = &n.schema_name_dot {
                 walk_schema_name(v, &item.schema_name);
                 v.visit_token(&item.dot);
@@ -22530,10 +22570,10 @@ pub fn walk_table_or_subquery<V: Visitor>(v: &mut V, node: &TableOrSubqueryNode)
                     }
                 }
             }
-            v.exit_rule(&"table_or_subquery", &n.span);
+            v.exit_rule(50, &"table_or_subquery", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"table_or_subquery", &n.span);
+            v.enter_rule(50, &"table_or_subquery", &n.span);
             if let Some(item) = &n.schema_name_dot {
                 walk_schema_name(v, &item.schema_name);
                 v.visit_token(&item.dot);
@@ -22554,10 +22594,10 @@ pub fn walk_table_or_subquery<V: Visitor>(v: &mut V, node: &TableOrSubqueryNode)
                 }
                 walk_table_alias(v, &item.table_alias);
             }
-            v.exit_rule(&"table_or_subquery", &n.span);
+            v.exit_rule(50, &"table_or_subquery", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"table_or_subquery", &n.span);
+            v.enter_rule(50, &"table_or_subquery", &n.span);
             v.visit_token(&n.lparen);
             if let Some(item) = &n.group_1 {
                 match item {
@@ -22574,10 +22614,10 @@ pub fn walk_table_or_subquery<V: Visitor>(v: &mut V, node: &TableOrSubqueryNode)
                 }
             }
             v.visit_token(&n.rparen);
-            v.exit_rule(&"table_or_subquery", &n.span);
+            v.exit_rule(50, &"table_or_subquery", &n.span);
         }
         Alt3(n) => {
-            v.enter_rule(&"table_or_subquery", &n.span);
+            v.enter_rule(50, &"table_or_subquery", &n.span);
             v.visit_token(&n.lparen);
             walk_select_stmt(v, &n.select_stmt);
             v.visit_token(&n.rparen);
@@ -22587,31 +22627,31 @@ pub fn walk_table_or_subquery<V: Visitor>(v: &mut V, node: &TableOrSubqueryNode)
                 }
                 walk_table_alias(v, &item.table_alias);
             }
-            v.exit_rule(&"table_or_subquery", &n.span);
+            v.exit_rule(50, &"table_or_subquery", &n.span);
         }
     }
 }
 
 pub fn walk_join_clause<V: Visitor>(v: &mut V, node: &JoinClauseNode) {
-    v.enter_rule(&"join_clause", &node.span);
+    v.enter_rule(51, &"join_clause", &node.span);
     walk_table_or_subquery(v, &node.table_or_subquery);
     for let item of &node.join_operator_table_or_subquery_join_constraint_list {
         walk_join_operator(v, &item.join_operator);
         walk_table_or_subquery(v, &item.table_or_subquery);
         walk_join_constraint(v, &item.join_constraint);
     }
-    v.exit_rule(&"join_clause", &node.span);
+    v.exit_rule(51, &"join_clause", &node.span);
 }
 
 pub fn walk_join_operator<V: Visitor>(v: &mut V, node: &JoinOperatorNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"join_operator", &n.span);
+            v.enter_rule(52, &"join_operator", &n.span);
             v.visit_token(&n.comma);
-            v.exit_rule(&"join_operator", &n.span);
+            v.exit_rule(52, &"join_operator", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"join_operator", &n.span);
+            v.enter_rule(52, &"join_operator", &n.span);
             if let Some(item) = &n.k_natural {
                 v.visit_token(item);
             }
@@ -22632,13 +22672,13 @@ pub fn walk_join_operator<V: Visitor>(v: &mut V, node: &JoinOperatorNode) {
                 }
             }
             v.visit_token(&n.k_join);
-            v.exit_rule(&"join_operator", &n.span);
+            v.exit_rule(52, &"join_operator", &n.span);
         }
     }
 }
 
 pub fn walk_join_constraint<V: Visitor>(v: &mut V, node: &JoinConstraintNode) {
-    v.enter_rule(&"join_constraint", &node.span);
+    v.enter_rule(53, &"join_constraint", &node.span);
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
@@ -22657,13 +22697,13 @@ pub fn walk_join_constraint<V: Visitor>(v: &mut V, node: &JoinConstraintNode) {
             }
         }
     }
-    v.exit_rule(&"join_constraint", &node.span);
+    v.exit_rule(53, &"join_constraint", &node.span);
 }
 
 pub fn walk_select_core<V: Visitor>(v: &mut V, node: &SelectCoreNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"select_core", &n.span);
+            v.enter_rule(54, &"select_core", &n.span);
             v.visit_token(&n.k_select);
             if let Some(item) = &n.k_distinct_or_k_all {
                 v.visit_token(item);
@@ -22707,10 +22747,10 @@ pub fn walk_select_core<V: Visitor>(v: &mut V, node: &SelectCoreNode) {
                     walk_expr(v, &item.expr);
                 }
             }
-            v.exit_rule(&"select_core", &n.span);
+            v.exit_rule(54, &"select_core", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"select_core", &n.span);
+            v.enter_rule(54, &"select_core", &n.span);
             v.visit_token(&n.k_values);
             v.visit_token(&n.lparen);
             walk_expr(v, &n.expr);
@@ -22729,7 +22769,7 @@ pub fn walk_select_core<V: Visitor>(v: &mut V, node: &SelectCoreNode) {
                 }
                 v.visit_token(&item.rparen);
             }
-            v.exit_rule(&"select_core", &n.span);
+            v.exit_rule(54, &"select_core", &n.span);
         }
     }
 }
@@ -22737,74 +22777,74 @@ pub fn walk_select_core<V: Visitor>(v: &mut V, node: &SelectCoreNode) {
 pub fn walk_compound_operator<V: Visitor>(v: &mut V, node: &CompoundOperatorNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"compound_operator", &n.span);
+            v.enter_rule(55, &"compound_operator", &n.span);
             v.visit_token(&n.k_union);
-            v.exit_rule(&"compound_operator", &n.span);
+            v.exit_rule(55, &"compound_operator", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"compound_operator", &n.span);
+            v.enter_rule(55, &"compound_operator", &n.span);
             v.visit_token(&n.k_union);
             v.visit_token(&n.k_all);
-            v.exit_rule(&"compound_operator", &n.span);
+            v.exit_rule(55, &"compound_operator", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"compound_operator", &n.span);
+            v.enter_rule(55, &"compound_operator", &n.span);
             v.visit_token(&n.k_intersect);
-            v.exit_rule(&"compound_operator", &n.span);
+            v.exit_rule(55, &"compound_operator", &n.span);
         }
         Alt3(n) => {
-            v.enter_rule(&"compound_operator", &n.span);
+            v.enter_rule(55, &"compound_operator", &n.span);
             v.visit_token(&n.k_except);
-            v.exit_rule(&"compound_operator", &n.span);
+            v.exit_rule(55, &"compound_operator", &n.span);
         }
     }
 }
 
 pub fn walk_signed_number<V: Visitor>(v: &mut V, node: &SignedNumberNode) {
-    v.enter_rule(&"signed_number", &node.span);
+    v.enter_rule(56, &"signed_number", &node.span);
     if let Some(item) = &node.plus_or_minus {
         v.visit_token(item);
     }
     v.visit_token(&node.numeric_literal);
-    v.exit_rule(&"signed_number", &node.span);
+    v.exit_rule(56, &"signed_number", &node.span);
 }
 
 pub fn walk_literal_value<V: Visitor>(v: &mut V, node: &LiteralValueNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"literal_value", &n.span);
+            v.enter_rule(57, &"literal_value", &n.span);
             v.visit_token(&n.numeric_literal);
-            v.exit_rule(&"literal_value", &n.span);
+            v.exit_rule(57, &"literal_value", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"literal_value", &n.span);
+            v.enter_rule(57, &"literal_value", &n.span);
             v.visit_token(&n.string_literal);
-            v.exit_rule(&"literal_value", &n.span);
+            v.exit_rule(57, &"literal_value", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"literal_value", &n.span);
+            v.enter_rule(57, &"literal_value", &n.span);
             v.visit_token(&n.blob_literal);
-            v.exit_rule(&"literal_value", &n.span);
+            v.exit_rule(57, &"literal_value", &n.span);
         }
         Alt3(n) => {
-            v.enter_rule(&"literal_value", &n.span);
+            v.enter_rule(57, &"literal_value", &n.span);
             v.visit_token(&n.k_null);
-            v.exit_rule(&"literal_value", &n.span);
+            v.exit_rule(57, &"literal_value", &n.span);
         }
         Alt4(n) => {
-            v.enter_rule(&"literal_value", &n.span);
+            v.enter_rule(57, &"literal_value", &n.span);
             v.visit_token(&n.k_current_time);
-            v.exit_rule(&"literal_value", &n.span);
+            v.exit_rule(57, &"literal_value", &n.span);
         }
         Alt5(n) => {
-            v.enter_rule(&"literal_value", &n.span);
+            v.enter_rule(57, &"literal_value", &n.span);
             v.visit_token(&n.k_current_date);
-            v.exit_rule(&"literal_value", &n.span);
+            v.exit_rule(57, &"literal_value", &n.span);
         }
         Alt6(n) => {
-            v.enter_rule(&"literal_value", &n.span);
+            v.enter_rule(57, &"literal_value", &n.span);
             v.visit_token(&n.k_current_timestamp);
-            v.exit_rule(&"literal_value", &n.span);
+            v.exit_rule(57, &"literal_value", &n.span);
         }
     }
 }
@@ -22812,45 +22852,45 @@ pub fn walk_literal_value<V: Visitor>(v: &mut V, node: &LiteralValueNode) {
 pub fn walk_unary_operator<V: Visitor>(v: &mut V, node: &UnaryOperatorNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"unary_operator", &n.span);
+            v.enter_rule(58, &"unary_operator", &n.span);
             v.visit_token(&n.minus);
-            v.exit_rule(&"unary_operator", &n.span);
+            v.exit_rule(58, &"unary_operator", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"unary_operator", &n.span);
+            v.enter_rule(58, &"unary_operator", &n.span);
             v.visit_token(&n.plus);
-            v.exit_rule(&"unary_operator", &n.span);
+            v.exit_rule(58, &"unary_operator", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"unary_operator", &n.span);
+            v.enter_rule(58, &"unary_operator", &n.span);
             v.visit_token(&n.tilde);
-            v.exit_rule(&"unary_operator", &n.span);
+            v.exit_rule(58, &"unary_operator", &n.span);
         }
         Alt3(n) => {
-            v.enter_rule(&"unary_operator", &n.span);
+            v.enter_rule(58, &"unary_operator", &n.span);
             v.visit_token(&n.k_not);
-            v.exit_rule(&"unary_operator", &n.span);
+            v.exit_rule(58, &"unary_operator", &n.span);
         }
     }
 }
 
 pub fn walk_error_message<V: Visitor>(v: &mut V, node: &ErrorMessageNode) {
-    v.enter_rule(&"error_message", &node.span);
+    v.enter_rule(59, &"error_message", &node.span);
     v.visit_token(&node.string_literal);
-    v.exit_rule(&"error_message", &node.span);
+    v.exit_rule(59, &"error_message", &node.span);
 }
 
 pub fn walk_module_argument<V: Visitor>(v: &mut V, node: &ModuleArgumentNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"module_argument", &n.span);
+            v.enter_rule(60, &"module_argument", &n.span);
             walk_expr(v, &n.expr);
-            v.exit_rule(&"module_argument", &n.span);
+            v.exit_rule(60, &"module_argument", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"module_argument", &n.span);
+            v.enter_rule(60, &"module_argument", &n.span);
             walk_column_def(v, &n.column_def);
-            v.exit_rule(&"module_argument", &n.span);
+            v.exit_rule(60, &"module_argument", &n.span);
         }
     }
 }
@@ -22858,14 +22898,14 @@ pub fn walk_module_argument<V: Visitor>(v: &mut V, node: &ModuleArgumentNode) {
 pub fn walk_column_alias<V: Visitor>(v: &mut V, node: &ColumnAliasNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"column_alias", &n.span);
+            v.enter_rule(61, &"column_alias", &n.span);
             v.visit_token(&n.identifier);
-            v.exit_rule(&"column_alias", &n.span);
+            v.exit_rule(61, &"column_alias", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"column_alias", &n.span);
+            v.enter_rule(61, &"column_alias", &n.span);
             v.visit_token(&n.string_literal);
-            v.exit_rule(&"column_alias", &n.span);
+            v.exit_rule(61, &"column_alias", &n.span);
         }
     }
 }
@@ -22873,781 +22913,781 @@ pub fn walk_column_alias<V: Visitor>(v: &mut V, node: &ColumnAliasNode) {
 pub fn walk_keyword<V: Visitor>(v: &mut V, node: &KeywordNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_abort);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_action);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_add);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt3(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_after);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt4(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_all);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt5(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_alter);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt6(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_analyze);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt7(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_and);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt8(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_as);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt9(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_asc);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt10(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_attach);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt11(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_autoincrement);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt12(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_before);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt13(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_begin);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt14(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_between);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt15(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_by);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt16(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_cascade);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt17(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_case);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt18(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_cast);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt19(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_check);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt20(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_collate);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt21(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_column);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt22(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_commit);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt23(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_conflict);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt24(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_constraint);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt25(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_create);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt26(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_cross);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt27(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_current_date);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt28(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_current_time);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt29(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_current_timestamp);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt30(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_database);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt31(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_default);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt32(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_deferrable);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt33(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_deferred);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt34(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_delete);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt35(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_desc);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt36(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_detach);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt37(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_distinct);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt38(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_drop);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt39(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_each);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt40(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_else);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt41(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_end);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt42(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_escape);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt43(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_except);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt44(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_exclusive);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt45(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_exists);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt46(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_explain);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt47(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_fail);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt48(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_for);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt49(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_foreign);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt50(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_from);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt51(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_full);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt52(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_glob);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt53(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_group);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt54(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_having);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt55(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_if);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt56(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_ignore);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt57(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_immediate);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt58(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_in);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt59(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_index);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt60(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_indexed);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt61(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_initially);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt62(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_inner);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt63(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_insert);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt64(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_instead);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt65(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_intersect);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt66(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_into);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt67(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_is);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt68(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_isnull);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt69(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_join);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt70(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_key);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt71(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_left);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt72(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_like);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt73(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_limit);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt74(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_match);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt75(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_natural);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt76(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_no);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt77(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_not);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt78(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_notnull);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt79(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_null);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt80(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_of);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt81(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_offset);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt82(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_on);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt83(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_or);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt84(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_order);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt85(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_outer);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt86(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_plan);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt87(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_pragma);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt88(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_primary);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt89(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_query);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt90(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_raise);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt91(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_recursive);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt92(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_references);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt93(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_regexp);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt94(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_reindex);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt95(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_release);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt96(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_rename);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt97(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_replace);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt98(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_restrict);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt99(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_right);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt100(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_rollback);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt101(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_row);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt102(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_savepoint);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt103(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_select);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt104(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_set);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt105(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_table);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt106(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_temp);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt107(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_temporary);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt108(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_then);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt109(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_to);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt110(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_transaction);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt111(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_trigger);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt112(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_union);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt113(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_unique);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt114(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_update);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt115(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_using);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt116(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_vacuum);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt117(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_values);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt118(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_view);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt119(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_virtual);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt120(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_when);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt121(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_where);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt122(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_with);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
         Alt123(n) => {
-            v.enter_rule(&"keyword", &n.span);
+            v.enter_rule(62, &"keyword", &n.span);
             v.visit_token(&n.k_without);
-            v.exit_rule(&"keyword", &n.span);
+            v.exit_rule(62, &"keyword", &n.span);
         }
     }
 }
 
 pub fn walk_name<V: Visitor>(v: &mut V, node: &NameNode) {
-    v.enter_rule(&"name", &node.span);
+    v.enter_rule(63, &"name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"name", &node.span);
+    v.exit_rule(63, &"name", &node.span);
 }
 
 pub fn walk_function_name<V: Visitor>(v: &mut V, node: &FunctionNameNode) {
-    v.enter_rule(&"function_name", &node.span);
+    v.enter_rule(64, &"function_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"function_name", &node.span);
+    v.exit_rule(64, &"function_name", &node.span);
 }
 
 pub fn walk_database_name<V: Visitor>(v: &mut V, node: &DatabaseNameNode) {
-    v.enter_rule(&"database_name", &node.span);
+    v.enter_rule(65, &"database_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"database_name", &node.span);
+    v.exit_rule(65, &"database_name", &node.span);
 }
 
 pub fn walk_schema_name<V: Visitor>(v: &mut V, node: &SchemaNameNode) {
-    v.enter_rule(&"schema_name", &node.span);
+    v.enter_rule(66, &"schema_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"schema_name", &node.span);
+    v.exit_rule(66, &"schema_name", &node.span);
 }
 
 pub fn walk_table_function_name<V: Visitor>(v: &mut V, node: &TableFunctionNameNode) {
-    v.enter_rule(&"table_function_name", &node.span);
+    v.enter_rule(67, &"table_function_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"table_function_name", &node.span);
+    v.exit_rule(67, &"table_function_name", &node.span);
 }
 
 pub fn walk_table_name<V: Visitor>(v: &mut V, node: &TableNameNode) {
-    v.enter_rule(&"table_name", &node.span);
+    v.enter_rule(68, &"table_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"table_name", &node.span);
+    v.exit_rule(68, &"table_name", &node.span);
 }
 
 pub fn walk_table_or_index_name<V: Visitor>(v: &mut V, node: &TableOrIndexNameNode) {
-    v.enter_rule(&"table_or_index_name", &node.span);
+    v.enter_rule(69, &"table_or_index_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"table_or_index_name", &node.span);
+    v.exit_rule(69, &"table_or_index_name", &node.span);
 }
 
 pub fn walk_new_table_name<V: Visitor>(v: &mut V, node: &NewTableNameNode) {
-    v.enter_rule(&"new_table_name", &node.span);
+    v.enter_rule(70, &"new_table_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"new_table_name", &node.span);
+    v.exit_rule(70, &"new_table_name", &node.span);
 }
 
 pub fn walk_column_name<V: Visitor>(v: &mut V, node: &ColumnNameNode) {
-    v.enter_rule(&"column_name", &node.span);
+    v.enter_rule(71, &"column_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"column_name", &node.span);
+    v.exit_rule(71, &"column_name", &node.span);
 }
 
 pub fn walk_collation_name<V: Visitor>(v: &mut V, node: &CollationNameNode) {
-    v.enter_rule(&"collation_name", &node.span);
+    v.enter_rule(72, &"collation_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"collation_name", &node.span);
+    v.exit_rule(72, &"collation_name", &node.span);
 }
 
 pub fn walk_foreign_table<V: Visitor>(v: &mut V, node: &ForeignTableNode) {
-    v.enter_rule(&"foreign_table", &node.span);
+    v.enter_rule(73, &"foreign_table", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"foreign_table", &node.span);
+    v.exit_rule(73, &"foreign_table", &node.span);
 }
 
 pub fn walk_index_name<V: Visitor>(v: &mut V, node: &IndexNameNode) {
-    v.enter_rule(&"index_name", &node.span);
+    v.enter_rule(74, &"index_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"index_name", &node.span);
+    v.exit_rule(74, &"index_name", &node.span);
 }
 
 pub fn walk_trigger_name<V: Visitor>(v: &mut V, node: &TriggerNameNode) {
-    v.enter_rule(&"trigger_name", &node.span);
+    v.enter_rule(75, &"trigger_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"trigger_name", &node.span);
+    v.exit_rule(75, &"trigger_name", &node.span);
 }
 
 pub fn walk_view_name<V: Visitor>(v: &mut V, node: &ViewNameNode) {
-    v.enter_rule(&"view_name", &node.span);
+    v.enter_rule(76, &"view_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"view_name", &node.span);
+    v.exit_rule(76, &"view_name", &node.span);
 }
 
 pub fn walk_module_name<V: Visitor>(v: &mut V, node: &ModuleNameNode) {
-    v.enter_rule(&"module_name", &node.span);
+    v.enter_rule(77, &"module_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"module_name", &node.span);
+    v.exit_rule(77, &"module_name", &node.span);
 }
 
 pub fn walk_pragma_name<V: Visitor>(v: &mut V, node: &PragmaNameNode) {
-    v.enter_rule(&"pragma_name", &node.span);
+    v.enter_rule(78, &"pragma_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"pragma_name", &node.span);
+    v.exit_rule(78, &"pragma_name", &node.span);
 }
 
 pub fn walk_savepoint_name<V: Visitor>(v: &mut V, node: &SavepointNameNode) {
-    v.enter_rule(&"savepoint_name", &node.span);
+    v.enter_rule(79, &"savepoint_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"savepoint_name", &node.span);
+    v.exit_rule(79, &"savepoint_name", &node.span);
 }
 
 pub fn walk_table_alias<V: Visitor>(v: &mut V, node: &TableAliasNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"table_alias", &n.span);
+            v.enter_rule(80, &"table_alias", &n.span);
             v.visit_token(&n.identifier);
-            v.exit_rule(&"table_alias", &n.span);
+            v.exit_rule(80, &"table_alias", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"table_alias", &n.span);
+            v.enter_rule(80, &"table_alias", &n.span);
             v.visit_token(&n.string_literal);
-            v.exit_rule(&"table_alias", &n.span);
+            v.exit_rule(80, &"table_alias", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"table_alias", &n.span);
+            v.enter_rule(80, &"table_alias", &n.span);
             v.visit_token(&n.lparen);
             walk_table_alias(v, &n.table_alias);
             v.visit_token(&n.rparen);
-            v.exit_rule(&"table_alias", &n.span);
+            v.exit_rule(80, &"table_alias", &n.span);
         }
     }
 }
 
 pub fn walk_transaction_name<V: Visitor>(v: &mut V, node: &TransactionNameNode) {
-    v.enter_rule(&"transaction_name", &node.span);
+    v.enter_rule(81, &"transaction_name", &node.span);
     walk_any_name(v, &node.any_name);
-    v.exit_rule(&"transaction_name", &node.span);
+    v.exit_rule(81, &"transaction_name", &node.span);
 }
 
 pub fn walk_any_name<V: Visitor>(v: &mut V, node: &AnyNameNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"any_name", &n.span);
+            v.enter_rule(82, &"any_name", &n.span);
             v.visit_token(&n.identifier);
-            v.exit_rule(&"any_name", &n.span);
+            v.exit_rule(82, &"any_name", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"any_name", &n.span);
+            v.enter_rule(82, &"any_name", &n.span);
             walk_keyword(v, &n.keyword);
-            v.exit_rule(&"any_name", &n.span);
+            v.exit_rule(82, &"any_name", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"any_name", &n.span);
+            v.enter_rule(82, &"any_name", &n.span);
             v.visit_token(&n.string_literal);
-            v.exit_rule(&"any_name", &n.span);
+            v.exit_rule(82, &"any_name", &n.span);
         }
         Alt3(n) => {
-            v.enter_rule(&"any_name", &n.span);
+            v.enter_rule(82, &"any_name", &n.span);
             v.visit_token(&n.lparen);
             walk_any_name(v, &n.any_name);
             v.visit_token(&n.rparen);
-            v.exit_rule(&"any_name", &n.span);
+            v.exit_rule(82, &"any_name", &n.span);
         }
     }
 }
@@ -23844,8 +23884,93 @@ pub fn highlight_mapping() -> HighlightMapping {
         "operator",  // TK_LIT_LTGT
         "operator",  // TK_LIT_TILDE
     ];
+    let rule_names: Array<String> = [
+        "parse",
+        "error",
+        "sql_stmt_list",
+        "sql_stmt",
+        "alter_table_stmt",
+        "analyze_stmt",
+        "attach_stmt",
+        "begin_stmt",
+        "commit_stmt",
+        "compound_select_stmt",
+        "create_index_stmt",
+        "create_table_stmt",
+        "create_trigger_stmt",
+        "create_view_stmt",
+        "create_virtual_table_stmt",
+        "delete_stmt",
+        "delete_stmt_limited",
+        "detach_stmt",
+        "drop_index_stmt",
+        "drop_table_stmt",
+        "drop_trigger_stmt",
+        "drop_view_stmt",
+        "factored_select_stmt",
+        "insert_stmt",
+        "pragma_stmt",
+        "reindex_stmt",
+        "release_stmt",
+        "rollback_stmt",
+        "savepoint_stmt",
+        "simple_select_stmt",
+        "select_stmt",
+        "select_or_values",
+        "update_stmt",
+        "update_stmt_limited",
+        "vacuum_stmt",
+        "column_def",
+        "type_name",
+        "column_constraint",
+        "conflict_clause",
+        "expr",
+        "foreign_key_clause",
+        "raise_function",
+        "indexed_column",
+        "table_constraint",
+        "with_clause",
+        "qualified_table_name",
+        "ordering_term",
+        "pragma_value",
+        "common_table_expression",
+        "result_column",
+        "table_or_subquery",
+        "join_clause",
+        "join_operator",
+        "join_constraint",
+        "select_core",
+        "compound_operator",
+        "signed_number",
+        "literal_value",
+        "unary_operator",
+        "error_message",
+        "module_argument",
+        "column_alias",
+        "keyword",
+        "name",
+        "function_name",
+        "database_name",
+        "schema_name",
+        "table_function_name",
+        "table_name",
+        "table_or_index_name",
+        "new_table_name",
+        "column_name",
+        "collation_name",
+        "foreign_table",
+        "index_name",
+        "trigger_name",
+        "view_name",
+        "module_name",
+        "pragma_name",
+        "savepoint_name",
+        "table_alias",
+        "transaction_name",
+        "any_name",
+    ];
     let overrides: Array<HighlightOverride> = [];
-    return HighlightMapping { defaults, overrides };
+    return HighlightMapping { defaults, rule_names, overrides };
 }
 
 pub fn highlight(input: &String) -> String {

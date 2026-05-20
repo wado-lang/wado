@@ -129,16 +129,11 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado/norm"(e) {
     let f: ref "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Foo";
-    let self: ref "core:prelude/string.wado//String";
     let __sroa___boxed_param_0_value: ref "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Elem";
     __sroa___boxed_param_0_value = e;
     if ref.test "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Elem::A"(__sroa___boxed_param_0_value) {
         f = ref.cast "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Elem::A"(__sroa___boxed_param_0_value).payload_0;
-        if __inline_String__is_empty_0: block -> bool {
-            self = f.cache;
-            break __inline_String__is_empty_0: self.used == 0;
-            unreachable;
-        } == 0 {
+        if (f.cache.used == 0) == 0 {
             return __sroa___boxed_param_0_value;
         }
         return struct.new "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Elem::A" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/default_field_variant_payload_ref_match.wado//Foo" { name: f.name, cache: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 } } };
