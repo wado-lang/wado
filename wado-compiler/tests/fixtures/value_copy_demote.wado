@@ -1,0 +1,36 @@
+// `value_copy_demote` regression: `sorted` is a deep value-copy of the
+// `&Array<String>` parameter that is only spine-mutated (`sort`) and read.
+// The deep per-element String copy is unnecessary — no element is mutated
+// through `sorted` — so the pass rewrites the copy to a shallow spine copy
+// (`array_clone_shallow`) via a synthesized `$shallow` sibling helper.
+//
+// `sort` / `sort_by` verify as element-immutable (they only reorder spine
+// slots), which is the precondition that lets the demotion fire. The source
+// array must remain observably unchanged.
+
+use { println } from "core:cli";
+
+fn distinct_count(tokens: &Array<String>) -> i32 {
+    let mut sorted = *tokens;
+    sorted.sort();
+    let mut n = 0;
+    for let mut i = 0; i < sorted.len(); i += 1 {
+        if i == 0 || sorted[i] != sorted[i - 1] {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    let words: Array<String> = ["pear", "apple", "pear", "fig"];
+    let n = distinct_count(&words);
+    // `words` must be untouched by the (now shallow) copy in distinct_count.
+    println(`{n} {words[0]} {words[3]}`);
+}
+
+__DATA__
+{
+    "stdout": "3 pear fig\n",
+    "wir_not_expect:O2": ["array_clone_deep"]
+}

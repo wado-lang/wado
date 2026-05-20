@@ -1,5 +1,5 @@
 use { Span, ParseError } from "./runtime.wado";
-use { escape_ident, to_snake_case, to_lower } from "./ident.wado";
+use { escape_ident, to_snake_case, to_lower, to_pascal_case } from "./ident.wado";
 
 /// OptionValue is the typed right-hand side of an ANTLR4 `key = value` option
 /// entry. ANTLR4 options can be a bare identifier, a dotted qualified name,
@@ -262,13 +262,18 @@ pub struct ParserRule {
     /// when the rule itself appears as a field (e.g. the LR self-ref slot in
     /// the precedence-climbing helper struct).
     pub field_name: String = "",
+    /// Cached `{to_pascal_case(name)}Node` — the rule's CST type name.
+    /// Equivalent to `rule_type_name(name)`; populated so codegen never
+    /// re-runs `to_pascal_case` for the same rule name.
+    pub type_name: String = "",
 }
 
 impl ParserRule {
     pub fn new(name: String, visibility: Visibility, options: Array<GrammarOption>, alternatives: Array<Alternative>) -> ParserRule {
         let snake_name = to_snake_case(&name);
         let field_name = escape_ident(&snake_name);
-        return ParserRule { name, visibility, options, alternatives, snake_name, field_name };
+        let type_name = `{to_pascal_case(&name)}Node`;
+        return ParserRule { name, visibility, options, alternatives, snake_name, field_name, type_name };
     }
 }
 
@@ -704,6 +709,9 @@ pub fn normalize_caches(grammar: &mut Grammar) {
         }
         if rule.field_name.is_empty() {
             rule.field_name = escape_ident(&rule.snake_name);
+        }
+        if rule.type_name.is_empty() {
+            rule.type_name = `{to_pascal_case(&rule.name)}Node`;
         }
         for let mut ai = 0; ai < rule.alternatives.len(); ai += 1 {
             let alt = &mut rule.alternatives[ai];

@@ -1023,12 +1023,19 @@ impl<'a> WirEmitter<'a> {
                 // branches on per-element nullability (slots beyond
                 // `Array<T>::used` are default-null) so it needs an
                 // extra temp of element-nullable-ref type.
-                if new_clone_site
-                    && element_copy_func.is_some()
+                //
+                // Dedup the element temp independently of `new_clone_site`:
+                // a *shallow* `ArrayClone` of the same `type_id` (emitted by
+                // `value_copy_demote`) claims `src_name` but carries no
+                // element temp, so gating on `new_clone_site` would let it
+                // suppress a sibling deep clone's declaration of `elem_name`.
+                if element_copy_func.is_some()
                     && let Some(elem_val) = self.array_element_val_type(type_id.index())
                 {
                     let elem_name = format!("__copy_arr_elem_{}", type_id.index());
-                    locals.push((elem_name, elem_val));
+                    if self.scratch_local_names.insert(elem_name.clone()) {
+                        locals.push((elem_name, elem_val));
+                    }
                 }
             }
             WirInstr::GlobalSet { value, .. } => {

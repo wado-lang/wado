@@ -1608,7 +1608,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
 /// single AltBody whose `fields` drives the struct-literal field
 /// assignments emitted after the alt body.
 fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext, fn_name: &String, emit_visibility: bool) {
-    let type_name = rule_type_name(&rule.name);
+    let type_name = rule.type_name;
     if emit_visibility {
         gen_visibility_comment(w, &rule.visibility);
     }
@@ -1649,7 +1649,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         return;
     }
 
-    let type_name = rule_type_name(&rule.name);
+    let type_name = rule.type_name;
     if emit_visibility {
         gen_visibility_comment(w, &rule.visibility);
     }
