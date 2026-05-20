@@ -61,7 +61,8 @@ pub struct LowerPlan {
 pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     super::translate::pattern::lower(flat);
     globals::extract(flat);
-    boxing::plan(flat);
+    let box_plan = boxing::prepare_types(flat);
+    boxing::lower_bodies(flat, &box_plan);
     let closure = closure::plan(flat);
     globals::build_initialize_modules(flat);
     flat.rebuild_variant_indices();
