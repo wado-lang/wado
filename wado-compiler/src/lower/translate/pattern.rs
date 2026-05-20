@@ -1537,6 +1537,38 @@ impl<'a> PatternLowerer<'a> {
         }
     }
 
+    /// Emit the `Let` statement for a `TirPattern::Binding` destructure
+    /// target. The binding local's current type is authoritative —
+    /// `boxing` may have promoted an address-taken local to `Box<T>`
+    /// after the pattern's recorded `type_id` was set — and the value
+    /// is coerced to it (match ergonomics: a `&T` / `&mut T` binding
+    /// can capture a by-value `T`).
+    fn emit_binding_let(
+        &self,
+        name: &str,
+        local_index: u32,
+        is_mut: bool,
+        value: TirExpr,
+        span: Span,
+        type_table: &TypeTable,
+        out: &mut Vec<TirStmt>,
+    ) {
+        let binding_type = type_table.get_local_type(local_index, &self.locals);
+        let value = coerce_value_to_binding(value, binding_type, type_table, span);
+        out.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: name.to_string(),
+                local_index,
+                is_mut,
+                is_reactive: false,
+                type_id: binding_type,
+                value,
+                skip_value_copy: false,
+            },
+            span,
+        ));
+    }
+
     /// Lower `LetDestructure` to explicit Let statements
     fn lower_let_pattern(
         &mut self,
@@ -1631,26 +1663,7 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Binding {
                 name, local_index, ..
             } => {
-                // Match ergonomics: if the binding type is `&T` / `&mut T`
-                // but the value is a non-reference `T`, coerce it. The
-                // binding local's current type is authoritative — boxing
-                // may have promoted an address-taken local to `Box<T>`
-                // after the pattern's recorded `type_id` was set.
-                let binding_type = type_table.get_local_type(*local_index, &self.locals);
-                let value = coerce_value_to_binding(value, binding_type, type_table, span);
-                let let_stmt = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: name.clone(),
-                        local_index: *local_index,
-                        is_mut,
-                        is_reactive: false,
-                        type_id: binding_type,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                out.push(let_stmt);
+                self.emit_binding_let(name, *local_index, is_mut, value, span, type_table, out);
             }
             TirPattern::Wildcard => {
                 // Evaluate value for side effects but discard
@@ -1801,26 +1814,7 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Binding {
                 name, local_index, ..
             } => {
-                // Match ergonomics: if the binding type is `&T` / `&mut T`
-                // but the value is a non-reference `T`, coerce it. The
-                // binding local's current type is authoritative — boxing
-                // may have promoted an address-taken local to `Box<T>`
-                // after the pattern's recorded `type_id` was set.
-                let binding_type = type_table.get_local_type(*local_index, &self.locals);
-                let value = coerce_value_to_binding(value, binding_type, type_table, span);
-                let let_stmt = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: name.clone(),
-                        local_index: *local_index,
-                        is_mut,
-                        is_reactive: false,
-                        type_id: binding_type,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                out.push(let_stmt);
+                self.emit_binding_let(name, *local_index, is_mut, value, span, type_table, out);
             }
             TirPattern::Tuple(sub_patterns, _) => {
                 // Nested tuple - allocate temp and recurse

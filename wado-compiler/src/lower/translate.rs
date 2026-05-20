@@ -108,9 +108,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         .map(|func_rc| {
             let ptr = Rc::as_ptr(&func_rc);
             translator.lower_function_patterns(&func_rc);
-            let nir_rc = Rc::new(RefCell::new(
-                translator.convert_function(&func_rc.borrow()),
-            ));
+            let nir_rc = Rc::new(RefCell::new(translator.convert_function(&func_rc.borrow())));
             func_map.insert(ptr, Rc::clone(&nir_rc));
             nir_rc
         })
