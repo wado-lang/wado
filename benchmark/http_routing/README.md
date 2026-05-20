@@ -1,27 +1,37 @@
 # HTTP Routing Benchmark — `wado serve` vs Hono
 
 This benchmark compares `wado serve` against an equivalent
-[Hono](https://hono.dev/) server running on Node.js, on a routing-heavy
-HTTP workload.
+[Hono](https://hono.dev/) server running on Node.js, on an HTTP routing
+workload.
 
 ## What it measures
 
-Both servers expose the **same 32-route set** and return the **same
-`{ "route": ..., "params": [...] }` JSON shape**. The route set mixes:
+The route set and request set are **Hono's own official router
+benchmark** —
+[`honojs/hono`, `benchmarks/routers/`](https://github.com/honojs/hono/tree/main/benchmarks/routers):
 
-- shallow and deep static routes sharing an `/api/v1` prefix,
-- single- and multi-parameter routes (`:id`, `:id/.../:pid/.../:cid`),
-- a wildcard route (`/static/*path`),
-- two `POST` routes that collide on a path with `GET`.
+- **12 routes** from `src/tool.mts` (static, single-parameter, and
+  wildcard routes, including a `GET`/`POST` collision on `/event/:id`).
+- **7 request shapes** from `src/bench.mts` (short static, static
+  sharing a radix, dynamic, mixed static/dynamic, `POST`, long static,
+  wildcard).
 
-The Wado side dispatches through `core:router` (a segment-level tagged
-DFA matcher). Hono uses its default `SmartRouter`. Load is applied with
+Both servers register the same 12 routes and return the same
+`{ "route": ..., "params": [...] }` JSON shape, so the comparison
+isolates routing + request handling. Load is applied with
 [`oha`](https://github.com/hatoo/oha).
 
-This is a **Wasm component on wasmtime vs JavaScript on Node.js**
-comparison — two different runtimes — so absolute numbers reflect the
-whole stack (HTTP server, routing, JSON serialization), not routing
-alone.
+Hono's original benchmark is an in-process router microbenchmark
+(`router.match()` under `mitata`). Here the same route/request set is
+driven end to end over HTTP, so `wado serve` and Hono are compared as
+whole servers.
+
+`wado serve` runs the Wado side: a `wasi:http/service` component on
+wasmtime, dispatched through `core:router`. It reuses a small pool of
+component instances with periodic recycling and the pooling allocator.
+Hono uses its default `SmartRouter` on `@hono/node-server`. This is a
+**Wasm component on wasmtime vs JavaScript on Node.js** comparison —
+two different runtimes.
 
 ## Files
 
@@ -48,10 +58,9 @@ DURATION=10s CONNECTIONS=100 mise run -C benchmark http-routing
 
 ## Recent Results
 
-Measured 2026-05-20 on a cloud VM. `oha` drove each route for 5s at 50
-concurrent connections. Cloud VMs are noisy — absolute numbers vary
-between runs, but the Wado side is steady at ~3.6k req/s regardless of
-route shape, which is the point of interest below.
+Measured 2026-05-20 on a cloud VM, `oha` driving each request for 6s at
+50 concurrent connections. Cloud VMs are noisy; both measured runs show
+the same picture, the more internally consistent one is shown.
 
 Environment:
 
@@ -65,26 +74,23 @@ Environment:
 
 Throughput (requests/sec, higher is better):
 
-| Route                                    | Shape       | `wado serve` | Hono (Node) |
-| ---------------------------------------- | ----------- | -----------: | ----------: |
-| `/health`                                | static      |        3,605 |      24,234 |
-| `/api/v1/users/list`                     | static      |        3,699 |      16,430 |
-| `/api/v1/admin/system/cache/stats`       | deep static |        3,598 |      22,634 |
-| `/api/v1/users/4242`                     | 1 param     |        3,562 |      14,851 |
-| `/api/v1/users/4242/posts/77`            | 2 params    |        3,628 |      21,046 |
-| `/api/v1/users/4242/posts/77/comments/9` | 3 params    |        3,786 |      18,088 |
-| `/static/css/site/main.css`              | wildcard    |        3,716 |      22,588 |
-| `/no/such/route`                         | miss (404)  |        3,630 |      20,627 |
+| Request                                     | `wado serve` | Hono (Node) |
+| ------------------------------------------- | -----------: | ----------: |
+| `GET /user`                                 |       30,778 |      20,728 |
+| `GET /user/comments`                        |       30,193 |      26,496 |
+| `GET /user/lookup/username/hey`             |       28,326 |      20,728 |
+| `GET /event/abcd1234/comments`              |       25,292 |      23,258 |
+| `POST /event/abcd1234/comment`              |       25,068 |      17,668 |
+| `GET /very/deeply/nested/route/hello/there` |       29,724 |      23,876 |
+| `GET /static/index.html`                    |       29,091 |      22,595 |
 
 Observations:
 
-- `wado serve` throughput is **flat across every route shape** — static,
-  deep static, multi-parameter, wildcard, and 404 all land within ~6% of
-  each other. Path matching via `core:router` is not the bottleneck;
-  per-request overhead (Wasm component HTTP plumbing, body streaming,
-  allocation) dominates.
-- Hono on Node.js is currently ~4–6x faster end to end, and noisier
-  (its numbers swing more between runs).
+- `wado serve` leads on every request — ~25k–31k req/s versus Hono's
+  ~17k–26k. The margin is widest on the parametric, `POST`, and deep
+  routes.
+- `wado serve` throughput is fairly flat across route shapes: path
+  matching via `core:router` is not the bottleneck.
 - This is a whole-stack, cross-runtime comparison (Wasm component on
-  wasmtime vs JS on Node.js), not an isolated routing microbenchmark.
-  For routing-algorithm-only numbers, see `example/router_bench.wado`.
+  wasmtime vs JS on Node.js). For routing-algorithm-only numbers, see
+  `example/router_bench.wado`.

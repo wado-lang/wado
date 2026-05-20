@@ -143,25 +143,27 @@ Notes:
 ## HTTP Routing
 
 End-to-end HTTP throughput of `wado serve` vs an equivalent
-[Hono](https://hono.dev/) server on Node.js, over a 32-route set
-(static / parametric / wildcard) returning a shared JSON shape. Load
-applied with `oha` (5s, 50 connections per route).
+[Hono](https://hono.dev/) server on Node.js. The route and request set
+is Hono's own official router benchmark (`honojs/hono`,
+`benchmarks/routers/`), driven over HTTP with `oha` (6s, 50
+connections per request).
 
 Throughput (requests/sec, higher is better):
 
-| Route shape        | `wado serve` | Hono (Node) |
-| ------------------ | -----------: | ----------: |
-| static (`/health`) |        3,605 |      24,234 |
-| 1 param            |        3,562 |      14,851 |
-| 3 params           |        3,786 |      18,088 |
-| wildcard           |        3,716 |      22,588 |
-| miss (404)         |        3,630 |      20,627 |
+| Request                         | `wado serve` | Hono (Node) |
+| ------------------------------- | -----------: | ----------: |
+| `GET /user`                     |       30,778 |      20,728 |
+| `GET /user/lookup/username/hey` |       28,326 |      20,728 |
+| `GET /event/abcd1234/comments`  |       25,292 |      23,258 |
+| `POST /event/abcd1234/comment`  |       25,068 |      17,668 |
+| `GET /static/index.html`        |       29,091 |      22,595 |
 
-`wado serve` throughput is flat across route shapes — `core:router`
-matching is not the bottleneck; per-request Wasm-component HTTP
-overhead dominates. This is a cross-runtime comparison (Wasm component
-on wasmtime vs JS on Node.js). See `http_routing/README.md` for the
-full per-route table and methodology.
+`wado serve` leads on every request (~25k–31k vs ~17k–26k req/s). It
+runs a `wasi:http/service` component on wasmtime, dispatching through
+`core:router`, with pooled instance reuse + periodic recycling. This is
+a cross-runtime comparison (Wasm component on wasmtime vs JS on
+Node.js). See `http_routing/README.md` for the full table and
+methodology.
 
 ## Running
 

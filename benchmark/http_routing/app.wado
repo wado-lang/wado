@@ -1,9 +1,10 @@
 // HTTP routing benchmark service.
 //
-// A routing-heavy `wasi:http/service` world app, used to benchmark
-// `wado serve` against an equivalent Hono (Node.js) server. The route
-// set mixes shallow/deep static routes, single- and multi-parameter
-// routes, and a wildcard route, all dispatched through `core:router`.
+// A `wasi:http/service` world app used to benchmark `wado serve` against
+// an equivalent Hono (Node.js) server. The route set is Hono's official
+// router benchmark (honojs/hono, benchmarks/routers/src/tool.mts): 12
+// routes mixing static, single-parameter, and wildcard routes, dispatched
+// through `core:router`.
 //
 // Run with wado serve:
 //   cargo run --bin wado -- serve benchmark/http_routing/app.wado
@@ -45,54 +46,25 @@ fn ok0(route: String) -> RouteResponse {
     return ok(route, [] as Array<String>);
 }
 
+// Hono's official router benchmark route set
+// (honojs/hono, benchmarks/routers/src/tool.mts).
 fn build_router() -> Router<Handler> {
     let mut r = Router::<Handler>::new();
 
-    // Static routes — shallow.
-    r.get("/",        |_req, _p| ok0("root"));
-    r.get("/health",  |_req, _p| ok0("health"));
-    r.get("/version", |_req, _p| ok0("version"));
-    r.get("/metrics", |_req, _p| ok0("metrics"));
-    r.get("/ping",    |_req, _p| ok0("ping"));
-
-    // Static routes — medium / deep, sharing the `/api/v1` prefix.
-    r.get("/api/v1/health",                  |_req, _p| ok0("api.health"));
-    r.get("/api/v1/version",                 |_req, _p| ok0("api.version"));
-    r.get("/api/v1/status",                  |_req, _p| ok0("api.status"));
-    r.get("/api/v1/users/list",              |_req, _p| ok0("users.list"));
-    r.get("/api/v1/posts/list",              |_req, _p| ok0("posts.list"));
-    r.get("/api/v1/products/list",           |_req, _p| ok0("products.list"));
-    r.get("/api/v1/orders/list",             |_req, _p| ok0("orders.list"));
-    r.get("/api/v1/comments/list",           |_req, _p| ok0("comments.list"));
-    r.get("/api/v1/admin/users/list",        |_req, _p| ok0("admin.users.list"));
-    r.get("/api/v1/admin/posts/list",        |_req, _p| ok0("admin.posts.list"));
-    r.get("/api/v1/admin/stats/revenue",     |_req, _p| ok0("admin.stats.revenue"));
-    r.get("/api/v1/admin/stats/traffic",     |_req, _p| ok0("admin.stats.traffic"));
-    r.get("/api/v1/admin/system/cache/stats", |_req, _p| ok0("admin.system.cache.stats"));
-    r.get("/api/v1/admin/system/logs/recent", |_req, _p| ok0("admin.system.logs.recent"));
-
-    // Single-parameter routes.
-    r.get("/api/v1/users/:id",      |_req, p| ok("users.show", [p["id"]]));
-    r.get("/api/v1/posts/:id",      |_req, p| ok("posts.show", [p["id"]]));
-    r.get("/api/v1/products/:id",   |_req, p| ok("products.show", [p["id"]]));
-    r.get("/api/v1/orders/:id",     |_req, p| ok("orders.show", [p["id"]]));
-    r.get("/api/v1/categories/:slug", |_req, p| ok("categories.show", [p["slug"]]));
-
-    // Multi-parameter routes.
-    r.get("/api/v1/users/:id/posts/:pid",     |_req, p| ok("users.posts.show", [p["id"], p["pid"]]));
-    r.get("/api/v1/users/:id/comments/:cid",  |_req, p| ok("users.comments.show", [p["id"], p["cid"]]));
-    r.get("/api/v1/posts/:id/comments/:cid",  |_req, p| ok("posts.comments.show", [p["id"], p["cid"]]));
-    r.get("/api/v1/users/:id/posts/:pid/comments/:cid",
-          |_req, p| ok("users.posts.comments.show", [p["id"], p["pid"], p["cid"]]));
-    r.get("/api/v1/categories/:slug/products/:pid/reviews/:rid",
-          |_req, p| ok("categories.products.reviews.show", [p["slug"], p["pid"], p["rid"]]));
-
-    // Mutating parametric routes.
-    r.post("/api/v1/users/:id", |_req, p| ok("users.update", [p["id"]]));
-    r.post("/api/v1/posts/:id", |_req, p| ok("posts.update", [p["id"]]));
-
-    // Wildcard route.
-    r.get("/static/*path", |_req, p| ok("static", [p["path"]]));
+    r.get("/user",          |_req, _p| ok0("user"));
+    r.get("/user/comments", |_req, _p| ok0("user.comments"));
+    r.get("/user/avatar",   |_req, _p| ok0("user.avatar"));
+    r.get("/user/lookup/username/:username",
+          |_req, p| ok("user.lookup.username", [p["username"]]));
+    r.get("/user/lookup/email/:address",
+          |_req, p| ok("user.lookup.email", [p["address"]]));
+    r.get("/event/:id",          |_req, p| ok("event.show", [p["id"]]));
+    r.get("/event/:id/comments", |_req, p| ok("event.comments", [p["id"]]));
+    r.post("/event/:id/comment", |_req, p| ok("event.comment.create", [p["id"]]));
+    r.get("/map/:location/events", |_req, p| ok("map.events", [p["location"]]));
+    r.get("/status",         |_req, _p| ok0("status"));
+    r.get("/very/deeply/nested/route/hello/there", |_req, _p| ok0("deeply.nested"));
+    r.get("/static/*path",   |_req, p| ok("static", [p["path"]]));
 
     return r;
 }
