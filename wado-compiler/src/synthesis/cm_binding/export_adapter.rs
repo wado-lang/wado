@@ -1294,7 +1294,9 @@ pub(super) fn synthesize_variant_lower_to_flat(
         };
 
         let mut case_stmts: Vec<TirStmt> = Vec::new();
-        let bindings: Vec<TirPattern> = if !case_flat.is_empty() {
+        let bindings: Vec<TirPattern> = if case_flat.is_empty() {
+            Vec::new()
+        } else {
             let payload_local = alloc_local(next_local, locals, case.payload);
             let payload_name = format!("__case_payload_{payload_local}");
             let lowered = synthesize_lower_to_flat(
@@ -1325,8 +1327,6 @@ pub(super) fn synthesize_variant_lower_to_flat(
                 local_index: payload_local,
                 type_id: case.payload,
             }]
-        } else {
-            Vec::new()
         };
 
         arms.push(TirMatchArm {

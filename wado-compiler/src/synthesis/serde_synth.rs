@@ -480,7 +480,7 @@ fn variant_err(
 ///
 /// Equivalent to the legacy `TirStmtKind::IfLet` shape; emitted as
 /// canonical TIR Match per WEP 2026-05-11 Phase 10 Step 3 so the
-/// `lower::translate::pattern` IfLet → Match pre-pass has nothing
+/// `lower::translate::pattern` `IfLet` → Match pre-pass has nothing
 /// further to rewrite here.
 fn if_let_ok(
     scrutinee: TirExpr,

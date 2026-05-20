@@ -530,7 +530,7 @@ pub(super) fn synthesize_lower_option_to_memory(
     let none_arm = TirMatchArm {
         pattern: TirPattern::Variant {
             enum_type: value_type_id,
-            variant_name: names.none_name.clone(),
+            variant_name: names.none_name,
             bindings: Vec::new(),
             payload_type: TypeTable::UNIT,
         },
@@ -671,7 +671,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 // wildcard arm is needed.
                 let span = synth_span();
                 let mut arms: Vec<TirMatchArm> = Vec::with_capacity(cases.len());
-                for case in cases.iter() {
+                for case in cases {
                     let case_name = case.wado_name.clone();
                     if let Some(payload_ty) = &case.payload {
                         let payload_type_id = {
@@ -887,7 +887,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     let none_arm = TirMatchArm {
         pattern: TirPattern::Variant {
             enum_type: vt,
-            variant_name: names.none_name.clone(),
+            variant_name: names.none_name,
             bindings: Vec::new(),
             payload_type: TypeTable::UNIT,
         },

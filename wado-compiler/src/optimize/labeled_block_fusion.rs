@@ -390,7 +390,7 @@ struct FusionInfo {
     /// instead of allocating a fresh `__fused_payload_N`. Without
     /// this, the Match consumer's pattern binding would be left
     /// unset after the Match is folded into the labeled block (the
-    /// wir_build `emit_pattern_bindings` pass that would normally
+    /// `wir_build` `emit_pattern_bindings` pass that would normally
     /// write into it never runs on the consumed Match).
     /// `None` for the legacy `If + VariantTest` consumer, where the
     /// binding lives inside `then_block`'s `Let { value:
@@ -762,7 +762,7 @@ fn find_break_case_index_for_name_in_expr(
 
 /// Helper mirroring `block_has_free_unlabeled_loop_exit` but starting
 /// from an `NirExpr` (the arm bodies of Match consumers are `NirExpr`
-/// rather than `NirBlock`). Walks into Block / LabeledBlock children
+/// rather than `NirBlock`). Walks into Block / `LabeledBlock` children
 /// and delegates to the block-level helper for everything else.
 fn arm_body_has_free_unlabeled_loop_exit(body: &NirExpr) -> bool {
     match &body.kind {

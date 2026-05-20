@@ -205,7 +205,7 @@ type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32]
 
 type "functype//core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>", ref "tuple//[Descriptor, String]");  // TypeId(59)
 
-type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>");  // TypeId(60)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>") -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(60)
 
 type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(61)
 
@@ -272,7 +272,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/run"() with 
     let out_tx: i32;
     let sub3: i32;
     let chunk: ref "core:prelude//Array<u8>";
-    let __pattern_temp_3: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
+    let __local_23: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         return;
@@ -320,9 +320,9 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/run"() with 
         "core:internal/cm_stream_write_u8"(a_tx, suffix);
         "wasi/stream-drop-writable"(a_tx);
         "wasi/future-drop-readable:transmission-filesystem"(sub2);
-        __pattern_temp_3 = "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_read_via_stream"(file, 0_i64);
-        file_rx = __pattern_temp_3.0;
-        read_future = __pattern_temp_3.1;
+        __local_23 = "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_read_via_stream"(file, 0_i64);
+        file_rx = __local_23.0;
+        read_future = __local_23.1;
         let __pair_temp_3: i64;
         __pair_temp_3 = "wasi/stream-new"();
         let __mv_lo_3: i32;
@@ -345,7 +345,8 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/run"() with 
         "wasi/stream-drop-writable"(out_tx);
         "wasi/future-drop-readable:transmission-cli"(sub3);
         "wasi/future-drop-readable:transmission-filesystem"(read_future);
-        "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("append_test.txt"), used: 15 }));
+        drop("core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("append_test.txt"), used: 15 })));
+    } else {
     }
 }
 
@@ -858,6 +859,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:fil
     let handle_1: i32;
     let raw: i32;
     let ws_3: i32;
+    let result: ref null "wasi:filesystem/types.wado//ErrorCode";
     let handle_6: i32;
     handle_1 = self.__cm_packed >> 4;
     if handle_1 != 0 {
@@ -884,13 +886,13 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:fil
         "wasi/subtask-drop"(raw);
         "wasi/waitable-set-drop"(ws_3);
     }
-    drop(block -> ref null "wasi:filesystem/types.wado//ErrorCode" {
+    result = block -> ref null "wasi:filesystem/types.wado//ErrorCode" {
         let __indirect_call_0: ref "canonical//CanonicalClosure_1";
         __indirect_call_0 = ref.cast "canonical//CanonicalClosure_1"(self.__cm_lift);
         call_ref "functype/$canonical_closure_fn_1"(__indirect_call_0.func, __indirect_call_0.env, self.__cm_outptr);
-    });
+    };
     drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
-    return;
+    return result;
 }
 
 fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {

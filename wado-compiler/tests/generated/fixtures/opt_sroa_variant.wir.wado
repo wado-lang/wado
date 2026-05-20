@@ -117,8 +117,8 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/opt_sroa_variant.wado/sum_bytes"(s) {
     let sum: i32;
     let byte: u8;
-    let _licm_used_10: i32;
-    let _licm_repr_11: ref builtin::array<u8>;
+    let _licm_used_9: i32;
+    let _licm_repr_10: ref builtin::array<u8>;
     let __sroa___iter_2_repr: ref builtin::array<u8>;
     let __sroa___iter_2_used: i32;
     let __sroa___iter_2_index: i32;
@@ -126,15 +126,15 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant.wado/sum_bytes"(s) {
     __sroa___iter_2_repr = s.repr;
     __sroa___iter_2_used = s.used;
     __sroa___iter_2_index = 0;
-    _licm_used_10 = __sroa___iter_2_used;
-    _licm_repr_11 = __sroa___iter_2_repr;
+    _licm_used_9 = __sroa___iter_2_used;
+    _licm_repr_10 = __sroa___iter_2_repr;
     b0: block {
         l1: loop {
             __fused___inline_StrUtf8ByteIter_Iterator__next_2: block {
-                if __sroa___iter_2_index >= _licm_used_10 {
+                if __sroa___iter_2_index >= _licm_used_9 {
                     break b0;
                 }
-                byte = builtin::array_get_u8(_licm_repr_11, __sroa___iter_2_index);
+                byte = builtin::array_get_u8(_licm_repr_10, __sroa___iter_2_index);
                 __sroa___iter_2_index = __sroa___iter_2_index + 1;
                 sum = sum + byte;
                 break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
@@ -152,10 +152,10 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant.wado/count_chars"(s) {
     __iter_2 = struct.new "core:prelude/string.wado//StrCharIter" { repr: s.repr, used: s.used, byte_index: 0 };
     b3: block {
         l4: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: char;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
+            let __sroa___iflet_4_discriminant: i32;
+            let __sroa___iflet_4_payload_0: char;
+            multivalue_bind [__sroa___iflet_4_discriminant, __sroa___iflet_4_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
+            if __sroa___iflet_4_discriminant == 0 {
                 count = count + 1;
             } else {
                 break b3;
@@ -201,10 +201,10 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant.wado/run"() with Stdout {
     let byte_78: u8;
     let f_82: ref "core:prelude/format.wado//Formatter";
     let f_87: ref "core:prelude/format.wado//Formatter";
-    let __sroa_iter_repr_92: ref builtin::array<u8>;
-    let __sroa_iter_used_93: i32;
-    let __sroa_iter_repr_95: ref builtin::array<u8>;
-    let __sroa_iter_used_96: i32;
+    let __sroa_iter_repr_90: ref builtin::array<u8>;
+    let __sroa_iter_used_91: i32;
+    let __sroa_iter_repr_93: ref builtin::array<u8>;
+    let __sroa_iter_used_94: i32;
     __v0_0 = "wado-compiler/tests/fixtures/opt_sroa_variant.wado/sum_bytes"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ABC"), used: 3 });
     __cond_1 = __v0_0 == 198;
     if __cond_1 == 0 {
@@ -300,13 +300,13 @@ condition: count_chars(\"hello\") == 5
     }
     __v0_6 = __inline_first_byte_23: block -> i32 {
         s_54 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Z"), used: 1 };
-        __sroa_iter_repr_92 = s_54.repr;
-        __sroa_iter_used_93 = 1;
+        __sroa_iter_repr_90 = s_54.repr;
+        __sroa_iter_used_91 = 1;
         __fused___inline_StrUtf8ByteIter_Iterator__next_25: block {
-            if 0 >= __sroa_iter_used_93 {
+            if 0 >= __sroa_iter_used_91 {
                 break __fused___inline_StrUtf8ByteIter_Iterator__next_25;
             }
-            byte_60 = builtin::array_get_u8(__sroa_iter_repr_92, 0);
+            byte_60 = builtin::array_get_u8(__sroa_iter_repr_90, 0);
             break __inline_first_byte_23: byte_60;
         };
         break __inline_first_byte_23: -1;
@@ -344,13 +344,13 @@ condition: first_byte(\"Z\") == 90
     }
     __v0_8 = __inline_first_byte_33: block -> i32 {
         s_72 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-        __sroa_iter_repr_95 = s_72.repr;
-        __sroa_iter_used_96 = 0;
+        __sroa_iter_repr_93 = s_72.repr;
+        __sroa_iter_used_94 = 0;
         __fused___inline_StrUtf8ByteIter_Iterator__next_35: block {
-            if 0 >= __sroa_iter_used_96 {
+            if 0 >= __sroa_iter_used_94 {
                 break __fused___inline_StrUtf8ByteIter_Iterator__next_35;
             }
-            byte_78 = builtin::array_get_u8(__sroa_iter_repr_95, 0);
+            byte_78 = builtin::array_get_u8(__sroa_iter_repr_93, 0);
             break __inline_first_byte_33: byte_78;
         };
         break __inline_first_byte_33: -1;

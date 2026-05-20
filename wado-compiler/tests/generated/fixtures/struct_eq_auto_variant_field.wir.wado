@@ -307,27 +307,37 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Container^Eq:
 }
 
 fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Color^Eq::eq"(self, other) {
-    let __sroa_self_value: i32;
-    let __sroa_other_value: i32;
-    if self.discriminant == 0 {
-        return other.discriminant == 0;
-    }
-    if self.discriminant == 1 {
-        return other.discriminant == 1;
-    }
-    if ref.test "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue"(self) {
-        if ref.test "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue"(other) {
-            return __inline_i32_Eq__eq_0: block -> bool {
-                __sroa_self_value = ref.cast "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue"(self).payload_0;
-                __sroa_other_value = ref.cast "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue"(other).payload_0;
-                break __inline_i32_Eq__eq_0: __sroa_self_value == __sroa_other_value;
-                unreachable;
-            };
+    let __eq_self_Blue_2: i32;
+    let __eq_other_Blue_3: i32;
+    let __match_scrut_0: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color";
+    __match_scrut_0 = self;
+    if __match_scrut_0.discriminant == 0 {
+        let __match_scrut_3: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color";
+        __match_scrut_3 = other;
+        if __match_scrut_3.discriminant == 0 {
+            return 1;
+        } else {
+            return 0;
+        }
+    } else if __match_scrut_0.discriminant == 1 {
+        let __match_scrut_2: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color";
+        __match_scrut_2 = other;
+        if __match_scrut_2.discriminant == 1 {
+            return 1;
+        } else {
+            return 0;
+        }
+    } else {
+        __eq_self_Blue_2 = ref.cast "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue"(__match_scrut_0).payload_0;
+        let __match_scrut_1: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color";
+        __match_scrut_1 = other;
+        if ref.test "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue"(__match_scrut_1) {
+            __eq_other_Blue_3 = ref.cast "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue"(__match_scrut_1).payload_0;
+            return __eq_self_Blue_2 == __eq_other_Blue_3;
         } else {
             return 0;
         }
     }
-    return 0;
 }
 
 fn "core:prelude/types.wado/Option<i32>^Eq::eq"(self, other) {

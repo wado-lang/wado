@@ -238,11 +238,11 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado/sum_until_non
     __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: keys.repr, used: keys.used, index: 0 };
     b2: block {
         l3: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                key = __sroa___pattern_temp_0_payload_0;
+            let __sroa___iflet_7_discriminant: i32;
+            let __sroa___iflet_7_payload_0: i32;
+            multivalue_bind [__sroa___iflet_7_discriminant, __sroa___iflet_7_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
+            if __sroa___iflet_7_discriminant == 0 {
+                key = __sroa___iflet_7_payload_0;
                 result = "wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado/find_item"(key);
                 if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(result) {
                     opt = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(result).payload_0;
@@ -583,13 +583,19 @@ condition: lookup_match(-1) == -2
     }
     __v0_6 = __inline_lookup_if_let_0: block -> i32 {
         result_189 = "wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado/find_item"(5);
-        if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(result_189) {
-            opt_190 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(result_189).payload_0;
-            if ref.test "core:prelude/types.wado//Option<i32>::Some"(opt_190) {
-                v_191 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt_190).payload_0;
+        let __match_scrut_6: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>";
+        __match_scrut_6 = result_189;
+        if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(__match_scrut_6) {
+            opt_190 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(__match_scrut_6).payload_0;
+            let __match_scrut_7: ref "core:prelude/types.wado//Option<i32>";
+            __match_scrut_7 = opt_190;
+            if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_7) {
+                v_191 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_7).payload_0;
                 break __inline_lookup_if_let_0: v_191;
+            } else {
             }
             break __inline_lookup_if_let_0: -1;
+        } else {
         }
         break __inline_lookup_if_let_0: -2;
         unreachable;
@@ -626,13 +632,19 @@ condition: lookup_if_let(5) == 50
     }
     __v0_8 = __inline_lookup_if_let_1: block -> i32 {
         result_195 = "wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado/find_item"(0);
-        if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(result_195) {
-            opt_196 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(result_195).payload_0;
-            if ref.test "core:prelude/types.wado//Option<i32>::Some"(opt_196) {
-                v_197 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt_196).payload_0;
+        let __match_scrut_8: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>";
+        __match_scrut_8 = result_195;
+        if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(__match_scrut_8) {
+            opt_196 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(__match_scrut_8).payload_0;
+            let __match_scrut_9: ref "core:prelude/types.wado//Option<i32>";
+            __match_scrut_9 = opt_196;
+            if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_9) {
+                v_197 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_9).payload_0;
                 break __inline_lookup_if_let_1: v_197;
+            } else {
             }
             break __inline_lookup_if_let_1: -1;
+        } else {
         }
         break __inline_lookup_if_let_1: -2;
         unreachable;
@@ -669,13 +681,19 @@ condition: lookup_if_let(0) == -1
     }
     __v0_10 = __inline_lookup_if_let_2: block -> i32 {
         result_201 = "wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado/find_item"(-1);
-        if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(result_201) {
-            opt_202 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(result_201).payload_0;
-            if ref.test "core:prelude/types.wado//Option<i32>::Some"(opt_202) {
-                v_203 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt_202).payload_0;
+        let __match_scrut_10: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>";
+        __match_scrut_10 = result_201;
+        if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(__match_scrut_10) {
+            opt_202 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(__match_scrut_10).payload_0;
+            let __match_scrut_11: ref "core:prelude/types.wado//Option<i32>";
+            __match_scrut_11 = opt_202;
+            if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_11) {
+                v_203 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_11).payload_0;
                 break __inline_lookup_if_let_2: v_203;
+            } else {
             }
             break __inline_lookup_if_let_2: -1;
+        } else {
         }
         break __inline_lookup_if_let_2: -2;
         unreachable;

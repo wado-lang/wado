@@ -4130,7 +4130,7 @@ fn variant_eq_body(
     let deref_other = || deref_local(1, "other", ref_variant_type, variant_type, span);
 
     let return_bool = |b: bool| -> TirExpr {
-        let inner = TirExpr::new(
+        TirExpr::new(
             TirExprKind::Block(TirBlock::new(
                 vec![TirStmt::new(
                     TirStmtKind::Return {
@@ -4146,8 +4146,7 @@ fn variant_eq_body(
             )),
             TypeTable::UNIT,
             span,
-        );
-        inner
+        )
     };
 
     let outer_arms: Vec<TirMatchArm> = cases

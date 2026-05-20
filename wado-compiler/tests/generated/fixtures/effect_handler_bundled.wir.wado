@@ -215,19 +215,19 @@ fn "wado-compiler/tests/fixtures/effect_handler_bundled.wado/run"() with Stdout 
 
 fn "wado-compiler/tests/fixtures/effect_handler_bundled.wado/__effect_dispatch__Greeting__hello"() {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_bundled.wado//__Dispatch_Greeting";
-    let __d: ref "wado-compiler/tests/fixtures/effect_handler_bundled.wado//__Dispatch_Greeting";
-    let __result: ref "core:prelude/string.wado//String";
+    let __local_1: ref "wado-compiler/tests/fixtures/effect_handler_bundled.wado//__Dispatch_Greeting";
+    let __local_2: ref "core:prelude/string.wado//String";
     __saved = global:__effect_Greeting;
     if ref.is_null(__saved) == 0 {
-        __d = ref.as_non_null(__saved);
-        global:__effect_Greeting = __d.outer;
-        __result = block -> ref "core:prelude/string.wado//String" {
+        __local_1 = ref.as_non_null(__saved);
+        global:__effect_Greeting = __local_1.outer;
+        __local_2 = block -> ref "core:prelude/string.wado//String" {
             let __indirect_call_0: ref "canonical//CanonicalClosure_0";
-            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__d.op_hello);
+            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__local_1.op_hello);
             call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
         };
         global:__effect_Greeting = __saved;
-        return __result;
+        return __local_2;
     } else {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Greeting::hello`"), used: 42 });
         unreachable;
@@ -236,19 +236,19 @@ fn "wado-compiler/tests/fixtures/effect_handler_bundled.wado/__effect_dispatch__
 
 fn "wado-compiler/tests/fixtures/effect_handler_bundled.wado/__effect_dispatch__Counter__tick"() {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_bundled.wado//__Dispatch_Counter";
-    let __d: ref "wado-compiler/tests/fixtures/effect_handler_bundled.wado//__Dispatch_Counter";
-    let __result: i32;
+    let __local_1: ref "wado-compiler/tests/fixtures/effect_handler_bundled.wado//__Dispatch_Counter";
+    let __local_2: i32;
     __saved = global:__effect_Counter;
     if ref.is_null(__saved) == 0 {
-        __d = ref.as_non_null(__saved);
-        global:__effect_Counter = __d.outer;
-        __result = block -> i32 {
+        __local_1 = ref.as_non_null(__saved);
+        global:__effect_Counter = __local_1.outer;
+        __local_2 = block -> i32 {
             let __indirect_call_0: ref "canonical//CanonicalClosure_1";
-            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_1"(__d.op_tick);
+            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_1"(__local_1.op_tick);
             call_ref "functype/$canonical_closure_fn_1"(__indirect_call_0.func, __indirect_call_0.env);
         };
         global:__effect_Counter = __saved;
-        return __result;
+        return __local_2;
     } else {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::tick`"), used: 40 });
         unreachable;

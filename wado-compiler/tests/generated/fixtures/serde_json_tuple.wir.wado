@@ -1807,11 +1807,11 @@ fn "core:json/write_escaped_string"(buf, s) {
     __iter_2 = struct.new "core:prelude/string.wado//StrCharIter" { repr: s.repr, used: s.used, byte_index: 0 };
     b142: block {
         l143: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: char;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                c = __sroa___pattern_temp_0_payload_0;
+            let __sroa___iflet_7_discriminant: i32;
+            let __sroa___iflet_7_payload_0: char;
+            multivalue_bind [__sroa___iflet_7_discriminant, __sroa___iflet_7_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
+            if __sroa___iflet_7_discriminant == 0 {
+                c = __sroa___iflet_7_payload_0;
                 if c == 34 {
                     "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\\\""), used: 2 });
                 } else if c == 92 {
@@ -3400,11 +3400,11 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     _licm_buf_33 = f.buf;
     b335: block {
         l336: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: char;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                c_3 = __sroa___pattern_temp_0_payload_0;
+            let __sroa___iflet_4_discriminant: i32;
+            let __sroa___iflet_4_payload_0: char;
+            multivalue_bind [__sroa___iflet_4_discriminant, __sroa___iflet_4_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
+            if __sroa___iflet_4_discriminant == 0 {
+                c_3 = __sroa___iflet_4_payload_0;
                 if c_3 == 34 {
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 34);
@@ -3655,6 +3655,7 @@ fn "core:serde/String^Deserialize::deserialize_next_element_from_seq<core:json/J
     if ref.is_null(opt) == 0 {
         v = ref.as_non_null(opt);
         return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: v };
+    } else {
     }
     return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: -1_i64 } };
 }
@@ -3676,6 +3677,7 @@ fn "core:serde/i32^Deserialize::deserialize_next_element_from_seq<core:json/Json
     if ref.test "core:prelude/types.wado//Option<i32>::Some"(opt) {
         v = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt).payload_0;
         return struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: v };
+    } else {
     }
     return struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: -1_i64 } };
 }
