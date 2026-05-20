@@ -667,7 +667,20 @@ impl Analyzer<'_> {
                 }
                 true
             }
-            NirStmtKind::Expr(e) => self.verify_expr(e, tainted, visiting),
+            NirStmtKind::Expr(e) => {
+                if !self.verify_expr(e, tainted, visiting) {
+                    return false;
+                }
+                // Assign-form taint: `x = <self-derived>` makes `x` alias
+                // self's storage thereafter, just like a `let` binding.
+                if let NirExprKind::Assign { target, value } = &e.kind
+                    && let NirExprKind::Local { index, .. } = target.kind
+                    && is_self_derived(value, tainted, self.type_table)
+                {
+                    tainted.insert(index);
+                }
+                true
+            }
             NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => value
                 .as_ref()
                 .map(|v| self.verify_expr(v, tainted, visiting))
@@ -794,6 +807,15 @@ impl Analyzer<'_> {
                 return true;
             }
             NirExprKind::IndirectCall { callee, args } => {
+                // Invoking a closure that captured a self-derived value runs
+                // its (unverified) body with access to `self`'s elements.
+                if is_self_derived(callee, tainted, self.type_table) {
+                    crate::compiler_trace!(
+                        "demote",
+                        "verify reject: indirect call of self-capturing closure"
+                    );
+                    return false;
+                }
                 if !self.verify_expr(callee, tainted, visiting) {
                     return false;
                 }
@@ -1018,9 +1040,9 @@ fn expr_mentions_local(expr: &NirExpr, idx: u32) -> bool {
     expr_children(expr).any(|c| expr_mentions_local(c, idx))
 }
 
-/// True when `expr` reads storage reachable from a tainted (self-derived)
-/// local: the local itself, a projection of it, or an `array_get` element
-/// read of a tainted spine.
+/// True when `expr` produces a value that may alias `self`'s storage — the
+/// tracked local itself, a projection of it, an `array_get` element read of a
+/// tracked spine, or an aggregate / closure that captures any such value.
 ///
 /// A primitive-typed value is excluded: reading `self.used` (an `i32`)
 /// produces an independent copy, so passing it around cannot reach `self`.
@@ -1043,6 +1065,20 @@ fn is_self_derived(expr: &NirExpr, tainted: &HashSet<u32>, tt: &Rc<RefCell<TypeT
                     .first()
                     .is_some_and(|a| is_self_derived(&a.expr, tainted, tt))
         }
+        // An aggregate / closure that embeds a self-derived value carries
+        // that aliasing storage. Tainting it lets the mutation checks below
+        // (field write, `&mut`, `&mut self` call, indirect call) fire on the
+        // aggregate / closure too.
+        NirExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .any(|f| is_self_derived(&f.value, tainted, tt)),
+        NirExprKind::TupleLiteral { elements } => {
+            elements.iter().any(|e| is_self_derived(e, tainted, tt))
+        }
+        NirExprKind::VariantConstruct { payload, .. } => payload
+            .as_ref()
+            .is_some_and(|p| is_self_derived(p, tainted, tt)),
+        NirExprKind::ClosureToCanonical { functor, .. } => is_self_derived(functor, tainted, tt),
         _ => false,
     }
 }
