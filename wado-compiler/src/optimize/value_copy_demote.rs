@@ -793,14 +793,31 @@ impl Analyzer<'_> {
             } => {
                 // The receiver auto-refs to `&self` / `&mut self`, so strip
                 // the wrapping reference before matching the handle.
-                if is_local(strip_refs(receiver), idx) {
-                    let key = (func.module_source.clone(), func.name.clone());
+                let recv = strip_refs(receiver);
+                let key = (func.module_source.clone(), func.name.clone());
+                if is_local(recv, idx) {
+                    // Receiver is the handle itself: `x.method()`.
                     let safe = match self.callee_mutates_self(&key) {
                         Some(false) => true, // &self
                         Some(true) => self.is_method_element_immutable(&key),
                         None => false,
                     };
                     if !safe {
+                        return false;
+                    }
+                } else if expr_mentions_local(receiver, idx) {
+                    // The handle appears inside the receiver — an element
+                    // or field of it (`x[i].method()`, `x.get(i).method()`,
+                    // `x.field.method()`). A `&mut self` method there may
+                    // mutate an element, which a shallow copy would share.
+                    // A `&self` method is a read; recurse to vet the
+                    // receiver. (`x[i]` lowers to an `Array::index` method
+                    // call, not a bare `Index`, so a structural root check
+                    // is not enough — match on the handle appearing at all.)
+                    if self.callee_mutates_self(&key) != Some(false) {
+                        return false;
+                    }
+                    if !self.handle_expr(receiver, idx) {
                         return false;
                     }
                 } else if !self.handle_expr(receiver, idx) {
@@ -813,6 +830,14 @@ impl Analyzer<'_> {
             }
             NirExprKind::IndirectCall { callee, args } => {
                 self.handle_expr(callee, idx) && args.iter().all(|a| self.handle_call_arg(a, idx))
+            }
+            NirExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            } => {
+                // `&mut x`, `&mut x[i]`, `&mut x.field` — a mutable
+                // reference into the handle escapes our control.
+                !expr_mentions_local(inner, idx)
             }
             NirExprKind::Index { expr: base, index } => {
                 // Index read: `x[i]` produces an element copy.
