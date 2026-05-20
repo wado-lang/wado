@@ -1,0 +1,34 @@
+// `value_copy_demote` soundness: one function with two copies that share
+// the same `$value_copy$T_Array<String>` helper — one demote-eligible
+// (`sorted`, only spine-mutated and read), one NOT (`victim`, an element
+// is mutated via `victim[0].push`).
+//
+// Retargeting must rewrite ONLY the eligible site. Demoting `victim` too
+// would make its shallow copy share `b`'s `String` objects, so
+// `victim[0].push('!')` would corrupt `b[0]`.
+//
+// `wir_expect:O2 ["array_clone_deep"]` asserts `victim`'s copy stays
+// deep; the stdout assertion catches the corruption (`b[0]` must remain
+// "hi").
+
+use { println } from "core:cli";
+
+fn process(a: &Array<String>, b: &Array<String>) -> String {
+    let mut sorted = *a;
+    sorted.sort();
+    let mut victim = *b;
+    victim[0].push('!');
+    return `{sorted[0]} {victim[0]} {b[0]}`;
+}
+
+export fn run() with Stdout {
+    let a: Array<String> = ["q", "p"];
+    let b: Array<String> = ["hi", "yo"];
+    println(process(&a, &b));
+}
+
+__DATA__
+{
+    "stdout": "p hi! hi\n",
+    "wir_expect:O2": ["array_clone_deep"]
+}

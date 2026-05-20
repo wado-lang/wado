@@ -69,44 +69,47 @@ pub fn demote_value_copies(project: &mut NirPackage) {
         eimm_memo: HashMap::new(),
     };
 
-    // Phase 1: collect demote-eligible call sites (function index, a path is
-    // not needed — we rewrite by matching the helper name).
-    let mut eligible: Vec<(usize, FuncKey)> = Vec::new();
+    // Phase 1: per `(function, target-local)`, AND-combine the eligibility
+    // of every value-copy-wrapper binding to that local. A local bound by
+    // several wrapper copies is demoted only when *every* binding is
+    // eligible — so the single `(fi, local)` key precisely drives the
+    // rewrite, and a binding whose sibling is unsafe stays deep rather than
+    // being collaterally demoted.
+    let mut site_elig: HashMap<(usize, u32), bool> = HashMap::new();
+    let mut site_key: HashMap<(usize, u32), FuncKey> = HashMap::new();
     for (fi, f) in project.functions.iter().enumerate() {
         let f = f.borrow();
         if f.value_copy_type().is_some() {
             continue;
         }
         let Some(body) = &f.body else { continue };
-        let mut sites: Vec<FuncKey> = Vec::new();
         collect_sites(
             body,
             &array_wrapper_copies,
             body,
             &f.params,
+            fi,
             &mut analyzer,
-            &mut sites,
+            &mut site_elig,
+            &mut site_key,
         );
-        if !sites.is_empty() {
-            crate::compiler_trace!("demote", "{}: {} eligible site(s)", f.name, sites.len());
-        }
-        for s in sites {
-            eligible.push((fi, s));
+    }
+
+    let mut demoted_keys: HashSet<FuncKey> = HashSet::new();
+    for (loc, &elig) in &site_elig {
+        if elig {
+            demoted_keys.insert(site_key[loc].clone());
         }
     }
-    crate::compiler_trace!("demote", "total eligible sites: {}", eligible.len());
-    if eligible.is_empty() {
+    crate::compiler_trace!("demote", "demoted helper keys: {}", demoted_keys.len());
+    if demoted_keys.is_empty() {
         return;
     }
 
-    // Phase 2: synthesize shallow sibling helpers (once per deep helper) and
-    // retarget the eligible call sites.
+    // Phase 2a: synthesize a shallow sibling helper per demoted deep helper.
     let mut shallow_name: HashMap<FuncKey, String> = HashMap::new();
     let mut new_funcs: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
-    for (_, deep_key) in &eligible {
-        if shallow_name.contains_key(deep_key) {
-            continue;
-        }
+    for deep_key in &demoted_keys {
         let new_name = format!("{}$shallow", deep_key.1);
         // A prior fixed-point iteration may already have synthesized this
         // helper; reuse it rather than adding a duplicate-named function.
@@ -115,8 +118,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
             continue;
         }
         let idx = by_key[deep_key];
-        let deep = project.functions[idx].borrow();
-        let mut shallow = deep.clone();
+        let mut shallow = project.functions[idx].borrow().clone();
         shallow.name = new_name.clone();
         shallow.kind = FunctionKind::Regular;
         shallow.is_pub = false;
@@ -124,19 +126,23 @@ pub fn demote_value_copies(project: &mut NirPackage) {
         if let Some(body) = &mut shallow.body {
             rewrite_array_clone_to_shallow(body);
         }
-        drop(deep);
         shallow_name.insert(deep_key.clone(), new_name);
         new_funcs.push(Rc::new(RefCell::new(shallow)));
     }
 
+    // Phase 2b: a pure mechanical rewrite — retarget exactly the
+    // `(fi, local)` bindings marked eligible. No analysis here, so it needs
+    // no `&project.functions` borrow and cannot conflict with the mutation.
     let mut touched: HashSet<usize> = HashSet::new();
-    for (fi, _) in &eligible {
-        touched.insert(*fi);
+    for ((fi, _), &elig) in &site_elig {
+        if elig {
+            touched.insert(*fi);
+        }
     }
     for fi in touched {
         let mut f = project.functions[fi].borrow_mut();
         if let Some(body) = &mut f.body {
-            retarget_calls(body, &array_wrapper_copies, &shallow_name);
+            retarget_block(body, fi, &site_elig, &array_wrapper_copies, &shallow_name);
         }
     }
     project.functions.extend(new_funcs);
@@ -214,39 +220,64 @@ fn rewrite_expr(expr: &mut NirExpr) {
 // Call-site collection / retargeting
 // ---------------------------------------------------------------------------
 
-/// Walk `block`, collecting deep-helper keys for `let x = $value_copy$T(arg)`
-/// (and the `Assign` form) bindings that can be safely demoted. Every nested
-/// block (statement-level and expression-embedded) is visited exactly once.
+/// If `value` is a one-argument call to an array-wrapper `$value_copy$T`
+/// helper, return that helper's key.
+fn wrapper_call_key(value: &NirExpr, wrappers: &HashSet<FuncKey>) -> Option<FuncKey> {
+    if let NirExprKind::Call { func, args, .. } = &value.kind
+        && args.len() == 1
+    {
+        let key = (func.module_source.clone(), func.name.clone());
+        if wrappers.contains(&key) {
+            return Some(key);
+        }
+    }
+    None
+}
+
+/// The `(value, target-local)` binding a statement establishes, when it is a
+/// `let x = …` or a `x = …` whose target is a plain local.
+fn stmt_binding(stmt: &NirStmt) -> Option<(&NirExpr, u32)> {
+    match &stmt.kind {
+        NirStmtKind::Let {
+            local_index, value, ..
+        } => Some((value, *local_index)),
+        NirStmtKind::Expr(e) => {
+            if let NirExprKind::Assign { target, value } = &e.kind
+                && let NirExprKind::Local { index, .. } = target.kind
+            {
+                Some((value, index))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Walk `block`; for every `let x = $value_copy$T(arg)` (and `Assign` form)
+/// binding to a value-copy-wrapper helper, AND-combine its eligibility into
+/// `site_elig[(fi, x)]`. Every nested block is visited exactly once.
 fn collect_sites(
     block: &NirBlock,
     wrappers: &HashSet<FuncKey>,
     fn_body: &NirBlock,
     params: &[crate::nir::NirParam],
+    fi: usize,
     an: &mut Analyzer,
-    out: &mut Vec<FuncKey>,
+    site_elig: &mut HashMap<(usize, u32), bool>,
+    site_key: &mut HashMap<(usize, u32), FuncKey>,
 ) {
     for stmt in &block.stmts {
-        // This statement's own Let / Assign binding.
-        match &stmt.kind {
-            NirStmtKind::Let {
-                local_index, value, ..
-            } => {
-                if let Some(key) =
-                    demote_candidate(value, wrappers, *local_index, fn_body, params, an)
-                {
-                    out.push(key);
-                }
-            }
-            NirStmtKind::Expr(e) => {
-                if let NirExprKind::Assign { target, value } = &e.kind
-                    && let NirExprKind::Local { index, .. } = &target.kind
-                    && let Some(key) =
-                        demote_candidate(value, wrappers, *index, fn_body, params, an)
-                {
-                    out.push(key);
-                }
-            }
-            _ => {}
+        if let Some((value, target)) = stmt_binding(stmt)
+            && let Some(key) = wrapper_call_key(value, wrappers)
+        {
+            let elig = demote_candidate(value, target, fn_body, params, an);
+            let loc = (fi, target);
+            site_elig
+                .entry(loc)
+                .and_modify(|e| *e &= elig)
+                .or_insert(elig);
+            site_key.entry(loc).or_insert(key);
         }
         // Descend into every sub-block one level down, exactly once.
         let mut subs: Vec<&NirBlock> = Vec::new();
@@ -270,7 +301,7 @@ fn collect_sites(
             direct_blocks_in_expr(e, &mut subs);
         }
         for sub in subs {
-            collect_sites(sub, wrappers, fn_body, params, an, out);
+            collect_sites(sub, wrappers, fn_body, params, fi, an, site_elig, site_key);
         }
     }
 }
@@ -359,114 +390,104 @@ fn is_immutable_ref_param(
     })
 }
 
-/// If `value` is `$value_copy$T_arraywrapper(arg)` and both the binding
-/// `target_idx` and the argument source are element-clean, return the deep
-/// helper key.
+/// True when the binding `target_idx` and the source `value` reads from are
+/// both element-clean — i.e. demoting `value` (an array-wrapper value copy)
+/// to a shallow copy is observably equivalent to the deep copy.
 fn demote_candidate(
     value: &NirExpr,
-    wrappers: &HashSet<FuncKey>,
     target_idx: u32,
     fn_body: &NirBlock,
     params: &[crate::nir::NirParam],
     an: &mut Analyzer,
-) -> Option<FuncKey> {
-    let NirExprKind::Call { func, args, .. } = &value.kind else {
-        return None;
+) -> bool {
+    let NirExprKind::Call { args, .. } = &value.kind else {
+        return false;
     };
-    if args.len() != 1 {
-        return None;
-    }
-    let key = (func.module_source.clone(), func.name.clone());
-    if !wrappers.contains(&key) {
-        return None;
-    }
     if !an.handle_is_element_clean(fn_body, target_idx) {
         crate::compiler_trace!(
             "demote",
-            "{}: target local {} not element-clean — skip",
-            func.name,
+            "target local {} not element-clean — skip",
             target_idx
         );
-        return None;
+        return false;
     }
     // The argument side: a fresh rvalue (`None` root) is uniquely owned;
     // an immutable-ref parameter cannot be mutated; otherwise every use of
     // the root local must itself be element-clean.
     match arg_source_root(&args[0].expr) {
-        None => {}
+        None => true,
         Some(root) => {
             let clean = is_immutable_ref_param(params, an.type_table, root)
                 || an.arg_local_is_element_clean(fn_body, root);
             if !clean {
                 crate::compiler_trace!(
                     "demote",
-                    "{}: arg root local {} not element-clean — skip",
-                    func.name,
+                    "arg root local {} not element-clean — skip",
                     root
                 );
-                return None;
             }
+            clean
         }
     }
-    Some(key)
 }
 
-fn retarget_calls(
+/// Phase 2b mechanical rewrite: visit every nested block, and for each
+/// `let x = …` / `x = …` binding whose `(fi, x)` is marked eligible, retarget
+/// the value-copy-wrapper call to its shallow sibling. Pure rewrite — no
+/// analysis, so it cannot conflict with the `&mut` borrow of the function.
+fn retarget_block(
     block: &mut NirBlock,
+    fi: usize,
+    site_elig: &HashMap<(usize, u32), bool>,
     wrappers: &HashSet<FuncKey>,
     shallow_name: &HashMap<FuncKey, String>,
 ) {
     for stmt in &mut block.stmts {
-        retarget_stmt(stmt, wrappers, shallow_name);
+        let target = match &stmt.kind {
+            NirStmtKind::Let { local_index, .. } => Some(*local_index),
+            NirStmtKind::Expr(e) => match &e.kind {
+                NirExprKind::Assign { target, .. } => match target.kind {
+                    NirExprKind::Local { index, .. } => Some(index),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(target) = target
+            && site_elig.get(&(fi, target)) == Some(&true)
+            && let Some(value) = stmt_binding_value_mut(stmt)
+        {
+            retarget_wrapper_call(value, wrappers, shallow_name);
+        }
+        for sub in stmt_subblocks_mut(stmt) {
+            retarget_block(sub, fi, site_elig, wrappers, shallow_name);
+        }
     }
 }
 
-fn retarget_stmt(
-    stmt: &mut NirStmt,
-    wrappers: &HashSet<FuncKey>,
-    shallow_name: &HashMap<FuncKey, String>,
-) {
+/// The mutable binding value of a `let` / `Assign` statement.
+fn stmt_binding_value_mut(stmt: &mut NirStmt) -> Option<&mut NirExpr> {
     match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::Expr(value) => {
-            retarget_expr(value, wrappers, shallow_name);
-        }
-        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                retarget_expr(v, wrappers, shallow_name);
+        NirStmtKind::Let { value, .. } => Some(value),
+        NirStmtKind::Expr(e) => {
+            if let NirExprKind::Assign { value, .. } = &mut e.kind {
+                Some(value)
+            } else {
+                None
             }
         }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            retarget_expr(condition, wrappers, shallow_name);
-            retarget_calls(then_block, wrappers, shallow_name);
-            if let Some(eb) = else_block {
-                retarget_calls(eb, wrappers, shallow_name);
-            }
-        }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            retarget_calls(body, wrappers, shallow_name);
-        }
-        NirStmtKind::LetDestructure { value, .. } => {
-            retarget_expr(value, wrappers, shallow_name);
-        }
-        NirStmtKind::Continue => {}
+        _ => None,
     }
 }
 
-fn retarget_expr(
-    expr: &mut NirExpr,
+/// Rewrite a value-copy-wrapper call to its synthesized shallow sibling.
+fn retarget_wrapper_call(
+    value: &mut NirExpr,
     wrappers: &HashSet<FuncKey>,
     shallow_name: &HashMap<FuncKey, String>,
 ) {
-    // Only `let x = $value_copy$T(arg)` shapes that `collect_sites` accepted
-    // are retargeted; matching the helper key is sufficient because every
-    // call to an array-wrapper helper whose binding is element-clean was
-    // collected. To stay precise we retarget exactly the Let/Assign-bound
-    // calls: a bare wrapper call elsewhere keeps its deep semantics.
-    if let NirExprKind::Call { func, args, .. } = &mut expr.kind
+    if let NirExprKind::Call { func, args, .. } = &mut value.kind
         && args.len() == 1
     {
         let key = (func.module_source.clone(), func.name.clone());
@@ -476,8 +497,83 @@ fn retarget_expr(
             func.name = new.clone();
         }
     }
-    for child in expr_children_mut(expr) {
-        retarget_expr(child, wrappers, shallow_name);
+}
+
+/// Every `NirBlock` one level down from `stmt` — statement-level branches
+/// and blocks embedded in the statement's own expressions.
+fn stmt_subblocks_mut(stmt: &mut NirStmt) -> Vec<&mut NirBlock> {
+    let mut out: Vec<&mut NirBlock> = Vec::new();
+    match &mut stmt.kind {
+        NirStmtKind::Let { value, .. }
+        | NirStmtKind::Expr(value)
+        | NirStmtKind::LetDestructure { value, .. } => blocks_in_expr_mut(value, &mut out),
+        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                blocks_in_expr_mut(v, &mut out);
+            }
+        }
+        NirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            blocks_in_expr_mut(condition, &mut out);
+            out.push(then_block);
+            if let Some(eb) = else_block {
+                out.push(eb);
+            }
+        }
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
+            out.push(body);
+        }
+        NirStmtKind::Continue => {}
+    }
+    out
+}
+
+/// `&mut` mirror of [`direct_blocks_in_expr`]. The classify-then-borrow split
+/// keeps `expr` borrowed mutably on exactly one path (the block-bearing match
+/// arms *or* the `expr_children_mut` recursion, never both).
+fn blocks_in_expr_mut<'a>(expr: &'a mut NirExpr, out: &mut Vec<&'a mut NirBlock>) {
+    let block_bearing = matches!(
+        &expr.kind,
+        NirExprKind::Block(_)
+            | NirExprKind::LabeledBlock { .. }
+            | NirExprKind::If { .. }
+            | NirExprKind::Switch { .. }
+    );
+    if block_bearing {
+        match &mut expr.kind {
+            NirExprKind::Block(b) | NirExprKind::LabeledBlock { block: b, .. } => out.push(b),
+            NirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                blocks_in_expr_mut(condition, out);
+                out.push(then_branch);
+                if let Some(eb) = else_branch {
+                    out.push(eb);
+                }
+            }
+            NirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                blocks_in_expr_mut(scrutinee, out);
+                for a in arms {
+                    out.push(a);
+                }
+                out.push(default);
+            }
+            _ => unreachable!("block_bearing checked above"),
+        }
+    } else {
+        for child in expr_children_mut(expr) {
+            blocks_in_expr_mut(child, out);
+        }
     }
 }
 
@@ -641,16 +737,24 @@ impl Analyzer<'_> {
                 ..
             } => {
                 let key = (func.module_source.clone(), func.name.clone());
-                if self.callee_mutates_self(&key) == Some(true)
-                    && is_self_derived(receiver, tainted, self.type_table)
-                    && !self.verify(&key, visiting)
-                {
-                    crate::compiler_trace!(
-                        "demote",
-                        "verify reject: &mut-self call to non-eimm {}",
-                        key.1
-                    );
-                    return false;
+                // A call whose receiver is self-derived may mutate an
+                // element unless the callee is known `&self` (cannot
+                // mutate) or a verified element-immutable `&mut self`
+                // method. An unresolvable callee is conservatively unsafe.
+                if is_self_derived(receiver, tainted, self.type_table) {
+                    let ok = match self.callee_mutates_self(&key) {
+                        Some(false) => true,
+                        Some(true) => self.verify(&key, visiting),
+                        None => false,
+                    };
+                    if !ok {
+                        crate::compiler_trace!(
+                            "demote",
+                            "verify reject: unsafe call on self-derived recv {}",
+                            key.1
+                        );
+                        return false;
+                    }
                 }
                 if !self.verify_expr(receiver, tainted, visiting) {
                     return false;
