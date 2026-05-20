@@ -296,6 +296,7 @@ condition: b == \"99\"
 fn "wado-compiler/tests/fixtures/generic_method_merged.wado/__test_6_self_call"() {
     let __v0_4: i32;
     let __cond_5: bool;
+    let __v0_6: i32;
     let __cond_7: bool;
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
@@ -347,7 +348,8 @@ condition: pair.0 == 42
         });
         unreachable;
     }
-    __cond_7 = b == 42;
+    __v0_6 = b;
+    __cond_7 = __v0_6 == 42;
     if __cond_7 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(123), used: 0 };
@@ -375,7 +377,7 @@ condition: pair.1 == 42
             "core:prelude/string.wado/String::push"(__local_12, 32);
             __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             f_51 = __local_13;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(b, f_51);
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_6, f_51);
             "core:prelude/string.wado/String::push"(__local_12, 10);
             break __tmpl: __local_12;
             unreachable;
