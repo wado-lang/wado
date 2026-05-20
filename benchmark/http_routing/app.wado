@@ -1,0 +1,122 @@
+// HTTP routing benchmark service.
+//
+// A routing-heavy `wasi:http/service` world app, used to benchmark
+// `wado serve` against an equivalent Hono (Node.js) server. The route
+// set mixes shallow/deep static routes, single- and multi-parameter
+// routes, and a wildcard route, all dispatched through `core:router`.
+//
+// Run with wado serve:
+//   cargo run --bin wado -- serve benchmark/http_routing/app.wado
+
+use {
+    Request, Response, ErrorCode, Fields, FieldValue, Trailers, StatusCode,
+} from "wasi:http";
+use { Router, PathParams } from "core:router";
+use { Serialize } from "core:serde";
+use json from "core:json";
+
+/// Uniform JSON body shape shared by every route, mirroring the Hono
+/// server's `{ route, params }` response so the serialization cost is
+/// comparable on both sides.
+struct ApiResponse {
+    route: String,
+    params: Array<String>,
+}
+impl Serialize for ApiResponse;
+
+struct RouteResponse {
+    status: StatusCode,
+    body: String,
+}
+
+type Handler = fn(Request, PathParams) -> RouteResponse;
+
+fn body_for(route: String, params: Array<String>) -> String {
+    return json::to_string(&ApiResponse { route, params }).unwrap();
+}
+
+/// 200 response for a parametric route.
+fn ok(route: String, params: Array<String>) -> RouteResponse {
+    return RouteResponse { status: 200, body: body_for(route, params) };
+}
+
+/// 200 response for a static route (no captured parameters).
+fn ok0(route: String) -> RouteResponse {
+    return ok(route, [] as Array<String>);
+}
+
+fn build_router() -> Router<Handler> {
+    let mut r = Router::<Handler>::new();
+
+    // Static routes — shallow.
+    r.get("/",        |_req, _p| ok0("root"));
+    r.get("/health",  |_req, _p| ok0("health"));
+    r.get("/version", |_req, _p| ok0("version"));
+    r.get("/metrics", |_req, _p| ok0("metrics"));
+    r.get("/ping",    |_req, _p| ok0("ping"));
+
+    // Static routes — medium / deep, sharing the `/api/v1` prefix.
+    r.get("/api/v1/health",                  |_req, _p| ok0("api.health"));
+    r.get("/api/v1/version",                 |_req, _p| ok0("api.version"));
+    r.get("/api/v1/status",                  |_req, _p| ok0("api.status"));
+    r.get("/api/v1/users/list",              |_req, _p| ok0("users.list"));
+    r.get("/api/v1/posts/list",              |_req, _p| ok0("posts.list"));
+    r.get("/api/v1/products/list",           |_req, _p| ok0("products.list"));
+    r.get("/api/v1/orders/list",             |_req, _p| ok0("orders.list"));
+    r.get("/api/v1/comments/list",           |_req, _p| ok0("comments.list"));
+    r.get("/api/v1/admin/users/list",        |_req, _p| ok0("admin.users.list"));
+    r.get("/api/v1/admin/posts/list",        |_req, _p| ok0("admin.posts.list"));
+    r.get("/api/v1/admin/stats/revenue",     |_req, _p| ok0("admin.stats.revenue"));
+    r.get("/api/v1/admin/stats/traffic",     |_req, _p| ok0("admin.stats.traffic"));
+    r.get("/api/v1/admin/system/cache/stats", |_req, _p| ok0("admin.system.cache.stats"));
+    r.get("/api/v1/admin/system/logs/recent", |_req, _p| ok0("admin.system.logs.recent"));
+
+    // Single-parameter routes.
+    r.get("/api/v1/users/:id",      |_req, p| ok("users.show", [p["id"]]));
+    r.get("/api/v1/posts/:id",      |_req, p| ok("posts.show", [p["id"]]));
+    r.get("/api/v1/products/:id",   |_req, p| ok("products.show", [p["id"]]));
+    r.get("/api/v1/orders/:id",     |_req, p| ok("orders.show", [p["id"]]));
+    r.get("/api/v1/categories/:slug", |_req, p| ok("categories.show", [p["slug"]]));
+
+    // Multi-parameter routes.
+    r.get("/api/v1/users/:id/posts/:pid",     |_req, p| ok("users.posts.show", [p["id"], p["pid"]]));
+    r.get("/api/v1/users/:id/comments/:cid",  |_req, p| ok("users.comments.show", [p["id"], p["cid"]]));
+    r.get("/api/v1/posts/:id/comments/:cid",  |_req, p| ok("posts.comments.show", [p["id"], p["cid"]]));
+    r.get("/api/v1/users/:id/posts/:pid/comments/:cid",
+          |_req, p| ok("users.posts.comments.show", [p["id"], p["pid"], p["cid"]]));
+    r.get("/api/v1/categories/:slug/products/:pid/reviews/:rid",
+          |_req, p| ok("categories.products.reviews.show", [p["slug"], p["pid"], p["rid"]]));
+
+    // Mutating parametric routes.
+    r.post("/api/v1/users/:id", |_req, p| ok("users.update", [p["id"]]));
+    r.post("/api/v1/posts/:id", |_req, p| ok("posts.update", [p["id"]]));
+
+    // Wildcard route.
+    r.get("/static/*path", |_req, p| ok("static", [p["path"]]));
+
+    return r;
+}
+
+global ROUTER: Router<Handler> = build_router();
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let resp = if let Some(m) = ROUTER.match_request(&request) {
+        (m.handler)(request, m.params)
+    } else {
+        RouteResponse { status: 404, body: body_for("not-found", [] as Array<String>) }
+    };
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+
+    let resp_headers = Fields::new();
+    resp_headers.append("content-type", "application/json".bytes().collect() as FieldValue);
+    let [response, _response_tx] = Response::new(resp_headers, Option::Some(body_rx), trailers_future);
+    response.set_status_code(resp.status);
+
+    task return Result::Ok(response);
+
+    body_tx.write(resp.body.bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}

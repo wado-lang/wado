@@ -140,6 +140,29 @@ Notes:
   (WASM) engine is omitted because it is ~2.5x slower than the JS
   engine on this input while producing byte-identical output.
 
+## HTTP Routing
+
+End-to-end HTTP throughput of `wado serve` vs an equivalent
+[Hono](https://hono.dev/) server on Node.js, over a 32-route set
+(static / parametric / wildcard) returning a shared JSON shape. Load
+applied with `oha` (5s, 50 connections per route).
+
+Throughput (requests/sec, higher is better):
+
+| Route shape        | `wado serve` | Hono (Node) |
+| ------------------ | -----------: | ----------: |
+| static (`/health`) |        3,605 |      24,234 |
+| 1 param            |        3,562 |      14,851 |
+| 3 params           |        3,786 |      18,088 |
+| wildcard           |        3,716 |      22,588 |
+| miss (404)         |        3,630 |      20,627 |
+
+`wado serve` throughput is flat across route shapes — `core:router`
+matching is not the bottleneck; per-request Wasm-component HTTP
+overhead dominates. This is a cross-runtime comparison (Wasm component
+on wasmtime vs JS on Node.js). See `http_routing/README.md` for the
+full per-route table and methodology.
+
 ## Running
 
 ```sh
@@ -155,6 +178,7 @@ mise run benchmark-json-canada      # JSON (2.3 MB)
 mise run benchmark-json-catalog     # JSON (1.7 MB)
 mise run benchmark-sqlite-parse     # SQL parsing
 mise run benchmark-syntax-highlight # syntax highlighting
+mise run benchmark-http-routing     # HTTP routing (wado serve vs Hono)
 ```
 
 Prerequisites: `cc`, `cargo`, `zig`, `node` (managed by `mise install`).
