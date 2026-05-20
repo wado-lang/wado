@@ -348,7 +348,7 @@ fn fuse_adjacent_pairs(
         // Check preconditions by borrowing both statements.
         let fusion_info = iter
             .peek()
-            .and_then(|if_stmt| check_fusion_preconditions(&let_stmt, if_stmt));
+            .and_then(|if_stmt| check_fusion_preconditions(&let_stmt, if_stmt, locals.as_slice()));
 
         if let Some(info) = fusion_info {
             let if_stmt = iter.next().unwrap();
@@ -410,9 +410,13 @@ struct FusionInfo {
 ///   _ => else] })` — the canonical shape post-Phase 10 Step 2a, with
 ///   the payload binding `b` (when present) carrying the local that
 ///   `then` reads from.
-fn check_fusion_preconditions(let_stmt: &NirStmt, if_stmt: &NirStmt) -> Option<FusionInfo> {
+fn check_fusion_preconditions(
+    let_stmt: &NirStmt,
+    if_stmt: &NirStmt,
+    locals: &[NirLocal],
+) -> Option<FusionInfo> {
     check_fusion_preconditions_if_variant_test(let_stmt, if_stmt)
-        .or_else(|| check_fusion_preconditions_match(let_stmt, if_stmt))
+        .or_else(|| check_fusion_preconditions_match(let_stmt, if_stmt, locals))
 }
 
 fn check_fusion_preconditions_if_variant_test(
@@ -519,7 +523,11 @@ fn check_fusion_preconditions_if_variant_test(
 /// legacy `If + VariantTest` consumer; the `pattern_payload_binding`
 /// field carries the variant arm's binding so `perform_fusion` can
 /// reuse it as the payload local.
-fn check_fusion_preconditions_match(let_stmt: &NirStmt, if_stmt: &NirStmt) -> Option<FusionInfo> {
+fn check_fusion_preconditions_match(
+    let_stmt: &NirStmt,
+    if_stmt: &NirStmt,
+    locals: &[NirLocal],
+) -> Option<FusionInfo> {
     use crate::nir::{NirMatchArm, NirPattern};
 
     // --- Stmt 1: Let { value: LabeledBlock { label, block } } ---
@@ -608,6 +616,23 @@ fn check_fusion_preconditions_match(let_stmt: &NirStmt, if_stmt: &NirStmt) -> Op
 
     // --- LabeledBlock only breaks to L with null or VariantConstruct ---
     let payload_type = check_lb_breaks_and_get_payload(lb_block, label, case_index)?;
+
+    // --- The reused binding slot must already be declared with the
+    // payload's type. `perform_fusion` writes the variant payload into
+    // the binding's local (`let <binding> = <payload>`) and the arm
+    // body reads `Local(<binding>)`; both rely on the binding's
+    // declared type matching `payload_type`. They can diverge when an
+    // earlier pass (e.g. `boxing`) gave the binding local a distinct
+    // but structurally-similar `TypeId` — folding the Match in would
+    // then emit an ill-typed assignment. Bail; the un-fused Match
+    // lowers correctly via `wir_build::emit_pattern_bindings`.
+    if let Some(binding) = pattern_payload_binding
+        && locals
+            .get(binding as usize)
+            .is_none_or(|local| local.type_id != payload_type)
+    {
+        return None;
+    }
 
     // --- temp must not be read outside the Match scrutinee position.
     // The `count_local_uses_in_*` walkers count every `Local(temp)`
