@@ -81,27 +81,35 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
     return aligned;
 }
 
-/// Free-list allocator — reclaims freed memory with a *coalescing* free
-/// list. Suitable for long-running processes (e.g. HTTP servers).
+/// Free-list allocator — reclaims freed memory with a *coalescing*,
+/// size-class-segregated free list. Suitable for long-running processes
+/// (e.g. HTTP servers).
 ///
 /// Every block carries an 8-byte header and 8-byte footer (boundary
 /// tags), both holding `block_size | used_bit`. On free, the physically
-/// adjacent previous and next blocks are inspected through their tags and
-/// merged when free, so per-request allocation churn cannot shatter the
-/// heap into unusable fragments. The free list is doubly linked
-/// (`next` at payload+0, `prev` at payload+4) so a neighbour can be
-/// unlinked in O(1) while coalescing.
+/// adjacent previous and next blocks are inspected through their tags
+/// and merged when free, so per-request allocation churn cannot shatter
+/// the heap into unusable fragments.
+///
+/// Free blocks are kept in segregated free lists — one doubly-linked
+/// list per size class. Bin `k` (k < 32) holds blocks of size exactly
+/// `24 + 8*k`; bin 32 is the catch-all "large" bin (first-fit).
+/// Allocation goes straight to the size class's bin, so the common case
+/// is O(1) rather than a first-fit scan over every free block.
 ///
 /// Block layout (8-byte aligned, size a multiple of 8):
 ///   [ size|used : i32 ][ pad : i32 ][ payload … ][ size|used : i32 ][ pad : i32 ]
 /// `alloc` returns `block + 8` (the payload), always 8-byte aligned —
 /// which satisfies every Component Model alignment (all are <= 8).
 ///
+/// The 33 bin heads live in memory at `[8, 8 + 4*33)`; the first block
+/// starts at byte 144. Wasm memory is zero-initialised, so every bin
+/// head starts empty.
+///
 /// The algorithm is developed and unit-tested in
 /// `example/freelist_allocator.wado`.
 ///
 /// Selected by `--allocator freelist` (default for HTTP service world).
-global mut free_list: i32 = 0;
 
 /// Block size encoded in a boundary tag (clears the low 3 bits).
 fn fl_size(tag: i32) -> i32 {
@@ -113,6 +121,24 @@ fn fl_used(tag: i32) -> i32 {
     return builtin::i32_and(tag, 1);
 }
 
+/// Size-class bin index for a block of `size` bytes: an exact bin per
+/// 8-byte step for small blocks, bin 32 for everything larger.
+fn fl_bin(size: i32) -> i32 {
+    let k = (size - 24) / 8;
+    return if k < 32 { k } else { 32 };
+}
+
+/// Head of size-class bin `k` (0 when empty). The bin-head table is the
+/// reserved memory region starting at byte 8.
+fn fl_bin_head(k: i32) -> i32 {
+    return builtin::i32_load(8 + k * 4);
+}
+
+/// Set the head of size-class bin `k`.
+fn fl_set_bin_head(k: i32, head: i32) {
+    builtin::i32_store(8 + k * 4, head);
+}
+
 /// Write the header and footer boundary tags of the block at `block`.
 fn fl_set_tags(block: i32, size: i32, used: i32) {
     // `size` is a multiple of 8 and `used` is 0 or 1, so `+` acts as `|`.
@@ -121,28 +147,45 @@ fn fl_set_tags(block: i32, size: i32, used: i32) {
     builtin::i32_store(block + size - 8, tag);
 }
 
-/// Insert `block` at the head of the doubly-linked free list.
-fn fl_push(block: i32) {
-    let head = free_list;
+/// Insert `block` (of `size` bytes) at the head of its size-class bin.
+fn fl_push(block: i32, size: i32) {
+    let k = fl_bin(size);
+    let head = fl_bin_head(k);
     builtin::i32_store(block + 8, head);
     builtin::i32_store(block + 12, 0);
     if head != 0 {
         builtin::i32_store(head + 12, block);
     }
-    free_list = block;
+    fl_set_bin_head(k, block);
 }
 
-/// Remove `block` from the free list (it must currently be linked).
+/// Remove `block` from its size-class bin (it must currently be linked).
 fn fl_unlink(block: i32) {
+    let k = fl_bin(fl_size(builtin::i32_load(block)));
     let next = builtin::i32_load(block + 8);
     let prev = builtin::i32_load(block + 12);
     if prev == 0 {
-        free_list = next;
+        fl_set_bin_head(k, next);
     } else {
         builtin::i32_store(prev + 8, next);
     }
     if next != 0 {
         builtin::i32_store(next + 12, prev);
+    }
+}
+
+/// Mark the block at `block` (currently sized `block_size`) used for an
+/// allocation of `size` bytes, splitting off the remainder as a free
+/// block when it is large enough (>= the 24-byte minimum).
+fn fl_carve(block: i32, block_size: i32, size: i32) {
+    let remainder = block_size - size;
+    if remainder >= 24 {
+        fl_set_tags(block, size, 1);
+        let rest = block + size;
+        fl_set_tags(rest, remainder, 0);
+        fl_push(rest, remainder);
+    } else {
+        fl_set_tags(block, block_size, 1);
     }
 }
 
@@ -152,6 +195,13 @@ fn fl_unlink(block: i32) {
 // satisfies every Component Model alignment (all are <= 8).
 #[allocator("freelist")]
 export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
+    // The shared `heap_offset` global starts at 8; on first use, reserve
+    // [8, 8 + 4*33) for the bin-head table and move the heap frontier past
+    // it. Wasm memory is zero-initialised, so the bins start empty.
+    if heap_offset < 144 {
+        heap_offset = 144;
+    }
+
     if newsize == 0 {
         // Free. `oldptr == 0` (freeing null) is a no-op.
         if oldptr == 0 {
@@ -175,9 +225,9 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
             }
         }
         // Coalesce with the physically-preceding block when it is free.
-        // The first block sits at offset 8, so `block > 8` means a
+        // The first block sits at byte 144, so `block > 144` means a
         // predecessor exists and `block - 8` holds its footer.
-        if block > 8 {
+        if block > 144 {
             let prev_footer = builtin::i32_load(block - 8);
             if fl_used(prev_footer) == 0 {
                 let prev_size = fl_size(prev_footer);
@@ -189,7 +239,7 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
         }
 
         fl_set_tags(block, size, 0);
-        fl_push(block);
+        fl_push(block, size);
         return 0;
     }
 
@@ -197,23 +247,27 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
     // overhead; the result is always at least the 24-byte minimum block.
     let size = builtin::i32_and(newsize + 7, -8) + 16;
 
-    // First-fit search of the free list.
-    let mut curr = free_list;
+    // Exact size-class bin first, then larger small bins: any block in a
+    // bin at index >= fl_bin(size) is large enough.
+    let mut j = fl_bin(size);
+    while j < 32 {
+        let b = fl_bin_head(j);
+        if b != 0 {
+            let block_size = fl_size(builtin::i32_load(b));
+            fl_unlink(b);
+            fl_carve(b, block_size, size);
+            return b + 8;
+        }
+        j += 1;
+    }
+
+    // Large bin: first-fit over the catch-all list.
+    let mut curr = fl_bin_head(32);
     while curr != 0 {
         let block_size = fl_size(builtin::i32_load(curr));
         if block_size >= size {
             fl_unlink(curr);
-            let remainder = block_size - size;
-            if remainder >= 24 {
-                // Split: keep `size` here, return the rest to the list.
-                fl_set_tags(curr, size, 1);
-                let rest = curr + size;
-                fl_set_tags(rest, remainder, 0);
-                fl_push(rest);
-            } else {
-                // Too small to split — hand back the whole block.
-                fl_set_tags(curr, block_size, 1);
-            }
+            fl_carve(curr, block_size, size);
             return curr + 8;
         }
         curr = builtin::i32_load(curr + 8);

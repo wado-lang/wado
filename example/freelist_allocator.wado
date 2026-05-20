@@ -1,10 +1,10 @@
-//! Development sandbox for a coalescing free-list allocator.
+//! Development sandbox for a coalescing, size-class-segregated free-list
+//! allocator.
 //!
-//! The boundary-tag coalescing algorithm is developed and unit-tested here,
-//! against a *simulated* linear memory (`Heap.mem`, a word-indexed
-//! `Array<i32>`), before being ported into
-//! `wado-compiler/lib/core/allocator.wado` — a `#![no_prelude]` /
-//! `#![wasm_module("mem")]` module that cannot host `test` blocks.
+//! The algorithm is developed and unit-tested here, against a *simulated*
+//! linear memory (`Heap.mem`, a word-indexed `Array<i32>`), before being
+//! ported into `wado-compiler/lib/core/allocator.wado` — a `#![no_prelude]`
+//! module that cannot host `test` blocks.
 //!
 //! Block layout (every block is 8-byte aligned, size a multiple of 8):
 //!
@@ -14,23 +14,37 @@
 //!   offset size-8:   i32  footer = size | used-bit
 //!   offset size-4:   i32  (padding)
 //!
-//! `alloc` returns `block + 8` (the payload), always 8-byte aligned — which
-//! satisfies every Component Model alignment (all of which are <= 8).
+//! `alloc` returns `block + 8` (the payload), always 8-byte aligned.
 //!
-//! On `free`, the physically-adjacent previous and next blocks are inspected
-//! through their boundary tags and merged when free, so per-request
-//! allocation churn cannot shatter the heap into unusable fragments.
+//! Free blocks are kept in **segregated free lists** — one doubly-linked
+//! list per size class. Small blocks (24 .. 24 + 8*31 bytes) have an exact
+//! bin each; everything larger shares one "large" bin. Allocation goes
+//! straight to the size class's bin, so the common case is O(1) instead of
+//! a first-fit scan over every free block. On `free`, physically adjacent
+//! free blocks are still merged via boundary tags.
+//!
+//! The bin-head table lives in memory at `[BIN_BASE, BIN_BASE + 4*NUM_BINS)`;
+//! the first block starts at `HEAP_START`.
 
 /// Per-block boundary-tag overhead (8-byte header + 8-byte footer).
 global OVERHEAD: i32 = 16;
 
-/// Smallest legal block: header + 8-byte payload (room for the free-list
-/// `next`/`prev` links) + footer.
+/// Smallest legal block: header + 8-byte payload + footer.
 global MIN_BLOCK: i32 = 24;
 
-/// Address of the first block. Lower addresses are reserved (so address 0
-/// can act as the null sentinel / empty-list marker).
-global HEAP_START: i32 = 8;
+/// Number of exact size-class bins. Bin `k` (k < SMALL_BINS) holds blocks
+/// of size exactly `MIN_BLOCK + 8*k`; bin `SMALL_BINS` is the catch-all
+/// "large" bin (first-fit).
+global SMALL_BINS: i32 = 32;
+
+/// Total bins (small bins plus the large bin).
+global NUM_BINS: i32 = 33;
+
+/// Byte address of the bin-head table.
+global BIN_BASE: i32 = 8;
+
+/// Byte address of the first block, past the bin-head table.
+global HEAP_START: i32 = 144;
 
 /// Extract the block size from a boundary tag (clears the low 3 bits).
 fn tag_size(tag: i32) -> i32 {
@@ -42,30 +56,36 @@ fn tag_used(tag: i32) -> bool {
     return builtin::i32_and(tag, 1) != 0;
 }
 
-/// A simulated linear memory plus the allocator's mutable state. In the
+/// Size-class bin index for a block of `size` bytes.
+fn bin_index(size: i32) -> i32 {
+    let k = (size - MIN_BLOCK) / 8;
+    return if k < SMALL_BINS { k } else { SMALL_BINS };
+}
+
+/// A simulated linear memory plus the allocator's bump frontier. In the
 /// ported `allocator.wado`, `mem` is the real Wasm linear memory and
-/// `heap_offset` / `free_list` are module globals.
+/// `heap_offset` is a module global; the bin-head table lives in memory.
 struct Heap {
     /// Word-indexed backing store; byte address `a` is word `a / 4`.
     mem: Array<i32>,
     /// Bump frontier: the first byte address past every block ever carved.
     heap_offset: i32,
-    /// Head of the doubly-linked free list (0 when empty).
-    free_list: i32,
 }
 
 impl Heap {
-    /// A fresh heap. `mem` starts large enough to cover the reserved region
-    /// below `HEAP_START`; it grows on demand.
+    /// A fresh heap. `mem` is sized to cover the bin-head table and the
+    /// alignment padding up to `HEAP_START`; it grows on demand. Wasm
+    /// memory is zero-initialised, so every bin head starts empty (0).
     fn new() -> Heap {
-        return Heap {
-            mem: [0, 0],
-            heap_offset: HEAP_START,
-            free_list: 0,
-        };
+        let mut mem: Array<i32> = [];
+        let words = HEAP_START / 4;
+        for let mut i = 0; i < words; i += 1 {
+            mem.push(0);
+        }
+        return Heap { mem, heap_offset: HEAP_START };
     }
 
-    /// Load the i32 at byte address `addr` (which is always 4-aligned).
+    /// Load the i32 at byte address `addr` (always 4-aligned).
     fn load(&self, addr: i32) -> i32 {
         return self.mem[addr / 4];
     }
@@ -82,6 +102,16 @@ impl Heap {
         }
     }
 
+    /// Head of size-class bin `k` (0 when empty).
+    fn bin_head(&self, k: i32) -> i32 {
+        return self.load(BIN_BASE + k * 4);
+    }
+
+    /// Set the head of size-class bin `k`.
+    fn set_bin_head(&mut self, k: i32, head: i32) {
+        self.store(BIN_BASE + k * 4, head);
+    }
+
     /// Write the header and footer boundary tags of the block at `block`.
     fn set_tags(&mut self, block: i32, size: i32, used: i32) {
         // `size` is a multiple of 8 and `used` is 0 or 1, so `+` is `|`.
@@ -90,28 +120,46 @@ impl Heap {
         self.store(block + size - 8, tag);
     }
 
-    /// Insert `block` at the head of the free list.
-    fn fl_push(&mut self, block: i32) {
-        let head = self.free_list;
+    /// Insert `block` (of `size` bytes) at the head of its size-class bin.
+    fn fl_push(&mut self, block: i32, size: i32) {
+        let k = bin_index(size);
+        let head = self.bin_head(k);
         self.store(block + 8, head);
         self.store(block + 12, 0);
         if head != 0 {
             self.store(head + 12, block);
         }
-        self.free_list = block;
+        self.set_bin_head(k, block);
     }
 
-    /// Remove `block` from the free list (it must currently be linked).
+    /// Remove `block` from its size-class bin (it must currently be linked).
     fn fl_unlink(&mut self, block: i32) {
+        let k = bin_index(tag_size(self.load(block)));
         let next = self.load(block + 8);
         let prev = self.load(block + 12);
         if prev == 0 {
-            self.free_list = next;
+            self.set_bin_head(k, next);
         } else {
             self.store(prev + 8, next);
         }
         if next != 0 {
             self.store(next + 12, prev);
+        }
+    }
+
+    /// Mark the block at `block` (currently sized `block_size`) used for an
+    /// allocation of `size` bytes, splitting off the remainder as a free
+    /// block when it is large enough to stand on its own.
+    fn carve(&mut self, block: i32, block_size: i32, size: i32) {
+        let remainder = block_size - size;
+        if remainder >= MIN_BLOCK {
+            self.set_tags(block, size, 1);
+            let rest = block + size;
+            self.set_tags(rest, remainder, 0);
+            self.fl_push(rest, remainder);
+        } else {
+            // Too small to split — hand back the whole block.
+            self.set_tags(block, block_size, 1);
         }
     }
 
@@ -121,23 +169,27 @@ impl Heap {
         // overhead. The result is always >= MIN_BLOCK.
         let size = builtin::i32_and(newsize + 7, -8) + OVERHEAD;
 
-        // First-fit search of the free list.
-        let mut curr = self.free_list;
+        // Exact size-class bin first, then larger small bins. Any block in
+        // a bin at index >= bin_index(size) is large enough.
+        let mut j = bin_index(size);
+        while j < SMALL_BINS {
+            let b = self.bin_head(j);
+            if b != 0 {
+                let block_size = tag_size(self.load(b));
+                self.fl_unlink(b);
+                self.carve(b, block_size, size);
+                return b + 8;
+            }
+            j += 1;
+        }
+
+        // Large bin: first-fit over the catch-all list.
+        let mut curr = self.bin_head(SMALL_BINS);
         while curr != 0 {
             let block_size = tag_size(self.load(curr));
             if block_size >= size {
                 self.fl_unlink(curr);
-                let remainder = block_size - size;
-                if remainder >= MIN_BLOCK {
-                    // Split: keep `size` here, return the rest to the list.
-                    self.set_tags(curr, size, 1);
-                    let rest = curr + size;
-                    self.set_tags(rest, remainder, 0);
-                    self.fl_push(rest);
-                } else {
-                    // Too small to split — hand back the whole block.
-                    self.set_tags(curr, block_size, 1);
-                }
+                self.carve(curr, block_size, size);
                 return curr + 8;
             }
             curr = self.load(curr + 8);
@@ -188,7 +240,7 @@ impl Heap {
         }
 
         self.set_tags(block, size, 0);
-        self.fl_push(block);
+        self.fl_push(block, size);
     }
 }
 
@@ -196,10 +248,10 @@ test "alloc: payloads are 8-byte aligned and laid out back to back" {
     let mut h = Heap::new();
     let a = h.alloc(64);
     let b = h.alloc(64);
-    // First block at HEAP_START=8, payload at 16. Block size for a 64-byte
-    // payload is align_up(64,8) + 16 = 80.
-    assert a == 16, `a={a}`;
-    assert b == 96, `b={b}`;
+    // First block at HEAP_START=144, payload at 152. Block size for a
+    // 64-byte payload is align_up(64,8) + 16 = 80.
+    assert a == 152, `a={a}`;
+    assert b == 232, `b={b}`;
     assert builtin::i32_and(a, 7) == 0;
     assert builtin::i32_and(b, 7) == 0;
 }
@@ -274,6 +326,24 @@ test "no coalescing across a still-used block" {
     h.free(c);
 }
 
+test "segregated bins serve each size class" {
+    let mut h = Heap::new();
+    // A small block and a large block, kept apart by a used block so they
+    // never coalesce, then freed.
+    let small = h.alloc(40);
+    let guard = h.alloc(40);
+    let large = h.alloc(900);
+    h.free(small);
+    h.free(large);
+    // Re-allocating each size must reuse its own freed block: the small
+    // request hits its exact bin, the large one the catch-all bin.
+    let small2 = h.alloc(40);
+    let large2 = h.alloc(900);
+    assert small2 == small, `small={small}, small2={small2}`;
+    assert large2 == large, `large={large}, large2={large2}`;
+    h.free(guard);
+}
+
 test "coalescing keeps the heap bounded under alloc/free churn" {
     let mut h = Heap::new();
     // Warm up: reach steady state, then record the frontier.
@@ -303,7 +373,7 @@ test "coalescing keeps the heap bounded under alloc/free churn" {
 test "interleaved varying-size churn stays bounded" {
     let mut h = Heap::new();
     let sizes: Array<i32> = [24, 200, 56, 512, 8, 96, 312, 40];
-    // Prime every size class so the free list holds blocks of each shape.
+    // Prime every size class so the bins hold blocks of each shape.
     let mut primed: Array<i32> = [];
     for let s of sizes {
         primed.push(h.alloc(s));
