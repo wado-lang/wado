@@ -377,6 +377,41 @@ fn serve_no_dir_default() {
 }
 
 #[test]
+fn serve_workers_and_max_concurrency() {
+    let parser = Parser::from_args(&["--workers", "4", "--max-concurrency", "64", "input.wado"]);
+    let opts = wado_cli::serve::parse_args(parser).unwrap();
+    assert_eq!(opts.workers, Some(4));
+    assert_eq!(opts.max_concurrency, 64);
+}
+
+#[test]
+fn serve_rejects_workers_above_max_concurrency() {
+    let parser = Parser::from_args(&["--workers", "65", "--max-concurrency", "64", "input.wado"]);
+    assert_err(
+        wado_cli::serve::parse_args(parser),
+        "--workers (65) must not exceed --max-concurrency (64)",
+    );
+}
+
+#[test]
+fn serve_rejects_workers_above_u32() {
+    let parser = Parser::from_args(&["--workers", "4294967296", "input.wado"]);
+    assert_err(
+        wado_cli::serve::parse_args(parser),
+        "--workers value is too large",
+    );
+}
+
+#[test]
+fn serve_rejects_max_concurrency_above_u32() {
+    let parser = Parser::from_args(&["--max-concurrency", "4294967296", "input.wado"]);
+    assert_err(
+        wado_cli::serve::parse_args(parser),
+        "--max-concurrency value is too large",
+    );
+}
+
+#[test]
 fn serve_rejects_no_dir() {
     // `serve` deliberately omits `--no-dir`: the default is already no
     // preopens, so the flag would be a misleading no-op. Confirm parsing

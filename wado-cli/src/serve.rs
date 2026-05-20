@@ -260,19 +260,24 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                 Opt::Timeout => timeout_secs = parse_timeout_arg(&mut parser)?,
                 Opt::Workers => {
                     let n = parse_count_arg("--workers", &mut parser, false)?;
-                    workers =
-                        Some(usize::try_from(n).map_err(|_| {
-                            CliExit::error("--workers value is too large".to_string())
-                        })?);
+                    // Bound by `u32`: `workers` sizes the pooling allocator's
+                    // `u32` instance count.
+                    let n = u32::try_from(n).map_err(|_| {
+                        CliExit::error("--workers value is too large".to_string())
+                    })?;
+                    workers = Some(n as usize);
                 }
                 Opt::RecycleRequests => {
                     recycle_requests = parse_count_arg("--recycle-requests", &mut parser, true)?;
                 }
                 Opt::MaxConcurrency => {
                     let n = parse_count_arg("--max-concurrency", &mut parser, false)?;
-                    max_concurrency = usize::try_from(n).map_err(|_| {
+                    // Bound by `u32`: `max_concurrency` sizes the pooling
+                    // allocator's `u32` stack count.
+                    let n = u32::try_from(n).map_err(|_| {
                         CliExit::error("--max-concurrency value is too large".to_string())
                     })?;
+                    max_concurrency = n as usize;
                 }
                 Opt::Help => return Err(CliExit::help(usage)),
             }
@@ -282,6 +287,17 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         } else {
             return Err(args::unexpected_arg(arg, &usage));
         }
+    }
+
+    // An explicit `--workers` above `--max-concurrency` would leave the
+    // pooling allocator under-sized for the number of worker stores. The
+    // auto-derived default is clamped instead (see `run`).
+    if let Some(w) = workers
+        && w > max_concurrency
+    {
+        return Err(CliExit::error(format!(
+            "--workers ({w}) must not exceed --max-concurrency ({max_concurrency})"
+        )));
     }
 
     Ok(ServeOptions {
@@ -922,11 +938,17 @@ pub async fn run(opts: ServeOptions) {
     let wasm = compile::compile(&opts.input, &flags).await;
 
     let timeout = Duration::from_secs(opts.timeout_secs);
-    let workers = opts.workers.unwrap_or_else(|| {
-        std::thread::available_parallelism()
-            .map(std::num::NonZero::get)
-            .unwrap_or(1)
-    });
+    // An explicit `--workers` is already validated against `--max-concurrency`
+    // in `parse_args`; the auto-derived default is clamped so it never sizes
+    // more workers than the stack pool can back.
+    let workers = opts
+        .workers
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(std::num::NonZero::get)
+                .unwrap_or(1)
+        })
+        .min(opts.max_concurrency);
     if let Err(e) = run_http_server(
         wasm,
         &opts.addr,
