@@ -2,7 +2,6 @@ use { ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind 
 use { LitToken } from "./lexer_gen.wado";
 use {
     literal_const_name,
-    str_set_from,
     is_single_alt_group,
     is_general_group,
     single_alt_group_type_name,
@@ -131,8 +130,7 @@ impl GenContext {
             return result;
         }
 
-        let visiting_set = str_set_from(visiting);
-        if visiting_set.contains(*name) {
+        if visiting.contains(name) {
             return [];
         }
 
@@ -296,8 +294,7 @@ impl GenContext {
                     cursor += 1;
                 },
                 RuleRef(r) => {
-                    let visiting_set = str_set_from(visiting);
-                    if visiting_set.contains(r.name) {
+                    if visiting.contains(&r.name) {
                         return cursor;
                     }
                     let rule = self.find_rule(&r.name);
@@ -446,8 +443,7 @@ impl GenContext {
             return val;
         }
 
-        let visiting_set = str_set_from(visiting);
-        if visiting_set.contains(*name) {
+        if visiting.contains(name) {
             return false;
         }
 
@@ -679,8 +675,7 @@ impl GenContext {
             return val;
         }
 
-        let visiting_set = str_set_from(visiting);
-        if visiting_set.contains(*name) {
+        if visiting.contains(name) {
             return false;
         }
 
@@ -754,8 +749,7 @@ impl GenContext {
             return val;
         }
 
-        let visiting_set = str_set_from(visiting);
-        if visiting_set.contains(*name) {
+        if visiting.contains(name) {
             return true;
         }
 
@@ -891,8 +885,7 @@ impl GenContext {
             return result;
         }
 
-        let visiting_set = str_set_from(visiting);
-        if visiting_set.contains(*name) {
+        if visiting.contains(name) {
             return [];
         }
 
@@ -997,8 +990,7 @@ impl GenContext {
     /// halt at depth 0 (per-depth alignment unknown across alts) —
     /// conservative but sound.
     pub fn tail_greedy_k_prefix_of_rule(&mut self, name: &String, max_k: i32, visiting: &mut Array<String>) -> Array<Array<String>> {
-        let visiting_set = str_set_from(visiting);
-        if visiting_set.contains(*name) {
+        if visiting.contains(name) {
             return [];
         }
 
@@ -1133,9 +1125,8 @@ impl GenContext {
         let tg = self.tail_greedy_first_of_rule(rule_name, &mut visiting);
         let mut intersection: Array<String> = [];
         if !tg.is_empty() && !caller_follow.is_empty() {
-            let follow_set = str_set_from(caller_follow);
             for let tk of &tg {
-                if follow_set.contains(*tk) {
+                if caller_follow.contains(tk) {
                     intersection.push(*tk);
                 }
             }
@@ -1155,10 +1146,9 @@ impl GenContext {
             let max_k_for_iter = caller_k_prefix.len();
             let iter_kp = self.tail_greedy_k_prefix_of_rule(rule_name, max_k_for_iter, &mut k_visiting);
             if !iter_kp.is_empty() && !caller_k_prefix[0].is_empty() {
-                let iter_d0 = str_set_from(&iter_kp[0]);
                 let mut overlaps = false;
                 for let tk of &caller_k_prefix[0] {
-                    if iter_d0.contains(*tk) {
+                    if iter_kp[0].contains(tk) {
                         overlaps = true;
                         break;
                     }
@@ -1328,9 +1318,8 @@ pub fn is_nullable(elem: &Element) -> bool {
 }
 
 pub fn sets_overlap(a: &Array<String>, b: &Array<String>) -> bool {
-    let b_set = str_set_from(b);
     for let x of a {
-        if b_set.contains(*x) {
+        if b.contains(x) {
             return true;
         }
     }
@@ -1353,7 +1342,7 @@ pub fn is_simple_token_group(alts: &Array<Alternative>) -> bool {
 
 fn extend_dedup(target: &mut Array<String>, source: &Array<String>) {
     for let item of source {
-        if !arr_contains(target, item) {
+        if !target.contains(item) {
             target.push(*item);
         }
     }
@@ -1415,27 +1404,18 @@ pub fn union_k_prefix(a: &Array<Array<String>>, b: &Array<Array<String>>) -> Arr
 /// implementation for every union-of-FIRST/FOLLOW sets in lower and
 /// emit; the grammar sets that pass through here are bounded by the
 /// rule's first/follow size (small in practice), so the linear
-/// `arr_contains` is fine.
+/// `Array::contains` is fine.
 pub fn union_kind_arrays(a: &Array<String>, b: &Array<String>) -> Array<String> {
     let mut result: Array<String> = [];
     for let tk of a {
         result.push(*tk);
     }
     for let tk of b {
-        if !arr_contains(&result, tk) {
+        if !result.contains(tk) {
             result.push(*tk);
         }
     }
     return result;
-}
-
-fn arr_contains(arr: &Array<String>, value: &String) -> bool {
-    for let item of arr {
-        if *item == *value {
-            return true;
-        }
-    }
-    return false;
 }
 
 fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {

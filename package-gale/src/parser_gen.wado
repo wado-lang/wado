@@ -18,7 +18,6 @@ use {
     token_group_field_name,
     is_general_group,
     general_group_field_name,
-    str_set_from,
     str_set_insert_all,
     gen_visibility_comment,
     to_snake_case,
@@ -741,11 +740,6 @@ fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32)
 /// correct LR alternative — exactly like the parse side, so scan and parse
 /// agree on which alt applies at every position.
 fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, ctx: &mut GenContext) {
-    let mut suffix_sets: Array<TreeSet<String>> = [];
-    for let sfs of suffix_first_sets {
-        suffix_sets.push(str_set_from(sfs));
-    }
-
     let mut emitted = TreeSet::<String>::new();
     let mut first_branch = true;
 
@@ -762,7 +756,7 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
                 if j == k {
                     continue;
                 }
-                if suffix_sets[group[j]].contains(*tk) {
+                if suffix_first_sets[group[j]].contains(tk) {
                     shared = true;
                 }
             }
@@ -810,12 +804,12 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
         let mut sub_first = true;
         let mut last_k = -1;
         for let mut k = 0; k < group.len(); k += 1 {
-            if suffix_sets[group[k]].contains(*shared_tk) {
+            if suffix_first_sets[group[k]].contains(shared_tk) {
                 last_k = k;
             }
         }
         for let mut k = 0; k < group.len(); k += 1 {
-            if !suffix_sets[group[k]].contains(*shared_tk) {
+            if !suffix_first_sets[group[k]].contains(shared_tk) {
                 continue;
             }
             let lr_idx = valid_lr_indices[group[k]];
@@ -3659,10 +3653,9 @@ fn compute_non_greedy_condition(rep_op: &RepeatOp, follow_first: &Array<String>,
 }
 
 fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
-    let b_set = str_set_from(b);
     let mut result: Array<String> = [];
     for let x of a {
-        if !b_set.contains(*x) {
+        if !b.contains(x) {
             result.push(*x);
         }
     }
@@ -4615,12 +4608,6 @@ fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, scan_suffix_fn:
 }
 
 fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, ctx: &mut GenContext, use_prec: bool) {
-    // Pre-convert suffix_first_sets to TreeSets for efficient lookup.
-    let mut suffix_sets: Array<TreeSet<String>> = [];
-    for let sfs of suffix_first_sets {
-        suffix_sets.push(str_set_from(sfs));
-    }
-
     // For each token in the group, find which alternatives match it.
     // Unique token → dispatch directly. Shared token → sub-dispatch via peek_at(1).
     let mut emitted = TreeSet::<String>::new();
@@ -4639,7 +4626,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &
                 if j == k {
                     continue;
                 }
-                if suffix_sets[group[j]].contains(*tk) {
+                if suffix_first_sets[group[j]].contains(tk) {
                     shared = true;
                 }
             }
@@ -4687,12 +4674,12 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &
         let mut sub_first = true;
         let mut last_k = -1;
         for let mut k = 0; k < group.len(); k += 1 {
-            if suffix_sets[group[k]].contains(*shared_tk) {
+            if suffix_first_sets[group[k]].contains(shared_tk) {
                 last_k = k;
             }
         }
         for let mut k = 0; k < group.len(); k += 1 {
-            if !suffix_sets[group[k]].contains(*shared_tk) {
+            if !suffix_first_sets[group[k]].contains(shared_tk) {
                 continue;
             }
             let lr_idx = valid_lr_indices[group[k]];
