@@ -9,8 +9,13 @@
 //!
 //! Pattern lowering (`IfLet` / `LetDestructure` / or-patterns →
 //! explicit `Let` + `Match`) is no longer a `plan` sub-pass: it runs
-//! inside the translator's per-function walk (WEP 2026-05-11 Phase 10
-//! Step 2b — see [`translate::pattern`](super::translate::pattern)).
+//! at the start of [`translate`](super::translate::translate), before
+//! the fold (WEP 2026-05-11 Phase 10 Step 2b — see
+//! [`translate::pattern`](super::translate::pattern)). String/bytes
+//! literal collection (`string`) likewise runs inside `translate`,
+//! *after* pattern lowering — pattern lowering synthesises
+//! string-literal expressions (string-literal pattern guards) that
+//! the data section must register.
 //!
 //! Sub-pass order:
 //!
@@ -32,8 +37,6 @@
 //!    wrap — see [`lift_mut`] module docs.
 //! 6. `value_copy` — insert `builtin::copy_value::<T>(x)` markers and
 //!    synthesize `$value_copy$T<id>` helpers; returns `ValueCopyPlan`.
-//! 7. `string` — collect literals and per-function DCE maps for the
-//!    data section; returns `StringPlan`.
 //!
 //! Only the sub-passes that need to pass data through to the translator
 //! carry a `*Plan` struct in [`LowerPlan`]; the others mutate `flat`
@@ -53,7 +56,6 @@ pub mod value_copy;
 pub struct LowerPlan {
     pub closure: closure::ClosurePlan,
     pub value_copy: value_copy::ValueCopyPlan,
-    pub strings: string::StringPlan,
 }
 
 pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
@@ -68,13 +70,5 @@ pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     // body. The lifted `Let mut` is the shape value_copy recognises.
     lift_mut::lift_mut_match_bindings(flat);
     let value_copy = value_copy::plan(flat);
-    // Strings are collected after `value_copy` planning so any literals
-    // that synthesized `$value_copy$T<id>` helpers introduce are
-    // included.
-    let strings = string::plan(flat);
-    LowerPlan {
-        closure,
-        value_copy,
-        strings,
-    }
+    LowerPlan { closure, value_copy }
 }

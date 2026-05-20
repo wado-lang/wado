@@ -4,9 +4,10 @@
 //! Pre-lower-only TIR variants (`Closure`, `Capture`, `FuncRef`,
 //! `TupleSpread`, …) must have been eliminated by `lower::plan`
 //! sub-passes before the translator runs — they `unreachable!()` here.
-//! `IfLet` is eliminated by `translate::pattern`, run per function via
-//! `lower_function_patterns` immediately before `convert_function`, so
-//! the `IfLet` arm is likewise unreachable by the time the fold begins.
+//! `IfLet` is eliminated by `translate::pattern`, run over every
+//! function at the start of `translate` before the fold begins, so the
+//! `IfLet` arm is likewise unreachable. String / bytes literal
+//! collection then runs over the pattern-lowered bodies.
 //!
 //! Some translator arms consume facts from `plan` to rewrite TIR
 //! markers into resolved NIR forms (the value-copy marker rewrite in
@@ -59,12 +60,22 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     let LowerPlan {
         closure,
         value_copy,
-        strings,
     } = plan;
-    // Gather pattern-lowering facts before `flat` is destructured;
-    // `convert_function` lowers each function's patterns as the first
-    // step of its per-function walk (WEP Phase 10 Step 2b).
-    let pattern = pattern::Lowering::new(&flat);
+    // Pattern-lower every function before the fold (WEP Phase 10
+    // Step 2b): `IfLet` / `LetDestructure` / or-patterns become
+    // explicit `Let` + `Match` that the fold consumes. This runs
+    // before string collection below because pattern lowering
+    // synthesises string-literal expressions (string-literal pattern
+    // guards) that the data section must register.
+    {
+        let pattern = pattern::Lowering::new(&flat);
+        let type_table = flat.type_table.borrow();
+        for func_rc in &flat.functions {
+            pattern.lower_function(&mut func_rc.borrow_mut(), &type_table);
+        }
+    }
+    // Collect string / bytes literals from the pattern-lowered bodies.
+    let strings = crate::lower::plan::string::plan(&flat);
     let FlatPackage {
         entry_module_source,
         type_table,
@@ -98,7 +109,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         value_copy: &value_copy,
         closure: &closure,
         type_table: Rc::clone(&type_table),
-        pattern,
     };
 
     let mut func_map: IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>> =
@@ -107,7 +117,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         .into_iter()
         .map(|func_rc| {
             let ptr = Rc::as_ptr(&func_rc);
-            translator.lower_function_patterns(&func_rc);
             let nir_rc = Rc::new(RefCell::new(translator.convert_function(&func_rc.borrow())));
             func_map.insert(ptr, Rc::clone(&nir_rc));
             nir_rc
@@ -165,10 +174,6 @@ struct Translator<'a> {
     /// that need to inspect resolved types during the walk (e.g.
     /// detecting wide-int `Match` scrutinees for the if-else rewrite).
     type_table: Rc<RefCell<TypeTable>>,
-    /// Pattern-lowering facts; `convert_function` lowers each
-    /// function's `IfLet` / `LetDestructure` / or-patterns into
-    /// explicit `Let` + `Match` before walking its body.
-    pattern: pattern::Lowering,
 }
 
 /// Per-function translation context. Created fresh for each function
@@ -265,17 +270,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
 }
 
 impl Translator<'_> {
-    /// Lower a function's patterns (`IfLet` / `LetDestructure` /
-    /// or-patterns → explicit `Let` + `Match`) in place. Run before
-    /// `convert_function` so the body walk sees only `Match`. Scoped
-    /// to its own `borrow_mut` so `convert_function` — which may take
-    /// a shared `.borrow()` of any function through a closure functor's
-    /// `call_method` — only ever shares the borrow.
-    fn lower_function_patterns(&self, func: &Rc<RefCell<TirFunction>>) {
-        self.pattern
-            .lower_function(&mut func.borrow_mut(), &self.type_table.borrow());
-    }
-
     fn convert_function(&self, func: &TirFunction) -> NirFunction {
         let fctx = FunctionTranslator::new(self, func);
         // Walk the body first so any locals allocated by per-arm
@@ -370,7 +364,6 @@ impl Translator<'_> {
             .get(&Rc::as_ptr(&cf.call_method))
             .cloned()
             .unwrap_or_else(|| {
-                self.lower_function_patterns(&cf.call_method);
                 Rc::new(RefCell::new(
                     self.convert_function(&cf.call_method.borrow()),
                 ))
