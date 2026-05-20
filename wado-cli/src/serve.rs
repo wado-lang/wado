@@ -27,7 +27,7 @@ use tokio::net::TcpListener;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
 use wasmtime::component::{Accessor, AccessorTask, Component};
-use wasmtime::{Engine, Store};
+use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi_http::p3::Request as WasiRequest;
 use wasmtime_wasi_http::p3::bindings::http::types::ErrorCode as HttpErrorCode;
 use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
@@ -40,8 +40,14 @@ use wado_compiler::LogLevel;
 
 /// Default per-request timeout in seconds. A guest that fails to produce a
 /// response head within this window is cut short by a first-byte timeout
-/// (see `dispatch_request`).
+/// (see `dispatch_request`); a guest that runs away in pure wasm is
+/// trapped by the epoch deadline (see `worker_loop`).
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
+
+/// Epoch ticker interval. A background task bumps the engine epoch every
+/// tick; a worker store's deadline counts these ticks, giving
+/// second-granularity runaway-guest detection.
+const EPOCH_TICK_MS: u64 = 1000;
 
 /// Default number of requests a worker instance handles before it is
 /// recycled (torn down and re-instantiated). Recycling resets state that
@@ -578,22 +584,40 @@ enum Step {
 ///
 /// On recycle or shutdown the loop stops accepting new requests but keeps
 /// draining the in-flight ones, so a recycle never drops a live request.
+///
+/// A runaway guest (one that monopolises the store's single thread in
+/// pure wasm) is bounded by the epoch deadline: the dispatch loop
+/// refreshes the deadline every turn, so only a guest that prevents the
+/// loop from turning trips it. The resulting trap surfaces as a
+/// `run_concurrent` error, after which the worker rebuilds its instance
+/// and resumes — self-healing rather than dying.
+///
+/// The epoch deadline is `timeout_secs` plus a grace margin: the
+/// client-facing first-byte timeout (`dispatch_request`) fires at exactly
+/// `timeout_secs` and returns 504, so the epoch trap is only a later
+/// backstop that reclaims the runaway and the worker — the client has
+/// already had a clean 504 by then.
 async fn worker_loop(
     engine: Engine,
     service_pre: Arc<ServicePre<WasiState>>,
     preopens: Arc<Preopens>,
     mut job_rx: mpsc::Receiver<RequestJob>,
     recycle_requests: u64,
+    timeout_secs: u64,
 ) {
+    // Grace over the client-facing timeout; also clears the 1s epoch-tick
+    // granularity so the first-byte 504 reliably precedes the epoch trap.
+    let epoch_ticks = timeout_secs.saturating_add(5);
     loop {
         // Fresh instance for this generation. Guest module-init (Wado
         // `global` initializers, e.g. a router built at startup) runs
         // here — once per generation, not once per request.
         let state = WasiState::new_no_inherit_env_with_preopens(&preopens, &[]);
         let mut store = Store::new(&engine, state);
-        // The serve engine enables epoch interruption; a long-lived store
-        // has no per-request deadline to enforce, so push it out of reach.
-        store.set_epoch_deadline(u64::MAX);
+        // Arm the epoch deadline. The dispatch loop refreshes it every
+        // turn (see below), so a healthy worker never trips it; a guest
+        // that runs away in pure wasm does.
+        store.set_epoch_deadline(epoch_ticks);
         let service = match service_pre.instantiate_async(&mut store).await {
             Ok(service) => Arc::new(service),
             Err(e) => {
@@ -631,6 +655,12 @@ async fn worker_loop(
                         }
                     };
 
+                    // The loop turned, so the worker is not starved by a
+                    // runaway guest: push the epoch deadline back out.
+                    accessor.with(|mut access| {
+                        access.as_context_mut().set_epoch_deadline(epoch_ticks);
+                    });
+
                     match step {
                         Step::Drained => {}
                         Step::Job(Some(job)) => {
@@ -658,8 +688,15 @@ async fn worker_loop(
             Ok(WorkerStop::Recycle) => {}
             Ok(WorkerStop::Shutdown) => return,
             Err(e) => {
-                eprintln!("Worker engine error: {e:?}");
-                return;
+                // The store trapped — typically a guest that ran past the
+                // epoch deadline. Rebuild the instance so the worker
+                // self-heals. In-flight requests on the trapped store are
+                // lost; requests still queued in the channel survive and
+                // are picked up by the fresh instance. The short sleep
+                // bounds a pathological rebuild loop (e.g. a guest that
+                // traps on every request).
+                eprintln!("Worker instance trapped; rebuilding: {e:?}");
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
         }
     }
@@ -709,12 +746,28 @@ async fn run_http_server(
             Arc::clone(&preopens),
             rx,
             recycle_requests,
+            timeout.as_secs().max(1),
         )));
     }
     let dispatch = Arc::new(Dispatch {
         txs,
         next: AtomicUsize::new(0),
     });
+
+    // Background ticker that advances the engine epoch. Each worker store
+    // arms an epoch deadline counted in these ticks; without the ticker
+    // the deadline would never be reached and runaway guests never trap.
+    let epoch_ticker = {
+        let engine = engine.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(EPOCH_TICK_MS));
+            interval.tick().await; // the first tick fires immediately; skip it
+            loop {
+                interval.tick().await;
+                engine.increment_epoch();
+            }
+        })
+    };
 
     let addr: SocketAddr = addr.parse()?;
     let listener = TcpListener::bind(addr).await?;
@@ -804,6 +857,7 @@ async fn run_http_server(
     for engine_task in engine_tasks {
         let _ = tokio::time::timeout(drain_deadline, engine_task).await;
     }
+    epoch_ticker.abort();
 
     Ok(())
 }
