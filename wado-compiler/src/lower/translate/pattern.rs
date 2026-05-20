@@ -11,10 +11,127 @@ use crate::tir::{
 };
 use crate::token::Span;
 
+/// Coerce a by-value `value` to a reference-typed pattern binding.
+///
+/// Match ergonomics let a `&T` / `&mut T` binding capture a value
+/// `T`; the binding's `Let` value must then be a reference to that
+/// value. When pattern lowering runs after `boxing::prepare_types`,
+/// the binding's reference type has been redefined to a `Box<T>`
+/// struct, so the coercion materialises a `Box<T>` struct literal
+/// rather than a `Ref` / `MutRef` unary — `boxing::lower_bodies`
+/// would have rewritten a raw `&value` the same way, but it has
+/// already run. A `value` that is itself a reference (a `Ref` /
+/// `MutRef`, or an already-boxed reference) is returned unchanged.
+fn coerce_value_to_binding(
+    value: TirExpr,
+    binding_type: TypeId,
+    type_table: &TypeTable,
+    span: Span,
+) -> TirExpr {
+    let value_is_ref = matches!(
+        type_table.get(value.type_id),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+    ) || type_table.box_payload_of(value.type_id).is_some();
+    if value_is_ref {
+        return value;
+    }
+    match type_table.get(binding_type) {
+        ResolvedType::Ref(_) => TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr: Box::new(value),
+            },
+            binding_type,
+            span,
+        ),
+        ResolvedType::MutRef(_) => TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::MutRef,
+                expr: Box::new(value),
+            },
+            binding_type,
+            span,
+        ),
+        // A `&primitive` / `&variant` / `&fn` binding type that boxing
+        // has redefined to its `Box<T>` struct: build the struct literal.
+        ResolvedType::Struct { name, .. } if type_table.box_payload_of(binding_type).is_some() => {
+            let struct_name = name.clone();
+            TirExpr::new(
+                TirExprKind::StructLiteral {
+                    struct_type: binding_type,
+                    struct_name,
+                    fields: vec![crate::tir::TirStructField {
+                        name: "value".to_string(),
+                        value,
+                        field_index: 0,
+                    }],
+                },
+                binding_type,
+                span,
+            )
+        }
+        _ => value,
+    }
+}
+
+/// Peel `Ref` / `MutRef` wrappers and `Box<T>` struct wrappers off
+/// `expr`, returning the unwrapped expression and its type.
+///
+/// A `Ref` / `MutRef` is peeled with a `Deref`; a `Box<T>` is peeled
+/// with a `.value` field access. `boxing::prepare_types` redefines
+/// every `Ref(boxable)` TypeId to its `Box<T>` struct type, so when
+/// pattern lowering runs after boxing a match scrutinee on a reference
+/// surfaces here as a `Box<T>` struct rather than a `Ref` — both
+/// shapes peel to the matched value. When pattern lowering runs before
+/// boxing the box-payload registry is empty, so this degrades to a
+/// plain `Ref` peel.
+fn peel_refs_and_box(
+    mut expr: TirExpr,
+    mut type_id: TypeId,
+    type_table: &TypeTable,
+    span: Span,
+) -> (TirExpr, TypeId) {
+    loop {
+        match type_table.get(type_id) {
+            ResolvedType::Ref(t) | ResolvedType::MutRef(t) => {
+                let t = *t;
+                expr = TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        expr: Box::new(expr),
+                    },
+                    t,
+                    span,
+                );
+                type_id = t;
+            }
+            _ => match type_table.box_payload_of(type_id) {
+                Some(payload) => {
+                    expr = TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(expr),
+                            field_index: 0,
+                            field_name: "value".to_string(),
+                        },
+                        payload,
+                        span,
+                    );
+                    type_id = payload;
+                }
+                None => return (expr, type_id),
+            },
+        }
+    }
+}
+
 /// Pattern lowering: a TIR-mutating pass that rewrites
-/// `LetDestructure` / `IfLet` into explicit `Let` + `If` chains and
-/// expands or-patterns in `Match` arms. Runs as the last TIR-touching
-/// pass before the translator walks TIR → NIR.
+/// `LetDestructure` / `IfLet` into explicit `Let` + `Match` chains and
+/// expands or-patterns in `Match` arms.
+///
+/// Runs after `boxing` (see [`crate::lower::plan`]): a match scrutinee
+/// on a reference reaches this pass as a `Box<T>` struct, and the
+/// references it synthesises for ergonomic bindings are box-shaped —
+/// [`peel_refs_and_box`] and [`coerce_value_to_binding`] handle both.
 pub fn lower(flat: &mut FlatPackage) {
     // Build a map keyed by (variant_name, module_source). The
     // module_source axis is required so that two modules each
@@ -447,22 +564,7 @@ impl<'a> PatternLowerer<'a> {
                         elem_type,
                         span,
                     );
-                    let mut inner = elem_type;
-                    let mut expr = local;
-                    while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) = type_table.get(inner)
-                    {
-                        let t = *t;
-                        expr = TirExpr::new(
-                            TirExprKind::Unary {
-                                op: TirUnaryOp::Deref,
-                                expr: Box::new(expr),
-                            },
-                            t,
-                            span,
-                        );
-                        inner = t;
-                    }
-                    expr
+                    peel_refs_and_box(local, elem_type, type_table, span).0
                 };
 
                 // Generate VariantTest condition
@@ -565,22 +667,7 @@ impl<'a> PatternLowerer<'a> {
                         elem_type,
                         span,
                     );
-                    let mut inner = elem_type;
-                    let mut expr = local;
-                    while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) = type_table.get(inner)
-                    {
-                        let t = *t;
-                        expr = TirExpr::new(
-                            TirExprKind::Unary {
-                                op: TirUnaryOp::Deref,
-                                expr: Box::new(expr),
-                            },
-                            t,
-                            span,
-                        );
-                        inner = t;
-                    }
-                    expr
+                    peel_refs_and_box(local, elem_type, type_table, span).0
                 };
 
                 // Generate enum discriminant comparison
@@ -816,7 +903,7 @@ impl<'a> PatternLowerer<'a> {
                     },
                     span,
                 );
-                let mut enum_expr = TirExpr::new(
+                let enum_local = TirExpr::new(
                     TirExprKind::Local {
                         index: temp_index,
                         name: temp_name,
@@ -824,19 +911,7 @@ impl<'a> PatternLowerer<'a> {
                     pattern_type,
                     span,
                 );
-                let mut inner = pattern_type;
-                while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) = type_table.get(inner) {
-                    let t = *t;
-                    enum_expr = TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Deref,
-                            expr: Box::new(enum_expr),
-                        },
-                        t,
-                        span,
-                    );
-                    inner = t;
-                }
+                let (enum_expr, _) = peel_refs_and_box(enum_local, pattern_type, type_table, span);
                 let eq_cond = TirExpr::new(
                     TirExprKind::Binary {
                         op: TirBinaryOp::Eq,
@@ -889,7 +964,7 @@ impl<'a> PatternLowerer<'a> {
                     },
                     span,
                 );
-                let mut variant_expr = TirExpr::new(
+                let variant_local = TirExpr::new(
                     TirExprKind::Local {
                         index: temp_index,
                         name: temp_name,
@@ -897,19 +972,8 @@ impl<'a> PatternLowerer<'a> {
                     pattern_type,
                     span,
                 );
-                let mut inner = pattern_type;
-                while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) = type_table.get(inner) {
-                    let t = *t;
-                    variant_expr = TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Deref,
-                            expr: Box::new(variant_expr),
-                        },
-                        t,
-                        span,
-                    );
-                    inner = t;
-                }
+                let (variant_expr, _) =
+                    peel_refs_and_box(variant_local, pattern_type, type_table, span);
 
                 let variant_type_info = match type_table.get(*enum_type) {
                     ResolvedType::Variant {
@@ -1547,49 +1611,22 @@ impl<'a> PatternLowerer<'a> {
                 }
             }
             TirPattern::Binding {
-                name,
-                local_index,
-                type_id,
+                name, local_index, ..
             } => {
-                // Match ergonomics: if binding type is &T or &mut T but value
-                // is a non-reference T, wrap in Ref/MutRef.
-                let value = {
-                    let binding_resolved = type_table.get(*type_id).clone();
-                    let value_is_ref = matches!(
-                        type_table.get(value.type_id),
-                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                    );
-                    if value_is_ref {
-                        value
-                    } else {
-                        match binding_resolved {
-                            ResolvedType::Ref(_) => TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::Ref,
-                                    expr: Box::new(value),
-                                },
-                                *type_id,
-                                span,
-                            ),
-                            ResolvedType::MutRef(_) => TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::MutRef,
-                                    expr: Box::new(value),
-                                },
-                                *type_id,
-                                span,
-                            ),
-                            _ => value,
-                        }
-                    }
-                };
+                // Match ergonomics: if the binding type is `&T` / `&mut T`
+                // but the value is a non-reference `T`, coerce it. The
+                // binding local's current type is authoritative — boxing
+                // may have promoted an address-taken local to `Box<T>`
+                // after the pattern's recorded `type_id` was set.
+                let binding_type = type_table.get_local_type(*local_index, &self.locals);
+                let value = coerce_value_to_binding(value, binding_type, type_table, span);
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
                         local_index: *local_index,
                         is_mut,
                         is_reactive: false,
-                        type_id: *type_id,
+                        type_id: binding_type,
                         value,
                         skip_value_copy: false,
                     },
@@ -1744,49 +1781,22 @@ impl<'a> PatternLowerer<'a> {
     ) {
         match pattern {
             TirPattern::Binding {
-                name,
-                local_index,
-                type_id,
+                name, local_index, ..
             } => {
-                // Match ergonomics: if binding type is &T or &mut T but value type
-                // is a non-reference T, wrap value in a Ref/MutRef operation.
-                let value = {
-                    let binding_resolved = type_table.get(*type_id).clone();
-                    let value_is_ref = matches!(
-                        type_table.get(value.type_id),
-                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                    );
-                    if value_is_ref {
-                        value
-                    } else {
-                        match binding_resolved {
-                            ResolvedType::Ref(_) => TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::Ref,
-                                    expr: Box::new(value),
-                                },
-                                *type_id,
-                                span,
-                            ),
-                            ResolvedType::MutRef(_) => TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::MutRef,
-                                    expr: Box::new(value),
-                                },
-                                *type_id,
-                                span,
-                            ),
-                            _ => value,
-                        }
-                    }
-                };
+                // Match ergonomics: if the binding type is `&T` / `&mut T`
+                // but the value is a non-reference `T`, coerce it. The
+                // binding local's current type is authoritative — boxing
+                // may have promoted an address-taken local to `Box<T>`
+                // after the pattern's recorded `type_id` was set.
+                let binding_type = type_table.get_local_type(*local_index, &self.locals);
+                let value = coerce_value_to_binding(value, binding_type, type_table, span);
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
                         local_index: *local_index,
                         is_mut,
                         is_reactive: false,
-                        type_id: *type_id,
+                        type_id: binding_type,
                         value,
                         skip_value_copy: false,
                     },
@@ -2029,25 +2039,15 @@ impl<'a> PatternLowerer<'a> {
                 }
                 *arms = expanded_arms;
 
-                // Match ergonomics: insert deref if scrutinee is Ref/MutRef
-                while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-                    type_table.get(scrutinee.type_id)
-                {
-                    let inner = *inner;
-                    let span = scrutinee.span;
-                    let old = std::mem::replace(
-                        scrutinee.as_mut(),
-                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
-                    );
-                    *scrutinee.as_mut() = TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Deref,
-                            expr: Box::new(old),
-                        },
-                        inner,
-                        span,
-                    );
-                }
+                // Match ergonomics: peel Ref / MutRef / Box off the scrutinee
+                let scrut_span = scrutinee.span;
+                let scrut_type = scrutinee.type_id;
+                let old = std::mem::replace(
+                    scrutinee.as_mut(),
+                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, scrut_span),
+                );
+                let (peeled, _) = peel_refs_and_box(old, scrut_type, type_table, scrut_span);
+                *scrutinee.as_mut() = peeled;
 
                 // Extract literal sub-patterns from tuple/struct patterns into guards
                 let scrutinee_type_id = scrutinee.type_id;

@@ -9,26 +9,30 @@
 //!
 //! Sub-pass order:
 //!
-//! 1. `translate::pattern` — `IfLet` / `LetDestructure` → explicit
+//! 1. `globals::extract` — extract non-constant initializers into a
+//!    per-module `__initialize_module` function (one per source
+//!    module; disambiguated by `module_source`).
+//! 2. `boxing::prepare_types` — mint `Box<T>` struct types and
+//!    redefine `Ref` / `MutRef` TypeIds; `boxing::lower_bodies` —
+//!    rewrite `&primitive` / `&mut primitive` into `Box<T>` struct
+//!    operations.
+//! 3. `translate::pattern` — `IfLet` / `LetDestructure` → explicit
 //!    `Let` + `Match`; or-pattern expansion, refutable sub-pattern
 //!    extraction, and ref-deref on `Match` scrutinees. The
 //!    implementation lives in the translator module because it
-//!    builds the TIR shapes the translator consumes; it must run
-//!    first so that downstream passes (boxing rewrites `&T` →
-//!    `Box<T>`) don't obscure the `Ref` peeling pattern lowering
-//!    needs. WEP 2026-05-11 Phase 10 Step 2b — moving this fully
-//!    into the translator's fold — is blocked on Step 6 (boxing
-//!    becoming analysis-only) for exactly this reason.
-//! 2. `globals::extract` — extract non-constant initializers into a
-//!    per-module `__initialize_module` function (one per source
-//!    module; disambiguated by `module_source`).
-//! 3. `boxing` — `&primitive` / `&mut primitive` → `Box<T>` structs.
+//!    builds the TIR shapes the translator consumes. It runs after
+//!    `boxing` (WEP 2026-05-11 Phase 10 Step 2b): a match scrutinee
+//!    on a reference reaches it as a `Box<T>` struct rather than a
+//!    `Ref`, and the references it synthesises for ergonomic
+//!    bindings must be box-shaped — `translate::pattern` handles
+//!    both. This decouples Step 2b (folding pattern lowering into
+//!    the translator's fold) from Step 6.
 //! 4. `closure` — closures → `__Closure_N` functor structs with
 //!    `__call` methods; returns `ClosurePlan`.
 //! 5. `globals::build_initialize_modules` — combine per-module init
 //!    functions into the top-level `__initialize_modules`.
 //! 6. `lift_mut::lift_mut_match_bindings` — lift `mut` payload
-//!    bindings inside the `Match` arms produced by step 1 into
+//!    bindings inside the `Match` arms produced by step 3 into
 //!    explicit `Let mut` statements at the arm body start, the
 //!    shape `value_copy::insert` keys on for its defensive-copy
 //!    wrap — see [`lift_mut`] module docs.
@@ -59,17 +63,21 @@ pub struct LowerPlan {
 }
 
 pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
-    super::translate::pattern::lower(flat);
     globals::extract(flat);
     let box_plan = boxing::prepare_types(flat);
     boxing::lower_bodies(flat, &box_plan);
+    // Pattern lowering runs after boxing: `boxing` has already
+    // redefined `Ref(boxable)` TypeIds to `Box<T>` structs, so
+    // `translate::pattern` peels and synthesises box-shaped
+    // references rather than `Ref` nodes. See module docs.
+    super::translate::pattern::lower(flat);
     let closure = closure::plan(flat);
     globals::build_initialize_modules(flat);
     flat.rebuild_variant_indices();
     // Lift `mut` payload bindings out of Match arm and IfLet patterns
     // into explicit `Let mut` statements before `value_copy` walks the
     // body. The lifted `Let mut` is the shape value_copy recognises;
-    // doing it here keeps pattern lowering (step 1) free of value_copy
+    // doing it here keeps pattern lowering free of value_copy
     // concerns — see [`lift_mut`] module docs.
     lift_mut::lift_mut_match_bindings(flat);
     let value_copy = value_copy::plan(flat);
