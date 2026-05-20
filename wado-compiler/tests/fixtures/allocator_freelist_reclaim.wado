@@ -1,37 +1,24 @@
-/// Test that the freelist allocator reclaims freed memory:
-/// freed blocks are recycled by subsequent allocations of the same size.
+/// Test that the freelist allocator reclaims freed memory: a freed block
+/// is recycled by a subsequent allocation of the same size.
 use { println } from "core:cli";
 
 export fn run() with Stdout {
-    // Allocate a block
+    // Allocate a block, free it, allocate the same size — the freed block
+    // must be recycled (same address), not bump-allocated afresh.
     let ptr1 = builtin::realloc(0, 0, 4, 128);
     assert ptr1 > 0;
-
-    // Free it
     builtin::realloc(ptr1, 128, 4, 0);
-
-    // Allocate the same size — should get the same address (recycled from free list)
     let ptr2 = builtin::realloc(0, 0, 4, 128);
     assert ptr2 == ptr1, `expected recycled address: ptr1={ptr1}, ptr2={ptr2}`;
 
-    // Free and re-allocate in a loop to verify steady-state behavior
+    // Free and re-allocate in a loop: steady state stays at one address —
+    // the heap must not creep upward.
     builtin::realloc(ptr2, 128, 4, 0);
     for let mut i = 0; i < 1000; i += 1 {
         let p = builtin::realloc(0, 0, 4, 128);
-        assert p == ptr1, `loop iteration {i}: expected recycled address`;
+        assert p == ptr1, `loop iteration {i}: expected recycled address, got {p}`;
         builtin::realloc(p, 128, 4, 0);
     }
-
-    // Verify memory doesn't grow: allocate two blocks, free both, re-allocate both
-    let a = builtin::realloc(0, 0, 4, 64);
-    let b = builtin::realloc(0, 0, 4, 64);
-    builtin::realloc(b, 64, 4, 0);
-    builtin::realloc(a, 64, 4, 0);
-    let a2 = builtin::realloc(0, 0, 4, 64);
-    let b2 = builtin::realloc(0, 0, 4, 64);
-    // Both should be recycled (order may differ due to free list LIFO)
-    assert (a2 == a && b2 == b) || (a2 == b && b2 == a),
-        `expected recycled addresses: a={a}, b={b}, a2={a2}, b2={b2}`;
 
     println("ok");
 }

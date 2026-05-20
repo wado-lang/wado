@@ -1,16 +1,19 @@
-/// Test that the freelist allocator handles zero-size free gracefully.
+/// Test that the freelist allocator handles `realloc(ptr, 0, _, 0)`:
+/// the block is freed using the size from its boundary tag (not the
+/// `oldsize` argument), and the space is then reclaimed.
 use { println } from "core:cli";
 
 export fn run() with Stdout {
     let ptr = builtin::realloc(0, 0, 4, 16);
-    // Free with oldsize=0 should be a no-op, not corrupt the free list
+    // Free with oldsize=0: the allocator reads the block size from its
+    // header tag, so the block is still freed correctly.
     builtin::realloc(ptr, 0, 4, 0);
 
-    // Allocate again — should still work (bump allocate, not from free list)
+    // Allocate again — the freed block is reclaimed.
     let ptr2 = builtin::realloc(0, 0, 4, 16);
-    assert ptr2 > 0;
+    assert ptr2 == ptr, `expected recycled: ptr={ptr}, ptr2={ptr2}`;
 
-    // Free normally, then re-allocate — should reclaim
+    // Free normally, then re-allocate — still reclaimed.
     builtin::realloc(ptr2, 16, 4, 0);
     let ptr3 = builtin::realloc(0, 0, 4, 16);
     assert ptr3 == ptr2, `expected recycled: ptr2={ptr2}, ptr3={ptr3}`;

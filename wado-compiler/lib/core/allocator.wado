@@ -81,65 +81,151 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
     return aligned;
 }
 
-/// Free-list allocator — reclaims freed memory via a singly-linked free list.
-/// Uses first-fit search with block splitting. Falls back to bump allocation
-/// when no suitable free block exists. All sizes are rounded to 8-byte alignment.
+/// Free-list allocator — reclaims freed memory with a *coalescing* free
+/// list. Suitable for long-running processes (e.g. HTTP servers).
+///
+/// Every block carries an 8-byte header and 8-byte footer (boundary
+/// tags), both holding `block_size | used_bit`. On free, the physically
+/// adjacent previous and next blocks are inspected through their tags and
+/// merged when free, so per-request allocation churn cannot shatter the
+/// heap into unusable fragments. The free list is doubly linked
+/// (`next` at payload+0, `prev` at payload+4) so a neighbour can be
+/// unlinked in O(1) while coalescing.
+///
+/// Block layout (8-byte aligned, size a multiple of 8):
+///   [ size|used : i32 ][ pad : i32 ][ payload … ][ size|used : i32 ][ pad : i32 ]
+/// `alloc` returns `block + 8` (the payload), always 8-byte aligned —
+/// which satisfies every Component Model alignment (all are <= 8).
+///
+/// The algorithm is developed and unit-tested in
+/// `example/freelist_allocator.wado`.
+///
 /// Selected by `--allocator freelist` (default for HTTP service world).
 global mut free_list: i32 = 0;
 
+/// Block size encoded in a boundary tag (clears the low 3 bits).
+fn fl_size(tag: i32) -> i32 {
+    return builtin::i32_and(tag, -8);
+}
+
+/// Used-bit of a boundary tag (1 = in use, 0 = free).
+fn fl_used(tag: i32) -> i32 {
+    return builtin::i32_and(tag, 1);
+}
+
+/// Write the header and footer boundary tags of the block at `block`.
+fn fl_set_tags(block: i32, size: i32, used: i32) {
+    // `size` is a multiple of 8 and `used` is 0 or 1, so `+` acts as `|`.
+    let tag = size + used;
+    builtin::i32_store(block, tag);
+    builtin::i32_store(block + size - 8, tag);
+}
+
+/// Insert `block` at the head of the doubly-linked free list.
+fn fl_push(block: i32) {
+    let head = free_list;
+    builtin::i32_store(block + 8, head);
+    builtin::i32_store(block + 12, 0);
+    if head != 0 {
+        builtin::i32_store(head + 12, block);
+    }
+    free_list = block;
+}
+
+/// Remove `block` from the free list (it must currently be linked).
+fn fl_unlink(block: i32) {
+    let next = builtin::i32_load(block + 8);
+    let prev = builtin::i32_load(block + 12);
+    if prev == 0 {
+        free_list = next;
+    } else {
+        builtin::i32_store(prev + 8, next);
+    }
+    if next != 0 {
+        builtin::i32_store(next + 12, prev);
+    }
+}
+
+// `oldsize` and `align` are unused: a freed block's size is read from its
+// own boundary tag (authoritative — it includes rounding and any no-split
+// slack), and every block payload is already 8-byte aligned, which
+// satisfies every Component Model alignment (all are <= 8).
 #[allocator("freelist")]
-export fn freelist_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
     if newsize == 0 {
-        if oldsize == 0 {
+        // Free. `oldptr == 0` (freeing null) is a no-op.
+        if oldptr == 0 {
             return 0;
         }
-        // Trap on immediate double-free (oldptr already at head of free list)
-        if oldptr == free_list {
+        let mut block = oldptr - 8;
+        let header = builtin::i32_load(block);
+        // Double-free guard: the block is already marked free.
+        if fl_used(header) == 0 {
             builtin::unreachable();
         }
-        // Free: add block to free list
-        let size = builtin::i32_and(oldsize + 7, -8);
-        builtin::i32_store(oldptr, size);
-        builtin::i32_store(oldptr + 4, free_list);
-        free_list = oldptr;
+        let mut size = fl_size(header);
+
+        // Coalesce with the physically-following block when it is free.
+        let next = block + size;
+        if next < heap_offset {
+            let next_header = builtin::i32_load(next);
+            if fl_used(next_header) == 0 {
+                fl_unlink(next);
+                size += fl_size(next_header);
+            }
+        }
+        // Coalesce with the physically-preceding block when it is free.
+        // The first block sits at offset 8, so `block > 8` means a
+        // predecessor exists and `block - 8` holds its footer.
+        if block > 8 {
+            let prev_footer = builtin::i32_load(block - 8);
+            if fl_used(prev_footer) == 0 {
+                let prev_size = fl_size(prev_footer);
+                let prev = block - prev_size;
+                fl_unlink(prev);
+                block = prev;
+                size += prev_size;
+            }
+        }
+
+        fl_set_tags(block, size, 0);
+        fl_push(block);
         return 0;
     }
 
-    let size = builtin::i32_and(newsize + 7, -8);
+    // Allocate. Round the payload up to 8 bytes and add the boundary-tag
+    // overhead; the result is always at least the 24-byte minimum block.
+    let size = builtin::i32_and(newsize + 7, -8) + 16;
 
-    // Search free list for first fit
-    let mut prev = 0;
+    // First-fit search of the free list.
     let mut curr = free_list;
     while curr != 0 {
-        let block_size = builtin::i32_load(curr);
-        let next = builtin::i32_load(curr + 4);
-        if block_size >= size && builtin::i32_and(curr, align - 1) == 0 {
-            // Remove from free list
-            if prev == 0 {
-                free_list = next;
-            } else {
-                builtin::i32_store(prev + 4, next);
-            }
-            // Split if remainder is large enough (>= 16 bytes)
+        let block_size = fl_size(builtin::i32_load(curr));
+        if block_size >= size {
+            fl_unlink(curr);
             let remainder = block_size - size;
-            if remainder >= 16 {
-                let rem_ptr = curr + size;
-                builtin::i32_store(rem_ptr, remainder);
-                builtin::i32_store(rem_ptr + 4, free_list);
-                free_list = rem_ptr;
+            if remainder >= 24 {
+                // Split: keep `size` here, return the rest to the list.
+                fl_set_tags(curr, size, 1);
+                let rest = curr + size;
+                fl_set_tags(rest, remainder, 0);
+                fl_push(rest);
+            } else {
+                // Too small to split — hand back the whole block.
+                fl_set_tags(curr, block_size, 1);
             }
-            return curr;
+            return curr + 8;
         }
-        prev = curr;
-        curr = next;
+        curr = builtin::i32_load(curr + 8);
     }
 
-    // No fit: bump allocate
-    let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
-    let new_offset = aligned + size;
+    // No fit: bump-allocate a fresh block at the heap frontier.
+    let block = heap_offset;
+    let new_offset = block + size;
     if builtin::unlikely(new_offset > builtin::memory_size() * 65536) {
         grow_memory(new_offset);
     }
     heap_offset = new_offset;
-    return aligned;
+    fl_set_tags(block, size, 1);
+    return block + 8;
 }
