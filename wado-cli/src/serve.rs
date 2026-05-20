@@ -259,14 +259,19 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                 Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
                 Opt::Timeout => timeout_secs = parse_timeout_arg(&mut parser)?,
                 Opt::Workers => {
-                    workers = Some(parse_count_arg("--workers", &mut parser, false)? as usize);
+                    let n = parse_count_arg("--workers", &mut parser, false)?;
+                    workers = Some(usize::try_from(n).map_err(|_| {
+                        CliExit::error("--workers value is too large".to_string())
+                    })?);
                 }
                 Opt::RecycleRequests => {
                     recycle_requests = parse_count_arg("--recycle-requests", &mut parser, true)?;
                 }
                 Opt::MaxConcurrency => {
-                    max_concurrency =
-                        parse_count_arg("--max-concurrency", &mut parser, false)? as usize;
+                    let n = parse_count_arg("--max-concurrency", &mut parser, false)?;
+                    max_concurrency = usize::try_from(n).map_err(|_| {
+                        CliExit::error("--max-concurrency value is too large".to_string())
+                    })?;
                 }
                 Opt::Help => return Err(CliExit::help(usage)),
             }

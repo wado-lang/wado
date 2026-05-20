@@ -5,11 +5,11 @@
 # official router-benchmark request set (honojs/hono,
 # benchmarks/routers/src/bench.mts), reporting requests/sec per request.
 #
-# Env overrides: DURATION (default 5s), CONNECTIONS (default 50).
+# Env overrides: DURATION (default 6s), CONNECTIONS (default 50).
 set -euo pipefail
 cd "$(dirname "$0")"
 
-DURATION="${DURATION:-5s}"
+DURATION="${DURATION:-6s}"
 CONNECTIONS="${CONNECTIONS:-50}"
 WADO_ADDR="127.0.0.1:8080"
 HONO_PORT="3000"
