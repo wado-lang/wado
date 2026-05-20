@@ -1,0 +1,17 @@
+// Test error: a labeled block whose `break` values have incompatible
+// types is rejected instead of silently taking the first break's type.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let result = compute: {
+        if true {
+            break compute: 10;
+        }
+        break compute: "hello"; // Error: i32 vs String
+    };
+    println(`{result}`);
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

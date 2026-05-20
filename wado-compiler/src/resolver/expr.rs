@@ -195,6 +195,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ctx.labeled_block_targets.push(LabeledBlockTarget {
                     label: lb.label.clone(),
                     break_types: Vec::new(),
+                    expected_type,
                 });
                 ctx.active_labels.push(lb.label.clone());
 
@@ -205,14 +206,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ctx.active_labels.pop();
                 let target = ctx.labeled_block_targets.pop().unwrap();
 
-                let result_type = if !target.break_types.is_empty() {
-                    // TODO: type unification for multiple breaks
-                    target.break_types[0]
-                } else if let Some(ty) = expected_type {
+                // Unify the types of every `break label: expr`. The use-site
+                // expected type wins when present; otherwise pick a
+                // representative break type, skipping `never` (the bottom
+                // type) so a diverging break does not mask the real type.
+                let result_type = if let Some(ty) = expected_type {
                     ty
+                } else if !target.break_types.is_empty() {
+                    target
+                        .break_types
+                        .iter()
+                        .copied()
+                        .find(|&t| t != TypeTable::NEVER)
+                        .unwrap_or(target.break_types[0])
                 } else {
                     TypeTable::UNIT
                 };
+
+                // Report any break whose value type disagrees with the
+                // unified result type.
+                for &break_type in &target.break_types {
+                    self.check_branch_type(break_type, result_type, lb.span);
+                }
 
                 TirExpr::new(
                     TirExprKind::LabeledBlock {
@@ -1947,7 +1962,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// else branches when an outer type annotation pinned the
     /// expected result type; the same rule lives inline in
     /// `resolve_match_expr` for arm bodies.
-    fn check_branch_type(&mut self, actual: TypeId, expected: TypeId, span: Span) {
+    pub(super) fn check_branch_type(&mut self, actual: TypeId, expected: TypeId, span: Span) {
         let result = {
             let tt = self.type_table.borrow();
             check_assignable(actual, expected, &tt)

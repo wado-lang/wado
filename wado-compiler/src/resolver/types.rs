@@ -1111,6 +1111,10 @@ pub(super) struct LabeledBlockTarget {
     pub(super) label: String,
     /// Types collected from `break label: expr;` statements
     pub(super) break_types: Vec<TypeId>,
+    /// Expected type propagated from the labeled block's use site, if any.
+    /// `break label: expr` values are resolved against this so a literal
+    /// (e.g. `break label: 10` with `let x: i64 = ...`) coerces correctly.
+    pub(super) expected_type: Option<TypeId>,
 }
 
 /// Function context during resolution with scope tracking
