@@ -4992,14 +4992,12 @@ pub fn i128::from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntErro
 
 pub fn i128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T234"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let [is_negative, digit_start] = "$value_copy$T234"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
         },
     });
-    let is_negative: bool = __pattern_temp_0.0;
-    let digit_start: i32 = __pattern_temp_0.1;
     let max_pos: u128 = "core::prelude/int128.wado::u128::from_pair"(18446744073709551615, 9223372036854775807 as u64);
     let max_neg_abs: u128 = "core::prelude/int128.wado::u128::from_pair"(0, 9223372036854775808);
     return match "core::prelude/intparse.wado::parse_u128_digits"(s, digit_start, end, radix) {
@@ -5874,14 +5872,12 @@ pub fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
 
 pub fn parse_i64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T234"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let [is_negative, digit_start] = "$value_copy$T234"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
         },
     });
-    let is_negative: bool = __pattern_temp_0.0;
-    let digit_start: i32 = __pattern_temp_0.1;
     return match "core::prelude/intparse.wado::parse_u64_digits"(s, digit_start, end, radix) {
         Ok(v) => if is_negative {
             if (v > min_abs) {
@@ -16533,7 +16529,7 @@ fn multiline_assert_stmt(items: Array<i32>) {
             });
         }
     }
-    items;
+    "$value_copy$T431"(items);
 }
 
 fn break_with_comment() {
@@ -18599,6 +18595,10 @@ fn __initialize_modules() {
 
 fn "$value_copy$T19"(v: [f64, f64]) -> [f64, f64] {
     return Tuple<f64,f64> { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$T431"(v: Array<i32>) -> Array<i32> {
+    return Array<i32> { repr: core::builtin::array_clone::<i32>(v.repr), used: v.used };
 }
 
 fn "$value_copy$T297"(v: [i32, char]) -> [i32, char] {

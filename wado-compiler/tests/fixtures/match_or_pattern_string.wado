@@ -1,0 +1,26 @@
+// Regression: pattern lowering rewrites a string-literal or-pattern
+// (`"alpha" | "beta" => ...`) into `String::eq` guards against
+// freshly-synthesised string-literal expressions. Those literals must
+// be registered in the data section by string collection, which
+// therefore has to run after pattern lowering. The scrutinee is built
+// without writing the literals as expressions, so the pattern-
+// synthesised literals are their only occurrence — an unregistered
+// literal aliases data segment 0 and the match silently misbehaves.
+fn is_reserved(name: &String) -> bool {
+    return match *name {
+        "alpha" | "beta" => true,
+        _ => false,
+    };
+}
+
+export fn run() {
+    let mut s = String::with_capacity(4);
+    s.push('b');
+    s.push('e');
+    s.push('t');
+    s.push('a');
+    assert is_reserved(&s);
+}
+
+__DATA__
+{"stdout": ""}
