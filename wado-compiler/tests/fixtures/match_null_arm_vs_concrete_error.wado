@@ -1,0 +1,13 @@
+// Test error: a `null` match arm cannot be reconciled with a sibling arm
+// that pins the match to a non-`Option` type. `null` is rejected against
+// the concrete type rather than crashing WIR translation.
+
+export fn run() {
+    let x = match true {
+        true => null,
+        false => 42,
+    };
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'i32', found 'null'"}

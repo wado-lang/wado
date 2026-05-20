@@ -1,0 +1,12 @@
+// Test error: a labeled block whose only `break` value is a bare `null`
+// has no way to determine its type. This is reported instead of letting
+// an unresolved `Option<UNKNOWN>` reach codegen.
+
+export fn run() {
+    let x = lbl: {
+        break lbl: null;
+    };
+}
+
+__DATA__
+{"compile_error": "cannot infer the type of this labeled block"}

@@ -12,6 +12,7 @@ use crate::tir::{
     TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TirUnaryOp,
     TypeId, TypeTable,
 };
+use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 
 use super::Resolver;
@@ -195,6 +196,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ctx.labeled_block_targets.push(LabeledBlockTarget {
                     label: lb.label.clone(),
                     break_types: Vec::new(),
+                    expected_type,
                 });
                 ctx.active_labels.push(lb.label.clone());
 
@@ -205,14 +207,62 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ctx.active_labels.pop();
                 let target = ctx.labeled_block_targets.pop().unwrap();
 
-                let result_type = if !target.break_types.is_empty() {
-                    // TODO: type unification for multiple breaks
-                    target.break_types[0]
-                } else if let Some(ty) = expected_type {
+                // Unify the types of every `break label: expr`. The use-site
+                // expected type wins when present; otherwise pick a
+                // representative break type, skipping `never` (the bottom
+                // type) and types still containing UNKNOWN (e.g. a bare
+                // `null` whose `Option<...>` inner is not yet known) so a
+                // diverging or unresolved break does not mask the real type.
+                // Mirrors `resolve_match_expr` result-type selection.
+                let result_type = if let Some(ty) = expected_type {
                     ty
+                } else if !target.break_types.is_empty() {
+                    let tt = self.type_table.borrow();
+                    target
+                        .break_types
+                        .iter()
+                        .copied()
+                        .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
+                        .or_else(|| {
+                            target
+                                .break_types
+                                .iter()
+                                .copied()
+                                .find(|&t| t != TypeTable::NEVER)
+                        })
+                        .unwrap_or(target.break_types[0])
                 } else {
                     TypeTable::UNIT
                 };
+
+                // Patch `break label: null` values whose `Option<...>` inner
+                // could not be inferred from the break alone. Now that the
+                // result type is known, rewrite the unresolved `Null`'s
+                // `type_id` so WIR translation sees a fully-resolved type.
+                // When the type stayed UNKNOWN (every break a bare `null`),
+                // or a `null` break cannot fit a non-`Option` result, report
+                // it rather than letting an unresolved type reach codegen.
+                let mut tir_block = tir_block;
+                if !self.report_uninferable_result(result_type, lb.span, "labeled block") {
+                    let unresolved = {
+                        let tt = self.type_table.borrow();
+                        let mut patcher = NullBreakPatcher {
+                            label: &lb.label,
+                            target_type: result_type,
+                            type_table: &tt,
+                            unresolved: Vec::new(),
+                        };
+                        patcher.visit_block(&mut tir_block);
+                        patcher.unresolved
+                    };
+                    self.report_unresolved_nulls(&unresolved, result_type);
+                }
+
+                // Report any break whose value type disagrees with the
+                // unified result type.
+                for &break_type in &target.break_types {
+                    self.check_branch_type(break_type, result_type, lb.span);
+                }
 
                 TirExpr::new(
                     TirExprKind::LabeledBlock {
@@ -1763,6 +1813,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 };
 
+                // An `if let` whose branches are all bare `null` leaves the
+                // type unresolved; report it rather than ICEing in codegen.
+                self.report_uninferable_result(type_id, if_expr.span, "if expression");
+
                 // Same arm-agreement rule as the `Condition::Expr` arm
                 // below: when `expected_type=Some(X)` pinned `type_id`
                 // to `X` unconditionally, the chain and else blocks
@@ -1873,16 +1927,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 };
 
-                // Patch unresolved `null` tails in either branch using the determined
-                // result type — see `patch_unresolved_null` for the rationale.
-                {
-                    let tt = self.type_table.borrow();
-                    if !tt.contains_unknown(type_id) {
-                        patch_unresolved_null_in_block(&mut then_block, type_id, &tt);
+                // Patch unresolved `null` tails in either branch using the
+                // determined result type — see `patch_unresolved_null`. When
+                // the type stayed UNKNOWN (both branches a bare `null`), or a
+                // `null` branch cannot fit a non-`Option` result, report it
+                // rather than letting an unresolved type reach codegen.
+                if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
+                    let unresolved = {
+                        let tt = self.type_table.borrow();
+                        let mut unresolved = Vec::new();
+                        patch_unresolved_null_in_block(
+                            &mut then_block,
+                            type_id,
+                            &tt,
+                            &mut unresolved,
+                        );
                         if let Some(eb) = else_block.as_mut() {
-                            patch_unresolved_null_in_block(eb, type_id, &tt);
+                            patch_unresolved_null_in_block(eb, type_id, &tt, &mut unresolved);
                         }
-                    }
+                        unresolved
+                    };
+                    self.report_unresolved_nulls(&unresolved, type_id);
                 }
 
                 // Same rule as `resolve_match_expr`: an if-expression
@@ -1947,7 +2012,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// else branches when an outer type annotation pinned the
     /// expected result type; the same rule lives inline in
     /// `resolve_match_expr` for arm bodies.
-    fn check_branch_type(&mut self, actual: TypeId, expected: TypeId, span: Span) {
+    pub(super) fn check_branch_type(&mut self, actual: TypeId, expected: TypeId, span: Span) {
         let result = {
             let tt = self.type_table.borrow();
             check_assignable(actual, expected, &tt)
@@ -1958,6 +2023,42 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let _ = self.logger.error(TypeError::TypeMismatch {
                 expected: expected_name,
                 found: found_name,
+                span,
+            });
+        }
+    }
+
+    /// Reports a `CannotInferType` error when a branch construct's result
+    /// type could not be inferred — it still contains UNKNOWN because every
+    /// branch produced an un-typeable value (e.g. a bare `null`). Returns
+    /// `true` when an error was reported, so the caller can skip the
+    /// `null`-patching pass (which requires a resolved target type).
+    fn report_uninferable_result(
+        &mut self,
+        result_type: TypeId,
+        span: Span,
+        construct: &str,
+    ) -> bool {
+        if !self.type_table.borrow().contains_unknown(result_type) {
+            return false;
+        }
+        let _ = self.logger.error(TypeError::CannotInferType {
+            message: format!("cannot infer the type of this {construct}; add a type annotation"),
+            span,
+        });
+        true
+    }
+
+    /// Reports each `null` branch value that could not be reconciled with a
+    /// branch construct's resolved (non-`Option`) result type. `null` is an
+    /// `Option`, so against e.g. `i32` it is a type mismatch — surfaced here
+    /// because `check_assignable` treats the still-`UNKNOWN` `null` leniently.
+    fn report_unresolved_nulls(&mut self, unresolved: &[Span], result_type: TypeId) {
+        for &span in unresolved {
+            let expected = self.type_table.borrow().type_name(result_type);
+            let _ = self.logger.error(TypeError::TypeMismatch {
+                expected,
+                found: "null".to_string(),
                 span,
             });
         }
@@ -2007,16 +2108,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 })
         });
 
-        // Patch `null`-bodied arms whose `Option<???>` inner could not be inferred.
-        // If the match's overall type is fully resolved we know the inner type;
-        // rewrite the `Null`'s `type_id` so WIR translation can see it.
-        {
-            let tt = self.type_table.borrow();
-            if !tt.contains_unknown(type_id) {
+        // Patch `null`-bodied arms whose `Option<???>` inner could not be
+        // inferred. If the match's overall type is fully resolved we know the
+        // inner type; rewrite the `Null`'s `type_id` so WIR translation can
+        // see it. When the type itself stayed UNKNOWN (every arm a bare
+        // `null`), or a `null` arm cannot fit a non-`Option` result, report
+        // it rather than letting an unresolved type reach codegen.
+        if !self.report_uninferable_result(type_id, match_expr.span, "match expression") {
+            let unresolved = {
+                let tt = self.type_table.borrow();
+                let mut unresolved = Vec::new();
                 for arm in &mut arms {
-                    patch_unresolved_null(&mut arm.body, type_id, &tt);
+                    patch_unresolved_null(&mut arm.body, type_id, &tt, &mut unresolved);
                 }
-            }
+                unresolved
+            };
+            self.report_unresolved_nulls(&unresolved, type_id);
         }
 
         // Reject arms whose body type disagrees with the match's overall
@@ -2916,7 +3023,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 TirTemplatePart::Literal(_) => false,
             }),
 
-            // `Switch` only appears after `lower::translate::switch` — long
+            // `Switch` only appears after `optimize::match_to_switch` — long
             // past resolve-time validation — but the walker stays sound for
             // any future post-resolve reuse.
             TirExprKind::Switch {
@@ -4378,31 +4485,100 @@ impl<H: CompilerHost> Resolver<'_, H> {
 /// value is discarded (e.g. inside an arbitrary call argument) are not
 /// affected — they would have been forced to a known type by their own
 /// surrounding context anyway.
-fn patch_unresolved_null(expr: &mut TirExpr, target_type: TypeId, type_table: &TypeTable) {
+///
+/// A `null` whose surrounding type is not an `Option<...>` cannot be
+/// rewritten; its span is pushed onto `unresolved` so the caller can
+/// report a type mismatch instead of letting `Option<UNKNOWN>` reach
+/// codegen.
+fn patch_unresolved_null(
+    expr: &mut TirExpr,
+    target_type: TypeId,
+    type_table: &TypeTable,
+    unresolved: &mut Vec<Span>,
+) {
     if matches!(expr.kind, TirExprKind::Null) && type_table.contains_unknown(expr.type_id) {
-        expr.type_id = target_type;
+        // Only rewrite when the surrounding type is genuinely an
+        // `Option<...>`. In ill-typed programs the unified result type may
+        // be a non-Option type alongside a `null` branch; rewriting the
+        // `Null` to that type would produce nonsensical TIR.
+        if type_table.as_option(target_type).is_some() {
+            expr.type_id = target_type;
+        } else {
+            unresolved.push(expr.span);
+        }
         return;
     }
     match &mut expr.kind {
         TirExprKind::Block(block) => {
-            patch_unresolved_null_in_block(block, target_type, type_table);
+            patch_unresolved_null_in_block(block, target_type, type_table, unresolved);
         }
         TirExprKind::If {
             then_branch,
             else_branch,
             ..
         } => {
-            patch_unresolved_null_in_block(then_branch, target_type, type_table);
+            patch_unresolved_null_in_block(then_branch, target_type, type_table, unresolved);
             if let Some(eb) = else_branch {
-                patch_unresolved_null_in_block(eb, target_type, type_table);
+                patch_unresolved_null_in_block(eb, target_type, type_table, unresolved);
             }
         }
         TirExprKind::Match { arms, .. } => {
             for arm in arms {
-                patch_unresolved_null(&mut arm.body, target_type, type_table);
+                patch_unresolved_null(&mut arm.body, target_type, type_table, unresolved);
             }
         }
         _ => {}
+    }
+}
+
+/// Patches `break <label>: null` values inside a labeled block once the
+/// block's result type is known. A bare `null` resolves to `Option<UNKNOWN>`
+/// when nothing constrains its inner type; after unification the result
+/// type pins it, so the unresolved `Null` is rewritten via
+/// [`patch_unresolved_null`]. Built on [`TirMutVisitor`] so every nesting
+/// construct is descended automatically.
+///
+/// A break value that still contains UNKNOWN after the patch — e.g. a
+/// `break label: null` whose block type is not an `Option` — cannot be
+/// reconciled; its span is collected in `unresolved` for the caller to
+/// report, since `check_assignable` treats UNKNOWN leniently and would
+/// otherwise let it slip through to codegen.
+struct NullBreakPatcher<'a> {
+    /// The labeled block whose breaks are being patched.
+    label: &'a str,
+    /// The block's unified result type.
+    target_type: TypeId,
+    type_table: &'a TypeTable,
+    /// Spans of break values left unresolved after the patch attempt.
+    unresolved: Vec<Span>,
+}
+
+impl TirMutVisitor for NullBreakPatcher<'_> {
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+        match &mut stmt.kind {
+            // A `break label: expr` targeting our block — patch its value.
+            TirStmtKind::Break {
+                label: Some(l),
+                value: Some(v),
+            } if l == self.label => {
+                patch_unresolved_null(v, self.target_type, self.type_table, &mut self.unresolved);
+            }
+            // A nested labeled block reusing our label shadows it: its
+            // breaks target the inner block, so do not descend.
+            TirStmtKind::LabeledBlock { label, .. } if label == self.label => {}
+            _ => self.walk_stmt(stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        match &mut expr.kind {
+            // Closures are separate functions — a `break` inside cannot
+            // target our label.
+            TirExprKind::Closure { .. } => {}
+            // A nested labeled-block expression reusing our label shadows it.
+            TirExprKind::LabeledBlock { label, .. } if label == self.label => {}
+            _ => self.walk_expr(expr),
+        }
     }
 }
 
@@ -4410,29 +4586,30 @@ fn patch_unresolved_null_in_block(
     block: &mut TirBlock,
     target_type: TypeId,
     type_table: &TypeTable,
+    unresolved: &mut Vec<Span>,
 ) {
     let Some(last) = block.stmts.last_mut() else {
         return;
     };
     match &mut last.kind {
         TirStmtKind::Expr(e) => {
-            patch_unresolved_null(e, target_type, type_table);
+            patch_unresolved_null(e, target_type, type_table, unresolved);
         }
         TirStmtKind::If {
             then_block,
             else_block: Some(eb),
             ..
         } => {
-            patch_unresolved_null_in_block(then_block, target_type, type_table);
-            patch_unresolved_null_in_block(eb, target_type, type_table);
+            patch_unresolved_null_in_block(then_block, target_type, type_table, unresolved);
+            patch_unresolved_null_in_block(eb, target_type, type_table, unresolved);
         }
         TirStmtKind::IfLet {
             then_block,
             else_block: Some(eb),
             ..
         } => {
-            patch_unresolved_null_in_block(then_block, target_type, type_table);
-            patch_unresolved_null_in_block(eb, target_type, type_table);
+            patch_unresolved_null_in_block(then_block, target_type, type_table, unresolved);
+            patch_unresolved_null_in_block(eb, target_type, type_table, unresolved);
         }
         _ => {}
     }

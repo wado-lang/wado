@@ -1,9 +1,13 @@
 //! TIR → NIR translator: a single fold that consumes a [`FlatPackage`]
 //! together with a [`LowerPlan`] and produces a [`NirPackage`].
 //!
-//! Pre-lower-only TIR variants (`Closure`, `Capture`, `FuncRef`, `IfLet`,
-//! `TupleSpread`, …) must have been eliminated by earlier lower
+//! Pre-lower-only TIR variants (`Closure`, `Capture`, `FuncRef`,
+//! `TupleSpread`, …) must have been eliminated by `lower::plan`
 //! sub-passes before the translator runs — they `unreachable!()` here.
+//! `IfLet` is eliminated by `translate::pattern`, run over every
+//! function at the start of `translate` before the fold begins, so the
+//! `IfLet` arm is likewise unreachable. String / bytes literal
+//! collection then runs over the pattern-lowered bodies.
 //!
 //! Some translator arms consume facts from `plan` to rewrite TIR
 //! markers into resolved NIR forms (the value-copy marker rewrite in
@@ -13,7 +17,6 @@
 //! See `docs/wep-2026-05-11-nir.md`.
 
 pub(super) mod pattern;
-mod switch;
 mod wide_int;
 
 use std::cell::RefCell;
@@ -57,8 +60,22 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     let LowerPlan {
         closure,
         value_copy,
-        strings,
     } = plan;
+    // Pattern-lower every function before the fold (WEP Phase 10
+    // Step 2b): `IfLet` / `LetDestructure` / or-patterns become
+    // explicit `Let` + `Match` that the fold consumes. This runs
+    // before string collection below because pattern lowering
+    // synthesises string-literal expressions (string-literal pattern
+    // guards) that the data section must register.
+    {
+        let pattern = pattern::Lowering::new(&flat);
+        let type_table = flat.type_table.borrow();
+        for func_rc in &flat.functions {
+            pattern.lower_function(&mut func_rc.borrow_mut(), &type_table);
+        }
+    }
+    // Collect string / bytes literals from the pattern-lowered bodies.
+    let strings = crate::lower::plan::string::plan(&flat);
     let FlatPackage {
         entry_module_source,
         type_table,
@@ -428,7 +445,7 @@ impl FunctionTranslator<'_, '_> {
                 block: self.convert_block(block),
             },
             TirStmtKind::IfLet { .. } => unreachable!(
-                "TirStmtKind::IfLet should be lowered by lower::pattern before lower::translate runs"
+                "TirStmtKind::IfLet should be lowered by translate::pattern before convert_function"
             ),
             TirStmtKind::LetDestructure {
                 pattern,
@@ -446,28 +463,6 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn convert_expr(&self, expr: &TirExpr) -> NirExpr {
-        // Dense integer / enum `Match` → `Switch` rewrite. Done before
-        // the wide-int check because the two never overlap (the
-        // `Switch` analysis rejects `i128`/`u128` scrutinees), and
-        // before `convert_expr_kind` so the recursive convert walk
-        // processes the rewritten Switch's arm blocks uniformly.
-        if let TirExprKind::Match {
-            expr: scrutinee,
-            arms,
-        } = &expr.kind
-        {
-            let scrut_resolved = self.base.type_table.borrow().get(scrutinee.type_id).clone();
-            if let Some(analysis) = switch::analyze(&scrut_resolved, arms) {
-                let switch_expr = switch::build(
-                    Box::new((**scrutinee).clone()),
-                    arms,
-                    analysis,
-                    expr.type_id,
-                    expr.span,
-                );
-                return self.convert_expr(&switch_expr);
-            }
-        }
         // Wide-int (`i128` / `u128`) match → if-else chain. Done before
         // dispatching `convert_expr_kind` so the rewrite can use the
         // outer expression's `type_id` / `span` for the synthesized

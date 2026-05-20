@@ -13,9 +13,38 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Run the boxing planner: a TIR-mutating pass that rewrites
-/// `&primitive` / `&mut primitive` into `Box<T>` struct operations.
-pub fn plan(flat: &mut FlatPackage) {
+/// Type-level boxing facts produced by [`prepare_types`].
+///
+/// By the time a `BoxPlan` exists, [`prepare_types`] has already
+/// redefined every `Ref(boxable)` / `MutRef(boxable)` `TypeId` in the
+/// shared [`TypeTable`] to its `Box<T>` struct type and appended the
+/// generated `Box<T>` struct definitions to the package. This struct
+/// carries the lookup maps the body-lowering pass needs:
+///
+/// - `box_struct_types` maps an inner `TypeId` to the canonical `Box<T>`
+///   struct `TypeId` minted for it.
+/// - `box_type_ids` is the set of *every* `TypeId` that now denotes a
+///   `Box<T>` struct — both the canonical wrapper ids and the
+///   redefined `Ref` / `MutRef` ids.
+pub struct BoxPlan {
+    /// Mapping from inner `TypeId` to Box<T> struct type ID.
+    /// e.g., `TypeTable::I32` → `TypeId` for Struct("Box<i32>")
+    box_struct_types: IndexMap<TypeId, TypeId>,
+    /// Set of all Box<T> struct type IDs (for fast lookup).
+    box_type_ids: IndexSet<TypeId>,
+}
+
+/// Prepare the type table for boxing: a type-table-only pass.
+///
+/// It mints a `Box<T>` struct type for every `&primitive` / `&variant`
+/// / `&fn` reference in the program, redefines the corresponding
+/// `Ref` / `MutRef` `TypeIds` to those struct types (so composite types
+/// that transitively contain a boxed reference follow automatically),
+/// and appends the generated struct definitions to `flat.structs`.
+///
+/// It does not touch any function body — body lowering is driven
+/// separately from the returned [`BoxPlan`].
+pub fn prepare_types(flat: &mut FlatPackage) -> BoxPlan {
     let box_module_source = flat
         .type_table
         .borrow()
@@ -23,28 +52,56 @@ pub fn plan(flat: &mut FlatPackage) {
         .struct_module(crate::compiler_item::CompilerItem::Box)
         .cloned()
         .unwrap_or_else(ModuleSource::prelude);
-    let mut box_lowerer = BoxLowerer::new(box_module_source);
+    let mut builder = TypeBuilder::new(box_module_source);
 
-    for s in &flat.structs {
-        box_lowerer
-            .struct_fields_map
-            .insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
-    }
     for v in &flat.variants {
-        box_lowerer.variant_names.insert(v.name.clone());
+        builder.variant_names.insert(v.name.clone());
     }
 
     {
         let mut type_table = flat.type_table.borrow_mut();
-        box_lowerer.create_needed_box_types(&mut type_table);
-        box_lowerer.rewrite_types(&mut type_table);
+        builder.create_needed_box_types(&mut type_table);
+        builder.rewrite_types(&mut type_table);
     }
 
-    box_lowerer.lower_module_exprs(flat);
-    flat.structs.append(&mut box_lowerer.generated_structs);
+    flat.structs.append(&mut builder.generated_structs);
+    BoxPlan {
+        box_struct_types: builder.box_struct_types,
+        box_type_ids: builder.box_type_ids,
+    }
 }
 
-struct BoxLowerer {
+/// Run the body-level boxing pass: a TIR-mutating pass that rewrites
+/// `&primitive` / `&mut primitive` into `Box<T>` struct operations,
+/// driven by the [`BoxPlan`] produced by [`prepare_types`].
+pub fn lower_bodies(flat: &mut FlatPackage, plan: &BoxPlan) {
+    let mut struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>> =
+        IndexMap::default();
+    for s in &flat.structs {
+        struct_fields_map.insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
+    }
+    let lowerer = BodyLowerer {
+        box_struct_types: &plan.box_struct_types,
+        box_type_ids: &plan.box_type_ids,
+        struct_fields_map,
+    };
+    lowerer.lower_module_exprs(flat);
+}
+
+/// Rewrites function bodies into `Box<T>` struct operations, driven by
+/// the type-table facts in a [`BoxPlan`]. Used only by [`lower_bodies`].
+struct BodyLowerer<'a> {
+    /// Mapping from inner `TypeId` to Box<T> struct type ID.
+    box_struct_types: &'a IndexMap<TypeId, TypeId>,
+    /// Set of all Box<T> struct type IDs (for fast lookup).
+    box_type_ids: &'a IndexSet<TypeId>,
+    /// Struct fields indexed by (name, `module_source`) for deref assign expansion.
+    struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
+}
+
+/// Builds `Box<T>` struct types and rewrites the type table. Used only
+/// by [`prepare_types`].
+struct TypeBuilder {
     /// Mapping from inner `TypeId` to Box<T> struct type ID.
     /// e.g., `TypeTable::I32` → `TypeId` for Struct("Box<i32>")
     box_struct_types: IndexMap<TypeId, TypeId>,
@@ -56,21 +113,18 @@ struct BoxLowerer {
     /// Resolved via `TypeTable::compiler_items().struct_module(CompilerItem::Box)`
     /// (registered from `#[compiler_item("box")]` on `struct Box<T>` in the prelude).
     box_module_source: ModuleSource,
-    /// Struct fields indexed by (name, `module_source`) for deref assign expansion.
-    struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
     /// Variant names from all modules, used to identify `GenericInstance` types
     /// that are variants and need boxing.
     variant_names: IndexSet<String>,
 }
 
-impl BoxLowerer {
+impl TypeBuilder {
     fn new(box_module_source: ModuleSource) -> Self {
         Self {
             box_struct_types: IndexMap::default(),
             box_type_ids: IndexSet::default(),
             generated_structs: Vec::new(),
             box_module_source,
-            struct_fields_map: IndexMap::default(),
             variant_names: IndexSet::default(),
         }
     }
@@ -130,16 +184,6 @@ impl BoxLowerer {
         struct_type_id
     }
 
-    /// Get the inner (value) `TypeId` for a Box struct type, if it is one.
-    fn get_box_inner_type(&self, type_id: TypeId) -> Option<TypeId> {
-        for (&inner, &box_type) in &self.box_struct_types {
-            if box_type == type_id {
-                return Some(inner);
-            }
-        }
-        None
-    }
-
     /// Check if a type is a variant (either directly or as a `GenericInstance` of a variant).
     fn is_variant_type(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
         match type_table.get(type_id) {
@@ -149,6 +193,102 @@ impl BoxLowerer {
             }
             _ => false,
         }
+    }
+
+    /// Scan the type table to find which primitives need Box types.
+    fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
+        // Collect base TypeIds that need boxing, plus newtypes.
+        // Boxing is required for:
+        // - Primitives (except i128/u128 which are already GC types)
+        // - Variant types (subtype hierarchy prevents field-by-field deref assignment)
+        // - Function types (the local holds a `ref struct` value; `&mut fn`
+        //   needs a stable heap slot for deref-assignment, and we box `&fn`
+        //   for the same shape so reference semantics stay uniform across
+        //   all `&T` / `&mut T` types — the optimizer can elide read-only
+        //   wrappers later).
+        let mut needs_box_base: IndexSet<TypeId> = IndexSet::default();
+
+        for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
+            match type_table.get(type_id).clone() {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    let is_prim = matches!(type_table.get(inner), ResolvedType::Primitive(p)
+                        if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128));
+                    let is_variant = self.is_variant_type(inner, type_table);
+                    let is_fn = matches!(type_table.get(inner), ResolvedType::Function { .. });
+                    if is_prim || is_variant || is_fn {
+                        needs_box_base.insert(inner);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Create Box<T> struct types for each type that needs boxing
+        for base_type_id in needs_box_base {
+            self.get_or_create_box_type(base_type_id, type_table);
+        }
+    }
+
+    /// Rewrite type table entries: Ref(primitive) → Box struct, MutRef(primitive) → Box struct.
+    ///
+    /// Note: Option(primitive) is NOT rewritten here. The type table keeps `Option(primitive)`
+    /// so that codegen and pattern matching can still see the original inner type. The lower
+    /// pass transforms variant expressions (`VariantConstruct`) to wrap/unwrap Box structs,
+    /// while codegen handles the type mapping from `Option(primitive)` to a nullable Box reference.
+    fn rewrite_types(&mut self, type_table: &mut TypeTable) {
+        // Collect entries to rewrite (can't mutate while iterating).
+        // The tuple holds (rewritten_type_id, new_resolved_type, payload_inner_type_id)
+        // so that we can register every rewritten id as a Box wrapper of
+        // its original `inner` payload — many `Ref(T)` TypeIds may
+        // collapse onto the same Box content, and downstream peeling
+        // needs the mapping for each of them, not just the canonical
+        // wrapper id stored in `box_struct_types`.
+        let mut replacements: Vec<(TypeId, ResolvedType, TypeId)> = Vec::new();
+
+        for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
+            match type_table.get(type_id).clone() {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    if let Some(&box_type_id) = self.box_struct_types.get(&inner) {
+                        // Replace Ref(primitive) with the Box struct type
+                        replacements.push((type_id, type_table.get(box_type_id).clone(), inner));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        for (type_id, new_type, _) in &replacements {
+            type_table.replace_type(*type_id, new_type.clone());
+        }
+
+        // Add all rewritten TypeIds to box_type_ids so that Deref/Assign
+        // handlers can recognize them as Box types. Mirror the rewrite as
+        // a `wrapper -> payload` entry on the type table so downstream
+        // passes can call `TypeTable::peel_refs_and_box` to look through
+        // the wrapper in one step (used by DCE inspect scanning and the
+        // canonical dispatch WIR builder).
+        for (type_id, _, inner) in &replacements {
+            self.box_type_ids.insert(*type_id);
+            type_table.register_box_payload(*type_id, *inner);
+        }
+        // Also register the canonical `Box<T>` wrapper ids that
+        // `create_needed_box_types` minted, so callers can ask for the
+        // payload of *any* TypeId that ended up looking like a Box.
+        for (&inner, &wrapper) in &self.box_struct_types {
+            type_table.register_box_payload(wrapper, inner);
+        }
+    }
+}
+
+impl BodyLowerer<'_> {
+    /// Get the inner (value) `TypeId` for a Box struct type, if it is one.
+    fn get_box_inner_type(&self, type_id: TypeId) -> Option<TypeId> {
+        for (&inner, &box_type) in self.box_struct_types {
+            if box_type == type_id {
+                return Some(inner);
+            }
+        }
+        None
     }
 
     /// Look up struct fields for a given `TypeId` via the type table.
@@ -384,7 +524,7 @@ impl BoxLowerer {
     ///
     /// Transforms function bodies and global initializers. Generated
     /// Box structs are appended by the caller.
-    fn lower_module_exprs(&mut self, flat: &mut FlatPackage) {
+    fn lower_module_exprs(&self, flat: &mut FlatPackage) {
         // Transform expressions in all functions.
         for func_rc in &flat.functions {
             let mut func = func_rc.borrow_mut();
@@ -397,90 +537,6 @@ impl BoxLowerer {
             for global in &mut flat.globals {
                 self.transform_expr(&mut global.initializer, &IndexSet::default(), &type_table);
             }
-        }
-    }
-
-    /// Scan the type table to find which primitives need Box types.
-    fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
-        // Collect base TypeIds that need boxing, plus newtypes.
-        // Boxing is required for:
-        // - Primitives (except i128/u128 which are already GC types)
-        // - Variant types (subtype hierarchy prevents field-by-field deref assignment)
-        // - Function types (the local holds a `ref struct` value; `&mut fn`
-        //   needs a stable heap slot for deref-assignment, and we box `&fn`
-        //   for the same shape so reference semantics stay uniform across
-        //   all `&T` / `&mut T` types — the optimizer can elide read-only
-        //   wrappers later).
-        let mut needs_box_base: IndexSet<TypeId> = IndexSet::default();
-
-        for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
-            match type_table.get(type_id).clone() {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    let is_prim = matches!(type_table.get(inner), ResolvedType::Primitive(p)
-                        if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128));
-                    let is_variant = self.is_variant_type(inner, type_table);
-                    let is_fn = matches!(type_table.get(inner), ResolvedType::Function { .. });
-                    if is_prim || is_variant || is_fn {
-                        needs_box_base.insert(inner);
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        // Create Box<T> struct types for each type that needs boxing
-        for base_type_id in needs_box_base {
-            self.get_or_create_box_type(base_type_id, type_table);
-        }
-    }
-
-    /// Rewrite type table entries: Ref(primitive) → Box struct, MutRef(primitive) → Box struct.
-    ///
-    /// Note: Option(primitive) is NOT rewritten here. The type table keeps `Option(primitive)`
-    /// so that codegen and pattern matching can still see the original inner type. The lower
-    /// pass transforms variant expressions (`VariantConstruct`) to wrap/unwrap Box structs,
-    /// while codegen handles the type mapping from `Option(primitive)` to a nullable Box reference.
-    fn rewrite_types(&mut self, type_table: &mut TypeTable) {
-        // Collect entries to rewrite (can't mutate while iterating).
-        // The tuple holds (rewritten_type_id, new_resolved_type, payload_inner_type_id)
-        // so that we can register every rewritten id as a Box wrapper of
-        // its original `inner` payload — many `Ref(T)` TypeIds may
-        // collapse onto the same Box content, and downstream peeling
-        // needs the mapping for each of them, not just the canonical
-        // wrapper id stored in `box_struct_types`.
-        let mut replacements: Vec<(TypeId, ResolvedType, TypeId)> = Vec::new();
-
-        for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
-            match type_table.get(type_id).clone() {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    if let Some(&box_type_id) = self.box_struct_types.get(&inner) {
-                        // Replace Ref(primitive) with the Box struct type
-                        replacements.push((type_id, type_table.get(box_type_id).clone(), inner));
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        for (type_id, new_type, _) in &replacements {
-            type_table.replace_type(*type_id, new_type.clone());
-        }
-
-        // Add all rewritten TypeIds to box_type_ids so that Deref/Assign
-        // handlers can recognize them as Box types. Mirror the rewrite as
-        // a `wrapper -> payload` entry on the type table so downstream
-        // passes can call `TypeTable::peel_refs_and_box` to look through
-        // the wrapper in one step (used by DCE inspect scanning and the
-        // canonical dispatch WIR builder).
-        for (type_id, _, inner) in &replacements {
-            self.box_type_ids.insert(*type_id);
-            type_table.register_box_payload(*type_id, *inner);
-        }
-        // Also register the canonical `Box<T>` wrapper ids that
-        // `create_needed_box_types` minted, so callers can ask for the
-        // payload of *any* TypeId that ended up looking like a Box.
-        for (&inner, &wrapper) in &self.box_struct_types {
-            type_table.register_box_payload(wrapper, inner);
         }
     }
 

@@ -1,0 +1,29 @@
+// A labeled block used as a value expression unifies its `break` values
+// against the use-site expected type, so integer literals coerce to the
+// annotated type instead of defaulting to i32.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let wide: i64 = compute: {
+        if true {
+            break compute: 10;
+        }
+        break compute: 20;
+    };
+    assert wide == 10;
+
+    // Without an annotation, multiple breaks of the same type still unify.
+    let same = pick: {
+        if false {
+            break pick: 1;
+        }
+        break pick: 2;
+    };
+    assert same == 2;
+
+    println(`wide={wide} same={same}`);
+}
+
+__DATA__
+{"stdout": "wide=10 same=2\n"}

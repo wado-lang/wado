@@ -87,17 +87,13 @@ fn "core:internal/cm_waitable_set_wait"(ws) {
 
 fn "core:prelude/types.wado/AsyncCall<()>::wait"(self) {
     let handle_1: i32;
-    let raw: i32;
     let ws_3: i32;
-    let handle_6: i32;
     handle_1 = self.__cm_packed >> 4;
     if handle_1 != 0 {
-        raw = handle_1;
         ws_3 = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            handle_6 = raw;
-            "wasi/waitable-join"(handle_6, ws_3);
-            break __inline_cm_waitable_join_0: handle_6;
+            "wasi/waitable-join"(handle_1, ws_3);
+            break __inline_cm_waitable_join_0: handle_1;
             unreachable;
         });
         b1: block {
@@ -112,7 +108,7 @@ fn "core:prelude/types.wado/AsyncCall<()>::wait"(self) {
                 continue l2;
             };
         };
-        "wasi/subtask-drop"(raw);
+        "wasi/subtask-drop"(handle_1);
         "wasi/waitable-set-drop"(ws_3);
     }
     let __indirect_call_0: ref "canonical//CanonicalClosure_0";

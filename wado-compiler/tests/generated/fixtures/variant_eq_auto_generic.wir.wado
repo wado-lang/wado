@@ -153,18 +153,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -224,20 +220,16 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
 fn "core:prelude/types.wado/Option<i32>^Eq::eq"(self, other) {
     let a: i32;
     let b: i32;
-    return let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>", __match_scrut_0 = self, (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) -> bool {
-        a = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0).payload_0;
-        let __match_scrut_2: ref "core:prelude/types.wado//Option<i32>";
-        __match_scrut_2 = other;
-        if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_2) -> bool {
-            b = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_2).payload_0;
+    return (if ref.test "core:prelude/types.wado//Option<i32>::Some"(self) -> bool {
+        a = ref.cast "core:prelude/types.wado//Option<i32>::Some"(self).payload_0;
+        if ref.test "core:prelude/types.wado//Option<i32>::Some"(other) -> bool {
+            b = ref.cast "core:prelude/types.wado//Option<i32>::Some"(other).payload_0;
             a == b;
         } else {
             0;
         }
     } else {
-        let __match_scrut_1: ref "core:prelude/types.wado//Option<i32>";
-        __match_scrut_1 = other;
-        if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_1) -> bool {
+        if ref.test "core:prelude/types.wado//Option<i32>::Some"(other) -> bool {
             0;
         } else {
             1;
@@ -246,17 +238,23 @@ fn "core:prelude/types.wado/Option<i32>^Eq::eq"(self, other) {
 }
 
 fn "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/Maybe<i32>^Eq::eq"(self, other) {
+    let __eq_self_Just_2: i32;
+    let __eq_other_Just_3: i32;
     if ref.test "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(self) {
+        __eq_self_Just_2 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(self).payload_0;
         if ref.test "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(other) {
-            return ref.cast "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(self).payload_0 == ref.cast "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(other).payload_0;
+            __eq_other_Just_3 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(other).payload_0;
+            return __eq_self_Just_2 == __eq_other_Just_3;
+        } else {
+            return 0;
+        }
+    } else {
+        if other.discriminant == 1 {
+            return 1;
         } else {
             return 0;
         }
     }
-    if self.discriminant == 1 {
-        return other.discriminant == 1;
-    }
-    return 0;
 }
 
 export fn "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/__cm_export__run" as "run"

@@ -903,7 +903,7 @@ fn lower_lr_alt(rule: &ParserRule, alt_idx: i32, own_prec: i32, conflict_min: i3
     // the suffix elements (skipping the leading self-ref), not the
     // whole alt.
     let case_names = case_names_for_rule(&rule.alternatives);
-    let type_name = rule_type_name(&rule.name);
+    let type_name = rule.type_name;
     let base = strip_suffix(&type_name, &"Node");
     let case_name = case_names[alt_idx];
     let struct_name = `{base}{case_name}`;
@@ -1879,7 +1879,7 @@ fn lower_header(rule: &ParserRule) -> RuleHeader {
         name: rule.name,
         snake_name: rule.snake_name,
         field_name: rule.field_name,
-        type_name: rule_type_name(&rule.name),
+        type_name: rule.type_name,
         visibility: rule.visibility,
         variant_of: null,
         case_names: case_names_for_rule(&rule.alternatives),
@@ -1912,7 +1912,7 @@ fn compute_alt_gc_starts(alternatives: &Array<Alternative>) -> Array<i32> {
 /// (`<RuleBase>` being `rule_type_name(rule.name)` with the trailing
 /// `Node` stripped — same as `parser_gen::gen_alt_body` callers).
 fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenContext, variant_mask: &Array<String>, variant_k_prefix_mask: &Array<Array<String>>) -> AltBody {
-    let type_name = rule_type_name(&rule.name);
+    let type_name = rule.type_name;
     let mut case_name: String = "";
     let mut struct_name: String = type_name;
     if rule.alternatives.len() != 1 {

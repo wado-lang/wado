@@ -184,18 +184,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -292,28 +288,26 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    let code: u32;
-    code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
-    if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code & 255);
+    if c <u 128 {
+        builtin::array_set_u8(self.repr, self.used, c & 255);
         self.used = self.used + 1;
-    } else if code <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
+    } else if c <u 2048 {
+        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
         self.used = self.used + 2;
-    } else if code <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
+    } else if c <u 65536 {
+        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
 }
@@ -354,9 +348,7 @@ fn "core:prelude/format.wado/Formatter::pad"(self, content) {
     }
     padding = self.width - content_len;
     align = self.align;
-    let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
-    __match_scrut_0 = align;
-    if __match_scrut_0 == 0 {
+    if align == 0 {
         "core:prelude/string.wado/String::push_str"(self.buf, content);
         "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
     } else if align == 1 {
@@ -411,7 +403,7 @@ fn "core:prelude/traits.wado/IterMap<core:prelude/array.wado/ArrayIter<wado-comp
     let __b: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let result: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let item: ref "core:prelude/string.wado//String";
-    let __pattern_temp_0: ref null "core:prelude/string.wado//String";
+    let __iflet_4: ref null "core:prelude/string.wado//String";
     result = __seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
         __b = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
         break __seq_lit: __b;
@@ -419,9 +411,9 @@ fn "core:prelude/traits.wado/IterMap<core:prelude/array.wado/ArrayIter<wado-comp
     };
     b23: block {
         l24: loop {
-            __pattern_temp_0 = "core:prelude/traits.wado/IterMap<core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>^Iterator::next"(self);
-            if ref.is_null(__pattern_temp_0) == 0 {
-                item = ref.as_non_null(__pattern_temp_0);
+            __iflet_4 = "core:prelude/traits.wado/IterMap<core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>^Iterator::next"(self);
+            if ref.is_null(__iflet_4) == 0 {
+                item = ref.as_non_null(__iflet_4);
                 "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(result, item);
             } else {
                 break b23;
@@ -477,15 +469,16 @@ fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self) 
 
 fn "core:prelude/traits.wado/IterMap<core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>^Iterator::next"(self) {
     let item: ref "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color";
-    let __pattern_temp_0: ref null "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color";
-    __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>^Iterator::next"(self.inner);
-    if ref.is_null(__pattern_temp_0) == 0 {
-        item = ref.as_non_null(__pattern_temp_0);
+    let __iflet_2: ref null "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color";
+    __iflet_2 = "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>^Iterator::next"(self.inner);
+    if ref.is_null(__iflet_2) == 0 {
+        item = ref.as_non_null(__iflet_2);
         return ref.as_non_null(block -> ref "core:prelude/string.wado//String" {
             let __indirect_call_0: ref "canonical//CanonicalClosure_0";
             __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(self.f);
             call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, item);
         });
+    } else {
     }
     return ref.null none;
 }
@@ -501,9 +494,9 @@ fn "core:prelude/array.wado/ArrayIter<wado-compiler/tests/fixtures/iter_map_coll
 }
 
 fn "wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__Closure_2::__call"(c) {
-    return let __match_scrut_0: ref "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color", __match_scrut_0 = c, (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+    return (if c.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 };
-    } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+    } else if c.discriminant == 1 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("blue"), used: 4 };

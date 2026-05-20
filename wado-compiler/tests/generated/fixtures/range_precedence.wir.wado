@@ -109,13 +109,10 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/range_precedence.wado/run"() with Stdout {
     let sum: i32;
     let __iter_1: ref "core:prelude/range.wado//RangeExclusive<i32>";
-    let i_2: i32;
     let sum2: i32;
     let __iter_4: ref "core:prelude/range.wado//RangeExclusive<i32>";
-    let i_5: i32;
     let sum3: i32;
     let __iter_7: ref "core:prelude/range.wado//RangeExclusive<i32>";
-    let i_8: i32;
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
     let __local_11: ref "core:prelude/string.wado//String";
@@ -126,12 +123,11 @@ fn "wado-compiler/tests/fixtures/range_precedence.wado/run"() with Stdout {
     __iter_1 = struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 0, end: 3 };
     b0: block {
         l1: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(__iter_1);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                i_2 = __sroa___pattern_temp_0_payload_0;
-                sum = sum + i_2;
+            let __sroa___iflet_15_discriminant: i32;
+            let __sroa___iflet_15_payload_0: i32;
+            multivalue_bind [__sroa___iflet_15_discriminant, __sroa___iflet_15_payload_0] = "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(__iter_1);
+            if __sroa___iflet_15_discriminant == 0 {
+                sum = sum + __sroa___iflet_15_payload_0;
             } else {
                 break b0;
             }
@@ -149,12 +145,11 @@ fn "wado-compiler/tests/fixtures/range_precedence.wado/run"() with Stdout {
     __iter_4 = struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 2, end: 5 };
     b3: block {
         l4: loop {
-            let __sroa___pattern_temp_1_discriminant: i32;
-            let __sroa___pattern_temp_1_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(__iter_4);
-            if __sroa___pattern_temp_1_discriminant == 0 {
-                i_5 = __sroa___pattern_temp_1_payload_0;
-                sum2 = sum2 + i_5;
+            let __sroa___iflet_16_discriminant: i32;
+            let __sroa___iflet_16_payload_0: i32;
+            multivalue_bind [__sroa___iflet_16_discriminant, __sroa___iflet_16_payload_0] = "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(__iter_4);
+            if __sroa___iflet_16_discriminant == 0 {
+                sum2 = sum2 + __sroa___iflet_16_payload_0;
             } else {
                 break b3;
             }
@@ -172,12 +167,11 @@ fn "wado-compiler/tests/fixtures/range_precedence.wado/run"() with Stdout {
     __iter_7 = struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 0, end: 4 };
     b6: block {
         l7: loop {
-            let __sroa___pattern_temp_2_discriminant: i32;
-            let __sroa___pattern_temp_2_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_2_discriminant, __sroa___pattern_temp_2_payload_0] = "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(__iter_7);
-            if __sroa___pattern_temp_2_discriminant == 0 {
-                i_8 = __sroa___pattern_temp_2_payload_0;
-                sum3 = sum3 + i_8;
+            let __sroa___iflet_17_discriminant: i32;
+            let __sroa___iflet_17_payload_0: i32;
+            multivalue_bind [__sroa___iflet_17_discriminant, __sroa___iflet_17_payload_0] = "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(__iter_7);
+            if __sroa___iflet_17_discriminant == 0 {
+                sum3 = sum3 + __sroa___iflet_17_payload_0;
             } else {
                 break b6;
             }
@@ -220,18 +214,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/range_precedence.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/range_precedence.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -408,28 +398,26 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    let code: u32;
-    code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
-    if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code & 255);
+    if c <u 128 {
+        builtin::array_set_u8(self.repr, self.used, c & 255);
         self.used = self.used + 1;
-    } else if code <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
+    } else if c <u 2048 {
+        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
         self.used = self.used + 2;
-    } else if code <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
+    } else if c <u 65536 {
+        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
 }
@@ -498,9 +486,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
     align = self.align;
-    let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
-    __match_scrut_0 = align;
-    if __match_scrut_0 == 0 {
+    if align == 0 {
         if sign_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
@@ -537,10 +523,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 
 fn "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(self) {
     let current: i32;
+    let __fused_payload_2: i32;
     let self_4: ref "core:prelude/types.wado//Box<i32>";
     let other: ref "core:prelude/types.wado//Box<i32>";
-    let __fused_payload_7: i32;
-    let __sroa_self_value: i32;
     if __inline_i32_Ord__cmp_0: block -> "core:prelude/traits.wado//enum:Ordering" {
         self_4 = struct.new "core:prelude/types.wado//Box<i32>" { value: self.start };
         other = struct.new "core:prelude/types.wado//Box<i32>" { value: self.end };
@@ -557,13 +542,12 @@ fn "core:prelude/range.wado/RangeExclusive<i32>^Iterator::next"(self) {
     }
     current = self.start;
     __fused___inline_i32_Step__next_step_1: block {
-        __sroa_self_value = current;
-        if __sroa_self_value == 2147483647 {
+        if current == 2147483647 {
             self.start = self.end;
             break __fused___inline_i32_Step__next_step_1;
         }
-        __fused_payload_7 = __sroa_self_value + 1;
-        self.start = __fused_payload_7;
+        __fused_payload_2 = current + 1;
+        self.start = __fused_payload_2;
         break __fused___inline_i32_Step__next_step_1;
     };
     return 0, current;

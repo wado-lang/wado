@@ -75,21 +75,19 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run"() {
     __pattern_temp_0 = "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream"();
     stdin_stream = __pattern_temp_0.0;
     subtask = "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(stdin_stream);
-    let __fr_handle_1: i32;
     let __fr_ptr_1: i32;
     let __fr_result_1: i32;
-    __fr_handle_1 = subtask;
     __fr_ptr_1 = "mem/realloc"(0, 0, 8, 40);
-    __fr_result_1 = "wasi/future-read:transmission-cli"(__fr_handle_1, __fr_ptr_1);
+    __fr_result_1 = "wasi/future-read:transmission-cli"(subtask, __fr_ptr_1);
     if __fr_result_1 == -1 {
         let __fr_ws_1: i32;
         let __fr_evtptr_1: i32;
         __fr_ws_1 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__fr_handle_1, __fr_ws_1);
+        "wasi/waitable-join"(subtask, __fr_ws_1);
         __fr_evtptr_1 = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(__fr_ws_1, __fr_evtptr_1));
         drop("mem/realloc"(__fr_evtptr_1, 8, 4, 0));
-        "wasi/waitable-join"(__fr_handle_1, 0);
+        "wasi/waitable-join"(subtask, 0);
         "wasi/waitable-set-drop"(__fr_ws_1);
         __fr_result_1 = 0;
     }

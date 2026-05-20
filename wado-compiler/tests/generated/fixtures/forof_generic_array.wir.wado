@@ -89,10 +89,10 @@ fn "wado-compiler/tests/fixtures/forof_generic_array.wado/run"() with Stdout {
     __iter_1 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: __sroa_c_items.repr, used: 3, index: 0 };
     b0: block {
         l1: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_1);
-            if __sroa___pattern_temp_0_discriminant == 0 {
+            let __sroa___iflet_3_discriminant: i32;
+            let __sroa___iflet_3_payload_0: i32;
+            multivalue_bind [__sroa___iflet_3_discriminant, __sroa___iflet_3_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_1);
+            if __sroa___iflet_3_discriminant == 0 {
             } else {
                 break b0;
             }
@@ -129,18 +129,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/forof_generic_array.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/forof_generic_array.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

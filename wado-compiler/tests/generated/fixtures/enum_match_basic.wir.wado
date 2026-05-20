@@ -72,11 +72,9 @@ fn "wado-compiler/tests/fixtures/enum_match_basic.wado/__cm_export__run"() {
     let c_4: "wado-compiler/tests/fixtures/enum_match_basic.wado//enum:Color";
     "core:cli/println"(__inline_color_name_5: block -> ref "core:prelude/string.wado//String" {
         c_2 = 0;
-        let __match_scrut_0: "wado-compiler/tests/fixtures/enum_match_basic.wado//enum:Color";
-        __match_scrut_0 = c_2;
-        if __match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
+        if c_2 == 0 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 };
-        } else if __match_scrut_0 == 1 -> ref "core:prelude/string.wado//String" {
+        } else if c_2 == 1 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("blue"), used: 4 };
@@ -86,11 +84,9 @@ fn "wado-compiler/tests/fixtures/enum_match_basic.wado/__cm_export__run"() {
     });
     "core:cli/println"(__inline_color_name_6: block -> ref "core:prelude/string.wado//String" {
         c_3 = 1;
-        let __match_scrut_1: "wado-compiler/tests/fixtures/enum_match_basic.wado//enum:Color";
-        __match_scrut_1 = c_3;
-        if __match_scrut_1 == 0 -> ref "core:prelude/string.wado//String" {
+        if c_3 == 0 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 };
-        } else if __match_scrut_1 == 1 -> ref "core:prelude/string.wado//String" {
+        } else if c_3 == 1 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("blue"), used: 4 };
@@ -100,11 +96,9 @@ fn "wado-compiler/tests/fixtures/enum_match_basic.wado/__cm_export__run"() {
     });
     "core:cli/println"(__inline_color_name_7: block -> ref "core:prelude/string.wado//String" {
         c_4 = 2;
-        let __match_scrut_2: "wado-compiler/tests/fixtures/enum_match_basic.wado//enum:Color";
-        __match_scrut_2 = c_4;
-        if __match_scrut_2 == 0 -> ref "core:prelude/string.wado//String" {
+        if c_4 == 0 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 };
-        } else if __match_scrut_2 == 1 -> ref "core:prelude/string.wado//String" {
+        } else if c_4 == 1 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("blue"), used: 4 };
@@ -133,18 +127,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/enum_match_basic.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/enum_match_basic.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

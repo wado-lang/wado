@@ -174,6 +174,10 @@ pub enum TypeError {
     /// Invalid numeric literal
     InvalidLiteral { message: String, span: Span },
 
+    /// A type could not be inferred and needs an explicit annotation
+    /// (e.g. a bare `null` whose `Option<...>` inner is undetermined).
+    CannotInferType { message: String, span: Span },
+
     /// Feature not yet implemented
     NotYetImplemented { feature: String, span: Span },
 
@@ -438,6 +442,9 @@ impl std::fmt::Display for TypeError {
                 )
             }
             TypeError::InvalidLiteral { message, span } => {
+                write!(f, "{}:{}: {}", span.line, span.column, message)
+            }
+            TypeError::CannotInferType { message, span } => {
                 write!(f, "{}:{}: {}", span.line, span.column, message)
             }
             TypeError::NotYetImplemented { feature, span } => {
@@ -786,6 +793,9 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             TypeError::InvalidLiteral { message, span } => {
                 (Code::InvalidSyntax, message.clone(), *span)
             }
+            TypeError::CannotInferType { message, span } => {
+                (Code::TypeMismatch, message.clone(), *span)
+            }
             TypeError::NotYetImplemented { feature, span } => (
                 Code::UnsupportedFeature,
                 format!("{feature} is not yet implemented"),
@@ -1111,6 +1121,10 @@ pub(super) struct LabeledBlockTarget {
     pub(super) label: String,
     /// Types collected from `break label: expr;` statements
     pub(super) break_types: Vec<TypeId>,
+    /// Expected type propagated from the labeled block's use site, if any.
+    /// `break label: expr` values are resolved against this so a literal
+    /// (e.g. `break label: 10` with `let x: i64 = ...`) coerces correctly.
+    pub(super) expected_type: Option<TypeId>,
 }
 
 /// Function context during resolution with scope tracking

@@ -49,8 +49,8 @@ use crate::synthesis::common::{alloc_local, option_some, ref_expr, synth_span};
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, SubstitutionContext, TirBlock,
     TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
-    TypeTable,
+    TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirTemplatePart, TypeId, TypeTable,
 };
 
 /// Canonical identity of an effect or resource **declaration**:
@@ -845,15 +845,33 @@ fn build_dispatch_wrapper_function(
         }],
         payload_type: inner_ref_type_id,
     };
-    stmts.push(TirStmt::new(
-        TirStmtKind::IfLet {
-            scrutinee: saved_pattern_scrutinee,
-            pattern,
-            then_block,
-            else_block: Some(else_block),
+    // Emit canonical TIR `Match` rather than `IfLet`: WEP 2026-05-11
+    // Phase 10 Step 3 migrates synthesis sites off `TirStmtKind::IfLet`
+    // so Step 4 can drop the variant once every producer is gone.
+    let then_span = then_block.span;
+    let else_span = else_block.span;
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(saved_pattern_scrutinee),
+            arms: vec![
+                TirMatchArm {
+                    pattern,
+                    guard: None,
+                    body: TirExpr::new(TirExprKind::Block(then_block), TypeTable::UNIT, then_span),
+                    span: then_span,
+                },
+                TirMatchArm {
+                    pattern: TirPattern::Wildcard,
+                    guard: None,
+                    body: TirExpr::new(TirExprKind::Block(else_block), TypeTable::UNIT, else_span),
+                    span: else_span,
+                },
+            ],
         },
+        TypeTable::UNIT,
         span,
-    ));
+    );
+    stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
 
     let body = TirBlock::new(stmts, span);
 

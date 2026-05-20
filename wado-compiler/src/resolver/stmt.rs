@@ -2712,10 +2712,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
         break_stmt: &BreakStmt,
         ctx: &mut FunctionContext,
     ) -> TirStmt {
+        // Resolve the break value against the target block's expected type
+        // so that literals coerce correctly (e.g. `break label: 10` when the
+        // block is used as `let x: i64 = label: { ... }`).
+        let expected = break_stmt.label.as_ref().and_then(|label| {
+            ctx.labeled_block_targets
+                .iter()
+                .rev()
+                .find(|t| &t.label == label)
+                .and_then(|t| t.expected_type)
+        });
         let value = break_stmt
             .value
             .as_ref()
-            .map(|v| self.resolve_expr(v, ctx, None));
+            .map(|v| self.resolve_expr(v, ctx, expected));
 
         // Validate that the target label exists
         if let Some(label) = &break_stmt.label
@@ -2727,10 +2737,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
         }
 
-        // If breaking with a value to a labeled block expression, record the type
+        // If breaking with a value to a labeled block expression, record the
+        // type. Scan innermost-first so a `break label` inside a nested block
+        // that reuses the same label name is attributed to the inner target —
+        // consistent with the `expected_type` lookup above and with WIR `br`
+        // depth resolution.
         if let (Some(label), Some(val)) = (&break_stmt.label, &value) {
-            // Find the labeled block target with this label
-            for target in &mut ctx.labeled_block_targets {
+            for target in ctx.labeled_block_targets.iter_mut().rev() {
                 if &target.label == label {
                     target.break_types.push(val.type_id);
                     break;

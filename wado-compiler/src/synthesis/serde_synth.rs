@@ -474,6 +474,14 @@ fn variant_err(
     )
 }
 
+/// Build a TIR Match `match scrutinee { Ok(ok) => then, _ => else }`
+/// wrapped in a `TirStmtKind::Expr` so the synthesised statement
+/// pipeline can append it like any other side-effecting expression.
+///
+/// Equivalent to the legacy `TirStmtKind::IfLet` shape; emitted as
+/// canonical TIR Match per WEP 2026-05-11 Phase 10 Step 3 so the
+/// `lower::translate::pattern` `IfLet` → Match pre-pass has nothing
+/// further to rewrite here.
 fn if_let_ok(
     scrutinee: TirExpr,
     result_type: TypeId,
@@ -485,26 +493,21 @@ fn if_let_ok(
     span: Span,
     names: &SerdeStdlibNames,
 ) -> TirStmt {
-    TirStmt::new(
-        TirStmtKind::IfLet {
-            scrutinee,
-            pattern: TirPattern::Variant {
-                enum_type: result_type,
-                variant_name: names.ok_name.clone(),
-                bindings: vec![TirPattern::Binding {
-                    name: ok_name.to_string(),
-                    local_index: ok_local,
-                    type_id: ok_type,
-                }],
-                payload_type: ok_type,
-            },
-            then_block,
-            else_block: Some(else_block),
-        },
+    variant_match_stmt(
+        scrutinee,
+        result_type,
+        names.ok_name.clone(),
+        ok_type,
+        ok_local,
+        ok_name,
+        then_block,
+        else_block,
         span,
     )
 }
 
+/// Build a TIR Match `match scrutinee { Some(inner) => then, _ => else }`.
+/// Same migration shape as [`if_let_ok`].
 fn if_let_some(
     scrutinee: TirExpr,
     option_type: TypeId,
@@ -516,24 +519,69 @@ fn if_let_some(
     span: Span,
     names: &SerdeStdlibNames,
 ) -> TirStmt {
-    TirStmt::new(
-        TirStmtKind::IfLet {
-            scrutinee,
-            pattern: TirPattern::Variant {
-                enum_type: option_type,
-                variant_name: names.some_name.clone(),
-                bindings: vec![TirPattern::Binding {
-                    name: inner_name.to_string(),
-                    local_index: inner_local,
-                    type_id: inner_type,
-                }],
-                payload_type: inner_type,
-            },
-            then_block,
-            else_block: Some(else_block),
-        },
+    variant_match_stmt(
+        scrutinee,
+        option_type,
+        names.some_name.clone(),
+        inner_type,
+        inner_local,
+        inner_name,
+        then_block,
+        else_block,
         span,
     )
+}
+
+/// Shared helper for the variant-arm + wildcard-arm Match used by both
+/// `if_let_ok` and `if_let_some`. Wraps each branch's block in a
+/// `TirExprKind::Block` so the arm's body expression yields Unit.
+fn variant_match_stmt(
+    scrutinee: TirExpr,
+    enum_type: TypeId,
+    case_name: String,
+    payload_type: TypeId,
+    payload_local: u32,
+    payload_name: &str,
+    then_block: TirBlock,
+    else_block: TirBlock,
+    span: Span,
+) -> TirStmt {
+    let then_span = then_block.span;
+    let else_span = else_block.span;
+    let then_body = TirExpr::new(TirExprKind::Block(then_block), TypeTable::UNIT, then_span);
+    let else_body = TirExpr::new(TirExprKind::Block(else_block), TypeTable::UNIT, else_span);
+    let arms = vec![
+        TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type,
+                variant_name: case_name,
+                bindings: vec![TirPattern::Binding {
+                    name: payload_name.to_string(),
+                    local_index: payload_local,
+                    type_id: payload_type,
+                }],
+                payload_type,
+            },
+            guard: None,
+            body: then_body,
+            span: then_span,
+        },
+        TirMatchArm {
+            pattern: TirPattern::Wildcard,
+            guard: None,
+            body: else_body,
+            span: else_span,
+        },
+    ];
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(scrutinee),
+            arms,
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    TirStmt::new(TirStmtKind::Expr(match_expr), span)
 }
 
 fn serialize_error_literal(

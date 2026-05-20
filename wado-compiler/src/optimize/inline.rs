@@ -363,6 +363,14 @@ fn is_inline_eligible(
         return false;
     }
 
+    // The size threshold applies even to functions with a single call site.
+    // "One call site ⇒ inlining is always a size win" is *false* here: if the
+    // sole call site sits inside a function that is itself duplicated by
+    // threshold inlining (or nested inlining) at N sites, the large callee is
+    // copied N times instead of being shared. Bypassing the threshold for
+    // single-call-site functions measured +87% (pi_approx) / +186% (zlib) at
+    // -Os, and regressed already at -O1, so it is not a stale-DCE artifact.
+    //
     // `#[inline]` hint raises the threshold by 5x, allowing functions up to 50
     // expressions (at the default threshold of 10) to be inlined.
     let effective_threshold = if func.inline_hint == InlineHint::Hint {

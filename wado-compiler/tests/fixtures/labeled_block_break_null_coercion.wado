@@ -1,0 +1,31 @@
+// A `break label: null` value whose `Option<...>` inner type cannot be
+// inferred from the break alone is resolved once the labeled block's
+// result type is known (here, from a sibling `Option::Some` break).
+// Previously the unresolved `Option<UNKNOWN>` reached WIR translation and
+// crashed the compiler.
+
+use { println, Stdout } from "core:cli";
+
+fn pick(empty: bool) -> Option<i32> {
+    let result = lbl: {
+        if empty {
+            break lbl: null;
+        }
+        break lbl: Option::Some(5);
+    };
+    return result;
+}
+
+export fn run() with Stdout {
+    match pick(false) {
+        Option::Some(v) => println(`some {v}`),
+        Option::None => println("none"),
+    }
+    match pick(true) {
+        Option::Some(v) => println(`some {v}`),
+        Option::None => println("none"),
+    }
+}
+
+__DATA__
+{"stdout": "some 5\nnone\n"}
