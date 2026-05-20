@@ -1,0 +1,15 @@
+// Test error: a `break label: null` whose sibling break pins the block to
+// a non-`Option` type cannot be reconciled. `null` is rejected against the
+// concrete type rather than crashing WIR translation.
+
+export fn run() {
+    let x = lbl: {
+        if true {
+            break lbl: null;
+        }
+        break lbl: 42;
+    };
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'i32', found 'null'"}

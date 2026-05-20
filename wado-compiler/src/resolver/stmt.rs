@@ -2737,10 +2737,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
         }
 
-        // If breaking with a value to a labeled block expression, record the type
+        // If breaking with a value to a labeled block expression, record the
+        // type. Scan innermost-first so a `break label` inside a nested block
+        // that reuses the same label name is attributed to the inner target —
+        // consistent with the `expected_type` lookup above and with WIR `br`
+        // depth resolution.
         if let (Some(label), Some(val)) = (&break_stmt.label, &value) {
-            // Find the labeled block target with this label
-            for target in &mut ctx.labeled_block_targets {
+            for target in ctx.labeled_block_targets.iter_mut().rev() {
                 if &target.label == label {
                     target.break_types.push(val.type_id);
                     break;

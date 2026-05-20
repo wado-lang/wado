@@ -1,0 +1,20 @@
+// Nested labeled blocks may reuse the same label name. Each `break label`
+// must be attributed to the innermost block carrying that label, so the
+// inner `break lbl: 1` feeds `inner` and the outer `break lbl: inner + 10`
+// feeds the outer block.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let r = lbl: {
+        let inner = lbl: {
+            break lbl: 1;
+        };
+        break lbl: inner + 10;
+    };
+    assert r == 11;
+    println(`r={r}`);
+}
+
+__DATA__
+{"stdout": "r=11\n"}

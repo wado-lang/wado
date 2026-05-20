@@ -174,6 +174,10 @@ pub enum TypeError {
     /// Invalid numeric literal
     InvalidLiteral { message: String, span: Span },
 
+    /// A type could not be inferred and needs an explicit annotation
+    /// (e.g. a bare `null` whose `Option<...>` inner is undetermined).
+    CannotInferType { message: String, span: Span },
+
     /// Feature not yet implemented
     NotYetImplemented { feature: String, span: Span },
 
@@ -438,6 +442,9 @@ impl std::fmt::Display for TypeError {
                 )
             }
             TypeError::InvalidLiteral { message, span } => {
+                write!(f, "{}:{}: {}", span.line, span.column, message)
+            }
+            TypeError::CannotInferType { message, span } => {
                 write!(f, "{}:{}: {}", span.line, span.column, message)
             }
             TypeError::NotYetImplemented { feature, span } => {
@@ -785,6 +792,9 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             ),
             TypeError::InvalidLiteral { message, span } => {
                 (Code::InvalidSyntax, message.clone(), *span)
+            }
+            TypeError::CannotInferType { message, span } => {
+                (Code::TypeMismatch, message.clone(), *span)
             }
             TypeError::NotYetImplemented { feature, span } => (
                 Code::UnsupportedFeature,
