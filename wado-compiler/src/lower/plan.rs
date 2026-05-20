@@ -23,7 +23,7 @@
 //!    per-module `__initialize_module` function (one per source
 //!    module; disambiguated by `module_source`).
 //! 2. `boxing::prepare_types` — mint `Box<T>` struct types and
-//!    redefine `Ref` / `MutRef` TypeIds; `boxing::lower_bodies` —
+//!    redefine `Ref` / `MutRef` `TypeIds`; `boxing::lower_bodies` —
 //!    rewrite `&primitive` / `&mut primitive` into `Box<T>` struct
 //!    operations.
 //! 3. `closure` — closures → `__Closure_N` functor structs with
@@ -70,5 +70,8 @@ pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     // body. The lifted `Let mut` is the shape value_copy recognises.
     lift_mut::lift_mut_match_bindings(flat);
     let value_copy = value_copy::plan(flat);
-    LowerPlan { closure, value_copy }
+    LowerPlan {
+        closure,
+        value_copy,
+    }
 }

@@ -79,7 +79,7 @@ fn coerce_value_to_binding(
 ///
 /// A `Ref` / `MutRef` is peeled with a `Deref`; a `Box<T>` is peeled
 /// with a `.value` field access. `boxing::prepare_types` redefines
-/// every `Ref(boxable)` TypeId to its `Box<T>` struct type, so when
+/// every `Ref(boxable)` `TypeId` to its `Box<T>` struct type, so when
 /// pattern lowering runs after boxing a match scrutinee on a reference
 /// surfaces here as a `Box<T>` struct rather than a `Ref` — both
 /// shapes peel to the matched value. When pattern lowering runs before

@@ -16,14 +16,14 @@ use crate::token::Span;
 /// Type-level boxing facts produced by [`prepare_types`].
 ///
 /// By the time a `BoxPlan` exists, [`prepare_types`] has already
-/// redefined every `Ref(boxable)` / `MutRef(boxable)` TypeId in the
+/// redefined every `Ref(boxable)` / `MutRef(boxable)` `TypeId` in the
 /// shared [`TypeTable`] to its `Box<T>` struct type and appended the
 /// generated `Box<T>` struct definitions to the package. This struct
 /// carries the lookup maps the body-lowering pass needs:
 ///
-/// - `box_struct_types` maps an inner TypeId to the canonical `Box<T>`
-///   struct TypeId minted for it.
-/// - `box_type_ids` is the set of *every* TypeId that now denotes a
+/// - `box_struct_types` maps an inner `TypeId` to the canonical `Box<T>`
+///   struct `TypeId` minted for it.
+/// - `box_type_ids` is the set of *every* `TypeId` that now denotes a
 ///   `Box<T>` struct — both the canonical wrapper ids and the
 ///   redefined `Ref` / `MutRef` ids.
 pub struct BoxPlan {
@@ -38,7 +38,7 @@ pub struct BoxPlan {
 ///
 /// It mints a `Box<T>` struct type for every `&primitive` / `&variant`
 /// / `&fn` reference in the program, redefines the corresponding
-/// `Ref` / `MutRef` TypeIds to those struct types (so composite types
+/// `Ref` / `MutRef` `TypeIds` to those struct types (so composite types
 /// that transitively contain a boxed reference follow automatically),
 /// and appends the generated struct definitions to `flat.structs`.
 ///
