@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779233227324,
+  "lastUpdate": 1779236763357,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23793,6 +23793,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 487141,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5c92c7f948217423fd6eff11ea602cb4dccabac7",
+          "message": "Merge pull request #1127 from wado-lang/claude/optimize-syntax-highlight-NGEk6\n\nperf: optimize syntax-highlight benchmark (-29.5%)",
+          "timestamp": "2026-05-20T09:19:32+09:00",
+          "tree_id": "5c25bfee32ebb528ceb05723599813995f7c72c6",
+          "url": "https://github.com/wado-lang/wado/commit/5c92c7f948217423fd6eff11ea602cb4dccabac7"
+        },
+        "date": 1779236762909,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17034,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 479481,
             "unit": "bytes"
           }
         ]
