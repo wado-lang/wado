@@ -2295,7 +2295,6 @@ impl TypeTableExt for TypeTable {
     }
 }
 
-
 /// Compute the type of a block when used as an expression. Delegates to
 /// `crate::tir::block_result_type` so we share the same statement-shape
 /// → result-type rules with the resolver (handles `If` / `IfLet` stmts
