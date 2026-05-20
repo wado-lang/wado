@@ -77,6 +77,9 @@ fn wir_pass(
 ) {
     use crate::optimize::pass_dump::{self, Phase};
     pass_dump::list_pass(name);
+    if pass_dump::should_skip_pass(name) {
+        return;
+    }
     pass_dump::dump_wir(name, module, Phase::Before);
     profiler.span_start(name);
     f(module);

@@ -680,14 +680,12 @@ fn "wado-compiler/tests/fixtures/closure_match_body_mutation.wado/__Closure_3::_
 }
 
 fn "wado-compiler/tests/fixtures/closure_match_body_mutation.wado/__Closure_4::__call"(self, i) {
-    let self_2: ref "core:prelude//Array<i32>";
     drop(__inline_Array_i32__IndexValue_i32___index_value_0: block -> i32 {
-        self_2 = self.__capture_0;
-        if i >= self_2.used {
+        if i >= self.__capture_0.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_i32__IndexValue_i32___index_value_0: builtin::array_get<i32>(self_2.repr, i);
+        break __inline_Array_i32__IndexValue_i32___index_value_0: builtin::array_get<i32>(self.__capture_0.repr, i);
         unreachable;
     });
     self.__capture_1.value = self.__capture_1.value + 1;

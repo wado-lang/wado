@@ -239,8 +239,14 @@ pub struct HighlightOverride {
 }
 
 /// Highlight mapping: defaults by token kind + context-aware overrides.
+///
+/// `rule_names` is the canonical name table used to resolve override
+/// `rule_name`s into integer ids that match what the generated walker
+/// passes to `Visitor::enter_rule`. The generator emits the names in
+/// parser-rule declaration order; index = rule id.
 pub struct HighlightMapping {
     pub defaults: Array<String>,
+    pub rule_names: Array<String>,
     pub overrides: Array<HighlightOverride>,
 }
 
@@ -251,49 +257,77 @@ pub struct HighlightCapture {
     pub end: i32,
 }
 
+/// Internal override form with the rule resolved to an integer id so the
+/// per-token classify loop avoids a String compare on every iteration.
+struct ResolvedOverride {
+    rule_id: i32,
+    token_kind: i32,
+    capture: String,
+}
+
 /// HighlightVisitor collects highlight captures during a CST walk.
 pub struct HighlightVisitor {
-    mapping: HighlightMapping,
-    rule_stack: Array<String>,
+    defaults: Array<String>,
+    overrides: Array<ResolvedOverride>,
+    rule_stack: Array<i32>,
     pub captures: Array<HighlightCapture>,
 }
 
 impl HighlightVisitor {
     pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
-        return HighlightVisitor { mapping, rule_stack: [], captures: [] };
+        let mut overrides: Array<ResolvedOverride> = Array::with_capacity(mapping.overrides.len());
+        for let ov of &mapping.overrides {
+            let mut id: i32 = -1;
+            for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
+                if mapping.rule_names[i] == ov.rule_name {
+                    id = i;
+                    break;
+                }
+            }
+            // Skip overrides whose rule_name doesn't match any known rule —
+            // they can never fire (no rule_id on the stack is ever < 0) and
+            // would otherwise waste a comparison on every classify() call.
+            if id < 0 {
+                continue;
+            }
+            overrides.push(ResolvedOverride {
+                rule_id: id,
+                token_kind: ov.token_kind,
+                capture: ov.capture,
+            });
+        }
+        return HighlightVisitor {
+            defaults: mapping.defaults,
+            overrides,
+            rule_stack: [],
+            captures: [],
+        };
     }
 
     fn classify(&self, kind: i32) -> String {
-        for let ov of &self.mapping.overrides {
+        for let ov of &self.overrides {
             if ov.token_kind == kind {
-                for let rule of &self.rule_stack {
-                    if *rule == ov.rule_name {
+                for let rule_id of &self.rule_stack {
+                    if *rule_id == ov.rule_id {
                         return ov.capture;
                     }
                 }
             }
         }
-        if kind >= 0 && kind < self.mapping.defaults.len() {
-            return self.mapping.defaults[kind];
+        if kind >= 0 && kind < self.defaults.len() {
+            return self.defaults[kind];
         }
         return "";
     }
 }
 
 impl Visitor for HighlightVisitor {
-    fn enter_rule(&mut self, name: &String, span: &Span) {
-        self.rule_stack.push(*name);
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.rule_stack.push(rule_id);
     }
 
-    fn exit_rule(&mut self, name: &String, span: &Span) {
-        if !self.rule_stack.is_empty() {
-            let last = self.rule_stack.len() - 1;
-            let mut new_stack: Array<String> = [];
-            for let mut i = 0; i < last; i += 1 {
-                new_stack.push(self.rule_stack[i]);
-            }
-            self.rule_stack = new_stack;
-        }
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.rule_stack.pop();
     }
 
     fn visit_token(&mut self, token: &Token) {
@@ -396,10 +430,16 @@ fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
 
 /// Visitor trait for walking typed CST nodes.
 /// Default methods are no-ops; override to add behavior.
+///
+/// `rule_id` is the parser-rule's index in the grammar's parser_rules array
+/// (0..n in declaration order). It's passed alongside `name` so visitors
+/// that want cheap dispatch (HighlightVisitor's rule stack) can avoid
+/// String compares while visitors that care about the name (TreeRecorder)
+/// can still use it.
 pub trait Visitor {
-    fn enter_rule(&mut self, name: &String, span: &Span) {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
-    fn exit_rule(&mut self, name: &String, span: &Span) {
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
     fn visit_token(&mut self, token: &Token) {
     }
@@ -433,11 +473,11 @@ impl TreeRecorder {
 }
 
 impl Visitor for TreeRecorder {
-    fn enter_rule(&mut self, name: &String, span: &Span) {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
         self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
     }
 
-    fn exit_rule(&mut self, name: &String, span: &Span) {
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
         self.events.push(TreeEvent::Exit);
     }
 
@@ -1851,7 +1891,7 @@ fn try_attribute(chars: &Array<char>, start: i32) -> i32 {
 
 pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
-    let mut tokens: Array<Token> = [];
+    let mut tokens: Array<Token> = Array::with_capacity(lexer.chars.len() / 4 + 1);
     let mut trivia: Array<Token> = [];
     let mut mode_stack: Array<i32> = [];
     let mut current_mode: i32 = 0;
@@ -3227,7 +3267,7 @@ pub fn parse(input: &String) -> Result<HtmlDocumentNode, ParseError> {
 }
 
 pub fn walk_htmlDocument<V: Visitor>(v: &mut V, node: &HtmlDocumentNode) {
-    v.enter_rule(&"htmlDocument", &node.span);
+    v.enter_rule(0, &"htmlDocument", &node.span);
     for let item of &node.scriptlet_or_sea_ws_list {
         walk_scriptletOrSeaWs(v, item);
     }
@@ -3246,26 +3286,26 @@ pub fn walk_htmlDocument<V: Visitor>(v: &mut V, node: &HtmlDocumentNode) {
     for let item of &node.html_elements_list {
         walk_htmlElements(v, item);
     }
-    v.exit_rule(&"htmlDocument", &node.span);
+    v.exit_rule(0, &"htmlDocument", &node.span);
 }
 
 pub fn walk_scriptletOrSeaWs<V: Visitor>(v: &mut V, node: &ScriptletOrSeaWsNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"scriptletOrSeaWs", &n.span);
+            v.enter_rule(1, &"scriptletOrSeaWs", &n.span);
             v.visit_token(&n.scriptlet);
-            v.exit_rule(&"scriptletOrSeaWs", &n.span);
+            v.exit_rule(1, &"scriptletOrSeaWs", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"scriptletOrSeaWs", &n.span);
+            v.enter_rule(1, &"scriptletOrSeaWs", &n.span);
             v.visit_token(&n.sea_ws);
-            v.exit_rule(&"scriptletOrSeaWs", &n.span);
+            v.exit_rule(1, &"scriptletOrSeaWs", &n.span);
         }
     }
 }
 
 pub fn walk_htmlElements<V: Visitor>(v: &mut V, node: &HtmlElementsNode) {
-    v.enter_rule(&"htmlElements", &node.span);
+    v.enter_rule(2, &"htmlElements", &node.span);
     for let item of &node.html_misc_list {
         walk_htmlMisc(v, item);
     }
@@ -3273,13 +3313,13 @@ pub fn walk_htmlElements<V: Visitor>(v: &mut V, node: &HtmlElementsNode) {
     for let item of &node.html_misc_list_2 {
         walk_htmlMisc(v, item);
     }
-    v.exit_rule(&"htmlElements", &node.span);
+    v.exit_rule(2, &"htmlElements", &node.span);
 }
 
 pub fn walk_htmlElement<V: Visitor>(v: &mut V, node: &HtmlElementNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"htmlElement", &n.span);
+            v.enter_rule(3, &"htmlElement", &n.span);
             v.visit_token(&n.tag_open);
             v.visit_token(&n.tag_name);
             for let item of &n.html_attribute_list {
@@ -3302,28 +3342,28 @@ pub fn walk_htmlElement<V: Visitor>(v: &mut V, node: &HtmlElementNode) {
                     }
                 }
             }
-            v.exit_rule(&"htmlElement", &n.span);
+            v.exit_rule(3, &"htmlElement", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"htmlElement", &n.span);
+            v.enter_rule(3, &"htmlElement", &n.span);
             v.visit_token(&n.scriptlet);
-            v.exit_rule(&"htmlElement", &n.span);
+            v.exit_rule(3, &"htmlElement", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"htmlElement", &n.span);
+            v.enter_rule(3, &"htmlElement", &n.span);
             walk_script(v, &n.script);
-            v.exit_rule(&"htmlElement", &n.span);
+            v.exit_rule(3, &"htmlElement", &n.span);
         }
         Alt3(n) => {
-            v.enter_rule(&"htmlElement", &n.span);
+            v.enter_rule(3, &"htmlElement", &n.span);
             walk_style(v, &n.style);
-            v.exit_rule(&"htmlElement", &n.span);
+            v.exit_rule(3, &"htmlElement", &n.span);
         }
     }
 }
 
 pub fn walk_htmlContent<V: Visitor>(v: &mut V, node: &HtmlContentNode) {
-    v.enter_rule(&"htmlContent", &node.span);
+    v.enter_rule(4, &"htmlContent", &node.span);
     if let Some(item) = &node.html_chardata {
         walk_htmlChardata(v, item);
     }
@@ -3345,30 +3385,30 @@ pub fn walk_htmlContent<V: Visitor>(v: &mut V, node: &HtmlContentNode) {
             walk_htmlChardata(v, item);
         }
     }
-    v.exit_rule(&"htmlContent", &node.span);
+    v.exit_rule(4, &"htmlContent", &node.span);
 }
 
 pub fn walk_htmlAttribute<V: Visitor>(v: &mut V, node: &HtmlAttributeNode) {
-    v.enter_rule(&"htmlAttribute", &node.span);
+    v.enter_rule(5, &"htmlAttribute", &node.span);
     v.visit_token(&node.tag_name);
     if let Some(item) = &node.tag_equals_attvalue_value {
         v.visit_token(&item.tag_equals);
         v.visit_token(&item.attvalue_value);
     }
-    v.exit_rule(&"htmlAttribute", &node.span);
+    v.exit_rule(5, &"htmlAttribute", &node.span);
 }
 
 pub fn walk_htmlChardata<V: Visitor>(v: &mut V, node: &HtmlChardataNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"htmlChardata", &n.span);
+            v.enter_rule(6, &"htmlChardata", &n.span);
             v.visit_token(&n.html_text);
-            v.exit_rule(&"htmlChardata", &n.span);
+            v.exit_rule(6, &"htmlChardata", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"htmlChardata", &n.span);
+            v.enter_rule(6, &"htmlChardata", &n.span);
             v.visit_token(&n.sea_ws);
-            v.exit_rule(&"htmlChardata", &n.span);
+            v.exit_rule(6, &"htmlChardata", &n.span);
         }
     }
 }
@@ -3376,14 +3416,14 @@ pub fn walk_htmlChardata<V: Visitor>(v: &mut V, node: &HtmlChardataNode) {
 pub fn walk_htmlMisc<V: Visitor>(v: &mut V, node: &HtmlMiscNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"htmlMisc", &n.span);
+            v.enter_rule(7, &"htmlMisc", &n.span);
             walk_htmlComment(v, &n.html_comment);
-            v.exit_rule(&"htmlMisc", &n.span);
+            v.exit_rule(7, &"htmlMisc", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"htmlMisc", &n.span);
+            v.enter_rule(7, &"htmlMisc", &n.span);
             v.visit_token(&n.sea_ws);
-            v.exit_rule(&"htmlMisc", &n.span);
+            v.exit_rule(7, &"htmlMisc", &n.span);
         }
     }
 }
@@ -3391,30 +3431,30 @@ pub fn walk_htmlMisc<V: Visitor>(v: &mut V, node: &HtmlMiscNode) {
 pub fn walk_htmlComment<V: Visitor>(v: &mut V, node: &HtmlCommentNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"htmlComment", &n.span);
+            v.enter_rule(8, &"htmlComment", &n.span);
             v.visit_token(&n.html_comment);
-            v.exit_rule(&"htmlComment", &n.span);
+            v.exit_rule(8, &"htmlComment", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"htmlComment", &n.span);
+            v.enter_rule(8, &"htmlComment", &n.span);
             v.visit_token(&n.html_conditional_comment);
-            v.exit_rule(&"htmlComment", &n.span);
+            v.exit_rule(8, &"htmlComment", &n.span);
         }
     }
 }
 
 pub fn walk_script<V: Visitor>(v: &mut V, node: &ScriptNode) {
-    v.enter_rule(&"script", &node.span);
+    v.enter_rule(9, &"script", &node.span);
     v.visit_token(&node.script_open);
     v.visit_token(&node.script_body_or_script_short_body);
-    v.exit_rule(&"script", &node.span);
+    v.exit_rule(9, &"script", &node.span);
 }
 
 pub fn walk_style<V: Visitor>(v: &mut V, node: &StyleNode) {
-    v.enter_rule(&"style", &node.span);
+    v.enter_rule(10, &"style", &node.span);
     v.visit_token(&node.style_open);
     v.visit_token(&node.style_body_or_style_short_body);
-    v.exit_rule(&"style", &node.span);
+    v.exit_rule(10, &"style", &node.span);
 }
 
 pub fn to_tree(node: &HtmlDocumentNode) -> CstNode {

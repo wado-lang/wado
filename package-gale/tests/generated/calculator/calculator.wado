@@ -236,8 +236,14 @@ pub struct HighlightOverride {
 }
 
 /// Highlight mapping: defaults by token kind + context-aware overrides.
+///
+/// `rule_names` is the canonical name table used to resolve override
+/// `rule_name`s into integer ids that match what the generated walker
+/// passes to `Visitor::enter_rule`. The generator emits the names in
+/// parser-rule declaration order; index = rule id.
 pub struct HighlightMapping {
     pub defaults: Array<String>,
+    pub rule_names: Array<String>,
     pub overrides: Array<HighlightOverride>,
 }
 
@@ -248,49 +254,77 @@ pub struct HighlightCapture {
     pub end: i32,
 }
 
+/// Internal override form with the rule resolved to an integer id so the
+/// per-token classify loop avoids a String compare on every iteration.
+struct ResolvedOverride {
+    rule_id: i32,
+    token_kind: i32,
+    capture: String,
+}
+
 /// HighlightVisitor collects highlight captures during a CST walk.
 pub struct HighlightVisitor {
-    mapping: HighlightMapping,
-    rule_stack: Array<String>,
+    defaults: Array<String>,
+    overrides: Array<ResolvedOverride>,
+    rule_stack: Array<i32>,
     pub captures: Array<HighlightCapture>,
 }
 
 impl HighlightVisitor {
     pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
-        return HighlightVisitor { mapping, rule_stack: [], captures: [] };
+        let mut overrides: Array<ResolvedOverride> = Array::with_capacity(mapping.overrides.len());
+        for let ov of &mapping.overrides {
+            let mut id: i32 = -1;
+            for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
+                if mapping.rule_names[i] == ov.rule_name {
+                    id = i;
+                    break;
+                }
+            }
+            // Skip overrides whose rule_name doesn't match any known rule —
+            // they can never fire (no rule_id on the stack is ever < 0) and
+            // would otherwise waste a comparison on every classify() call.
+            if id < 0 {
+                continue;
+            }
+            overrides.push(ResolvedOverride {
+                rule_id: id,
+                token_kind: ov.token_kind,
+                capture: ov.capture,
+            });
+        }
+        return HighlightVisitor {
+            defaults: mapping.defaults,
+            overrides,
+            rule_stack: [],
+            captures: [],
+        };
     }
 
     fn classify(&self, kind: i32) -> String {
-        for let ov of &self.mapping.overrides {
+        for let ov of &self.overrides {
             if ov.token_kind == kind {
-                for let rule of &self.rule_stack {
-                    if *rule == ov.rule_name {
+                for let rule_id of &self.rule_stack {
+                    if *rule_id == ov.rule_id {
                         return ov.capture;
                     }
                 }
             }
         }
-        if kind >= 0 && kind < self.mapping.defaults.len() {
-            return self.mapping.defaults[kind];
+        if kind >= 0 && kind < self.defaults.len() {
+            return self.defaults[kind];
         }
         return "";
     }
 }
 
 impl Visitor for HighlightVisitor {
-    fn enter_rule(&mut self, name: &String, span: &Span) {
-        self.rule_stack.push(*name);
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.rule_stack.push(rule_id);
     }
 
-    fn exit_rule(&mut self, name: &String, span: &Span) {
-        if !self.rule_stack.is_empty() {
-            let last = self.rule_stack.len() - 1;
-            let mut new_stack: Array<String> = [];
-            for let mut i = 0; i < last; i += 1 {
-                new_stack.push(self.rule_stack[i]);
-            }
-            self.rule_stack = new_stack;
-        }
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.rule_stack.pop();
     }
 
     fn visit_token(&mut self, token: &Token) {
@@ -393,10 +427,16 @@ fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
 
 /// Visitor trait for walking typed CST nodes.
 /// Default methods are no-ops; override to add behavior.
+///
+/// `rule_id` is the parser-rule's index in the grammar's parser_rules array
+/// (0..n in declaration order). It's passed alongside `name` so visitors
+/// that want cheap dispatch (HighlightVisitor's rule stack) can avoid
+/// String compares while visitors that care about the name (TreeRecorder)
+/// can still use it.
 pub trait Visitor {
-    fn enter_rule(&mut self, name: &String, span: &Span) {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
-    fn exit_rule(&mut self, name: &String, span: &Span) {
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
     fn visit_token(&mut self, token: &Token) {
     }
@@ -430,11 +470,11 @@ impl TreeRecorder {
 }
 
 impl Visitor for TreeRecorder {
-    fn enter_rule(&mut self, name: &String, span: &Span) {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
         self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
     }
 
-    fn exit_rule(&mut self, name: &String, span: &Span) {
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
         self.events.push(TreeEvent::Exit);
     }
 
@@ -1196,7 +1236,7 @@ fn classify_keyword(chars: &Array<char>, start: i32, end: i32) -> i32 {
 
 pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
-    let mut tokens: Array<Token> = [];
+    let mut tokens: Array<Token> = Array::with_capacity(lexer.chars.len() / 4 + 1);
     let mut trivia: Array<Token> = [];
     while !lexer.at_end() {
         let start = lexer.pos;
@@ -2166,67 +2206,67 @@ pub fn parse(input: &String) -> Result<EquationNode, ParseError> {
 }
 
 pub fn walk_equation<V: Visitor>(v: &mut V, node: &EquationNode) {
-    v.enter_rule(&"equation", &node.span);
+    v.enter_rule(0, &"equation", &node.span);
     walk_expression(v, &node.expression);
     walk_relop(v, &node.relop);
     walk_expression(v, &node.expression_2);
     v.visit_token(&node.eof);
-    v.exit_rule(&"equation", &node.span);
+    v.exit_rule(0, &"equation", &node.span);
 }
 
 pub fn walk_expression<V: Visitor>(v: &mut V, node: &ExpressionNode) {
-    v.enter_rule(&"expression", &node.span);
+    v.enter_rule(1, &"expression", &node.span);
     walk_multiplyingExpression(v, &node.multiplying_expression);
     for let item of &node.item_multiplying_expression_list {
         v.visit_token(&item.plus_or_minus);
         walk_multiplyingExpression(v, &item.multiplying_expression);
     }
-    v.exit_rule(&"expression", &node.span);
+    v.exit_rule(1, &"expression", &node.span);
 }
 
 pub fn walk_multiplyingExpression<V: Visitor>(v: &mut V, node: &MultiplyingExpressionNode) {
-    v.enter_rule(&"multiplyingExpression", &node.span);
+    v.enter_rule(2, &"multiplyingExpression", &node.span);
     walk_powExpression(v, &node.pow_expression);
     for let item of &node.item_pow_expression_list {
         v.visit_token(&item.times_or_div);
         walk_powExpression(v, &item.pow_expression);
     }
-    v.exit_rule(&"multiplyingExpression", &node.span);
+    v.exit_rule(2, &"multiplyingExpression", &node.span);
 }
 
 pub fn walk_powExpression<V: Visitor>(v: &mut V, node: &PowExpressionNode) {
-    v.enter_rule(&"powExpression", &node.span);
+    v.enter_rule(3, &"powExpression", &node.span);
     walk_signedAtom(v, &node.signed_atom);
     for let item of &node.pow_signed_atom_list {
         v.visit_token(&item.pow);
         walk_signedAtom(v, &item.signed_atom);
     }
-    v.exit_rule(&"powExpression", &node.span);
+    v.exit_rule(3, &"powExpression", &node.span);
 }
 
 pub fn walk_signedAtom<V: Visitor>(v: &mut V, node: &SignedAtomNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"signedAtom", &n.span);
+            v.enter_rule(4, &"signedAtom", &n.span);
             v.visit_token(&n.plus);
             walk_signedAtom(v, &n.signed_atom);
-            v.exit_rule(&"signedAtom", &n.span);
+            v.exit_rule(4, &"signedAtom", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"signedAtom", &n.span);
+            v.enter_rule(4, &"signedAtom", &n.span);
             v.visit_token(&n.minus);
             walk_signedAtom(v, &n.signed_atom);
-            v.exit_rule(&"signedAtom", &n.span);
+            v.exit_rule(4, &"signedAtom", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"signedAtom", &n.span);
+            v.enter_rule(4, &"signedAtom", &n.span);
             walk_func_(v, &n.func_);
-            v.exit_rule(&"signedAtom", &n.span);
+            v.exit_rule(4, &"signedAtom", &n.span);
         }
         Alt3(n) => {
-            v.enter_rule(&"signedAtom", &n.span);
+            v.enter_rule(4, &"signedAtom", &n.span);
             walk_atom(v, &n.atom);
-            v.exit_rule(&"signedAtom", &n.span);
+            v.exit_rule(4, &"signedAtom", &n.span);
         }
     }
 }
@@ -2234,64 +2274,64 @@ pub fn walk_signedAtom<V: Visitor>(v: &mut V, node: &SignedAtomNode) {
 pub fn walk_atom<V: Visitor>(v: &mut V, node: &AtomNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"atom", &n.span);
+            v.enter_rule(5, &"atom", &n.span);
             walk_scientific(v, &n.scientific);
-            v.exit_rule(&"atom", &n.span);
+            v.exit_rule(5, &"atom", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"atom", &n.span);
+            v.enter_rule(5, &"atom", &n.span);
             walk_variable(v, &n.variable);
-            v.exit_rule(&"atom", &n.span);
+            v.exit_rule(5, &"atom", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"atom", &n.span);
+            v.enter_rule(5, &"atom", &n.span);
             walk_constant(v, &n.constant);
-            v.exit_rule(&"atom", &n.span);
+            v.exit_rule(5, &"atom", &n.span);
         }
         Alt3(n) => {
-            v.enter_rule(&"atom", &n.span);
+            v.enter_rule(5, &"atom", &n.span);
             v.visit_token(&n.lparen);
             walk_expression(v, &n.expression);
             v.visit_token(&n.rparen);
-            v.exit_rule(&"atom", &n.span);
+            v.exit_rule(5, &"atom", &n.span);
         }
     }
 }
 
 pub fn walk_scientific<V: Visitor>(v: &mut V, node: &ScientificNode) {
-    v.enter_rule(&"scientific", &node.span);
+    v.enter_rule(6, &"scientific", &node.span);
     v.visit_token(&node.scientific_number);
-    v.exit_rule(&"scientific", &node.span);
+    v.exit_rule(6, &"scientific", &node.span);
 }
 
 pub fn walk_constant<V: Visitor>(v: &mut V, node: &ConstantNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"constant", &n.span);
+            v.enter_rule(7, &"constant", &n.span);
             v.visit_token(&n.pi);
-            v.exit_rule(&"constant", &n.span);
+            v.exit_rule(7, &"constant", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"constant", &n.span);
+            v.enter_rule(7, &"constant", &n.span);
             v.visit_token(&n.euler);
-            v.exit_rule(&"constant", &n.span);
+            v.exit_rule(7, &"constant", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"constant", &n.span);
+            v.enter_rule(7, &"constant", &n.span);
             v.visit_token(&n.i);
-            v.exit_rule(&"constant", &n.span);
+            v.exit_rule(7, &"constant", &n.span);
         }
     }
 }
 
 pub fn walk_variable<V: Visitor>(v: &mut V, node: &VariableNode) {
-    v.enter_rule(&"variable", &node.span);
+    v.enter_rule(8, &"variable", &node.span);
     v.visit_token(&node.variable);
-    v.exit_rule(&"variable", &node.span);
+    v.exit_rule(8, &"variable", &node.span);
 }
 
 pub fn walk_func_<V: Visitor>(v: &mut V, node: &FuncNode) {
-    v.enter_rule(&"func_", &node.span);
+    v.enter_rule(9, &"func_", &node.span);
     walk_funcname(v, &node.funcname);
     v.visit_token(&node.lparen);
     walk_expression(v, &node.expression);
@@ -2300,55 +2340,55 @@ pub fn walk_func_<V: Visitor>(v: &mut V, node: &FuncNode) {
         walk_expression(v, &item.expression);
     }
     v.visit_token(&node.rparen);
-    v.exit_rule(&"func_", &node.span);
+    v.exit_rule(9, &"func_", &node.span);
 }
 
 pub fn walk_funcname<V: Visitor>(v: &mut V, node: &FuncnameNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"funcname", &n.span);
+            v.enter_rule(10, &"funcname", &n.span);
             v.visit_token(&n.cos);
-            v.exit_rule(&"funcname", &n.span);
+            v.exit_rule(10, &"funcname", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"funcname", &n.span);
+            v.enter_rule(10, &"funcname", &n.span);
             v.visit_token(&n.tan);
-            v.exit_rule(&"funcname", &n.span);
+            v.exit_rule(10, &"funcname", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"funcname", &n.span);
+            v.enter_rule(10, &"funcname", &n.span);
             v.visit_token(&n.sin);
-            v.exit_rule(&"funcname", &n.span);
+            v.exit_rule(10, &"funcname", &n.span);
         }
         Alt3(n) => {
-            v.enter_rule(&"funcname", &n.span);
+            v.enter_rule(10, &"funcname", &n.span);
             v.visit_token(&n.acos);
-            v.exit_rule(&"funcname", &n.span);
+            v.exit_rule(10, &"funcname", &n.span);
         }
         Alt4(n) => {
-            v.enter_rule(&"funcname", &n.span);
+            v.enter_rule(10, &"funcname", &n.span);
             v.visit_token(&n.atan);
-            v.exit_rule(&"funcname", &n.span);
+            v.exit_rule(10, &"funcname", &n.span);
         }
         Alt5(n) => {
-            v.enter_rule(&"funcname", &n.span);
+            v.enter_rule(10, &"funcname", &n.span);
             v.visit_token(&n.asin);
-            v.exit_rule(&"funcname", &n.span);
+            v.exit_rule(10, &"funcname", &n.span);
         }
         Alt6(n) => {
-            v.enter_rule(&"funcname", &n.span);
+            v.enter_rule(10, &"funcname", &n.span);
             v.visit_token(&n.log);
-            v.exit_rule(&"funcname", &n.span);
+            v.exit_rule(10, &"funcname", &n.span);
         }
         Alt7(n) => {
-            v.enter_rule(&"funcname", &n.span);
+            v.enter_rule(10, &"funcname", &n.span);
             v.visit_token(&n.ln);
-            v.exit_rule(&"funcname", &n.span);
+            v.exit_rule(10, &"funcname", &n.span);
         }
         Alt8(n) => {
-            v.enter_rule(&"funcname", &n.span);
+            v.enter_rule(10, &"funcname", &n.span);
             v.visit_token(&n.sqrt);
-            v.exit_rule(&"funcname", &n.span);
+            v.exit_rule(10, &"funcname", &n.span);
         }
     }
 }
@@ -2356,19 +2396,19 @@ pub fn walk_funcname<V: Visitor>(v: &mut V, node: &FuncnameNode) {
 pub fn walk_relop<V: Visitor>(v: &mut V, node: &RelopNode) {
     match node {
         Alt0(n) => {
-            v.enter_rule(&"relop", &n.span);
+            v.enter_rule(11, &"relop", &n.span);
             v.visit_token(&n.eq);
-            v.exit_rule(&"relop", &n.span);
+            v.exit_rule(11, &"relop", &n.span);
         }
         Alt1(n) => {
-            v.enter_rule(&"relop", &n.span);
+            v.enter_rule(11, &"relop", &n.span);
             v.visit_token(&n.gt);
-            v.exit_rule(&"relop", &n.span);
+            v.exit_rule(11, &"relop", &n.span);
         }
         Alt2(n) => {
-            v.enter_rule(&"relop", &n.span);
+            v.enter_rule(11, &"relop", &n.span);
             v.visit_token(&n.lt);
-            v.exit_rule(&"relop", &n.span);
+            v.exit_rule(11, &"relop", &n.span);
         }
     }
 }

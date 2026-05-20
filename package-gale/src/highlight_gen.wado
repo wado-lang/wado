@@ -4,12 +4,17 @@ use { CodeWriter, FnSpec, GlobalSpec } from "./wadopoet.wado";
 use { escape_string } from "./gen_util.wado";
 
 pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
-    gen_highlight_mapping(w, &grammar.lexer_rules, lit_tokens);
+    gen_highlight_mapping(w, &grammar.lexer_rules, &grammar.parser_rules, lit_tokens);
     gen_highlight_fn(w, &grammar.parser_rules);
     gen_highlight_run(w);
 }
 
-fn gen_highlight_mapping(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>) {
+fn gen_highlight_mapping(
+    w: &mut CodeWriter,
+    lexer_rules: &Array<LexerRule>,
+    parser_rules: &Array<ParserRule>,
+    lit_tokens: &Array<LitToken>,
+) {
     let mut f = FnSpec::new("highlight_mapping");
     f.set_pub();
     f.set_return_type(&"HighlightMapping");
@@ -34,8 +39,18 @@ fn gen_highlight_mapping(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit
     w.dedent();
     w.line(&"];");
 
+    // Rule names indexed by rule_id (parser-rule declaration order). Must
+    // match the ids the generated walker passes to Visitor::enter_rule.
+    w.line(&"let rule_names: Array<String> = [");
+    w.indent();
+    for let rule of parser_rules {
+        w.line(&`{escape_string(&rule.name)},`);
+    }
+    w.dedent();
+    w.line(&"];");
+
     w.line(&"let overrides: Array<HighlightOverride> = [];");
-    w.line(&"return HighlightMapping { defaults, overrides };");
+    w.line(&"return HighlightMapping { defaults, rule_names, overrides };");
 
     w.end();
     w.blank();

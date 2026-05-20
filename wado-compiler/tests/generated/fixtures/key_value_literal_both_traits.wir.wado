@@ -168,22 +168,17 @@ fn "wado-compiler/tests/fixtures/key_value_literal_both_traits.wado/run"() with 
     let key_41: ref "core:prelude/string.wado//String";
     let key_44: ref "core:prelude/string.wado//String";
     let key_47: ref "core:prelude/string.wado//String";
-    let self_51: ref "core:prelude//Array<i32>";
     let f_55: ref "core:prelude/format.wado//Formatter";
     let f_60: ref "core:prelude/format.wado//Formatter";
-    let self_64: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let f_68: ref "core:prelude/format.wado//Formatter";
     let f_73: ref "core:prelude/format.wado//Formatter";
     let f_79: ref "core:prelude/format.wado//Formatter";
     let f_84: ref "core:prelude/format.wado//Formatter";
     let __b_88: ref "core:prelude//Array<core:prelude/string.wado/String>";
-    let self_101: ref "core:prelude//Array<i32>";
     let f_105: ref "core:prelude/format.wado//Formatter";
     let f_110: ref "core:prelude/format.wado//Formatter";
-    let self_115: ref "core:prelude//Array<i32>";
     let f_120: ref "core:prelude/format.wado//Formatter";
     let f_125: ref "core:prelude/format.wado//Formatter";
-    let self_130: ref "core:prelude//Array<i32>";
     let f_135: ref "core:prelude/format.wado//Formatter";
     let f_140: ref "core:prelude/format.wado//Formatter";
     named = __kv_lit: block -> ref "wado-compiler/tests/fixtures/key_value_literal_both_traits.wado//Bag<i32>" {
@@ -208,11 +203,7 @@ fn "wado-compiler/tests/fixtures/key_value_literal_both_traits.wado/run"() with 
         break __kv_lit: __b_0;
         unreachable;
     };
-    __v0_2 = __inline_Array_i32___len_14: block -> i32 {
-        self_51 = named.values;
-        break __inline_Array_i32___len_14: self_51.used;
-        unreachable;
-    };
+    __v0_2 = named.values.used;
     __cond_3 = __v0_2 == 3;
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -243,11 +234,7 @@ condition: named.len() == 3
         });
         unreachable;
     }
-    __v0_4 = __inline_Array_core_prelude_string_wado_String___len_23: block -> i32 {
-        self_64 = named.keys;
-        break __inline_Array_core_prelude_string_wado_String___len_23: self_64.used;
-        unreachable;
-    } > 0;
+    __v0_4 = named.keys.used > 0;
     if __v0_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(137), used: 0 };
@@ -328,11 +315,7 @@ condition: v == 20
         break __seq_lit: __b_9;
         unreachable;
     };
-    __v0_11 = __inline_Array_i32___len_48: block -> i32 {
-        self_101 = indexed.values;
-        break __inline_Array_i32___len_48: self_101.used;
-        unreachable;
-    };
+    __v0_11 = indexed.values.used;
     __cond_12 = __v0_11 == 3;
     if __cond_12 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -364,12 +347,11 @@ condition: indexed.len() == 3
         unreachable;
     }
     __v0_13 = __inline_Array_i32__IndexValue_i32___index_value_57: block -> i32 {
-        self_115 = indexed.values;
-        if 0 >= self_115.used {
+        if 0 >= indexed.values.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_i32__IndexValue_i32___index_value_57: builtin::array_get<i32>(self_115.repr, 0);
+        break __inline_Array_i32__IndexValue_i32___index_value_57: builtin::array_get<i32>(indexed.values.repr, 0);
         unreachable;
     };
     __cond_14 = __v0_13 == 100;
@@ -403,12 +385,11 @@ condition: indexed.get_by_index(0) == 100
         unreachable;
     }
     __v0_15 = __inline_Array_i32__IndexValue_i32___index_value_66: block -> i32 {
-        self_130 = indexed.values;
-        if 2 >= self_130.used {
+        if 2 >= indexed.values.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_i32__IndexValue_i32___index_value_66: builtin::array_get<i32>(self_130.repr, 2);
+        break __inline_Array_i32__IndexValue_i32___index_value_66: builtin::array_get<i32>(indexed.values.repr, 2);
         unreachable;
     };
     __cond_16 = __v0_15 == 300;
