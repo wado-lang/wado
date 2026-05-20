@@ -2989,7 +2989,7 @@ pub fn block_result_type(block: &TirBlock) -> TypeId {
 /// equal types agree; a `Never` branch defers to the other; an
 /// outright mismatch yields `None` so the caller falls back to
 /// `Unit`.
-pub fn agree_branch_types(t: TypeId, e: TypeId) -> Option<TypeId> {
+pub(crate) fn agree_branch_types(t: TypeId, e: TypeId) -> Option<TypeId> {
     if t == e {
         Some(t)
     } else if t == TypeTable::NEVER {

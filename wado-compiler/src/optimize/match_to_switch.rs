@@ -126,10 +126,15 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[NirMatchArm]) -> Option<Switch
         }
         match &arm.pattern {
             NirPattern::Literal(NirLiteralPattern::I128(v)) => {
-                value_to_arm.push((*v as i64, arm_idx));
+                // Bail if the literal does not fit in `i64`: the Switch
+                // dispatch operates on `i64` case values, so a wrapping
+                // cast would corrupt the min/max range analysis.
+                let v = i64::try_from(*v).ok()?;
+                value_to_arm.push((v, arm_idx));
             }
             NirPattern::Literal(NirLiteralPattern::U128(v)) => {
-                value_to_arm.push((*v as i64, arm_idx));
+                let v = i64::try_from(*v).ok()?;
+                value_to_arm.push((v, arm_idx));
             }
             NirPattern::Enum { case_index, .. } => {
                 value_to_arm.push((i64::from(*case_index), arm_idx));
