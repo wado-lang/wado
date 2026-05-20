@@ -1,7 +1,5 @@
 global mut heap_offset: i32 = 8;
 
-global mut free_list: i32 = 0;
-
 global mut POW10: Array<u64> = null;
 
 global mut __modules_initialized: bool = false;
@@ -541,54 +539,146 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
     return aligned;
 }
 
-export fn freelist_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+fn fl_size(tag: i32) -> i32 {
+    return core::builtin::i32_and(tag, -8);
+}
+
+fn fl_used(tag: i32) -> i32 {
+    return core::builtin::i32_and(tag, 1);
+}
+
+fn fl_bin(size: i32) -> i32 {
+    let k: i32 = ((size - 24) / 8);
+    return if (k < 32) {
+        k;
+    } else {
+        32;
+    };
+}
+
+fn fl_bin_head(k: i32) -> i32 {
+    return core::builtin::i32_load((8 + (k * 4)));
+}
+
+fn fl_set_bin_head(k: i32, head: i32) {
+    core::builtin::i32_store((8 + (k * 4)), head);
+}
+
+fn fl_set_tags(block: i32, size: i32, used: i32) {
+    let tag: i32 = (size + used);
+    core::builtin::i32_store(block, tag);
+    core::builtin::i32_store(((block + size) - 8), tag);
+}
+
+fn fl_push(block: i32, size: i32) {
+    let k: i32 = core::allocator::fl_bin(size);
+    let head: i32 = core::allocator::fl_bin_head(k);
+    core::builtin::i32_store((block + 8), head);
+    core::builtin::i32_store((block + 12), 0);
+    if (head != 0) {
+        core::builtin::i32_store((head + 12), block);
+    }
+    core::allocator::fl_set_bin_head(k, block);
+}
+
+fn fl_unlink(block: i32) {
+    let k: i32 = core::allocator::fl_bin(core::allocator::fl_size(core::builtin::i32_load(block)));
+    let next: i32 = core::builtin::i32_load((block + 8));
+    let prev: i32 = core::builtin::i32_load((block + 12));
+    if (prev == 0) {
+        core::allocator::fl_set_bin_head(k, next);
+    } else {
+        core::builtin::i32_store((prev + 8), next);
+    }
+    if (next != 0) {
+        core::builtin::i32_store((next + 12), prev);
+    }
+}
+
+fn fl_carve(block: i32, block_size: i32, size: i32) {
+    let remainder: i32 = (block_size - size);
+    if (remainder >= 24) {
+        core::allocator::fl_set_tags(block, size, 1);
+        let rest: i32 = (block + size);
+        core::allocator::fl_set_tags(rest, remainder, 0);
+        core::allocator::fl_push(rest, remainder);
+    } else {
+        core::allocator::fl_set_tags(block, block_size, 1);
+    }
+}
+
+export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
+    if (core::allocator::heap_offset < 144) {
+        core::allocator::heap_offset = 144;
+    }
     if (newsize == 0) {
-        if (oldsize == 0) {
+        if (oldptr == 0) {
             return 0;
         }
-        if (oldptr == core::allocator::free_list) {
+        let mut block: i32 = (oldptr - 8);
+        let header: i32 = core::builtin::i32_load(block);
+        if (core::allocator::fl_used(header) == 0) {
             core::builtin::unreachable();
         }
-        let size: i32 = core::builtin::i32_and((oldsize + 7), -8);
-        core::builtin::i32_store(oldptr, size);
-        core::builtin::i32_store((oldptr + 4), core::allocator::free_list);
-        core::allocator::free_list = oldptr;
+        let mut size: i32 = core::allocator::fl_size(header);
+        let next: i32 = (block + size);
+        if (next < core::allocator::heap_offset) {
+            let next_header: i32 = core::builtin::i32_load(next);
+            if (core::allocator::fl_used(next_header) == 0) {
+                core::allocator::fl_unlink(next);
+                size = (size + core::allocator::fl_size(next_header));
+            }
+        }
+        if (block > 144) {
+            let prev_footer: i32 = core::builtin::i32_load((block - 8));
+            if (core::allocator::fl_used(prev_footer) == 0) {
+                let prev_size: i32 = core::allocator::fl_size(prev_footer);
+                let prev: i32 = (block - prev_size);
+                core::allocator::fl_unlink(prev);
+                block = prev;
+                size = (size + prev_size);
+            }
+        }
+        core::allocator::fl_set_tags(block, size, 0);
+        core::allocator::fl_push(block, size);
         return 0;
     }
-    let size: i32 = core::builtin::i32_and((newsize + 7), -8);
-    let mut prev: i32 = 0;
-    let mut curr: i32 = core::allocator::free_list;
+    let size: i32 = (core::builtin::i32_and((newsize + 7), -8) + 16);
+    let mut j: i32 = core::allocator::fl_bin(size);
+    loop {
+        if !(j < 32) {
+            break;
+        }
+        let b: i32 = core::allocator::fl_bin_head(j);
+        if (b != 0) {
+            let block_size: i32 = core::allocator::fl_size(core::builtin::i32_load(b));
+            core::allocator::fl_unlink(b);
+            core::allocator::fl_carve(b, block_size, size);
+            return (b + 8);
+        }
+        j = (j + 1);
+    }
+    let mut curr: i32 = core::allocator::fl_bin_head(32);
     loop {
         if !(curr != 0) {
             break;
         }
-        let block_size: i32 = core::builtin::i32_load(curr);
-        let next: i32 = core::builtin::i32_load((curr + 4));
-        if ((block_size >= size) && (core::builtin::i32_and(curr, (align - 1)) == 0)) {
-            if (prev == 0) {
-                core::allocator::free_list = next;
-            } else {
-                core::builtin::i32_store((prev + 4), next);
-            }
-            let remainder: i32 = (block_size - size);
-            if (remainder >= 16) {
-                let rem_ptr: i32 = (curr + size);
-                core::builtin::i32_store(rem_ptr, remainder);
-                core::builtin::i32_store((rem_ptr + 4), core::allocator::free_list);
-                core::allocator::free_list = rem_ptr;
-            }
-            return curr;
+        let block_size: i32 = core::allocator::fl_size(core::builtin::i32_load(curr));
+        if (block_size >= size) {
+            core::allocator::fl_unlink(curr);
+            core::allocator::fl_carve(curr, block_size, size);
+            return (curr + 8);
         }
-        prev = curr;
-        curr = next;
+        curr = core::builtin::i32_load((curr + 8));
     }
-    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
-    let new_offset: i32 = (aligned + size);
+    let block: i32 = core::allocator::heap_offset;
+    let new_offset: i32 = (block + size);
     if core::builtin::unlikely((new_offset > (core::builtin::memory_size() * 65536))) {
         core::allocator::grow_memory(new_offset);
     }
     core::allocator::heap_offset = new_offset;
-    return aligned;
+    core::allocator::fl_set_tags(block, size, 1);
+    return (block + 8);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {

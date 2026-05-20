@@ -888,7 +888,7 @@ pub async fn run(opts: ServeOptions) {
     let timeout = Duration::from_secs(opts.timeout_secs);
     let workers = opts.workers.unwrap_or_else(|| {
         std::thread::available_parallelism()
-            .map(|n| n.get())
+            .map(std::num::NonZero::get)
             .unwrap_or(1)
     });
     if let Err(e) = run_http_server(

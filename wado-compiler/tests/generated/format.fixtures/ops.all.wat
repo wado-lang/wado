@@ -13,7 +13,6 @@
     (type (;1;) (func (param i32 i32 i32 i32) (result i32)))
     (memory (;0;) 1)
     (global (;0;) (mut i32) (i32.const 8))
-    (global (;1;) (mut i32) (i32.const 0))
     (export "realloc" (func $realloc))
     (export "memory" (memory 0))
     (func $grow_memory (;0;) (type 0) (param i32)
