@@ -1,0 +1,31 @@
+// `value_copy_demote` soundness regression: the bound copy mutates an
+// *element* of the array through a `&mut self` method on `x[0]`.
+//
+// `value_copy_demote` must NOT fire here. A shallow spine copy would
+// share the `String` element objects with the source array, so
+// `x[0].push('!')` would corrupt `words[0]` as well. The deep
+// per-element copy is mandatory — the demoted shallow form is unsound.
+//
+// `wir_expect:O2 ["array_clone_deep"]` asserts the copy stays deep
+// (demotion correctly refused); the stdout assertion catches the
+// corruption directly: `words[0]` must remain "hi", not "hi!".
+
+use { println } from "core:cli";
+
+fn shout_first(words: &Array<String>) -> String {
+    let mut x = *words;
+    x[0].push('!');
+    return x[0];
+}
+
+export fn run() with Stdout {
+    let words: Array<String> = ["hi", "yo"];
+    let s = shout_first(&words);
+    println(`{s} {words[0]}`);
+}
+
+__DATA__
+{
+    "stdout": "hi! hi\n",
+    "wir_expect:O2": ["array_clone_deep"]
+}

@@ -1,7 +1,6 @@
 use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind } from "./ir.wado";
 use {
     to_pascal_case,
-    rule_type_name,
     literal_field_name,
     case_names_for_rule,
     is_simple_cst_group,
@@ -26,7 +25,7 @@ pub fn gen_visitor(w: &mut CodeWriter, grammar: &Grammar) {
 }
 
 fn gen_walk_fn(w: &mut CodeWriter, rule: &ParserRule, rule_name: &String, rule_id: i32) {
-    let type_name = rule_type_name(&rule.name);
+    let type_name = rule.type_name;
     w.begin(&`pub fn walk_{rule.name}<V: Visitor>(v: &mut V, node: &{type_name})`);
 
     let mut group_counter: i32 = 0;
@@ -179,7 +178,7 @@ fn gen_to_tree_fn(w: &mut CodeWriter, grammar: &Grammar) {
         return;
     }
     let root_rule = &grammar.parser_rules[0];
-    let root_type = rule_type_name(&root_rule.name);
+    let root_type = root_rule.type_name;
 
     w.begin(&`pub fn to_tree(node: &{root_type}) -> CstNode`);
     w.line(&"let mut recorder = TreeRecorder::new();");
