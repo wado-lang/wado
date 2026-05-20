@@ -276,10 +276,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-write from "wasi/future-write";
 
 fn "wado-compiler/tests/fixtures/stream_http_response_body.wado/handle"() {
-    let trailers_future: i32;
-    let trailers_tx: i32;
-    let body_rx: i32;
-    let body_tx: i32;
     let headers: i32;
     let response: i32;
     let __b_7: ref "core:prelude//Array<u8>";
@@ -424,17 +420,13 @@ fn "wado-compiler/tests/fixtures/stream_http_response_body.wado/handle"() {
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    trailers_future = __mv_lo_1;
-    trailers_tx = __mv_hi_1;
     let __pair_temp_2: i64;
     __pair_temp_2 = "wasi/stream-new"();
     let __mv_lo_2: i32;
     let __mv_hi_2: i32;
     multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
-    body_rx = __mv_lo_2;
-    body_tx = __mv_hi_2;
     headers = "wado-compiler/tests/fixtures/stream_http_response_body.wado/__cm_binding__Fields_new"();
-    __pattern_temp_2 = "wado-compiler/tests/fixtures/stream_http_response_body.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: body_rx }, trailers_future);
+    __pattern_temp_2 = "wado-compiler/tests/fixtures/stream_http_response_body.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: __mv_lo_2 }, __mv_lo_1);
     response = __pattern_temp_2.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -753,23 +745,21 @@ fn "wado-compiler/tests/fixtures/stream_http_response_body.wado/handle"() {
         break __seq_lit: __b_7;
         unreachable;
     };
-    "core:internal/cm_stream_write_u8"(body_tx, data);
-    "wasi/stream-drop-writable"(body_tx);
+    "core:internal/cm_stream_write_u8"(__mv_hi_2, data);
+    "wasi/stream-drop-writable"(__mv_hi_2);
     let __fw_write_ptr_3: i32;
-    let __fw_handle_3: i32;
     let __fw_result_3: i32;
-    __fw_handle_3 = trailers_tx;
     __fw_write_ptr_3 = "mem/realloc"(0, 0, 8, 40);
     builtin::store_i64(__fw_write_ptr_3, 0_i64);
     builtin::store_i64[8](__fw_write_ptr_3, 0_i64);
     builtin::store_i64[16](__fw_write_ptr_3, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_3, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_3, 0_i64);
-    __fw_result_3 = "wasi/future-write"(__fw_handle_3, __fw_write_ptr_3);
+    __fw_result_3 = "wasi/future-write"(__mv_hi_1, __fw_write_ptr_3);
     if __fw_result_3 == -1 {
         let __fw_evt_3: i32;
         __fw_result_3 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__fw_handle_3, __fw_result_3);
+        "wasi/waitable-join"(__mv_hi_1, __fw_result_3);
         __fw_evt_3 = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(__fw_result_3, __fw_evt_3));
         drop("mem/realloc"(__fw_evt_3, 8, 4, 0));

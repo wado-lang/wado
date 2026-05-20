@@ -78,22 +78,11 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"() with Stdout, MonotonicClock {
     let t1: u64;
-    let ts: u64;
-    let evt: u64;
-    let t1_u64: u64;
-    let ts_u64: u64;
-    let evt_u64: u64;
     let t2: u64;
-    let ts2: u64;
     let diff: u64;
     t1 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
-    ts = t1;
-    evt = t1;
-    t1_u64 = t1;
-    ts_u64 = ts;
-    evt_u64 = evt;
-    if (if t1_u64 == ts_u64 -> i32 {
-        ts_u64 == evt_u64;
+    if (if t1 == t1 -> i32 {
+        t1 == t1;
     } else {
         0;
     }) {
@@ -102,8 +91,7 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"() with 
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("FAILED: values differ"), used: 21 });
     }
     t2 = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
-    ts2 = t2;
-    diff = ts2 - ts;
+    diff = t2 - t1;
     if diff >=u 0_i64 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("timestamp arithmetic works"), used: 26 });
     }
@@ -113,7 +101,6 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_chained"() with 
 fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_duration"() with Stdout, MonotonicClock {
     let res: u64;
     let double_res: u64;
-    let as_u64: u64;
     res = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"();
     if res >u 0_i64 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("resolution is positive"), used: 22 });
@@ -124,8 +111,7 @@ fn "wado-compiler/tests/fixtures/newtype_wasi.wado/newtype_wasi_duration"() with
     if double_res >=u res {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("double is >= original"), used: 21 });
     }
-    as_u64 = res;
-    if as_u64 >u 0_i64 {
+    if res >u 0_i64 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("cast to u64 works"), used: 17 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duration tests passed"), used: 21 });
@@ -190,18 +176,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

@@ -185,6 +185,17 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     }
     flatten_seq_assignments(module);
     elide_multi_field_struct_locals(module);
+    // Multi-field struct-local elision rewrites multi-value destructures into
+    // fresh `LocalSet alias = LocalGet temp` copies. Re-run copy propagation to
+    // fold those away — the phase-1 run happened before these copies existed.
+    wir_pass(
+        "wir/propagate_trivial_copies_post_sroa",
+        module,
+        profiler,
+        |m| {
+            peephole::propagate_trivial_copies(m);
+        },
+    );
     profiler.span_end("wir/phase5_peephole");
 
     // Phase 6: Write-only local elimination for WIR-synthesised locals

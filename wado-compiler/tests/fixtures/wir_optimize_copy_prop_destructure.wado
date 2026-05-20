@@ -1,0 +1,29 @@
+// Copy propagation folds away the local-to-local copies that multi-value
+// destructuring lowering introduces. Lowering a `let [q, r] = pair()` binds
+// the call's split results into `__mv_*` temps, then copies each temp into the
+// pattern variable (`LocalSet q = LocalGet __mv_lo`). `propagate_trivial_copies`
+// must eliminate those copies so the pattern variables do not survive as
+// redundant WIR locals.
+
+#[inline("never")]
+fn divmod(a: i32, b: i32) -> [i32, i32] {
+    return [a / b, a % b];
+}
+
+export fn run() {
+    let [q, r] = divmod(17, 5);
+    assert q == 3;
+    assert r == 2;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": [
+        "q = __pattern_temp_0_mv_0",
+        "r = __pattern_temp_0_mv_1"
+    ],
+    "wir_expect:O2": [
+        "__pattern_temp_0_mv_0 == 3"
+    ]
+}

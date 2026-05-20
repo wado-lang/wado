@@ -267,16 +267,14 @@ fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/walk
     let l: ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//LeafNode";
     let b: ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//BranchNode";
     let v_5: i32;
-    let __match_scrut_0: ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node";
-    __match_scrut_0 = node;
-    if ref.test "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(__match_scrut_0) {
-        l = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(__match_scrut_0).payload_0;
+    if ref.test "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(node) {
+        l = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(node).payload_0;
         block {
             v_5 = l.value;
             v.total = v.total + v_5;
         };
     } else {
-        b = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch"(__match_scrut_0).payload_0;
+        b = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch"(node).payload_0;
         "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/walk_branch<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Sum>"(v, b.children);
     }
 }
@@ -285,12 +283,8 @@ fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/walk
     let __iter_2: ref "core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>";
     let c: ref "core:prelude/types.wado//Box<Node>";
     let __iflet_4: ref null "core:prelude/types.wado//Box<Node>";
-    let self: ref "core:prelude//Array<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>";
-    let arr: ref "core:prelude//Array<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>";
     __iter_2 = __inline__wado_compiler_tests_fixtures_inline_mutual_recursive_generic_visit_wado_Node_IntoIterator__into_iter_0: block -> ref "core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>" {
-        self = b;
-        arr = self;
-        break __inline__wado_compiler_tests_fixtures_inline_mutual_recursive_generic_visit_wado_Node_IntoIterator__into_iter_0: struct.new "core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>" { repr: arr.repr, used: arr.used, index: 0 };
+        break __inline__wado_compiler_tests_fixtures_inline_mutual_recursive_generic_visit_wado_Node_IntoIterator__into_iter_0: struct.new "core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>" { repr: b.repr, used: b.used, index: 0 };
         unreachable;
     };
     b2: block {
@@ -325,18 +319,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -375,21 +365,15 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:internal/log_stderr"(message) {
-    let rx: i32;
-    let tx: i32;
     let future_handle: i32;
-    let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
-    "core:internal/write_string_to_stream"(tx, message, 1);
-    future = future_handle;
-    "wasi/future-drop-readable:transmission-cli"(future);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__mv_lo_1);
+    "core:internal/write_string_to_stream"(__mv_hi_1, message, 1);
+    "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 
 fn "core:internal/panic"(message) {
@@ -553,28 +537,26 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    let code: u32;
-    code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
-    if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code & 255);
+    if c <u 128 {
+        builtin::array_set_u8(self.repr, self.used, c & 255);
         self.used = self.used + 1;
-    } else if code <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
+    } else if c <u 2048 {
+        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
         self.used = self.used + 2;
-    } else if code <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
+    } else if c <u 65536 {
+        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
 }
@@ -590,14 +572,10 @@ fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node
     let __eq_other_Branch_5: ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//BranchNode";
     let __sroa_self_value: i32;
     let __sroa_other_value: i32;
-    let __match_scrut_0: ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node";
-    __match_scrut_0 = self;
-    if ref.test "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(__match_scrut_0) {
-        __eq_self_Leaf_2 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(__match_scrut_0).payload_0;
-        let __match_scrut_2: ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node";
-        __match_scrut_2 = other;
-        if ref.test "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(__match_scrut_2) {
-            __eq_other_Leaf_3 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(__match_scrut_2).payload_0;
+    if ref.test "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(self) {
+        __eq_self_Leaf_2 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(self).payload_0;
+        if ref.test "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(other) {
+            __eq_other_Leaf_3 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(other).payload_0;
             return __inline_i32_Eq__eq_1: block -> bool {
                 __sroa_self_value = __eq_self_Leaf_2.value;
                 __sroa_other_value = __eq_other_Leaf_3.value;
@@ -608,11 +586,9 @@ fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node
             return 0;
         }
     } else {
-        __eq_self_Branch_4 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch"(__match_scrut_0).payload_0;
-        let __match_scrut_1: ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node";
-        __match_scrut_1 = other;
-        if ref.test "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch"(__match_scrut_1) {
-            __eq_other_Branch_5 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch"(__match_scrut_1).payload_0;
+        __eq_self_Branch_4 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch"(self).payload_0;
+        if ref.test "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch"(other) {
+            __eq_other_Branch_5 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch"(other).payload_0;
             return "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/BranchNode^Eq::eq"(__eq_self_Branch_4.children, __eq_other_Branch_5.children);
         } else {
             return 0;
@@ -653,17 +629,15 @@ fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node
     let s_7: ref "core:prelude/string.wado//String";
     let s_9: ref "core:prelude/string.wado//String";
     let s_11: ref "core:prelude/string.wado//String";
-    let __match_scrut_0: ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node";
-    __match_scrut_0 = self;
-    if ref.test "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(__match_scrut_0) {
-        __inspect_Leaf_2 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(__match_scrut_0).payload_0;
+    if ref.test "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(self) {
+        __inspect_Leaf_2 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf"(self).payload_0;
         s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Node::Leaf("), used: 11 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_5);
         "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/LeafNode^Inspect::inspect"(__inspect_Leaf_2.value, f);
         s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_7);
     } else {
-        __inspect_Branch_3 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch"(__match_scrut_0).payload_0;
+        __inspect_Branch_3 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch"(self).payload_0;
         s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Node::Branch("), used: 13 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_9);
         "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/BranchNode^Inspect::inspect"(__inspect_Branch_3.children, f);
@@ -736,9 +710,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
     align = self.align;
-    let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
-    __match_scrut_0 = align;
-    if __match_scrut_0 == 0 {
+    if align == 0 {
         if sign_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }

@@ -417,14 +417,9 @@ fn "wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/handle"(re
     let req_scheme: ref null "wasi:http/types.wado//Scheme";
     let s_26: ref "wasi:http/types.wado//Scheme";
     let name: ref "core:prelude/string.wado//String";
-    let __v0_28: ref "core:prelude/string.wado//String";
     let __v1_29: bool;
     let __v2: bool;
     let __cond_31: bool;
-    let resp_trailers_future: i32;
-    let resp_trailers_tx: i32;
-    let resp_rx: i32;
-    let resp_tx: i32;
     let resp_headers: i32;
     let response: i32;
     let __local_39: ref "core:prelude/string.wado//String";
@@ -640,30 +635,26 @@ fn "wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/handle"(re
     let f_409: ref "core:prelude/format.wado//Formatter";
     let self_412: ref "core:prelude/string.wado//String";
     custom = struct.new "wasi:http/types.wado//Method::Other" { discriminant: 9, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PURGE"), used: 5 } };
-    let __match_scrut_0: ref "wasi:http/types.wado//Method";
-    __match_scrut_0 = custom;
-    __v0_2 = (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("GET"), used: 3 };
-    } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("HEAD"), used: 4 };
-    } else if __match_scrut_0.discriminant == 2 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("POST"), used: 4 };
-    } else if __match_scrut_0.discriminant == 3 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PUT"), used: 3 };
-    } else if __match_scrut_0.discriminant == 4 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DELETE"), used: 6 };
-    } else if __match_scrut_0.discriminant == 5 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CONNECT"), used: 7 };
-    } else if __match_scrut_0.discriminant == 6 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("OPTIONS"), used: 7 };
-    } else if __match_scrut_0.discriminant == 7 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("TRACE"), used: 5 };
-    } else if __match_scrut_0.discriminant == 8 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PATCH"), used: 5 };
-    } else {
-        s_218 = ref.cast "wasi:http/types.wado//Method::Other"(__match_scrut_0).payload_0;
-        s_218;
-    });
+    __v0_2 = block -> ref "core:prelude/string.wado//String" {
+        block -> ref "core:prelude/string.wado//String" {
+            block -> ref "core:prelude/string.wado//String" {
+                block -> ref "core:prelude/string.wado//String" {
+                    block -> ref "core:prelude/string.wado//String" {
+                        block -> ref "core:prelude/string.wado//String" {
+                            block -> ref "core:prelude/string.wado//String" {
+                                block -> ref "core:prelude/string.wado//String" {
+                                    block -> ref "core:prelude/string.wado//String" {
+                                        s_218 = ref.cast "wasi:http/types.wado//Method::Other"(custom).payload_0;
+                                        s_218;
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
     __cond_3 = __inline_String_Eq__eq_3: block -> bool {
         other_220 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PURGE"), used: 5 };
         len_a_221 = __v0_2.used;
@@ -706,28 +697,26 @@ condition: method_name(custom) == \"PURGE\"
     }
     __v0_4 = __inline_method_name_13: block -> ref "core:prelude/string.wado//String" {
         m_233 = struct.new "wasi:http/types.wado//Method" { 1 };
-        let __match_scrut_1: ref "wasi:http/types.wado//Method";
-        __match_scrut_1 = m_233;
-        if __match_scrut_1.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+        if m_233.discriminant == 0 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("GET"), used: 3 };
-        } else if __match_scrut_1.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+        } else if m_233.discriminant == 1 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("HEAD"), used: 4 };
-        } else if __match_scrut_1.discriminant == 2 -> ref "core:prelude/string.wado//String" {
+        } else if m_233.discriminant == 2 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("POST"), used: 4 };
-        } else if __match_scrut_1.discriminant == 3 -> ref "core:prelude/string.wado//String" {
+        } else if m_233.discriminant == 3 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PUT"), used: 3 };
-        } else if __match_scrut_1.discriminant == 4 -> ref "core:prelude/string.wado//String" {
+        } else if m_233.discriminant == 4 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DELETE"), used: 6 };
-        } else if __match_scrut_1.discriminant == 5 -> ref "core:prelude/string.wado//String" {
+        } else if m_233.discriminant == 5 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CONNECT"), used: 7 };
-        } else if __match_scrut_1.discriminant == 6 -> ref "core:prelude/string.wado//String" {
+        } else if m_233.discriminant == 6 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("OPTIONS"), used: 7 };
-        } else if __match_scrut_1.discriminant == 7 -> ref "core:prelude/string.wado//String" {
+        } else if m_233.discriminant == 7 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("TRACE"), used: 5 };
-        } else if __match_scrut_1.discriminant == 8 -> ref "core:prelude/string.wado//String" {
+        } else if m_233.discriminant == 8 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PATCH"), used: 5 };
         } else {
-            s_234 = ref.cast "wasi:http/types.wado//Method::Other"(__match_scrut_1).payload_0;
+            s_234 = ref.cast "wasi:http/types.wado//Method::Other"(m_233).payload_0;
             s_234;
         }
         break __inline_method_name_13;
@@ -775,28 +764,26 @@ condition: method_name(Method::Head) == \"HEAD\"
     }
     __v0_6 = __inline_method_name_24: block -> ref "core:prelude/string.wado//String" {
         m_249 = struct.new "wasi:http/types.wado//Method" { 6 };
-        let __match_scrut_2: ref "wasi:http/types.wado//Method";
-        __match_scrut_2 = m_249;
-        if __match_scrut_2.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+        if m_249.discriminant == 0 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("GET"), used: 3 };
-        } else if __match_scrut_2.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+        } else if m_249.discriminant == 1 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("HEAD"), used: 4 };
-        } else if __match_scrut_2.discriminant == 2 -> ref "core:prelude/string.wado//String" {
+        } else if m_249.discriminant == 2 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("POST"), used: 4 };
-        } else if __match_scrut_2.discriminant == 3 -> ref "core:prelude/string.wado//String" {
+        } else if m_249.discriminant == 3 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PUT"), used: 3 };
-        } else if __match_scrut_2.discriminant == 4 -> ref "core:prelude/string.wado//String" {
+        } else if m_249.discriminant == 4 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DELETE"), used: 6 };
-        } else if __match_scrut_2.discriminant == 5 -> ref "core:prelude/string.wado//String" {
+        } else if m_249.discriminant == 5 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CONNECT"), used: 7 };
-        } else if __match_scrut_2.discriminant == 6 -> ref "core:prelude/string.wado//String" {
+        } else if m_249.discriminant == 6 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("OPTIONS"), used: 7 };
-        } else if __match_scrut_2.discriminant == 7 -> ref "core:prelude/string.wado//String" {
+        } else if m_249.discriminant == 7 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("TRACE"), used: 5 };
-        } else if __match_scrut_2.discriminant == 8 -> ref "core:prelude/string.wado//String" {
+        } else if m_249.discriminant == 8 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PATCH"), used: 5 };
         } else {
-            s_250 = ref.cast "wasi:http/types.wado//Method::Other"(__match_scrut_2).payload_0;
+            s_250 = ref.cast "wasi:http/types.wado//Method::Other"(m_249).payload_0;
             s_250;
         }
         break __inline_method_name_24;
@@ -844,28 +831,26 @@ condition: method_name(Method::Options) == \"OPTIONS\"
     }
     __v0_8 = __inline_method_name_35: block -> ref "core:prelude/string.wado//String" {
         m_265 = struct.new "wasi:http/types.wado//Method" { 7 };
-        let __match_scrut_3: ref "wasi:http/types.wado//Method";
-        __match_scrut_3 = m_265;
-        if __match_scrut_3.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+        if m_265.discriminant == 0 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("GET"), used: 3 };
-        } else if __match_scrut_3.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+        } else if m_265.discriminant == 1 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("HEAD"), used: 4 };
-        } else if __match_scrut_3.discriminant == 2 -> ref "core:prelude/string.wado//String" {
+        } else if m_265.discriminant == 2 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("POST"), used: 4 };
-        } else if __match_scrut_3.discriminant == 3 -> ref "core:prelude/string.wado//String" {
+        } else if m_265.discriminant == 3 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PUT"), used: 3 };
-        } else if __match_scrut_3.discriminant == 4 -> ref "core:prelude/string.wado//String" {
+        } else if m_265.discriminant == 4 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DELETE"), used: 6 };
-        } else if __match_scrut_3.discriminant == 5 -> ref "core:prelude/string.wado//String" {
+        } else if m_265.discriminant == 5 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CONNECT"), used: 7 };
-        } else if __match_scrut_3.discriminant == 6 -> ref "core:prelude/string.wado//String" {
+        } else if m_265.discriminant == 6 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("OPTIONS"), used: 7 };
-        } else if __match_scrut_3.discriminant == 7 -> ref "core:prelude/string.wado//String" {
+        } else if m_265.discriminant == 7 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("TRACE"), used: 5 };
-        } else if __match_scrut_3.discriminant == 8 -> ref "core:prelude/string.wado//String" {
+        } else if m_265.discriminant == 8 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PATCH"), used: 5 };
         } else {
-            s_266 = ref.cast "wasi:http/types.wado//Method::Other"(__match_scrut_3).payload_0;
+            s_266 = ref.cast "wasi:http/types.wado//Method::Other"(m_265).payload_0;
             s_266;
         }
         break __inline_method_name_35;
@@ -913,28 +898,26 @@ condition: method_name(Method::Trace) == \"TRACE\"
     }
     __v0_10 = __inline_method_name_46: block -> ref "core:prelude/string.wado//String" {
         m_281 = struct.new "wasi:http/types.wado//Method" { 5 };
-        let __match_scrut_4: ref "wasi:http/types.wado//Method";
-        __match_scrut_4 = m_281;
-        if __match_scrut_4.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+        if m_281.discriminant == 0 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("GET"), used: 3 };
-        } else if __match_scrut_4.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+        } else if m_281.discriminant == 1 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("HEAD"), used: 4 };
-        } else if __match_scrut_4.discriminant == 2 -> ref "core:prelude/string.wado//String" {
+        } else if m_281.discriminant == 2 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("POST"), used: 4 };
-        } else if __match_scrut_4.discriminant == 3 -> ref "core:prelude/string.wado//String" {
+        } else if m_281.discriminant == 3 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PUT"), used: 3 };
-        } else if __match_scrut_4.discriminant == 4 -> ref "core:prelude/string.wado//String" {
+        } else if m_281.discriminant == 4 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DELETE"), used: 6 };
-        } else if __match_scrut_4.discriminant == 5 -> ref "core:prelude/string.wado//String" {
+        } else if m_281.discriminant == 5 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CONNECT"), used: 7 };
-        } else if __match_scrut_4.discriminant == 6 -> ref "core:prelude/string.wado//String" {
+        } else if m_281.discriminant == 6 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("OPTIONS"), used: 7 };
-        } else if __match_scrut_4.discriminant == 7 -> ref "core:prelude/string.wado//String" {
+        } else if m_281.discriminant == 7 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("TRACE"), used: 5 };
-        } else if __match_scrut_4.discriminant == 8 -> ref "core:prelude/string.wado//String" {
+        } else if m_281.discriminant == 8 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PATCH"), used: 5 };
         } else {
-            s_282 = ref.cast "wasi:http/types.wado//Method::Other"(__match_scrut_4).payload_0;
+            s_282 = ref.cast "wasi:http/types.wado//Method::Other"(m_281).payload_0;
             s_282;
         }
         break __inline_method_name_46;
@@ -981,28 +964,26 @@ condition: method_name(Method::Connect) == \"CONNECT\"
         unreachable;
     }
     m_12 = "wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/__cm_binding__Request_get_method"(request);
-    let __match_scrut_5: ref "wasi:http/types.wado//Method";
-    __match_scrut_5 = m_12;
-    __v0_13 = (if __match_scrut_5.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+    __v0_13 = (if m_12.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("GET"), used: 3 };
-    } else if __match_scrut_5.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+    } else if m_12.discriminant == 1 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("HEAD"), used: 4 };
-    } else if __match_scrut_5.discriminant == 2 -> ref "core:prelude/string.wado//String" {
+    } else if m_12.discriminant == 2 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("POST"), used: 4 };
-    } else if __match_scrut_5.discriminant == 3 -> ref "core:prelude/string.wado//String" {
+    } else if m_12.discriminant == 3 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PUT"), used: 3 };
-    } else if __match_scrut_5.discriminant == 4 -> ref "core:prelude/string.wado//String" {
+    } else if m_12.discriminant == 4 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DELETE"), used: 6 };
-    } else if __match_scrut_5.discriminant == 5 -> ref "core:prelude/string.wado//String" {
+    } else if m_12.discriminant == 5 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CONNECT"), used: 7 };
-    } else if __match_scrut_5.discriminant == 6 -> ref "core:prelude/string.wado//String" {
+    } else if m_12.discriminant == 6 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("OPTIONS"), used: 7 };
-    } else if __match_scrut_5.discriminant == 7 -> ref "core:prelude/string.wado//String" {
+    } else if m_12.discriminant == 7 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("TRACE"), used: 5 };
-    } else if __match_scrut_5.discriminant == 8 -> ref "core:prelude/string.wado//String" {
+    } else if m_12.discriminant == 8 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PATCH"), used: 5 };
     } else {
-        s_298 = ref.cast "wasi:http/types.wado//Method::Other"(__match_scrut_5).payload_0;
+        s_298 = ref.cast "wasi:http/types.wado//Method::Other"(m_12).payload_0;
         s_298;
     });
     __cond_14 = __inline_String_Eq__eq_58: block -> bool {
@@ -1047,14 +1028,12 @@ condition: method_name(m) == \"GET\"
     }
     __v0_15 = __inline_scheme_name_68: block -> ref "core:prelude/string.wado//String" {
         s_313 = struct.new "wasi:http/types.wado//Scheme" { 0 };
-        let __match_scrut_6: ref "wasi:http/types.wado//Scheme";
-        __match_scrut_6 = s_313;
-        if __match_scrut_6.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+        if s_313.discriminant == 0 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http"), used: 4 };
-        } else if __match_scrut_6.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+        } else if s_313.discriminant == 1 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("https"), used: 5 };
         } else {
-            s_314 = ref.cast "wasi:http/types.wado//Scheme::Other"(__match_scrut_6).payload_0;
+            s_314 = ref.cast "wasi:http/types.wado//Scheme::Other"(s_313).payload_0;
             s_314;
         }
         break __inline_scheme_name_68;
@@ -1102,14 +1081,12 @@ condition: scheme_name(Scheme::Http) == \"http\"
     }
     __v0_17 = __inline_scheme_name_79: block -> ref "core:prelude/string.wado//String" {
         s_329 = struct.new "wasi:http/types.wado//Scheme" { 1 };
-        let __match_scrut_7: ref "wasi:http/types.wado//Scheme";
-        __match_scrut_7 = s_329;
-        if __match_scrut_7.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+        if s_329.discriminant == 0 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http"), used: 4 };
-        } else if __match_scrut_7.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+        } else if s_329.discriminant == 1 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("https"), used: 5 };
         } else {
-            s_330 = ref.cast "wasi:http/types.wado//Scheme::Other"(__match_scrut_7).payload_0;
+            s_330 = ref.cast "wasi:http/types.wado//Scheme::Other"(s_329).payload_0;
             s_330;
         }
         break __inline_scheme_name_79;
@@ -1156,14 +1133,12 @@ condition: scheme_name(Scheme::Https) == \"https\"
         unreachable;
     }
     __v0_19 = struct.new "wasi:http/types.wado//Scheme::Other" { discriminant: 2, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ftp"), used: 3 } };
-    let __match_scrut_8: ref "wasi:http/types.wado//Scheme";
-    __match_scrut_8 = __v0_19;
-    __v1_20 = (if __match_scrut_8.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+    __v1_20 = (if __v0_19.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http"), used: 4 };
-    } else if __match_scrut_8.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+    } else if __v0_19.discriminant == 1 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("https"), used: 5 };
     } else {
-        s_346 = ref.cast "wasi:http/types.wado//Scheme::Other"(__match_scrut_8).payload_0;
+        s_346 = ref.cast "wasi:http/types.wado//Scheme::Other"(__v0_19).payload_0;
         s_346;
     });
     __cond_21 = __inline_String_Eq__eq_91: block -> bool {
@@ -1211,14 +1186,12 @@ condition: scheme_name(Scheme::Other(\"ftp\")) == \"ftp\"
         unreachable;
     }
     __v0_22 = struct.new "wasi:http/types.wado//Scheme::Other" { discriminant: 2, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wss"), used: 3 } };
-    let __match_scrut_9: ref "wasi:http/types.wado//Scheme";
-    __match_scrut_9 = __v0_22;
-    __v1_23 = (if __match_scrut_9.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+    __v1_23 = (if __v0_22.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http"), used: 4 };
-    } else if __match_scrut_9.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+    } else if __v0_22.discriminant == 1 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("https"), used: 5 };
     } else {
-        s_363 = ref.cast "wasi:http/types.wado//Scheme::Other"(__match_scrut_9).payload_0;
+        s_363 = ref.cast "wasi:http/types.wado//Scheme::Other"(__v0_22).payload_0;
         s_363;
     });
     __cond_24 = __inline_String_Eq__eq_103: block -> bool {
@@ -1268,33 +1241,30 @@ condition: scheme_name(Scheme::Other(\"wss\")) == \"wss\"
     req_scheme = "wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/__cm_binding__Request_get_scheme"(request);
     if ref.is_null(req_scheme) == 0 {
         s_26 = ref.as_non_null(req_scheme);
-        let __match_scrut_11: ref "wasi:http/types.wado//Scheme";
-        __match_scrut_11 = s_26;
-        name = (if __match_scrut_11.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+        name = (if s_26.discriminant == 0 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http"), used: 4 };
-        } else if __match_scrut_11.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+        } else if s_26.discriminant == 1 -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("https"), used: 5 };
         } else {
-            s_380 = ref.cast "wasi:http/types.wado//Scheme::Other"(__match_scrut_11).payload_0;
+            s_380 = ref.cast "wasi:http/types.wado//Scheme::Other"(s_26).payload_0;
             s_380;
         });
-        __v0_28 = name;
         __v1_29 = __inline_String_Eq__eq_115: block -> bool {
             other_382 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http"), used: 4 };
-            len_a_383 = __v0_28.used;
+            len_a_383 = name.used;
             if len_a_383 != other_382.used {
                 break __inline_String_Eq__eq_115: 0;
             }
-            break __inline_String_Eq__eq_115: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_28.repr, other_382.repr, len_a_383);
+            break __inline_String_Eq__eq_115: "core:prelude/string.wado/String^Eq::eq_bytes"(name.repr, other_382.repr, len_a_383);
             unreachable;
         };
         __v2 = __inline_String_Eq__eq_120: block -> bool {
             other_389 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("https"), used: 5 };
-            len_a_390 = __v0_28.used;
+            len_a_390 = name.used;
             if len_a_390 != other_389.used {
                 break __inline_String_Eq__eq_120: 0;
             }
-            break __inline_String_Eq__eq_120: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_28.repr, other_389.repr, len_a_390);
+            break __inline_String_Eq__eq_120: "core:prelude/string.wado/String^Eq::eq_bytes"(name.repr, other_389.repr, len_a_390);
             unreachable;
         };
         __cond_31 = (if __v1_29 -> i32 {
@@ -1331,7 +1301,7 @@ condition: name == \"http\" || name == \"https\"
                 "core:prelude/string.wado/String::push"(__local_59, 58);
                 "core:prelude/string.wado/String::push"(__local_59, 32);
                 __local_60 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_59 };
-                "core:prelude/format.wado/String^Inspect::inspect"(__v0_28, __local_60);
+                "core:prelude/format.wado/String^Inspect::inspect"(name, __local_60);
                 "core:prelude/string.wado/String::push"(__local_59, 10);
                 "core:prelude/string.wado/String::push_str"(__local_59, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("name == \"http\": "), used: 16 });
                 __local_60 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_59 };
@@ -1363,17 +1333,13 @@ condition: name == \"http\" || name == \"https\"
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    resp_trailers_future = __mv_lo_1;
-    resp_trailers_tx = __mv_hi_1;
     let __pair_temp_2: i64;
     __pair_temp_2 = "wasi/stream-new"();
     let __mv_lo_2: i32;
     let __mv_hi_2: i32;
     multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
-    resp_rx = __mv_lo_2;
-    resp_tx = __mv_hi_2;
     resp_headers = "wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/__cm_binding__Fields_new"();
-    __pattern_temp_2 = "wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/__cm_binding__Response_new"(resp_headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: resp_rx }, resp_trailers_future);
+    __pattern_temp_2 = "wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/__cm_binding__Response_new"(resp_headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: __mv_lo_2 }, __mv_lo_1);
     response = __pattern_temp_2.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -1687,27 +1653,25 @@ condition: name == \"http\" || name == \"https\"
         }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    "core:internal/cm_stream_write_u8"(resp_tx, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(__inline_String__bytes_136: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
+    "core:internal/cm_stream_write_u8"(__mv_hi_2, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(__inline_String__bytes_136: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
         self_412 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
         break __inline_String__bytes_136: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_412.repr, used: self_412.used, index: 0 };
         unreachable;
     }));
-    "wasi/stream-drop-writable"(resp_tx);
+    "wasi/stream-drop-writable"(__mv_hi_2);
     let __fw_write_ptr_3: i32;
-    let __fw_handle_3: i32;
     let __fw_result_3: i32;
-    __fw_handle_3 = resp_trailers_tx;
     __fw_write_ptr_3 = "mem/realloc"(0, 0, 8, 40);
     builtin::store_i64(__fw_write_ptr_3, 0_i64);
     builtin::store_i64[8](__fw_write_ptr_3, 0_i64);
     builtin::store_i64[16](__fw_write_ptr_3, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_3, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_3, 0_i64);
-    __fw_result_3 = "wasi/future-write"(__fw_handle_3, __fw_write_ptr_3);
+    __fw_result_3 = "wasi/future-write"(__mv_hi_1, __fw_write_ptr_3);
     if __fw_result_3 == -1 {
         let __fw_evt_3: i32;
         __fw_result_3 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__fw_handle_3, __fw_result_3);
+        "wasi/waitable-join"(__mv_hi_1, __fw_result_3);
         __fw_evt_3 = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(__fw_result_3, __fw_evt_3));
         drop("mem/realloc"(__fw_evt_3, 8, 4, 0));
@@ -1877,21 +1841,15 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:internal/log_stderr"(message) {
-    let rx: i32;
-    let tx: i32;
     let future_handle: i32;
-    let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
-    "core:internal/write_string_to_stream"(tx, message, 1);
-    future = future_handle;
-    "wasi/future-drop-readable:transmission-cli"(future);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__mv_lo_1);
+    "core:internal/write_string_to_stream"(__mv_hi_1, message, 1);
+    "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 
 fn "core:internal/panic"(message) {
@@ -2151,7 +2109,6 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
     let b2_8: u32;
     let b3: u32;
     let code_10: u32;
-    let value_11: u32;
     if self.byte_index >= self.used {
         return 1, 0;
     }
@@ -2159,8 +2116,7 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
     self.byte_index = self.byte_index + 1;
     if b0 <u 128 {
         return 0, __inline_char__from_u32_unchecked_0: block -> char {
-            value_11 = b0;
-            break __inline_char__from_u32_unchecked_0: value_11;
+            break __inline_char__from_u32_unchecked_0: b0;
             unreachable;
         };
     }
@@ -2186,28 +2142,26 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    let code: u32;
-    code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
-    if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code & 255);
+    if c <u 128 {
+        builtin::array_set_u8(self.repr, self.used, c & 255);
         self.used = self.used + 1;
-    } else if code <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
+    } else if c <u 2048 {
+        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
         self.used = self.used + 2;
-    } else if code <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
+    } else if c <u 65536 {
+        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
 }
@@ -2218,16 +2172,14 @@ fn "wasi:http/types.wado/Scheme^Inspect::inspect"(self, f) {
     let s_6: ref "core:prelude/string.wado//String";
     let s_8: ref "core:prelude/string.wado//String";
     let s_10: ref "core:prelude/string.wado//String";
-    let __match_scrut_0: ref "wasi:http/types.wado//Scheme";
-    __match_scrut_0 = self;
-    if __match_scrut_0.discriminant == 0 {
+    if self.discriminant == 0 {
         s_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Scheme::Http"), used: 12 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_4);
-    } else if __match_scrut_0.discriminant == 1 {
+    } else if self.discriminant == 1 {
         s_6 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Scheme::Https"), used: 13 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_6);
     } else {
-        __inspect_Other_2 = ref.cast "wasi:http/types.wado//Scheme::Other"(__match_scrut_0).payload_0;
+        __inspect_Other_2 = ref.cast "wasi:http/types.wado//Scheme::Other"(self).payload_0;
         s_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Scheme::Other("), used: 14 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_8);
         "core:prelude/format.wado/String^Inspect::inspect"(__inspect_Other_2, f);
@@ -2272,9 +2224,7 @@ fn "core:prelude/format.wado/Formatter::pad"(self, content) {
     }
     padding = self.width - content_len;
     align = self.align;
-    let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
-    __match_scrut_0 = align;
-    if __match_scrut_0 == 0 {
+    if align == 0 {
         "core:prelude/string.wado/String::push_str"(self.buf, content);
         "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
     } else if align == 1 {
@@ -2334,9 +2284,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
     align = self.align;
-    let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
-    __match_scrut_0 = align;
-    if __match_scrut_0 == 0 {
+    if align == 0 {
         if sign_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
@@ -2373,15 +2321,12 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 
 fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __iter_2: ref "core:prelude/string.wado//StrCharIter";
-    let c_3: char;
     let self_7: ref "core:prelude/string.wado//StrCharIter";
-    let self_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
     __iter_2 = __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         self_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
-            self_8 = self;
-            break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: self_8.repr, used: self_8.used, byte_index: 0 };
+            break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
             unreachable;
         };
         break __inline_core_prelude_string_wado_StrCharIter_IntoIterator__into_iter_1: self_7;
@@ -2394,24 +2339,23 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
             let __sroa___iflet_4_payload_0: char;
             multivalue_bind [__sroa___iflet_4_discriminant, __sroa___iflet_4_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
             if __sroa___iflet_4_discriminant == 0 {
-                c_3 = __sroa___iflet_4_payload_0;
-                if c_3 == 34 {
+                if __sroa___iflet_4_payload_0 == 34 {
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 34);
-                } else if c_3 == 92 {
+                } else if __sroa___iflet_4_payload_0 == 92 {
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
-                } else if c_3 == 10 {
+                } else if __sroa___iflet_4_payload_0 == 10 {
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 110);
-                } else if c_3 == 13 {
+                } else if __sroa___iflet_4_payload_0 == 13 {
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 114);
-                } else if c_3 == 9 {
+                } else if __sroa___iflet_4_payload_0 == 9 {
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 116);
                 } else {
-                    "core:prelude/string.wado/String::push"(_licm_buf_33, c_3);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, __sroa___iflet_4_payload_0);
                 }
             } else {
                 break b229;

@@ -69,24 +69,20 @@ fn "wado-compiler/tests/fixtures/enum_impl_basic.wado/run"() with Stdout {
     let n: "wado-compiler/tests/fixtures/enum_impl_basic.wado//enum:Season";
     let w: "wado-compiler/tests/fixtures/enum_impl_basic.wado//enum:Season";
     s = 0;
-    let __match_scrut_0: "wado-compiler/tests/fixtures/enum_impl_basic.wado//enum:Season";
-    __match_scrut_0 = s;
-    if (if __match_scrut_0 == 0 -> bool {
+    if (if s == 0 -> bool {
         1;
-    } else if __match_scrut_0 == 1 -> bool {
+    } else if s == 1 -> bool {
         1;
     } else {
         0;
     }) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("spring is warm"), used: 14 });
     }
-    let __match_scrut_1: "wado-compiler/tests/fixtures/enum_impl_basic.wado//enum:Season";
-    __match_scrut_1 = s;
-    n = (if __match_scrut_1 == 0 -> "wado-compiler/tests/fixtures/enum_impl_basic.wado//enum:Season" {
+    n = (if s == 0 -> "wado-compiler/tests/fixtures/enum_impl_basic.wado//enum:Season" {
         1;
-    } else if __match_scrut_1 == 1 -> "wado-compiler/tests/fixtures/enum_impl_basic.wado//enum:Season" {
+    } else if s == 1 -> "wado-compiler/tests/fixtures/enum_impl_basic.wado//enum:Season" {
         2;
-    } else if __match_scrut_1 == 2 -> "wado-compiler/tests/fixtures/enum_impl_basic.wado//enum:Season" {
+    } else if s == 2 -> "wado-compiler/tests/fixtures/enum_impl_basic.wado//enum:Season" {
         3;
     } else {
         0;
@@ -96,11 +92,9 @@ fn "wado-compiler/tests/fixtures/enum_impl_basic.wado/run"() with Stdout {
     } else {
     }
     w = 3;
-    let __match_scrut_3: "wado-compiler/tests/fixtures/enum_impl_basic.wado//enum:Season";
-    __match_scrut_3 = w;
-    if (if __match_scrut_3 == 0 -> bool {
+    if (if w == 0 -> bool {
         1;
-    } else if __match_scrut_3 == 1 -> bool {
+    } else if w == 1 -> bool {
         1;
     } else {
         0;
@@ -138,18 +132,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/enum_impl_basic.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/enum_impl_basic.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
