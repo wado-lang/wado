@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779257435980,
+  "lastUpdate": 1779278052396,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -23920,6 +23920,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 17108,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 473871,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9450a7438cbfa34d3f710c22271facc29c17a19f",
+          "message": "Merge pull request #1132 from wado-lang/claude/optimize-gale-gen-performance-AOKBj\n\nperf(optimize): add value_copy_demote pass + gale gen optimizations",
+          "timestamp": "2026-05-20T20:47:01+09:00",
+          "tree_id": "2b3c17e8bb0318668a33fe3b4fa1ad6ef4f8913e",
+          "url": "https://github.com/wado-lang/wado/commit/9450a7438cbfa34d3f710c22271facc29c17a19f"
+        },
+        "date": 1779278052184,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1911,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 10111,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17206,
             "unit": "bytes"
           },
           {
