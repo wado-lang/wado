@@ -73,8 +73,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/stream_write_hello.wado/run"() with Stdout {
-    let rx: i32;
-    let tx: i32;
     let __b_2: ref "core:prelude//Array<u8>";
     let data: ref "core:prelude//Array<u8>";
     let __pair_temp_1: i64;
@@ -82,16 +80,14 @@ fn "wado-compiler/tests/fixtures/stream_write_hello.wado/run"() with Stdout {
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    "wasi/stream-drop-readable"(rx);
+    "wasi/stream-drop-readable"(__mv_lo_1);
     data = __seq_lit: block -> ref "core:prelude//Array<u8>" {
         __b_2 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 10), used: 6 };
         break __seq_lit: __b_2;
         unreachable;
     };
-    "core:internal/cm_stream_write_u8"(tx, data);
-    "wasi/stream-drop-writable"(tx);
+    "core:internal/cm_stream_write_u8"(__mv_hi_1, data);
+    "wasi/stream-drop-writable"(__mv_hi_1);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("write ok"), used: 8 });
 }
 
@@ -122,18 +118,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/stream_write_hello.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/stream_write_hello.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

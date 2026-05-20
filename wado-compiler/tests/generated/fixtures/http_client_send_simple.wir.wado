@@ -333,8 +333,6 @@ import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 
 fn "wado-compiler/tests/fixtures/http_client_send_simple.wado/handle"() with Client {
     let headers: i32;
-    let trailers_future: i32;
-    let trailers_tx: i32;
     let out_req: i32;
     let upstream: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_1: i32;
@@ -477,9 +475,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_simple.wado/handle"() with Cli
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    trailers_future = __mv_lo_1;
-    trailers_tx = __mv_hi_1;
-    __pattern_temp_1 = "wado-compiler/tests/fixtures/http_client_send_simple.wado/__cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 });
+    __pattern_temp_1 = "wado-compiler/tests/fixtures/http_client_send_simple.wado/__cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_1, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 });
     out_req = __pattern_temp_1.0;
     drop("wado-compiler/tests/fixtures/http_client_send_simple.wado/__cm_binding__Request_set_scheme"(out_req, struct.new "wasi:http/types.wado//Scheme" { 0 }));
     drop("wado-compiler/tests/fixtures/http_client_send_simple.wado/__cm_binding__Request_set_authority"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("localhost"), used: 9 }));
@@ -797,20 +793,18 @@ fn "wado-compiler/tests/fixtures/http_client_send_simple.wado/handle"() with Cli
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     let __fw_write_ptr_2: i32;
-    let __fw_handle_2: i32;
     let __fw_result_2: i32;
-    __fw_handle_2 = trailers_tx;
     __fw_write_ptr_2 = "mem/realloc"(0, 0, 8, 40);
     builtin::store_i64(__fw_write_ptr_2, 0_i64);
     builtin::store_i64[8](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_2, 0_i64);
-    __fw_result_2 = "wasi/future-write"(__fw_handle_2, __fw_write_ptr_2);
+    __fw_result_2 = "wasi/future-write"(__mv_hi_1, __fw_write_ptr_2);
     if __fw_result_2 == -1 {
         let __fw_evt_2: i32;
         __fw_result_2 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__fw_handle_2, __fw_result_2);
+        "wasi/waitable-join"(__mv_hi_1, __fw_result_2);
         __fw_evt_2 = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(__fw_result_2, __fw_evt_2));
         drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
@@ -1380,18 +1374,14 @@ fn "core:internal/cm_waitable_set_wait"(ws) {
 
 fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"(self) {
     let handle_1: i32;
-    let raw: i32;
     let ws_3: i32;
     let result: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
-    let handle_6: i32;
     handle_1 = self.__cm_packed >> 4;
     if handle_1 != 0 {
-        raw = handle_1;
         ws_3 = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            handle_6 = raw;
-            "wasi/waitable-join"(handle_6, ws_3);
-            break __inline_cm_waitable_join_0: handle_6;
+            "wasi/waitable-join"(handle_1, ws_3);
+            break __inline_cm_waitable_join_0: handle_1;
             unreachable;
         });
         b140: block {
@@ -1406,7 +1396,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/t
                 continue l141;
             };
         };
-        "wasi/subtask-drop"(raw);
+        "wasi/subtask-drop"(handle_1);
         "wasi/waitable-set-drop"(ws_3);
     }
     result = block -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>" {

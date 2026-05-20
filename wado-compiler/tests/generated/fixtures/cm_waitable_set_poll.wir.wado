@@ -269,12 +269,8 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"() {
     let ws: i32;
     let event: ref null "core:prelude/types.wado//WaitEvent";
-    let trailers_future_2: i32;
-    let trailers_tx_3: i32;
     let headers_4: i32;
     let response_5: i32;
-    let trailers_future_7: i32;
-    let trailers_tx_8: i32;
     let headers_9: i32;
     let response_10: i32;
     let __local_13: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
@@ -556,10 +552,8 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"() {
         let __mv_lo_1: i32;
         let __mv_hi_1: i32;
         multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-        trailers_future_2 = __mv_lo_1;
-        trailers_tx_3 = __mv_hi_1;
         headers_4 = "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Fields_new"();
-        __local_317 = "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Response_new"(headers_4, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future_2);
+        __local_317 = "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Response_new"(headers_4, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_1);
         response_5 = __local_317.0;
         __local_13 = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response_5 };
         __local_15 = 0;
@@ -874,20 +868,18 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"() {
             "wasi/task-return"(1, __local_15, __local_16, __local_17, __local_18, __local_19, __local_20, __local_21);
         }
         let __fw_write_ptr_2: i32;
-        let __fw_handle_2: i32;
         let __fw_result_2: i32;
-        __fw_handle_2 = trailers_tx_3;
         __fw_write_ptr_2 = "mem/realloc"(0, 0, 8, 40);
         builtin::store_i64(__fw_write_ptr_2, 0_i64);
         builtin::store_i64[8](__fw_write_ptr_2, 0_i64);
         builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
         builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
         builtin::store_i64[32](__fw_write_ptr_2, 0_i64);
-        __fw_result_2 = "wasi/future-write"(__fw_handle_2, __fw_write_ptr_2);
+        __fw_result_2 = "wasi/future-write"(__mv_hi_1, __fw_write_ptr_2);
         if __fw_result_2 == -1 {
             let __fw_evt_2: i32;
             __fw_result_2 = "wasi/waitable-set-new"();
-            "wasi/waitable-join"(__fw_handle_2, __fw_result_2);
+            "wasi/waitable-join"(__mv_hi_1, __fw_result_2);
             __fw_evt_2 = "mem/realloc"(0, 0, 4, 8);
             drop("wasi/waitable-set-wait"(__fw_result_2, __fw_evt_2));
             drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
@@ -901,10 +893,8 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"() {
     let __mv_lo_3: i32;
     let __mv_hi_3: i32;
     multivalue_bind [__mv_lo_3, __mv_hi_3] = (builtin::i32_wrap_i64(__pair_temp_3); builtin::i32_wrap_i64(__pair_temp_3 >>u 32_i64));
-    trailers_future_7 = __mv_lo_3;
-    trailers_tx_8 = __mv_hi_3;
     headers_9 = "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Fields_new"();
-    __pattern_temp_3 = "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Response_new"(headers_9, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future_7);
+    __pattern_temp_3 = "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/__cm_binding__Response_new"(headers_9, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_3);
     response_10 = __pattern_temp_3.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response_10 };
     __tv_1 = 0;
@@ -1219,20 +1209,18 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_poll.wado/handle"() {
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     let __fw_write_ptr_4: i32;
-    let __fw_handle_4: i32;
     let __fw_result_4: i32;
-    __fw_handle_4 = trailers_tx_8;
     __fw_write_ptr_4 = "mem/realloc"(0, 0, 8, 40);
     builtin::store_i64(__fw_write_ptr_4, 0_i64);
     builtin::store_i64[8](__fw_write_ptr_4, 0_i64);
     builtin::store_i64[16](__fw_write_ptr_4, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_4, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_4, 0_i64);
-    __fw_result_4 = "wasi/future-write"(__fw_handle_4, __fw_write_ptr_4);
+    __fw_result_4 = "wasi/future-write"(__mv_hi_3, __fw_write_ptr_4);
     if __fw_result_4 == -1 {
         let __fw_evt_4: i32;
         __fw_result_4 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__fw_handle_4, __fw_result_4);
+        "wasi/waitable-join"(__mv_hi_3, __fw_result_4);
         __fw_evt_4 = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(__fw_result_4, __fw_evt_4));
         drop("mem/realloc"(__fw_evt_4, 8, 4, 0));

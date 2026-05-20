@@ -337,9 +337,7 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_tuple
     a_0 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 };
     b_1 = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     pair = struct.new "tuple//[Option<i32>, Option<i32>]" { 0: a_0, 1: b_1 };
-    let __match_scrut_0: ref "tuple//[Option<i32>, Option<i32>]";
-    __match_scrut_0 = pair;
-    result = (if __local_26 = __match_scrut_0.0; __local_27 = __match_scrut_0.1; (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_26) -> i32 {
+    result = (if __local_26 = pair.0; __local_27 = pair.1; (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_26) -> i32 {
         ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_27);
     } else {
         0;
@@ -368,8 +366,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_tuple
             break __tmpl: __local_14;
             unreachable;
         };
-    __local_28 = __match_scrut_0.0;
-    __local_29 = __match_scrut_0.1;
+    __local_28 = pair.0;
+    __local_29 = pair.1;
     } else if (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_28) -> i32 {
         __local_29.discriminant == 1;
     } else {
@@ -393,8 +391,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_tuple
             break __tmpl: __local_16;
             unreachable;
         };
-    __local_30 = __match_scrut_0.0;
-    __local_31 = __match_scrut_0.1;
+    __local_30 = pair.0;
+    __local_31 = pair.1;
     } else if (if (if __local_30.discriminant == 1 -> i32 {
         ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_31);
     } else {
@@ -419,8 +417,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_tuple
             break __tmpl: __local_18;
             unreachable;
         };
-    __local_32 = __match_scrut_0.0;
-    __local_33 = __match_scrut_0.1;
+    __local_32 = pair.0;
+    __local_33 = pair.1;
     } else if (if __local_32.discriminant == 1 -> i32 {
         __local_33.discriminant == 1;
     } else {
@@ -432,9 +430,7 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_tuple
     });
     "core:cli/println"(result);
     pair2 = struct.new "tuple//[Option<i32>, Option<i32>]" { 0: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 3 }, 1: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 7 } };
-    let __match_scrut_1: ref "tuple//[Option<i32>, Option<i32>]";
-    __match_scrut_1 = pair2;
-    result2 = (if __local_34 = __match_scrut_1.0; __local_35 = __match_scrut_1.1; (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_34) -> i32 {
+    result2 = (if __local_34 = pair2.0; __local_35 = pair2.1; (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_34) -> i32 {
         ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_35);
     } else {
         0;
@@ -463,8 +459,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_tuple
             break __tmpl: __local_20;
             unreachable;
         };
-    __local_36 = __match_scrut_1.0;
-    __local_37 = __match_scrut_1.1;
+    __local_36 = pair2.0;
+    __local_37 = pair2.1;
     } else if (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_36) -> i32 {
         __local_37.discriminant == 1;
     } else {
@@ -488,8 +484,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_tuple
             break __tmpl: __local_22;
             unreachable;
         };
-    __local_38 = __match_scrut_1.0;
-    __local_39 = __match_scrut_1.1;
+    __local_38 = pair2.0;
+    __local_39 = pair2.1;
     } else if (if (if __local_38.discriminant == 1 -> i32 {
         ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_39);
     } else {
@@ -514,8 +510,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_tuple
             break __tmpl: __local_24;
             unreachable;
         };
-    __local_40 = __match_scrut_1.0;
-    __local_41 = __match_scrut_1.1;
+    __local_40 = pair2.0;
+    __local_41 = pair2.1;
     } else if (if __local_40.discriminant == 1 -> i32 {
         __local_41.discriminant == 1;
     } else {
@@ -550,10 +546,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/tuple_inside_variant
     let f_34: ref "core:prelude/format.wado//Formatter";
     let f_39: ref "core:prelude/format.wado//Formatter";
     s = struct.new "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect" { discriminant: 1, payload_0: struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 } };
-    let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape";
-    __match_scrut_0 = s;
-    desc = (if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Circle"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
-        r = ref.cast "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Circle"(__match_scrut_0).payload_0;
+    desc = (if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Circle"(s) -> ref "core:prelude/string.wado//String" {
+        r = ref.cast "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Circle"(s).payload_0;
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("circle r="), used: 9 });
@@ -562,9 +556,9 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/tuple_inside_variant
             break __tmpl: __local_10;
             unreachable;
         };
-    } else if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
+    } else if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect"(s) -> ref "core:prelude/string.wado//String" {
         let __variant_payload_1: ref "tuple//[i32, i32]";
-        __variant_payload_1 = ref.cast "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect"(__match_scrut_0).payload_0;
+        __variant_payload_1 = ref.cast "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect"(s).payload_0;
         w = __variant_payload_1.0;
         h = __variant_payload_1.1;
         __tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -584,22 +578,20 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/tuple_inside_variant
             break __tmpl: __local_12;
             unreachable;
         };
-    } else if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Labeled"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
+    } else if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Labeled"(s) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("labeled"), used: 7 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("point"), used: 5 };
     });
     "core:cli/println"(desc);
     s2 = struct.new "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Labeled" { discriminant: 2, payload_0: struct.new "tuple//[String, Point]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("origin"), used: 6 }, 1: struct.new "wado-compiler/tests/fixtures/match_nested_patterns.wado//Point" { x: 0, y: 0 } } };
-    let __match_scrut_1: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape";
-    __match_scrut_1 = s2;
-    desc2 = (if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Circle"(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
+    desc2 = (if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Circle"(s2) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("circle"), used: 6 };
-    } else if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect"(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
+    } else if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect"(s2) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rect"), used: 4 };
-    } else if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Labeled"(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
+    } else if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Labeled"(s2) -> ref "core:prelude/string.wado//String" {
         let __variant_payload_2: ref "tuple//[String, Point]";
-        __variant_payload_2 = ref.cast "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Labeled"(__match_scrut_1).payload_0;
+        __variant_payload_2 = ref.cast "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Labeled"(s2).payload_0;
         name = __variant_payload_2.0;
         let __tuple_elem_3: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Point";
         __tuple_elem_3 = __variant_payload_2.1;
@@ -635,9 +627,7 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_struc
     let __local_5: ref "core:prelude/types.wado//Option<i32>";
     let __local_6: ref "core:prelude/types.wado//Option<i32>";
     t = struct.new "wado-compiler/tests/fixtures/match_nested_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test"), used: 4 }, value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 99 } };
-    let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Tagged";
-    __match_scrut_0 = t;
-    result = (if __local_5 = __match_scrut_0.value; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_5) -> i32 {
+    result = (if __local_5 = t.value; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_5) -> i32 {
         n = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__local_5).payload_0;
         1;
     } else {
@@ -655,7 +645,7 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_struc
             break __tmpl: __local_3;
             unreachable;
         };
-    __local_6 = __match_scrut_0.value;
+    __local_6 = t.value;
     } else if __local_6.discriminant == 1 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("empty"), used: 5 };
     } else {
@@ -665,13 +655,11 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_struc
 }
 
 fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/literal_in_tuple"() with Stdout {
-    let pair: ref "tuple//[i32, i32]";
     let y_1: i32;
     let x_2: i32;
     let x_3: i32;
     let y_4: i32;
     let desc: ref "core:prelude/string.wado//String";
-    let pair2: ref "tuple//[i32, i32]";
     let y_7: i32;
     let x_8: i32;
     let x_9: i32;
@@ -701,17 +689,14 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/literal_in_tuple"() 
     let f_52: ref "core:prelude/format.wado//Formatter";
     let f_70: ref "core:prelude/format.wado//Formatter";
     let f_75: ref "core:prelude/format.wado//Formatter";
-    pair = struct.new "tuple//[i32, i32]" { 0: 1, 1: 2 };
-    let __match_scrut_0: ref "tuple//[i32, i32]";
-    __match_scrut_0 = pair;
-    desc = (if __local_24 = __match_scrut_0.0; __local_25 = __match_scrut_0.1; (if __local_24 == 0 -> i32 {
+    desc = (if __local_24 = 1; __local_25 = 2; (if __local_24 == 0 -> i32 {
         __local_25 == 0;
     } else {
         0;
     }) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("origin"), used: 6 };
-    __local_26 = __match_scrut_0.0;
-    y_1 = __match_scrut_0.1;
+    __local_26 = 1;
+    y_1 = 2;
     } else if __local_26 == 0 -> ref "core:prelude/string.wado//String" {
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
@@ -728,8 +713,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/literal_in_tuple"() 
             break __tmpl: __local_12;
             unreachable;
         };
-    x_2 = __match_scrut_0.0;
-    __local_27 = __match_scrut_0.1;
+    x_2 = 1;
+    __local_27 = 2;
     } else if __local_27 == 0 -> ref "core:prelude/string.wado//String" {
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
@@ -747,8 +732,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/literal_in_tuple"() 
             unreachable;
         };
     } else {
-        x_3 = __match_scrut_0.0;
-        y_4 = __match_scrut_0.1;
+        x_3 = 1;
+        y_4 = 2;
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 };
             "core:prelude/string.wado/String::push"(__local_16, 112);
@@ -770,17 +755,14 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/literal_in_tuple"() 
         };
     });
     "core:cli/println"(desc);
-    pair2 = struct.new "tuple//[i32, i32]" { 0: 0, 1: 5 };
-    let __match_scrut_1: ref "tuple//[i32, i32]";
-    __match_scrut_1 = pair2;
-    desc2 = (if __local_28 = __match_scrut_1.0; __local_29 = __match_scrut_1.1; (if __local_28 == 0 -> i32 {
+    desc2 = (if __local_28 = 0; __local_29 = 5; (if __local_28 == 0 -> i32 {
         __local_29 == 0;
     } else {
         0;
     }) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("origin"), used: 6 };
-    __local_30 = __match_scrut_1.0;
-    y_7 = __match_scrut_1.1;
+    __local_30 = 0;
+    y_7 = 5;
     } else if __local_30 == 0 -> ref "core:prelude/string.wado//String" {
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
@@ -797,8 +779,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/literal_in_tuple"() 
             break __tmpl: __local_18;
             unreachable;
         };
-    x_8 = __match_scrut_1.0;
-    __local_31 = __match_scrut_1.1;
+    x_8 = 0;
+    __local_31 = 5;
     } else if __local_31 == 0 -> ref "core:prelude/string.wado//String" {
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
@@ -816,8 +798,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/literal_in_tuple"() 
             unreachable;
         };
     } else {
-        x_9 = __match_scrut_1.0;
-        y_10 = __match_scrut_1.1;
+        x_9 = 0;
+        y_10 = 5;
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 };
             "core:prelude/string.wado/String::push"(__local_22, 112);
@@ -842,7 +824,6 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/literal_in_tuple"() 
 }
 
 fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/enum_inside_tuple"() with Stdout {
-    let pair: ref "tuple//[Color, i32]";
     let n_1: i32;
     let n_2: i32;
     let n_3: i32;
@@ -856,10 +837,7 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/enum_inside_tuple"()
     let __local_11: "wado-compiler/tests/fixtures/match_nested_patterns.wado//enum:Color";
     let __local_12: "wado-compiler/tests/fixtures/match_nested_patterns.wado//enum:Color";
     let __local_13: "wado-compiler/tests/fixtures/match_nested_patterns.wado//enum:Color";
-    pair = struct.new "tuple//[Color, i32]" { 0: 0, 1: 100 };
-    let __match_scrut_0: ref "tuple//[Color, i32]";
-    __match_scrut_0 = pair;
-    desc = (if __local_11 = __match_scrut_0.0; n_1 = __match_scrut_0.1; __local_11 == 0 -> ref "core:prelude/string.wado//String" {
+    desc = (if __local_11 = 0; n_1 = 100; __local_11 == 0 -> ref "core:prelude/string.wado//String" {
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
             "core:prelude/string.wado/String::push"(__local_5, 114);
@@ -872,8 +850,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/enum_inside_tuple"()
             break __tmpl: __local_5;
             unreachable;
         };
-    __local_12 = __match_scrut_0.0;
-    n_2 = __match_scrut_0.1;
+    __local_12 = 0;
+    n_2 = 100;
     } else if __local_12 == 1 -> ref "core:prelude/string.wado//String" {
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
@@ -889,8 +867,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/enum_inside_tuple"()
             break __tmpl: __local_7;
             unreachable;
         };
-    __local_13 = __match_scrut_0.0;
-    n_3 = __match_scrut_0.1;
+    __local_13 = 0;
+    n_3 = 100;
     } else if __local_13 == 2 -> ref "core:prelude/string.wado//String" {
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
@@ -918,49 +896,41 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/or_pattern_nested"()
     let desc_5: ref "core:prelude/string.wado//String";
     let desc_7: ref "core:prelude/string.wado//String";
     let desc_9: ref "core:prelude/string.wado//String";
-    let __sroa___tuple_3_0: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape";
-    let __sroa___tuple_3_1: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape";
-    let __sroa___tuple_3_2: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape";
     s1 = struct.new "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Circle" { discriminant: 0, payload_0: 1 };
     s2 = struct.new "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape" { 3 };
     s3 = struct.new "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect" { discriminant: 1, payload_0: struct.new "tuple//[i32, i32]" { 0: 2, 1: 3 } };
-    __sroa___tuple_3_0 = s1;
-    __sroa___tuple_3_1 = s2;
-    __sroa___tuple_3_2 = s3;
-    let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape";
-    __match_scrut_0 = __sroa___tuple_3_0;
-    desc_5 = (if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Circle"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
+    desc_5 = (if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Circle"(s1) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("simple"), used: 6 };
-    } else if __match_scrut_0.discriminant == 3 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("simple"), used: 6 };
-    } else if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("complex"), used: 7 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("complex"), used: 7 };
+        block -> ref "core:prelude/string.wado//String" {
+            if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect"(s1) -> ref "core:prelude/string.wado//String" {
+                struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("complex"), used: 7 };
+            } else {
+                struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("complex"), used: 7 };
+            }
+        };
     });
     "core:cli/println"(desc_5);
-    let __match_scrut_1: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape";
-    __match_scrut_1 = __sroa___tuple_3_1;
-    desc_7 = (if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Circle"(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
+    desc_7 = (if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Circle"(s2) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("simple"), used: 6 };
-    } else if __match_scrut_1.discriminant == 3 -> ref "core:prelude/string.wado//String" {
+    } else if s2.discriminant == 3 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("simple"), used: 6 };
-    } else if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect"(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
+    } else if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect"(s2) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("complex"), used: 7 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("complex"), used: 7 };
     });
     "core:cli/println"(desc_7);
-    let __match_scrut_2: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape";
-    __match_scrut_2 = __sroa___tuple_3_2;
-    desc_9 = (if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Circle"(__match_scrut_2) -> ref "core:prelude/string.wado//String" {
+    desc_9 = (if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Circle"(s3) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("simple"), used: 6 };
-    } else if __match_scrut_2.discriminant == 3 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("simple"), used: 6 };
-    } else if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect"(__match_scrut_2) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("complex"), used: 7 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("complex"), used: 7 };
+        block -> ref "core:prelude/string.wado//String" {
+            if ref.test "wado-compiler/tests/fixtures/match_nested_patterns.wado//Shape::Rect"(s3) -> ref "core:prelude/string.wado//String" {
+                struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("complex"), used: 7 };
+            } else {
+                struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("complex"), used: 7 };
+            }
+        };
     });
     "core:cli/println"(desc_9);
 }
@@ -1061,9 +1031,9 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/matches_nested"() wi
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matches tuple: "), used: 15 });
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-        "core:prelude/format.wado/Formatter::pad"(__local_4, (if let __match_scrut_0: ref null "tuple//[i32, i32]"; __match_scrut_0 = opt; (if ref.is_null(__match_scrut_0) == 0 -> bool {
+        "core:prelude/format.wado/Formatter::pad"(__local_4, (if (if ref.is_null(opt) == 0 -> bool {
             let __variant_payload_1: ref "tuple//[i32, i32]";
-            __variant_payload_1 = ref.as_non_null(__match_scrut_0);
+            __variant_payload_1 = ref.as_non_null(opt);
             1;
         } else {
             0;
@@ -1080,9 +1050,9 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/matches_nested"() wi
         __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matches nested: "), used: 16 });
         __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
-        "core:prelude/format.wado/Formatter::pad"(__local_6, (if let __match_scrut_1: ref null "core:prelude/types.wado//Option<i32>"; __match_scrut_1 = opt2; (if ref.is_null(__match_scrut_1) == 0 -> bool {
+        "core:prelude/format.wado/Formatter::pad"(__local_6, (if (if ref.is_null(opt2) == 0 -> bool {
             let __variant_payload_2: ref "core:prelude/types.wado//Option<i32>";
-            __variant_payload_2 = ref.as_non_null(__match_scrut_1);
+            __variant_payload_2 = ref.as_non_null(opt2);
             1;
         } else {
             0;
@@ -1099,9 +1069,9 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/matches_nested"() wi
         __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matches struct: "), used: 16 });
         __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
-        self_23 = struct.new "core:prelude/types.wado//Box<bool>" { value: let __match_scrut_2: ref null "wado-compiler/tests/fixtures/match_nested_patterns.wado//Point"; __match_scrut_2 = opt3; (if ref.is_null(__match_scrut_2) == 0 -> bool {
+        self_23 = struct.new "core:prelude/types.wado//Box<bool>" { value: (if ref.is_null(opt3) == 0 -> bool {
             let __variant_payload_3: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Point";
-            __variant_payload_3 = ref.as_non_null(__match_scrut_2);
+            __variant_payload_3 = ref.as_non_null(opt3);
             let __struct_field_4: i32;
             __struct_field_4 = __variant_payload_3.x;
             1;
@@ -1146,9 +1116,7 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/for_of_with_nested_m
                 __variant_payload_1 = ref.as_non_null(__iflet_12);
                 color = __variant_payload_1.0;
                 n = __variant_payload_1.1;
-                let __match_scrut_1: "wado-compiler/tests/fixtures/match_nested_patterns.wado//enum:Color";
-                __match_scrut_1 = color;
-                desc = (if __match_scrut_1 == 0 -> ref "core:prelude/string.wado//String" {
+                desc = (if color == 0 -> ref "core:prelude/string.wado//String" {
                     __tmpl: block -> ref "core:prelude/string.wado//String" {
                         __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
                         "core:prelude/string.wado/String::push"(__local_6, 82);
@@ -1158,7 +1126,7 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/for_of_with_nested_m
                         break __tmpl: __local_6;
                         unreachable;
                     };
-                } else if __match_scrut_1 == 1 -> ref "core:prelude/string.wado//String" {
+                } else if color == 1 -> ref "core:prelude/string.wado//String" {
                     __tmpl: block -> ref "core:prelude/string.wado//String" {
                         __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
                         "core:prelude/string.wado/String::push"(__local_8, 71);
@@ -1189,7 +1157,6 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/for_of_with_nested_m
 }
 
 fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/struct_literal_in_match"() with Stdout {
-    let p: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Point";
     let y_1: i32;
     let x_2: i32;
     let x_3: i32;
@@ -1207,17 +1174,14 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/struct_literal_in_ma
     let __local_15: i32;
     let f_31: ref "core:prelude/format.wado//Formatter";
     let f_36: ref "core:prelude/format.wado//Formatter";
-    p = struct.new "wado-compiler/tests/fixtures/match_nested_patterns.wado//Point" { x: 0, y: 5 };
-    let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Point";
-    __match_scrut_0 = p;
-    desc = (if __local_12 = __match_scrut_0.x; __local_13 = __match_scrut_0.y; (if __local_12 == 0 -> i32 {
+    desc = (if __local_12 = 0; __local_13 = 5; (if __local_12 == 0 -> i32 {
         __local_13 == 0;
     } else {
         0;
     }) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("origin"), used: 6 };
-    __local_14 = __match_scrut_0.x;
-    y_1 = __match_scrut_0.y;
+    __local_14 = 0;
+    y_1 = 5;
     } else if __local_14 == 0 -> ref "core:prelude/string.wado//String" {
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
@@ -1234,8 +1198,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/struct_literal_in_ma
             break __tmpl: __local_6;
             unreachable;
         };
-    x_2 = __match_scrut_0.x;
-    __local_15 = __match_scrut_0.y;
+    x_2 = 0;
+    __local_15 = 5;
     } else if __local_15 == 0 -> ref "core:prelude/string.wado//String" {
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
@@ -1253,8 +1217,8 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/struct_literal_in_ma
             unreachable;
         };
     } else {
-        x_3 = __match_scrut_0.x;
-        y_4 = __match_scrut_0.y;
+        x_3 = 0;
+        y_4 = 5;
         __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 };
             "core:prelude/string.wado/String::push"(__local_10, 112);
@@ -1302,9 +1266,7 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/nested_struct_match"
     let f_42: ref "core:prelude/format.wado//Formatter";
     let f_47: ref "core:prelude/format.wado//Formatter";
     line = struct.new "wado-compiler/tests/fixtures/match_nested_patterns.wado//Line" { start: struct.new "wado-compiler/tests/fixtures/match_nested_patterns.wado//Point" { x: 0, y: 0 }, end: struct.new "wado-compiler/tests/fixtures/match_nested_patterns.wado//Point" { x: 10, y: 20 } };
-    let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Line";
-    __match_scrut_0 = line;
-    desc = (if __local_12 = __match_scrut_0.start; __local_16 = __match_scrut_0.end; (if __local_15 = __local_12.x; (if __local_15 == 0 -> i32 {
+    desc = (if __local_12 = line.start; __local_16 = line.end; (if __local_15 = __local_12.x; (if __local_15 == 0 -> i32 {
         __local_14 = __local_12.y;
         __local_14 == 0;
     } else {
@@ -1332,11 +1294,11 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/nested_struct_match"
         };
     } else {
         let __struct_field_1: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Point";
-        __struct_field_1 = __match_scrut_0.start;
+        __struct_field_1 = line.start;
         sx = __struct_field_1.x;
         sy = __struct_field_1.y;
         let __struct_field_2: ref "wado-compiler/tests/fixtures/match_nested_patterns.wado//Point";
-        __struct_field_2 = __match_scrut_0.end;
+        __struct_field_2 = line.end;
         ex = __struct_field_2.x;
         ey = __struct_field_2.y;
         __tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -1486,18 +1448,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/match_nested_patterns.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/match_nested_patterns.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -1536,21 +1494,15 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:internal/log_stderr"(message) {
-    let rx: i32;
-    let tx: i32;
     let future_handle: i32;
-    let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
-    "core:internal/write_string_to_stream"(tx, message, 1);
-    future = future_handle;
-    "wasi/future-drop-readable:transmission-cli"(future);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__mv_lo_1);
+    "core:internal/write_string_to_stream"(__mv_hi_1, message, 1);
+    "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 
 fn "core:internal/panic"(message) {
@@ -1847,14 +1799,6 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
     let borrow: u64;
     let c_hi_raw: u64;
     let c_lo_raw: u64;
-    let a1_lo_i: i64;
-    let a1_hi_i: i64;
-    let a1_lo: u64;
-    let a1_hi: u64;
-    let a0_lo_i: i64;
-    let a0_hi_i: i64;
-    let a0_lo: u64;
-    let a0_hi: u64;
     let sum_lo: u64;
     let carry1: u64;
     let top_lo: u64;
@@ -1875,22 +1819,14 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
     let __mv_lo_1: i64;
     let __mv_hi_1: i64;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(c_hi_raw, f);
-    a1_lo_i = __mv_lo_1;
-    a1_hi_i = __mv_hi_1;
-    a1_lo = a1_lo_i;
-    a1_hi = a1_hi_i;
     let __mv_lo_2: i64;
     let __mv_hi_2: i64;
     multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(c_lo_raw, f);
-    a0_lo_i = __mv_lo_2;
-    a0_hi_i = __mv_hi_2;
-    a0_lo = a0_lo_i;
-    a0_hi = a0_hi_i;
-    sum_lo = a1_lo + a0_hi;
-    carry1 = builtin::i64_extend_i32_u(sum_lo <u a1_lo);
+    sum_lo = __mv_lo_1 + __mv_hi_2;
+    carry1 = builtin::i64_extend_i32_u(sum_lo <u __mv_lo_1);
     top_lo = sum_lo;
-    top_hi = a1_hi + carry1;
-    if a0_lo != 0_i64 {
+    top_hi = __mv_hi_1 + carry1;
+    if __mv_lo_2 != 0_i64 {
         top_lo = top_lo + 1_i64;
         if top_lo == 0_i64 {
             top_hi = top_hi + 1_i64;
@@ -1907,22 +1843,14 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
 }
 
 fn "core:prelude/fpfmt.wado/uscale"(x, pm_hi, pm_lo, s) {
-    let mid_i64: i64;
-    let hi_tmp: i64;
-    let mid: u64;
     let hi: u64;
     let sticky: u64;
     let s_mod_64: u64;
     let check_mask: u64;
-    let mid2_i64: i64;
-    let mid2: u64;
     let __mv_lo_1: i64;
     let __mv_hi_1: i64;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(x, pm_hi);
-    mid_i64 = __mv_lo_1;
-    hi_tmp = __mv_hi_1;
-    mid = mid_i64;
-    hi = hi_tmp;
+    hi = __mv_hi_1;
     sticky = 1_i64;
     s_mod_64 = builtin::i64_extend_i32_s(s & 63);
     check_mask = (1_i64 << s_mod_64) - 1_i64;
@@ -1930,17 +1858,13 @@ fn "core:prelude/fpfmt.wado/uscale"(x, pm_hi, pm_lo, s) {
         let __mv_lo_2: i64;
         let __mv_hi_2: i64;
         multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(x, pm_lo);
-        mid2_i64 = __mv_hi_2;
-        mid2 = mid2_i64;
-        sticky = builtin::i64_extend_i32_u((mid - mid2) >u 1_i64);
-        hi = hi - builtin::i64_extend_i32_u(mid <u mid2);
+        sticky = builtin::i64_extend_i32_u((__mv_lo_1 - __mv_hi_2) >u 1_i64);
+        hi = hi - builtin::i64_extend_i32_u(__mv_lo_1 <u __mv_hi_2);
     }
     return (hi >>u builtin::i64_extend_i32_s(s)) | sticky;
 }
 
 fn "core:prelude/fpfmt.wado/fixed_width_for_prec"(f, precision) {
-    let m: u64;
-    let e: i32;
     let log10_e63: i32;
     let p1: i32;
     let lp1: i32;
@@ -1961,10 +1885,8 @@ fn "core:prelude/fpfmt.wado/fixed_width_for_prec"(f, precision) {
     let unpack_mv_mantissa: u64;
     let unpack_mv_exponent: i32;
     multivalue_bind [unpack_mv_mantissa, unpack_mv_exponent] = "core:prelude/fpfmt.wado/unpack64"(f);
-    m = unpack_mv_mantissa;
-    e = unpack_mv_exponent;
     log10_e63 = __inline_log10_pow2_0: block -> i32 {
-        x_21 = e + 63;
+        x_21 = unpack_mv_exponent + 63;
         break __inline_log10_pow2_0: (x_21 * 78913) >> 18;
         unreachable;
     };
@@ -1973,8 +1895,8 @@ fn "core:prelude/fpfmt.wado/fixed_width_for_prec"(f, precision) {
     let pm1_mv_hi: u64;
     let pm1_mv_lo: u64;
     multivalue_bind [pm1_mv_hi, pm1_mv_lo] = "core:prelude/fpfmt.wado/mul_pow10"(p1);
-    s1 = 0 - ((e + lp1) + 3);
-    u1 = "core:prelude/fpfmt.wado/uscale"(m, pm1_mv_hi, pm1_mv_lo, s1);
+    s1 = 0 - ((unpack_mv_exponent + lp1) + 3);
+    u1 = "core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm1_mv_hi, pm1_mv_lo, s1);
     d1_floor = (u1 + 0_i64) >>u 2_i64;
     decimal_pos = (if d1_floor >=u 10_i64 -> i32 {
         2 - p1;
@@ -1992,8 +1914,8 @@ fn "core:prelude/fpfmt.wado/fixed_width_for_prec"(f, precision) {
     let pm_mv_hi: u64;
     let pm_mv_lo: u64;
     multivalue_bind [pm_mv_hi, pm_mv_lo] = "core:prelude/fpfmt.wado/mul_pow10"(p_15);
-    s = 0 - ((e + lp) + 3);
-    u_19 = "core:prelude/fpfmt.wado/uscale"(m, pm_mv_hi, pm_mv_lo, s);
+    s = 0 - ((unpack_mv_exponent + lp) + 3);
+    u_19 = "core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm_mv_hi, pm_mv_lo, s);
     d = ((u_19 + 1_i64) + ((u_19 >>u 2_i64) & 1_i64)) >>u 2_i64;
     if d >=u __inline_Array_u64__IndexValue_i32___index_value_0: block -> u64 {
         self = global:core::prelude/fpfmt.wado::POW10;
@@ -2015,8 +1937,6 @@ fn "core:prelude/fpfmt.wado/fixed_width_for_prec"(f, precision) {
 }
 
 fn "core:prelude/fpfmt.wado/short"(f) {
-    let m: u64;
-    let e_4: i32;
     let min_m: u64;
     let z: i32;
     let p_7: i32;
@@ -2029,8 +1949,6 @@ fn "core:prelude/fpfmt.wado/short"(f) {
     let dmax: u64;
     let d_div_10: u64;
     let can_trim: bool;
-    let digits: u64;
-    let exponent: i32;
     let d: u64;
     let e_22: i32;
     let x_23: i32;
@@ -2043,41 +1961,39 @@ fn "core:prelude/fpfmt.wado/short"(f) {
     let unpack_mv_mantissa: u64;
     let unpack_mv_exponent: i32;
     multivalue_bind [unpack_mv_mantissa, unpack_mv_exponent] = "core:prelude/fpfmt.wado/unpack64"(f);
-    m = unpack_mv_mantissa;
-    e_4 = unpack_mv_exponent;
     min_m = 0_i64;
     z = 11;
     p_7 = 0;
-    m_is_power_of_2 = m == -9223372036854775808_i64;
+    m_is_power_of_2 = unpack_mv_mantissa == -9223372036854775808_i64;
     if (if m_is_power_of_2 -> i32 {
-        e_4 > -1085;
+        unpack_mv_exponent > -1085;
     } else {
         0;
     }) {
         p_7 = 0 - __inline_skewed_0: block -> i32 {
-            e_22 = e_4 + 11;
+            e_22 = unpack_mv_exponent + 11;
             break __inline_skewed_0: ((e_22 * 631305) - 261663) >> 21;
             unreachable;
         };
-        min_m = m - 512_i64;
+        min_m = unpack_mv_mantissa - 512_i64;
     } else {
-        if e_4 < -1085 {
-            z = 11 + (-1085 - e_4);
+        if unpack_mv_exponent < -1085 {
+            z = 11 + (-1085 - unpack_mv_exponent);
         }
         p_7 = 0 - __inline_log10_pow2_1: block -> i32 {
-            x_23 = e_4 + z;
+            x_23 = unpack_mv_exponent + z;
             break __inline_log10_pow2_1: (x_23 * 78913) >> 18;
             unreachable;
         };
-        min_m = m - (1_i64 << builtin::i64_extend_i32_s(z - 1));
+        min_m = unpack_mv_mantissa - (1_i64 << builtin::i64_extend_i32_s(z - 1));
     }
-    max_m = m + (1_i64 << builtin::i64_extend_i32_s(z - 1));
-    odd = builtin::i32_wrap_i64((m >>u builtin::i64_extend_i32_s(z)) & 1_i64);
+    max_m = unpack_mv_mantissa + (1_i64 << builtin::i64_extend_i32_s(z - 1));
+    odd = builtin::i32_wrap_i64((unpack_mv_mantissa >>u builtin::i64_extend_i32_s(z)) & 1_i64);
     lp = (p_7 * 108853) >> 15;
     let pm_mv_hi: u64;
     let pm_mv_lo: u64;
     multivalue_bind [pm_mv_hi, pm_mv_lo] = "core:prelude/fpfmt.wado/mul_pow10"(p_7);
-    s = 0 - ((e_4 + lp) + 3);
+    s = 0 - ((unpack_mv_exponent + lp) + 3);
     dmin = __inline_unrounded_ceil_4: block -> u64 {
         u_26 = __inline_unrounded_nudge_5: block -> u64 {
             u_27 = "core:prelude/fpfmt.wado/uscale"(min_m, pm_mv_hi, pm_mv_lo, s);
@@ -2103,14 +2019,12 @@ fn "core:prelude/fpfmt.wado/short"(f) {
         let __pattern_temp_0_mv_0: u64;
         let __pattern_temp_0_mv_1: i32;
         multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "core:prelude/fpfmt.wado/trim_zeros"(d_div_10, 0 - (p_7 - 1));
-        digits = __pattern_temp_0_mv_0;
-        exponent = __pattern_temp_0_mv_1;
-        return digits, exponent;
+        return __pattern_temp_0_mv_0, __pattern_temp_0_mv_1;
     }
     d = dmin;
     if dmin <u dmax {
         d = __inline_unrounded_round_8: block -> u64 {
-            u_32 = "core:prelude/fpfmt.wado/uscale"(m, pm_mv_hi, pm_mv_lo, s);
+            u_32 = "core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm_mv_hi, pm_mv_lo, s);
             break __inline_unrounded_round_8: ((u_32 + 1_i64) + ((u_32 >>u 2_i64) & 1_i64)) >>u 2_i64;
             unreachable;
         };
@@ -2127,15 +2041,10 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
     let d2: u64;
     let d1b: u64;
     let x_17: u64;
-    let lo_21: i64;
     let x_22: u64;
-    let lo_26: i64;
     let x_27: u64;
-    let lo_31: i64;
     let x_32: u64;
-    let lo_36: i64;
     let x_37: u64;
-    let lo_41: i64;
     xv = x;
     pv = p;
     d1 = __inline_rotate_right_0: block -> u64 {
@@ -2143,8 +2052,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
             let __mv_lo_1: i64;
             let __mv_hi_1: i64;
             multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(xv, -3689348814741910323_i64);
-            lo_21 = __mv_lo_1;
-            break __inline_u64_mul_1: lo_21;
+            break __inline_u64_mul_1: __mv_lo_1;
             unreachable;
         };
         break __inline_rotate_right_0: (x_17 >>u 1_i64) | (x_17 << 63_i64);
@@ -2161,8 +2069,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
             let __mv_lo_2: i64;
             let __mv_hi_2: i64;
             multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(xv, -4078282918271054303_i64);
-            lo_26 = __mv_lo_2;
-            break __inline_u64_mul_3: lo_26;
+            break __inline_u64_mul_3: __mv_lo_2;
             unreachable;
         };
         break __inline_rotate_right_2: (x_22 >>u 8_i64) | (x_22 << 56_i64);
@@ -2177,8 +2084,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
             let __mv_lo_3: i64;
             let __mv_hi_3: i64;
             multivalue_bind [__mv_lo_3, __mv_hi_3] = i64.mul_wide_u(xv, -3276141747490816367_i64);
-            lo_31 = __mv_lo_3;
-            break __inline_u64_mul_5: lo_31;
+            break __inline_u64_mul_5: __mv_lo_3;
             unreachable;
         };
         break __inline_rotate_right_4: (x_27 >>u 4_i64) | (x_27 << 60_i64);
@@ -2193,8 +2099,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
             let __mv_lo_4: i64;
             let __mv_hi_4: i64;
             multivalue_bind [__mv_lo_4, __mv_hi_4] = i64.mul_wide_u(xv, -8116567392432202711_i64);
-            lo_36 = __mv_lo_4;
-            break __inline_u64_mul_7: lo_36;
+            break __inline_u64_mul_7: __mv_lo_4;
             unreachable;
         };
         break __inline_rotate_right_6: (x_32 >>u 2_i64) | (x_32 << 62_i64);
@@ -2209,8 +2114,7 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
             let __mv_lo_5: i64;
             let __mv_hi_5: i64;
             multivalue_bind [__mv_lo_5, __mv_hi_5] = i64.mul_wide_u(xv, -3689348814741910323_i64);
-            lo_41 = __mv_lo_5;
-            break __inline_u64_mul_9: lo_41;
+            break __inline_u64_mul_9: __mv_lo_5;
             unreachable;
         };
         break __inline_rotate_right_8: (x_37 >>u 1_i64) | (x_37 << 63_i64);
@@ -2515,13 +2419,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/f64::fmt_into"(self, f) {
-    let value: f64;
-    let is_special: bool;
-    let is_neg_4: bool;
-    let kind: "core:prelude/fpfmt.wado//enum:SpecialKind";
     let abs_f: f64;
-    let d_8: u64;
-    let p: i32;
     let nd_10: i32;
     let mark: i32;
     let nd_14: i32;
@@ -2532,35 +2430,29 @@ fn "core:prelude/primitive.wado/f64::fmt_into"(self, f) {
         "core:prelude/primitive.wado/f64::fmt_fixed"(self, f.precision, f);
         return;
     }
-    value = self;
     let __pattern_temp_0_mv_0: bool;
     let __pattern_temp_0_mv_1: bool;
     let __pattern_temp_0_mv_2: "core:prelude/fpfmt.wado//enum:SpecialKind";
-    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2] = "core:prelude/fpfmt.wado/check_special"(value);
-    is_special = __pattern_temp_0_mv_0;
-    is_neg_4 = __pattern_temp_0_mv_1;
-    kind = __pattern_temp_0_mv_2;
-    if is_special {
-        "core:prelude/primitive.wado/fmt_float_special"(f, is_neg_4, kind, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("0"), used: 1 });
+    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2] = "core:prelude/fpfmt.wado/check_special"(self);
+    if __pattern_temp_0_mv_0 {
+        "core:prelude/primitive.wado/fmt_float_special"(f, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("0"), used: 1 });
         return;
     }
-    abs_f = (if is_neg_4 -> f64 {
-        builtin::f64_neg(value);
+    abs_f = (if __pattern_temp_0_mv_1 -> f64 {
+        builtin::f64_neg(self);
     } else {
-        value;
+        self;
     });
     let result_mv_digits: u64;
     let result_mv_exponent: i32;
     multivalue_bind [result_mv_digits, result_mv_exponent] = "core:prelude/fpfmt.wado/short"(abs_f);
-    d_8 = result_mv_digits;
-    p = result_mv_exponent;
     nd_10 = __inline_digits_0: block -> i32 {
         nd_14 = __inline_log10_pow2_1: block -> i32 {
-            x_15 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d_8));
+            x_15 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(result_mv_digits));
             break __inline_log10_pow2_1: (x_15 * 78913) >> 18;
             unreachable;
         };
-        break __inline_digits_0: nd_14 + (d_8 >=u __inline_Array_u64__IndexValue_i32___index_value_0: block -> u64 {
+        break __inline_digits_0: nd_14 + (result_mv_digits >=u __inline_Array_u64__IndexValue_i32___index_value_0: block -> u64 {
             self_22 = global:core::prelude/fpfmt.wado::POW10;
             if nd_14 >= self_22.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -2576,24 +2468,18 @@ fn "core:prelude/primitive.wado/f64::fmt_into"(self, f) {
         break __inline_String__len_5: self_19.used;
         unreachable;
     };
-    if is_neg_4 {
+    if __pattern_temp_0_mv_1 {
         "core:prelude/string.wado/String::push"(f.buf, 45);
     } else if f.sign_plus {
         "core:prelude/string.wado/String::push"(f.buf, 43);
     }
-    "core:prelude/fpfmt.wado/write_decimal"(f.buf, d_8, p, nd_10);
+    "core:prelude/fpfmt.wado/write_decimal"(f.buf, result_mv_digits, result_mv_exponent, nd_10);
     "core:prelude/format.wado/Formatter::apply_padding"(f, mark);
 }
 
 fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
-    let value: f64;
-    let is_special: bool;
-    let is_neg_5: bool;
-    let kind: "core:prelude/fpfmt.wado//enum:SpecialKind";
     let mark_7: i32;
     let abs_f: f64;
-    let d_10: u64;
-    let p: i32;
     let nd_12: i32;
     let mark_13: i32;
     let self_16: ref "core:prelude/string.wado//String";
@@ -2601,31 +2487,25 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
     let x_21: i32;
     let self_25: ref "core:prelude/string.wado//String";
     let self_28: ref "core:prelude//Array<u64>";
-    value = self;
     let __pattern_temp_0_mv_0: bool;
     let __pattern_temp_0_mv_1: bool;
     let __pattern_temp_0_mv_2: "core:prelude/fpfmt.wado//enum:SpecialKind";
-    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2] = "core:prelude/fpfmt.wado/check_special"(value);
-    is_special = __pattern_temp_0_mv_0;
-    is_neg_5 = __pattern_temp_0_mv_1;
-    kind = __pattern_temp_0_mv_2;
-    if is_special {
-        if (if let __match_scrut_0: "core:prelude/fpfmt.wado//enum:SpecialKind"; __match_scrut_0 = kind; (if __match_scrut_0 == 3 -> bool {
+    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2] = "core:prelude/fpfmt.wado/check_special"(self);
+    if __pattern_temp_0_mv_0 {
+        if (if (if __pattern_temp_0_mv_2 == 3 -> bool {
             1;
         } else {
             0;
         }) -> i32 {
             1;
         } else {
-            let __match_scrut_1: "core:prelude/fpfmt.wado//enum:SpecialKind";
-            __match_scrut_1 = kind;
-            if __match_scrut_1 == 2 -> bool {
+            if __pattern_temp_0_mv_2 == 2 -> bool {
                 1;
             } else {
                 0;
             }
         }) {
-            "core:prelude/primitive.wado/fmt_float_special"(f, is_neg_5, kind, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("0"), used: 1 });
+            "core:prelude/primitive.wado/fmt_float_special"(f, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("0"), used: 1 });
             return;
         }
         mark_7 = __inline_String__len_1: block -> i32 {
@@ -2633,7 +2513,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
             break __inline_String__len_1: self_16.used;
             unreachable;
         };
-        if is_neg_5 {
+        if __pattern_temp_0_mv_1 {
             "core:prelude/string.wado/String::push"(f.buf, 45);
         } else if f.sign_plus {
             "core:prelude/string.wado/String::push"(f.buf, 43);
@@ -2646,23 +2526,21 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
         "core:prelude/format.wado/Formatter::apply_padding"(f, mark_7);
         return;
     }
-    abs_f = (if is_neg_5 -> f64 {
-        builtin::f64_neg(value);
+    abs_f = (if __pattern_temp_0_mv_1 -> f64 {
+        builtin::f64_neg(self);
     } else {
-        value;
+        self;
     });
     let result_mv_digits: u64;
     let result_mv_exponent: i32;
     multivalue_bind [result_mv_digits, result_mv_exponent] = "core:prelude/fpfmt.wado/fixed_width_for_prec"(abs_f, precision);
-    d_10 = result_mv_digits;
-    p = result_mv_exponent;
     nd_12 = __inline_digits_3: block -> i32 {
         nd_20 = __inline_log10_pow2_4: block -> i32 {
-            x_21 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d_10));
+            x_21 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(result_mv_digits));
             break __inline_log10_pow2_4: (x_21 * 78913) >> 18;
             unreachable;
         };
-        break __inline_digits_3: nd_20 + (d_10 >=u __inline_Array_u64__IndexValue_i32___index_value_0: block -> u64 {
+        break __inline_digits_3: nd_20 + (result_mv_digits >=u __inline_Array_u64__IndexValue_i32___index_value_0: block -> u64 {
             self_28 = global:core::prelude/fpfmt.wado::POW10;
             if nd_20 >= self_28.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -2678,12 +2556,12 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
         break __inline_String__len_8: self_25.used;
         unreachable;
     };
-    if is_neg_5 {
+    if __pattern_temp_0_mv_1 {
         "core:prelude/string.wado/String::push"(f.buf, 45);
     } else if f.sign_plus {
         "core:prelude/string.wado/String::push"(f.buf, 43);
     }
-    "core:prelude/fpfmt.wado/write_decimal_prec"(f.buf, d_10, p, nd_12, precision);
+    "core:prelude/fpfmt.wado/write_decimal_prec"(f.buf, result_mv_digits, result_mv_exponent, nd_12, precision);
     "core:prelude/format.wado/Formatter::apply_padding"(f, mark_13);
 }
 
@@ -2752,28 +2630,26 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    let code: u32;
-    code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
-    if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code & 255);
+    if c <u 128 {
+        builtin::array_set_u8(self.repr, self.used, c & 255);
         self.used = self.used + 1;
-    } else if code <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
+    } else if c <u 2048 {
+        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
         self.used = self.used + 2;
-    } else if code <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
+    } else if c <u 65536 {
+        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
 }
@@ -2814,9 +2690,7 @@ fn "core:prelude/format.wado/Formatter::pad"(self, content) {
     }
     padding = self.width - content_len;
     align = self.align;
-    let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
-    __match_scrut_0 = align;
-    if __match_scrut_0 == 0 {
+    if align == 0 {
         "core:prelude/string.wado/String::push_str"(self.buf, content);
         "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
     } else if align == 1 {
@@ -2874,9 +2748,7 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
     padding = self.width - content_len;
     fill_byte = self.fill & 255;
     align = self.align;
-    let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
-    __match_scrut_0 = align;
-    if __match_scrut_0 == 0 {
+    if align == 0 {
         "core:prelude/string.wado/String::append_byte_filled"(self.buf, fill_byte, padding);
     } else if align == 1 {
         left_pad = padding / 2;
@@ -3003,9 +2875,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
     align = self.align;
-    let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
-    __match_scrut_0 = align;
-    if __match_scrut_0 == 0 {
+    if align == 0 {
         if sign_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }

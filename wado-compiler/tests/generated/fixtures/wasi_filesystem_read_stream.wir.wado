@@ -226,8 +226,6 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/run"() with St
     let file: i32;
     let file_rx: i32;
     let read_future: i32;
-    let out_rx: i32;
-    let out_tx: i32;
     let sub: i32;
     let chunk: ref "core:prelude//Array<u8>";
     let __local_11: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
@@ -255,21 +253,19 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/run"() with St
         let __mv_lo_1: i32;
         let __mv_hi_1: i32;
         multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-        out_rx = __mv_lo_1;
-        out_tx = __mv_hi_1;
-        sub = "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Stdout_write_via_stream"(out_rx);
+        sub = "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
         b3: block {
             l4: loop {
                 chunk = "core:internal/cm_stream_read_u8"(file_rx, 4096);
                 if chunk.used == 0 {
                     break b3;
                 }
-                "core:internal/cm_stream_write_u8"(out_tx, chunk);
+                "core:internal/cm_stream_write_u8"(__mv_hi_1, chunk);
                 continue l4;
             };
         };
         "wasi/stream-drop-readable"(file_rx);
-        "wasi/stream-drop-writable"(out_tx);
+        "wasi/stream-drop-writable"(__mv_hi_1);
         "wasi/future-drop-readable:transmission-cli"(sub);
         "wasi/future-drop-readable:transmission-filesystem"(read_future);
     } else {
@@ -492,18 +488,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/eprintln"(message) with Stderr {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Stderr_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Stderr_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -562,21 +554,15 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:internal/log_stderr"(message) {
-    let rx: i32;
-    let tx: i32;
     let future_handle: i32;
-    let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
-    "core:internal/write_string_to_stream"(tx, message, 1);
-    future = future_handle;
-    "wasi/future-drop-readable:transmission-cli"(future);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__mv_lo_1);
+    "core:internal/write_string_to_stream"(__mv_hi_1, message, 1);
+    "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 
 fn "core:internal/panic"(message) {
@@ -694,18 +680,14 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/
 
 fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {
     let handle_1: i32;
-    let raw: i32;
     let ws_3: i32;
     let result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
-    let handle_6: i32;
     handle_1 = self.__cm_packed >> 4;
     if handle_1 != 0 {
-        raw = handle_1;
         ws_3 = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            handle_6 = raw;
-            "wasi/waitable-join"(handle_6, ws_3);
-            break __inline_cm_waitable_join_0: handle_6;
+            "wasi/waitable-join"(handle_1, ws_3);
+            break __inline_cm_waitable_join_0: handle_1;
             unreachable;
         });
         b61: block {
@@ -720,7 +702,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesy
                 continue l62;
             };
         };
-        "wasi/subtask-drop"(raw);
+        "wasi/subtask-drop"(handle_1);
         "wasi/waitable-set-drop"(ws_3);
     }
     result = block -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {

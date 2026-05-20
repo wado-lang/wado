@@ -98,17 +98,13 @@ fn "wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/process"(a, 
     let sorted: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let victim: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let __local_4: ref "core:prelude/string.wado//String";
-    let v_5: ref "core:prelude//Array<core:prelude/string.wado/String>";
-    let v_7: ref "core:prelude//Array<core:prelude/string.wado/String>";
     sorted = __inline__value_copy_T95_shallow_0: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
-        v_5 = a;
-        break __inline__value_copy_T95_shallow_0: struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone<ref "core:prelude/string.wado//String">(v_5.repr)), used: v_5.used };
+        break __inline__value_copy_T95_shallow_0: struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone<ref "core:prelude/string.wado//String">(a.repr)), used: a.used };
         unreachable;
     };
     "wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/Array<core:prelude/string.wado/String>::sort_by$__Closure_2"(sorted);
     victim = __inline__value_copy_T95_2: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
-        v_7 = b;
-        break __inline__value_copy_T95_2: struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T25*/ v_7.repr)), used: v_7.used };
+        break __inline__value_copy_T95_2: struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T25*/ b.repr)), used: b.used };
         unreachable;
     };
     "core:prelude/string.wado/String::push"(__inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_3: block -> ref "core:prelude/string.wado//String" {
@@ -201,18 +197,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -251,21 +243,15 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:internal/log_stderr"(message) {
-    let rx: i32;
-    let tx: i32;
     let future_handle: i32;
-    let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
-    "core:internal/write_string_to_stream"(tx, message, 1);
-    future = future_handle;
-    "wasi/future-drop-readable:transmission-cli"(future);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__mv_lo_1);
+    "core:internal/write_string_to_stream"(__mv_hi_1, message, 1);
+    "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 
 fn "core:internal/panic"(message) {
@@ -392,28 +378,26 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    let code: u32;
-    code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
-    if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code & 255);
+    if c <u 128 {
+        builtin::array_set_u8(self.repr, self.used, c & 255);
         self.used = self.used + 1;
-    } else if code <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
+    } else if c <u 2048 {
+        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
         self.used = self.used + 2;
-    } else if code <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
+    } else if c <u 65536 {
+        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
 }

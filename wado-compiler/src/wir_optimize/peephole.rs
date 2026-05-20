@@ -139,7 +139,7 @@ impl WirRefVisitor for CopyCollector<'_> {
             let source_invariant = self
                 .counts
                 .get(source)
-                .map_or(true, |i| i.defs <= 1 && i.tees == 0);
+                .is_none_or(|i| i.defs <= 1 && i.tees == 0);
             if alias_single_def && source_invariant {
                 self.candidates.insert(alias.clone(), source.clone());
             }

@@ -9,48 +9,43 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-variant wado-compiler/tests/fixtures/variant_in_struct_match_module.wado//Align {  // TypeId(2)
-    Left,
-    Right,
-}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wado-compiler/tests/fixtures/variant_in_struct_match_module.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//wado-compiler/tests/fixtures/variant_in_struct_match_module.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wado-compiler/tests/fixtures/variant_in_struct_match_module.wado/__cm_export__run" = fn();  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/variant_in_struct_match_module.wado/__cm_export__run" = fn();  // TypeId(12)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(12)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(13)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(13)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(14)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(14)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(15)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(15)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(16)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(17)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(17)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(18)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(20)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -71,15 +66,9 @@ fn "wado-compiler/tests/fixtures/variant_in_struct_match_module.wado/__cm_bindin
 
 fn "wado-compiler/tests/fixtures/variant_in_struct_match_module.wado/__cm_export__run"() {
     let name: ref "core:prelude/string.wado//String";
-    let __sroa_opts_align: ref "wado-compiler/tests/fixtures/variant_in_struct_match_module.wado//Align";
-    __sroa_opts_align = struct.new "wado-compiler/tests/fixtures/variant_in_struct_match_module.wado//Align" { 1 };
-    let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_in_struct_match_module.wado//Align";
-    __match_scrut_0 = __sroa_opts_align;
-    name = (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("left"), used: 4 };
-    } else {
+    name = block -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("right"), used: 5 };
-    });
+    };
     "core:cli/println"(name);
     "wasi/task-return"(0);
 }
@@ -102,18 +91,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/variant_in_struct_match_module.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/variant_in_struct_match_module.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

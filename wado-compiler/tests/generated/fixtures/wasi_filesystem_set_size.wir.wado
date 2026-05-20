@@ -388,22 +388,16 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/write_bytes"(file, data) with Descriptor {
-    let write_rx: i32;
-    let write_tx: i32;
     let subtask: i32;
-    let __f: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    write_rx = __mv_lo_1;
-    write_tx = __mv_hi_1;
-    subtask = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_write_via_stream"(file, write_rx, 0_i64);
-    "core:internal/cm_stream_write_u8"(write_tx, data);
-    "wasi/stream-drop-writable"(write_tx);
-    __f = subtask;
-    "wasi/future-drop-readable:transmission-filesystem"(__f);
+    subtask = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_write_via_stream"(file, __mv_lo_1, 0_i64);
+    "core:internal/cm_stream_write_u8"(__mv_hi_1, data);
+    "wasi/stream-drop-writable"(__mv_hi_1);
+    "wasi/future-drop-readable:transmission-filesystem"(subtask);
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/read_all"(file) with Descriptor {
@@ -413,7 +407,6 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/read_all"(file) w
     let result: ref "core:prelude//Array<u8>";
     let chunk: ref "core:prelude//Array<u8>";
     let __iter_6: ref "core:prelude/array.wado//ArrayIter<u8>";
-    let b: u8;
     let __pattern_temp_0: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
     __pattern_temp_0 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_read_via_stream"(file, 0_i64);
     read_stream = __pattern_temp_0.0;
@@ -436,8 +429,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/read_all"(file) w
                     let __sroa___iflet_9_payload_0: u8;
                     multivalue_bind [__sroa___iflet_9_discriminant, __sroa___iflet_9_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(__iter_6);
                     if __sroa___iflet_9_discriminant == 0 {
-                        b = __sroa___iflet_9_payload_0;
-                        "core:prelude/array.wado/Array<u8>::push"(result, b);
+                        "core:prelude/array.wado/Array<u8>::push"(result, __sroa___iflet_9_payload_0);
                     } else {
                         break b3;
                     }
@@ -502,10 +494,8 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
         };
         "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/write_bytes"(file, data);
         stat1 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat"(file));
-        let __match_scrut_1: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";
-        __match_scrut_1 = stat1;
-        if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(__match_scrut_1) {
-            s_7 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(__match_scrut_1).payload_0;
+        if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat1) {
+            s_7 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat1).payload_0;
             if s_7.size == 10_i64 {
                 "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: initial size is 10 (correct)"), used: 38 });
             } else {
@@ -523,19 +513,15 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
         } else {
         }
         trunc_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_set_size"(file, 5_i64));
-        let __match_scrut_2: ref null "wasi:filesystem/types.wado//ErrorCode";
-        __match_scrut_2 = trunc_result;
-        if ref.is_null(__match_scrut_2) {
+        if ref.is_null(trunc_result) {
             "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncate to 5 succeeded"), used: 33 });
         } else {
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncate failed"), used: 25 });
             return;
         }
         stat2 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat"(file));
-        let __match_scrut_3: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";
-        __match_scrut_3 = stat2;
-        if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(__match_scrut_3) {
-            s_11 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(__match_scrut_3).payload_0;
+        if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat2) {
+            s_11 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat2).payload_0;
             if s_11.size == 5_i64 {
                 "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncated size is 5 (correct)"), used: 39 });
             } else {
@@ -621,18 +607,14 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
             });
         }
         extend_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_set_size"(file, 8_i64));
-        let __match_scrut_4: ref null "wasi:filesystem/types.wado//ErrorCode";
-        __match_scrut_4 = extend_result;
-        if ref.is_null(__match_scrut_4) {
+        if ref.is_null(extend_result) {
             "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: extend to 8 succeeded"), used: 31 });
         } else {
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: extend failed"), used: 23 });
         }
         stat3 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat"(file));
-        let __match_scrut_5: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";
-        __match_scrut_5 = stat3;
-        if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(__match_scrut_5) {
-            s_16 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(__match_scrut_5).payload_0;
+        if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat3) {
+            s_16 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat3).payload_0;
             if s_16.size == 8_i64 {
                 "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: extended size is 8 (correct)"), used: 38 });
             } else {
@@ -1311,34 +1293,26 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
 fn "core:cli/eprintln"(message) with Stderr {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stderr_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stderr_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -1397,21 +1371,15 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:internal/log_stderr"(message) {
-    let rx: i32;
-    let tx: i32;
     let future_handle: i32;
-    let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx);
-    "core:internal/write_string_to_stream"(tx, message, 1);
-    future = future_handle;
-    "wasi/future-drop-readable:transmission-cli"(future);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__mv_lo_1);
+    "core:internal/write_string_to_stream"(__mv_hi_1, message, 1);
+    "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 
 fn "core:internal/panic"(message) {
@@ -1586,7 +1554,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
-    let val_i64: i64;
     let offset_3: i32;
     let digit_count: i32;
     let temp: i64;
@@ -1604,8 +1571,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     let carry_18: i64;
     let self_19: ref "core:prelude/string.wado//String";
     let self_20: ref "core:prelude/string.wado//String";
-    val_i64 = self;
-    if val_i64 == 0_i64 {
+    if self == 0_i64 {
         offset_3 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, 1);
         builtin::array_set_u8(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
             self_19 = f.buf;
@@ -1615,7 +1581,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
         return;
     }
     digit_count = 0;
-    temp = val_i64;
+    temp = self;
     b216: block {
         l217: loop {
             if temp == 0_i64 {
@@ -1644,7 +1610,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
         unreachable;
     };
     pos = offset_11 + digit_count;
-    temp = val_i64;
+    temp = self;
     b221: block {
         l222: loop {
             if temp == 0_i64 {
@@ -1728,28 +1694,26 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    let code: u32;
-    code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
-    if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code & 255);
+    if c <u 128 {
+        builtin::array_set_u8(self.repr, self.used, c & 255);
         self.used = self.used + 1;
-    } else if code <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
+    } else if c <u 2048 {
+        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
         self.used = self.used + 2;
-    } else if code <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
+    } else if c <u 65536 {
+        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
 }
@@ -1818,9 +1782,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
     align = self.align;
-    let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
-    __match_scrut_0 = align;
-    if __match_scrut_0 == 0 {
+    if align == 0 {
         if sign_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
@@ -1867,18 +1829,14 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/
 
 fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {
     let handle_1: i32;
-    let raw: i32;
     let ws_3: i32;
     let result: ref null "wasi:filesystem/types.wado//ErrorCode";
-    let handle_6: i32;
     handle_1 = self.__cm_packed >> 4;
     if handle_1 != 0 {
-        raw = handle_1;
         ws_3 = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            handle_6 = raw;
-            "wasi/waitable-join"(handle_6, ws_3);
-            break __inline_cm_waitable_join_0: handle_6;
+            "wasi/waitable-join"(handle_1, ws_3);
+            break __inline_cm_waitable_join_0: handle_1;
             unreachable;
         });
         b257: block {
@@ -1893,7 +1851,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:fil
                 continue l258;
             };
         };
-        "wasi/subtask-drop"(raw);
+        "wasi/subtask-drop"(handle_1);
         "wasi/waitable-set-drop"(ws_3);
     }
     result = block -> ref null "wasi:filesystem/types.wado//ErrorCode" {
@@ -1907,18 +1865,14 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:fil
 
 fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {
     let handle_1: i32;
-    let raw: i32;
     let ws_3: i32;
     let result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";
-    let handle_6: i32;
     handle_1 = self.__cm_packed >> 4;
     if handle_1 != 0 {
-        raw = handle_1;
         ws_3 = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            handle_6 = raw;
-            "wasi/waitable-join"(handle_6, ws_3);
-            break __inline_cm_waitable_join_0: handle_6;
+            "wasi/waitable-join"(handle_1, ws_3);
+            break __inline_cm_waitable_join_0: handle_1;
             unreachable;
         });
         b262: block {
@@ -1933,7 +1887,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesy
                 continue l263;
             };
         };
-        "wasi/subtask-drop"(raw);
+        "wasi/subtask-drop"(handle_1);
         "wasi/waitable-set-drop"(ws_3);
     }
     result = block -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>" {
@@ -1947,18 +1901,14 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesy
 
 fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) {
     let handle_1: i32;
-    let raw: i32;
     let ws_3: i32;
     let result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
-    let handle_6: i32;
     handle_1 = self.__cm_packed >> 4;
     if handle_1 != 0 {
-        raw = handle_1;
         ws_3 = "wasi/waitable-set-new"();
         drop(__inline_cm_waitable_join_0: block -> i32 {
-            handle_6 = raw;
-            "wasi/waitable-join"(handle_6, ws_3);
-            break __inline_cm_waitable_join_0: handle_6;
+            "wasi/waitable-join"(handle_1, ws_3);
+            break __inline_cm_waitable_join_0: handle_1;
             unreachable;
         });
         b267: block {
@@ -1973,7 +1923,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesy
                 continue l268;
             };
         };
-        "wasi/subtask-drop"(raw);
+        "wasi/subtask-drop"(handle_1);
         "wasi/waitable-set-drop"(ws_3);
     }
     result = block -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {

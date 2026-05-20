@@ -94,16 +94,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/tuple_elision_multivalue.wado/run"() with Stdout {
-    let lo1: i64;
-    let hi1: i64;
-    let lo2: i64;
-    let hi2: i64;
-    let lo3: i64;
-    let hi3: i64;
-    let lo4: i64;
-    let hi4: i64;
-    let lo5: i64;
-    let hi6: i64;
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_12: ref "core:prelude/string.wado//String";
@@ -127,14 +117,12 @@ fn "wado-compiler/tests/fixtures/tuple_elision_multivalue.wado/run"() with Stdou
     let __mv_lo_1: i64;
     let __mv_hi_1: i64;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.add128(100_i64, 200_i64, 50_i64, 25_i64);
-    lo1 = __mv_lo_1;
-    hi1 = __mv_hi_1;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(48), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("add128: lo="), used: 11 });
         __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
         f_26 = __local_11;
-        "core:prelude/primitive.wado/i64::fmt_decimal"(lo1, f_26);
+        "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_lo_1, f_26);
         "core:prelude/string.wado/String::push"(__local_10, 44);
         "core:prelude/string.wado/String::push"(__local_10, 32);
         "core:prelude/string.wado/String::push"(__local_10, 104);
@@ -142,21 +130,19 @@ fn "wado-compiler/tests/fixtures/tuple_elision_multivalue.wado/run"() with Stdou
         "core:prelude/string.wado/String::push"(__local_10, 61);
         __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
         f_31 = __local_11;
-        "core:prelude/primitive.wado/i64::fmt_decimal"(hi1, f_31);
+        "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_hi_1, f_31);
         break __tmpl: __local_10;
         unreachable;
     });
     let __mv_lo_2: i64;
     let __mv_hi_2: i64;
     multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.sub128(150_i64, 225_i64, 50_i64, 25_i64);
-    lo2 = __mv_lo_2;
-    hi2 = __mv_hi_2;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(48), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub128: lo="), used: 11 });
         __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
         f_37 = __local_13;
-        "core:prelude/primitive.wado/i64::fmt_decimal"(lo2, f_37);
+        "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_lo_2, f_37);
         "core:prelude/string.wado/String::push"(__local_12, 44);
         "core:prelude/string.wado/String::push"(__local_12, 32);
         "core:prelude/string.wado/String::push"(__local_12, 104);
@@ -164,21 +150,19 @@ fn "wado-compiler/tests/fixtures/tuple_elision_multivalue.wado/run"() with Stdou
         "core:prelude/string.wado/String::push"(__local_12, 61);
         __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
         f_42 = __local_13;
-        "core:prelude/primitive.wado/i64::fmt_decimal"(hi2, f_42);
+        "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_hi_2, f_42);
         break __tmpl: __local_12;
         unreachable;
     });
     let __mv_lo_3: i64;
     let __mv_hi_3: i64;
     multivalue_bind [__mv_lo_3, __mv_hi_3] = i64.mul_wide_u(10_i64, 20_i64);
-    lo3 = __mv_lo_3;
-    hi3 = __mv_hi_3;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mul_wide_u: lo="), used: 15 });
         __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
         f_48 = __local_15;
-        "core:prelude/primitive.wado/i64::fmt_decimal"(lo3, f_48);
+        "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_lo_3, f_48);
         "core:prelude/string.wado/String::push"(__local_14, 44);
         "core:prelude/string.wado/String::push"(__local_14, 32);
         "core:prelude/string.wado/String::push"(__local_14, 104);
@@ -186,21 +170,19 @@ fn "wado-compiler/tests/fixtures/tuple_elision_multivalue.wado/run"() with Stdou
         "core:prelude/string.wado/String::push"(__local_14, 61);
         __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
         f_53 = __local_15;
-        "core:prelude/primitive.wado/i64::fmt_decimal"(hi3, f_53);
+        "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_hi_3, f_53);
         break __tmpl: __local_14;
         unreachable;
     });
     let __mv_lo_4: i64;
     let __mv_hi_4: i64;
     multivalue_bind [__mv_lo_4, __mv_hi_4] = i64.mul_wide_s(-10_i64, 20_i64);
-    lo4 = __mv_lo_4;
-    hi4 = __mv_hi_4;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mul_wide_s: lo="), used: 15 });
         __local_17 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
         f_59 = __local_17;
-        "core:prelude/primitive.wado/i64::fmt_decimal"(lo4, f_59);
+        "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_lo_4, f_59);
         "core:prelude/string.wado/String::push"(__local_16, 44);
         "core:prelude/string.wado/String::push"(__local_16, 32);
         "core:prelude/string.wado/String::push"(__local_16, 104);
@@ -208,31 +190,29 @@ fn "wado-compiler/tests/fixtures/tuple_elision_multivalue.wado/run"() with Stdou
         "core:prelude/string.wado/String::push"(__local_16, 61);
         __local_17 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
         f_64 = __local_17;
-        "core:prelude/primitive.wado/i64::fmt_decimal"(hi4, f_64);
+        "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_hi_4, f_64);
         break __tmpl: __local_16;
         unreachable;
     });
     let __mv_lo_5: i64;
     let __mv_hi_5: i64;
     multivalue_bind [__mv_lo_5, __mv_hi_5] = i64.mul_wide_u(100_i64, 100_i64);
-    lo5 = __mv_lo_5;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mul_wide_u lo only: "), used: 20 });
         __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
-        "core:prelude/primitive.wado/i64::fmt_decimal"(lo5, __local_19);
+        "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_lo_5, __local_19);
         break __tmpl: __local_18;
         unreachable;
     });
     let __mv_lo_6: i64;
     let __mv_hi_6: i64;
     multivalue_bind [__mv_lo_6, __mv_hi_6] = i64.mul_wide_u(-9223372036854775808_i64, 2_i64);
-    hi6 = __mv_hi_6;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mul_wide_u hi only: "), used: 20 });
         __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
-        "core:prelude/primitive.wado/i64::fmt_decimal"(hi6, __local_21);
+        "core:prelude/primitive.wado/i64::fmt_decimal"(__mv_hi_6, __local_21);
         break __tmpl: __local_20;
         unreachable;
     });
@@ -265,18 +245,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/tuple_elision_multivalue.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/tuple_elision_multivalue.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -381,7 +357,6 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 }
 
 fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
-    let value: i64;
     let is_negative: bool;
     let remaining_digits: i32;
     let digit_count_6: i32;
@@ -392,9 +367,8 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
     let offset_11: i32;
     let self_12: ref "core:prelude/string.wado//String";
     let self_13: ref "core:prelude/string.wado//String";
-    value = self;
-    is_negative = value < 0_i64;
-    if value == -9223372036854775808_i64 {
+    is_negative = self < 0_i64;
+    if self == -9223372036854775808_i64 {
         remaining_digits = "core:prelude/primitive.wado/count_digits_i64"(922337203685477580_i64);
         digit_count_6 = remaining_digits + 1;
         offset_7 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 1, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_6);
@@ -407,9 +381,9 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
     } else {
         abs_val = (if is_negative -> i64 {
-            0_i64 - value;
+            0_i64 - self;
         } else {
-            value;
+            self;
         });
         digit_count_10 = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
         offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_10);
@@ -473,28 +447,26 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    let code: u32;
-    code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
-    if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code & 255);
+    if c <u 128 {
+        builtin::array_set_u8(self.repr, self.used, c & 255);
         self.used = self.used + 1;
-    } else if code <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
+    } else if c <u 2048 {
+        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
         self.used = self.used + 2;
-    } else if code <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
+    } else if c <u 65536 {
+        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
 }
@@ -563,9 +535,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
     align = self.align;
-    let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
-    __match_scrut_0 = align;
-    if __match_scrut_0 == 0 {
+    if align == 0 {
         if sign_len > 0 {
             "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }

@@ -275,10 +275,6 @@ import fn wasi/future-new from "wasi/future-new";
 import fn wasi/future-write from "wasi/future-write";
 
 fn "wado-compiler/tests/fixtures/cm_future_read.wado/handle"() {
-    let future_rx: i32;
-    let future_tx: i32;
-    let trailers_future: i32;
-    let trailers_tx: i32;
     let headers: i32;
     let response: i32;
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
@@ -421,27 +417,23 @@ fn "wado-compiler/tests/fixtures/cm_future_read.wado/handle"() {
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    future_rx = __mv_lo_1;
-    future_tx = __mv_hi_1;
     let __fw_write_ptr_2: i32;
     __fw_write_ptr_2 = "mem/realloc"(0, 0, 4, 4);
     builtin::store_i32(__fw_write_ptr_2, 42);
-    drop("wasi/future-write:s32"(future_tx, __fw_write_ptr_2));
-    let __fr_handle_3: i32;
+    drop("wasi/future-write:s32"(__mv_hi_1, __fw_write_ptr_2));
     let __fr_ptr_3: i32;
     let __fr_result_3: i32;
-    __fr_handle_3 = future_rx;
     __fr_ptr_3 = "mem/realloc"(0, 0, 8, 40);
-    __fr_result_3 = "wasi/future-read:s32"(__fr_handle_3, __fr_ptr_3);
+    __fr_result_3 = "wasi/future-read:s32"(__mv_lo_1, __fr_ptr_3);
     if __fr_result_3 == -1 {
         let __fr_ws_3: i32;
         let __fr_evtptr_3: i32;
         __fr_ws_3 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__fr_handle_3, __fr_ws_3);
+        "wasi/waitable-join"(__mv_lo_1, __fr_ws_3);
         __fr_evtptr_3 = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(__fr_ws_3, __fr_evtptr_3));
         drop("mem/realloc"(__fr_evtptr_3, 8, 4, 0));
-        "wasi/waitable-join"(__fr_handle_3, 0);
+        "wasi/waitable-join"(__mv_lo_1, 0);
         "wasi/waitable-set-drop"(__fr_ws_3);
         __fr_result_3 = 0;
     }
@@ -458,10 +450,8 @@ fn "wado-compiler/tests/fixtures/cm_future_read.wado/handle"() {
     let __mv_lo_5: i32;
     let __mv_hi_5: i32;
     multivalue_bind [__mv_lo_5, __mv_hi_5] = (builtin::i32_wrap_i64(__pair_temp_5); builtin::i32_wrap_i64(__pair_temp_5 >>u 32_i64));
-    trailers_future = __mv_lo_5;
-    trailers_tx = __mv_hi_5;
     headers = "wado-compiler/tests/fixtures/cm_future_read.wado/__cm_binding__Fields_new"();
-    __pattern_temp_2 = "wado-compiler/tests/fixtures/cm_future_read.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future);
+    __pattern_temp_2 = "wado-compiler/tests/fixtures/cm_future_read.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_5);
     response = __pattern_temp_2.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -776,20 +766,18 @@ fn "wado-compiler/tests/fixtures/cm_future_read.wado/handle"() {
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     let __fw_write_ptr_6: i32;
-    let __fw_handle_6: i32;
     let __fw_result_6: i32;
-    __fw_handle_6 = trailers_tx;
     __fw_write_ptr_6 = "mem/realloc"(0, 0, 8, 40);
     builtin::store_i64(__fw_write_ptr_6, 0_i64);
     builtin::store_i64[8](__fw_write_ptr_6, 0_i64);
     builtin::store_i64[16](__fw_write_ptr_6, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_6, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_6, 0_i64);
-    __fw_result_6 = "wasi/future-write"(__fw_handle_6, __fw_write_ptr_6);
+    __fw_result_6 = "wasi/future-write"(__mv_hi_5, __fw_write_ptr_6);
     if __fw_result_6 == -1 {
         let __fw_evt_6: i32;
         __fw_result_6 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__fw_handle_6, __fw_result_6);
+        "wasi/waitable-join"(__mv_hi_5, __fw_result_6);
         __fw_evt_6 = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(__fw_result_6, __fw_evt_6));
         drop("mem/realloc"(__fw_evt_6, 8, 4, 0));

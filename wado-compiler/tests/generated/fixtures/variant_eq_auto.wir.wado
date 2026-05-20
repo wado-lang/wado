@@ -150,18 +150,14 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 }
 
 fn "core:cli/println"(message) with Stdout {
-    let rx: i32;
-    let tx: i32;
     let handle: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    rx = __mv_lo_1;
-    tx = __mv_hi_1;
-    handle = "wado-compiler/tests/fixtures/variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream"(rx);
-    "core:cli/write_to_stream"(tx, message, 1);
+    handle = "wado-compiler/tests/fixtures/variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
+    "core:cli/write_to_stream"(__mv_hi_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -223,32 +219,24 @@ fn "wado-compiler/tests/fixtures/variant_eq_auto.wado/Shape^Eq::eq"(self, other)
     let __eq_other_Circle_3: f64;
     let __eq_self_Rectangle_4: f64;
     let __eq_other_Rectangle_5: f64;
-    let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
-    __match_scrut_0 = self;
-    if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(__match_scrut_0) {
-        __eq_self_Circle_2 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(__match_scrut_0).payload_0;
-        let __match_scrut_3: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
-        __match_scrut_3 = other;
-        if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(__match_scrut_3) {
-            __eq_other_Circle_3 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(__match_scrut_3).payload_0;
+    if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(self) {
+        __eq_self_Circle_2 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(self).payload_0;
+        if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(other) {
+            __eq_other_Circle_3 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(other).payload_0;
             return __eq_self_Circle_2 == __eq_other_Circle_3;
         } else {
             return 0;
         }
-    } else if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(__match_scrut_0) {
-        __eq_self_Rectangle_4 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(__match_scrut_0).payload_0;
-        let __match_scrut_2: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
-        __match_scrut_2 = other;
-        if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(__match_scrut_2) {
-            __eq_other_Rectangle_5 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(__match_scrut_2).payload_0;
+    } else if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(self) {
+        __eq_self_Rectangle_4 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(self).payload_0;
+        if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(other) {
+            __eq_other_Rectangle_5 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(other).payload_0;
             return __eq_self_Rectangle_4 == __eq_other_Rectangle_5;
         } else {
             return 0;
         }
     } else {
-        let __match_scrut_1: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
-        __match_scrut_1 = other;
-        if __match_scrut_1.discriminant == 2 {
+        if other.discriminant == 2 {
             return 1;
         } else {
             return 0;
