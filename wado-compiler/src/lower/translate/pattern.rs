@@ -5,7 +5,7 @@ use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    CallArg, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,
+    CallArg, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField, TirFunction,
     TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
     TypeTable,
 };
@@ -124,74 +124,92 @@ fn peel_refs_and_box(
     }
 }
 
-/// Pattern lowering: a TIR-mutating pass that rewrites
-/// `LetDestructure` / `IfLet` into explicit `Let` + `Match` chains and
-/// expands or-patterns in `Match` arms.
+/// Package-level facts pattern lowering needs, gathered once so the
+/// per-function [`Lowering::lower_function`] entry point can be called
+/// from the translator's [`convert_function`](super::Translator)
+/// per-function walk (WEP 2026-05-11 Phase 10 Step 2b).
 ///
-/// Runs after `boxing` (see [`crate::lower::plan`]): a match scrutinee
-/// on a reference reaches this pass as a `Box<T>` struct, and the
-/// references it synthesises for ergonomic bindings are box-shaped —
-/// [`peel_refs_and_box`] and [`coerce_value_to_binding`] handle both.
-pub fn lower(flat: &mut FlatPackage) {
-    // Build a map keyed by (variant_name, module_source). The
-    // module_source axis is required so that two modules each
-    // declaring a variant with the same name keep their case
-    // tables distinct — pattern lookup resolves the
-    // module_source from the scrutinee's resolved type.
-    let mut variant_case_map: IndexMap<(String, ModuleSource), Vec<(String, u32)>> =
-        IndexMap::default();
-    for variant in &flat.variants {
-        let cases: Vec<(String, u32)> = variant
-            .cases
-            .iter()
-            .map(|c| (c.name.clone(), c.index))
-            .collect();
-        variant_case_map.insert((variant.name.clone(), variant.module_source.clone()), cases);
-    }
+/// Pattern lowering rewrites `LetDestructure` / `IfLet` into explicit
+/// `Let` + `Match` chains and expands or-patterns in `Match` arms. It
+/// runs after the whole `lower::plan` phase (boxing, closure,
+/// `lift_mut`, `value_copy`, …): a match scrutinee on a reference
+/// reaches it as a `Box<T>` struct and the references it synthesises
+/// for ergonomic bindings are box-shaped — [`peel_refs_and_box`] and
+/// [`coerce_value_to_binding`] handle both.
+pub struct Lowering {
+    /// Map from (`variant_name`, `module_source`) to (`case_name`,
+    /// `case_index`) pairs. The `module_source` axis keeps two
+    /// modules' same-named variants distinct.
+    variant_case_map: IndexMap<(String, ModuleSource), Vec<(String, u32)>>,
+    /// Map from (`struct_name`, `module_source`) to field definitions.
+    struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
+    /// Canonical stdlib name of the `Eq` trait.
+    eq_trait_name: String,
+    /// Canonical stdlib name of the `String` struct.
+    string_struct_name: String,
+}
 
-    // Build struct fields map from module structs. The key uses the
-    // struct's own `module_source` so that two modules each declaring
-    // a struct with the same name keep their field tables distinct —
-    // pattern lookup resolves the `module_source` from the scrutinee's
-    // resolved type.
-    let mut struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>> =
-        IndexMap::default();
-    for s in &flat.structs {
-        struct_fields_map.insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
-    }
-
-    let type_table = flat.type_table.borrow();
-    let eq_trait_name = type_table
-        .compiler_items()
-        .trait_name(crate::compiler_item::CompilerItem::Eq)
-        .to_string();
-    let string_struct_name = type_table
-        .compiler_items()
-        .struct_name(crate::compiler_item::CompilerItem::String)
-        .to_string();
-    for func_rc in &flat.functions {
-        let mut func = func_rc.borrow_mut();
-        if let Some(mut body) = func.body.take() {
-            // Take ownership of the values to avoid borrow conflicts
-            let local_count = func.local_count;
-            let locals = std::mem::take(&mut func.locals);
-
-            let mut lowerer = PatternLowerer::new(
-                local_count,
-                locals,
-                eq_trait_name.clone(),
-                string_struct_name.clone(),
-                &variant_case_map,
-                &struct_fields_map,
-            );
-            lowerer.lower_block(&mut body, &type_table);
-
-            // Put the values back
-            let (new_count, new_locals) = lowerer.into_parts();
-            func.local_count = new_count;
-            func.locals = new_locals;
-            func.body = Some(body);
+impl Lowering {
+    /// Gather the package-level maps once, before the translator's
+    /// per-function walk begins.
+    pub fn new(flat: &FlatPackage) -> Self {
+        let mut variant_case_map: IndexMap<(String, ModuleSource), Vec<(String, u32)>> =
+            IndexMap::default();
+        for variant in &flat.variants {
+            let cases: Vec<(String, u32)> = variant
+                .cases
+                .iter()
+                .map(|c| (c.name.clone(), c.index))
+                .collect();
+            variant_case_map.insert((variant.name.clone(), variant.module_source.clone()), cases);
         }
+
+        let mut struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>> =
+            IndexMap::default();
+        for s in &flat.structs {
+            struct_fields_map.insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
+        }
+
+        let type_table = flat.type_table.borrow();
+        let eq_trait_name = type_table
+            .compiler_items()
+            .trait_name(crate::compiler_item::CompilerItem::Eq)
+            .to_string();
+        let string_struct_name = type_table
+            .compiler_items()
+            .struct_name(crate::compiler_item::CompilerItem::String)
+            .to_string();
+        Self {
+            variant_case_map,
+            struct_fields_map,
+            eq_trait_name,
+            string_struct_name,
+        }
+    }
+
+    /// Lower the patterns in one function's body in place.
+    pub fn lower_function(&self, func: &mut TirFunction, type_table: &TypeTable) {
+        let Some(mut body) = func.body.take() else {
+            return;
+        };
+        // Take ownership of the locals to avoid borrow conflicts.
+        let local_count = func.local_count;
+        let locals = std::mem::take(&mut func.locals);
+
+        let mut lowerer = PatternLowerer::new(
+            local_count,
+            locals,
+            self.eq_trait_name.clone(),
+            self.string_struct_name.clone(),
+            &self.variant_case_map,
+            &self.struct_fields_map,
+        );
+        lowerer.lower_block(&mut body, type_table);
+
+        let (new_count, new_locals) = lowerer.into_parts();
+        func.local_count = new_count;
+        func.locals = new_locals;
+        func.body = Some(body);
     }
 }
 

@@ -4,8 +4,13 @@
 //! The planner is allowed to mutate the input [`FlatPackage`] when the
 //! mutation is annotation-style (inserting `builtin::copy_value::<T>(...)`
 //! markers, pushing synthesized helper functions, rewriting `Closure` /
-//! `&primitive` / `IfLet` nodes in place). The translator is purely a
-//! fold over TIR; everything that needs global analysis happens here.
+//! `&primitive` nodes in place). The translator is purely a fold over
+//! TIR; everything that needs global analysis happens here.
+//!
+//! Pattern lowering (`IfLet` / `LetDestructure` / or-patterns →
+//! explicit `Let` + `Match`) is no longer a `plan` sub-pass: it runs
+//! inside the translator's per-function walk (WEP 2026-05-11 Phase 10
+//! Step 2b — see [`translate::pattern`](super::translate::pattern)).
 //!
 //! Sub-pass order:
 //!
@@ -16,29 +21,18 @@
 //!    redefine `Ref` / `MutRef` TypeIds; `boxing::lower_bodies` —
 //!    rewrite `&primitive` / `&mut primitive` into `Box<T>` struct
 //!    operations.
-//! 3. `translate::pattern` — `IfLet` / `LetDestructure` → explicit
-//!    `Let` + `Match`; or-pattern expansion, refutable sub-pattern
-//!    extraction, and ref-deref on `Match` scrutinees. The
-//!    implementation lives in the translator module because it
-//!    builds the TIR shapes the translator consumes. It runs after
-//!    `boxing` (WEP 2026-05-11 Phase 10 Step 2b): a match scrutinee
-//!    on a reference reaches it as a `Box<T>` struct rather than a
-//!    `Ref`, and the references it synthesises for ergonomic
-//!    bindings must be box-shaped — `translate::pattern` handles
-//!    both. This decouples Step 2b (folding pattern lowering into
-//!    the translator's fold) from Step 6.
-//! 4. `closure` — closures → `__Closure_N` functor structs with
+//! 3. `closure` — closures → `__Closure_N` functor structs with
 //!    `__call` methods; returns `ClosurePlan`.
-//! 5. `globals::build_initialize_modules` — combine per-module init
+//! 4. `globals::build_initialize_modules` — combine per-module init
 //!    functions into the top-level `__initialize_modules`.
-//! 6. `lift_mut::lift_mut_match_bindings` — lift `mut` payload
-//!    bindings inside the `Match` arms produced by step 3 into
-//!    explicit `Let mut` statements at the arm body start, the
+//! 5. `lift_mut::lift_mut_match_bindings` — lift `mut` payload
+//!    bindings inside `Match` arm and `IfLet` patterns into explicit
+//!    `Let mut` statements at the arm body / then-block start, the
 //!    shape `value_copy::insert` keys on for its defensive-copy
 //!    wrap — see [`lift_mut`] module docs.
-//! 7. `value_copy` — insert `builtin::copy_value::<T>(x)` markers and
+//! 6. `value_copy` — insert `builtin::copy_value::<T>(x)` markers and
 //!    synthesize `$value_copy$T<id>` helpers; returns `ValueCopyPlan`.
-//! 8. `string` — collect literals and per-function DCE maps for the
+//! 7. `string` — collect literals and per-function DCE maps for the
 //!    data section; returns `StringPlan`.
 //!
 //! Only the sub-passes that need to pass data through to the translator
@@ -66,19 +60,12 @@ pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     globals::extract(flat);
     let box_plan = boxing::prepare_types(flat);
     boxing::lower_bodies(flat, &box_plan);
-    // Pattern lowering runs after boxing: `boxing` has already
-    // redefined `Ref(boxable)` TypeIds to `Box<T>` structs, so
-    // `translate::pattern` peels and synthesises box-shaped
-    // references rather than `Ref` nodes. See module docs.
-    super::translate::pattern::lower(flat);
     let closure = closure::plan(flat);
     globals::build_initialize_modules(flat);
     flat.rebuild_variant_indices();
     // Lift `mut` payload bindings out of Match arm and IfLet patterns
     // into explicit `Let mut` statements before `value_copy` walks the
-    // body. The lifted `Let mut` is the shape value_copy recognises;
-    // doing it here keeps pattern lowering free of value_copy
-    // concerns — see [`lift_mut`] module docs.
+    // body. The lifted `Let mut` is the shape value_copy recognises.
     lift_mut::lift_mut_match_bindings(flat);
     let value_copy = value_copy::plan(flat);
     // Strings are collected after `value_copy` planning so any literals
