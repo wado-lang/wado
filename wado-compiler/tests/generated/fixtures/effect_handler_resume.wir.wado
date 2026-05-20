@@ -184,19 +184,19 @@ fn "wado-compiler/tests/fixtures/effect_handler_resume.wado/run"() with Stdout {
 
 fn "wado-compiler/tests/fixtures/effect_handler_resume.wado/__effect_dispatch__Counter__next"() {
     let __saved: ref null "wado-compiler/tests/fixtures/effect_handler_resume.wado//__Dispatch_Counter";
-    let __d: ref "wado-compiler/tests/fixtures/effect_handler_resume.wado//__Dispatch_Counter";
-    let __result: i32;
+    let __local_1: ref "wado-compiler/tests/fixtures/effect_handler_resume.wado//__Dispatch_Counter";
+    let __local_2: i32;
     __saved = global:__effect_Counter;
     if ref.is_null(__saved) == 0 {
-        __d = ref.as_non_null(__saved);
-        global:__effect_Counter = __d.outer;
-        __result = block -> i32 {
+        __local_1 = ref.as_non_null(__saved);
+        global:__effect_Counter = __local_1.outer;
+        __local_2 = block -> i32 {
             let __indirect_call_0: ref "canonical//CanonicalClosure_0";
-            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__d.op_next);
+            __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__local_1.op_next);
             call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
         };
         global:__effect_Counter = __saved;
-        return __result;
+        return __local_2;
     } else {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
         unreachable;

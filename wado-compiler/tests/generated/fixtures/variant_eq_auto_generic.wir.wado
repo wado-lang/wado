@@ -246,17 +246,29 @@ fn "core:prelude/types.wado/Option<i32>^Eq::eq"(self, other) {
 }
 
 fn "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/Maybe<i32>^Eq::eq"(self, other) {
-    if ref.test "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(self) {
-        if ref.test "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(other) {
-            return ref.cast "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(self).payload_0 == ref.cast "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(other).payload_0;
+    let __eq_self_Just_2: i32;
+    let __eq_other_Just_3: i32;
+    let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>";
+    __match_scrut_0 = self;
+    if ref.test "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(__match_scrut_0) {
+        __eq_self_Just_2 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(__match_scrut_0).payload_0;
+        let __match_scrut_2: ref "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>";
+        __match_scrut_2 = other;
+        if ref.test "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(__match_scrut_2) {
+            __eq_other_Just_3 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just"(__match_scrut_2).payload_0;
+            return __eq_self_Just_2 == __eq_other_Just_3;
+        } else {
+            return 0;
+        }
+    } else {
+        let __match_scrut_1: ref "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>";
+        __match_scrut_1 = other;
+        if __match_scrut_1.discriminant == 1 {
+            return 1;
         } else {
             return 0;
         }
     }
-    if self.discriminant == 1 {
-        return other.discriminant == 1;
-    }
-    return 0;
 }
 
 export fn "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/__cm_export__run" as "run"

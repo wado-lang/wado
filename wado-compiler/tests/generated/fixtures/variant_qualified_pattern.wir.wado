@@ -199,20 +199,20 @@ global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/variant_qualified_pattern.wado/check"(op) {
     let any: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
-    let __pattern_temp_0: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
-    let __pattern_temp_1: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
     any = struct.new "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op" { 0 };
-    __pattern_temp_0 = op;
-    if (if __pattern_temp_0.discriminant == 0 -> i32 {
-        1;
-    } else {
-        __pattern_temp_0.discriminant == 1;
-    }) {
+    let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
+    __match_scrut_0 = op;
+    if __match_scrut_0.discriminant == 0 {
         return 1;
+    } else if __match_scrut_0.discriminant == 1 {
+        return 1;
+    } else {
     }
-    __pattern_temp_1 = op;
-    if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__pattern_temp_1) {
+    let __match_scrut_1: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
+    __match_scrut_1 = op;
+    if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__match_scrut_1) {
         return 0;
+    } else {
     }
     return "wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op^Eq::eq"(any, struct.new "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op" { 0 });
 }
@@ -281,7 +281,6 @@ fn "wado-compiler/tests/fixtures/variant_qualified_pattern.wado/run"() {
     let f_159: ref "core:prelude/format.wado//Formatter";
     let v_162: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>";
     let x_163: i32;
-    let __local_2_164: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>";
     let f_169: ref "core:prelude/format.wado//Formatter";
     let f_174: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
@@ -410,9 +409,12 @@ condition: !check(&Op::Token(1))
     }
     __v0_8 = struct.new "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token" { discriminant: 2, payload_0: 42 };
     __v1_9 = __inline_token_value_26: block -> i32 {
-        if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__v0_8) {
-            v_91 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__v0_8).payload_0;
+        let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
+        __match_scrut_0 = __v0_8;
+        if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__match_scrut_0) {
+            v_91 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__match_scrut_0).payload_0;
             break __inline_token_value_26: v_91;
+        } else {
         }
         break __inline_token_value_26: -1;
         unreachable;
@@ -453,9 +455,12 @@ condition: token_value(Op::Token(42)) == 42
     }
     __v0_11 = __inline_token_value_35: block -> i32 {
         op_105 = struct.new "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op" { 1 };
-        if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(op_105) {
-            v_106 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(op_105).payload_0;
+        let __match_scrut_1: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
+        __match_scrut_1 = op_105;
+        if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__match_scrut_1) {
+            v_106 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__match_scrut_1).payload_0;
             break __inline_token_value_35: v_106;
+        } else {
         }
         break __inline_token_value_35: -1;
         unreachable;
@@ -575,12 +580,18 @@ condition: false
     }
     __v0_21 = struct.new "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>::Some" { discriminant: 0, payload_0: 8 };
     __v1_22 = __inline_maybe_unwrap_61: block -> i32 {
-        if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>::Some"(__v0_21) {
-            x_147 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>::Some"(__v0_21).payload_0;
+        let __match_scrut_4: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>";
+        __match_scrut_4 = __v0_21;
+        if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>::Some"(__match_scrut_4) {
+            x_147 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>::Some"(__match_scrut_4).payload_0;
             break __inline_maybe_unwrap_61: x_147;
+        } else {
         }
-        if __v0_21.discriminant == 1 {
+        let __match_scrut_5: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>";
+        __match_scrut_5 = __v0_21;
+        if __match_scrut_5.discriminant == 1 {
             break __inline_maybe_unwrap_61: -1;
+        } else {
         }
         break __inline_maybe_unwrap_61: -2;
         unreachable;
@@ -621,13 +632,18 @@ condition: maybe_unwrap(Maybe::Some(8)) == 8
     }
     __v0_24 = __inline_maybe_unwrap_70: block -> i32 {
         v_162 = struct.new "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>" { 1 };
-        __local_2_164 = v_162;
-        if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>::Some"(__local_2_164) {
-            x_163 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>::Some"(__local_2_164).payload_0;
+        let __match_scrut_6: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>";
+        __match_scrut_6 = v_162;
+        if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>::Some"(__match_scrut_6) {
+            x_163 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>::Some"(__match_scrut_6).payload_0;
             break __inline_maybe_unwrap_70: x_163;
+        } else {
         }
-        if v_162.discriminant == 1 {
+        let __match_scrut_7: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>";
+        __match_scrut_7 = v_162;
+        if __match_scrut_7.discriminant == 1 {
             break __inline_maybe_unwrap_70: -1;
+        } else {
         }
         break __inline_maybe_unwrap_70: -2;
         unreachable;
@@ -2058,46 +2074,60 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op^Eq::eq"(self, other) {
-    let __sroa_self_value: i32;
-    let __sroa_other_value: i32;
-    if self.discriminant == 0 {
-        return other.discriminant == 0;
-    }
-    if self.discriminant == 1 {
-        return other.discriminant == 1;
-    }
-    if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(self) {
-        if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(other) {
-            return __inline_i32_Eq__eq_0: block -> bool {
-                __sroa_self_value = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(self).payload_0;
-                __sroa_other_value = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(other).payload_0;
-                break __inline_i32_Eq__eq_0: __sroa_self_value == __sroa_other_value;
-                unreachable;
-            };
+    let __eq_self_Token_2: i32;
+    let __eq_other_Token_3: i32;
+    let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
+    __match_scrut_0 = self;
+    if __match_scrut_0.discriminant == 0 {
+        let __match_scrut_3: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
+        __match_scrut_3 = other;
+        if __match_scrut_3.discriminant == 0 {
+            return 1;
+        } else {
+            return 0;
+        }
+    } else if __match_scrut_0.discriminant == 1 {
+        let __match_scrut_2: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
+        __match_scrut_2 = other;
+        if __match_scrut_2.discriminant == 1 {
+            return 1;
+        } else {
+            return 0;
+        }
+    } else {
+        __eq_self_Token_2 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__match_scrut_0).payload_0;
+        let __match_scrut_1: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
+        __match_scrut_1 = other;
+        if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__match_scrut_1) {
+            __eq_other_Token_3 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__match_scrut_1).payload_0;
+            return __eq_self_Token_2 == __eq_other_Token_3;
         } else {
             return 0;
         }
     }
-    return 0;
 }
 
 fn "wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Op^Inspect::inspect"(self, f) {
-    let s_3: ref "core:prelude/string.wado//String";
-    let s_5: ref "core:prelude/string.wado//String";
-    let s_7: ref "core:prelude/string.wado//String";
-    let s_13: ref "core:prelude/string.wado//String";
-    if self.discriminant == 0 {
-        s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Op::Wildcard"), used: 12 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_3);
-    } else if self.discriminant == 1 {
-        s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Op::Excluded"), used: 12 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_5);
-    } else if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(self) {
-        s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Op::Token("), used: 10 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_7);
-        "core:prelude/primitive.wado/i32::fmt_decimal"(ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(self).payload_0, f);
-        s_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_13);
+    let __inspect_Token_2: i32;
+    let s_4: ref "core:prelude/string.wado//String";
+    let s_6: ref "core:prelude/string.wado//String";
+    let s_8: ref "core:prelude/string.wado//String";
+    let s_14: ref "core:prelude/string.wado//String";
+    let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op";
+    __match_scrut_0 = self;
+    if __match_scrut_0.discriminant == 0 {
+        s_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Op::Wildcard"), used: 12 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_4);
+    } else if __match_scrut_0.discriminant == 1 {
+        s_6 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Op::Excluded"), used: 12 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_6);
+    } else {
+        __inspect_Token_2 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Op::Token"(__match_scrut_0).payload_0;
+        s_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Op::Token("), used: 10 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_8);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inspect_Token_2, f);
+        s_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_14);
     }
 }
 
@@ -2364,18 +2394,22 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 }
 
 fn "wado-compiler/tests/fixtures/variant_qualified_pattern.wado/Maybe<i32>^Inspect::inspect"(self, f) {
-    let s_3: ref "core:prelude/string.wado//String";
-    let s_9: ref "core:prelude/string.wado//String";
-    let s_11: ref "core:prelude/string.wado//String";
-    if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>::Some"(self) {
-        s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Maybe::Some("), used: 12 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_3);
-        "core:prelude/primitive.wado/i32::fmt_decimal"(ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>::Some"(self).payload_0, f);
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_9);
-    } else if self.discriminant == 1 {
-        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Maybe::None"), used: 11 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_11);
+    let __inspect_Some_2: i32;
+    let s_4: ref "core:prelude/string.wado//String";
+    let s_10: ref "core:prelude/string.wado//String";
+    let s_12: ref "core:prelude/string.wado//String";
+    let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>";
+    __match_scrut_0 = self;
+    if ref.test "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>::Some"(__match_scrut_0) {
+        __inspect_Some_2 = ref.cast "wado-compiler/tests/fixtures/variant_qualified_pattern.wado//Maybe<i32>::Some"(__match_scrut_0).payload_0;
+        s_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Maybe::Some("), used: 12 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_4);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inspect_Some_2, f);
+        s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_10);
+    } else {
+        s_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Maybe::None"), used: 11 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_12);
     }
 }
 

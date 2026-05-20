@@ -303,6 +303,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     let rmdir_again: ref null "wasi:filesystem/types.wado//ErrorCode";
     let __local_17: ref "core:prelude/string.wado//String";
     let __local_18: ref "core:prelude/format.wado//Formatter";
+<<<<<<< HEAD
     let __pattern_temp_2: ref "tuple//[Stream<wasi:filesystem/types.wado/DirectoryEntry>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
     let __pattern_temp_3: ref null "wasi:filesystem/types.wado//DirectoryEntry";
     let v: ref "wasi:filesystem/types.wado//DirectoryEntry";
@@ -314,6 +315,38 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     let len_a_39: i32;
     let other_41: ref "core:prelude/string.wado//String";
     let len_a_42: i32;
+||||||| 2709b095
+    let __pattern_temp_2: ref "tuple//[Stream<wasi:filesystem/types.wado/DirectoryEntry>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
+    let __pattern_temp_3: ref null "wasi:filesystem/types.wado//DirectoryEntry";
+    let v: ref "wasi:filesystem/types.wado//DirectoryEntry";
+    let self_31: ref "core:prelude/string.wado//String";
+    let other_32: ref "core:prelude/string.wado//String";
+    let len_a_33: i32;
+    let self_34: ref "core:prelude/string.wado//String";
+    let other_35: ref "core:prelude/string.wado//String";
+    let len_a_36: i32;
+    let self_37: ref "core:prelude/string.wado//String";
+    let other_38: ref "core:prelude/string.wado//String";
+    let len_a_39: i32;
+    let self_40: ref "core:prelude/string.wado//String";
+    let other_41: ref "core:prelude/string.wado//String";
+    let len_a_42: i32;
+=======
+    let __pattern_temp_0: ref "tuple//[Stream<wasi:filesystem/types.wado/DirectoryEntry>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
+    let __iflet_22: ref null "wasi:filesystem/types.wado//DirectoryEntry";
+    let self_30: ref "core:prelude/string.wado//String";
+    let other_31: ref "core:prelude/string.wado//String";
+    let len_a_32: i32;
+    let self_33: ref "core:prelude/string.wado//String";
+    let other_34: ref "core:prelude/string.wado//String";
+    let len_a_35: i32;
+    let self_36: ref "core:prelude/string.wado//String";
+    let other_37: ref "core:prelude/string.wado//String";
+    let len_a_38: i32;
+    let self_39: ref "core:prelude/string.wado//String";
+    let other_40: ref "core:prelude/string.wado//String";
+    let len_a_41: i32;
+>>>>>>> origin/claude/nir-lower-phase-review-V5JP2
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
@@ -338,9 +371,9 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     mkdir_dup = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_create_directory_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 }));
     if ref.is_null(mkdir_dup) == 0 {
         err = ref.as_non_null(mkdir_dup);
-        let __match_scrut_0: ref "wasi:filesystem/types.wado//ErrorCode";
-        __match_scrut_0 = err;
-        if __match_scrut_0.discriminant == 6 {
+        let __match_scrut_2: ref "wasi:filesystem/types.wado//ErrorCode";
+        __match_scrut_2 = err;
+        if __match_scrut_2.discriminant == 6 {
             "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("create_directory_at: duplicate returns Exist (correct)"), used: 54 });
         } else {
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("create_directory_at: duplicate returned wrong error"), used: 51 });
@@ -348,9 +381,9 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("create_directory_at: duplicate should fail"), used: 42 });
     }
-    __pattern_temp_2 = "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_read_directory"(dir);
-    dir_stream = __pattern_temp_2.0;
-    _done = __pattern_temp_2.1;
+    __pattern_temp_0 = "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_read_directory"(dir);
+    dir_stream = __pattern_temp_0.0;
+    _done = __pattern_temp_0.1;
     found_hello = 0;
     found_binary = 0;
     found_subdir = 0;
@@ -360,70 +393,154 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     __iter_13 = struct.new "core:prelude/array.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: entries.repr, used: entries.used, index: 0 };
     b5: block {
         l6: loop {
-            __pattern_temp_3 = "core:prelude/array.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(__iter_13);
-            if ref.is_null(__pattern_temp_3) == 0 {
-                entry = __inline__value_copy_T51_5: block -> ref "wasi:filesystem/types.wado//DirectoryEntry" {
-                    v = ref.as_non_null(__pattern_temp_3);
-                    break __inline__value_copy_T51_5: v;
-                    unreachable;
-                };
+            __iflet_22 = "core:prelude/array.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(__iter_13);
+            if ref.is_null(__iflet_22) == 0 {
+                entry = ref.as_non_null(__iflet_22);
                 entry_count = entry_count + 1;
+<<<<<<< HEAD
                 if __inline_String_Eq__eq_6: block -> bool {
                     other_32 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 };
                     len_a_33 = entry.name.used;
                     if len_a_33 != other_32.used {
                         break __inline_String_Eq__eq_6: 0;
+||||||| 2709b095
+                if __inline_String_Eq__eq_6: block -> bool {
+                    self_31 = entry.name;
+                    other_32 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 };
+                    len_a_33 = self_31.used;
+                    if len_a_33 != other_32.used {
+                        break __inline_String_Eq__eq_6: 0;
+=======
+                if __inline_String_Eq__eq_5: block -> bool {
+                    self_30 = entry.name;
+                    other_31 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 };
+                    len_a_32 = self_30.used;
+                    if len_a_32 != other_31.used {
+                        break __inline_String_Eq__eq_5: 0;
+>>>>>>> origin/claude/nir-lower-phase-review-V5JP2
                     }
+<<<<<<< HEAD
                     break __inline_String_Eq__eq_6: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_32.repr, len_a_33);
+||||||| 2709b095
+                    break __inline_String_Eq__eq_6: "core:prelude/string.wado/String^Eq::eq_bytes"(self_31.repr, other_32.repr, len_a_33);
+=======
+                    break __inline_String_Eq__eq_5: "core:prelude/string.wado/String^Eq::eq_bytes"(self_30.repr, other_31.repr, len_a_32);
+>>>>>>> origin/claude/nir-lower-phase-review-V5JP2
                     unreachable;
                 } {
                     found_hello = 1;
-                    let __match_scrut_1: ref "wasi:filesystem/types.wado//DescriptorType";
-                    __match_scrut_1 = entry.type;
-                    if __match_scrut_1.discriminant == 5 {
+                    let __match_scrut_4: ref "wasi:filesystem/types.wado//DescriptorType";
+                    __match_scrut_4 = entry.type;
+                    if __match_scrut_4.discriminant == 5 {
                         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_directory: hello.txt is RegularFile (correct)"), used: 50 });
                     }
                 }
+<<<<<<< HEAD
                 if __inline_String_Eq__eq_7: block -> bool {
                     other_35 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("binary.dat"), used: 10 };
                     len_a_36 = entry.name.used;
                     if len_a_36 != other_35.used {
                         break __inline_String_Eq__eq_7: 0;
+||||||| 2709b095
+                if __inline_String_Eq__eq_7: block -> bool {
+                    self_34 = entry.name;
+                    other_35 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("binary.dat"), used: 10 };
+                    len_a_36 = self_34.used;
+                    if len_a_36 != other_35.used {
+                        break __inline_String_Eq__eq_7: 0;
+=======
+                if __inline_String_Eq__eq_6: block -> bool {
+                    self_33 = entry.name;
+                    other_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("binary.dat"), used: 10 };
+                    len_a_35 = self_33.used;
+                    if len_a_35 != other_34.used {
+                        break __inline_String_Eq__eq_6: 0;
+>>>>>>> origin/claude/nir-lower-phase-review-V5JP2
                     }
+<<<<<<< HEAD
                     break __inline_String_Eq__eq_7: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_35.repr, len_a_36);
+||||||| 2709b095
+                    break __inline_String_Eq__eq_7: "core:prelude/string.wado/String^Eq::eq_bytes"(self_34.repr, other_35.repr, len_a_36);
+=======
+                    break __inline_String_Eq__eq_6: "core:prelude/string.wado/String^Eq::eq_bytes"(self_33.repr, other_34.repr, len_a_35);
+>>>>>>> origin/claude/nir-lower-phase-review-V5JP2
                     unreachable;
                 } {
                     found_binary = 1;
                 }
+<<<<<<< HEAD
                 if __inline_String_Eq__eq_8: block -> bool {
                     other_38 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("subdir"), used: 6 };
                     len_a_39 = entry.name.used;
                     if len_a_39 != other_38.used {
                         break __inline_String_Eq__eq_8: 0;
+||||||| 2709b095
+                if __inline_String_Eq__eq_8: block -> bool {
+                    self_37 = entry.name;
+                    other_38 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("subdir"), used: 6 };
+                    len_a_39 = self_37.used;
+                    if len_a_39 != other_38.used {
+                        break __inline_String_Eq__eq_8: 0;
+=======
+                if __inline_String_Eq__eq_7: block -> bool {
+                    self_36 = entry.name;
+                    other_37 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("subdir"), used: 6 };
+                    len_a_38 = self_36.used;
+                    if len_a_38 != other_37.used {
+                        break __inline_String_Eq__eq_7: 0;
+>>>>>>> origin/claude/nir-lower-phase-review-V5JP2
                     }
+<<<<<<< HEAD
                     break __inline_String_Eq__eq_8: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_38.repr, len_a_39);
+||||||| 2709b095
+                    break __inline_String_Eq__eq_8: "core:prelude/string.wado/String^Eq::eq_bytes"(self_37.repr, other_38.repr, len_a_39);
+=======
+                    break __inline_String_Eq__eq_7: "core:prelude/string.wado/String^Eq::eq_bytes"(self_36.repr, other_37.repr, len_a_38);
+>>>>>>> origin/claude/nir-lower-phase-review-V5JP2
                     unreachable;
                 } {
                     found_subdir = 1;
-                    let __match_scrut_2: ref "wasi:filesystem/types.wado//DescriptorType";
-                    __match_scrut_2 = entry.type;
-                    if __match_scrut_2.discriminant == 2 {
+                    let __match_scrut_5: ref "wasi:filesystem/types.wado//DescriptorType";
+                    __match_scrut_5 = entry.type;
+                    if __match_scrut_5.discriminant == 2 {
                         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_directory: subdir is Directory (correct)"), used: 45 });
                     }
                 }
+<<<<<<< HEAD
                 if __inline_String_Eq__eq_9: block -> bool {
                     other_41 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 };
                     len_a_42 = entry.name.used;
                     if len_a_42 != other_41.used {
                         break __inline_String_Eq__eq_9: 0;
+||||||| 2709b095
+                if __inline_String_Eq__eq_9: block -> bool {
+                    self_40 = entry.name;
+                    other_41 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 };
+                    len_a_42 = self_40.used;
+                    if len_a_42 != other_41.used {
+                        break __inline_String_Eq__eq_9: 0;
+=======
+                if __inline_String_Eq__eq_8: block -> bool {
+                    self_39 = entry.name;
+                    other_40 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 };
+                    len_a_41 = self_39.used;
+                    if len_a_41 != other_40.used {
+                        break __inline_String_Eq__eq_8: 0;
+>>>>>>> origin/claude/nir-lower-phase-review-V5JP2
                     }
+<<<<<<< HEAD
                     break __inline_String_Eq__eq_9: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_41.repr, len_a_42);
+||||||| 2709b095
+                    break __inline_String_Eq__eq_9: "core:prelude/string.wado/String^Eq::eq_bytes"(self_40.repr, other_41.repr, len_a_42);
+=======
+                    break __inline_String_Eq__eq_8: "core:prelude/string.wado/String^Eq::eq_bytes"(self_39.repr, other_40.repr, len_a_41);
+>>>>>>> origin/claude/nir-lower-phase-review-V5JP2
                     unreachable;
                 } {
                     found_newdir = 1;
-                    let __match_scrut_3: ref "wasi:filesystem/types.wado//DescriptorType";
-                    __match_scrut_3 = entry.type;
-                    if __match_scrut_3.discriminant == 2 {
+                    let __match_scrut_6: ref "wasi:filesystem/types.wado//DescriptorType";
+                    __match_scrut_6 = entry.type;
+                    if __match_scrut_6.discriminant == 2 {
                         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_directory: test_newdir is Directory (correct)"), used: 50 });
                     }
                 }

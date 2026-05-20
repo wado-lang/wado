@@ -1737,30 +1737,38 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "wado-compiler/tests/fixtures/match_or_pattern_2.wado/Shape^Inspect::inspect"(self, f) {
-    let s_3: ref "core:prelude/string.wado//String";
-    let s_7: ref "core:prelude/string.wado//String";
-    let s_9: ref "core:prelude/string.wado//String";
-    let s_13: ref "core:prelude/string.wado//String";
-    let s_15: ref "core:prelude/string.wado//String";
-    let s_19: ref "core:prelude/string.wado//String";
-    if ref.test "wado-compiler/tests/fixtures/match_or_pattern_2.wado//Shape::Circle"(self) {
-        s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Shape::Circle("), used: 14 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_3);
-        "core:prelude/primitive.wado/f64::inspect_into"(ref.cast "wado-compiler/tests/fixtures/match_or_pattern_2.wado//Shape::Circle"(self).payload_0, f);
-        s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_7);
-    } else if ref.test "wado-compiler/tests/fixtures/match_or_pattern_2.wado//Shape::Square"(self) {
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Shape::Square("), used: 14 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_9);
-        "core:prelude/primitive.wado/f64::inspect_into"(ref.cast "wado-compiler/tests/fixtures/match_or_pattern_2.wado//Shape::Square"(self).payload_0, f);
-        s_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_13);
-    } else if ref.test "wado-compiler/tests/fixtures/match_or_pattern_2.wado//Shape::Triangle"(self) {
-        s_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Shape::Triangle("), used: 16 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_15);
-        "core:prelude/primitive.wado/f64::inspect_into"(ref.cast "wado-compiler/tests/fixtures/match_or_pattern_2.wado//Shape::Triangle"(self).payload_0, f);
-        s_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_19);
+    let __inspect_Circle_2: f64;
+    let __inspect_Square_3: f64;
+    let __inspect_Triangle_4: f64;
+    let s_6: ref "core:prelude/string.wado//String";
+    let s_10: ref "core:prelude/string.wado//String";
+    let s_12: ref "core:prelude/string.wado//String";
+    let s_16: ref "core:prelude/string.wado//String";
+    let s_18: ref "core:prelude/string.wado//String";
+    let s_22: ref "core:prelude/string.wado//String";
+    let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_or_pattern_2.wado//Shape";
+    __match_scrut_0 = self;
+    if ref.test "wado-compiler/tests/fixtures/match_or_pattern_2.wado//Shape::Circle"(__match_scrut_0) {
+        __inspect_Circle_2 = ref.cast "wado-compiler/tests/fixtures/match_or_pattern_2.wado//Shape::Circle"(__match_scrut_0).payload_0;
+        s_6 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Shape::Circle("), used: 14 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_6);
+        "core:prelude/primitive.wado/f64::inspect_into"(__inspect_Circle_2, f);
+        s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_10);
+    } else if ref.test "wado-compiler/tests/fixtures/match_or_pattern_2.wado//Shape::Square"(__match_scrut_0) {
+        __inspect_Square_3 = ref.cast "wado-compiler/tests/fixtures/match_or_pattern_2.wado//Shape::Square"(__match_scrut_0).payload_0;
+        s_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Shape::Square("), used: 14 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_12);
+        "core:prelude/primitive.wado/f64::inspect_into"(__inspect_Square_3, f);
+        s_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_16);
+    } else {
+        __inspect_Triangle_4 = ref.cast "wado-compiler/tests/fixtures/match_or_pattern_2.wado//Shape::Triangle"(__match_scrut_0).payload_0;
+        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Shape::Triangle("), used: 16 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_18);
+        "core:prelude/primitive.wado/f64::inspect_into"(__inspect_Triangle_4, f);
+        s_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_22);
     }
 }
 
@@ -1771,13 +1779,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l173: loop {
+            l172: loop {
                 if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l173;
+                continue l172;
             };
         };
     };
@@ -1871,10 +1879,10 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
         i_8 = content_len - 1;
         _licm_buf_29 = self.buf;
         _licm_repr_33 = _licm_buf_29.repr;
-        b183: block {
-            l184: loop {
+        b182: block {
+            l183: loop {
                 if i_8 < 0 {
-                    break b183;
+                    break b182;
                 }
                 index_14 = (start_pos + left_pad) + i_8;
                 value_15 = __inline_String__get_byte_unchecked_2: block -> u8 {
@@ -1884,7 +1892,7 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_33, index_14, value_15);
                 i_8 = i_8 - 1;
-                continue l184;
+                continue l183;
             };
         };
         __for_1: block {
@@ -1892,14 +1900,14 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
             _licm_buf_30 = self.buf;
             _licm_repr_34 = _licm_buf_30.repr;
             block {
-                l187: loop {
+                l186: loop {
                     if j_9 >= left_pad {
                         break __for_1;
                     }
                     index_19 = start_pos + j_9;
                     builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
                     j_9 = j_9 + 1;
-                    continue l187;
+                    continue l186;
                 };
             };
         };
@@ -1909,10 +1917,10 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
         i_10 = content_len - 1;
         _licm_buf_31 = self.buf;
         _licm_repr_35 = _licm_buf_31.repr;
-        b189: block {
-            l190: loop {
+        b188: block {
+            l189: loop {
                 if i_10 < 0 {
-                    break b189;
+                    break b188;
                 }
                 index_22 = (start_pos + padding) + i_10;
                 value_23 = __inline_String__get_byte_unchecked_5: block -> u8 {
@@ -1922,7 +1930,7 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_35, index_22, value_23);
                 i_10 = i_10 - 1;
-                continue l190;
+                continue l189;
             };
         };
         __for_2: block {
@@ -1930,14 +1938,14 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
             _licm_buf_32 = self.buf;
             _licm_repr_36 = _licm_buf_32.repr;
             block {
-                l193: loop {
+                l192: loop {
                     if j_11 >= padding {
                         break __for_2;
                     }
                     index_27 = start_pos + j_11;
                     builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
                     j_11 = j_11 + 1;
-                    continue l193;
+                    continue l192;
                 };
             };
         };

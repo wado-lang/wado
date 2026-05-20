@@ -135,6 +135,7 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/try_divide"(a, b
     if __sroa_result_discriminant == 0 {
         n = __sroa_result_case0_payload_0;
         return n;
+    } else {
     }
     return -1;
 }
@@ -155,6 +156,7 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/use_payload"(x) 
     if __sroa_result_discriminant == 0 {
         p = ref.as_non_null(__sroa_result_case0_payload_0);
         return p.value;
+    } else {
     }
     return -1;
 }
@@ -168,6 +170,7 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/use_err_branch"(
     if __sroa_result_discriminant == 1 {
         msg = ref.as_non_null(__sroa_result_case1_payload_0);
         return msg;
+    } else {
     }
     return struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
 }
@@ -916,11 +919,11 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     _licm_buf_33 = f.buf;
     b65: block {
         l66: loop {
-            let __sroa___pattern_temp_0_discriminant: i32;
-            let __sroa___pattern_temp_0_payload_0: char;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
-            if __sroa___pattern_temp_0_discriminant == 0 {
-                c_3 = __sroa___pattern_temp_0_payload_0;
+            let __sroa___iflet_4_discriminant: i32;
+            let __sroa___iflet_4_payload_0: char;
+            multivalue_bind [__sroa___iflet_4_discriminant, __sroa___iflet_4_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
+            if __sroa___iflet_4_discriminant == 0 {
+                c_3 = __sroa___iflet_4_payload_0;
                 if c_3 == 34 {
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
                     "core:prelude/string.wado/String::push"(_licm_buf_33, 34);

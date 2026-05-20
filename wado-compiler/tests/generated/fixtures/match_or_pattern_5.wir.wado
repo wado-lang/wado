@@ -503,26 +503,32 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "wado-compiler/tests/fixtures/match_or_pattern_5.wado/Expr^Inspect::inspect"(self, f) {
-    let s_3: ref "core:prelude/string.wado//String";
-    let s_9: ref "core:prelude/string.wado//String";
+    let __inspect_Num_2: i32;
+    let __inspect_Neg_3: i32;
+    let s_5: ref "core:prelude/string.wado//String";
     let s_11: ref "core:prelude/string.wado//String";
-    let s_17: ref "core:prelude/string.wado//String";
+    let s_13: ref "core:prelude/string.wado//String";
     let s_19: ref "core:prelude/string.wado//String";
-    if ref.test "wado-compiler/tests/fixtures/match_or_pattern_5.wado//Expr::Num"(self) {
-        s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Expr::Num("), used: 10 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_3);
-        "core:prelude/primitive.wado/i32::fmt_decimal"(ref.cast "wado-compiler/tests/fixtures/match_or_pattern_5.wado//Expr::Num"(self).payload_0, f);
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_9);
-    } else if ref.test "wado-compiler/tests/fixtures/match_or_pattern_5.wado//Expr::Neg"(self) {
-        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Expr::Neg("), used: 10 };
+    let s_21: ref "core:prelude/string.wado//String";
+    let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_or_pattern_5.wado//Expr";
+    __match_scrut_0 = self;
+    if ref.test "wado-compiler/tests/fixtures/match_or_pattern_5.wado//Expr::Num"(__match_scrut_0) {
+        __inspect_Num_2 = ref.cast "wado-compiler/tests/fixtures/match_or_pattern_5.wado//Expr::Num"(__match_scrut_0).payload_0;
+        s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Expr::Num("), used: 10 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_5);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inspect_Num_2, f);
+        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_11);
-        "core:prelude/primitive.wado/i32::fmt_decimal"(ref.cast "wado-compiler/tests/fixtures/match_or_pattern_5.wado//Expr::Neg"(self).payload_0, f);
-        s_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s_17);
-    } else if self.discriminant == 2 {
-        s_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Expr::Zero"), used: 10 };
+    } else if ref.test "wado-compiler/tests/fixtures/match_or_pattern_5.wado//Expr::Neg"(__match_scrut_0) {
+        __inspect_Neg_3 = ref.cast "wado-compiler/tests/fixtures/match_or_pattern_5.wado//Expr::Neg"(__match_scrut_0).payload_0;
+        s_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Expr::Neg("), used: 10 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_13);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inspect_Neg_3, f);
+        s_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_19);
+    } else {
+        s_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Expr::Zero"), used: 10 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_21);
     }
 }
 
@@ -533,13 +539,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l33: loop {
+            l32: loop {
                 if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l33;
+                continue l32;
             };
         };
     };

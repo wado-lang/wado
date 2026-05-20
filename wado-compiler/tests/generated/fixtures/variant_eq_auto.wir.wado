@@ -219,38 +219,41 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
 }
 
 fn "wado-compiler/tests/fixtures/variant_eq_auto.wado/Shape^Eq::eq"(self, other) {
-    let __sroa_self_value_6: f64;
-    let __sroa_other_value_7: f64;
-    let __sroa_self_value_8: f64;
-    let __sroa_other_value_9: f64;
-    if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(self) {
-        if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(other) {
-            return __inline_f64_Eq__eq_0: block -> bool {
-                __sroa_self_value_6 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(self).payload_0;
-                __sroa_other_value_7 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(other).payload_0;
-                break __inline_f64_Eq__eq_0: __sroa_self_value_6 == __sroa_other_value_7;
-                unreachable;
-            };
+    let __eq_self_Circle_2: f64;
+    let __eq_other_Circle_3: f64;
+    let __eq_self_Rectangle_4: f64;
+    let __eq_other_Rectangle_5: f64;
+    let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
+    __match_scrut_0 = self;
+    if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(__match_scrut_0) {
+        __eq_self_Circle_2 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(__match_scrut_0).payload_0;
+        let __match_scrut_3: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
+        __match_scrut_3 = other;
+        if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(__match_scrut_3) {
+            __eq_other_Circle_3 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(__match_scrut_3).payload_0;
+            return __eq_self_Circle_2 == __eq_other_Circle_3;
+        } else {
+            return 0;
+        }
+    } else if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(__match_scrut_0) {
+        __eq_self_Rectangle_4 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(__match_scrut_0).payload_0;
+        let __match_scrut_2: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
+        __match_scrut_2 = other;
+        if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(__match_scrut_2) {
+            __eq_other_Rectangle_5 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(__match_scrut_2).payload_0;
+            return __eq_self_Rectangle_4 == __eq_other_Rectangle_5;
+        } else {
+            return 0;
+        }
+    } else {
+        let __match_scrut_1: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
+        __match_scrut_1 = other;
+        if __match_scrut_1.discriminant == 2 {
+            return 1;
         } else {
             return 0;
         }
     }
-    if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(self) {
-        if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(other) {
-            return __inline_f64_Eq__eq_1: block -> bool {
-                __sroa_self_value_8 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(self).payload_0;
-                __sroa_other_value_9 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(other).payload_0;
-                break __inline_f64_Eq__eq_1: __sroa_self_value_8 == __sroa_other_value_9;
-                unreachable;
-            };
-        } else {
-            return 0;
-        }
-    }
-    if self.discriminant == 2 {
-        return other.discriminant == 2;
-    }
-    return 0;
 }
 
 export fn "wado-compiler/tests/fixtures/variant_eq_auto.wado/__cm_export__run" as "run"
