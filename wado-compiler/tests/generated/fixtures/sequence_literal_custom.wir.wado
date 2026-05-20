@@ -143,20 +143,15 @@ fn "wado-compiler/tests/fixtures/sequence_literal_custom.wado/run"() with Stdout
     let __local_22: ref "core:prelude/string.wado//String";
     let __local_23: ref "core:prelude/format.wado//Formatter";
     let __b_26: ref "core:prelude//Array<i32>";
-    let self_35: ref "core:prelude//Array<i32>";
     let f_39: ref "core:prelude/format.wado//Formatter";
     let f_44: ref "core:prelude/format.wado//Formatter";
-    let self_49: ref "core:prelude//Array<i32>";
     let f_54: ref "core:prelude/format.wado//Formatter";
     let f_59: ref "core:prelude/format.wado//Formatter";
-    let self_64: ref "core:prelude//Array<i32>";
     let f_69: ref "core:prelude/format.wado//Formatter";
     let f_74: ref "core:prelude/format.wado//Formatter";
-    let self_79: ref "core:prelude//Array<i32>";
     let f_84: ref "core:prelude/format.wado//Formatter";
     let f_89: ref "core:prelude/format.wado//Formatter";
     let __b_93: ref "core:prelude//Array<i32>";
-    let self_102: ref "core:prelude//Array<i32>";
     let f_106: ref "core:prelude/format.wado//Formatter";
     let f_111: ref "core:prelude/format.wado//Formatter";
     s = __seq_lit: block -> ref "wado-compiler/tests/fixtures/sequence_literal_custom.wado//SeqVec<i32>" {
@@ -171,11 +166,7 @@ fn "wado-compiler/tests/fixtures/sequence_literal_custom.wado/run"() with Stdout
         break __seq_lit: __b_0;
         unreachable;
     };
-    __v0_2 = __inline_Array_i32___len_9: block -> i32 {
-        self_35 = s.items;
-        break __inline_Array_i32___len_9: self_35.used;
-        unreachable;
-    };
+    __v0_2 = s.items.used;
     __cond_3 = __v0_2 == 3;
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -207,12 +198,11 @@ condition: s.len() == 3
         unreachable;
     }
     __v0_4 = __inline_Array_i32__IndexValue_i32___index_value_18: block -> i32 {
-        self_49 = s.items;
-        if 0 >= self_49.used {
+        if 0 >= s.items.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_i32__IndexValue_i32___index_value_18: builtin::array_get<i32>(self_49.repr, 0);
+        break __inline_Array_i32__IndexValue_i32___index_value_18: builtin::array_get<i32>(s.items.repr, 0);
         unreachable;
     };
     __cond_5 = __v0_4 == 10;
@@ -246,12 +236,11 @@ condition: s.get(0) == 10
         unreachable;
     }
     __v0_6 = __inline_Array_i32__IndexValue_i32___index_value_27: block -> i32 {
-        self_64 = s.items;
-        if 1 >= self_64.used {
+        if 1 >= s.items.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_i32__IndexValue_i32___index_value_27: builtin::array_get<i32>(self_64.repr, 1);
+        break __inline_Array_i32__IndexValue_i32___index_value_27: builtin::array_get<i32>(s.items.repr, 1);
         unreachable;
     };
     __cond_7 = __v0_6 == 20;
@@ -285,12 +274,11 @@ condition: s.get(1) == 20
         unreachable;
     }
     __v0_8 = __inline_Array_i32__IndexValue_i32___index_value_36: block -> i32 {
-        self_79 = s.items;
-        if 2 >= self_79.used {
+        if 2 >= s.items.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_i32__IndexValue_i32___index_value_36: builtin::array_get<i32>(self_79.repr, 2);
+        break __inline_Array_i32__IndexValue_i32___index_value_36: builtin::array_get<i32>(s.items.repr, 2);
         unreachable;
     };
     __cond_9 = __v0_8 == 30;
@@ -335,11 +323,7 @@ condition: s.get(2) == 30
         break __seq_lit: __b_10;
         unreachable;
     };
-    __v0_12 = __inline_Array_i32___len_51: block -> i32 {
-        self_102 = s2.items;
-        break __inline_Array_i32___len_51: self_102.used;
-        unreachable;
-    };
+    __v0_12 = s2.items.used;
     __cond_13 = __v0_12 == 3;
     if __cond_13 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {

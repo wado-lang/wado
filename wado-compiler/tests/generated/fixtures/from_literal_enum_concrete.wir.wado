@@ -144,10 +144,8 @@ fn "wado-compiler/tests/fixtures/from_literal_enum_concrete.wado/run"() with Std
     let __b_13: ref "core:prelude//Array<i32>";
     let key_21: ref "core:prelude/string.wado//String";
     let key_24: ref "core:prelude/string.wado//String";
-    let self_27: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let f_31: ref "core:prelude/format.wado//Formatter";
     let f_36: ref "core:prelude/format.wado//Formatter";
-    let self_39: ref "core:prelude//Array<i32>";
     let f_44: ref "core:prelude/format.wado//Formatter";
     let f_49: ref "core:prelude/format.wado//Formatter";
     m = __kv_lit: block -> ref "wado-compiler/tests/fixtures/from_literal_enum_concrete.wado//DirMap<wado-compiler/tests/fixtures/from_literal_enum_concrete.wado/Direction,i32>" {
@@ -169,11 +167,7 @@ fn "wado-compiler/tests/fixtures/from_literal_enum_concrete.wado/run"() with Std
         break __kv_lit: __b_0;
         unreachable;
     };
-    __v0_2 = __inline_Array_core_prelude_string_wado_String___len_12: block -> i32 {
-        self_27 = m.keys;
-        break __inline_Array_core_prelude_string_wado_String___len_12: self_27.used;
-        unreachable;
-    };
+    __v0_2 = m.keys.used;
     __cond_3 = __v0_2 == 2;
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -205,12 +199,11 @@ condition: m.keys.len() == 2
         unreachable;
     }
     __v0_4 = __inline_Array_i32__IndexValue_i32___index_value_20: block -> i32 {
-        self_39 = m.values;
-        if 0 >= self_39.used {
+        if 0 >= m.values.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
-        break __inline_Array_i32__IndexValue_i32___index_value_20: builtin::array_get<i32>(self_39.repr, 0);
+        break __inline_Array_i32__IndexValue_i32___index_value_20: builtin::array_get<i32>(m.values.repr, 0);
         unreachable;
     };
     __cond_5 = __v0_4 == 1;

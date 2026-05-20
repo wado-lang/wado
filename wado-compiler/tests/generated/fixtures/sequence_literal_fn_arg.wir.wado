@@ -134,10 +134,8 @@ fn "wado-compiler/tests/fixtures/sequence_literal_fn_arg.wado/run"() with Stdout
     let f_31: ref "core:prelude/format.wado//Formatter";
     let f_36: ref "core:prelude/format.wado//Formatter";
     let __b_40: ref "core:prelude//Array<i32>";
-    let self_43: ref "core:prelude//Array<i32>";
     let f_47: ref "core:prelude/format.wado//Formatter";
     let f_52: ref "core:prelude/format.wado//Formatter";
-    let self_58: ref "core:prelude//Array<i32>";
     result = __inline_count_items_2: block -> i32 {
         v = __seq_lit: block -> ref "wado-compiler/tests/fixtures/sequence_literal_fn_arg.wado//SeqVec<i32>" {
             __b_0 = struct.new "wado-compiler/tests/fixtures/sequence_literal_fn_arg.wado//SeqVec<i32>" { items: ref.as_non_null(__inline_SeqVec_i32___new_4____seq_lit: block -> ref "core:prelude//Array<i32>" {
@@ -153,12 +151,7 @@ fn "wado-compiler/tests/fixtures/sequence_literal_fn_arg.wado/run"() with Stdout
             break __seq_lit: __b_0;
             unreachable;
         };
-        __inline_Array_i32___len_2: block -> i32 {
-            self_58 = v.items;
-            break __inline_Array_i32___len_2: self_58.used;
-            unreachable;
-        };
-        break __inline_count_items_2;
+        break __inline_count_items_2: v.items.used;
         unreachable;
     };
     __cond_3 = result == 5;
@@ -207,11 +200,7 @@ condition: result == 5
         break __seq_lit: __b_4;
         unreachable;
     };
-    __v0_6 = __inline_Array_i32___len_23: block -> i32 {
-        self_43 = empty.items;
-        break __inline_Array_i32___len_23: self_43.used;
-        unreachable;
-    };
+    __v0_6 = empty.items.used;
     __cond_7 = __v0_6 == 0;
     if __cond_7 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {

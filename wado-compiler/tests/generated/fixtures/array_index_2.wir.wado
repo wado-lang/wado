@@ -279,9 +279,10 @@ fn "wado-compiler/tests/fixtures/array_index_2.wado/array_index_inline_nested"()
     let __sroa_node_values: ref "core:prelude//Array<i32>";
     let __sroa_node_deleted: ref "core:prelude//Array<bool>";
     let _licm_used_53: i32;
-    let _licm_repr_54: ref builtin::array<bool>;
-    let _licm_used_55: i32;
-    let _licm_repr_56: ref builtin::array<i32>;
+    let _licm_used_54: i32;
+    let _licm_repr_55: ref builtin::array<bool>;
+    let _licm_used_56: i32;
+    let _licm_repr_57: ref builtin::array<i32>;
     __sroa_node_keys = __seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
         __b_1 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("cherry"), used: 6 }), used: 3 };
         break __seq_lit: __b_1;
@@ -300,29 +301,30 @@ fn "wado-compiler/tests/fixtures/array_index_2.wado/array_index_inline_nested"()
     sum = 0;
     __for_1: block {
         i = 0;
-        _licm_used_53 = 3;
-        _licm_repr_54 = __sroa_node_deleted.repr;
-        _licm_used_55 = 3;
-        _licm_repr_56 = __sroa_node_values.repr;
+        _licm_used_53 = __sroa_node_keys.used;
+        _licm_used_54 = 3;
+        _licm_repr_55 = __sroa_node_deleted.repr;
+        _licm_used_56 = 3;
+        _licm_repr_57 = __sroa_node_values.repr;
         block {
             l8: loop {
-                if i >= __sroa_node_keys.used {
+                if i >= _licm_used_53 {
                     break __for_1;
                 }
                 if __inline_Array_bool__IndexValue_i32___index_value_19: block -> bool {
-                    if i >= _licm_used_53 {
+                    if i >= _licm_used_54 {
                         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     }
-                    break __inline_Array_bool__IndexValue_i32___index_value_19: builtin::array_get<bool>(_licm_repr_54, i);
+                    break __inline_Array_bool__IndexValue_i32___index_value_19: builtin::array_get<bool>(_licm_repr_55, i);
                     unreachable;
                 } == 0 {
                     sum = sum + __inline_Array_i32__IndexValue_i32___index_value_20: block -> i32 {
-                        if i >= _licm_used_55 {
+                        if i >= _licm_used_56 {
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }
-                        break __inline_Array_i32__IndexValue_i32___index_value_20: builtin::array_get<i32>(_licm_repr_56, i);
+                        break __inline_Array_i32__IndexValue_i32___index_value_20: builtin::array_get<i32>(_licm_repr_57, i);
                         unreachable;
                     };
                 }
