@@ -12,6 +12,7 @@ use crate::tir::{
     TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TirUnaryOp,
     TypeId, TypeTable,
 };
+use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 
 use super::Resolver;
@@ -209,19 +210,47 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Unify the types of every `break label: expr`. The use-site
                 // expected type wins when present; otherwise pick a
                 // representative break type, skipping `never` (the bottom
-                // type) so a diverging break does not mask the real type.
+                // type) and types still containing UNKNOWN (e.g. a bare
+                // `null` whose `Option<...>` inner is not yet known) so a
+                // diverging or unresolved break does not mask the real type.
+                // Mirrors `resolve_match_expr` result-type selection.
                 let result_type = if let Some(ty) = expected_type {
                     ty
                 } else if !target.break_types.is_empty() {
+                    let tt = self.type_table.borrow();
                     target
                         .break_types
                         .iter()
                         .copied()
-                        .find(|&t| t != TypeTable::NEVER)
+                        .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
+                        .or_else(|| {
+                            target
+                                .break_types
+                                .iter()
+                                .copied()
+                                .find(|&t| t != TypeTable::NEVER)
+                        })
                         .unwrap_or(target.break_types[0])
                 } else {
                     TypeTable::UNIT
                 };
+
+                // Patch `break label: null` values whose `Option<...>` inner
+                // could not be inferred from the break alone. Now that the
+                // result type is known, rewrite the unresolved `Null`'s
+                // `type_id` so WIR translation sees a fully-resolved type.
+                let mut tir_block = tir_block;
+                {
+                    let tt = self.type_table.borrow();
+                    if !tt.contains_unknown(result_type) {
+                        NullBreakPatcher {
+                            label: &lb.label,
+                            target_type: result_type,
+                            type_table: &tt,
+                        }
+                        .visit_block(&mut tir_block);
+                    }
+                }
 
                 // Report any break whose value type disagrees with the
                 // unified result type.
@@ -4418,6 +4447,49 @@ fn patch_unresolved_null(expr: &mut TirExpr, target_type: TypeId, type_table: &T
             }
         }
         _ => {}
+    }
+}
+
+/// Patches `break <label>: null` values inside a labeled block once the
+/// block's result type is known. A bare `null` resolves to `Option<UNKNOWN>`
+/// when nothing constrains its inner type; after unification the result
+/// type pins it, so the unresolved `Null` is rewritten via
+/// [`patch_unresolved_null`]. Built on [`TirMutVisitor`] so every nesting
+/// construct is descended automatically.
+struct NullBreakPatcher<'a> {
+    /// The labeled block whose breaks are being patched.
+    label: &'a str,
+    /// The block's unified result type.
+    target_type: TypeId,
+    type_table: &'a TypeTable,
+}
+
+impl TirMutVisitor for NullBreakPatcher<'_> {
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+        match &mut stmt.kind {
+            // A `break label: expr` targeting our block — patch its value.
+            TirStmtKind::Break {
+                label: Some(l),
+                value: Some(v),
+            } if l == self.label => {
+                patch_unresolved_null(v, self.target_type, self.type_table);
+            }
+            // A nested labeled block reusing our label shadows it: its
+            // breaks target the inner block, so do not descend.
+            TirStmtKind::LabeledBlock { label, .. } if label == self.label => {}
+            _ => self.walk_stmt(stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        match &mut expr.kind {
+            // Closures are separate functions — a `break` inside cannot
+            // target our label.
+            TirExprKind::Closure { .. } => {}
+            // A nested labeled-block expression reusing our label shadows it.
+            TirExprKind::LabeledBlock { label, .. } if label == self.label => {}
+            _ => self.walk_expr(expr),
+        }
     }
 }
 

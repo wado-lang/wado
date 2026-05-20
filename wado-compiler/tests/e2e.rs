@@ -1036,3 +1036,4 @@ test "passes unexpectedly" {
 // fn-ref fixture added (self-recursive generic)
 // touched
 // labeled-block break type unification fixtures added
+// labeled-block break null-coercion / shadowed-label fixtures added
