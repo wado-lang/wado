@@ -742,14 +742,15 @@ async fn run_http_server(
     recycle_requests: u64,
     max_concurrency: usize,
 ) -> Result<()> {
+    // `workers` and `max_concurrency` are bounded to `u32` range in
+    // `parse_args`, so these conversions never fail.
+    let workers_u32 = u32::try_from(workers).expect("workers bounded to u32 in parse_args");
+    let max_concurrency_u32 =
+        u32::try_from(max_concurrency).expect("max_concurrency bounded to u32 in parse_args");
     // Pool head-room: at most `workers` instances are live at once (a
     // recycle drops the old instance before building the new), plus slack.
-    let max_instances = u32::try_from(workers).unwrap_or(u32::MAX).saturating_add(8);
-    let engine = runtime::create_serve_engine(
-        cranelift_opt,
-        max_instances,
-        u32::try_from(max_concurrency).unwrap_or(u32::MAX),
-    )?;
+    let max_instances = workers_u32.saturating_add(8);
+    let engine = runtime::create_serve_engine(cranelift_opt, max_instances, max_concurrency_u32)?;
     let component = Component::new(&engine, &wasm)?;
     let linker = runtime::create_linker(&engine)?;
     // Open preopens once at startup; they are attached to every worker
