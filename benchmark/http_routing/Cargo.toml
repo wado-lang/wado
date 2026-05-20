@@ -1,0 +1,20 @@
+[workspace]
+
+[package]
+name = "http-routing-axum"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "axum_server"
+path = "axum_server.rs"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros"] }
+serde_json = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1

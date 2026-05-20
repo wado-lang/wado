@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# HTTP routing benchmark: `wado serve` vs Hono (Node.js).
+# HTTP routing benchmark: `wado serve` vs Hono (Node.js) vs Axum (native Rust).
 #
 # Starts each server in turn and drives load with `oha` against Hono's
 # official router-benchmark request set (honojs/hono,
@@ -13,6 +13,7 @@ DURATION="${DURATION:-5s}"
 CONNECTIONS="${CONNECTIONS:-50}"
 WADO_ADDR="127.0.0.1:8080"
 HONO_PORT="3000"
+AXUM_PORT="3001"
 WADO_BIN="../../target/release/wado"
 
 # Hono's official router-benchmark request set ("METHOD PATH" per entry):
@@ -62,6 +63,9 @@ stop_server() {
 echo "=== Building wado (release) ==="
 cargo build --release --quiet --manifest-path ../../wado-cli/Cargo.toml
 
+echo "=== Building Axum server (release) ==="
+cargo build --release --quiet --manifest-path Cargo.toml
+
 echo "=== Installing Hono dependencies ==="
 npm install --prefix . --silent --no-audit --no-fund
 
@@ -79,6 +83,14 @@ PORT="$HONO_PORT" node app.js >/dev/null 2>&1 &
 SERVER_PID=$!
 wait_ready "http://127.0.0.1:${HONO_PORT}/status"
 bench "http://127.0.0.1:${HONO_PORT}"
+stop_server
+
+echo
+echo "=== Axum (native Rust) ==="
+PORT="$AXUM_PORT" ./target/release/axum_server >/dev/null 2>&1 &
+SERVER_PID=$!
+wait_ready "http://127.0.0.1:${AXUM_PORT}/status"
+bench "http://127.0.0.1:${AXUM_PORT}"
 stop_server
 
 echo
