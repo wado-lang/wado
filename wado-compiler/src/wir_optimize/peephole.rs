@@ -27,10 +27,10 @@ struct LocalDefInfo {
 /// - `alias` is single-def: this copy is its only `LocalSet`, it is never
 ///   `LocalTee`'d, and it is not a parameter. Every read of `alias` therefore
 ///   observes the value written by this copy.
-/// - `source` is single-assignment: at most one definition in the whole
-///   function and never `LocalTee`'d (parameters qualify — their value never
-///   changes). `LocalGet source` thus yields the same value at every program
-///   point.
+/// - `source` has at most one definition and is never `LocalTee`'d, and that
+///   definition (if any) structurally dominates the copy — or `source` is a
+///   parameter. Together this means `source` is never rewritten between the
+///   copy and the alias uses, so it is invariant over that span.
 /// - the copy dominates every use of `alias` (checked structurally over the
 ///   WIR control flow), so no use can observe `alias`'s zero-initialized value
 ///   before the copy runs.
@@ -68,10 +68,11 @@ fn propagate_copies_in_function(body: &mut Vec<WirInstr>, params: &IndexSet<Stri
         return;
     }
 
-    // 3. Drop candidates whose copy does not dominate every use of the alias.
+    // 3. Drop candidates whose copy does not dominate every alias use, or
+    //    whose source is not yet invariant at the copy.
     let mut disqualified: IndexSet<String> = IndexSet::default();
     let mut defined: IndexSet<String> = IndexSet::default();
-    check_dominance_in_body(body, &candidates, &mut defined, &mut disqualified);
+    check_dominance_in_body(body, &candidates, params, &mut defined, &mut disqualified);
     candidates.retain(|alias, _| !disqualified.contains(alias));
     if candidates.is_empty() {
         return;
@@ -149,8 +150,17 @@ impl WirRefVisitor for CopyCollector<'_> {
 }
 
 /// Structural dominance check: walks the function in execution order tracking,
-/// per scope, which candidate aliases have had their (single) defining copy
-/// executed. A `LocalGet alias` reached before that copy disqualifies `alias`.
+/// per scope, which locals have had a definition executed. It enforces two
+/// conditions per candidate copy `alias = source`:
+///
+/// - the copy dominates every use of `alias` — a `LocalGet alias` reached
+///   before the copy disqualifies `alias`, so no use observes the alias's
+///   zero-initialized value;
+/// - `source` is invariant from the copy onward — its definition must already
+///   dominate the copy (or `source` is a parameter / never defined). Combined
+///   with `source` having at most one definition (checked by `CopyCollector`),
+///   this guarantees `source` is not rewritten between the copy and the alias
+///   uses, so `alias == source` holds at every use.
 ///
 /// `defined` is threaded by value into conditional and looping scopes
 /// (`Block` / `Loop` / `If` branches) so a definition inside one of them does
@@ -159,17 +169,19 @@ impl WirRefVisitor for CopyCollector<'_> {
 fn check_dominance_in_body(
     body: &[WirInstr],
     candidates: &IndexMap<String, String>,
+    params: &IndexSet<String>,
     defined: &mut IndexSet<String>,
     disqualified: &mut IndexSet<String>,
 ) {
     for instr in body {
-        check_dominance_in_instr(instr, candidates, defined, disqualified);
+        check_dominance_in_instr(instr, candidates, params, defined, disqualified);
     }
 }
 
 fn check_dominance_in_instr(
     instr: &WirInstr,
     candidates: &IndexMap<String, String>,
+    params: &IndexSet<String>,
     defined: &mut IndexSet<String>,
     disqualified: &mut IndexSet<String>,
 ) {
@@ -180,17 +192,35 @@ fn check_dominance_in_instr(
             }
         }
         WirInstr::LocalSet { name, value } => {
-            check_dominance_in_instr(value, candidates, defined, disqualified);
-            if candidates.contains_key(name) {
-                defined.insert(name.clone());
+            check_dominance_in_instr(value, candidates, params, defined, disqualified);
+            // For a candidate copy, `source` must already be invariant here:
+            // its definition must dominate the copy (or it is a parameter).
+            // Otherwise the copy could capture an earlier value while `source`
+            // is still rewritten before the alias is read.
+            if let Some(source) = candidates.get(name)
+                && !params.contains(source)
+                && !defined.contains(source)
+            {
+                disqualified.insert(name.clone());
+            }
+            defined.insert(name.clone());
+        }
+        WirInstr::LocalTee { name, value } => {
+            check_dominance_in_instr(value, candidates, params, defined, disqualified);
+            defined.insert(name.clone());
+        }
+        WirInstr::MultiValueLocalBind { instr, locals } => {
+            check_dominance_in_instr(instr, candidates, params, defined, disqualified);
+            for local in locals.iter().flatten() {
+                defined.insert(local.clone());
             }
         }
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
             let mut nested = defined.clone();
-            check_dominance_in_body(body, candidates, &mut nested, disqualified);
+            check_dominance_in_body(body, candidates, params, &mut nested, disqualified);
         }
         WirInstr::Seq(body) => {
-            check_dominance_in_body(body, candidates, defined, disqualified);
+            check_dominance_in_body(body, candidates, params, defined, disqualified);
         }
         WirInstr::If {
             condition,
@@ -198,17 +228,23 @@ fn check_dominance_in_instr(
             else_body,
             ..
         } => {
-            check_dominance_in_instr(condition, candidates, defined, disqualified);
+            check_dominance_in_instr(condition, candidates, params, defined, disqualified);
             let mut then_defined = defined.clone();
-            check_dominance_in_body(then_body, candidates, &mut then_defined, disqualified);
+            check_dominance_in_body(
+                then_body,
+                candidates,
+                params,
+                &mut then_defined,
+                disqualified,
+            );
             if let Some(eb) = else_body {
                 let mut else_defined = defined.clone();
-                check_dominance_in_body(eb, candidates, &mut else_defined, disqualified);
+                check_dominance_in_body(eb, candidates, params, &mut else_defined, disqualified);
             }
         }
         other => {
             other.for_each_child(&mut |child| {
-                check_dominance_in_instr(child, candidates, defined, disqualified);
+                check_dominance_in_instr(child, candidates, params, defined, disqualified);
             });
         }
     }
