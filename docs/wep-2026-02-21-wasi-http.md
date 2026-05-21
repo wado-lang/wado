@@ -115,6 +115,23 @@ Currently, calling `Client::send` from Wado is not yet implemented. The type and
 
 This world is not yet supported as a compilation target. The `wasi:http/service` world is used for all current HTTP programs.
 
+### 7. Deployment Model and Threat Boundary
+
+`wado serve` targets managed serverless platforms — Google Cloud Run, AWS Lambda, and equivalents. It is not designed to be exposed directly at the network edge.
+
+On these platforms the client TCP connection is terminated by the platform's front layer, not by `wado serve`:
+
+- AWS Lambda (API Gateway / Function URL): the front layer buffers the request and response, so the guest never sees a raw client socket. The invocation is additionally bounded by a hard execution timeout (15 minutes maximum).
+- Cloud Run: the Google Front End terminates the client connection and enforces a per-request timeout (5 minutes default, 60 minutes maximum).
+
+Slow-client attacks (Slowloris, slow-read) are therefore outside `wado serve`'s threat model. The platform fronts the connection and its hard timeout is an unconditional backstop, so a slow client cannot pin a worker resource for longer than the platform allows; defending against slow clients is the platform's responsibility. A throughput floor and a per-IP connection limit were both considered for `wado serve` itself and rejected: against an attacker operating just above any safely-settable threshold they are mitigation only, and the platform front already owns this defense.
+
+Liveness, however, is a separate property that `wado serve` must guarantee on its own — a worker stuck forever is a correctness bug, not a tolerated denial of service. The response body pump can stall in exactly one way: a consumer that holds the connection open but stops reading it. The connection is never closed, so hyper never drops the body channel, so `frame_tx.send` blocks forever (issue #1138). The pump already exits when the connection _closes_ — that drops the channel and the send fails — but nothing ends a connection that simply stays open and undrained. So the pump bounds every `frame_tx.send` with the per-request `--timeout`: a stalled consumer is reclaimed within that window and the worker self-heals. This is a liveness guarantee, not a DoS countermeasure. It is load-bearing when `wado serve` runs standalone — `wado serve file.wado` is a plain `0.0.0.0:8080` server with no platform front and no external timeout, so the per-frame timeout is the only thing that ends the hang. On the managed platforms it is defense-in-depth: the platform timeout would eventually close the connection and free the worker, but `--timeout` reclaims it sooner and on a value the operator controls.
+
+`--max-concurrency` independently bounds total resource use: it caps concurrently in-flight requests and sizes the pooling allocator's fiber-stack pool, so worst-case resource use is bounded by construction rather than growing without limit.
+
+Operator guidance: set `--timeout` at or below the platform's request/execution timeout. `wado serve` then returns a clean `504` and self-heals the worker before the platform cuts the connection.
+
 ## Type Reference
 
 All types are imported from `"wasi:http"`.
