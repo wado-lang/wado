@@ -13,8 +13,8 @@ export fn run() with Stdout {
     for let s of sizes {
         primed.push(builtin::realloc(0, 0, 8, s));
     }
-    for let p of primed {
-        builtin::realloc(p, 0, 8, 0);
+    for let mut i = 0; i < sizes.len(); i += 1 {
+        builtin::realloc(primed[i], sizes[i], 8, 0);
     }
 
     // Probe before and after the churn loop with a 1024-byte payload —
@@ -31,8 +31,9 @@ export fn run() with Stdout {
             live.push(builtin::realloc(0, 0, 8, s));
         }
         // Free in reverse so coalescing merges in both directions.
+        // `live[k]` was allocated for `sizes[k]`.
         for let mut k = live.len() - 1; k >= 0; k -= 1 {
-            builtin::realloc(live[k], 0, 8, 0);
+            builtin::realloc(live[k], sizes[k], 8, 0);
         }
     }
 
