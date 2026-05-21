@@ -377,7 +377,7 @@ type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/send_requ
 
 type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/read_body" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(81)
 
-type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/handle" = fn();  // TypeId(82)
+type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/handle" = fn(i32);  // TypeId(82)
 
 type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(83)
 
@@ -481,13 +481,17 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(132)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(133)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(134)
+type "functype//wasi/resource-drop:fields" = fn(i32);  // TypeId(134)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(135)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(135)
 
-type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(136)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(136)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(137)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(137)
+
+type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(138)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(139)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -518,6 +522,8 @@ import fn wasi/future-new:transmission-http from "wasi/future-new:transmission-h
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
+import fn wasi/resource-drop:fields from "wasi/resource-drop:fields";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
@@ -610,23 +616,23 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/read_body"(resp) {
     return result;
 }
 
-fn "wado-compiler/tests/fixtures/http_client_advanced.wado/handle"() with Client {
+fn "wado-compiler/tests/fixtures/http_client_advanced.wado/handle"(request) with Client {
     let resp1: i32;
     let status1: u16;
-    let __cond_3: bool;
+    let __cond_4: bool;
     let resp1_headers: i32;
-    let __v0_5: bool;
+    let __v0_6: bool;
     let upstream_vals: ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>";
-    let __v0_8: i32;
-    let __cond_9: bool;
+    let __v0_9: i32;
+    let __cond_10: bool;
     let body1: ref "core:prelude/string.wado//String";
     let resp2: i32;
     let status2: u16;
-    let __cond_14: bool;
+    let __cond_15: bool;
     let body2: ref "core:prelude/string.wado//String";
     let resp3: i32;
-    let __v0_17: u16;
-    let __cond_18: bool;
+    let __v0_18: u16;
+    let __cond_19: bool;
     let body3: ref "core:prelude/string.wado//String";
     let combined: ref "core:prelude/string.wado//String";
     let resp_headers: i32;
@@ -776,23 +782,23 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/handle"() with Client
     let __local_188: i32;
     let __local_189: i32;
     let __pattern_temp_2: ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
-    let f_196: ref "core:prelude/format.wado//Formatter";
-    let f_201: ref "core:prelude/format.wado//Formatter";
-    let s_207: ref "core:prelude/string.wado//String";
-    let f_211: ref "core:prelude/format.wado//Formatter";
-    let f_216: ref "core:prelude/format.wado//Formatter";
-    let f_223: ref "core:prelude/format.wado//Formatter";
-    let f_228: ref "core:prelude/format.wado//Formatter";
-    let f_234: ref "core:prelude/format.wado//Formatter";
-    let f_239: ref "core:prelude/format.wado//Formatter";
-    let s_245: ref "core:prelude/string.wado//String";
-    let f_249: ref "core:prelude/format.wado//Formatter";
-    let f_254: ref "core:prelude/format.wado//Formatter";
-    let s_260: ref "core:prelude/string.wado//String";
+    let f_197: ref "core:prelude/format.wado//Formatter";
+    let f_202: ref "core:prelude/format.wado//Formatter";
+    let s_208: ref "core:prelude/string.wado//String";
+    let f_212: ref "core:prelude/format.wado//Formatter";
+    let f_217: ref "core:prelude/format.wado//Formatter";
+    let f_224: ref "core:prelude/format.wado//Formatter";
+    let f_229: ref "core:prelude/format.wado//Formatter";
+    let f_235: ref "core:prelude/format.wado//Formatter";
+    let f_240: ref "core:prelude/format.wado//Formatter";
+    let s_246: ref "core:prelude/string.wado//String";
+    let f_250: ref "core:prelude/format.wado//Formatter";
+    let f_255: ref "core:prelude/format.wado//Formatter";
+    let s_261: ref "core:prelude/string.wado//String";
     resp1 = "wado-compiler/tests/fixtures/http_client_advanced.wado/send_request"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/api/a"), used: 6 });
     status1 = "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Response_get_status_code"(resp1);
-    __cond_3 = status1 == 200;
-    if __cond_3 == 0 {
+    __cond_4 = status1 == 200;
+    if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_29 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(126), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_29, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
@@ -809,17 +815,17 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/handle"() with Client
             "core:prelude/string.wado/String::push_str"(__local_29, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_client_advanced.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_29, 58);
             __local_30 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_29 };
-            f_196 = __local_30;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(60, f_196);
+            f_197 = __local_30;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(60, f_197);
             "core:prelude/string.wado/String::push_str"(__local_29, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: status1 == 200
 "), used: 27 });
             "core:prelude/string.wado/String::push_str"(__local_29, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("status1: "), used: 9 });
             __local_30 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_29 };
-            f_201 = __local_30;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(status1 & 65535, f_201);
-            s_207 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as StatusCode"), used: 14 };
-            "core:prelude/string.wado/String::push_str"(f_201.buf, s_207);
+            f_202 = __local_30;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(status1 & 65535, f_202);
+            s_208 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as StatusCode"), used: 14 };
+            "core:prelude/string.wado/String::push_str"(f_202.buf, s_208);
             "core:prelude/string.wado/String::push"(__local_29, 10);
             break __tmpl: __local_29;
             unreachable;
@@ -827,8 +833,8 @@ condition: status1 == 200
         unreachable;
     }
     resp1_headers = "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Response_get_headers"(resp1);
-    __v0_5 = "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_has"(resp1_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-upstream"), used: 10 });
-    if __v0_5 == 0 {
+    __v0_6 = "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_has"(resp1_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-upstream"), used: 10 });
+    if __v0_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_31 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(193), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_31, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
@@ -845,15 +851,15 @@ condition: status1 == 200
             "core:prelude/string.wado/String::push_str"(__local_31, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_client_advanced.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_31, 58);
             __local_32 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_31 };
-            f_211 = __local_32;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(64, f_211);
+            f_212 = __local_32;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(64, f_212);
             "core:prelude/string.wado/String::push_str"(__local_31, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: resp1_headers.has(\"x-upstream\" as FieldName)
 "), used: 57 });
             "core:prelude/string.wado/String::push_str"(__local_31, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("resp1_headers.has(\"x-upstream\" as FieldName): "), used: 46 });
             __local_32 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_31 };
-            f_216 = __local_32;
-            "core:prelude/format.wado/Formatter::pad"(f_216, (if __v0_5 -> ref "core:prelude/string.wado//String" {
+            f_217 = __local_32;
+            "core:prelude/format.wado/Formatter::pad"(f_217, (if __v0_6 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -865,9 +871,9 @@ condition: resp1_headers.has(\"x-upstream\" as FieldName)
         unreachable;
     }
     upstream_vals = "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_get"(resp1_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-upstream"), used: 10 });
-    __v0_8 = upstream_vals.used;
-    __cond_9 = __v0_8 > 0;
-    if __cond_9 == 0 {
+    __v0_9 = upstream_vals.used;
+    __cond_10 = __v0_9 > 0;
+    if __cond_10 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_33 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(147), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_33, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
@@ -884,15 +890,15 @@ condition: resp1_headers.has(\"x-upstream\" as FieldName)
             "core:prelude/string.wado/String::push_str"(__local_33, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_client_advanced.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_33, 58);
             __local_34 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_33 };
-            f_223 = __local_34;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(66, f_223);
+            f_224 = __local_34;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(66, f_224);
             "core:prelude/string.wado/String::push_str"(__local_33, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: upstream_vals.len() > 0
 "), used: 36 });
             "core:prelude/string.wado/String::push_str"(__local_33, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("upstream_vals.len(): "), used: 21 });
             __local_34 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_33 };
-            f_228 = __local_34;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_8, f_228);
+            f_229 = __local_34;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_9, f_229);
             "core:prelude/string.wado/String::push"(__local_33, 10);
             break __tmpl: __local_33;
             unreachable;
@@ -902,8 +908,8 @@ condition: upstream_vals.len() > 0
     body1 = "wado-compiler/tests/fixtures/http_client_advanced.wado/read_body"(resp1);
     resp2 = "wado-compiler/tests/fixtures/http_client_advanced.wado/send_request"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/api/b"), used: 6 });
     status2 = "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Response_get_status_code"(resp2);
-    __cond_14 = status2 == 201;
-    if __cond_14 == 0 {
+    __cond_15 = status2 == 201;
+    if __cond_15 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_35 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(126), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_35, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
@@ -920,17 +926,17 @@ condition: upstream_vals.len() > 0
             "core:prelude/string.wado/String::push_str"(__local_35, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_client_advanced.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_35, 58);
             __local_36 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_35 };
-            f_234 = __local_36;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(73, f_234);
+            f_235 = __local_36;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(73, f_235);
             "core:prelude/string.wado/String::push_str"(__local_35, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: status2 == 201
 "), used: 27 });
             "core:prelude/string.wado/String::push_str"(__local_35, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("status2: "), used: 9 });
             __local_36 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_35 };
-            f_239 = __local_36;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(status2 & 65535, f_239);
-            s_245 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as StatusCode"), used: 14 };
-            "core:prelude/string.wado/String::push_str"(f_239.buf, s_245);
+            f_240 = __local_36;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(status2 & 65535, f_240);
+            s_246 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as StatusCode"), used: 14 };
+            "core:prelude/string.wado/String::push_str"(f_240.buf, s_246);
             "core:prelude/string.wado/String::push"(__local_35, 10);
             break __tmpl: __local_35;
             unreachable;
@@ -939,9 +945,9 @@ condition: status2 == 201
     }
     body2 = "wado-compiler/tests/fixtures/http_client_advanced.wado/read_body"(resp2);
     resp3 = "wado-compiler/tests/fixtures/http_client_advanced.wado/send_request"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/api/c"), used: 6 });
-    __v0_17 = "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Response_get_status_code"(resp3);
-    __cond_18 = __v0_17 == 200;
-    if __cond_18 == 0 {
+    __v0_18 = "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Response_get_status_code"(resp3);
+    __cond_19 = __v0_18 == 200;
+    if __cond_19 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_37 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(158), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_37, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
@@ -958,17 +964,17 @@ condition: status2 == 201
             "core:prelude/string.wado/String::push_str"(__local_37, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_client_advanced.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_37, 58);
             __local_38 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_37 };
-            f_249 = __local_38;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(78, f_249);
+            f_250 = __local_38;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(78, f_250);
             "core:prelude/string.wado/String::push_str"(__local_37, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: resp3.get_status_code() == 200
 "), used: 43 });
             "core:prelude/string.wado/String::push_str"(__local_37, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("resp3.get_status_code(): "), used: 25 });
             __local_38 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_37 };
-            f_254 = __local_38;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_17 & 65535, f_254);
-            s_260 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as StatusCode"), used: 14 };
-            "core:prelude/string.wado/String::push_str"(f_254.buf, s_260);
+            f_255 = __local_38;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_18 & 65535, f_255);
+            s_261 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as StatusCode"), used: 14 };
+            "core:prelude/string.wado/String::push_str"(f_255.buf, s_261);
             "core:prelude/string.wado/String::push"(__local_37, 10);
             break __tmpl: __local_37;
             unreachable;
@@ -1322,6 +1328,8 @@ condition: resp3.get_status_code() == 200
         drop("mem/realloc"(__fw_evt_3, 8, 4, 0));
     }
     drop("mem/realloc"(__fw_write_ptr_3, 40, 8, 0));
+    "wasi/resource-drop:fields"(resp1_headers);
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_new"() with Fields {
@@ -1984,7 +1992,7 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_lift__Client_sen
 }
 
 fn "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_export__handle"(request) {
-    "wado-compiler/tests/fixtures/http_client_advanced.wado/handle"();
+    "wado-compiler/tests/fixtures/http_client_advanced.wado/handle"(request);
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {

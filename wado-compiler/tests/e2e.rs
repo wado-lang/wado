@@ -391,7 +391,7 @@ async fn run_http_request_async(
                 let handler = pin!(async {
                     let res = match service.handle(store, req).await? {
                         Ok(res) => res,
-                        Err(err) => return anyhow::Ok(Err(Some(err))),
+                        Err(err) => return anyhow::Ok(Err(err)),
                     };
                     let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
                     let (parts, body) = res.into_parts();
@@ -405,17 +405,39 @@ async fn run_http_request_async(
                     io.await
                         .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
                 });
-                // select: handler completing first is normal (guest may not
-                // consume request body); io completing first means body error.
+                // The handler's result is authoritative. The request-body I/O
+                // future runs concurrently only so host-side body delivery can
+                // progress; it legitimately completes early once the guest
+                // finishes with the request (e.g. drops the `Request` handle,
+                // closing the body stream). So if `io` finishes first, surface
+                // a genuine body error but otherwise keep awaiting the handler.
                 match select(handler, io).await {
                     Either::Left((result, _)) => result,
-                    Either::Right((result, _)) => result.map(|()| Err(None)),
+                    Either::Right((io_result, handler)) => {
+                        io_result?;
+                        handler.await
+                    }
                 }
             })
             .await?
     })
     .await
     .map_err(|_| anyhow::anyhow!("HTTP handler timed out after {timeout_duration:?}"))??;
+
+    // Resource-cleanup check: every per-request wasi-http resource handle
+    // (the incoming `Request`, `Fields`, `Response`, stream/future ends) must
+    // be dropped by the time the handler finishes and its response body has
+    // been collected. A surviving table entry means the guest leaked a
+    // `resource.drop`; under `wado serve`'s pooled instance reuse this leaks
+    // one slot per request and eventually exhausts the component resource
+    // table ("resource table has no free keys" — issue #1133).
+    assert!(
+        store.data().table.is_empty(),
+        "[resource leak] the HTTP handler left resources undropped in the \
+         component resource table ({:?}). Every per-request Component Model \
+         resource must be dropped before the handler returns.",
+        store.data().table,
+    );
 
     match handle_result {
         Ok(res) => {
@@ -428,12 +450,11 @@ async fn run_http_request_async(
                 body,
             })
         }
-        Err(Some(error_code)) => Ok(HttpTestResult {
+        Err(error_code) => Ok(HttpTestResult {
             status: 500,
             headers: http::HeaderMap::new(),
             body: format!("{error_code:?}").into_bytes(),
         }),
-        Err(None) => Err(anyhow::anyhow!("Handler returned error without error code")),
     }
 }
 
@@ -1028,15 +1049,3 @@ test "passes unexpectedly" {
         resolved.0,
     );
 }
-// touched to trigger datatest_mini rediscovery
-// fn-ref fixtures added (cross-module newtype)
-// fn-ref fixtures added (generic turbofish / inferred / closure wrapper)
-// fn-ref fixtures added (generic cross-module / outer)
-// fn-ref fixtures added (generic ref / alias / arity / cross-module alias)
-// fn-ref fixture added (self-recursive generic)
-// touched
-// labeled-block break type unification fixtures added
-// labeled-block break null-coercion / shadowed-label fixtures added
-// labeled-block break null-inference error fixtures added
-// match / if all-null inference error fixtures added
-// uninferable method type parameter error fixture added

@@ -221,7 +221,9 @@ type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(66)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(67)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(68)
+type "functype//wasi/resource-drop:descriptor" = fn(i32);  // TypeId(68)
+
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(69)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -244,6 +246,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-filesystem from "wasi/future-drop-readable:transmission-filesystem";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/resource-drop:descriptor from "wasi/resource-drop:descriptor";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/run"() with Stdout, Stderr, Preopens {
@@ -258,7 +261,8 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/run"() with S
     let read_done: i32;
     let sub2: i32;
     let chunk: ref "core:prelude//Array<u8>";
-    let __local_17: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
+    let __block_v_15: ref null "wasi:filesystem/types.wado//ErrorCode";
+    let __local_18: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         return;
@@ -288,9 +292,9 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/run"() with S
         "core:internal/cm_stream_write_u8"(__mv_hi_1, data);
         "wasi/stream-drop-writable"(__mv_hi_1);
         "wasi/future-drop-readable:transmission-filesystem"(sub1);
-        __local_17 = "wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/__cm_binding__Descriptor_read_via_stream"(file, 0_i64);
-        file_rx = __local_17.0;
-        read_done = __local_17.1;
+        __local_18 = "wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/__cm_binding__Descriptor_read_via_stream"(file, 0_i64);
+        file_rx = __local_18.0;
+        read_done = __local_18.1;
         let __pair_temp_2: i64;
         __pair_temp_2 = "wasi/stream-new"();
         let __mv_lo_2: i32;
@@ -311,9 +315,12 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/run"() with S
         "wasi/stream-drop-writable"(__mv_hi_2);
         "wasi/future-drop-readable:transmission-cli"(sub2);
         "wasi/future-drop-readable:transmission-filesystem"(read_done);
-        drop("core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_output.txt"), used: 15 })));
+        __block_v_15 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_output.txt"), used: 15 }));
+        "wasi/resource-drop:descriptor"(file);
+        drop(__block_v_15);
     } else {
     }
+    "wasi/resource-drop:descriptor"(dir);
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

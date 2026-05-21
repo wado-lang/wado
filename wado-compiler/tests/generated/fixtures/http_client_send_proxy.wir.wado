@@ -297,7 +297,7 @@ type "functype//wasi/wasi:http/Request::set_authority" = fn(i32, i32, i32, i32) 
 
 type "functype//wasi/wasi:http/Response::get_status_code" = fn(i32) -> i32;  // TypeId(60)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_proxy.wado/handle" = fn();  // TypeId(61)
+type "functype//wado-compiler/tests/fixtures/http_client_send_proxy.wado/handle" = fn(i32);  // TypeId(61)
 
 type "functype//wado-compiler/tests/fixtures/http_client_send_proxy.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(62)
 
@@ -361,15 +361,17 @@ type "functype//wasi/future-new" = fn() -> i64;  // TypeId(91)
 
 type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(92)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(93)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(93)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(94)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(94)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(95)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(95)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(96)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(96)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(97)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(97)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(98)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -389,12 +391,13 @@ import fn wasi/wasi:http/Response::get_status_code from "wasi/wasi:http/Response
 import memory (1) from "mem/memory";
 import fn wasi/future-new from "wasi/future-new";
 import fn wasi/future-write from "wasi/future-write";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
-fn "wado-compiler/tests/fixtures/http_client_send_proxy.wado/handle"() with Client {
+fn "wado-compiler/tests/fixtures/http_client_send_proxy.wado/handle"(request) with Client {
     let headers: i32;
     let out_req: i32;
     let upstream_result: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
@@ -539,8 +542,8 @@ fn "wado-compiler/tests/fixtures/http_client_send_proxy.wado/handle"() with Clie
     let __local_163: i32;
     let __local_164: i32;
     let __pattern_temp_1: ref "tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
-    let f_170: ref "core:prelude/format.wado//Formatter";
-    let f_175: ref "core:prelude/format.wado//Formatter";
+    let f_171: ref "core:prelude/format.wado//Formatter";
+    let f_176: ref "core:prelude/format.wado//Formatter";
     let s: ref "core:prelude/string.wado//String";
     headers = "wado-compiler/tests/fixtures/http_client_send_proxy.wado/__cm_binding__Fields_new"();
     let __pair_temp_1: i64;
@@ -598,8 +601,8 @@ fn "wado-compiler/tests/fixtures/http_client_send_proxy.wado/handle"() with Clie
             "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_client_send_proxy.wado"), used: 56 });
             "core:prelude/string.wado/String::push"(__local_12, 58);
             __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
-            f_170 = __local_13;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(33, f_170);
+            f_171 = __local_13;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(33, f_171);
             "core:prelude/string.wado/String::push"(__local_12, 58);
             "core:prelude/string.wado/String::push"(__local_12, 32);
             "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected upstream status 200"), used: 28 });
@@ -615,10 +618,10 @@ condition: status == 200
             "core:prelude/string.wado/String::push"(__local_12, 58);
             "core:prelude/string.wado/String::push"(__local_12, 32);
             __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
-            f_175 = __local_13;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(status & 65535, f_175);
+            f_176 = __local_13;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(status & 65535, f_176);
             s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as StatusCode"), used: 14 };
-            "core:prelude/string.wado/String::push_str"(f_175.buf, s);
+            "core:prelude/string.wado/String::push_str"(f_176.buf, s);
             "core:prelude/string.wado/String::push"(__local_12, 10);
             break __tmpl: __local_12;
             unreachable;
@@ -937,6 +940,7 @@ condition: status == 200
         }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_client_send_proxy.wado/__cm_binding__Fields_new"() with Fields {
@@ -1439,7 +1443,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_proxy.wado/__cm_lift__Client_s
 }
 
 fn "wado-compiler/tests/fixtures/http_client_send_proxy.wado/__cm_export__handle"(request) {
-    "wado-compiler/tests/fixtures/http_client_send_proxy.wado/handle"();
+    "wado-compiler/tests/fixtures/http_client_send_proxy.wado/handle"(request);
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {

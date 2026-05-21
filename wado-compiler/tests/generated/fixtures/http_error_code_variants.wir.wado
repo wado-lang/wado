@@ -200,7 +200,7 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(32)
 
 type "functype//wasi/task-return" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(33)
 
-type "functype//wado-compiler/tests/fixtures/http_error_code_variants.wado/handle" = fn();  // TypeId(34)
+type "functype//wado-compiler/tests/fixtures/http_error_code_variants.wado/handle" = fn(i32);  // TypeId(34)
 
 type "functype//wado-compiler/tests/fixtures/http_error_code_variants.wado/__cm_export__handle" = fn(i32);  // TypeId(35)
 
@@ -208,11 +208,14 @@ type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i
 
 type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(37)
 
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(38)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
-fn "wado-compiler/tests/fixtures/http_error_code_variants.wado/handle"() {
+fn "wado-compiler/tests/fixtures/http_error_code_variants.wado/handle"(request) {
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_1: i32;
     let __tv_2: i32;
@@ -659,10 +662,11 @@ fn "wado-compiler/tests/fixtures/http_error_code_variants.wado/handle"() {
         }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_error_code_variants.wado/__cm_export__handle"(request) {
-    "wado-compiler/tests/fixtures/http_error_code_variants.wado/handle"();
+    "wado-compiler/tests/fixtures/http_error_code_variants.wado/handle"(request);
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {

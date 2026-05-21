@@ -239,7 +239,7 @@ type "functype//wasi/wasi:http/Fields::append" = fn(i32, i32, i32, i32, i32, i32
 
 type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(42)
 
-type "functype//wado-compiler/tests/fixtures/http_response_headers.wado/handle" = fn();  // TypeId(43)
+type "functype//wado-compiler/tests/fixtures/http_response_headers.wado/handle" = fn(i32);  // TypeId(43)
 
 type "functype//wado-compiler/tests/fixtures/http_response_headers.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(44)
 
@@ -267,6 +267,8 @@ type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(55)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(56)
 
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(57)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
@@ -278,11 +280,12 @@ import fn wasi/future-write from "wasi/future-write";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
-fn "wado-compiler/tests/fixtures/http_response_headers.wado/handle"() {
+fn "wado-compiler/tests/fixtures/http_response_headers.wado/handle"(request) {
     let headers: i32;
-    let __b_3: ref "core:prelude//Array<u8>";
-    let value_4: ref "core:prelude//Array<u8>";
+    let __b_4: ref "core:prelude//Array<u8>";
+    let value_5: ref "core:prelude//Array<u8>";
     let response: i32;
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_1: i32;
@@ -425,12 +428,12 @@ fn "wado-compiler/tests/fixtures/http_response_headers.wado/handle"() {
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
     headers = "wado-compiler/tests/fixtures/http_response_headers.wado/__cm_binding__Fields_new"();
-    value_4 = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __b_3 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
-        break __seq_lit: __b_3;
+    value_5 = __seq_lit: block -> ref "core:prelude//Array<u8>" {
+        __b_4 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
+        break __seq_lit: __b_4;
         unreachable;
     };
-    drop("wado-compiler/tests/fixtures/http_response_headers.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-wado"), used: 6 }, value_4));
+    drop("wado-compiler/tests/fixtures/http_response_headers.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-wado"), used: 6 }, value_5));
     __pattern_temp_1 = "wado-compiler/tests/fixtures/http_response_headers.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_1);
     response = __pattern_temp_1.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
@@ -763,6 +766,7 @@ fn "wado-compiler/tests/fixtures/http_response_headers.wado/handle"() {
         drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
     }
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_response_headers.wado/__cm_binding__Fields_new"() with Fields {
@@ -852,7 +856,7 @@ fn "wado-compiler/tests/fixtures/http_response_headers.wado/__cm_binding__Respon
 }
 
 fn "wado-compiler/tests/fixtures/http_response_headers.wado/__cm_export__handle"(request) {
-    "wado-compiler/tests/fixtures/http_response_headers.wado/handle"();
+    "wado-compiler/tests/fixtures/http_response_headers.wado/handle"(request);
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {

@@ -309,15 +309,17 @@ type "functype//wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__Cl
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__Closure_6::__call" = fn(i32) -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(89)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(90)
+type "functype//wasi/resource-drop:descriptor" = fn(i32);  // TypeId(90)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(91)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(91)
 
-type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(92)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(92)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(93)
+type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(93)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(94)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(94)
+
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(95)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -336,6 +338,7 @@ import fn wasi/wasi:filesystem/Descriptor::set_times_at from "wasi/wasi:filesyst
 import fn wasi/wasi:filesystem/Descriptor::open_at from "wasi/wasi:filesystem/Descriptor::open_at";
 import fn wasi/wasi:filesystem/Descriptor::unlink_file_at from "wasi/wasi:filesystem/Descriptor::unlink_file_at";
 import memory (1) from "mem/memory";
+import fn wasi/resource-drop:descriptor from "wasi/resource-drop:descriptor";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-filesystem from "wasi/future-drop-readable:transmission-filesystem";
@@ -417,8 +420,10 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/run"() with Stdo
         } else {
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_times: NoChange/NoChange failed"), used: 35 });
         }
+        "wasi/resource-drop:descriptor"(file);
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("failed to create times_test.txt"), used: 31 });
+        "wasi/resource-drop:descriptor"(dir);
         return;
     }
     times_at_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__Descriptor_set_times_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("times_test.txt"), used: 14 }, struct.new "wasi:filesystem/types.wado//NewTimestamp" { 0 }, struct.new "wasi:filesystem/types.wado//NewTimestamp" { 1 }));
@@ -429,6 +434,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/run"() with Stdo
     }
     drop("core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("times_test.txt"), used: 14 })));
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all set_times tests passed"), used: 26 });
+    "wasi/resource-drop:descriptor"(dir);
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

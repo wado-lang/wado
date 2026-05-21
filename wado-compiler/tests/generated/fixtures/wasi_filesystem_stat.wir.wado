@@ -275,15 +275,17 @@ type "functype//wado-compiler/tests/fixtures/wasi_filesystem_stat.wado/__Closure
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_stat.wado/__Closure_4::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(77)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(78)
+type "functype//wasi/resource-drop:descriptor" = fn(i32);  // TypeId(78)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(79)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(79)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(80)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(80)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(81)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(81)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(82)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(82)
+
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(83)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -299,6 +301,7 @@ import fn wasi/wasi:filesystem/Descriptor::stat from "wasi/wasi:filesystem/Descr
 import fn wasi/wasi:filesystem/Descriptor::stat_at from "wasi/wasi:filesystem/Descriptor::stat_at";
 import fn wasi/wasi:filesystem/Descriptor::open_at from "wasi/wasi:filesystem/Descriptor::open_at";
 import memory (1) from "mem/memory";
+import fn wasi/resource-drop:descriptor from "wasi/resource-drop:descriptor";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
@@ -355,6 +358,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_stat.wado/run"() with Stdout, S
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stat_at: test passed"), used: 20 });
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stat_at: failed to stat hello.txt"), used: 33 });
+        "wasi/resource-drop:descriptor"(dir);
         return;
     }
     open_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_stat.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }, 0, 1));
@@ -374,10 +378,12 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_stat.wado/run"() with Stdout, S
         } else {
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stat: failed to stat file descriptor"), used: 36 });
         }
+        "wasi/resource-drop:descriptor"(file);
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stat: failed to open hello.txt"), used: 30 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all stat tests passed"), used: 21 });
+    "wasi/resource-drop:descriptor"(dir);
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_stat.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

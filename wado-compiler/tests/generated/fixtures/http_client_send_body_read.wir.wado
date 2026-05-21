@@ -330,7 +330,7 @@ type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  //
 
 type "functype//wasi/wasi:http/Response::consume_body" = fn(i32, i32, i32);  // TypeId(68)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle" = fn();  // TypeId(69)
+type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle" = fn(i32);  // TypeId(69)
 
 type "functype//wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(70)
 
@@ -408,11 +408,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(106)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(107)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(108)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(108)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(109)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(109)
 
-type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(110)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(110)
+
+type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(111)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -438,10 +440,11 @@ import fn wasi/future-new:transmission-http from "wasi/future-new:transmission-h
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
-fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle"() with Client {
+fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle"(request) with Client {
     let headers: i32;
     let out_req: i32;
     let upstream_result: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
@@ -1001,6 +1004,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle"() with 
         drop("mem/realloc"(__fw_evt_6, 8, 4, 0));
     }
     drop("mem/realloc"(__fw_write_ptr_6, 40, 8, 0));
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_binding__Fields_new"() with Fields {
@@ -1533,7 +1537,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_lift__Clie
 }
 
 fn "wado-compiler/tests/fixtures/http_client_send_body_read.wado/__cm_export__handle"(request) {
-    "wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle"();
+    "wado-compiler/tests/fixtures/http_client_send_body_read.wado/handle"(request);
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {

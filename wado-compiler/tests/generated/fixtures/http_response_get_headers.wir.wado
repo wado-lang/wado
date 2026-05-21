@@ -268,7 +268,7 @@ type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  //
 
 type "functype//wasi/wasi:http/Response::get_headers" = fn(i32) -> i32;  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/http_response_get_headers.wado/handle" = fn();  // TypeId(53)
+type "functype//wado-compiler/tests/fixtures/http_response_get_headers.wado/handle" = fn(i32);  // TypeId(53)
 
 type "functype//wado-compiler/tests/fixtures/http_response_get_headers.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(54)
 
@@ -322,13 +322,17 @@ type "functype//wasi/future-new" = fn() -> i64;  // TypeId(78)
 
 type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(79)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(80)
+type "functype//wasi/resource-drop:fields" = fn(i32);  // TypeId(80)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(81)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(81)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(82)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(82)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(83)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(83)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(84)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(85)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -346,13 +350,15 @@ import fn wasi/wasi:http/Response::get_headers from "wasi/wasi:http/Response::ge
 import memory (1) from "mem/memory";
 import fn wasi/future-new from "wasi/future-new";
 import fn wasi/future-write from "wasi/future-write";
+import fn wasi/resource-drop:fields from "wasi/resource-drop:fields";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn "wado-compiler/tests/fixtures/http_response_get_headers.wado/handle"() {
+fn "wado-compiler/tests/fixtures/http_response_get_headers.wado/handle"(request) {
     let headers: i32;
-    let __b_3: ref "core:prelude//Array<u8>";
+    let __b_4: ref "core:prelude//Array<u8>";
     let v: ref "core:prelude//Array<u8>";
     let response: i32;
     let resp_headers: i32;
@@ -494,8 +500,8 @@ fn "wado-compiler/tests/fixtures/http_response_get_headers.wado/handle"() {
     let __local_162: i32;
     let __local_163: i32;
     let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
-    let f_178: ref "core:prelude/format.wado//Formatter";
-    let f_183: ref "core:prelude/format.wado//Formatter";
+    let f_179: ref "core:prelude/format.wado//Formatter";
+    let f_184: ref "core:prelude/format.wado//Formatter";
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
     let __mv_lo_1: i32;
@@ -503,8 +509,8 @@ fn "wado-compiler/tests/fixtures/http_response_get_headers.wado/handle"() {
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
     headers = "wado-compiler/tests/fixtures/http_response_get_headers.wado/__cm_binding__Fields_new"();
     v = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __b_3 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(121, 101, 115), used: 3 };
-        break __seq_lit: __b_3;
+        __b_4 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(121, 101, 115), used: 3 };
+        break __seq_lit: __b_4;
         unreachable;
     };
     drop("wado-compiler/tests/fixtures/http_response_get_headers.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-check"), used: 7 }, v));
@@ -529,15 +535,15 @@ fn "wado-compiler/tests/fixtures/http_response_get_headers.wado/handle"() {
             "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_response_get_headers.wado"), used: 59 });
             "core:prelude/string.wado/String::push"(__local_11, 58);
             __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
-            f_178 = __local_12;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(17, f_178);
+            f_179 = __local_12;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(17, f_179);
             "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: resp_headers.has(\"x-check\" as FieldName)
 "), used: 53 });
             "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("resp_headers.has(\"x-check\" as FieldName): "), used: 42 });
             __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
-            f_183 = __local_12;
-            "core:prelude/format.wado/Formatter::pad"(f_183, (if __v0 -> ref "core:prelude/string.wado//String" {
+            f_184 = __local_12;
+            "core:prelude/format.wado/Formatter::pad"(f_184, (if __v0 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -878,6 +884,8 @@ condition: resp_headers.has(\"x-check\" as FieldName)
         drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
     }
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
+    "wasi/resource-drop:fields"(resp_headers);
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_response_get_headers.wado/__cm_binding__Fields_new"() with Fields {
@@ -977,7 +985,7 @@ fn "wado-compiler/tests/fixtures/http_response_get_headers.wado/__cm_binding__Fi
 }
 
 fn "wado-compiler/tests/fixtures/http_response_get_headers.wado/__cm_export__handle"(request) {
-    "wado-compiler/tests/fixtures/http_response_get_headers.wado/handle"();
+    "wado-compiler/tests/fixtures/http_response_get_headers.wado/handle"(request);
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {

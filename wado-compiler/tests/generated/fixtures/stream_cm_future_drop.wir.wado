@@ -219,7 +219,7 @@ type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(37)
 
 type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(38)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_future_drop.wado/handle" = fn();  // TypeId(39)
+type "functype//wado-compiler/tests/fixtures/stream_cm_future_drop.wado/handle" = fn(i32);  // TypeId(39)
 
 type "functype//wado-compiler/tests/fixtures/stream_cm_future_drop.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(40)
 
@@ -235,6 +235,8 @@ type "functype//wasi/future-new" = fn() -> i64;  // TypeId(45)
 
 type "functype//wasi/future-drop-writable" = fn(i32);  // TypeId(46)
 
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(47)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
@@ -242,8 +244,9 @@ import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
 import fn wasi/future-new from "wasi/future-new";
 import fn wasi/future-drop-writable from "wasi/future-drop-writable";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
-fn "wado-compiler/tests/fixtures/stream_cm_future_drop.wado/handle"() {
+fn "wado-compiler/tests/fixtures/stream_cm_future_drop.wado/handle"(request) {
     let headers: i32;
     let response: i32;
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
@@ -702,6 +705,7 @@ fn "wado-compiler/tests/fixtures/stream_cm_future_drop.wado/handle"() {
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     "wasi/future-drop-writable"(__mv_hi_1);
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/stream_cm_future_drop.wado/__cm_binding__Fields_new"() with Fields {
@@ -731,7 +735,7 @@ fn "wado-compiler/tests/fixtures/stream_cm_future_drop.wado/__cm_binding__Respon
 }
 
 fn "wado-compiler/tests/fixtures/stream_cm_future_drop.wado/__cm_export__handle"(request) {
-    "wado-compiler/tests/fixtures/stream_cm_future_drop.wado/handle"();
+    "wado-compiler/tests/fixtures/stream_cm_future_drop.wado/handle"(request);
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {

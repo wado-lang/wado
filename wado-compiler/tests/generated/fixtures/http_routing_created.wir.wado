@@ -258,6 +258,8 @@ type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(55)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(56)
 
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(57)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
@@ -270,6 +272,7 @@ import fn wasi/future-write from "wasi/future-write";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
 fn "wado-compiler/tests/fixtures/http_routing_created.wado/handle"(request) {
     let path: ref null "core:prelude/string.wado//String";
@@ -767,6 +770,7 @@ fn "wado-compiler/tests/fixtures/http_routing_created.wado/handle"(request) {
         drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
     }
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_routing_created.wado/__cm_binding__Request_get_path_with_query"(self) with Request {
