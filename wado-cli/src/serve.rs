@@ -387,11 +387,21 @@ struct RequestJob {
 struct HandlerTask {
     service: Arc<Service>,
     job: RequestJob,
+    /// Idle timeout for the body pump. A `frame_tx.send` that stalls longer
+    /// than this — a client that stops draining the response but keeps the
+    /// connection open — aborts the pump, so a non-draining client cannot
+    /// pin this task's fiber stack indefinitely (issue #1138). The timeout
+    /// is applied per frame, so a slow-but-progressing client is unaffected.
+    idle_timeout: Duration,
 }
 
 impl AccessorTask<WasiState> for HandlerTask {
     async fn run(self, accessor: &Accessor<WasiState>) -> wasmtime::Result<()> {
-        let HandlerTask { service, job } = self;
+        let HandlerTask {
+            service,
+            job,
+            idle_timeout,
+        } = self;
         let RequestJob {
             wasi_req,
             io,
@@ -432,18 +442,31 @@ impl AccessorTask<WasiState> for HandlerTask {
                     }
                 }
 
-                // Pump frames until EOF, body error, or hyper drops the body.
-                // `frame_tx.send().await` blocks on a full channel, so a slow
-                // consumer back-pressures into the guest.
+                // Pump frames until EOF, body error, hyper drops the body,
+                // or the consumer stalls past the idle timeout.
+                //
+                // `frame_tx.send().await` blocks on a full channel, so a
+                // slow consumer back-pressures into the guest. A client
+                // that stops draining entirely but keeps the connection
+                // open never drops `frame_rx`, so the send would otherwise
+                // block forever and pin this task's fiber stack (#1138).
+                // `tokio::time::timeout` bounds each send; it resets per
+                // frame, so a slow-but-progressing client is unaffected.
                 let mut body = pin!(body);
-                loop {
-                    match poll_fn(|cx| body.as_mut().poll_frame(cx)).await {
-                        Some(Ok(frame)) => {
-                            if frame_tx.send(frame).await.is_err() {
-                                break;
-                            }
+                while let Some(Ok(frame)) = poll_fn(|cx| body.as_mut().poll_frame(cx)).await {
+                    match tokio::time::timeout(idle_timeout, frame_tx.send(frame)).await {
+                        Ok(Ok(())) => {}
+                        // hyper dropped the body — client disconnected.
+                        Ok(Err(_)) => break,
+                        // The consumer stalled: abort the pump so the fiber
+                        // stack is reclaimed.
+                        Err(_) => {
+                            eprintln!(
+                                "Request body pump aborted: response consumer \
+                                 stalled for more than {idle_timeout:?}"
+                            );
+                            break;
                         }
-                        Some(Err(_)) | None => break,
                     }
                 }
                 anyhow::Ok(())
@@ -630,6 +653,8 @@ async fn worker_loop(
     // Grace over the client-facing timeout; also clears the 1s epoch-tick
     // granularity so the first-byte 504 reliably precedes the epoch trap.
     let epoch_ticks = timeout_secs.saturating_add(5);
+    // Idle timeout handed to every `HandlerTask` for its body pump.
+    let request_timeout = Duration::from_secs(timeout_secs);
     loop {
         // Fresh instance for this generation. Guest module-init (Wado
         // `global` initializers, e.g. a router built at startup) runs
@@ -699,6 +724,7 @@ async fn worker_loop(
                             inflight.push(accessor.spawn(HandlerTask {
                                 service: Arc::clone(&service),
                                 job,
+                                idle_timeout: request_timeout,
                             }));
                             handled += 1;
                             if recycle_requests != 0 && handled >= recycle_requests {

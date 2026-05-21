@@ -228,6 +228,54 @@ fn responds_with_streamed_chunked_body() {
     );
 }
 
+/// Issue #1138: a client that reads the response head but then stops
+/// draining the body — while keeping the connection open — must not pin
+/// the worker's fiber stack forever. The body pump applies a per-frame
+/// idle timeout (`--timeout`); once a `frame_tx.send` stalls past it the
+/// pump aborts and logs. We assert that abort happens.
+#[test]
+fn non_draining_client_does_not_pin_worker_stack() {
+    let (_guard, port, stderr) = start_serve("serve_big_body.wado", &["--timeout", "2"]);
+
+    // Open the connection, send the request, read just the head plus a
+    // little body, then stall: stop reading while holding the socket open.
+    let addr = format!("127.0.0.1:{port}");
+    let mut stream = TcpStream::connect(&addr).expect("connect");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let req = "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+    stream.write_all(req.as_bytes()).unwrap();
+
+    // Drain a small fixed amount so the response head has definitely been
+    // produced, then never read again.
+    let mut head = [0u8; 8192];
+    let n = stream.read(&mut head).expect("read response head");
+    assert!(n > 0, "expected some response bytes before stalling");
+
+    // The connection stays open (`stream` is still in scope) but is no
+    // longer drained. Within `--timeout` plus slack the body pump should
+    // give up and log the abort. Without the idle timeout it blocks on
+    // `frame_tx.send` forever and this loop times out.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        if stderr.lock().unwrap().contains("Request body pump aborted") {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "body pump did not abort within 30s for a non-draining client; \
+             stderr:\n{}",
+            stderr.lock().unwrap(),
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+
+    // Hold the connection until the abort is observed so it is attributed
+    // to the stall, not to a client disconnect (which is a separate path).
+    drop(stream);
+}
+
 /// SIGTERM should trigger the shutdown path: the accept loop stops, the
 /// drain phase runs, and the process exits with status 0. Verifies both
 /// the exit status and the operator-facing log line so a regression that

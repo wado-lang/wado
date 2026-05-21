@@ -1,0 +1,30 @@
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+// Used by the issue #1138 `wado serve` test: the handler streams a body
+// far larger than the kernel socket buffers plus the capacity-8 frame
+// channel, so a client that stops draining the response (but keeps the
+// connection open) makes the host-side `frame_tx.send` block. Without an
+// idle timeout on the body pump that send blocks forever and pins the
+// worker's fiber stack.
+export async fn handle(_request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
+    response.set_status_code(200);
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    // One 4 KiB chunk of 'X'.
+    let mut chunk: Array<u8> = [];
+    for let _ of 0..<4096 {
+        chunk.push(88);
+    }
+    // 4096 chunks => 16 MiB total, comfortably past any localhost TCP
+    // buffer autotuning. A stalled consumer therefore leaves the guest
+    // with thousands of writes still pending.
+    for let _ of 0..<4096 {
+        body_tx.write(chunk);
+    }
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
