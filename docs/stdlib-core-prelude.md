@@ -772,11 +772,6 @@ Cancel an in-progress write. Blocks until cancellation completes.
 
 Drop the writable end, signaling end-of-stream.
 
-### `pub resource Waitable`
-
-Opaque token identifying a waitable handle within a WaitableSet.
-Obtained from `Subtask::join`. Compared by handle identity (==).
-
 ### `pub resource WaitableSet`
 
 A set of waitable handles used for async task coordination.
@@ -863,6 +858,17 @@ Acknowledge cancellation of the current task.
 Call this in response to a cancellation signal (e.g. after receiving
 `WaitEvent { code: 6 }` from `WaitableSet::wait`). Signals to the CM
 runtime that the task accepts being cancelled and will clean up.
+
+## Types
+
+### `pub type Waitable = i32`
+
+Opaque token identifying a waitable handle within a WaitableSet.
+Obtained from `Subtask::join`. Compared by handle identity (`==`).
+
+A newtype over the raw `i32` handle: copyable, with `Eq` inherited from
+`i32`. It is an identity token with no lifecycle of its own — the joined
+`Subtask` / `AsyncCall` owns the actual handle lifecycle.
 
 ## Primitive Types
 

@@ -94,7 +94,7 @@ pub struct StrCharIndicesIter {
 
 pub struct WaitEvent {
     pub code: i32,
-    pub handle: Waitable,
+    pub handle: i32,
     pub payload: u32,
 }
 
@@ -379,6 +379,10 @@ pub struct "Box<Fn<2,Tuple<i32,I::Item>>>" {
 
 pub struct "Box<Fn<2,Tuple<I::Item,J::Item>>>" {
     value: fn mut([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item],
+}
+
+pub struct "Box<i32>" {
+    value: i32,
 }
 
 pub struct "Box<Fn<1,T>>" {
@@ -1926,7 +1930,7 @@ pub fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
     let evt_handle: i32 = core::builtin::i32_load(out_ptr);
     let payload: i32 = core::builtin::i32_load((out_ptr + 4));
     let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
-    return WaitEvent { code: code, handle: evt_handle as Waitable, payload: payload as u32 };
+    return WaitEvent { code: code, handle: evt_handle as i32, payload: payload as u32 };
 }
 
 pub fn cm_waitable_join(handle: i32, ws: i32) -> i32 {
@@ -1944,7 +1948,7 @@ pub fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
     let evt_handle: i32 = core::builtin::i32_load(out_ptr);
     let payload: i32 = core::builtin::i32_load((out_ptr + 4));
     let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
-    return Option<WaitEvent>::Some(WaitEvent { code: code, handle: evt_handle as Waitable, payload: payload as u32 });
+    return Option<WaitEvent>::Some(WaitEvent { code: code, handle: evt_handle as i32, payload: payload as u32 });
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -12831,12 +12835,8 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
     self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Waitable^Eq::eq"(self: &Waitable, other: &Waitable) -> bool {
-    return (*self as i32 == *other as i32);
-}
-
 pub fn "WaitEvent^Eq::eq"(self: &WaitEvent, other: &WaitEvent) -> bool {
-    return ((Box<i32> { value: self.code }."i32^Eq::eq"(Box<i32> { value: other.code }) && self.handle."Waitable^Eq::eq"(&other.handle)) && Box<u32> { value: self.payload }."u32^Eq::eq"(Box<u32> { value: other.payload }));
+    return ((Box<i32> { value: self.code }."i32^Eq::eq"(Box<i32> { value: other.code }) && Box<i32> { value: self.handle }."Waitable^Eq::eq"(Box<i32> { value: other.handle })) && Box<u32> { value: self.payload }."u32^Eq::eq"(Box<u32> { value: other.payload }));
 }
 
 pub fn "WaitEvent^Ord::cmp"(self: &WaitEvent, other: &WaitEvent) -> Ordering {
@@ -12844,7 +12844,7 @@ pub fn "WaitEvent^Ord::cmp"(self: &WaitEvent, other: &WaitEvent) -> Ordering {
     if (c != Ordering::Equal) {
         return c;
     }
-    let c: Ordering = self.handle."Waitable^Ord::cmp"(&other.handle);
+    let c: Ordering = Box<i32> { value: self.handle }."Waitable^Ord::cmp"(Box<i32> { value: other.handle });
     if (c != Ordering::Equal) {
         return c;
     }
@@ -12861,11 +12861,16 @@ pub fn "WaitEvent^Inspect::inspect"(self: &WaitEvent, f: &mut Formatter) {
     Box<i32> { value: self.code }."i32^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"handle: ");
-    self.handle."Waitable^Inspect::inspect"(f);
+    Box<i32> { value: self.handle }."Waitable^Inspect::inspect"(f);
     f.Formatter::write_str(&", ");
     f.Formatter::write_str(&"payload: ");
     Box<u32> { value: self.payload }."u32^Inspect::inspect"(f);
     f.Formatter::write_str(&" }");
+}
+
+pub fn "Waitable^Inspect::inspect"(self: Box<i32>, f: &mut Formatter) {
+    Box<i32> { value: self.value as i32 }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&" as Waitable");
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -12914,13 +12919,17 @@ pub fn "WaitEvent^InspectAlt::inspect_alt"(self: &WaitEvent, f: &mut Formatter) 
     f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"handle: ");
-    self.handle."Waitable^InspectAlt::inspect_alt"(f);
+    Box<i32> { value: self.handle }."Waitable^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"payload: ");
     Box<u32> { value: self.payload }."u32^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
     f.Formatter::close_brace("}");
+}
+
+pub fn "Waitable^InspectAlt::inspect_alt"(self: Box<i32>, f: &mut Formatter) {
+    self."Waitable^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -12963,6 +12972,10 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tup
 
 pub fn "WaitEvent^Display::fmt"(self: &WaitEvent, f: &mut Formatter) {
     self."WaitEvent^Inspect::inspect"(f);
+}
+
+pub fn "Waitable^Display::fmt"(self: Box<i32>, f: &mut Formatter) {
+    self."Waitable^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -13031,6 +13044,10 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,
 
 pub fn "WaitEvent^DisplayAlt::fmt_alt"(self: &WaitEvent, f: &mut Formatter) {
     self."WaitEvent^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Waitable^DisplayAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
+    self."Waitable^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {

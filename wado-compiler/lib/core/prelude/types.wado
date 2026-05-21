@@ -189,14 +189,12 @@ pub resource StreamWritable<T> {
 }
 
 /// Opaque token identifying a waitable handle within a WaitableSet.
-/// Obtained from `Subtask::join`. Compared by handle identity (==).
-pub resource Waitable;
-
-impl Eq for Waitable {
-    pub fn eq(&self, other: &Self) -> bool {
-        return *self as i32 == *other as i32;
-    }
-}
+/// Obtained from `Subtask::join`. Compared by handle identity (`==`).
+///
+/// A newtype over the raw `i32` handle: copyable, with `Eq` inherited from
+/// `i32`. It is an identity token with no lifecycle of its own — the joined
+/// `Subtask` / `AsyncCall` owns the actual handle lifecycle.
+pub type Waitable = i32;
 
 /// Event returned by `WaitableSet::wait` or `WaitableSet::poll`.
 pub struct WaitEvent {
