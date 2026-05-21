@@ -68,9 +68,8 @@ boundary.
   method takes `&self`".
 
 Read as language-wide claims these contradict each other. This WEP resolves
-the tension by splitting the model by _resource kind_ — whether the resource
-is a CM canonical handle or a host-owned GC object — which both earlier WEPs
-already treat as a first-class distinction.
+the tension by splitting the model by _resource kind_ — affine resources
+versus host-object resources — a distinction both earlier WEPs already draw.
 
 ## Decision
 
@@ -79,18 +78,24 @@ already treat as a first-class distinction.
 A Wado `resource` is one of two kinds, and the ownership model follows the
 kind:
 
-| Resource kind         | Backed by                                           | Ownership model                                                | Cleanup                                |
-| --------------------- | --------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------- |
-| CM canonical resource | a CM `own` / `borrow` handle (handle table, `dtor`) | Affine (move-only) + resource-scoped borrow checker (this WEP) | Deterministic `resource.drop` / `dtor` |
-| Host-object resource  | a Wasm GC reference to a host object (no `dtor`)    | Value semantics (copyable), no borrow checker — WEP 2026-04-28 | Wasm GC                                |
+| Resource kind        | Backed by                                                                        | Ownership model                                                | Cleanup                                |
+| -------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------- |
+| Affine resource      | a CM `own` / `borrow` handle, or a guest-owned representation, with a destructor | Affine (move-only) + resource-scoped borrow checker (this WEP) | Deterministic `resource.drop` / `dtor` |
+| Host-object resource | a Wasm GC reference to a host object (no `dtor`)                                 | Value semantics (copyable), no borrow checker — WEP 2026-04-28 | Wasm GC                                |
 
-This is not a compromise; it follows from what the handle is. A CM canonical
-handle indexes a per-instance table and carries a destructor with `own` /
-`borrow` transfer semantics — copying it (`let b = a;`) would alias one table
-slot and lead to a double-`resource.drop` trap or a use-after-transfer trap.
-A host-object resource is a GC reference to an object the host owns, with no
-handle table and no `dtor`; holding many references to the same object is
-normal and safe, and the GC reclaims the object. So WEP 2026-04-28's
+The affine kind covers CM-imported resources (WASI handles), guest-defined
+resources exported across a CM boundary, and guest-internal resources such as
+`AsyncCall<T>` that never cross a boundary. They differ in representation but
+share one ownership model.
+
+This is not a compromise; it follows from what an affine resource owns. It
+holds a one-shot, destructor-bearing thing — a CM `own` / `borrow` handle into
+a per-instance table, or a guest-owned allocation — so copying it (`let b = a;`)
+would alias that thing: a double-`resource.drop` trap, a use-after-transfer
+trap, or a double free. A host-object resource is a GC reference to an object
+the host owns, with no handle table and no `dtor`; holding many references to
+the same object is normal and safe, and the GC reclaims the object. So
+WEP 2026-04-28's
 value-semantics claims are correct _within its scope_ (`extends` is gated on
 host-object resources, declared `type="extern-ref"`), but must not be read as
 language-wide. The amendment below narrows that wording.
@@ -107,11 +112,11 @@ must not be confused with a host-object resource, whose `externref` points at
 a host-owned GC object and has no `dtor`. "`i32` vs `externref`" is therefore
 not the axis that decides the ownership model; the resource kind is.
 
-The rest of this WEP concerns CM canonical resources.
+The rest of this WEP concerns affine resources.
 
-### CM canonical resources are affine
+### Affine resources are move-only
 
-A CM canonical resource value is move-only:
+An affine resource value is move-only:
 
 - It cannot be copied. `let b = a;` where `a` is a resource binding moves `a`
   into `b`; `a` is then invalid. There is no implicit copy.
@@ -131,6 +136,27 @@ analysis. spec.md's headline "no borrow checker" remains true for the
 value-semantics language at large; resources are a single, deliberately
 contained exception.
 
+#### Consuming `self` receivers are resource-only
+
+A method may take its receiver by value — a bare `self`, which _consumes_ the
+receiver — only when the receiver type is a `resource`. Non-resource methods
+take `&self` or `&mut self`; a bare `self` receiver on a non-resource type is
+a compile error.
+
+A consuming receiver is only meaningful for an affine type. On a copyable
+value-semantics type, by-value `self` would hand the method a deep copy of the
+receiver — observably identical to `&self` plus a wasted copy. Restricting
+`self` receivers to resources keeps the only by-value receiver the one that
+carries real meaning: move the resource in and consume it.
+
+This is what licenses `fn drop(self)` (see "Deterministic drop") and the
+consuming `fn wait(self)` / `fn cancel(self)` on `AsyncCall<T>` — a
+guest-defined resource owning an in-flight CM subtask, per
+[WEP 2026-04-22](./wep-2026-04-22-subtask-generic.md). It does not license
+consuming methods on a `unique struct`: a `unique struct` is affine, but it is
+consumed by `move` into a by-value parameter or by scope-exit drop, not
+through a `self` method.
+
 ### The resource-scoped borrow checker
 
 Borrows of resources (`&R`, including `&self` receivers) need one additional
@@ -138,7 +164,7 @@ check: a borrow must not outlive — or be invalidated by a move of — the
 resource it points into. A full borrow checker is unnecessary here because
 three properties of resources collapse the hard parts:
 
-1. No `&mut` on resources. Every CM canonical resource method takes `&self`
+1. No `&mut` on resources. Every affine resource method takes `&self`
    or consumes `self` by value; observable mutation happens host-side. With
    no `&mut`, there is no shared-XOR-mutable exclusivity analysis at all —
    the conceptually heaviest half of a borrow checker is simply absent.
@@ -223,8 +249,9 @@ The drop action depends on which side of the boundary the resource lives on:
 
 - An imported resource handle held by the guest (e.g. `Descriptor`) is
   dropped by emitting `resource.drop` — the host frees the underlying object.
-- A guest-defined (exported) resource runs its destructor. Destructor syntax
-  and effect propagation are as specified in
+- A guest-defined resource runs its destructor — whether it is exported
+  across a CM boundary or purely guest-internal (e.g. `AsyncCall<T>`).
+  Destructor syntax and effect propagation are as specified in
   [WEP 2026-01-12](./wep-2026-01-12-resource-lifecycle.md); this WEP does not
   change them. It only makes the _ownership tracking_ that decides _when_ a
   drop fires authoritative rather than heuristic.
@@ -276,7 +303,7 @@ with no additional checker machinery — resources are simply the first client.
 
 - [WEP 2026-01-12 (RAII)](./wep-2026-01-12-resource-lifecycle.md): its
   `unique` / move-only / destructor / compositional-cleanup model is adopted,
-  scoped to CM canonical resources, and given a concrete implementation via
+  scoped to affine resources, and given a concrete implementation via
   this WEP's checker. Its open question "should there be a borrow checker?"
   is answered: a resource-scoped one, with the three simplifications above.
   Its explicit-drop form — a free `drop(r)` — is superseded by the consuming
@@ -299,10 +326,10 @@ scope is unchanged:
 
 - "In Wado, resource handles are themselves immutable values ... They have
   value semantics, no lifetimes, no borrow checker." → scoped to host-object
-  resources, with a cross-reference to this WEP for CM canonical resources.
+  resources, with a cross-reference to this WEP for affine resources.
 - Sidebar "resource handles are immutable" / "Across the language, every
-  `resource` method takes `&self`." → scoped to host-object resources. CM
-  canonical resources additionally have by-value consuming methods.
+  `resource` method takes `&self`." → scoped to host-object resources. Affine
+  resources additionally have by-value consuming methods.
 
 These edits are applied directly in WEP 2026-04-28.
 
@@ -320,9 +347,9 @@ note in that WEP.
 
 ### Positive
 
-- One coherent ownership story: affine for CM canonical resources, GC value
-  semantics for host-object resources, split by resource kind — a distinction
-  both earlier WEPs already draw.
+- One coherent ownership story: affine ownership for affine resources, GC
+  value semantics for host-object resources, split by resource kind — a
+  distinction both earlier WEPs already draw.
 - Soundness is static: double-drop, use-after-transfer, and leaked borrows
   are compile errors, not runtime traps.
 - No lifetimes, no annotations, no exclusivity analysis — the checker is on

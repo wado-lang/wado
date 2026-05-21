@@ -100,7 +100,7 @@ It may include TODOs on WIP.
 - [Effect Handler](./wep-2026-04-11-effect-handler.md)
 - [Kiln — Keyed IDL Lowering Notation](./wep-2026-04-12-kiln.md)
 - [LSP Architecture](./wep-2026-04-18-lsp-architecture.md)
-- [Generic `Subtask<T>` for CM async imports](./wep-2026-04-22-subtask-generic.md)
+- [Generic `AsyncCall<T>` for CM async imports](./wep-2026-04-22-subtask-generic.md)
 - [Synopsis Tests](./wep-2026-04-26-synopsis-tests.md)
 - [Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md)
 - [TIR Interpreter (`tiri`) Evolution Plan](./wep-2026-04-27-tir-interpreter.md)

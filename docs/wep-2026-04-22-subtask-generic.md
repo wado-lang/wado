@@ -1,4 +1,4 @@
-# WEP: Generic `Subtask<T>` for CM async imports
+# WEP: Generic `AsyncCall<T>` for CM async imports
 
 ## Context
 
@@ -61,65 +61,108 @@ single task via `waitable-set.wait`.
 
 ## Decision
 
-Expose the CM `subtask` primitive to Wado user code by generalizing the existing
-`Subtask` resource to `Subtask<T>` and changing the synthesized signature of
-CM `async func` imports to return `Subtask<T>` instead of `T` directly. The
-user explicitly `.wait()`s when they want the result.
+Expose the CM `subtask` primitive to Wado user code as a type, `AsyncCall<T>`,
+and change the synthesized signature of CM `async func` imports to return
+`AsyncCall<T>` instead of `T` directly. The user explicitly `.wait()`s when
+they want the result.
+
+> Naming note: this WEP was originally titled `Subtask<T>`. The type shipped
+> as `AsyncCall<T>` — "subtask" is the CM primitive it wraps, but the Wado type
+> is the whole in-flight call (handle plus result buffer plus lift function),
+> so `AsyncCall` reads better at call sites. The non-generic `Subtask` resource
+> (a thin wrapper over the raw CM subtask handle) was retained, not replaced;
+> see "Breaking changes". This document uses `AsyncCall<T>` throughout.
 
 ### Wado type
 
 ```wado
 // core/prelude/types.wado
-/// A handle to an in-flight async CM import call. Internally represents both
-/// the CM subtask handle and the result buffer; `wait()` blocks until the
-/// subtask returns, then lifts the result and frees the buffer.
-pub resource Subtask<T> {
-    /// Wait for the subtask to return and take its value. Consumes self
+/// A handle to an in-flight async CM import call, parameterised by the result
+/// type `T`. Owns the CM subtask handle and the linear-memory result buffer;
+/// `wait` blocks until the subtask returns, lifts the result, and frees the
+/// buffer.
+pub resource AsyncCall<T> {
+    /// Wait for the subtask to return and take its value. Consumes `self`
     /// (drops the subtask handle and frees the result buffer).
     fn wait(self) -> T;
 
-    /// Cancel the in-flight subtask. Consumes self.
+    /// Cancel the in-flight subtask and free the buffer. Consumes `self`.
     fn cancel(self);
 
     /// Join this subtask to a waitable set for manual polling (used when the
     /// caller wants to wait on multiple subtasks or streams simultaneously).
+    /// Borrows `self`; the caller still owns the `AsyncCall<T>` and remains
+    /// responsible for the eventual `wait` / `cancel`.
     fn join(&self, set: &WaitableSet) -> Waitable;
 }
 ```
 
-`Subtask<T>` is a Wado-level struct (not a direct CM handle resource) wrapping
-`(subtask_handle: i32, outptr: i32)`. Size and alignment of the result buffer
-are baked in at monomorphization time based on `T`.
+`AsyncCall<T>` is a `resource` in the ownership sense of
+[WEP 2026-05-21](./wep-2026-05-21-resource-ownership.md): an affine
+(move-only) type with a destructor. It is _not_ a CM-imported resource and is
+_not_ exported across any CM boundary — it is a guest-internal resource. Its
+representation is a guest-internal aggregate: the packed subtask handle, the
+result buffer pointer, the buffer size and alignment (for `realloc`-based
+free), and a per-`T` lift function. Size and alignment are baked in at
+monomorphization time based on `T`.
+
+`wait` and `cancel` take `self` by value because they genuinely consume the
+in-flight call — after either, the subtask handle is dropped and the buffer
+freed — and because consuming `self` receivers are restricted to `resource`
+types (see WEP 2026-05-21). `join` only registers the subtask with a waitable
+set, so it borrows.
+
+### Implementation status and divergence
+
+This WEP is implemented, but the shipped form diverges from the design above
+in two ways that the affine ownership model
+([WEP 2026-05-21](./wep-2026-05-21-resource-ownership.md)) is meant to
+correct:
+
+- `AsyncCall<T>` is declared `pub struct`, not `pub resource`. As a plain
+  struct it has value semantics and is _copyable_, so two copies can each
+  `wait()` and double-free the result buffer.
+- `wait` / `cancel` / `join` all take `&self`. A borrow does not consume, so
+  `task.wait(); task.wait();` type-checks even though the first call already
+  freed the buffer. The stdlib doc comment on `AsyncCall<T>::wait` already
+  states the value "must not be used again — doing so is a use-after-free";
+  the contract is documented but unenforced.
+
+Both are exactly the unsoundness the affine model removes: as a `resource`,
+`AsyncCall<T>` is non-copyable, and consuming `wait(self)` / `cancel(self)`
+turn the documented use-after-free into a compile error. Closing this gap is
+tracked by WEP 2026-05-21's roadmap; until then the `&self` form remains, with
+the contract enforced only by documentation.
 
 ### Synthesis of async imports
 
 For each WIT `async func` import, the compiler synthesizes a Wado function
-whose return type is `Subtask<T>` where `T` is the CM return type lifted to
+whose return type is `AsyncCall<T>` where `T` is the CM return type lifted to
 Wado. The body:
 
 1. Allocates outptr via `realloc` with size/align computed from `T`.
 2. Calls the import via `canon lower async`, receiving the packed subtask
    handle / status.
-3. Wraps `(subtask_handle, outptr)` in a `Subtask<T>` GC struct and returns
-   it.
+3. Wraps the packed handle, the result buffer pointer, its size and
+   alignment, and a per-`T` lift function in an `AsyncCall<T>` value and
+   returns it.
 
-The existing eager wait + lift + free pipeline moves into the synthesized
-`Subtask<T>::wait` method, monomorphized per `T`:
+The eager wait + lift + free pipeline lives in `AsyncCall<T>::wait`,
+monomorphized per `T`:
 
-1. If the packed handle is zero (Status::Returned synchronously), skip the
+1. If the packed handle is zero (`Status::Returned` synchronously), skip the
    wait.
 2. Otherwise, create a `WaitableSet`, join the subtask, loop on `wait()` until
    `Status::Returned`, drop both.
-3. Lift `T` from outptr using `synthesize_lift_with_context`.
+3. Lift `T` from outptr using the per-import lift function.
 4. `realloc(outptr, size, align, 0)` to free.
 
 ### `wado-from-idl` automation
 
-WIT `async func foo(...) -> T` ⇒ Wado `fn foo(...) -> Subtask<T>` (no `async`
+WIT `async func foo(...) -> T` ⇒ Wado `fn foo(...) -> AsyncCall<T>` (no `async`
 keyword, matching the spec's rule that "effect declarations never use the
-`async` keyword"). `wado-from-idl` already tracks `is_async` in its IR
-(`transform.rs:282`); the change is in `codegen.rs:248` to emit
-`Subtask<ReturnType>` instead of adding the `async` keyword.
+`async` keyword"). `wado-from-idl` tracks `is_async` in its IR and emits
+`AsyncCall<ReturnType>` rather than adding the `async` keyword.
 
 World exports (entry points like `run`, `handle`) continue to use `async fn`
 since they represent the CM lifting boundary, not a CM import adapter.
@@ -142,10 +185,10 @@ let [req, _transmit] = Request::new(headers, Option::Some(body_rx), trailers_fut
 req.set_method(Method::Post);
 // ... configure req ...
 
-let subtask = Client::send(req);    // canon lower async, host subtask starts
-body_tx.write(body);                 // rendezvous with subtask reading body_rx
+let task = Client::send(req);    // canon lower async, host subtask starts
+body_tx.write(body);             // rendezvous with subtask reading body_rx
 body_tx.drop();
-let resp = subtask.wait();           // wait + lift + free
+let resp = task.wait();          // wait + lift + free; consumes `task`
 trailers_tx.write(Result::Ok(null));
 ```
 
@@ -153,55 +196,54 @@ trailers_tx.write(Result::Ok(null));
 
 ### Breaking changes
 
-- The existing non-generic `Subtask` resource is replaced by the new
-  `Subtask<T>`. Call sites (`internal::wait_for_subtask`,
-  `tests/fixtures/cm_subtask_join.wado`) migrate. The CM canonical operations
-  `subtask-drop`, `subtask-cancel`, `waitable-join` remain internally
-  accessible to the compiler but no longer directly exposed as methods on a
-  user-facing resource.
 - Every caller of a WIT `async func` import sees a signature change. Existing
   callers must add `.wait()` to retrieve the result. In practice this is only
   `Client::send`; no other async imports are currently used from Wado.
+- The non-generic `Subtask` resource is _retained_ as a compiler-internal
+  type, not replaced. `AsyncCall<T>` reaches the CM canonical operations
+  (`subtask-drop`, `subtask-cancel`, `waitable-join`) by `as`-casting its
+  packed handle to `Subtask` inside the stdlib. Those `as` casts between a raw
+  `i32` and a resource are an internal escape hatch that bypasses ownership
+  entirely; WEP 2026-05-21 tracks restricting them to `internal`-only code.
 
 ### Out of scope
 
 - Generic structured concurrency primitives (`join`, `race`). Spec §
-  Concurrency Model shows `join` syntax that is not yet implemented. Once
-  `Subtask<T>` is in place, `join` can be built as a stdlib library that
-  combines multiple `Subtask<T>` values via `WaitableSet::wait`.
+  Concurrency Model shows `join` syntax that is not yet implemented. With
+  `AsyncCall<T>` in place, `join` can be built as a stdlib library that
+  combines multiple `AsyncCall<T>` values via `WaitableSet::wait`.
 - TLS trust store configuration for outgoing HTTPS requests from `wado run`.
   wasmtime-wasi-http 43.0.1's `WasiHttpHooks::send_request` signature uses
   `pub(crate)` types (`HttpResult`, `HttpError`, `body::UnsyncBoxBody`),
   making external override impossible without patching upstream or using a
   local vendor fork. Tracked separately.
 
-## Implementation plan
+## Implementation status
 
-1. **Add `Subtask<T>` type to `prelude/types.wado`**. Keep the existing
-   non-generic `Subtask` temporarily as an internal type for migration.
-2. **Teach the compiler about the new representation**. `Subtask<T>` is a
-   struct-like type with two hidden `i32` fields. Type resolver, monomorphization,
-   and WIR lowering need to know how to construct and destructure it.
-3. **Synthesize `Subtask<T>::wait` and `Subtask<T>::cancel`** per `T`, reusing
-   the existing `synthesize_lift_with_context` helper for the lift step and
-   `wait_for_subtask` logic for the wait loop.
-4. **Rewrite the `needs_async_lower` branch in `cm_binding.rs`**. The adapter
-   now returns `Subtask<T>` without waiting. Move the wait/lift/free into the
-   synthesized `Subtask<T>::wait` body instead.
-5. **Update `wado-from-idl/src/codegen.rs`**. For `func.is_async`, drop the
-   `async` keyword and wrap the return type in `Subtask<…>`. World exports
-   keep the `async` keyword as today.
-6. **Regenerate stdlib**: `mise run update-stdlib-wasi`.
-7. **Migrate existing fixtures**. Only `http_client_send_simple.wado`,
-   `http_client_advanced.wado`, `http_client_send_body_read.wado` and a few
-   others use `Client::send`; add `.wait()` to each call. `cm_subtask_join.wado`
-   migrates to the new type.
-8. **Add a new fixture** `http_client_send_with_body.wado` that exercises
-   spawn → write → wait → done end-to-end with an `outgoing_mocks` endpoint,
-   replacing the current TODO comment.
-9. **Update `example/llm.wado`** to use the new pattern.
-10. **Update `docs/wasi-http-features.md`** to remove the
-    `Request.new with contents=Some(Stream<u8>)` TODO.
+- [x] `AsyncCall<T>` added to `prelude/types.wado`; non-generic `Subtask`
+      retained as an internal resource.
+- [x] Compiler representation: `AsyncCall<T>` is a struct-like type with the
+      hidden `i32` fields plus the lift `fn` pointer; type resolver,
+      monomorphization, and WIR lowering construct and read it. Hardcoded
+      under the name `"AsyncCall"` in `cm_binding/import_adapter.rs`,
+      `cm_binding/types.rs`, `resolver/call.rs`, and `component_model.rs`.
+- [x] `AsyncCall<T>::wait` / `cancel` / `join` written in Wado in
+      `prelude/types.wado`, reusing `wait_for_subtask`-style logic.
+- [x] `needs_async_lower` branch in `cm_binding.rs` returns `AsyncCall<T>`
+      without waiting.
+- [x] `wado-from-idl` emits `AsyncCall<…>` for `is_async` functions.
+- [x] Existing `Client::send` fixtures migrated to add `.wait()`.
+- [ ] Make `AsyncCall<T>` a `resource` (affine, non-copyable) and change
+      `wait` / `cancel` to consuming `self` receivers — removes the documented
+      use-after-free. Tracked by WEP 2026-05-21.
+- [ ] Restrict `as` casts between `i32` and resources to `internal`-only
+      code so user code cannot forge or alias resource handles. Tracked by
+      WEP 2026-05-21.
 
-Step 2 (compiler representation of `Subtask<T>`) is the most substantial; the
-rest is plumbing. Estimated at 1–2k lines of compiler changes + fixtures.
+## References
+
+- [Resource Ownership and a Resource-Scoped Borrow Checker](./wep-2026-05-21-resource-ownership.md)
+- [Redesign Wasm CM Builtins as Resource Canonical Attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md)
+- [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md)
+- [WASI HTTP Integration](./wep-2026-02-21-wasi-http.md)
+- [Component Model Concurrency](../vendor/component-model/design/mvp/Concurrency.md)
