@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779328325460,
+  "lastUpdate": 1779356984307,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24213,6 +24213,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/08387f32b04614b9be380015f068936865eaee71"
         },
         "date": 1779328325016,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "730d06d34f7f8a75ffa478bb4226389a45652049",
+          "message": "Merge pull request #1140 from wado-lang/claude/detect-resource-cleanup-axIdZ\n\nfix: drop Component Model resources to stop resource-table leak (#1133)",
+          "timestamp": "2026-05-21T18:43:20+09:00",
+          "tree_id": "d4108afc8b0268f74e35f83d1b9c004344203238",
+          "url": "https://github.com/wado-lang/wado/commit/730d06d34f7f8a75ffa478bb4226389a45652049"
+        },
+        "date": 1779356983855,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
