@@ -269,7 +269,8 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/run"() with 
     let read_future: i32;
     let sub3: i32;
     let chunk: ref "core:prelude//Array<u8>";
-    let __local_23: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
+    let __block_v_20: ref null "wasi:filesystem/types.wado//ErrorCode";
+    let __local_24: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         return;
@@ -313,9 +314,9 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/run"() with 
         "core:internal/cm_stream_write_u8"(__mv_hi_2, suffix);
         "wasi/stream-drop-writable"(__mv_hi_2);
         "wasi/future-drop-readable:transmission-filesystem"(sub2);
-        __local_23 = "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_read_via_stream"(file, 0_i64);
-        file_rx = __local_23.0;
-        read_future = __local_23.1;
+        __local_24 = "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_read_via_stream"(file, 0_i64);
+        file_rx = __local_24.0;
+        read_future = __local_24.1;
         let __pair_temp_3: i64;
         __pair_temp_3 = "wasi/stream-new"();
         let __mv_lo_3: i32;
@@ -336,8 +337,9 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/run"() with 
         "wasi/stream-drop-writable"(__mv_hi_3);
         "wasi/future-drop-readable:transmission-cli"(sub3);
         "wasi/future-drop-readable:transmission-filesystem"(read_future);
-        drop("core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("append_test.txt"), used: 15 })));
+        __block_v_20 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("append_test.txt"), used: 15 }));
         "wasi/resource-drop:descriptor"(file);
+        drop(__block_v_20);
     } else {
     }
     "wasi/resource-drop:descriptor"(dir);

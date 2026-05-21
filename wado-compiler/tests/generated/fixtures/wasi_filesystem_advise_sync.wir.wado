@@ -363,6 +363,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/run"() with St
     let data: ref "core:prelude//Array<u8>";
     let sd_result: ref null "wasi:filesystem/types.wado//ErrorCode";
     let sync_result: ref null "wasi:filesystem/types.wado//ErrorCode";
+    let __block_v_19: ref null "wasi:filesystem/types.wado//ErrorCode";
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
@@ -437,8 +438,9 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/run"() with St
         } else {
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sync: failed"), used: 12 });
         }
-        drop("core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sync_test.txt"), used: 13 })));
+        __block_v_19 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sync_test.txt"), used: 13 }));
         "wasi/resource-drop:descriptor"(wfile);
+        drop(__block_v_19);
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("failed to create sync_test.txt"), used: 30 });
     }
