@@ -391,7 +391,7 @@ async fn run_http_request_async(
                 let handler = pin!(async {
                     let res = match service.handle(store, req).await? {
                         Ok(res) => res,
-                        Err(err) => return anyhow::Ok(Err(Some(err))),
+                        Err(err) => return anyhow::Ok(Err(err)),
                     };
                     let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
                     let (parts, body) = res.into_parts();
@@ -450,12 +450,11 @@ async fn run_http_request_async(
                 body,
             })
         }
-        Err(Some(error_code)) => Ok(HttpTestResult {
+        Err(error_code) => Ok(HttpTestResult {
             status: 500,
             headers: http::HeaderMap::new(),
             body: format!("{error_code:?}").into_bytes(),
         }),
-        Err(None) => Err(anyhow::anyhow!("Handler returned error without error code")),
     }
 }
 

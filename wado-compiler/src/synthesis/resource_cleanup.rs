@@ -34,6 +34,20 @@
 //! `Result<Fields, HeaderError>` returned by `Fields::from_list`) is dropped
 //! structurally: a synthesized `match` extracts and drops the resource in the
 //! case(s) that carry one.
+//!
+//! ## Relationship to a future ownership system
+//!
+//! This pass reconstructs, by dataflow analysis, ownership information that
+//! Wado's surface language does not yet track. Resources are opaque `i32`
+//! handles with value semantics, so `let b = a` and `Result::unwrap(&self)`
+//! silently *alias* a handle rather than *moving* it. The borrow-vs-transfer
+//! classification here is therefore partly heuristic — see
+//! [`is_resource_aggregate`], which conservatively treats any method call on
+//! a resource-carrying aggregate as moving the resource out. Should Wado
+//! later distinguish `Owned<T>` / `Borrow<T>` with a `move` operator, that
+//! distinction becomes explicit in the type system and this pass collapses
+//! to "drop every owned binding that was not moved out", letting most of the
+//! heuristics here be removed.
 
 use crate::compiler_item::CompilerItem;
 use crate::component_model::WasiRegistry;

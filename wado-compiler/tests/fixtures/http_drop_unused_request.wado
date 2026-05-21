@@ -1,0 +1,27 @@
+// Regression test for issue #1133: the incoming owned `request` resource
+// must be released even when the handler never reads it.
+//
+// `request` is an `own<request>` handle the canonical ABI hands to the
+// guest. Since this handler ignores it, nothing transfers the handle, so
+// the resource-cleanup pass must emit `resource.drop` for it at end of
+// scope. Without that drop, `wado serve`'s pooled instance reuse leaks one
+// host resource-table slot per request until the table exhausts.
+//
+// `wir_expect:O0` asserts the drop is present in the WIR; the e2e runner's
+// resource-table check asserts it actually fires at runtime.
+
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {"status": 200},
+    "wir_expect:O0": ["resource-drop:request"]
+}
