@@ -300,9 +300,10 @@ fn run_pass(
 }
 
 pub mod pass_dump {
-    use std::sync::OnceLock;
+    use std::sync::{Mutex, OnceLock};
 
     use super::NirPackage;
+    use crate::hashmap::IndexMap;
     use crate::wir::WirPackage;
 
     #[derive(Copy, Clone)]
@@ -359,9 +360,6 @@ pub mod pass_dump {
     /// is the 1-based occurrence number — letting bisection target a
     /// specific iteration (e.g., `tir/ref_elim@2`).
     pub fn should_skip_pass(name: &str) -> bool {
-        use std::sync::Mutex;
-
-        use crate::hashmap::IndexMap;
         static COUNTS: OnceLock<Mutex<IndexMap<String, u32>>> = OnceLock::new();
         let list = skip_list();
         if list.is_empty() {
