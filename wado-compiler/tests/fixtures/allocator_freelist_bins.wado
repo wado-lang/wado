@@ -1,0 +1,30 @@
+/// Test that the freelist allocator's segregated bins serve each size
+/// class independently: a freed small block and a freed large block are
+/// each recycled by a request of their own size.
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    // A small block and a large block, separated by a guard block that
+    // stays in use so the two never coalesce into one.
+    let small = builtin::realloc(0, 0, 8, 40);
+    let guard = builtin::realloc(0, 0, 8, 40);
+    let large = builtin::realloc(0, 0, 8, 900);
+    builtin::realloc(small, 40, 8, 0);
+    builtin::realloc(large, 900, 8, 0);
+
+    // The small request hits its exact size-class bin; the large
+    // request hits the catch-all large bin. Each must recycle its own
+    // freed block.
+    let small2 = builtin::realloc(0, 0, 8, 40);
+    let large2 = builtin::realloc(0, 0, 8, 900);
+    assert small2 == small, `small={small}, small2={small2}`;
+    assert large2 == large, `large={large}, large2={large2}`;
+
+    builtin::realloc(guard, 40, 8, 0);
+    builtin::realloc(small2, 40, 8, 0);
+    builtin::realloc(large2, 900, 8, 0);
+    println("ok");
+}
+
+__DATA__
+{"allocator": "freelist", "stdout": "ok\n"}

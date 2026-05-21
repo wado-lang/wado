@@ -1,0 +1,40 @@
+/// Test that coalescing keeps the heap bounded under sustained
+/// alloc/free churn: freed neighbours merge back into one block, so a
+/// steady-state workload reuses the same address instead of creeping
+/// the heap frontier upward.
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    // Warm up to a steady state: two small blocks freed and merged,
+    // then a larger block carved from the merge and freed again.
+    let w1 = builtin::realloc(0, 0, 8, 40);
+    let w2 = builtin::realloc(0, 0, 8, 40);
+    builtin::realloc(w1, 40, 8, 0);
+    builtin::realloc(w2, 40, 8, 0);
+    let warm = builtin::realloc(0, 0, 8, 80);
+    builtin::realloc(warm, 80, 8, 0);
+
+    // Each iteration allocates two adjacent small blocks, frees both
+    // (they coalesce into one), then allocates a block too large for
+    // either fragment alone. Without coalescing the heap would creep
+    // upward every iteration; with it, the allocation always lands at
+    // the same anchor address.
+    let mut anchor = 0;
+    for let mut i = 0; i < 1000; i += 1 {
+        let x = builtin::realloc(0, 0, 8, 40);
+        if i == 0 {
+            anchor = x;
+        }
+        assert x == anchor, `iteration {i}: heap crept: x={x}, anchor={anchor}`;
+        let y = builtin::realloc(0, 0, 8, 40);
+        builtin::realloc(x, 40, 8, 0);
+        builtin::realloc(y, 40, 8, 0);
+        let z = builtin::realloc(0, 0, 8, 80);
+        builtin::realloc(z, 80, 8, 0);
+    }
+
+    println("ok");
+}
+
+__DATA__
+{"allocator": "freelist", "stdout": "ok\n"}
