@@ -1272,11 +1272,7 @@ pub(super) fn synthesize_variant_lower_to_flat(
     // Set flat[0] = discriminant via canonical `Match`. Case names
     // mirror the payload-flattening `Match` arms built below.
     if !flat_locals.is_empty() {
-        let case_names: Vec<String> = variant_decl
-            .cases
-            .iter()
-            .map(|c| c.name.clone())
-            .collect();
+        let case_names: Vec<String> = variant_decl.cases.iter().map(|c| c.name.clone()).collect();
         stmts.push(expr_stmt(assign(
             local_ref(
                 flat_locals[0].0,

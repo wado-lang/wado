@@ -512,9 +512,8 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
             scan_transfers(inner, consuming, consumed, cx);
         }
 
-        // Tag inspection / `matches` test: reads the discriminant only, never
-        // transfers the value.
-        TirExprKind::VariantTag { expr: inner } | TirExprKind::VariantTest { expr: inner, .. } => {
+        // `matches` test: reads the discriminant only, never transfers the value.
+        TirExprKind::VariantTest { expr: inner, .. } => {
             scan_transfers(inner, false, consumed, cx);
         }
 
@@ -614,18 +613,6 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
                 }
                 scan_transfers(&arm.body, true, consumed, cx);
             }
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            scan_transfers(scrutinee, true, consumed, cx);
-            for arm in arms {
-                scan_block_transfers(arm, consumed, cx);
-            }
-            scan_block_transfers(default, consumed, cx);
         }
 
         TirExprKind::StructLiteral { fields, .. } => {

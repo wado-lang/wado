@@ -643,8 +643,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
 
             // Push discriminant via canonical `Match`. The case-name list
             // mirrors the payload-flattening `Match` arms built below.
-            let case_names: Vec<String> =
-                cases.iter().map(|c| c.wado_name.clone()).collect();
+            let case_names: Vec<String> = cases.iter().map(|c| c.wado_name.clone()).collect();
             flat_args.push(match_variant_tag(
                 local_ref(val_local, &format!("{prefix}_val"), vt),
                 &case_names,

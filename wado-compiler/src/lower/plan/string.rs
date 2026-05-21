@@ -253,22 +253,8 @@ impl StringCollector {
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.collect_expr(value);
             }
-            TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. }
-            | TirExprKind::VariantPayload { expr, .. } => {
+            TirExprKind::VariantTest { expr, .. } | TirExprKind::VariantPayload { expr, .. } => {
                 self.collect_expr(expr);
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.collect_expr(scrutinee);
-                for arm in arms {
-                    self.collect_block(arm);
-                }
-                self.collect_block(default);
             }
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }

@@ -836,22 +836,9 @@ fn rewrite_cm_methods_in_expr(
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }
-        | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
             rewrite_cm_methods_in_expr(inner, tt, entry_source, wasi_registry);
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            rewrite_cm_methods_in_expr(scrutinee, tt, entry_source, wasi_registry);
-            for arm in arms.iter_mut() {
-                rewrite_cm_methods_in_block(arm, tt, entry_source, wasi_registry);
-            }
-            rewrite_cm_methods_in_block(default, tt, entry_source, wasi_registry);
         }
         TirExprKind::TemplateString { parts } => {
             for part in parts.iter_mut() {

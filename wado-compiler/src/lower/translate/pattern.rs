@@ -2164,7 +2164,6 @@ impl<'a> PatternLowerer<'a> {
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             }
-            | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. } => {
                 self.lower_expr(inner, type_table);
@@ -2254,18 +2253,6 @@ impl<'a> PatternLowerer<'a> {
             }
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.lower_expr(value, type_table);
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.lower_expr(scrutinee, type_table);
-                for arm in arms {
-                    self.lower_block(arm, type_table);
-                }
-                self.lower_block(default, type_table);
             }
             // Terminals
             TirExprKind::IntLiteral { .. }

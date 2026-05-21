@@ -159,7 +159,6 @@ pub trait TirMutVisitor {
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             }
-            | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. } => {
                 self.visit_expr(inner);
@@ -238,18 +237,6 @@ pub trait TirMutVisitor {
                 for arg in args {
                     self.visit_expr(arg);
                 }
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.visit_expr(scrutinee);
-                for arm in arms {
-                    self.visit_block(arm);
-                }
-                self.visit_block(default);
             }
             TirExprKind::TemplateString { parts } => {
                 for part in parts {
@@ -418,7 +405,6 @@ pub trait TirRefVisitor {
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             }
-            | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. } => {
                 self.visit_expr(inner);
@@ -497,18 +483,6 @@ pub trait TirRefVisitor {
                 for arg in args {
                     self.visit_expr(arg);
                 }
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.visit_expr(scrutinee);
-                for arm in arms {
-                    self.visit_block(arm);
-                }
-                self.visit_block(default);
             }
             TirExprKind::TemplateString { parts } => {
                 for part in parts {
@@ -683,7 +657,6 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
             call_expr: inner, ..
         }
         | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
             changed |= visitor.visit_expr(inner);
@@ -762,18 +735,6 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
         }
         TirExprKind::GlobalVarSet { value, .. } => {
             changed |= visitor.visit_expr(value);
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            changed |= visitor.visit_expr(scrutinee);
-            for arm in arms {
-                changed |= visitor.visit_block(arm);
-            }
-            changed |= visitor.visit_block(default);
         }
         // Leaf nodes
         TirExprKind::Local { .. }
@@ -881,16 +842,6 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
                         || expr_has_break_to(label, &arm.body)
                 })
         }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            expr_has_break_to(label, scrutinee)
-                || arms.iter().any(|arm| block_has_break_to(label, arm))
-                || block_has_break_to(label, default)
-        }
         TirExprKind::Binary { left, right, .. } => {
             expr_has_break_to(label, left) || expr_has_break_to(label, right)
         }
@@ -902,7 +853,6 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
         | TirExprKind::TypePackExpansion {
             call_expr: expr, ..
         }
-        | TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => expr_has_break_to(label, expr),
         TirExprKind::Index { expr, index }

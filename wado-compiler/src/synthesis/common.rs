@@ -110,7 +110,11 @@ pub fn i64_const(value: i64) -> TirExpr {
 
 /// Create a bool literal expression.
 pub fn bool_const(value: bool) -> TirExpr {
-    TirExpr::new(TirExprKind::BoolLiteral(value), TypeTable::BOOL, synth_span())
+    TirExpr::new(
+        TirExprKind::BoolLiteral(value),
+        TypeTable::BOOL,
+        synth_span(),
+    )
 }
 
 /// `match scrutinee { Case => true, _ => false }` — the canonical `Match`

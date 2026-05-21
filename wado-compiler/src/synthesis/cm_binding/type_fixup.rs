@@ -1434,18 +1434,6 @@ fn rewrite_calls_in_expr(
             rewrite_calls_in_expr(e, adapters, entry_source, wasi_registry, type_table);
             rewrite_calls_in_expr(index, adapters, entry_source, wasi_registry, type_table);
         }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry, type_table);
-            for arm in arms {
-                rewrite_calls_in_block(arm, adapters, entry_source, wasi_registry, type_table);
-            }
-            rewrite_calls_in_block(default, adapters, entry_source, wasi_registry, type_table);
-        }
         TirExprKind::Match {
             expr: scrutinee,
             arms,
@@ -1512,7 +1500,6 @@ fn rewrite_calls_in_expr(
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }
-        | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
             rewrite_calls_in_expr(inner, adapters, entry_source, wasi_registry, type_table);
@@ -1721,18 +1708,6 @@ fn collect_effect_calls_in_expr(
             collect_effect_calls_in_expr(e, effects, wasi_registry);
             collect_effect_calls_in_expr(index, effects, wasi_registry);
         }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_effect_calls_in_expr(scrutinee, effects, wasi_registry);
-            for arm in arms {
-                collect_effect_calls_in_block(arm, effects, wasi_registry);
-            }
-            collect_effect_calls_in_block(default, effects, wasi_registry);
-        }
         TirExprKind::Match {
             expr: scrutinee,
             arms,
@@ -1780,7 +1755,6 @@ fn collect_effect_calls_in_expr(
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }
-        | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
             collect_effect_calls_in_expr(inner, effects, wasi_registry);

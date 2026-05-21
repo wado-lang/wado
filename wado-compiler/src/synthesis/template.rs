@@ -320,7 +320,6 @@ fn expand_expr(expr: &mut TirExpr, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
             expand_expr(inner, alloc, ctx);
@@ -399,19 +398,6 @@ fn expand_expr(expr: &mut TirExpr, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx
         }
         TirExprKind::GlobalVarSet { value, .. } => {
             expand_expr(value, alloc, ctx);
-            return;
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            expand_expr(scrutinee, alloc, ctx);
-            for arm in arms {
-                expand_block(arm, alloc, ctx);
-            }
-            expand_block(default, alloc, ctx);
             return;
         }
         TirExprKind::WithHandler { bindings, body, .. } => {

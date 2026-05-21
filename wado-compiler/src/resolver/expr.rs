@@ -2974,7 +2974,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             }
-            | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. } => Self::any_in_expr(inner, probe),
             TirExprKind::Assign { target, value }
@@ -3022,20 +3021,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 TirTemplatePart::Interpolation { expr, .. } => Self::any_in_expr(expr, probe),
                 TirTemplatePart::Literal(_) => false,
             }),
-
-            // `Switch` only appears after `optimize::match_to_switch` — long
-            // past resolve-time validation — but the walker stays sound for
-            // any future post-resolve reuse.
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                Self::any_in_expr(scrutinee, probe)
-                    || arms.iter().any(|arm| Self::any_in_tree(arm, probe))
-                    || Self::any_in_tree(default, probe)
-            }
 
             // Closures stay in their own scope.
             TirExprKind::Closure { .. } => false,

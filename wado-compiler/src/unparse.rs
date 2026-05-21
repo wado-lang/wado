@@ -4354,11 +4354,6 @@ impl<'a> TirUnparser<'a> {
             }
 
             // Lowered pattern matching nodes
-            TirExprKind::VariantTag { expr } => {
-                self.output.push_str("__variant_tag(");
-                self.unparse_expr(expr);
-                self.output.push(')');
-            }
             TirExprKind::VariantTest {
                 expr,
                 case_index,
@@ -4375,37 +4370,6 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str("__variant_payload(");
                 self.unparse_expr(expr);
                 self.output.push_str(&format!(", case={case_index})"));
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                min_value,
-                arms,
-                default,
-            } => {
-                self.output.push_str("switch ");
-                self.unparse_expr(scrutinee);
-                self.output.push_str(&format!(" (base={min_value}) {{\n"));
-                self.indent_level += 1;
-                for (i, arm) in arms.iter().enumerate() {
-                    self.write_indent();
-                    self.output
-                        .push_str(&format!("{} => {{\n", *min_value + i as i64));
-                    self.indent_level += 1;
-                    self.unparse_block(arm);
-                    self.indent_level -= 1;
-                    self.write_indent();
-                    self.output.push_str("}\n");
-                }
-                self.write_indent();
-                self.output.push_str("_ => {\n");
-                self.indent_level += 1;
-                self.unparse_block(default);
-                self.indent_level -= 1;
-                self.write_indent();
-                self.output.push_str("}\n");
-                self.indent_level -= 1;
-                self.write_indent();
-                self.output.push('}');
             }
             TirExprKind::TemplateString { parts } => {
                 self.output.push('`');
