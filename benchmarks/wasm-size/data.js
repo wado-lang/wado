@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779322843075,
+  "lastUpdate": 1779328325460,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24169,6 +24169,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e38dfb8fe78d6d64448c92de6451ebaa1ca08e8e"
         },
         "date": 1779322842627,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "08387f32b04614b9be380015f068936865eaee71",
+          "message": "Merge pull request #1139 from wado-lang/claude/find-fixme-comments-mdE3U\n\nfix: report uninferable method type parameters instead of ICE",
+          "timestamp": "2026-05-21T10:45:56+09:00",
+          "tree_id": "c1650a17b656a0468ed8f45de8de4db350508a45",
+          "url": "https://github.com/wado-lang/wado/commit/08387f32b04614b9be380015f068936865eaee71"
+        },
+        "date": 1779328325016,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
