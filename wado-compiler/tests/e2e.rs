@@ -1049,16 +1049,3 @@ test "passes unexpectedly" {
         resolved.0,
     );
 }
-// touched to trigger datatest_mini rediscovery
-// fn-ref fixtures added (cross-module newtype)
-// fn-ref fixtures added (generic turbofish / inferred / closure wrapper)
-// fn-ref fixtures added (generic cross-module / outer)
-// fn-ref fixtures added (generic ref / alias / arity / cross-module alias)
-// fn-ref fixture added (self-recursive generic)
-// touched
-// labeled-block break type unification fixtures added
-// labeled-block break null-coercion / shadowed-label fixtures added
-// labeled-block break null-inference error fixtures added
-// match / if all-null inference error fixtures added
-// resource-cleanup fixtures added (unused request drop, value-block drop)
-// uninferable method type parameter error fixture added
