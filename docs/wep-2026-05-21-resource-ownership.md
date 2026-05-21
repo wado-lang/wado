@@ -78,15 +78,32 @@ versus host-object resources — a distinction both earlier WEPs already draw.
 A Wado `resource` is one of two kinds, and the ownership model follows the
 kind:
 
-| Resource kind        | Backed by                                                                        | Ownership model                                                | Cleanup                                |
-| -------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------- |
-| Affine resource      | a CM `own` / `borrow` handle, or a guest-owned representation, with a destructor | Affine (move-only) + resource-scoped borrow checker (this WEP) | Deterministic `resource.drop` / `dtor` |
-| Host-object resource | a Wasm GC reference to a host object (no `dtor`)                                 | Value semantics (copyable), no borrow checker — WEP 2026-04-28 | Wasm GC                                |
+| Resource kind        | Backed by                                                                                             | Ownership model                                                | Cleanup                                |
+| -------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------- |
+| Affine resource      | a CM `own` / `borrow` handle, a canonical-ABI waitable handle (bare `i32`), or a guest representation | Affine (move-only) + resource-scoped borrow checker (this WEP) | Deterministic `resource.drop` / `dtor` |
+| Host-object resource | a Wasm GC reference to a host object (no `dtor`)                                                      | Value semantics (copyable), no borrow checker — WEP 2026-04-28 | Wasm GC                                |
 
-The affine kind covers CM-imported resources (WASI handles), guest-defined
-resources exported across a CM boundary, and guest-internal resources such as
-`AsyncCall<T>` that never cross a boundary. They differ in representation but
-share one ownership model.
+The affine kind spans three backings:
+
+- a CM `own` / `borrow` resource handle — CM-imported resources (WASI
+  `Descriptor` etc.) and guest-defined resources exported across a CM
+  boundary;
+- a canonical-ABI waitable handle — a bare `i32` index that is _not_ a CM
+  `resource` type (`stream` / `future` ends, `subtask`, `waitable-set`,
+  `error-context`), but still needs exactly-once `drop`, so Wado models it as
+  an affine resource;
+- a guest representation — guest-internal resources such as `AsyncCall<T>`
+  that never cross a CM boundary.
+
+They differ in representation but share one ownership model. The CM
+classification — `resource` vs async value type vs waitable — is orthogonal:
+what places a type in the affine kind is needing exactly-once cleanup, not
+being a CM `resource`.
+
+`Waitable` (the identity token returned by `join`) is _not_ affine: it has no
+`drop` and no lifecycle, so it is a copyable newtype over `i32`, not a
+resource — see
+[WEP 2026-03-01](./wep-2026-03-01-cm-resource-canonical-attrs.md).
 
 This is not a compromise; it follows from what an affine resource owns. It
 holds a one-shot, destructor-bearing thing — a CM `own` / `borrow` handle into

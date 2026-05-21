@@ -82,7 +82,9 @@ pub resource FutureWritable<T> {
 /// Opaque token identifying a waitable handle within a WaitableSet.
 /// Obtained from `Subtask::join` (and future `Stream::join`, etc.).
 /// Compared by handle identity (==) to determine which waitable fired.
-pub resource Waitable;
+/// A copyable newtype over the raw `i32` handle; construction is
+/// module-private so user code cannot forge one.
+pub type Waitable = i32;
 
 /// Result of `WaitableSet::wait` or `WaitableSet::poll`.
 pub struct WaitEvent {
@@ -146,9 +148,16 @@ unchanged.
 
 ### Waitable: Typed Handle Token
 
-`Waitable` is an opaque resource wrapping a CM handle (u32). It does not represent
-a new CM concept — it is the same handle value that was joined, wrapped in a distinct
-Wado type for type safety.
+`Waitable` is a copyable newtype over the raw `i32` waitable handle. It does
+not represent a new CM concept — it is the same handle value that was joined,
+wrapped in a distinct Wado type for type safety.
+
+It is _not_ a `resource`. A `Waitable` carries no lifecycle of its own — no
+destructor, no `drop`, nothing to release; the joined `Subtask` / `AsyncCall`
+owns the actual lifecycle. Its only operation is identity comparison (`==`).
+A `resource` would make it affine (move-only), which fights the intended
+compare-`event.handle`-against-many-tokens usage. A copyable newtype is the
+right model — see the amendment note below.
 
 When `Subtask::join(set)` is called:
 
@@ -175,8 +184,33 @@ if event.handle == w1 {
 }
 ```
 
-`Waitable` auto-derives `Eq` (compares underlying handle values). It intentionally
-does NOT expose the raw handle — users must go through `join` to obtain tokens.
+`Waitable` compares by `==` (the underlying `i32`). It intentionally does NOT
+expose the raw handle — its construction is module-private, so users must go
+through `join` to obtain tokens.
+
+### Amendment: `Waitable` is a newtype, not a resource (WEP 2026-05-21)
+
+This WEP originally declared `pub resource Waitable;`. It is amended to a
+copyable newtype, `pub type Waitable = i32;` (with module-private
+construction). The declarations above show the corrected form.
+
+`Waitable` is an identity token: it has no destructor, no `drop`, and owns no
+lifecycle — the joined `Subtask` / `AsyncCall` owns that. Under the affine
+ownership model ([WEP 2026-05-21](./wep-2026-05-21-resource-ownership.md)) a
+`resource` is move-only, which would forbid the natural usage of comparing one
+`event.handle` against several saved tokens. A copyable newtype is both sound
+and ergonomic here. As a side benefit, constructing a `Waitable` from the
+`i32` the canonical ABI hands back (`waitable-set-wait` / `waitable-join`) is
+an ordinary newtype wrap, not an unchecked `i32`-to-`resource` cast.
+
+The other async handles — `Stream` / `Future` / `StreamWritable` /
+`FutureWritable` / `WaitableSet` / `Subtask` / `ErrorContext` — stay
+`resource`. They are likewise not CM `resource` types (they are async value
+types and canonical-ABI waitables), but unlike `Waitable` they require
+exactly-once `drop` and ownership transfer, so they need the affine
+discipline; a copyable newtype would be unsound for them. WEP 2026-05-21
+records this as a distinct resource backing — a bare `i32` canonical-ABI
+waitable handle.
 
 ### Naming: Future<T> as the Readable End
 
