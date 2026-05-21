@@ -1488,6 +1488,20 @@ fn emit_canonical_intrinsics(
             CanonicalIntrinsic::ErrorContextDrop => {
                 builder.error_context_drop();
             }
+            CanonicalIntrinsic::ResourceDrop(cm_name) => {
+                // The imported resource type is aliased into the component's
+                // local type space by `generate_cm_imports` (which runs first):
+                // HTTP resources as `http-<cm>-resource`, others as
+                // `resource:<cm>`.
+                let http_key = format!("http-{cm_name}-resource");
+                let generic_key = format!("resource:{cm_name}");
+                let type_idx = if ctx.has_type(&http_key) {
+                    ctx.type_idx(&http_key)
+                } else {
+                    ctx.type_idx(&generic_key)
+                };
+                builder.resource_drop(type_idx);
+            }
         }
     }
 }

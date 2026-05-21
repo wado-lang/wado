@@ -15,6 +15,7 @@ pub mod common;
 pub mod effect_dispatch;
 pub mod from_synth;
 pub mod kiln_synth;
+pub mod resource_cleanup;
 pub mod serde_synth;
 pub mod template;
 pub mod traits;
@@ -78,6 +79,13 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
     // the original `WithHandler` shape to know which effects are
     // satisfied locally.
     let project = effect_dispatch::synthesize_pre_cm_binding(project)?;
+
+    // Insert `resource.drop` for every owned Component Model resource that is
+    // never transferred. Runs before CM-binding synthesis so resource method
+    // calls are still `MethodCall`/`Call` nodes (their post-rewrite forms
+    // would obscure the borrow-vs-transfer distinction).
+    let mut project = project;
+    resource_cleanup::elaborate_resource_drops(&mut project);
 
     let project = cm_binding::generate_adapters(project)?;
     Ok(project)

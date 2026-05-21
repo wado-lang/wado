@@ -352,6 +352,9 @@ pub enum CanonicalIntrinsic {
     ErrorContextDebugMessage,
     ErrorContextDrop,
     TaskReturn,
+    /// `resource.drop` for an imported Component Model resource.
+    /// The payload is the resource's CM name (e.g. `"request"`).
+    ResourceDrop(String),
 }
 
 impl CanonicalIntrinsic {
@@ -387,6 +390,7 @@ impl CanonicalIntrinsic {
             Self::ErrorContextDebugMessage => "error-context-debug-message".to_string(),
             Self::ErrorContextDrop => "error-context-drop".to_string(),
             Self::TaskReturn => "task-return".to_string(),
+            Self::ResourceDrop(name) => format!("resource-drop:{name}"),
         }
     }
 
@@ -399,6 +403,9 @@ impl CanonicalIntrinsic {
         Some(match name {
             _ if name.starts_with("stream-") => {
                 return parse_stream_intrinsic(name);
+            }
+            _ if name.starts_with("resource-drop:") => {
+                Self::ResourceDrop(name["resource-drop:".len()..].to_string())
             }
             "future-new" => Self::FutureNew(CmFuturePayload::Trailers),
             "future-read" => Self::FutureRead(CmFuturePayload::Trailers),
