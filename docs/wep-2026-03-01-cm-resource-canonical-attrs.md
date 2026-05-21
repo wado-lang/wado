@@ -49,7 +49,7 @@ pub resource Stream<T> {
     fn read(&self, max: i32) -> Array<T>;
 
     #[canonical("stream-drop-readable")]
-    fn drop(&self);
+    fn drop(self);
 }
 
 pub resource StreamWritable<T> {
@@ -57,7 +57,7 @@ pub resource StreamWritable<T> {
     fn write(&self, data: Array<T>);
 
     #[canonical("stream-drop-writable")]
-    fn drop(&self);
+    fn drop(self);
 }
 
 pub resource Future<T> {
@@ -68,7 +68,7 @@ pub resource Future<T> {
     fn read(&self) -> Option<T>;
 
     #[canonical("future-drop-readable")]
-    fn drop(&self);
+    fn drop(self);
 }
 
 pub resource FutureWritable<T> {
@@ -76,7 +76,7 @@ pub resource FutureWritable<T> {
     fn write(&self, value: T);
 
     #[canonical("future-drop-writable")]
-    fn drop(&self);
+    fn drop(self);
 }
 
 /// Opaque token identifying a waitable handle within a WaitableSet.
@@ -104,12 +104,12 @@ pub resource WaitableSet {
     fn poll(&self) -> Option<WaitEvent>;
 
     #[canonical("waitable-set-drop")]
-    fn drop(&self);
+    fn drop(self);
 }
 
 pub resource Subtask {
     #[canonical("subtask-drop")]
-    fn drop(&self);
+    fn drop(self);
 
     /// Join this subtask to a waitable set.
     /// Returns a Waitable token that identifies this subtask in wait results.
@@ -125,9 +125,24 @@ pub resource ErrorContext {
     fn debug_message(&self) -> String;
 
     #[canonical("error-context-drop")]
-    fn drop(&self);
+    fn drop(self);
 }
 ```
+
+### Amendment: `drop` is a consuming method (WEP 2026-05-21)
+
+`drop` is a _consuming_ method — `fn drop(self)`, not `fn drop(&self)`. The
+declarations above show the corrected form.
+
+Under the affine resource ownership model
+([Resource Ownership](./wep-2026-05-21-resource-ownership.md)), a `&self`
+receiver is a non-consuming borrow. A `fn drop(&self)` would leave the binding
+usable after its CM handle is already dead (a use-after-free), and would also
+double-drop against the automatic scope-exit drop that the ownership model
+inserts. A consuming `self` receiver invalidates the binding at the call site,
+so the move checker records the move and suppresses the scope-exit drop —
+exactly one `resource.drop` is emitted. The `ws.drop()` call-site syntax is
+unchanged.
 
 ### Waitable: Typed Handle Token
 
@@ -637,6 +652,9 @@ __DATA__
 
 ## Related WEPs
 
+- [WEP: Resource Ownership](wep-2026-05-21-resource-ownership.md) — the affine
+  ownership model for CM canonical resources; amends `drop` to a consuming
+  `fn drop(self)` (see the amendment note above).
 - [WEP: TIR-Level CM Binding Synthesis](wep-2026-02-15-cm-binding-synthesis.md) — The type-driven
   synthesizer that generates CM ABI lowering/lifting code for import and export adapters.
   The canonical method synthesis functions (`emit_stream_read`, etc.) proposed here complement

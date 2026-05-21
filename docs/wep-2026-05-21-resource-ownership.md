@@ -68,37 +68,50 @@ boundary.
   method takes `&self`".
 
 Read as language-wide claims these contradict each other. This WEP resolves
-the tension by splitting the model along the resource's backing
-representation, which both earlier WEPs already treat as a first-class axis.
+the tension by splitting the model by _resource kind_ — whether the resource
+is a CM canonical handle or a host-owned GC object — which both earlier WEPs
+already treat as a first-class distinction.
 
 ## Decision
 
-### Split the ownership model by backing
+### Split the ownership model by resource kind
 
-Per [Resource Inheritance](./wep-2026-04-28-resource-inheritance.md), a
-resource is backed either by a CM `i32` handle or by a Wasm GC `externref`.
-The ownership model follows the backing:
+A Wado `resource` is one of two kinds, and the ownership model follows the
+kind:
 
-| Backing      | Ownership model                                                             | Cleanup                                |
-| ------------ | --------------------------------------------------------------------------- | -------------------------------------- |
-| `i32` handle | Affine (move-only) + resource-scoped borrow checker (this WEP)              | Deterministic `resource.drop` / `dtor` |
-| `externref`  | Value semantics (copyable), no borrow checker — the model in WEP 2026-04-28 | Wasm GC                                |
+| Resource kind         | Backed by                                           | Ownership model                                                | Cleanup                                |
+| --------------------- | --------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------- |
+| CM canonical resource | a CM `own` / `borrow` handle (handle table, `dtor`) | Affine (move-only) + resource-scoped borrow checker (this WEP) | Deterministic `resource.drop` / `dtor` |
+| Host-object resource  | a Wasm GC reference to a host object (no `dtor`)    | Value semantics (copyable), no borrow checker — WEP 2026-04-28 | Wasm GC                                |
 
-This is not a compromise; it follows from the representations. An `i32`
-handle is a table index with a destructor and CM `own` / `borrow` transfer
-semantics — copying it (`let b = a;`) would alias one table slot and lead to
-a double-`resource.drop` trap or a use-after-transfer trap. An `externref` is
-a GC reference with no handle table and no `dtor`; holding many references to
-the same host object is normal and safe, and the GC reclaims the object. So
-WEP 2026-04-28's value-semantics claims are correct _within its scope_
-(`extends` is gated on `externref` backing), but must not be read as
+This is not a compromise; it follows from what the handle is. A CM canonical
+handle indexes a per-instance table and carries a destructor with `own` /
+`borrow` transfer semantics — copying it (`let b = a;`) would alias one table
+slot and lead to a double-`resource.drop` trap or a use-after-transfer trap.
+A host-object resource is a GC reference to an object the host owns, with no
+handle table and no `dtor`; holding many references to the same object is
+normal and safe, and the GC reclaims the object. So WEP 2026-04-28's
+value-semantics claims are correct _within its scope_ (`extends` is gated on
+host-object resources, declared `type="extern-ref"`), but must not be read as
 language-wide. The amendment below narrows that wording.
 
-The rest of this WEP concerns `i32`-backed resources.
+#### Representation is orthogonal to kind
 
-### `i32`-backed resources are affine
+The _ownership model_ is fixed by the resource kind. The _wasm-level
+representation_ of a CM canonical handle is a separate, ABI-mode axis owned by
+[GC in Components](./wep-2026-03-28-gc-in-components.md): the handle is lowered
+as `i32` in CM-LM mode and as `externref` in CM-GC mode. A CM canonical
+resource lowered as `externref` in CM-GC mode is still a CM `own` / `borrow`
+handle with a `dtor` — it is affine, and this WEP applies to it unchanged. It
+must not be confused with a host-object resource, whose `externref` points at
+a host-owned GC object and has no `dtor`. "`i32` vs `externref`" is therefore
+not the axis that decides the ownership model; the resource kind is.
 
-An `i32`-backed resource value is move-only:
+The rest of this WEP concerns CM canonical resources.
+
+### CM canonical resources are affine
+
+A CM canonical resource value is move-only:
 
 - It cannot be copied. `let b = a;` where `a` is a resource binding moves `a`
   into `b`; `a` is then invalid. There is no implicit copy.
@@ -125,7 +138,7 @@ check: a borrow must not outlive — or be invalidated by a move of — the
 resource it points into. A full borrow checker is unnecessary here because
 three properties of resources collapse the hard parts:
 
-1. No `&mut` on resources. Every `i32`-backed resource method takes `&self`
+1. No `&mut` on resources. Every CM canonical resource method takes `&self`
    or consumes `self` by value; observable mutation happens host-side. With
    no `&mut`, there is no shared-XOR-mutable exclusivity analysis at all —
    the conceptually heaviest half of a borrow checker is simply absent.
@@ -195,7 +208,16 @@ real failure mode.
 A resource that is owned and not moved out is dropped when its binding goes
 out of scope, on every control-flow path — block end, early `return`, and the
 non-taken side of a branch. `move` suppresses the drop at the source.
-`drop(r)` performs the drop explicitly and invalidates `r`.
+
+A resource may also expose an explicit drop method. It is a _consuming_
+method — `fn drop(self)` — the form used by `Stream`, `WaitableSet`, and the
+other canonical resources in
+[WEP 2026-03-01](./wep-2026-03-01-cm-resource-canonical-attrs.md) (amended
+below from `fn drop(&self)`). Calling `r.drop()` consumes `r`, so the move
+checker records the move and the automatic scope-exit drop does not also
+fire — exactly one `resource.drop` is emitted. A `&self` drop method would
+be unsound: the binding would stay usable after its handle is dead, and the
+scope-exit drop would double-free.
 
 The drop action depends on which side of the boundary the resource lives on:
 
@@ -254,35 +276,53 @@ with no additional checker machinery — resources are simply the first client.
 
 - [WEP 2026-01-12 (RAII)](./wep-2026-01-12-resource-lifecycle.md): its
   `unique` / move-only / destructor / compositional-cleanup model is adopted,
-  scoped to `i32`-backed resources, and given a concrete implementation via
+  scoped to CM canonical resources, and given a concrete implementation via
   this WEP's checker. Its open question "should there be a borrow checker?"
   is answered: a resource-scoped one, with the three simplifications above.
+  Its explicit-drop form — a free `drop(r)` — is superseded by the consuming
+  `fn drop(self)` method (see the amendment below).
+- [WEP 2026-03-01 (CM Resource Canonical Attributes)](./wep-2026-03-01-cm-resource-canonical-attrs.md):
+  amended (below) — its resource `drop` methods take `&self`, which is
+  unsound under the affine model; they become consuming `fn drop(self)`.
 - [WEP 2026-04-28 (Inheritance)](./wep-2026-04-28-resource-inheritance.md):
-  amended (below) so its value-semantics wording reads as scoped to
-  `externref`-backed resources, not language-wide.
+  amended (in that WEP) so its value-semantics wording reads as scoped to
+  host-object resources, not language-wide.
 
-## Amendment to WEP 2026-04-28
+## Amendments to earlier WEPs
 
-WEP 2026-04-28's value-semantics statements are correct for `externref`-backed
+### WEP 2026-04-28 (Resource Inheritance)
+
+WEP 2026-04-28's value-semantics statements are correct for host-object
 resources (the only kind `extends` admits) but are phrased as language-wide
 claims. The following sentences are narrowed; the substance for that WEP's
 scope is unchanged:
 
 - "In Wado, resource handles are themselves immutable values ... They have
-  value semantics, no lifetimes, no borrow checker." → scoped to
-  `externref`-backed resources, with a cross-reference to this WEP for
-  `i32`-backed resources.
+  value semantics, no lifetimes, no borrow checker." → scoped to host-object
+  resources, with a cross-reference to this WEP for CM canonical resources.
 - Sidebar "resource handles are immutable" / "Across the language, every
-  `resource` method takes `&self`." → scoped to `externref`-backed resources.
-  `i32`-backed resources additionally have by-value consuming methods.
+  `resource` method takes `&self`." → scoped to host-object resources. CM
+  canonical resources additionally have by-value consuming methods.
+
+These edits are applied directly in WEP 2026-04-28.
+
+### WEP 2026-03-01 (CM Resource Canonical Attributes)
+
+WEP 2026-03-01 declares the resource `drop` method as `fn drop(&self)`. A
+`&self` receiver is a non-consuming borrow, so under the affine model
+`r.drop()` would leave `r` usable after its handle is dead and would
+double-drop against the automatic scope-exit drop. The `drop` method is
+amended to a consuming `fn drop(self)`; the `r.drop()` call-site syntax is
+unchanged. This edit is applied directly in WEP 2026-03-01, with an amendment
+note in that WEP.
 
 ## Consequences
 
 ### Positive
 
-- One coherent ownership story: affine for `i32`-backed resources, GC value
-  semantics for `externref`-backed, split along a representation axis both
-  earlier WEPs already use.
+- One coherent ownership story: affine for CM canonical resources, GC value
+  semantics for host-object resources, split by resource kind — a distinction
+  both earlier WEPs already draw.
 - Soundness is static: double-drop, use-after-transfer, and leaked borrows
   are compile errors, not runtime traps.
 - No lifetimes, no annotations, no exclusivity analysis — the checker is on
@@ -315,6 +355,14 @@ scope is unchanged:
   `borrow<record>` mapping shown in
   [WEP 2026-01-29](./wep-2026-01-29-wit-wado-mapping.md) is a separate
   question about record parameters and is out of scope here.
+- `Waitable` ([WEP 2026-03-01](./wep-2026-03-01-cm-resource-canonical-attrs.md))
+  is declared a `resource` but is really a copyable identity token — it wraps
+  a `u32` handle, has no `dtor` and no `drop`, and auto-derives `Eq` for
+  free comparison. The affine model makes it move-only, and any `struct`
+  carrying it (e.g. `WaitEvent`) move-only too, which fights its intended
+  compare-freely usage. It should likely be modelled as an opaque newtype
+  rather than a `resource`, or be given an explicit copyable-token exception.
+  Deferred to a follow-up.
 
 ## Implementation Roadmap
 
@@ -340,18 +388,21 @@ scope is unchanged:
       owned-and-not-moved set.
 - [ ] Compositional destructor synthesis for `unique struct` / variant /
       array carrying resources (per WEP 2026-01-12), in declaration order.
+- [ ] Migrate the resource `drop` methods in `types.wado` from `fn drop(&self)`
+      to consuming `fn drop(self)` (per the WEP 2026-03-01 amendment).
 
 ### M4: CM boundary + amendment
 
 - [ ] Confirm CM-binding synthesis maps by-value `R` → `own`, `&R` → `borrow`
       with no ownership heuristics left.
-- [ ] Apply the wording amendment to WEP 2026-04-28.
+- [x] Apply the wording amendments to WEP 2026-04-28 and WEP 2026-03-01.
 
 ## References
 
 - [Component Model Explainer — Handle types and Resource built-ins](../vendor/component-model/design/mvp/Explainer.md)
 - [Component Model Canonical ABI — `lift_own` / `lift_borrow`](../vendor/component-model/design/mvp/CanonicalABI.md)
 - [Resource Lifecycle Management (RAII)](./wep-2026-01-12-resource-lifecycle.md)
+- [Redesign Wasm CM Builtins as Resource Canonical Attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md)
 - [Resource Inheritance and Downcast](./wep-2026-04-28-resource-inheritance.md)
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
 - [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md)
