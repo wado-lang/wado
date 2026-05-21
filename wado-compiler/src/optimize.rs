@@ -359,15 +359,16 @@ pub mod pass_dump {
     /// is the 1-based occurrence number — letting bisection target a
     /// specific iteration (e.g., `tir/ref_elim@2`).
     pub fn should_skip_pass(name: &str) -> bool {
-        use std::collections::HashMap;
         use std::sync::Mutex;
-        static COUNTS: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
+
+        use crate::hashmap::IndexMap;
+        static COUNTS: OnceLock<Mutex<IndexMap<String, u32>>> = OnceLock::new();
         let list = skip_list();
         if list.is_empty() {
             return false;
         }
         let mut counts = COUNTS
-            .get_or_init(|| Mutex::new(HashMap::new()))
+            .get_or_init(|| Mutex::new(IndexMap::default()))
             .lock()
             .unwrap();
         let n = counts.entry(name.to_string()).or_insert(0);

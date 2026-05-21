@@ -14,8 +14,9 @@
 //! written to be reused by future passes (e.g. a `container_sroa` migration).
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::nir::{
@@ -34,7 +35,7 @@ fn builtin_gname(func: &FunctionRef) -> Option<String> {
 
 pub fn demote_value_copies(project: &mut NirPackage) {
     // Map every function to its index for callee lookup.
-    let mut by_key: HashMap<FuncKey, usize> = HashMap::new();
+    let mut by_key: IndexMap<FuncKey, usize> = IndexMap::default();
     for (i, f) in project.functions.iter().enumerate() {
         let f = f.borrow();
         by_key.insert((f.module_source.clone(), f.name.clone()), i);
@@ -42,7 +43,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
 
     // Identify `$value_copy$T` helpers whose body is an `Array<E>` wrapper
     // copy: `return StructLiteral { repr: array_clone(v.repr), used: ... }`.
-    let mut array_wrapper_copies: HashSet<FuncKey> = HashSet::new();
+    let mut array_wrapper_copies: IndexSet<FuncKey> = IndexSet::default();
     for f in &project.functions {
         let f = f.borrow();
         if f.value_copy_type().is_some()
@@ -66,7 +67,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
         funcs: &project.functions,
         by_key: &by_key,
         type_table: &type_table,
-        eimm_memo: HashMap::new(),
+        eimm_memo: IndexMap::default(),
     };
 
     // Phase 1: per `(function, target-local)`, AND-combine the eligibility
@@ -75,8 +76,8 @@ pub fn demote_value_copies(project: &mut NirPackage) {
     // eligible — so the single `(fi, local)` key precisely drives the
     // rewrite, and a binding whose sibling is unsafe stays deep rather than
     // being collaterally demoted.
-    let mut site_elig: HashMap<(usize, u32), bool> = HashMap::new();
-    let mut site_key: HashMap<(usize, u32), FuncKey> = HashMap::new();
+    let mut site_elig: IndexMap<(usize, u32), bool> = IndexMap::default();
+    let mut site_key: IndexMap<(usize, u32), FuncKey> = IndexMap::default();
     for (fi, f) in project.functions.iter().enumerate() {
         let f = f.borrow();
         if f.value_copy_type().is_some() {
@@ -95,7 +96,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
         );
     }
 
-    let mut demoted_keys: HashSet<FuncKey> = HashSet::new();
+    let mut demoted_keys: IndexSet<FuncKey> = IndexSet::default();
     for (loc, &elig) in &site_elig {
         if elig {
             demoted_keys.insert(site_key[loc].clone());
@@ -107,7 +108,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
     }
 
     // Phase 2a: synthesize a shallow sibling helper per demoted deep helper.
-    let mut shallow_name: HashMap<FuncKey, String> = HashMap::new();
+    let mut shallow_name: IndexMap<FuncKey, String> = IndexMap::default();
     let mut new_funcs: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
     for deep_key in &demoted_keys {
         let new_name = format!("{}$shallow", deep_key.1);
@@ -119,7 +120,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
         }
         let idx = by_key[deep_key];
         let mut shallow = project.functions[idx].borrow().clone();
-        shallow.name = new_name.clone();
+        shallow.name.clone_from(&new_name);
         shallow.kind = FunctionKind::Regular;
         shallow.is_pub = false;
         shallow.is_export = false;
@@ -133,7 +134,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
     // Phase 2b: a pure mechanical rewrite — retarget exactly the
     // `(fi, local)` bindings marked eligible. No analysis here, so it needs
     // no `&project.functions` borrow and cannot conflict with the mutation.
-    let mut touched: HashSet<usize> = HashSet::new();
+    let mut touched: IndexSet<usize> = IndexSet::default();
     for ((fi, _), &elig) in &site_elig {
         if elig {
             touched.insert(*fi);
@@ -222,7 +223,7 @@ fn rewrite_expr(expr: &mut NirExpr) {
 
 /// If `value` is a one-argument call to an array-wrapper `$value_copy$T`
 /// helper, return that helper's key.
-fn wrapper_call_key(value: &NirExpr, wrappers: &HashSet<FuncKey>) -> Option<FuncKey> {
+fn wrapper_call_key(value: &NirExpr, wrappers: &IndexSet<FuncKey>) -> Option<FuncKey> {
     if let NirExprKind::Call { func, args, .. } = &value.kind
         && args.len() == 1
     {
@@ -259,13 +260,13 @@ fn stmt_binding(stmt: &NirStmt) -> Option<(&NirExpr, u32)> {
 /// `site_elig[(fi, x)]`. Every nested block is visited exactly once.
 fn collect_sites(
     block: &NirBlock,
-    wrappers: &HashSet<FuncKey>,
+    wrappers: &IndexSet<FuncKey>,
     fn_body: &NirBlock,
     params: &[crate::nir::NirParam],
     fi: usize,
     an: &mut Analyzer,
-    site_elig: &mut HashMap<(usize, u32), bool>,
-    site_key: &mut HashMap<(usize, u32), FuncKey>,
+    site_elig: &mut IndexMap<(usize, u32), bool>,
+    site_key: &mut IndexMap<(usize, u32), FuncKey>,
 ) {
     for stmt in &block.stmts {
         if let Some((value, target)) = stmt_binding(stmt)
@@ -438,9 +439,9 @@ fn demote_candidate(
 fn retarget_block(
     block: &mut NirBlock,
     fi: usize,
-    site_elig: &HashMap<(usize, u32), bool>,
-    wrappers: &HashSet<FuncKey>,
-    shallow_name: &HashMap<FuncKey, String>,
+    site_elig: &IndexMap<(usize, u32), bool>,
+    wrappers: &IndexSet<FuncKey>,
+    shallow_name: &IndexMap<FuncKey, String>,
 ) {
     for stmt in &mut block.stmts {
         let target = match &stmt.kind {
@@ -484,8 +485,8 @@ fn stmt_binding_value_mut(stmt: &mut NirStmt) -> Option<&mut NirExpr> {
 /// Rewrite a value-copy-wrapper call to its synthesized shallow sibling.
 fn retarget_wrapper_call(
     value: &mut NirExpr,
-    wrappers: &HashSet<FuncKey>,
-    shallow_name: &HashMap<FuncKey, String>,
+    wrappers: &IndexSet<FuncKey>,
+    shallow_name: &IndexMap<FuncKey, String>,
 ) {
     if let NirExprKind::Call { func, args, .. } = &mut value.kind
         && args.len() == 1
@@ -494,7 +495,7 @@ fn retarget_wrapper_call(
         if wrappers.contains(&key)
             && let Some(new) = shallow_name.get(&key)
         {
-            func.name = new.clone();
+            func.name.clone_from(new);
         }
     }
 }
@@ -583,9 +584,9 @@ fn blocks_in_expr_mut<'a>(expr: &'a mut NirExpr, out: &mut Vec<&'a mut NirBlock>
 
 struct Analyzer<'a> {
     funcs: &'a [Rc<RefCell<NirFunction>>],
-    by_key: &'a HashMap<FuncKey, usize>,
+    by_key: &'a IndexMap<FuncKey, usize>,
     type_table: &'a Rc<RefCell<TypeTable>>,
-    eimm_memo: HashMap<FuncKey, bool>,
+    eimm_memo: IndexMap<FuncKey, bool>,
 }
 
 impl Analyzer<'_> {
@@ -603,13 +604,13 @@ impl Analyzer<'_> {
     /// True when calling `key` (a `&mut self` method) cannot mutate any
     /// element of `self`. Memoized; recursion is conservatively `false`.
     fn is_method_element_immutable(&mut self, key: &FuncKey) -> bool {
-        let mut visiting: HashSet<FuncKey> = HashSet::new();
+        let mut visiting: IndexSet<FuncKey> = IndexSet::default();
         let r = self.verify(key, &mut visiting);
         crate::compiler_trace!("demote", "eimm({}) = {}", key.1, r);
         r
     }
 
-    fn verify(&mut self, key: &FuncKey, visiting: &mut HashSet<FuncKey>) -> bool {
+    fn verify(&mut self, key: &FuncKey, visiting: &mut IndexSet<FuncKey>) -> bool {
         if let Some(&v) = self.eimm_memo.get(key) {
             return v;
         }
@@ -624,13 +625,13 @@ impl Analyzer<'_> {
         let body_opt = self.funcs[idx].borrow().body.clone();
         let result = match body_opt {
             Some(body) => {
-                let mut tainted: HashSet<u32> = HashSet::new();
+                let mut tainted: IndexSet<u32> = IndexSet::default();
                 tainted.insert(0); // local 0 == self
                 self.verify_block(&body, &mut tainted, visiting)
             }
             None => false,
         };
-        visiting.remove(key);
+        visiting.swap_remove(key);
         self.eimm_memo.insert(key.clone(), result);
         result
     }
@@ -638,8 +639,8 @@ impl Analyzer<'_> {
     fn verify_block(
         &mut self,
         block: &NirBlock,
-        tainted: &mut HashSet<u32>,
-        visiting: &mut HashSet<FuncKey>,
+        tainted: &mut IndexSet<u32>,
+        visiting: &mut IndexSet<FuncKey>,
     ) -> bool {
         for stmt in &block.stmts {
             if !self.verify_stmt(stmt, tainted, visiting) {
@@ -652,8 +653,8 @@ impl Analyzer<'_> {
     fn verify_stmt(
         &mut self,
         stmt: &NirStmt,
-        tainted: &mut HashSet<u32>,
-        visiting: &mut HashSet<FuncKey>,
+        tainted: &mut IndexSet<u32>,
+        visiting: &mut IndexSet<FuncKey>,
     ) -> bool {
         match &stmt.kind {
             NirStmtKind::Let {
@@ -708,8 +709,8 @@ impl Analyzer<'_> {
     fn verify_expr(
         &mut self,
         expr: &NirExpr,
-        tainted: &HashSet<u32>,
-        visiting: &mut HashSet<FuncKey>,
+        tainted: &IndexSet<u32>,
+        visiting: &mut IndexSet<FuncKey>,
     ) -> bool {
         match &expr.kind {
             // `&mut <self-derived>` would expose mutable element access.
@@ -845,8 +846,8 @@ impl Analyzer<'_> {
     fn verify_call_arg(
         &mut self,
         arg: &NirExpr,
-        tainted: &HashSet<u32>,
-        visiting: &mut HashSet<FuncKey>,
+        tainted: &IndexSet<u32>,
+        visiting: &mut IndexSet<FuncKey>,
     ) -> bool {
         if let NirExprKind::Unary {
             op: NirUnaryOp::Ref,
@@ -1046,7 +1047,7 @@ fn expr_mentions_local(expr: &NirExpr, idx: u32) -> bool {
 ///
 /// A primitive-typed value is excluded: reading `self.used` (an `i32`)
 /// produces an independent copy, so passing it around cannot reach `self`.
-fn is_self_derived(expr: &NirExpr, tainted: &HashSet<u32>, tt: &Rc<RefCell<TypeTable>>) -> bool {
+fn is_self_derived(expr: &NirExpr, tainted: &IndexSet<u32>, tt: &Rc<RefCell<TypeTable>>) -> bool {
     if matches!(tt.borrow().get(expr.type_id), ResolvedType::Primitive(_)) {
         return false;
     }

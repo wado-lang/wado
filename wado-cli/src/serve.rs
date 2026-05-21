@@ -612,7 +612,7 @@ enum WorkerStop {
 /// One step of a worker's dispatch loop.
 enum Step {
     /// A job arrived (`Some`), or the request channel closed (`None`).
-    Job(Option<RequestJob>),
+    Job(Option<Box<RequestJob>>),
     /// An in-flight request finished.
     Drained,
 }
@@ -698,13 +698,13 @@ async fn worker_loop(
                         Step::Drained
                     } else if inflight.is_empty() {
                         // Idle — only a new job can wake us.
-                        Step::Job(job_rx.recv().await)
+                        Step::Job(job_rx.recv().await.map(Box::new))
                     } else {
                         // Accept new jobs and drain in-flight concurrently.
                         let recv = pin!(job_rx.recv());
                         let drain = pin!(inflight.next());
                         match select(recv, drain).await {
-                            Either::Left((job, _drain)) => Step::Job(job),
+                            Either::Left((job, _drain)) => Step::Job(job.map(Box::new)),
                             Either::Right((_done, _recv)) => Step::Drained,
                         }
                     };
@@ -723,7 +723,7 @@ async fn worker_loop(
                             // the task itself is driven by `run_concurrent`.
                             inflight.push(accessor.spawn(HandlerTask {
                                 service: Arc::clone(&service),
-                                job,
+                                job: *job,
                                 idle_timeout: request_timeout,
                             }));
                             handled += 1;

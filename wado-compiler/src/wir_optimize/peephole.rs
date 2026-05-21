@@ -48,7 +48,7 @@ pub(super) fn propagate_trivial_copies(module: &mut WirPackage) {
     }
 }
 
-fn propagate_copies_in_function(body: &mut Vec<WirInstr>, params: &IndexSet<String>) {
+fn propagate_copies_in_function(body: &mut [WirInstr], params: &IndexSet<String>) {
     // 1. Count definitions per local across the whole function.
     let mut counts: IndexMap<String, LocalDefInfo> = IndexMap::default();
     let mut counter = DefCounter {
@@ -260,7 +260,7 @@ fn resolve_chains(candidates: &IndexMap<String, String>) -> IndexMap<String, Str
         while !seen.contains(&current) {
             seen.insert(current.clone());
             match candidates.get(&current) {
-                Some(next) => current = next.clone(),
+                Some(next) => current.clone_from(next),
                 None => break,
             }
         }
