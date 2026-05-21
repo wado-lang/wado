@@ -512,6 +512,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 raw_args: &method_call.args,
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
+                span: method_call.span,
             })
         } else {
             type_args
