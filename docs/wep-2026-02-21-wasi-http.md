@@ -115,6 +115,26 @@ Currently, calling `Client::send` from Wado is not yet implemented. The type and
 
 This world is not yet supported as a compilation target. The `wasi:http/service` world is used for all current HTTP programs.
 
+### 7. Deployment Model and Threat Boundary
+
+`wado serve` targets managed serverless platforms — Google Cloud Run, AWS Lambda, and equivalents. It is not designed to be exposed directly at the network edge.
+
+On these platforms the client TCP connection is terminated by the platform's front layer, not by `wado serve`:
+
+- AWS Lambda (API Gateway / Function URL): the front layer buffers the request and response, so the guest never sees a raw client socket. The invocation is additionally bounded by a hard execution timeout (15 minutes maximum).
+- Cloud Run: the Google Front End terminates the client connection and enforces a per-request timeout (5 minutes default, 60 minutes maximum).
+
+Consequently, slow-client attacks (Slowloris, slow-read) are outside `wado serve`'s threat model. The platform fronts the connection and its hard timeout is an unconditional backstop, so a slow client cannot pin a worker resource indefinitely. Defending against slow clients is the platform's responsibility.
+
+Within that boundary `wado serve` guarantees two properties:
+
+- No unbounded resource leak. The response body pump applies a per-frame idle timeout (`--timeout`): a consumer that stops draining the body while holding the connection open is reclaimed within that window rather than pinning a worker fiber stack forever (issue #1138). This holds independently of the platform timeout, so a generous or misconfigured platform timeout cannot turn a stalled consumer into a permanent leak.
+- Bounded total concurrency. `--max-concurrency` caps concurrently in-flight requests and sizes the pooling allocator's fiber-stack pool, so the worst case is bounded resource use, never unbounded growth.
+
+A throughput floor and a per-IP connection limit were both considered and rejected. Against an attacker operating just above any safely-settable threshold they are mitigation only, and the platform front already owns this defense.
+
+Operator guidance: set `--timeout` at or below the platform's request/execution timeout. `wado serve` then returns a clean `504` and self-heals the worker before the platform cuts the connection.
+
 ## Type Reference
 
 All types are imported from `"wasi:http"`.
