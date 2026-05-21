@@ -114,11 +114,11 @@ __DATA__
 ### Adding Test Fixtures
 
 After adding new `.wado` files to `tests/fixtures/`, run `touch tests/e2e.rs`
-to trigger `datatest_mini` to rediscover test files.
+so `datatest_mini` rediscovers test files.
 
-Without this, `cargo test` will not detect the new fixture because
-`datatest_mini` discovers files at compile time. Use the `touch` command —
-do not append marker comments to `tests/e2e.rs`.
+`datatest_mini` discovers fixtures at compile time, so without rebuilding
+`tests/e2e.rs` an incremental `cargo test` will not pick up the new fixture.
+This only matters for local development — CI builds from scratch.
 
 `tests/fixtures` requires data-section test spec, so if you test cross-module features, place the loaded modules in `tests/fixtures/sub`.
 
