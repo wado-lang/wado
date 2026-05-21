@@ -16,7 +16,7 @@ use super::Resolver;
 use super::infer::InferCtx;
 use super::types::{
     ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
-    IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo,
+    IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo, TypeError,
 };
 
 /// Lightweight reference to an impl block, avoiding deep clones.
@@ -59,6 +59,9 @@ pub(super) struct MethodInferenceInput<'a> {
     /// Expected return type at the call site (from a type annotation or
     /// surrounding call), used for back-inference.
     pub expected_return_type: Option<TypeId>,
+    /// Call-site span, used to anchor a "cannot infer type parameter"
+    /// diagnostic when inference leaves a method type parameter dangling.
+    pub span: Span,
 }
 
 impl<H: CompilerHost> Resolver<'_, H> {
@@ -1312,6 +1315,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             raw_args,
             decl_return_type,
             expected_return_type,
+            span,
         } = input;
 
         let base_type_id = self.get_base_type(receiver_type);
@@ -1355,9 +1359,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let method_type_param_ids: Vec<TypeId> = {
             let mut tt = self.type_table.borrow_mut();
             method_type_param_names
-                .into_iter()
+                .iter()
                 .enumerate()
-                .map(|(i, name)| tt.make_type_param(name, impl_offset + i as u32))
+                .map(|(i, (name, _))| tt.make_type_param(name.clone(), impl_offset + i as u32))
                 .collect()
         };
 
@@ -1391,6 +1395,44 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if !all_concrete {
             let all_outer = inferred.iter().all(|tid| scope_params.contains(tid));
             if !all_outer {
+                // A method type parameter resolved to neither a concrete type
+                // nor an outer-scope parameter — it stayed a fresh, dangling
+                // `TypeParam`. Without an explicit turbofish or an LHS type
+                // annotation there is nothing left to pin it, so report a
+                // clean diagnostic here instead of letting the dangling id
+                // reach a later phase and panic.
+                //
+                // `fn`-bound parameters (`<F: fn(...) -> ...>`) are excluded:
+                // they are constrained structurally from the bound's function
+                // type, not by call-site inference, so an empty result for
+                // them is expected and handled downstream.
+                let unresolved: Vec<&str> = method_type_param_names
+                    .iter()
+                    .zip(inferred.iter())
+                    .filter(|&((_, has_fn_bound), &tid)| {
+                        !has_fn_bound
+                            && matches!(
+                                self.type_table.borrow().get(tid),
+                                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                            )
+                            && !scope_params.contains(&tid)
+                    })
+                    .map(|((name, _), _)| name.as_str())
+                    .collect();
+                if !unresolved.is_empty() {
+                    let params = unresolved
+                        .iter()
+                        .map(|n| format!("`{n}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let _ = self.logger.error(TypeError::CannotInferType {
+                        message: format!(
+                            "cannot infer type parameter {params} of method `{method_name}`; \
+                             add a turbofish (`{method_name}::<...>()`) or a type annotation"
+                        ),
+                        span,
+                    });
+                }
                 return vec![];
             }
         }
@@ -1405,13 +1447,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &self,
         trait_names: &[String],
         method_name: &str,
-    ) -> Option<Vec<String>> {
-        let extract_names = |method: &ast::Function| -> Option<Vec<String>> {
-            let names: Vec<String> = method
+    ) -> Option<Vec<(String, bool)>> {
+        let extract_names = |method: &ast::Function| -> Option<Vec<(String, bool)>> {
+            let names: Vec<(String, bool)> = method
                 .type_params
                 .iter()
                 .filter(|p| !p.is_effect)
-                .map(|tp| tp.name.clone())
+                .map(|tp| {
+                    let has_fn_bound = tp.bounds.iter().any(|b| b.fn_signature.is_some());
+                    (tp.name.clone(), has_fn_bound)
+                })
                 .collect();
             if names.is_empty() { None } else { Some(names) }
         };
@@ -1467,13 +1512,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         struct_name: &str,
         struct_module_source: Option<&ModuleSource>,
         method_name: &str,
-    ) -> Option<Vec<String>> {
-        let extract_names = |method: &ast::Function| -> Option<Vec<String>> {
-            let names: Vec<String> = method
+    ) -> Option<Vec<(String, bool)>> {
+        let extract_names = |method: &ast::Function| -> Option<Vec<(String, bool)>> {
+            let names: Vec<(String, bool)> = method
                 .type_params
                 .iter()
                 .filter(|p| !p.is_effect)
-                .map(|tp| tp.name.clone())
+                .map(|tp| {
+                    let has_fn_bound = tp.bounds.iter().any(|b| b.fn_signature.is_some());
+                    (tp.name.clone(), has_fn_bound)
+                })
                 .collect();
             if names.is_empty() { None } else { Some(names) }
         };
@@ -1487,7 +1535,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             impl_type_name == struct_name || impl_base_name == struct_name
         };
 
-        let search_items = |items: &[Item], include_trait: bool| -> Option<Vec<String>> {
+        let search_items = |items: &[Item], include_trait: bool| -> Option<Vec<(String, bool)>> {
             for item in items {
                 if let Item::Impl(impl_block) = item
                     && impl_matches_struct(impl_block, include_trait)
