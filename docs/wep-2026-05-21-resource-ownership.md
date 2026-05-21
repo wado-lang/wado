@@ -399,14 +399,6 @@ note in that WEP.
   `borrow<record>` mapping shown in
   [WEP 2026-01-29](./wep-2026-01-29-wit-wado-mapping.md) is a separate
   question about record parameters and is out of scope here.
-- `Waitable` ([WEP 2026-03-01](./wep-2026-03-01-cm-resource-canonical-attrs.md))
-  is declared a `resource` but is really a copyable identity token — it wraps
-  a `u32` handle, has no `dtor` and no `drop`, and auto-derives `Eq` for
-  free comparison. The affine model makes it move-only, and any `struct`
-  carrying it (e.g. `WaitEvent`) move-only too, which fights its intended
-  compare-freely usage. It should likely be modelled as an opaque newtype
-  rather than a `resource`, or be given an explicit copyable-token exception.
-  Deferred to a follow-up.
 
 ## Implementation Roadmap
 
