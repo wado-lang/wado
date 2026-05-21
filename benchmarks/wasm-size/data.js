@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779369790027,
+  "lastUpdate": 1779400329689,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24345,6 +24345,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8f74bb924f6e1b7289f0a723a934a6ff39741d72"
         },
         "date": 1779369789549,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d989487e0bfeabafcf852a9e89642ae84a3c6871",
+          "message": "Merge pull request #1143 from wado-lang/claude/wasm-resource-ownership-ODbXa\n\nResource ownership: affine model WEP + Waitable newtype",
+          "timestamp": "2026-05-22T06:45:52+09:00",
+          "tree_id": "2fd59b0766c613aa2e23397d73799c010d5fb88c",
+          "url": "https://github.com/wado-lang/wado/commit/d989487e0bfeabafcf852a9e89642ae84a3c6871"
+        },
+        "date": 1779400329361,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
