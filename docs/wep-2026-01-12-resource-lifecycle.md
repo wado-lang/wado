@@ -90,6 +90,22 @@ This aligns perfectly with Wado's needs.
 
 ## Decision
 
+> Amendment (WEP 2026-05-21): the destructor / drop design below is refined by
+> [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md). Three
+> points changed and are applied throughout this document:
+>
+> - The destructor is the `fn drop(self)` method, not a `fn [destructor]()`
+>   bracket form. One name serves both the destructor and the explicit-drop
+>   method.
+> - `drop` takes `self` by value (consuming). It does not take `&mut self`,
+>   and resource methods in general take `&self` (or consuming `self`), never
+>   `&mut self` — resource handles carry no Wado-side mutable state.
+> - Explicit drop is the `r.drop()` method call, not a free `drop(r)`
+>   function.
+>
+> The compositional-cleanup, execution-guarantee, and effect-propagation
+> rules are unchanged; only the spelling above is corrected.
+
 ### 1. `resource` Types Are Implicitly `unique`
 
 Component Model `resource` types automatically have move-only semantics:
@@ -98,9 +114,9 @@ Component Model `resource` types automatically have move-only semantics:
 resource File {
     static fn open(path: String) -> File with FileSystem;
 
-    fn write(&mut self, data: &Array<u8>) -> Result<u32, IoError> with FileSystem;
+    fn write(&self, data: &Array<u8>) -> Result<u32, IoError> with FileSystem;
 
-    fn [destructor]() with FileSystem;  // Called on drop
+    fn drop(self) with FileSystem;  // Called on drop
 }
 
 let file = File::open("data.txt");
@@ -115,35 +131,37 @@ let file2 = move file; // OK: explicit move
 - Move-only semantics prevent these bugs
 - Consistent with Component Model semantics
 
-### 2. Destructor Syntax: `fn [destructor]() with Effects`
+### 2. Destructor Syntax: `fn drop(self) with Effects`
 
-The destructor is a special method with the `[destructor]` attribute:
+The destructor is the resource's `drop` method:
 
 ```wado
 resource Socket {
     static fn connect(addr: String) -> Socket with Network;
 
-    fn read(&mut self, buf: &mut Array<u8>) -> i32 with Network;
+    fn read(&self, buf: &mut Array<u8>) -> i32 with Network;
     fn write(&self, data: &Array<u8>) -> i32 with Network;
 
-    // Destructor can declare effects
-    fn [destructor]() with Network;
+    // Destructor: a consuming method, may declare effects
+    fn drop(self) with Network;
 }
 ```
 
 **Syntax rules**:
 
-- Must be named `[destructor]` (attribute syntax, not identifier)
-- Must have signature `fn [destructor]() with Effects`
-- No parameters, no return value
-- Can declare effects (destructor may perform I/O)
-- Implicitly takes `&mut self` (can access fields)
+- Named `drop` — a plain method, not a special identifier
+- Signature `fn drop(self) with Effects`
+- Takes `self` by value: `drop` _consumes_ the resource (see WEP 2026-05-21;
+  consuming `self` receivers are resource-only)
+- No other parameters, no return value
+- Can declare effects (a destructor may perform I/O)
 
 **Rationale**:
 
-- `[destructor]` is clear and searchable
-- Bracket syntax `[...]` distinguishes from regular methods
-- Aligns with WIT's destructor notation
+- One name for the destructor and the explicit-drop method: calling
+  `r.drop()` runs it; the compiler also runs it on scope exit
+- A consuming `self` receiver invalidates the binding at the call site, so
+  the move checker prevents use-after-free and double-drop
 - Effects are necessary (closing a file requires `FileSystem` effect)
 
 ### 3. Compositional Cleanup: Structs with `resource` Fields
@@ -152,7 +170,7 @@ When a struct contains `resource` fields, it automatically becomes `unique` and 
 
 ```wado
 resource Socket {
-    fn [destructor]() with Network;
+    fn drop(self) with Network;
 }
 
 struct Connection {
@@ -163,8 +181,8 @@ struct Connection {
 // Connection is implicitly unique (has resource field)
 // Compiler synthesizes destructor:
 //
-// fn [destructor]() with Network {
-//     self.socket.[destructor]();  // Call resource destructor
+// fn drop(self) with Network {
+//     self.socket.drop();  // Call resource destructor
 //     // buffer is GC'd, no action needed
 // }
 
@@ -202,7 +220,7 @@ Destructors are called deterministically in these situations:
 | Scope exit    | End of block            | `{ let f = File::open(...); }`              |
 | Early return  | Before function returns | `if err { return; }`                        |
 | Move          | Old binding invalidated | `let f2 = move f;` (f's destructor NOT run) |
-| Explicit drop | `drop(f)` call          | `drop(f);`                                  |
+| Explicit drop | `f.drop()` call         | `f.drop();`                                 |
 | Panic         | Unwinding (TBD)         | `panic("error");`                           |
 
 **Scope exit example**:
@@ -211,7 +229,7 @@ Destructors are called deterministically in these situations:
 fn example() with FileSystem {
     let file = File::open("data.txt");
     file.write("hello");
-    // file.[destructor]() called here automatically
+    // file.drop() called here automatically
 }
 ```
 
@@ -223,11 +241,11 @@ fn example(path: String) -> Result<(), Error> with FileSystem {
 
     if should_abort() {
         return Err(Error::Aborted);
-        // file.[destructor]() called before return
+        // file.drop() called before return
     }
 
     file.write("data");
-    // file.[destructor]() called at end of scope
+    // file.drop() called at end of scope
 }
 ```
 
@@ -243,19 +261,17 @@ fn example() with FileSystem {
 
 fn consume(f: File) with FileSystem {
     f.write("data");
-    // f.[destructor]() called here
+    // f.drop() called here
 }
 ```
 
 **Explicit drop**:
 
 ```wado
-use {drop} from "core:memory";
-
 fn example() with FileSystem {
     let file = File::open("data.txt");
     file.write("data");
-    drop(file);  // Explicitly call destructor
+    file.drop();  // Explicitly run the destructor; consumes `file`
     // file is now invalid
 
     // more work...
@@ -333,10 +349,10 @@ use {File} from "wasi:filesystem" with {
 resource File {
     static fn open(path: String) -> File with FileSystem;
 
-    fn write(&mut self, data: &Array<u8>) -> Result<u32, IoError> with FileSystem;
-    fn read(&mut self, buf: &mut Array<u8>) -> Result<u32, IoError> with FileSystem;
+    fn write(&self, data: &Array<u8>) -> Result<u32, IoError> with FileSystem;
+    fn read(&self, buf: &mut Array<u8>) -> Result<u32, IoError> with FileSystem;
 
-    fn [destructor]() with FileSystem {
+    fn drop(self) with FileSystem {
         // Implementation calls WASI close
         wasi_filesystem_close(self.handle);
     }
@@ -378,7 +394,7 @@ Destructors can declare effects, and these effects propagate to callers:
 
 ```wado
 resource Database {
-    fn [destructor]() with Network, Stdout {
+    fn drop(self) with Network, Stdout {
         // Close connection and log
         close_connection(self.handle);
         println("Database connection closed");
@@ -388,7 +404,7 @@ resource Database {
 fn use_db() with Network, Stdout {
     let db = Database::connect();
     // ...
-    // db.[destructor]() requires Network, Stdout
+    // db.drop() requires Network, Stdout
     // Caller must have these effects
 }
 ```
@@ -405,9 +421,9 @@ This is automatically checked by the compiler.
 resource File {
     static fn open(path: String) -> Result<File, IoError> with FileSystem;
 
-    fn write(&mut self, data: &Array<u8>) -> Result<u32, IoError> with FileSystem;
+    fn write(&self, data: &Array<u8>) -> Result<u32, IoError> with FileSystem;
 
-    fn [destructor]() with FileSystem {
+    fn drop(self) with FileSystem {
         wasi_filesystem_close(self.handle);
     }
 }
@@ -415,7 +431,7 @@ resource File {
 fn write_log(message: String) with FileSystem {
     let file = File::open("log.txt")?;
     file.write(message.bytes().collect());
-    // file.[destructor]() called here - file is closed
+    // file.drop() called here - file is closed
 }
 ```
 
@@ -423,11 +439,11 @@ fn write_log(message: String) with FileSystem {
 
 ```wado
 resource Socket {
-    fn [destructor]() with Network;
+    fn drop(self) with Network;
 }
 
 resource File {
-    fn [destructor]() with FileSystem;
+    fn drop(self) with FileSystem;
 }
 
 struct Server {
@@ -438,9 +454,9 @@ struct Server {
 
 // Server is implicitly unique
 // Synthesized destructor:
-//   fn [destructor]() with Network, FileSystem {
-//       self.socket.[destructor]();
-//       self.log_file.[destructor]();
+//   fn drop(self) with Network, FileSystem {
+//       self.socket.drop();
+//       self.log_file.drop();
 //   }
 
 fn run_server() with Network, FileSystem {
@@ -452,7 +468,7 @@ fn run_server() with Network, FileSystem {
 
     server.run();
 
-    // server.[destructor]() called here
+    // server.drop() called here
     // 1. socket closed
     // 2. log_file closed
     // 3. config GC'd
@@ -463,7 +479,7 @@ fn run_server() with Network, FileSystem {
 
 ```wado
 resource Inner {
-    fn [destructor]() with Stdout {
+    fn drop(self) with Stdout {
         println("Inner destroyed");
     }
 }
@@ -471,9 +487,9 @@ resource Inner {
 resource Outer {
     inner: Inner,
 
-    fn [destructor]() with Stdout {
+    fn drop(self) with Stdout {
         println("Outer destroyed");
-        // self.inner.[destructor]() called automatically after this
+        // self.inner.drop() called automatically after this
     }
 }
 
