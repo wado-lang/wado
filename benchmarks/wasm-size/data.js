@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779317695408,
+  "lastUpdate": 1779322843075,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24145,6 +24145,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 460021,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e38dfb8fe78d6d64448c92de6451ebaa1ca08e8e",
+          "message": "Merge pull request #1136 from wado-lang/claude/benchmark-wado-hono-XfSfB\n\nserve: instance reuse + coalescing allocator, with an HTTP routing benchmark",
+          "timestamp": "2026-05-21T09:14:25+09:00",
+          "tree_id": "a91824dd5c1a6a5c8e606243b18e98e287f26cf1",
+          "url": "https://github.com/wado-lang/wado/commit/e38dfb8fe78d6d64448c92de6451ebaa1ca08e8e"
+        },
+        "date": 1779322842627,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
             "unit": "bytes"
           }
         ]
