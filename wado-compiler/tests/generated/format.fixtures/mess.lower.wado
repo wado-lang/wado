@@ -548,7 +548,7 @@ fn fl_used(tag: i32) -> i32 {
 }
 
 fn fl_bin(size: i32) -> i32 {
-    let k: i32 = ((size - 24) / 8);
+    let k: i32 = ((size - 32) / 16);
     return if (k < 32) {
         k;
     } else {
@@ -597,7 +597,7 @@ fn fl_unlink(block: i32) {
 
 fn fl_carve(block: i32, block_size: i32, size: i32) {
     let remainder: i32 = (block_size - size);
-    if (remainder >= 24) {
+    if (remainder >= 32) {
         core::allocator::fl_set_tags(block, size, 1);
         let rest: i32 = (block + size);
         core::allocator::fl_set_tags(rest, remainder, 0);
@@ -608,8 +608,8 @@ fn fl_carve(block: i32, block_size: i32, size: i32) {
 }
 
 export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
-    if (core::allocator::heap_offset < 144) {
-        core::allocator::heap_offset = 144;
+    if (core::allocator::heap_offset < 152) {
+        core::allocator::heap_offset = 152;
     }
     if (newsize == 0) {
         if (oldptr == 0) {
@@ -629,7 +629,7 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
                 size = (size + core::allocator::fl_size(next_header));
             }
         }
-        if (block > 144) {
+        if (block > 152) {
             let prev_footer: i32 = core::builtin::i32_load((block - 8));
             if (core::allocator::fl_used(prev_footer) == 0) {
                 let prev_size: i32 = core::allocator::fl_size(prev_footer);
@@ -643,7 +643,7 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
         core::allocator::fl_push(block, size);
         return 0;
     }
-    let size: i32 = (core::builtin::i32_and((newsize + 7), -8) + 16);
+    let size: i32 = (core::builtin::i32_and((newsize + 15), -16) + 16);
     let mut j: i32 = core::allocator::fl_bin(size);
     loop {
         if !(j < 32) {
