@@ -1,0 +1,38 @@
+// Test: when a method's type parameter appears only in the return type and
+// the call site provides neither a turbofish nor an LHS type annotation, the
+// type parameter cannot be inferred. This must surface as a clean compile
+// error rather than reaching a later phase and panicking.
+//
+// Regression test for the `json_value.wado` FIXME: `seq.next_element()`
+// (a `fn next_element<T>(&mut self) -> Result<Option<T>, _>`) called without
+// `::<Value>` used to ICE in WIR lowering with "unresolved MethodCall".
+
+trait Producer {
+    fn produce<T>(&self) -> Option<T>;
+}
+
+fn consume<P: Producer>(p: &P) {
+    // `T` of `produce` only appears in the return type and nothing here
+    // constrains it, so it is genuinely uninferable.
+    let opt = p.produce();
+    match opt {
+        Some(_v) => {},
+        None => {},
+    }
+}
+
+struct Gen {}
+
+impl Producer for Gen {
+    fn produce<T>(&self) -> Option<T> {
+        return Option::None;
+    }
+}
+
+export fn run() {
+    let g = Gen {};
+    consume(&g);
+}
+
+__DATA__
+{"compile_error": "cannot infer"}
