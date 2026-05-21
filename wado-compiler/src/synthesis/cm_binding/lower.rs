@@ -24,13 +24,11 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, builtin_call, cast, expr_stmt, i32_const, i64_const,
-    internal_call, let_mut_stmt, let_stmt, local_ref, synth_span,
+    internal_call, let_mut_stmt, let_stmt, local_ref, match_enum_tag, match_variant_tag,
+    match_variant_test, synth_span,
 };
 
-use super::types::{
-    binary_add, flatten_param_type, kebab_to_pascal, variant_tag, variant_test,
-    wasi_type_to_type_id,
-};
+use super::types::{binary_add, flatten_param_type, kebab_to_pascal, wasi_type_to_type_id};
 
 /// Synthesize TIR statements that store a Wado value into linear memory.
 ///
@@ -309,17 +307,15 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
     type_table: &RefCell<TypeTable>,
 ) {
     let name = named.name.as_str();
-    let cases = if let Some(c) = wasi_registry.get_variant_cases_by_source(source, name) {
-        c.to_vec()
-    } else {
-        // Fallback: store as i32
-        stmts.push(expr_stmt(builtin_call(
-            "i32_store8",
-            vec![addr, variant_tag(value)],
-            TypeTable::UNIT,
-        )));
-        return;
-    };
+    let cases = wasi_registry
+        .get_variant_cases_by_source(source, name)
+        .unwrap_or_else(|| {
+            unreachable!(
+                "synthesize_lower_wasi_variant_to_memory requires a registry-known \
+                 wasi variant: {source}::{name}"
+            )
+        })
+        .to_vec();
 
     let value_type_id = value.type_id;
 
@@ -327,12 +323,20 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
     let value_local = alloc_local(next_local, locals, value_type_id);
     stmts.push(let_stmt("__variant_val", value_local, value_type_id, value));
 
-    // Store discriminant byte
+    // Store discriminant byte. The case-name list mirrors the
+    // payload-lowering `Match` arms built below.
+    let case_names: Vec<String> = cases
+        .iter()
+        .map(|case| kebab_to_pascal(&case.cm_name))
+        .collect();
     stmts.push(expr_stmt(builtin_call(
         "i32_store8",
         vec![
             addr.clone(),
-            variant_tag(local_ref(value_local, "__variant_val", value_type_id)),
+            match_variant_tag(
+                local_ref(value_local, "__variant_val", value_type_id),
+                &case_names,
+            ),
         ],
         TypeTable::UNIT,
     )));
@@ -457,16 +461,15 @@ pub(super) fn synthesize_lower_option_to_memory(
     let value_local = alloc_local(next_local, locals, value_type_id);
     stmts.push(let_stmt("__opt_val", value_local, value_type_id, value));
 
-    // Store discriminant byte: variant_test(Some) → 1 = Some, 0 = None.
-    // Use variant_test (ref.test) rather than variant_tag (struct.get)
-    // because variant_tag traps on null refs.
+    // Store discriminant byte: match on `Some` → 1 = Some, 0 = None.
+    // The `Match` compiles to `ref.test`, which (unlike a discriminant
+    // `struct.get`) does not trap on null refs.
     stmts.push(expr_stmt(builtin_call(
         "i32_store8",
         vec![
             addr.clone(),
-            variant_test(
+            match_variant_test(
                 local_ref(value_local, "__opt_val", value_type_id),
-                names.some_index,
                 &names.some_name,
             ),
         ],
@@ -599,7 +602,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 TypeTable::I32,
             ));
         }
-        // Enum → variant_tag (single i32)
+        // Enum → discriminant via canonical `Match` (single i32)
         Type::Named(n)
             if n.source_interface.as_deref().is_some_and(|s| {
                 s.starts_with("wasi:")
@@ -608,7 +611,14 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                         .is_some()
             }) =>
         {
-            flat_args.push(variant_tag(value));
+            let source = n
+                .source_interface
+                .as_deref()
+                .expect("wasi enum source_interface present");
+            let enum_cases = wasi_registry
+                .get_enum_variants_by_source(source, &n.name)
+                .expect("wasi enum cases present");
+            flat_args.push(match_enum_tag(value, enum_cases));
         }
         // Variant → disc + join of all case payload flats
         Type::Named(n)
@@ -627,17 +637,18 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             let val_local = alloc_local(next_local, locals, vt);
             stmts.push(let_stmt(&format!("{prefix}_val"), val_local, vt, value));
 
-            // Push discriminant
-            flat_args.push(variant_tag(local_ref(
-                val_local,
-                &format!("{prefix}_val"),
-                vt,
-            )));
-
-            // Compute max flat payload count across all cases (the "join")
             let cases = wasi_registry
                 .get_variant_cases_by_source(source, &n.name)
                 .unwrap_or(&[]);
+
+            // Push discriminant via canonical `Match`. The case-name list
+            // mirrors the payload-flattening `Match` arms built below.
+            let case_names: Vec<String> =
+                cases.iter().map(|c| c.wado_name.clone()).collect();
+            flat_args.push(match_variant_tag(
+                local_ref(val_local, &format!("{prefix}_val"), vt),
+                &case_names,
+            ));
             let max_flat_count: usize = cases
                 .iter()
                 .map(|c| {
@@ -792,16 +803,15 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     stmts.push(let_stmt(&format!("{prefix}_optval"), val_local, vt, value));
 
     // CM ABI option discriminant: 0 = None, 1 = Some.
-    // Use variant_test (ref.test) instead of variant_tag (struct.get)
-    // because variant_tag traps on null refs.
+    // The `Match` compiles to `ref.test`, which (unlike a discriminant
+    // `struct.get`) does not trap on null refs.
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt(
         &format!("{prefix}_disc"),
         disc_local,
         TypeTable::I32,
-        variant_test(
+        match_variant_test(
             local_ref(val_local, &format!("{prefix}_optval"), vt),
-            names.some_index,
             &names.some_name,
         ),
     ));

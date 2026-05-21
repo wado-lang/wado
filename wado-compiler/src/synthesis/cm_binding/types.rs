@@ -854,44 +854,6 @@ pub(super) fn find_struct_decl(
     None
 }
 
-/// Create a `VariantTag` TIR expression (extracts i32 discriminant).
-pub(super) fn variant_tag(expr: TirExpr) -> TirExpr {
-    let _ = expr.type_id;
-    TirExpr::new(
-        TirExprKind::VariantTag {
-            expr: Box::new(expr),
-        },
-        TypeTable::I32,
-        synth_span(),
-    )
-}
-
-/// Create a `VariantTest` TIR expression (tests if variant is a specific case).
-pub(super) fn variant_test(expr: TirExpr, case_index: u32, case_name: &str) -> TirExpr {
-    TirExpr::new(
-        TirExprKind::VariantTest {
-            expr: Box::new(expr),
-            case_index,
-            case_name: case_name.to_string(),
-        },
-        TypeTable::BOOL,
-        synth_span(),
-    )
-}
-
-/// Create a `VariantPayload` TIR expression (extracts payload from a variant case).
-pub(super) fn variant_payload(expr: TirExpr, case_index: u32, payload_type: TypeId) -> TirExpr {
-    TirExpr::new(
-        TirExprKind::VariantPayload {
-            expr: Box::new(expr),
-            case_index,
-            payload_type,
-        },
-        payload_type,
-        synth_span(),
-    )
-}
-
 /// Create a `FieldAccess` TIR expression (accesses a struct field).
 pub(super) fn field_access(
     expr: TirExpr,

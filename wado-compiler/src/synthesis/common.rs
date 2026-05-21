@@ -12,8 +12,8 @@ use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-    TypeTable,
+    TirExprKind, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -105,6 +105,154 @@ pub fn i64_const(value: i64) -> TirExpr {
         },
         TypeTable::I64,
         synth_span(),
+    )
+}
+
+/// Create a bool literal expression.
+pub fn bool_const(value: bool) -> TirExpr {
+    TirExpr::new(TirExprKind::BoolLiteral(value), TypeTable::BOOL, synth_span())
+}
+
+/// `match scrutinee { Case => true, _ => false }` — the canonical `Match`
+/// form replacing the removed `VariantTest` expression. The arm pattern
+/// carries empty `bindings`: the test only probes the discriminant /
+/// `ref.test`, never the payload, and `wir_build` derives unit-vs-payload
+/// from the variant declaration regardless of the binding list.
+pub fn match_variant_test(scrutinee: TirExpr, case_name: &str) -> TirExpr {
+    let span = synth_span();
+    let variant_type = scrutinee.type_id;
+    let arms = vec![
+        TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: variant_type,
+                variant_name: case_name.to_string(),
+                bindings: Vec::new(),
+                payload_type: TypeTable::UNIT,
+            },
+            guard: None,
+            body: bool_const(true),
+            span,
+        },
+        TirMatchArm {
+            pattern: TirPattern::Wildcard,
+            guard: None,
+            body: bool_const(false),
+            span,
+        },
+    ];
+    TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(scrutinee),
+            arms,
+        },
+        TypeTable::BOOL,
+        span,
+    )
+}
+
+/// `match scrutinee { Case_0 => 0, Case_1 => 1, ... }` over a variant value —
+/// the canonical `Match` form replacing `VariantTag`. Arms cover every case
+/// in declaration order, so the `Match` is exhaustive without a wildcard.
+pub fn match_variant_tag(scrutinee: TirExpr, case_names: &[String]) -> TirExpr {
+    let span = synth_span();
+    let variant_type = scrutinee.type_id;
+    let arms = case_names
+        .iter()
+        .enumerate()
+        .map(|(index, name)| TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: variant_type,
+                variant_name: name.clone(),
+                bindings: Vec::new(),
+                payload_type: TypeTable::UNIT,
+            },
+            guard: None,
+            body: i32_const(index as i32),
+            span,
+        })
+        .collect();
+    TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(scrutinee),
+            arms,
+        },
+        TypeTable::I32,
+        span,
+    )
+}
+
+/// `match scrutinee { Case_0 => 0, ... }` over a plain enum value — the
+/// canonical `Match` form replacing `VariantTag` applied to an enum.
+pub fn match_enum_tag(scrutinee: TirExpr, case_names: &[String]) -> TirExpr {
+    let span = synth_span();
+    let enum_type = scrutinee.type_id;
+    let arms = case_names
+        .iter()
+        .enumerate()
+        .map(|(index, name)| TirMatchArm {
+            pattern: TirPattern::Enum {
+                enum_type,
+                case_name: name.clone(),
+                case_index: index as u32,
+            },
+            guard: None,
+            body: i32_const(index as i32),
+            span,
+        })
+        .collect();
+    TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(scrutinee),
+            arms,
+        },
+        TypeTable::I32,
+        span,
+    )
+}
+
+/// `match scrutinee { Case(p) => p, _ => unreachable() }` — the canonical
+/// `Match` form replacing `VariantPayload`. The caller has already
+/// established that the scrutinee holds the given case, so the fallback arm
+/// traps. Allocates the payload binding local.
+pub fn match_variant_payload(
+    scrutinee: TirExpr,
+    case_name: &str,
+    payload_type: TypeId,
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+) -> TirExpr {
+    let span = synth_span();
+    let variant_type = scrutinee.type_id;
+    let binding_local = alloc_local(next_local, locals, payload_type);
+    let binding_name = format!("__payload_{binding_local}");
+    let case_arm = TirMatchArm {
+        pattern: TirPattern::Variant {
+            enum_type: variant_type,
+            variant_name: case_name.to_string(),
+            bindings: vec![TirPattern::Binding {
+                name: binding_name.clone(),
+                local_index: binding_local,
+                type_id: payload_type,
+            }],
+            payload_type,
+        },
+        guard: None,
+        body: local_ref(binding_local, &binding_name, payload_type),
+        span,
+    };
+    let fallback_arm = TirMatchArm {
+        pattern: TirPattern::Wildcard,
+        guard: None,
+        body: builtin_call("unreachable", Vec::new(), payload_type),
+        span,
+    };
+    TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(scrutinee),
+            arms: vec![case_arm, fallback_arm],
+        },
+        payload_type,
+        span,
     )
 }
 

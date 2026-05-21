@@ -35,7 +35,8 @@ use crate::tir::{
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_raw_call, expr_stmt,
     generic_method_call, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, option_none, option_some, param_local, return_stmt, synth_span,
+    local_ref, loop_stmt, match_variant_payload, match_variant_tag, match_variant_test,
+    option_none, option_some, param_local, return_stmt, synth_span,
 };
 
 use super::import_adapter::make_binding_function;
@@ -45,7 +46,6 @@ use super::types::{
     LiftContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero,
     compute_export_flat_param_types, export_needs_param_lifting, field_access, find_struct_decl,
     find_variant_decl, flat_types_from_type_id, flatten_export_type, type_id_to_ast_type,
-    variant_payload, variant_tag, variant_test,
 };
 
 /// Build the export binding function name for a world export.
@@ -364,12 +364,11 @@ fn lower_to_flat_inner(
             let opt_local = alloc_local(next_local, locals, type_id);
             stmts.push(let_stmt("__opt_val", opt_local, type_id, value));
 
-            // Discriminant: VariantTest(Some) → 1 = Some, 0 = None
+            // Discriminant: match on `Some` → 1 = Some, 0 = None
             let disc_expr = TirExpr::new(
                 TirExprKind::Cast {
-                    expr: Box::new(variant_test(
+                    expr: Box::new(match_variant_test(
                         local_ref(opt_local, "__opt_val", type_id),
-                        names.some_index,
                         &names.some_name,
                     )),
                     target_type: TypeTable::I32,
@@ -408,12 +407,14 @@ fn lower_to_flat_inner(
                     })
                     .collect();
 
-                // if disc != 0 { lower(variant_payload(value)) → inner_locals }
+                // if disc != 0 { lower(Some payload) → inner_locals }
                 let mut then_stmts: Vec<TirStmt> = Vec::new();
-                let unwrapped = variant_payload(
+                let unwrapped = match_variant_payload(
                     local_ref(opt_local, "__opt_val", type_id),
-                    names.some_index,
+                    &names.some_name,
                     inner_type_id,
+                    next_local,
+                    locals,
                 );
                 let inner_lowered = synthesize_lower_to_flat(
                     unwrapped,
@@ -1268,15 +1269,24 @@ pub(super) fn synthesize_variant_lower_to_flat(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     ctx: LiftContext<'_>,
 ) {
-    // Set flat[0] = discriminant
+    // Set flat[0] = discriminant via canonical `Match`. Case names
+    // mirror the payload-flattening `Match` arms built below.
     if !flat_locals.is_empty() {
+        let case_names: Vec<String> = variant_decl
+            .cases
+            .iter()
+            .map(|c| c.name.clone())
+            .collect();
         stmts.push(expr_stmt(assign(
             local_ref(
                 flat_locals[0].0,
                 &flat_locals[0].1,
                 cm_val_type_to_type_id(flat_types[0]),
             ),
-            variant_tag(local_ref(value_local, "__err_val", value_type_id)),
+            match_variant_tag(
+                local_ref(value_local, "__err_val", value_type_id),
+                &case_names,
+            ),
         )));
     }
 
