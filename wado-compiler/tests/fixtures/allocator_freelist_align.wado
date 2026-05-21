@@ -1,0 +1,16 @@
+/// Test that the freelist allocator returns 16-byte-aligned payloads,
+/// even for payload sizes that are not themselves multiples of 16. This
+/// satisfies callers that request a 16-byte alignment (e.g. for `v128`).
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let sizes: Array<i32> = [1, 7, 15, 17, 33, 100, 257];
+    for let s of sizes {
+        let p = builtin::realloc(0, 0, 16, s);
+        assert builtin::i32_and(p, 15) == 0, `payload {p} for size {s} is not 16-aligned`;
+    }
+    println("ok");
+}
+
+__DATA__
+{"allocator": "freelist", "stdout": "ok\n"}

@@ -3,22 +3,23 @@
 use { println } from "core:cli";
 
 export fn run() with Stdout {
-    // Allocate a large block and free it
+    // Allocate a large block and free it.
     let big = builtin::realloc(0, 0, 8, 1024);
     assert big > 0;
     builtin::realloc(big, 1024, 8, 0);
 
-    // Allocate a smaller block — should come from the freed large block
+    // Allocate a smaller block — carved from the freed large block.
     let small1 = builtin::realloc(0, 0, 8, 64);
     assert small1 == big, `expected split from freed block: big={big}, small1={small1}`;
 
-    // Allocate another small block — should come from the split remainder
+    // The next small block comes from the split remainder. A 64-byte
+    // payload occupies an 80-byte block (16 bytes of boundary tags).
     let small2 = builtin::realloc(0, 0, 8, 64);
-    assert small2 == big + 64, `expected split remainder: expected={big + 64}, small2={small2}`;
+    assert small2 == big + 80, `expected split remainder: expected={big + 80}, small2={small2}`;
 
-    // The remainder (1024 - 64 - 64 = 896) should still be available
+    // And again, a 128-byte payload (144-byte block) from what is left.
     let small3 = builtin::realloc(0, 0, 8, 128);
-    assert small3 == big + 128, `expected from remainder: expected={big + 128}, small3={small3}`;
+    assert small3 == big + 160, `expected from remainder: expected={big + 160}, small3={small3}`;
 
     println("ok");
 }

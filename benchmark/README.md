@@ -140,6 +140,33 @@ Notes:
   (WASM) engine is omitted because it is ~2.5x slower than the JS
   engine on this input while producing byte-identical output.
 
+## HTTP Routing
+
+End-to-end HTTP throughput of `wado serve` vs an equivalent
+[Hono](https://hono.dev/) server on Node.js vs an equivalent
+[Axum](https://github.com/tokio-rs/axum) server in native Rust. The
+route and request set is Hono's own official router benchmark
+(`honojs/hono`, `benchmarks/routers/`), driven over HTTP with `oha`
+(6s, 50 connections per request).
+
+Throughput (requests/sec, higher is better):
+
+| Request                         | `wado serve` | Hono (Node) | Axum (native) |
+| ------------------------------- | -----------: | ----------: | ------------: |
+| `GET /user`                     |       30,728 |      25,701 |       138,236 |
+| `GET /user/lookup/username/hey` |       29,608 |      21,466 |       119,565 |
+| `GET /event/abcd1234/comments`  |       28,862 |      24,815 |       124,284 |
+| `POST /event/abcd1234/comment`  |       28,721 |      18,772 |       132,484 |
+| `GET /static/index.html`        |       30,326 |      20,907 |       119,672 |
+
+`wado serve` leads Hono on every request (~29k–30k vs ~19k–28k req/s);
+native-Rust Axum is the ceiling at ~4–5x faster (~120k–138k). `wado
+serve` runs a `wasi:http/service` component on wasmtime, dispatching
+through `core:router`, with pooled instance reuse + periodic recycling.
+A cross-runtime comparison (Wasm component on wasmtime vs JS on Node.js
+vs native Rust). See `http_routing/README.md` for the full table and
+methodology.
+
 ## Running
 
 ```sh
@@ -155,6 +182,7 @@ mise run benchmark-json-canada      # JSON (2.3 MB)
 mise run benchmark-json-catalog     # JSON (1.7 MB)
 mise run benchmark-sqlite-parse     # SQL parsing
 mise run benchmark-syntax-highlight # syntax highlighting
+mise run benchmark-http-routing     # HTTP routing (wado serve vs Hono vs Axum)
 ```
 
 Prerequisites: `cc`, `cargo`, `zig`, `node` (managed by `mise install`).

@@ -1,15 +1,19 @@
 use std::convert::Infallible;
 use std::fmt::Write as _;
+use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::{Pin, pin};
 use std::process;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
 use anyhow::Result;
 use bytes::Bytes;
+use futures::StreamExt as _;
 use futures::future::{Either, poll_fn, select};
+use futures::stream::FuturesUnordered;
 use http_body::{Body as _, Frame};
 use http_body_util::BodyExt as _;
 use http_body_util::Full;
@@ -20,12 +24,12 @@ use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto;
 use lexopt::Arg::Value;
 use tokio::net::TcpListener;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{Notify, mpsc, oneshot};
 use tokio::task::JoinSet;
-use wasmtime::Engine;
-use wasmtime::Store;
-use wasmtime::component::Component;
+use wasmtime::component::{Accessor, AccessorTask, Component};
+use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi_http::p3::Request as WasiRequest;
+use wasmtime_wasi_http::p3::bindings::http::types::ErrorCode as HttpErrorCode;
 use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
 
 use crate::args::{self, CliExit};
@@ -35,16 +39,28 @@ use crate::runtime::{self, Preopens, WasiState};
 use wado_compiler::LogLevel;
 
 /// Default per-request timeout in seconds. A guest that fails to produce a
-/// response within this window is cut short by one of the three layers
-/// documented on `handle_http_request`: an epoch-deadline trap on a
-/// runaway wasm loop, a wall-clock timeout on a stuck host `await`, or a
-/// first-byte timeout on a guest that never produces a head.
+/// response head within this window is cut short by a first-byte timeout
+/// (see `dispatch_request`); a guest that runs away in pure wasm is
+/// trapped by the epoch deadline (see `worker_loop`).
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
-/// Epoch ticker interval. Each tick is a unit of `set_epoch_deadline`, so
-/// a 1s tick + a deadline of `timeout_secs` ticks yields second-granularity
-/// timeout enforcement — sufficient for the 30s default.
+/// Epoch ticker interval. A background task bumps the engine epoch every
+/// tick; a worker store's deadline counts these ticks, giving
+/// second-granularity runaway-guest detection.
 const EPOCH_TICK_MS: u64 = 1000;
+
+/// Default number of requests a worker instance handles before it is
+/// recycled (torn down and re-instantiated). Recycling resets state that
+/// accumulates in a long-lived instance — chiefly the component resource
+/// table (see issue #1133). Measured throughput is flat across recycle
+/// thresholds from ~1k to ~100k requests, so this is sized for infrequent
+/// recycling. `0` disables recycling.
+const DEFAULT_RECYCLE_REQUESTS: u64 = 10000;
+
+/// Default ceiling on concurrently in-flight requests. Each in-flight
+/// request needs an async fiber stack from the pooling allocator, so this
+/// also sizes the engine's stack pool.
+const DEFAULT_MAX_CONCURRENCY: usize = 1024;
 
 pub struct ServeOptions {
     pub input: String,
@@ -60,6 +76,12 @@ pub struct ServeOptions {
     pub preopened_dirs: Vec<(String, String)>,
     /// Per-request timeout in seconds.
     pub timeout_secs: u64,
+    /// Number of worker instances. `None` means "one per CPU".
+    pub workers: Option<usize>,
+    /// Recycle a worker after this many requests; `0` disables recycling.
+    pub recycle_requests: u64,
+    /// Ceiling on concurrently in-flight requests.
+    pub max_concurrency: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -72,6 +94,9 @@ enum Opt {
     LogLevel,
     Allocator,
     Timeout,
+    Workers,
+    RecycleRequests,
+    MaxConcurrency,
     Help,
 }
 
@@ -80,6 +105,27 @@ const TIMEOUT_SPEC: args::OptSpec = args::OptSpec {
     short: None,
     value: Some("<seconds>"),
     desc: "Per-request timeout in seconds (default: 30)",
+};
+
+const WORKERS_SPEC: args::OptSpec = args::OptSpec {
+    long: Some("workers"),
+    short: None,
+    value: Some("<n>"),
+    desc: "Number of worker instances (default: CPU count)",
+};
+
+const RECYCLE_REQUESTS_SPEC: args::OptSpec = args::OptSpec {
+    long: Some("recycle-requests"),
+    short: None,
+    value: Some("<n>"),
+    desc: "Recycle a worker after N requests; 0 disables (default: 10000)",
+};
+
+const MAX_CONCURRENCY_SPEC: args::OptSpec = args::OptSpec {
+    long: Some("max-concurrency"),
+    short: None,
+    value: Some("<n>"),
+    desc: "Max concurrently in-flight requests (default: 1024)",
 };
 
 impl Opt {
@@ -92,6 +138,9 @@ impl Opt {
         Self::LogLevel,
         Self::Allocator,
         Self::Timeout,
+        Self::Workers,
+        Self::RecycleRequests,
+        Self::MaxConcurrency,
         Self::Help,
     ];
 
@@ -115,6 +164,9 @@ impl Opt {
             Self::LogLevel => args::LOG_LEVEL_SPEC,
             Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Timeout => TIMEOUT_SPEC,
+            Self::Workers => WORKERS_SPEC,
+            Self::RecycleRequests => RECYCLE_REQUESTS_SPEC,
+            Self::MaxConcurrency => MAX_CONCURRENCY_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -148,6 +200,23 @@ fn parse_timeout_arg(parser: &mut lexopt::Parser) -> Result<u64, CliExit> {
     Ok(n)
 }
 
+/// Parse a non-negative integer option. When `allow_zero` is false, `0`
+/// is rejected.
+fn parse_count_arg(
+    flag: &str,
+    parser: &mut lexopt::Parser,
+    allow_zero: bool,
+) -> Result<u64, CliExit> {
+    let s = args::require_string(parser)?;
+    let n = s.parse::<u64>().map_err(|_| {
+        CliExit::error(format!("{flag} requires a non-negative integer, got '{s}'"))
+    })?;
+    if n == 0 && !allow_zero {
+        return Err(CliExit::error(format!("{flag} must be > 0")));
+    }
+    Ok(n)
+}
+
 /// Parse command-line arguments for the `serve` subcommand.
 ///
 /// # Errors
@@ -164,6 +233,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut allocator: Option<String> = None;
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
     let mut timeout_secs: u64 = DEFAULT_TIMEOUT_SECS;
+    let mut workers: Option<usize> = None;
+    let mut recycle_requests: u64 = DEFAULT_RECYCLE_REQUESTS;
+    let mut max_concurrency: usize = DEFAULT_MAX_CONCURRENCY;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -186,6 +258,26 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
                 Opt::Timeout => timeout_secs = parse_timeout_arg(&mut parser)?,
+                Opt::Workers => {
+                    let n = parse_count_arg("--workers", &mut parser, false)?;
+                    // Bound by `u32`: `workers` sizes the pooling allocator's
+                    // `u32` instance count.
+                    let n = u32::try_from(n)
+                        .map_err(|_| CliExit::error("--workers value is too large".to_string()))?;
+                    workers = Some(n as usize);
+                }
+                Opt::RecycleRequests => {
+                    recycle_requests = parse_count_arg("--recycle-requests", &mut parser, true)?;
+                }
+                Opt::MaxConcurrency => {
+                    let n = parse_count_arg("--max-concurrency", &mut parser, false)?;
+                    // Bound by `u32`: `max_concurrency` sizes the pooling
+                    // allocator's `u32` stack count.
+                    let n = u32::try_from(n).map_err(|_| {
+                        CliExit::error("--max-concurrency value is too large".to_string())
+                    })?;
+                    max_concurrency = n as usize;
+                }
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -194,6 +286,17 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         } else {
             return Err(args::unexpected_arg(arg, &usage));
         }
+    }
+
+    // An explicit `--workers` above `--max-concurrency` would leave the
+    // pooling allocator under-sized for the number of worker stores. The
+    // auto-derived default is clamped instead (see `run`).
+    if let Some(w) = workers
+        && w > max_concurrency
+    {
+        return Err(CliExit::error(format!(
+            "--workers ({w}) must not exceed --max-concurrency ({max_concurrency})"
+        )));
     }
 
     Ok(ServeOptions {
@@ -206,6 +309,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         allocator,
         preopened_dirs,
         timeout_secs,
+        workers,
+        recycle_requests,
+        max_concurrency,
     })
 }
 
@@ -257,217 +363,165 @@ fn error_response(status: u16, msg: String) -> HyperResponse<StreamingBody> {
         .expect("static status code should always build successfully")
 }
 
-/// Handle a single HTTP request using the Wasm component, **streaming** the
-/// response body frame-by-frame.
-///
-/// The store is moved into a spawned task that drives `run_concurrent` for
-/// the entire lifetime of the response, including the guest's post-`task
-/// return` continuation. As soon as the head is available the spawn task
-/// hands the response head plus a body channel back here via a oneshot;
-/// from then on hyper drains body frames directly from that channel while
-/// the spawn task keeps producing them. Because the channel is bounded
-/// (capacity 8), a slow consumer naturally back-pressures the guest.
-///
-/// The per-request timeout is enforced in three layered ways, because no
-/// single mechanism covers every kind of stall on its own:
-///
-/// * `Store::set_epoch_deadline` plus the engine-wide ticker traps the
-///   guest if it spends more than the deadline *running wasm*. This is
-///   the only mechanism that can preempt a tight CPU loop inside the
-///   guest.
-/// * `tokio::time::timeout(timeout, run_concurrent(...))` wraps the
-///   spawn task itself. This bounds the wall-clock lifetime of the
-///   request even when the pump is stuck on a host `await` (e.g.
-///   `frame_tx.send` blocked on a slow client) — epoch interruption
-///   cannot preempt a host await, so without this layer a misbehaving
-///   downstream could pin the store and the spawn task indefinitely.
-/// * A first-byte `tokio::time::sleep(timeout)` raced against the head
-///   oneshot returns 504 to the client if the guest never produces a
-///   response head — covering the case where the guest is stuck before
-///   any bytes have been put on the wire.
-///
-/// Hang avoidance:
-///
-/// * Hyper dropping the body causes `frame_tx.send` to fail, breaking the
-///   pump loop; the spawn task then exits.
-/// * If the outer first-byte timeout fires, the spawn task is left to
-///   run, but the wall-clock timeout guarantees it terminates within
-///   `timeout` regardless of where it is stuck (wasm or host await).
-async fn handle_http_request(
-    engine: &Engine,
-    service_pre: &ServicePre<WasiState>,
-    preopens: &Preopens,
-    timeout: Duration,
-    req: HyperRequest<hyper::body::Incoming>,
-) -> Result<HyperResponse<StreamingBody>> {
-    type HttpErrorCode = wasmtime_wasi_http::p3::bindings::http::types::ErrorCode;
+/// A request handed to the engine task for processing on the shared
+/// component instance.
+struct RequestJob {
+    wasi_req: WasiRequest,
+    io: Pin<Box<dyn Future<Output = Result<(), HttpErrorCode>> + Send>>,
+    resp_tx: oneshot::Sender<HandlerOutcome>,
+}
 
-    // Each request gets a fresh WASI state — the WASI ctx is scoped
-    // per-request — but the preopened dirs are opened once at server
-    // startup and shared via reference-counted `cap_std::fs::Dir` handles,
-    // so per-request setup does not re-`openat` the host paths. Use the
-    // no-env variant: an HTTP server's environment typically holds secrets
-    // (DB creds, API tokens) that must not leak into per-request handler
-    // components, matching the pre-refactor behaviour where serve only
-    // inherited stdio.
-    let state = WasiState::new_no_inherit_env_with_preopens(preopens, &[]);
-    let mut store = Store::new(engine, state);
-    let timeout_secs = timeout.as_secs().max(1);
-    // The engine-wide ticker bumps the epoch every `EPOCH_TICK_MS`, so
-    // setting `deadline_ticks = timeout_secs` gives second-granularity
-    // enforcement on the configured `timeout`.
-    store.set_epoch_deadline(timeout_secs);
+/// Processes one HTTP request on the long-lived component instance.
+///
+/// The component is instantiated once at server startup; every request
+/// runs as a task spawned (via `Accessor::spawn`) onto that single shared
+/// instance. Guest state therefore persists across requests — managing it
+/// is the Wado program's responsibility, exactly as for a conventional
+/// HTTP server daemon.
+///
+/// As soon as the response head is available the task hands it — plus a
+/// body-frame channel — back to `dispatch_request` over a oneshot; from
+/// then on hyper drains body frames directly from that channel while the
+/// task keeps producing them. The channel is bounded (capacity 8), so a
+/// slow consumer back-pressures the guest.
+struct HandlerTask {
+    service: Arc<Service>,
+    job: RequestJob,
+}
 
-    // Instantiation runs synchronously up to the first guest yield point and
-    // could in principle spin; bound it with the same overall timeout.
-    let service: Service =
-        match tokio::time::timeout(timeout, service_pre.instantiate_async(&mut store)).await {
-            Ok(Ok(s)) => s,
-            Ok(Err(e)) => {
-                eprintln!("Instantiation failed: {e:?}");
-                return Ok(error_response(500, format!("Instantiation failed:\n{e:?}")));
-            }
-            Err(_) => {
-                eprintln!("Instantiation timed out after {timeout_secs}s");
-                return Ok(error_response(
-                    504,
-                    format!("Instantiation timed out after {timeout_secs}s"),
-                ));
+impl AccessorTask<WasiState> for HandlerTask {
+    async fn run(self, accessor: &Accessor<WasiState>) -> wasmtime::Result<()> {
+        let HandlerTask { service, job } = self;
+        let RequestJob {
+            wasi_req,
+            io,
+            resp_tx,
+        } = job;
+
+        let mut resp_tx = Some(resp_tx);
+        let (frame_tx, frame_rx) = mpsc::channel::<Frame<Bytes>>(8);
+        let mut frame_rx_holder = Some(frame_rx);
+
+        // Scoped so the pinned `handler`/`io_arm` coroutines — which borrow
+        // `resp_tx` — are dropped before `resp_tx` is inspected below.
+        let drive_result = {
+            let handler = pin!(async {
+                let res = match service.handle(accessor, wasi_req).await? {
+                    Ok(res) => res,
+                    Err(err) => {
+                        if let Some(tx) = resp_tx.take() {
+                            let _ = tx.send(HandlerOutcome::GuestError(err));
+                        }
+                        return anyhow::Ok(());
+                    }
+                };
+                let res = accessor.with(|store| res.into_http(store, async { Ok(()) }))?;
+                let (parts, body) = res.into_parts();
+
+                // Hand the response head plus the receiver to `dispatch_request`
+                // so hyper can start writing the response while we keep
+                // producing body frames here.
+                if let Some(tx) = resp_tx.take() {
+                    let rx = frame_rx_holder
+                        .take()
+                        .expect("frame_rx is taken at most once");
+                    if tx.send(HandlerOutcome::Streaming(parts, rx)).is_err() {
+                        // Caller gave up before the head landed (e.g. first-byte
+                        // timeout fired). Stop here; the body is discarded.
+                        return anyhow::Ok(());
+                    }
+                }
+
+                // Pump frames until EOF, body error, or hyper drops the body.
+                // `frame_tx.send().await` blocks on a full channel, so a slow
+                // consumer back-pressures into the guest.
+                let mut body = pin!(body);
+                loop {
+                    match poll_fn(|cx| body.as_mut().poll_frame(cx)).await {
+                        Some(Ok(frame)) => {
+                            if frame_tx.send(frame).await.is_err() {
+                                break;
+                            }
+                        }
+                        Some(Err(_)) | None => break,
+                    }
+                }
+                anyhow::Ok(())
+            });
+            let io_arm = pin!(async {
+                io.await
+                    .map_err(|e| anyhow::anyhow!("request body I/O: {e:?}"))
+            });
+            // The handler is the source of truth for response progress; the io
+            // future only drives request-body delivery and typically resolves
+            // later. Poll io concurrently, but never wait for it alone.
+            match select(handler, io_arm).await {
+                Either::Left((res, _io)) => res,
+                Either::Right((_io_res, handler)) => handler.await,
             }
         };
 
+        // Surface failures that prevented a response head. After the head
+        // has been sent, `resp_tx` is `None` and we just exit.
+        if let Some(tx) = resp_tx {
+            let outcome = match drive_result {
+                Ok(()) => HandlerOutcome::Trapped(
+                    "Handler returned without producing a response".to_string(),
+                ),
+                Err(e) => HandlerOutcome::Trapped(format!("Handler error: {e:?}")),
+            };
+            let _ = tx.send(outcome);
+        }
+        Ok(())
+    }
+}
+
+/// Round-robin dispatcher over a fixed pool of worker instances. Each
+/// worker is one long-lived component instance bound to its own store and
+/// engine task; requests are striped across them so guest execution fans
+/// out over multiple cores instead of serialising on one.
+struct Dispatch {
+    txs: Vec<mpsc::Sender<RequestJob>>,
+    next: AtomicUsize,
+}
+
+impl Dispatch {
+    /// Hand `job` to the next worker in rotation. Errors only once that
+    /// worker's engine task has stopped (i.e. during shutdown).
+    async fn submit(&self, job: RequestJob) -> Result<(), mpsc::error::SendError<RequestJob>> {
+        let idx = self.next.fetch_add(1, Ordering::Relaxed) % self.txs.len();
+        self.txs[idx].send(job).await
+    }
+}
+
+/// Convert a hyper request into a job, submit it to a worker instance, and
+/// render the outcome as a hyper response.
+///
+/// A first-byte `tokio::time::sleep(timeout)` is raced against the head
+/// oneshot, so a guest that never produces a response head yields a 504.
+async fn dispatch_request(
+    dispatch: &Dispatch,
+    timeout: Duration,
+    req: HyperRequest<hyper::body::Incoming>,
+) -> Result<HyperResponse<StreamingBody>> {
     let (parts, body) = req.into_parts();
     let body = body.map_err(HttpErrorCode::from_hyper_request_error);
     let http_req = http::Request::from_parts(parts, body);
     let (wasi_req, io) = WasiRequest::from_http(http_req);
 
     let (resp_tx, resp_rx) = oneshot::channel::<HandlerOutcome>();
-    let (frame_tx, frame_rx) = mpsc::channel::<Frame<Bytes>>(8);
+    let job = RequestJob {
+        wasi_req,
+        io: Box::pin(io),
+        resp_tx,
+    };
 
-    // The spawn task owns `store`, `service`, and `frame_tx`. Dropping
-    // `frame_tx` (which happens automatically when the closure exits)
-    // closes the body stream from hyper's point of view.
-    tokio::spawn(async move {
-        // Both `resp_tx` and `frame_rx` are taken at most once: when the
-        // handler produces head frames it moves the receiver into the
-        // outcome and releases the sender. After `run_concurrent` returns,
-        // a still-`Some` `resp_tx` means we never produced a head and need
-        // to surface the failure synthetically.
-        let mut resp_tx = Some(resp_tx);
-        let mut frame_rx_holder = Some(frame_rx);
+    if dispatch.submit(job).await.is_err() {
+        return Ok(error_response(503, "Server is shutting down".to_string()));
+    }
 
-        // Wrap `run_concurrent` in a wall-clock timeout. The per-store
-        // `set_epoch_deadline` only traps the guest while it is *running
-        // wasm*; an epoch interrupt cannot preempt a host `await` such as
-        // `frame_tx.send(...).await` blocking on a slow or stuck consumer.
-        // Without the outer wall-clock bound, a client that stops draining
-        // the body would pin this task — and the `Store` it owns — alive
-        // forever. Letting the timeout fire here drops `frame_tx`, which
-        // hyper sees as EOF on the response body, and frees the store.
-        let drive_result = tokio::time::timeout(
-            timeout,
-            store.run_concurrent(async |store| -> anyhow::Result<()> {
-                let handler = pin!(async {
-                    let res = match service.handle(store, wasi_req).await? {
-                        Ok(res) => res,
-                        Err(err) => {
-                            if let Some(tx) = resp_tx.take() {
-                                let _ = tx.send(HandlerOutcome::GuestError(err));
-                            }
-                            return anyhow::Ok(());
-                        }
-                    };
-                    let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
-                    let (parts, body) = res.into_parts();
-
-                    // Hand the response head plus the receiver to the outer
-                    // task so hyper can start writing the response while we
-                    // keep producing frames here.
-                    if let Some(tx) = resp_tx.take() {
-                        let rx = frame_rx_holder
-                            .take()
-                            .expect("frame_rx is taken at most once");
-                        if tx.send(HandlerOutcome::Streaming(parts, rx)).is_err() {
-                            // Outer side gave up before the head landed
-                            // (e.g. first-byte timeout fired). Stop here;
-                            // the body will be discarded.
-                            return anyhow::Ok(());
-                        }
-                    }
-
-                    // Pump frames until EOF, body error, or hyper drops the
-                    // body. `frame_tx.send().await` blocks on a full channel,
-                    // so a slow consumer back-pressures into the guest.
-                    let mut body = pin!(body);
-                    loop {
-                        let frame = poll_fn(|cx| body.as_mut().poll_frame(cx)).await;
-                        match frame {
-                            Some(Ok(frame)) => {
-                                if frame_tx.send(frame).await.is_err() {
-                                    // Hyper dropped the body; abandon the
-                                    // rest of the stream.
-                                    break;
-                                }
-                            }
-                            // Body read error: close the stream by exiting
-                            // the loop. `frame_tx` is dropped on return,
-                            // which surfaces as EOF on the hyper side.
-                            Some(Err(_)) => break,
-                            None => break,
-                        }
-                    }
-                    anyhow::Ok(())
-                });
-                let io_arm = pin!(async {
-                    io.await
-                        .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
-                });
-                // The handler is the source of truth for response progress;
-                // the io future only drives request-body delivery and
-                // typically resolves *later* than the handler (it waits for
-                // the request resource to be dropped, which happens when
-                // the guest function fully exits — well after `task return`).
-                //
-                // We must not cancel the handler the moment io resolves
-                // (would truncate streamed bodies), and we must not block
-                // forever on io after the handler is done (would hang
-                // indefinitely on guests that hold the request resource
-                // until function exit). The select-then-await pattern
-                // satisfies both: io is polled concurrently while we wait
-                // for the handler, but we never wait for io alone.
-                match select(handler, io_arm).await {
-                    Either::Left((res, _io)) => res,
-                    Either::Right((_io_res, handler)) => handler.await,
-                }
-            }),
-        )
-        .await;
-
-        // Surface failures that prevented the handler from producing a head.
-        // After the head has already been sent, `resp_tx` is `None` here and
-        // we just exit — dropping `frame_tx` ends the body stream, which
-        // hyper translates into a normal (possibly truncated) response.
-        if let Some(tx) = resp_tx {
-            let outcome = match drive_result {
-                Ok(Ok(Ok(()))) => HandlerOutcome::Trapped(
-                    "Handler returned without producing a response".to_string(),
-                ),
-                Ok(Ok(Err(e))) => HandlerOutcome::Trapped(format!("Handler error: {e:?}")),
-                Ok(Err(e)) => {
-                    if is_epoch_deadline_error(&e) {
-                        HandlerOutcome::Timeout
-                    } else {
-                        HandlerOutcome::Trapped(format!("Handler trapped:\n{e:?}"))
-                    }
-                }
-                Err(_elapsed) => HandlerOutcome::Timeout,
-            };
-            let _ = tx.send(outcome);
-        }
-    });
-
-    // First-byte timeout. After the head arrives, the body stream is
-    // bounded by the per-store epoch deadline rather than by this sleep.
+    // First-byte timeout. After the head arrives, the body stream is bounded
+    // by the bounded frame channel rather than by this sleep.
     let timeout_fut = pin!(tokio::time::sleep(timeout));
     let outcome = match select(pin!(resp_rx), timeout_fut).await {
         Either::Left((Ok(outcome), _)) => outcome,
@@ -488,14 +542,11 @@ async fn handle_http_request(
             error_response(500, msg)
         }
         HandlerOutcome::Timeout => {
-            eprintln!("Handler timed out after {timeout_secs}s");
-            error_response(504, format!("Handler timed out after {timeout_secs}s"))
+            let secs = timeout.as_secs();
+            eprintln!("Handler timed out after {secs}s");
+            error_response(504, format!("Handler timed out after {secs}s"))
         }
     })
-}
-
-fn is_epoch_deadline_error(err: &wasmtime::Error) -> bool {
-    err.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::Interrupt)
 }
 
 /// Wait for a shutdown signal (SIGINT or, on Unix, SIGTERM). Resolves on
@@ -526,61 +577,232 @@ async fn shutdown_signal() {
     }
 }
 
+/// Why a worker's dispatch loop stopped.
+#[derive(Clone, Copy)]
+enum WorkerStop {
+    /// Recycle threshold reached: tear the instance down and rebuild.
+    Recycle,
+    /// The request channel closed: the server is shutting down.
+    Shutdown,
+}
+
+/// One step of a worker's dispatch loop.
+enum Step {
+    /// A job arrived (`Some`), or the request channel closed (`None`).
+    Job(Option<RequestJob>),
+    /// An in-flight request finished.
+    Drained,
+}
+
+/// Drives one worker: a long-lived component instance that handles
+/// requests off `job_rx`.
+///
+/// After `recycle_requests` requests the instance is torn down and
+/// replaced with a fresh one. Recycling bounds the per-request garbage
+/// that piles up in a worker's long-lived Wasm GC heap; the pooling
+/// allocator makes the rebuild cheap by reusing the OS memory slots.
+/// `recycle_requests == 0` disables recycling (reuse forever).
+///
+/// On recycle or shutdown the loop stops accepting new requests but keeps
+/// draining the in-flight ones, so a recycle never drops a live request.
+///
+/// A runaway guest (one that monopolises the store's single thread in
+/// pure wasm) is bounded by the epoch deadline: the dispatch loop
+/// refreshes the deadline every turn, so only a guest that prevents the
+/// loop from turning trips it. The resulting trap surfaces as a
+/// `run_concurrent` error, after which the worker rebuilds its instance
+/// and resumes — self-healing rather than dying.
+///
+/// The epoch deadline is `timeout_secs` plus a grace margin: the
+/// client-facing first-byte timeout (`dispatch_request`) fires at exactly
+/// `timeout_secs` and returns 504, so the epoch trap is only a later
+/// backstop that reclaims the runaway and the worker — the client has
+/// already had a clean 504 by then.
+async fn worker_loop(
+    engine: Engine,
+    service_pre: Arc<ServicePre<WasiState>>,
+    preopens: Arc<Preopens>,
+    mut job_rx: mpsc::Receiver<RequestJob>,
+    recycle_requests: u64,
+    timeout_secs: u64,
+    fatal: Arc<Notify>,
+) {
+    // Grace over the client-facing timeout; also clears the 1s epoch-tick
+    // granularity so the first-byte 504 reliably precedes the epoch trap.
+    let epoch_ticks = timeout_secs.saturating_add(5);
+    loop {
+        // Fresh instance for this generation. Guest module-init (Wado
+        // `global` initializers, e.g. a router built at startup) runs
+        // here — once per generation, not once per request.
+        let state = WasiState::new_no_inherit_env_with_preopens(&preopens, &[]);
+        let mut store = Store::new(&engine, state);
+        // Arm the epoch deadline. The dispatch loop refreshes it every
+        // turn (see below), so a healthy worker never trips it; a guest
+        // that runs away in pure wasm does.
+        store.set_epoch_deadline(epoch_ticks);
+        let service = match service_pre.instantiate_async(&mut store).await {
+            Ok(service) => Arc::new(service),
+            Err(e) => {
+                // Instantiation here happens after `Component::new` and
+                // `linker.instantiate_pre` have already succeeded at
+                // startup, so a failure is a deterministic fault that
+                // would hit every worker identically — the server cannot
+                // serve. Signal a fatal shutdown rather than silently
+                // leaving a dead worker whose channel still accepts jobs.
+                eprintln!("Worker instantiation failed: {e:?}");
+                fatal.notify_one();
+                return;
+            }
+        };
+
+        let stop = store
+            .run_concurrent(async |accessor| {
+                let mut inflight = FuturesUnordered::new();
+                let mut handled: u64 = 0;
+                let mut stopping: Option<WorkerStop> = None;
+                loop {
+                    if let Some(stop) = stopping
+                        && inflight.is_empty()
+                    {
+                        return stop;
+                    }
+
+                    let step = if stopping.is_some() {
+                        // Draining only — `inflight` is non-empty here.
+                        let _ = inflight.next().await;
+                        Step::Drained
+                    } else if inflight.is_empty() {
+                        // Idle — only a new job can wake us.
+                        Step::Job(job_rx.recv().await)
+                    } else {
+                        // Accept new jobs and drain in-flight concurrently.
+                        let recv = pin!(job_rx.recv());
+                        let drain = pin!(inflight.next());
+                        match select(recv, drain).await {
+                            Either::Left((job, _drain)) => Step::Job(job),
+                            Either::Right((_done, _recv)) => Step::Drained,
+                        }
+                    };
+
+                    // The loop turned, so the worker is not starved by a
+                    // runaway guest: push the epoch deadline back out.
+                    accessor.with(|mut access| {
+                        access.as_context_mut().set_epoch_deadline(epoch_ticks);
+                    });
+
+                    match step {
+                        Step::Drained => {}
+                        Step::Job(Some(job)) => {
+                            // The `JoinHandle` is kept in `inflight` so a
+                            // recycle can wait for the request to finish;
+                            // the task itself is driven by `run_concurrent`.
+                            inflight.push(accessor.spawn(HandlerTask {
+                                service: Arc::clone(&service),
+                                job,
+                            }));
+                            handled += 1;
+                            if recycle_requests != 0 && handled >= recycle_requests {
+                                stopping = Some(WorkerStop::Recycle);
+                            }
+                        }
+                        Step::Job(None) => stopping = Some(WorkerStop::Shutdown),
+                    }
+                }
+            })
+            .await;
+
+        match stop {
+            // Drop the old store (returns its pooling slots) and loop to
+            // build a fresh instance.
+            Ok(WorkerStop::Recycle) => {}
+            Ok(WorkerStop::Shutdown) => return,
+            Err(e) => {
+                // The store trapped — typically a guest that ran past the
+                // epoch deadline. Rebuild the instance so the worker
+                // self-heals. In-flight requests on the trapped store are
+                // lost; requests still queued in the channel survive and
+                // are picked up by the fresh instance. The short sleep
+                // bounds a pathological rebuild loop (e.g. a guest that
+                // traps on every request).
+                eprintln!("Worker instance trapped; rebuilding: {e:?}");
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
+    }
+}
+
 async fn run_http_server(
     wasm: Vec<u8>,
     addr: &str,
     cranelift_opt: wasmtime::OptLevel,
     preopened_dirs: Vec<(String, String)>,
     timeout: Duration,
+    workers: usize,
+    recycle_requests: u64,
+    max_concurrency: usize,
 ) -> Result<()> {
-    let engine = runtime::create_serve_engine(cranelift_opt)?;
+    // `workers` and `max_concurrency` are bounded to `u32` range in
+    // `parse_args`, so these conversions never fail.
+    let workers_u32 = u32::try_from(workers).expect("workers bounded to u32 in parse_args");
+    let max_concurrency_u32 =
+        u32::try_from(max_concurrency).expect("max_concurrency bounded to u32 in parse_args");
+    // Pool head-room: at most `workers` instances are live at once (a
+    // recycle drops the old instance before building the new), plus slack.
+    let max_instances = workers_u32.saturating_add(8);
+    let engine = runtime::create_serve_engine(cranelift_opt, max_instances, max_concurrency_u32)?;
     let component = Component::new(&engine, &wasm)?;
     let linker = runtime::create_linker(&engine)?;
-    // Open preopens once here, then share across requests. Each request
-    // attaches them via `WasiState::new_no_inherit_env_with_preopens`,
-    // which clones the underlying `Arc<cap_std::fs::Dir>` rather than
-    // re-running `openat` per request.
-    let preopens = Preopens::open(&preopened_dirs)?;
-    // Pre-link the component once. This front-loads the per-export string
-    // lookups that `Service::instantiate_async` would otherwise repeat on
-    // every request.
+    // Open preopens once at startup; they are attached to every worker
+    // generation's `WasiState`.
+    let preopens = Arc::new(Preopens::open(&preopened_dirs)?);
     let instance_pre = linker.instantiate_pre(&component)?;
-    let service_pre = ServicePre::<WasiState>::new(instance_pre)?;
-
-    // Drop the linker — the `InstancePre` already captured everything we
-    // need, and keeping the linker around would force every request to
-    // share it (the linker is `&self`, but holding it serves no purpose).
+    let service_pre = Arc::new(ServicePre::<WasiState>::new(instance_pre)?);
     drop(linker);
     drop(component);
 
-    let engine = Arc::new(engine);
-    let service_pre = Arc::new(service_pre);
-    let preopens = Arc::new(preopens);
+    // One worker = one long-lived component instance on its own store and
+    // engine task. Workers run guest code on independent stores, so
+    // request handling fans out across cores; each worker recycles its
+    // instance every `recycle_requests` requests.
+    // Per-worker request queue. `workers <= max_concurrency` (enforced in
+    // `parse_args` / clamped in `run`), so the quotient is at least 1 and
+    // the queues sum to at most `max_concurrency` — never more in-flight
+    // work than the pooling allocator's stack pool was sized for.
+    let chan_cap = max_concurrency / workers;
+    // Notified by a worker that fails to instantiate; the accept loop
+    // treats it as a fatal shutdown (see `worker_loop`).
+    let fatal = Arc::new(Notify::new());
+    let mut txs = Vec::with_capacity(workers);
+    let mut engine_tasks = Vec::with_capacity(workers);
+    for _ in 0..workers {
+        let (tx, rx) = mpsc::channel::<RequestJob>(chan_cap);
+        txs.push(tx);
+        engine_tasks.push(tokio::spawn(worker_loop(
+            engine.clone(),
+            Arc::clone(&service_pre),
+            Arc::clone(&preopens),
+            rx,
+            recycle_requests,
+            timeout.as_secs().max(1),
+            Arc::clone(&fatal),
+        )));
+    }
+    let dispatch = Arc::new(Dispatch {
+        txs,
+        next: AtomicUsize::new(0),
+    });
 
-    // Background tokio task drives `Engine::increment_epoch` so the
-    // per-store `set_epoch_deadline` actually fires. Implemented as a
-    // tokio task (rather than `std::thread`) so shutdown can wait for it
-    // without blocking the runtime: a `Notify` flips the loop to its exit
-    // arm, and we `await` the `JoinHandle` to be sure no further bumps
-    // are in flight.
-    let epoch_shutdown = Arc::new(tokio::sync::Notify::new());
-    let epoch_task = {
-        let shutdown = Arc::clone(&epoch_shutdown);
-        let engine = Arc::clone(&engine);
+    // Background ticker that advances the engine epoch. Each worker store
+    // arms an epoch deadline counted in these ticks; without the ticker
+    // the deadline would never be reached and runaway guests never trap.
+    let epoch_ticker = {
+        let engine = engine.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_millis(EPOCH_TICK_MS));
-            // The first `interval.tick()` fires immediately by default.
-            // Consume it so the first real bump happens one full
-            // `EPOCH_TICK_MS` after server startup, matching the previous
-            // `std::thread::sleep` behaviour.
-            interval.tick().await;
+            interval.tick().await; // the first tick fires immediately; skip it
             loop {
-                let tick = pin!(interval.tick());
-                let stop = pin!(shutdown.notified());
-                match select(tick, stop).await {
-                    Either::Left(_) => engine.increment_epoch(),
-                    Either::Right(_) => break,
-                }
+                interval.tick().await;
+                engine.increment_epoch();
             }
         })
     };
@@ -588,7 +810,13 @@ async fn run_http_server(
     let addr: SocketAddr = addr.parse()?;
     let listener = TcpListener::bind(addr).await?;
 
+    let recycle_desc = if recycle_requests == 0 {
+        "off".to_string()
+    } else {
+        format!("every {recycle_requests} req")
+    };
     eprintln!("HTTP server listening on http://{addr}/");
+    eprintln!("Instance reuse: ON — {workers} worker(s), recycle {recycle_desc}");
     eprintln!("Per-request timeout: {}s", timeout.as_secs());
     #[cfg(unix)]
     eprintln!("Send SIGINT or SIGTERM to shut down");
@@ -596,7 +824,14 @@ async fn run_http_server(
     eprintln!("Send Ctrl+C to shut down");
 
     let mut connections: JoinSet<()> = JoinSet::new();
-    let mut shutdown = pin!(shutdown_signal());
+    // Resolves to `true` when shutdown was triggered by a fatal worker
+    // failure, `false` for a normal OS signal.
+    let mut shutdown = pin!(async {
+        let sig = pin!(shutdown_signal());
+        let fat = pin!(fatal.notified());
+        matches!(select(sig, fat).await, Either::Right(((), _)))
+    });
+    let fatal_shutdown;
 
     // Accept loop with graceful shutdown. On signal, stop accepting and
     // wait for in-flight connections to drain (with a hard cap so we don't
@@ -604,57 +839,47 @@ async fn run_http_server(
     loop {
         let accept = pin!(listener.accept());
         match select(accept, shutdown.as_mut()).await {
-            Either::Right(((), _accept)) => {
-                eprintln!(
-                    "Shutdown signal received; draining {} in-flight connection(s)…",
-                    connections.len()
-                );
+            Either::Right((is_fatal, _accept)) => {
+                fatal_shutdown = is_fatal;
+                if is_fatal {
+                    eprintln!(
+                        "Fatal: a worker failed to instantiate; shutting down ({} in-flight connection(s))",
+                        connections.len()
+                    );
+                } else {
+                    eprintln!(
+                        "Shutdown signal received; draining {} in-flight connection(s)…",
+                        connections.len()
+                    );
+                }
                 break;
             }
             Either::Left((Err(e), _shutdown)) => {
-                // A persistent failure (file descriptor exhaustion, listener
-                // gone) would otherwise turn the loop into a hot CPU/log
-                // spammer. A short sleep is a cheap circuit-breaker: it
-                // doesn't fix the underlying problem but it stops the
-                // server from making it worse.
+                // A persistent failure (fd exhaustion, listener gone) would
+                // otherwise turn the loop into a hot CPU/log spammer. A short
+                // sleep is a cheap circuit-breaker.
                 eprintln!("accept error: {e}");
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
             Either::Left((Ok((stream, remote_addr)), _shutdown)) => {
                 let io = TokioIo::new(stream);
-
-                let engine = Arc::clone(&engine);
-                let service_pre = Arc::clone(&service_pre);
-                let preopens = Arc::clone(&preopens);
+                let dispatch = Arc::clone(&dispatch);
 
                 connections.spawn(async move {
-                    let svc = service_fn(|req| {
-                        let engine = Arc::clone(&engine);
-                        let service_pre = Arc::clone(&service_pre);
-                        let preopens = Arc::clone(&preopens);
-
-                        async move {
-                            handle_http_request(&engine, &service_pre, &preopens, timeout, req)
-                                .await
-                        }
+                    let svc = service_fn(move |req| {
+                        let dispatch = Arc::clone(&dispatch);
+                        async move { dispatch_request(&dispatch, timeout, req).await }
                     });
 
-                    // Auto-detect HTTP/1.1 vs h2c (HTTP/2 cleartext, prior-knowledge)
-                    // by sniffing the connection preface. HTTP/1 callers see normal
-                    // behavior; h2c clients (e.g. `curl --http2-prior-knowledge`) get
-                    // trailers without needing the `TE: trailers` handshake hyper
-                    // requires on the HTTP/1 path.
+                    // Auto-detect HTTP/1.1 vs h2c by sniffing the connection
+                    // preface, so h2c clients get trailers without the
+                    // `TE: trailers` handshake hyper requires on HTTP/1.
                     let builder = auto::Builder::new(TokioExecutor::new());
                     if let Err(e) = builder.serve_connection(io, svc).await {
                         eprintln!("Error serving {remote_addr}: {e}");
                     }
                 });
 
-                // Non-blockingly reap any connections that finished while
-                // we were accepting, so the JoinSet doesn't grow unboundedly
-                // on a long-running server. Surface task panics here too —
-                // dropping `try_join_next()`'s `Result` would silently lose
-                // them.
                 while let Some(res) = connections.try_join_next() {
                     log_connection_join_error(res);
                 }
@@ -662,8 +887,8 @@ async fn run_http_server(
         }
     }
 
-    // Drain phase: stop accepting, give in-flight connections a bounded
-    // window to finish. Anything still alive at the deadline gets aborted.
+    // Drain in-flight connections first — they still need the worker engine
+    // tasks alive to receive their responses.
     let drain_deadline = timeout + Duration::from_secs(5);
     let drain = async {
         while let Some(res) = connections.join_next().await {
@@ -678,13 +903,18 @@ async fn run_http_server(
         connections.shutdown().await;
     }
 
-    // Stop the epoch ticker. `await`-ing the JoinHandle is the async
-    // equivalent of `std::thread::JoinHandle::join` — but unlike the
-    // thread version it doesn't block the runtime: the ticker sees the
-    // notify within one `EPOCH_TICK_MS` and exits.
-    epoch_shutdown.notify_one();
-    let _ = epoch_task.await;
+    // No connection can submit more work now: dropping the dispatcher
+    // closes every worker channel, ending each engine task's dispatch
+    // loop. Wait for them to wind down.
+    drop(dispatch);
+    for engine_task in engine_tasks {
+        let _ = tokio::time::timeout(drain_deadline, engine_task).await;
+    }
+    epoch_ticker.abort();
 
+    if fatal_shutdown {
+        anyhow::bail!("a worker failed to instantiate the component");
+    }
     Ok(())
 }
 
@@ -712,12 +942,26 @@ pub async fn run(opts: ServeOptions) {
     let wasm = compile::compile(&opts.input, &flags).await;
 
     let timeout = Duration::from_secs(opts.timeout_secs);
+    // An explicit `--workers` is already validated against `--max-concurrency`
+    // in `parse_args`; the auto-derived default is clamped so it never sizes
+    // more workers than the stack pool can back.
+    let workers = opts
+        .workers
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(std::num::NonZero::get)
+                .unwrap_or(1)
+        })
+        .min(opts.max_concurrency);
     if let Err(e) = run_http_server(
         wasm,
         &opts.addr,
         cranelift_opt,
         opts.preopened_dirs,
         timeout,
+        workers,
+        opts.recycle_requests,
+        opts.max_concurrency,
     )
     .await
     {

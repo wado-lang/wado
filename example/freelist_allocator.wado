@@ -1,0 +1,422 @@
+//! Development sandbox for a coalescing, size-class-segregated free-list
+//! allocator.
+//!
+//! The algorithm is developed and unit-tested here, against a *simulated*
+//! linear memory (`Heap.mem`, a word-indexed `Array<i32>`), before being
+//! ported into `wado-compiler/lib/core/allocator.wado` — a `#![no_prelude]`
+//! module that cannot host `test` blocks.
+//!
+//! Block layout (size a multiple of 16):
+//!
+//!   offset 0:        i32  header = size | used-bit
+//!   offset 4:        i32  (padding)
+//!   offset 8:        payload …            (when free: [8]=next, [12]=prev)
+//!   offset size-8:   i32  footer = size | used-bit
+//!   offset size-4:   i32  (padding)
+//!
+//! Block sizes are multiples of 16 and `HEAP_START` is congruent to
+//! 8 (mod 16), so `alloc` returns `block + 8` — a payload that is always
+//! 16-byte aligned (satisfying every alignment `realloc` is called with,
+//! up to the 16-byte `v128`).
+//!
+//! Free blocks are kept in **segregated free lists** — one doubly-linked
+//! list per size class. Small blocks (32 .. 32 + 16*31 bytes) have an exact
+//! bin each; everything larger shares one "large" bin. Allocation goes
+//! straight to the size class's bin, so the common case is O(1) instead of
+//! a first-fit scan over every free block. On `free`, physically adjacent
+//! free blocks are still merged via boundary tags.
+//!
+//! The bin-head table lives in memory at `[BIN_BASE, BIN_BASE + 4*NUM_BINS)`;
+//! the first block starts at `HEAP_START`.
+
+/// Per-block boundary-tag overhead (8-byte header + 8-byte footer).
+global OVERHEAD: i32 = 16;
+
+/// Smallest legal block: header + 16-byte payload + footer.
+global MIN_BLOCK: i32 = 32;
+
+/// Number of exact size-class bins. Bin `k` (k < SMALL_BINS) holds blocks
+/// of size exactly `MIN_BLOCK + 16*k`; bin `SMALL_BINS` is the catch-all
+/// "large" bin (first-fit).
+global SMALL_BINS: i32 = 32;
+
+/// Total bins (small bins plus the large bin).
+global NUM_BINS: i32 = 33;
+
+/// Byte address of the bin-head table.
+global BIN_BASE: i32 = 8;
+
+/// Byte address of the first block: the lowest address past the bin-head
+/// table that is congruent to 8 (mod 16), so payloads land 16-byte aligned.
+global HEAP_START: i32 = 152;
+
+/// Extract the block size from a boundary tag (clears the low 3 bits).
+fn tag_size(tag: i32) -> i32 {
+    return builtin::i32_and(tag, -8);
+}
+
+/// True when a boundary tag marks its block as in use.
+fn tag_used(tag: i32) -> bool {
+    return builtin::i32_and(tag, 1) != 0;
+}
+
+/// Size-class bin index for a block of `size` bytes.
+fn bin_index(size: i32) -> i32 {
+    let k = (size - MIN_BLOCK) / 16;
+    return if k < SMALL_BINS { k } else { SMALL_BINS };
+}
+
+/// A simulated linear memory plus the allocator's bump frontier. In the
+/// ported `allocator.wado`, `mem` is the real Wasm linear memory and
+/// `heap_offset` is a module global; the bin-head table lives in memory.
+struct Heap {
+    /// Word-indexed backing store; byte address `a` is word `a / 4`.
+    mem: Array<i32>,
+    /// Bump frontier: the first byte address past every block ever carved.
+    heap_offset: i32,
+}
+
+impl Heap {
+    /// A fresh heap. `mem` is sized to cover the bin-head table and the
+    /// alignment padding up to `HEAP_START`; it grows on demand. Wasm
+    /// memory is zero-initialised, so every bin head starts empty (0).
+    fn new() -> Heap {
+        let mut mem: Array<i32> = [];
+        let words = HEAP_START / 4;
+        for let mut i = 0; i < words; i += 1 {
+            mem.push(0);
+        }
+        return Heap { mem, heap_offset: HEAP_START };
+    }
+
+    /// Load the i32 at byte address `addr` (always 4-aligned).
+    fn load(&self, addr: i32) -> i32 {
+        return self.mem[addr / 4];
+    }
+
+    /// Store `value` at byte address `addr`.
+    fn store(&mut self, addr: i32, value: i32) {
+        self.mem[addr / 4] = value;
+    }
+
+    /// Grow the backing store until it covers byte address `end`.
+    fn ensure(&mut self, end: i32) {
+        while self.mem.len() * 4 < end {
+            self.mem.push(0);
+        }
+    }
+
+    /// Head of size-class bin `k` (0 when empty).
+    fn bin_head(&self, k: i32) -> i32 {
+        return self.load(BIN_BASE + k * 4);
+    }
+
+    /// Set the head of size-class bin `k`.
+    fn set_bin_head(&mut self, k: i32, head: i32) {
+        self.store(BIN_BASE + k * 4, head);
+    }
+
+    /// Write the header and footer boundary tags of the block at `block`.
+    fn set_tags(&mut self, block: i32, size: i32, used: i32) {
+        // `size` is a multiple of 16 and `used` is 0 or 1, so `+` is `|`.
+        let tag = size + used;
+        self.store(block, tag);
+        self.store(block + size - 8, tag);
+    }
+
+    /// Insert `block` (of `size` bytes) at the head of its size-class bin.
+    fn fl_push(&mut self, block: i32, size: i32) {
+        let k = bin_index(size);
+        let head = self.bin_head(k);
+        self.store(block + 8, head);
+        self.store(block + 12, 0);
+        if head != 0 {
+            self.store(head + 12, block);
+        }
+        self.set_bin_head(k, block);
+    }
+
+    /// Remove `block` from its size-class bin (it must currently be linked).
+    fn fl_unlink(&mut self, block: i32) {
+        let k = bin_index(tag_size(self.load(block)));
+        let next = self.load(block + 8);
+        let prev = self.load(block + 12);
+        if prev == 0 {
+            self.set_bin_head(k, next);
+        } else {
+            self.store(prev + 8, next);
+        }
+        if next != 0 {
+            self.store(next + 12, prev);
+        }
+    }
+
+    /// Mark the block at `block` (currently sized `block_size`) used for an
+    /// allocation of `size` bytes, splitting off the remainder as a free
+    /// block when it is large enough to stand on its own.
+    fn carve(&mut self, block: i32, block_size: i32, size: i32) {
+        let remainder = block_size - size;
+        if remainder >= MIN_BLOCK {
+            self.set_tags(block, size, 1);
+            let rest = block + size;
+            self.set_tags(rest, remainder, 0);
+            self.fl_push(rest, remainder);
+        } else {
+            // Too small to split — hand back the whole block.
+            self.set_tags(block, block_size, 1);
+        }
+    }
+
+    /// Allocate `newsize` payload bytes; returns the payload address.
+    fn alloc(&mut self, newsize: i32) -> i32 {
+        // Round the payload up to 16 bytes and add the boundary-tag
+        // overhead. The result is a multiple of 16 and always >= MIN_BLOCK.
+        let size = builtin::i32_and(newsize + 15, -16) + OVERHEAD;
+
+        // Exact size-class bin first, then larger small bins. Any block in
+        // a bin at index >= bin_index(size) is large enough.
+        let mut j = bin_index(size);
+        while j < SMALL_BINS {
+            let b = self.bin_head(j);
+            if b != 0 {
+                let block_size = tag_size(self.load(b));
+                self.fl_unlink(b);
+                self.carve(b, block_size, size);
+                return b + 8;
+            }
+            j += 1;
+        }
+
+        // Large bin: first-fit over the catch-all list.
+        let mut curr = self.bin_head(SMALL_BINS);
+        while curr != 0 {
+            let block_size = tag_size(self.load(curr));
+            if block_size >= size {
+                self.fl_unlink(curr);
+                self.carve(curr, block_size, size);
+                return curr + 8;
+            }
+            curr = self.load(curr + 8);
+        }
+
+        // No fit: bump-allocate a fresh block at the heap frontier.
+        let block = self.heap_offset;
+        let new_offset = block + size;
+        self.ensure(new_offset);
+        self.heap_offset = new_offset;
+        self.set_tags(block, size, 1);
+        return block + 8;
+    }
+
+    /// Free the block whose payload is `ptr`, coalescing free neighbours.
+    fn free(&mut self, ptr: i32) {
+        if ptr == 0 {
+            return;
+        }
+        let mut block = ptr - 8;
+        let header = self.load(block);
+        if !tag_used(header) {
+            // The block is already free — a double free.
+            panic("freelist: double free");
+        }
+        let mut size = tag_size(header);
+
+        // Coalesce with the physically-following block when it is free.
+        let next = block + size;
+        if next < self.heap_offset {
+            let next_header = self.load(next);
+            if !tag_used(next_header) {
+                self.fl_unlink(next);
+                size += tag_size(next_header);
+            }
+        }
+
+        // Coalesce with the physically-preceding block when it is free.
+        if block > HEAP_START {
+            let prev_footer = self.load(block - 8);
+            if !tag_used(prev_footer) {
+                let prev_size = tag_size(prev_footer);
+                let prev = block - prev_size;
+                self.fl_unlink(prev);
+                block = prev;
+                size += prev_size;
+            }
+        }
+
+        self.set_tags(block, size, 0);
+        self.fl_push(block, size);
+    }
+}
+
+test "alloc: payloads are 16-byte aligned and laid out back to back" {
+    let mut h = Heap::new();
+    let a = h.alloc(64);
+    let b = h.alloc(64);
+    // First block at HEAP_START=152, payload at 160. Block size for a
+    // 64-byte payload is align_up(64,16) + 16 = 80.
+    assert a == 160, `a={a}`;
+    assert b == 240, `b={b}`;
+    assert builtin::i32_and(a, 15) == 0;
+    assert builtin::i32_and(b, 15) == 0;
+}
+
+test "alloc: payloads stay 16-byte aligned for every payload size" {
+    let mut h = Heap::new();
+    // Sweep payload sizes that are not multiples of 16 — the allocator
+    // must still hand back 16-byte-aligned payloads.
+    let sizes: Array<i32> = [1, 7, 8, 15, 17, 24, 33, 100, 257];
+    for let s of sizes {
+        let p = h.alloc(s);
+        assert builtin::i32_and(p, 15) == 0, `payload {p} for size {s} is not 16-aligned`;
+    }
+}
+
+test "free + same-size alloc reuses the block without growing" {
+    let mut h = Heap::new();
+    let a = h.alloc(64);
+    h.free(a);
+    let frontier = h.heap_offset;
+    let a2 = h.alloc(64);
+    assert a2 == a, `a={a}, a2={a2}`;
+    assert h.heap_offset == frontier, "heap grew on a recycled allocation";
+}
+
+test "alloc splits a larger free block" {
+    let mut h = Heap::new();
+    let big = h.alloc(1024);
+    h.free(big);
+    // 64-byte payload -> 80-byte block, carved out of the freed 1040 block.
+    let s1 = h.alloc(64);
+    let s2 = h.alloc(64);
+    assert s1 == big, `s1={s1}, big={big}`;
+    assert s2 == big + 80, `s2={s2}, expected={big + 80}`;
+}
+
+test "free coalesces with the following block" {
+    let mut h = Heap::new();
+    let a = h.alloc(64);
+    let b = h.alloc(64);
+    let c = h.alloc(64);
+    let frontier = h.heap_offset;
+    // Free b, then a: freeing a merges forward into b.
+    h.free(b);
+    h.free(a);
+    // The merged a+b block (160 bytes) holds a payload too big for either
+    // block alone, so this only succeeds if coalescing happened.
+    let merged = h.alloc(120);
+    assert merged == a, `merged={merged}, a={a}`;
+    assert h.heap_offset == frontier, "heap grew despite a coalesced block";
+    h.free(c);
+}
+
+test "free coalesces with both neighbours" {
+    let mut h = Heap::new();
+    let a = h.alloc(64);
+    let b = h.alloc(64);
+    let c = h.alloc(64);
+    let frontier = h.heap_offset;
+    // Free the outer blocks first, then the middle one: freeing b merges
+    // with both a (backward) and c (forward) into one 240-byte block.
+    h.free(a);
+    h.free(c);
+    h.free(b);
+    let merged = h.alloc(200);
+    assert merged == a, `merged={merged}, a={a}`;
+    assert h.heap_offset == frontier, "heap grew despite a 3-way coalesce";
+}
+
+test "no coalescing across a still-used block" {
+    let mut h = Heap::new();
+    let a = h.alloc(64);
+    let b = h.alloc(64);
+    let c = h.alloc(64);
+    let frontier = h.heap_offset;
+    // Only b is free; a and c stay used, so b cannot merge with anything.
+    h.free(b);
+    // A request larger than b's block must bump-allocate, not reuse b.
+    let big = h.alloc(256);
+    assert big != b, "allocated into a block that should not fit";
+    assert h.heap_offset > frontier, "expected a bump allocation";
+    h.free(a);
+    h.free(c);
+}
+
+test "segregated bins serve each size class" {
+    let mut h = Heap::new();
+    // A small block and a large block, kept apart by a used block so they
+    // never coalesce, then freed.
+    let small = h.alloc(40);
+    let guard = h.alloc(40);
+    let large = h.alloc(900);
+    h.free(small);
+    h.free(large);
+    // Re-allocating each size must reuse its own freed block: the small
+    // request hits its exact bin, the large one the catch-all bin.
+    let small2 = h.alloc(40);
+    let large2 = h.alloc(900);
+    assert small2 == small, `small={small}, small2={small2}`;
+    assert large2 == large, `large={large}, large2={large2}`;
+    h.free(guard);
+}
+
+test "coalescing keeps the heap bounded under alloc/free churn" {
+    let mut h = Heap::new();
+    // Warm up: reach steady state, then record the frontier.
+    let w1 = h.alloc(40);
+    let w2 = h.alloc(40);
+    h.free(w1);
+    h.free(w2);
+    let warm = h.alloc(80);
+    h.free(warm);
+    let frontier = h.heap_offset;
+
+    // Each iteration frees two adjacent small blocks and then allocates a
+    // block too large for either fragment alone. Without coalescing the
+    // fragments are unusable and the heap grows every iteration.
+    for let mut i = 0; i < 5000; i += 1 {
+        let x = h.alloc(40);
+        let y = h.alloc(40);
+        h.free(x);
+        h.free(y);
+        let z = h.alloc(80);
+        h.free(z);
+    }
+    assert h.heap_offset == frontier,
+        `heap grew under churn: frontier={frontier}, now={h.heap_offset}`;
+}
+
+test "interleaved varying-size churn stays bounded" {
+    let mut h = Heap::new();
+    let sizes: Array<i32> = [24, 200, 56, 512, 8, 96, 312, 40];
+    // Prime every size class so the bins hold blocks of each shape.
+    let mut primed: Array<i32> = [];
+    for let s of sizes {
+        primed.push(h.alloc(s));
+    }
+    for let p of primed {
+        h.free(p);
+    }
+    let frontier = h.heap_offset;
+
+    for let mut i = 0; i < 2000; i += 1 {
+        let mut live: Array<i32> = [];
+        for let s of sizes {
+            live.push(h.alloc(s));
+        }
+        // Free in reverse so coalescing exercises both directions.
+        let n = live.len();
+        for let mut k = n - 1; k >= 0; k -= 1 {
+            h.free(live[k]);
+        }
+    }
+    assert h.heap_offset == frontier,
+        `heap grew under mixed churn: frontier={frontier}, now={h.heap_offset}`;
+}
+
+#[expect_trap]
+test "double free traps" {
+    let mut h = Heap::new();
+    let p = h.alloc(64);
+    h.free(p);
+    h.free(p);
+}

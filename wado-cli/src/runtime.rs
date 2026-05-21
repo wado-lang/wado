@@ -3,7 +3,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 use wasmtime::component::{Linker, ResourceTable};
-use wasmtime::{Config, Engine, OptLevel, ProfilingStrategy, Store};
+use wasmtime::{
+    Config, Engine, InstanceAllocationStrategy, OptLevel, PoolingAllocationConfig,
+    ProfilingStrategy, Store,
+};
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
@@ -311,19 +314,49 @@ pub fn create_test_engine(opt_level: OptLevel) -> Result<Engine> {
     Ok(Engine::new(&config)?)
 }
 
-/// Create a wasmtime Engine for `wado serve` with epoch interruption enabled.
+/// Create a wasmtime Engine for `wado serve`, backed by the pooling
+/// instance allocator.
 ///
-/// The serve loop pairs this with a per-store `set_epoch_deadline` and a
-/// background ticker that calls `Engine::increment_epoch`, so a guest stuck
-/// in a tight loop traps after the configured request timeout instead of
-/// holding a tokio task forever.
+/// `wado serve` keeps a fixed set of long-lived component instances and
+/// recycles them periodically. The pooling allocator keeps the OS memory
+/// slots (linear memories, tables, GC heaps, async fiber stacks)
+/// reserved up front and reuses them across (re-)instantiations, so a
+/// recycle costs no `mmap`/`munmap` round-trip.
+///
+/// `max_instances` bounds how many component instances may be live at
+/// once (workers plus recycle head-room); `max_concurrency` bounds the
+/// number of in-flight requests, each of which needs an async fiber
+/// stack from the pool. Both translate into a fixed up-front virtual
+/// address-space reservation.
+///
+/// Epoch interruption is enabled so `wado serve` can push the per-store
+/// deadline out of reach on its long-lived stores.
 ///
 /// # Errors
 ///
-/// Returns an error if the engine cannot be created with the given configuration.
-pub fn create_serve_engine(opt_level: OptLevel) -> Result<Engine> {
+/// Returns an error if the engine cannot be created — notably if the
+/// host cannot reserve the pool's virtual address space.
+pub fn create_serve_engine(
+    opt_level: OptLevel,
+    max_instances: u32,
+    max_concurrency: u32,
+) -> Result<Engine> {
     let mut config = create_config(opt_level, &ProfileMode::None);
     config.epoch_interruption(true);
+
+    // Generous per-instance multipliers: a single component instantiation
+    // expands into several core instances / memories / tables / GC heaps.
+    // `max_instances` is small (workers + head-room), so the headroom
+    // costs little address space.
+    let mut pool = PoolingAllocationConfig::new();
+    pool.total_component_instances(max_instances);
+    pool.total_core_instances(max_instances.saturating_mul(8));
+    pool.total_memories(max_instances.saturating_mul(4));
+    pool.total_tables(max_instances.saturating_mul(8));
+    pool.total_gc_heaps(max_instances.saturating_mul(4));
+    pool.total_stacks(max_concurrency.max(1));
+    config.allocation_strategy(InstanceAllocationStrategy::Pooling(pool));
+
     Ok(Engine::new(&config)?)
 }
 

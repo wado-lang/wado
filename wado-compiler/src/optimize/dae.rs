@@ -21,6 +21,9 @@
 //!   dispatch carries an implicit handler param the call sites assume).
 //! - Non-`Regular` `FunctionKind` entries (specialised stubs).
 //! - Builtin / wasm-asset modules (their signatures are part of the ABI).
+//! - Allocator entry points (`allocator_tag.is_some()`) — wired raw into
+//!   the canonical ABI as `realloc`, with no `is_cm_export` wrapper to
+//!   absorb a shrunken signature.
 //! - Trait methods (`method_info.trait_name.is_some()`) — sibling impls and
 //!   the trait declaration share a signature contract.
 //! - Functions whose pointer is taken via `FuncRef` anywhere in the project.
@@ -172,6 +175,16 @@ fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_rela
         return false;
     }
     if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
+        return false;
+    }
+    // Allocator entry points (`#[allocator(...)]`) are wired straight into
+    // the component's canonical ABI as the `realloc` core function. Unlike
+    // a user `export fn` — which reaches the boundary through an
+    // `is_cm_export` wrapper that absorbs a shrunken signature — the
+    // allocator function IS the boundary. Its 4-argument
+    // `(i32, i32, i32, i32) -> i32` realloc signature must survive verbatim,
+    // even when the chosen allocator never reads `oldsize` / `align`.
+    if func.allocator_tag.is_some() {
         return false;
     }
     // Trait methods have signature contracts shared with other impls

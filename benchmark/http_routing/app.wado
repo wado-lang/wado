@@ -1,0 +1,94 @@
+// HTTP routing benchmark service.
+//
+// A `wasi:http/service` world app used to benchmark `wado serve` against
+// an equivalent Hono (Node.js) server. The route set is Hono's official
+// router benchmark (honojs/hono, benchmarks/routers/src/tool.mts): 12
+// routes mixing static, single-parameter, and wildcard routes, dispatched
+// through `core:router`.
+//
+// Run with wado serve:
+//   cargo run --bin wado -- serve benchmark/http_routing/app.wado
+
+use {
+    Request, Response, ErrorCode, Fields, FieldValue, Trailers, StatusCode,
+} from "wasi:http";
+use { Router, PathParams } from "core:router";
+use { Serialize } from "core:serde";
+use json from "core:json";
+
+/// Uniform JSON body shape shared by every route, mirroring the Hono
+/// server's `{ route, params }` response so the serialization cost is
+/// comparable on both sides.
+struct ApiResponse {
+    route: String,
+    params: Array<String>,
+}
+impl Serialize for ApiResponse;
+
+struct RouteResponse {
+    status: StatusCode,
+    body: String,
+}
+
+type Handler = fn(Request, PathParams) -> RouteResponse;
+
+fn body_for(route: String, params: Array<String>) -> String {
+    return json::to_string(&ApiResponse { route, params }).unwrap();
+}
+
+/// 200 response for a parametric route.
+fn ok(route: String, params: Array<String>) -> RouteResponse {
+    return RouteResponse { status: 200, body: body_for(route, params) };
+}
+
+/// 200 response for a static route (no captured parameters).
+fn ok0(route: String) -> RouteResponse {
+    return ok(route, [] as Array<String>);
+}
+
+// Hono's official router benchmark route set
+// (honojs/hono, benchmarks/routers/src/tool.mts).
+fn build_router() -> Router<Handler> {
+    let mut r = Router::<Handler>::new();
+
+    r.get("/user",          |_req, _p| ok0("user"));
+    r.get("/user/comments", |_req, _p| ok0("user.comments"));
+    r.get("/user/avatar",   |_req, _p| ok0("user.avatar"));
+    r.get("/user/lookup/username/:username",
+          |_req, p| ok("user.lookup.username", [p["username"]]));
+    r.get("/user/lookup/email/:address",
+          |_req, p| ok("user.lookup.email", [p["address"]]));
+    r.get("/event/:id",          |_req, p| ok("event.show", [p["id"]]));
+    r.get("/event/:id/comments", |_req, p| ok("event.comments", [p["id"]]));
+    r.post("/event/:id/comment", |_req, p| ok("event.comment.create", [p["id"]]));
+    r.get("/map/:location/events", |_req, p| ok("map.events", [p["location"]]));
+    r.get("/status",         |_req, _p| ok0("status"));
+    r.get("/very/deeply/nested/route/hello/there", |_req, _p| ok0("deeply.nested"));
+    r.get("/static/*path",   |_req, p| ok("static", [p["path"]]));
+
+    return r;
+}
+
+global ROUTER: Router<Handler> = build_router();
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let resp = if let Some(m) = ROUTER.match_request(&request) {
+        (m.handler)(request, m.params)
+    } else {
+        RouteResponse { status: 404, body: body_for("not-found", [] as Array<String>) }
+    };
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+
+    let resp_headers = Fields::new();
+    resp_headers.append("content-type", "application/json".bytes().collect() as FieldValue);
+    let [response, _response_tx] = Response::new(resp_headers, Option::Some(body_rx), trailers_future);
+    response.set_status_code(resp.status);
+
+    task return Result::Ok(response);
+
+    body_tx.write(resp.body.bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
