@@ -1060,3 +1060,4 @@ test "passes unexpectedly" {
 // labeled-block break null-coercion / shadowed-label fixtures added
 // labeled-block break null-inference error fixtures added
 // match / if all-null inference error fixtures added
+// resource-cleanup fixtures added (unused request drop, value-block drop)

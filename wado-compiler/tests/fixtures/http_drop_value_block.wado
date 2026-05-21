@@ -1,0 +1,37 @@
+// Regression test for the #1140 review: a resource declared inside a
+// value-yielding block must be dropped without clobbering the block's value.
+//
+// The `Get` match arm is a block that declares a block-local `Fields`
+// resource `probe` and evaluates to an `i32`. The resource-cleanup pass
+// drops `probe` at the end of that arm; appending the drop naively would
+// make the arm evaluate to the drop (`Unit`) instead of the `i32`. The pass
+// must instead bind the arm's value to a temporary, run the drop, then yield
+// the temporary — so `probe_count` is still `7` and `probe` is still freed.
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Method, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let probe_count = match request.get_method() {
+        Get => {
+            let probe = Fields::new();
+            let bytes: Array<u8> = [118 as u8];
+            let _ = probe.append("x-probe" as FieldName, bytes as FieldValue);
+            if probe.has("x-probe" as FieldName) {
+                7;
+            } else {
+                0;
+            }
+        },
+        _ => 0,
+    };
+    assert probe_count == 7;
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

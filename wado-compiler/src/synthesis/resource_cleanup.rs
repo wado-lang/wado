@@ -812,16 +812,46 @@ fn elab_block_entry(
 
     if flow == Flow::Normal {
         // Drop resources declared in this block, innermost (last) first.
-        for slot in (entry..owned.len()).rev() {
-            if let Some(live) = owned[slot].take() {
-                let drops = drop_one(&live, cx);
-                out.extend(drops);
-            }
+        let drops: Vec<TirStmt> = (entry..owned.len())
+            .rev()
+            .filter_map(|slot| owned[slot].take())
+            .flat_map(|live| drop_one(&live, cx))
+            .collect();
+        if !drops.is_empty() {
+            out = append_block_drops(out, drops, cx);
         }
     }
     // Block-local slots leave scope; enclosing slots (with any transfers
     // applied within this block) remain visible to the caller.
     owned.truncate(entry);
+    out
+}
+
+/// Append end-of-scope `drops` to a block's statements without changing the
+/// block's value.
+///
+/// A block expression's value is its last statement (see
+/// [`crate::tir::block_result_type`]). Naively appending the drop statements
+/// would make the block evaluate to the last drop (`Unit`) and miscompile
+/// `let x = { ... }`. So when the block yields a value, the original
+/// statements are nested into an inner block expression, its value bound to a
+/// fresh local, the drops run, and that local is re-emitted as the value.
+fn append_block_drops(stmts: Vec<TirStmt>, drops: Vec<TirStmt>, cx: &mut Cx) -> Vec<TirStmt> {
+    let span = synth_span();
+    let inner = TirBlock { stmts, span };
+    let result_ty = crate::tir::block_result_type(&inner);
+    if result_ty == TypeTable::UNIT || result_ty == TypeTable::NEVER {
+        // The block yields nothing observable; the drops can simply run last.
+        let mut out = inner.stmts;
+        out.extend(drops);
+        return out;
+    }
+    // Preserve the value: `let __block_v = { <stmts> }; <drops>; __block_v`.
+    let (v, vname) = cx.alloc_local(result_ty, "block_v");
+    let inner_expr = TirExpr::new(TirExprKind::Block(inner), result_ty, span);
+    let mut out = vec![let_stmt(&vname, v, result_ty, inner_expr)];
+    out.extend(drops);
+    out.push(expr_stmt(local_ref(v, &vname, result_ty)));
     out
 }
 
@@ -1134,16 +1164,35 @@ fn elab_stmt(
             let value = value.map(|v| elab_value_expr(v, owned, cx));
             // `break` skips this block's exit drops; emit drops for resources
             // declared in this block here, innermost first.
-            for slot in (entry..owned.len()).rev() {
-                if let Some(live) = owned[slot].take() {
-                    let drops = drop_one(&live, cx);
+            let drops: Vec<TirStmt> = (entry..owned.len())
+                .rev()
+                .filter_map(|slot| owned[slot].take())
+                .flat_map(|live| drop_one(&live, cx))
+                .collect();
+            match value {
+                // Spill the break value so the drops run after it is computed
+                // (it may borrow a resource being dropped).
+                Some(value) if !drops.is_empty() => {
+                    let ty = value.type_id;
+                    let (tmp, tmp_name) = cx.alloc_local(ty, "drop_spill");
+                    out.push(let_stmt(&tmp_name, tmp, ty, value));
                     out.extend(drops);
+                    out.push(TirStmt {
+                        kind: TirStmtKind::Break {
+                            label,
+                            value: Some(local_ref(tmp, &tmp_name, ty)),
+                        },
+                        span,
+                    });
+                }
+                _ => {
+                    out.extend(drops);
+                    out.push(TirStmt {
+                        kind: TirStmtKind::Break { label, value },
+                        span,
+                    });
                 }
             }
-            out.push(TirStmt {
-                kind: TirStmtKind::Break { label, value },
-                span,
-            });
             Flow::Diverged
         }
 
@@ -1246,12 +1295,14 @@ fn reconcile(
                 (false, false) => owned[slot] = None,
                 (true, false) => {
                     let drops = drop_one(&live, cx);
-                    then_stmts.extend(drops);
+                    let s = std::mem::take(then_stmts);
+                    *then_stmts = append_block_drops(s, drops, cx);
                     owned[slot] = None;
                 }
                 (false, true) => {
                     let drops = drop_one(&live, cx);
-                    else_stmts.extend(drops);
+                    let s = std::mem::take(else_stmts);
+                    *else_stmts = append_block_drops(s, drops, cx);
                     owned[slot] = None;
                 }
             },
@@ -1412,8 +1463,8 @@ fn elab_arm_body(body: TirExpr, owned: &mut Owned, cx: &mut Cx, entry: usize) ->
     }
 }
 
-/// Append a `resource.drop` to a `match` arm body, spilling the arm value when
-/// the arm produces one so the drop runs after the value is computed.
+/// Append a `resource.drop` to a `match` arm body, preserving the arm's value
+/// (via [`append_block_drops`]) so the drop runs after the value is computed.
 fn append_arm_drop(arm: &mut TirMatchArm, live: &Live, cx: &mut Cx) {
     let body = std::mem::replace(
         &mut arm.body,
@@ -1421,7 +1472,7 @@ fn append_arm_drop(arm: &mut TirMatchArm, live: &Live, cx: &mut Cx) {
     );
     let type_id = body.type_id;
     let span = body.span;
-    let mut stmts = match body.kind {
+    let stmts = match body.kind {
         TirExprKind::Block(block) => block.stmts,
         other => vec![expr_stmt(TirExpr {
             kind: other,
@@ -1430,30 +1481,7 @@ fn append_arm_drop(arm: &mut TirMatchArm, live: &Live, cx: &mut Cx) {
         })],
     };
     let drops = drop_one(live, cx);
-    if type_id == TypeTable::UNIT || type_id == TypeTable::NEVER {
-        // The arm produces no value: the drop can simply run last.
-        stmts.extend(drops);
-    } else {
-        // Spill the value so the drop runs after it is computed; the spilled
-        // local becomes the arm's value.
-        let value = match stmts.pop() {
-            Some(TirStmt {
-                kind: TirStmtKind::Expr(expr),
-                ..
-            }) => expr,
-            other => {
-                if let Some(stmt) = other {
-                    stmts.push(stmt);
-                }
-                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span)
-            }
-        };
-        let value_ty = value.type_id;
-        let (tmp, tmp_name) = cx.alloc_local(value_ty, "drop_spill");
-        stmts.push(let_stmt(&tmp_name, tmp, value_ty, value));
-        stmts.extend(drops);
-        stmts.push(expr_stmt(local_ref(tmp, &tmp_name, value_ty)));
-    }
+    let stmts = append_block_drops(stmts, drops, cx);
     arm.body = TirExpr {
         kind: TirExprKind::Block(TirBlock { stmts, span }),
         type_id,
