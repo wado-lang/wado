@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779367955572,
+  "lastUpdate": 1779369790027,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24301,6 +24301,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/de53e523f25771119e98ec802262ed13e859ae4f"
         },
         "date": 1779367955279,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8f74bb924f6e1b7289f0a723a934a6ff39741d72",
+          "message": "Merge pull request #1142 from wado-lang/claude/wado-async-execution-LtcgS\n\nfix(serve): bound the response body pump with an idle timeout",
+          "timestamp": "2026-05-21T22:16:19+09:00",
+          "tree_id": "16ebd2b2ad6dedf666507033c626bc9d20486b0a",
+          "url": "https://github.com/wado-lang/wado/commit/8f74bb924f6e1b7289f0a723a934a6ff39741d72"
+        },
+        "date": 1779369789549,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
