@@ -17,10 +17,13 @@ export fn run() with Stdout {
         builtin::realloc(p, 0, 8, 0);
     }
 
-    // A sentinel allocation before and after the churn loop: if the
-    // heap creeps, the second sentinel lands at a higher address.
-    let before = builtin::realloc(0, 0, 8, 16);
-    builtin::realloc(before, 16, 8, 0);
+    // Probe before and after the churn loop with a 1024-byte payload —
+    // larger than every primed size (the largest is 512), so it can
+    // only be served from the fully coalesced region, never from a
+    // leftover small fragment. If coalescing degrades, the probe must
+    // bump-allocate and its address creeps upward.
+    let before = builtin::realloc(0, 0, 8, 1024);
+    builtin::realloc(before, 1024, 8, 0);
 
     for let mut i = 0; i < 1000; i += 1 {
         let mut live: Array<i32> = [];
@@ -33,9 +36,9 @@ export fn run() with Stdout {
         }
     }
 
-    let after = builtin::realloc(0, 0, 8, 16);
+    let after = builtin::realloc(0, 0, 8, 1024);
     assert after == before, `heap crept under mixed churn: before={before}, after={after}`;
-    builtin::realloc(after, 16, 8, 0);
+    builtin::realloc(after, 1024, 8, 0);
 
     println("ok");
 }
