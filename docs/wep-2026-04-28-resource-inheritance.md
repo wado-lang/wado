@@ -130,7 +130,7 @@ Given `Child <: Parent`:
 | `&Child`     | `&Child <: &Parent`                | Read-only view; every method available on `&Parent` is available on `&Child`.                                                                                                              |
 | `&mut Child` | **invariant** in the resource type | A `&mut Parent` permits writing back any `Parent` (e.g., `*r = other_parent`); allowing `&mut Child <: &mut Parent` would let an arbitrary `Parent` be assigned where `Child` is required. |
 
-Resource handles have value semantics, so the common case is plain value passing — implicit upcast happens at the call site:
+`externref`-backed resource handles have value semantics, so the common case is plain value passing — implicit upcast happens at the call site:
 
 ```wado
 fn read_node(n: Node) -> u16 { return n.node_type(); }
@@ -339,13 +339,17 @@ Consistency with Tide WEP examples (`el.downcast::<T>()`) and method-chain ergon
 
 #### Why value-returning, not `Option<&T>`
 
-In Wado, resource handles are themselves immutable values (their mutations all happen on the host side via `&self` methods — see the sidebar below). They have value semantics, no lifetimes, no borrow checker. Returning `Option<T>` rather than `Option<&T>` is the honest signature: the result is a new handle pointing at the same host object, and the source remains valid in parallel. There is no borrow to track.
+An `externref`-backed resource handle is itself an immutable value (its mutations all happen on the host side via `&self` methods — see the sidebar below). Such handles have value semantics, no lifetimes, no borrow checker. Returning `Option<T>` rather than `Option<&T>` is the honest signature: the result is a new handle pointing at the same host object, and the source remains valid in parallel. There is no borrow to track.
+
+(`i32`-backed CM resources are affine — move-only with a resource-scoped borrow check — per [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md). `extends` is gated on `externref` backing, so this section concerns `externref`-backed resources only.)
 
 There is no `downcast_mut`. Resources do not have `&mut self` methods (see sidebar), so a `&mut`-flavoured downcast has no API to feed.
 
-##### Sidebar: resource handles are immutable
+##### Sidebar: externref-backed resource handles are immutable
 
-Across the language, every `resource` method takes `&self`. The Wado-side handle (an `externref`) carries no mutable state of its own; all observable mutation occurs in the host object referenced by that handle and is invoked through ordinary `&self` host calls. There is no language-level rule preventing someone from writing `fn foo(&mut self)` on a resource today, but in this WEP's scope (`externref`-backed resources participating in `extends`) the pattern does not arise. A future WEP can decide whether to forbid `&mut self` on resources outright.
+Every `externref`-backed `resource` method takes `&self`. The Wado-side handle (an `externref`) carries no mutable state of its own; all observable mutation occurs in the host object referenced by that handle and is invoked through ordinary `&self` host calls. There is no language-level rule preventing someone from writing `fn foo(&mut self)` on a resource today, but in this WEP's scope (`externref`-backed resources participating in `extends`) the pattern does not arise. A future WEP can decide whether to forbid `&mut self` on resources outright.
+
+`i32`-backed CM resources differ: in addition to `&self` methods they have by-value consuming methods (e.g. `Request::consume_body`), which transfer ownership of the receiver. Their ownership model is specified in [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md).
 
 #### Allowed targets
 
@@ -601,6 +605,7 @@ Lands as one milestone to avoid an intermediate "compiles but does not run" stat
 
 ## See Also
 
+- [Resource Ownership](./wep-2026-05-21-resource-ownership.md) — affine ownership and the resource-scoped borrow checker for `i32`-backed resources; narrows this WEP's value-semantics wording to `externref`-backed resources
 - [GC in Components](./wep-2026-03-28-gc-in-components.md) — resource representation in CM-GC vs CM-LM
 - [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md) — how flat CM resources map to Wado today
 - [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md) — where the CM lowering happens

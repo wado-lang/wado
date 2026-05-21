@@ -111,3 +111,4 @@ It may include TODOs on WIP.
 - [Normalized IR (NIR) Layer](./wep-2026-05-11-nir.md)
 - [String API — checked / unchecked / internal Discipline](./wep-2026-05-16-string-checked-unchecked-discipline.md)
 - [Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md)
+- [Resource Ownership and a Resource-Scoped Borrow Checker](./wep-2026-05-21-resource-ownership.md)
