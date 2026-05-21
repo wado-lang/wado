@@ -404,9 +404,13 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(108)
 
 type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(109)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(110)
+type "functype//wasi/resource-drop:fields" = fn(i32);  // TypeId(110)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(111)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(111)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(112)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(113)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -432,6 +436,8 @@ import fn wasi/future-new from "wasi/future-new";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-write from "wasi/future-write";
+import fn wasi/resource-drop:fields from "wasi/resource-drop:fields";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/handle"(request) {
@@ -1131,6 +1137,9 @@ condition: clone_append matches { Ok(_) }
         drop("mem/realloc"(__fw_evt_3, 8, 4, 0));
     }
     drop("mem/realloc"(__fw_write_ptr_3, 40, 8, 0));
+    "wasi/resource-drop:fields"(cloned);
+    "wasi/resource-drop:fields"(headers);
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Request_get_headers"(self) with Request {

@@ -352,15 +352,17 @@ type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  /
 
 type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(106)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(107)
+type "functype//wasi/resource-drop:descriptor" = fn(i32);  // TypeId(107)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(108)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(108)
 
-type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(109)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(109)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(110)
+type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(110)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(111)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(111)
+
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(112)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -384,6 +386,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-filesystem from "wasi/future-drop-readable:transmission-filesystem";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
+import fn wasi/resource-drop:descriptor from "wasi/resource-drop:descriptor";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
@@ -517,6 +520,8 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
             "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncate to 5 succeeded"), used: 33 });
         } else {
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncate failed"), used: 25 });
+            "wasi/resource-drop:descriptor"(file);
+            "wasi/resource-drop:descriptor"(dir);
             return;
         }
         stat2 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat"(file));
@@ -632,10 +637,12 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
         } else {
         }
         drop("core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size_test.txt"), used: 17 })));
+        "wasi/resource-drop:descriptor"(file);
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("failed to create set_size_test.txt"), used: 34 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all set_size tests passed"), used: 25 });
+    "wasi/resource-drop:descriptor"(dir);
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

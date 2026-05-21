@@ -261,7 +261,7 @@ type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(48)
 
 type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(49)
 
-type "functype//wado-compiler/tests/fixtures/http_base64_decode.wado/handle" = fn();  // TypeId(50)
+type "functype//wado-compiler/tests/fixtures/http_base64_decode.wado/handle" = fn(i32);  // TypeId(50)
 
 type "functype//wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(51)
 
@@ -325,9 +325,11 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(80)
 
 type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(81)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(82)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(82)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(83)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(83)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(84)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -344,18 +346,19 @@ import fn wasi/future-new from "wasi/future-new";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-write from "wasi/future-write";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:core::base64::DECODE_TABLE: ref null "core:prelude//Array<u8>" = ref.null none;
 global mut global:__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/http_base64_decode.wado/handle"() {
+fn "wado-compiler/tests/fixtures/http_base64_decode.wado/handle"(request) {
     let result: ref null "core:prelude//Array<u8>";
-    let bytes_1: ref "core:prelude//Array<u8>";
+    let bytes_2: ref "core:prelude//Array<u8>";
     let __cond: bool;
     let headers: i32;
     let response: i32;
-    let bytes_10: ref "core:prelude//Array<u8>";
+    let bytes_11: ref "core:prelude//Array<u8>";
     let text: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/string.wado//String";
     let __local_14: ref "core:prelude/format.wado//Formatter";
@@ -495,11 +498,11 @@ fn "wado-compiler/tests/fixtures/http_base64_decode.wado/handle"() {
     let __local_165: i32;
     let __pattern_temp_2: ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let __local_169: ref null "core:prelude//Array<u8>";
-    let encoded_172: ref "core:prelude/string.wado//String";
-    let bytes_173: ref "core:prelude//Array<u8>";
+    let encoded_173: ref "core:prelude/string.wado//String";
+    let bytes_174: ref "core:prelude//Array<u8>";
     let v: ref "core:prelude/string.wado//String";
-    let encoded_184: ref "core:prelude/string.wado//String";
-    let bytes_185: ref "core:prelude//Array<u8>";
+    let encoded_185: ref "core:prelude/string.wado//String";
+    let bytes_186: ref "core:prelude//Array<u8>";
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -508,14 +511,14 @@ fn "wado-compiler/tests/fixtures/http_base64_decode.wado/handle"() {
         global:__modules_initialized = 1;
     };
     result = __inline_decode_3: block -> ref null "core:prelude//Array<u8>" {
-        encoded_172 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("YWJj"), used: 4 };
-        bytes_173 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: encoded_172.repr, used: encoded_172.used, index: 0 });
-        break __inline_decode_3: "core:base64/decode_impl"(bytes_173, bytes_173.used);
+        encoded_173 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("YWJj"), used: 4 };
+        bytes_174 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: encoded_173.repr, used: encoded_173.used, index: 0 });
+        break __inline_decode_3: "core:base64/decode_impl"(bytes_174, bytes_174.used);
         unreachable;
     };
     __cond = (if ref.is_null(result) == 0 -> bool {
-        bytes_1 = ref.as_non_null(result);
-        bytes_1.used == 3;
+        bytes_2 = ref.as_non_null(result);
+        bytes_2.used == 3;
     } else {
         0;
     });
@@ -872,14 +875,14 @@ condition: result matches { Some(bytes) && bytes.len() == 3 }
     }
     text = __inline__value_copy_T20_11: block -> ref "core:prelude/string.wado//String" {
         __local_169 = __inline_decode_12: block -> ref null "core:prelude//Array<u8>" {
-            encoded_184 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("YWJj"), used: 4 };
-            bytes_185 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: encoded_184.repr, used: encoded_184.used, index: 0 });
-            break __inline_decode_12: "core:base64/decode_impl"(bytes_185, bytes_185.used);
+            encoded_185 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("YWJj"), used: 4 };
+            bytes_186 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: encoded_185.repr, used: encoded_185.used, index: 0 });
+            break __inline_decode_12: "core:base64/decode_impl"(bytes_186, bytes_186.used);
             unreachable;
         };
         v = (if ref.is_null(__local_169) == 0 -> ref "core:prelude/string.wado//String" {
-            bytes_10 = ref.as_non_null(__local_169);
-            "core:prelude/string.wado/String::from_utf8_lossy<core:prelude/array.wado/Array<u8>>"(bytes_10);
+            bytes_11 = ref.as_non_null(__local_169);
+            "core:prelude/string.wado/String::from_utf8_lossy<core:prelude/array.wado/Array<u8>>"(bytes_11);
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("FAIL"), used: 4 };
         });
@@ -906,6 +909,7 @@ condition: result matches { Some(bytes) && bytes.len() == 3 }
         drop("mem/realloc"(__fw_evt_3, 8, 4, 0));
     }
     drop("mem/realloc"(__fw_write_ptr_3, 40, 8, 0));
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_binding__Fields_new"() with Fields {
@@ -942,7 +946,7 @@ fn "wado-compiler/tests/fixtures/http_base64_decode.wado/__cm_export__handle"(re
         global:core::base64::DECODE_TABLE = "core:base64/build_decode_table"();
         global:__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/http_base64_decode.wado/handle"();
+    "wado-compiler/tests/fixtures/http_base64_decode.wado/handle"(request);
 }
 
 fn "core:base64/build_decode_table"() {

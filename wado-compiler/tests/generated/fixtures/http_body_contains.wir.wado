@@ -234,7 +234,7 @@ type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(43)
 
 type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(44)
 
-type "functype//wado-compiler/tests/fixtures/http_body_contains.wado/handle" = fn();  // TypeId(45)
+type "functype//wado-compiler/tests/fixtures/http_body_contains.wado/handle" = fn(i32);  // TypeId(45)
 
 type "functype//wado-compiler/tests/fixtures/http_body_contains.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(46)
 
@@ -260,6 +260,8 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(56)
 
 type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(57)
 
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(58)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/task-return from "wasi/task-return";
@@ -274,11 +276,12 @@ import fn wasi/future-new from "wasi/future-new";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-write from "wasi/future-write";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
-fn "wado-compiler/tests/fixtures/http_body_contains.wado/handle"() {
+fn "wado-compiler/tests/fixtures/http_body_contains.wado/handle"(request) {
     let headers: i32;
     let response: i32;
-    let __b_7: ref "core:prelude//Array<u8>";
+    let __b_8: ref "core:prelude//Array<u8>";
     let data: ref "core:prelude//Array<u8>";
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_1: i32;
@@ -741,8 +744,8 @@ fn "wado-compiler/tests/fixtures/http_body_contains.wado/handle"() {
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     data = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __b_7 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33), used: 13 };
-        break __seq_lit: __b_7;
+        __b_8 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33), used: 13 };
+        break __seq_lit: __b_8;
         unreachable;
     };
     "core:internal/cm_stream_write_u8"(__mv_hi_2, data);
@@ -765,6 +768,7 @@ fn "wado-compiler/tests/fixtures/http_body_contains.wado/handle"() {
         drop("mem/realloc"(__fw_evt_3, 8, 4, 0));
     }
     drop("mem/realloc"(__fw_write_ptr_3, 40, 8, 0));
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_body_contains.wado/__cm_binding__Fields_new"() with Fields {
@@ -794,7 +798,7 @@ fn "wado-compiler/tests/fixtures/http_body_contains.wado/__cm_binding__Response_
 }
 
 fn "wado-compiler/tests/fixtures/http_body_contains.wado/__cm_export__handle"(request) {
-    "wado-compiler/tests/fixtures/http_body_contains.wado/handle"();
+    "wado-compiler/tests/fixtures/http_body_contains.wado/handle"(request);
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {

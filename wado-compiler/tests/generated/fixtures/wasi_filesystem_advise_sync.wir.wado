@@ -308,15 +308,17 @@ type "functype//wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/__
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/__Closure_7::__call" = fn(i32) -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(92)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(93)
+type "functype//wasi/resource-drop:descriptor" = fn(i32);  // TypeId(93)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(94)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(94)
 
-type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(95)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(95)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(96)
+type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(96)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(97)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(97)
+
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(98)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -336,6 +338,7 @@ import fn wasi/wasi:filesystem/Descriptor::stat from "wasi/wasi:filesystem/Descr
 import fn wasi/wasi:filesystem/Descriptor::open_at from "wasi/wasi:filesystem/Descriptor::open_at";
 import fn wasi/wasi:filesystem/Descriptor::unlink_file_at from "wasi/wasi:filesystem/Descriptor::unlink_file_at";
 import memory (1) from "mem/memory";
+import fn wasi/resource-drop:descriptor from "wasi/resource-drop:descriptor";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-filesystem from "wasi/future-drop-readable:transmission-filesystem";
@@ -401,6 +404,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/run"() with St
         } else {
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("advise: Normal failed"), used: 21 });
         }
+        "wasi/resource-drop:descriptor"(file);
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("failed to open hello.txt for advise test"), used: 40 });
     }
@@ -434,10 +438,12 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/run"() with St
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sync: failed"), used: 12 });
         }
         drop("core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/__cm_binding__Descriptor_unlink_file_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sync_test.txt"), used: 13 })));
+        "wasi/resource-drop:descriptor"(wfile);
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("failed to create sync_test.txt"), used: 30 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all advise/sync tests passed"), used: 28 });
+    "wasi/resource-drop:descriptor"(dir);
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

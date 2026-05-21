@@ -953,7 +953,7 @@ fn elab_stmt(
             let drops: Vec<Live> = owned
                 .iter_mut()
                 .rev()
-                .filter_map(|slot| slot.take())
+                .filter_map(std::option::Option::take)
                 .collect();
             if drops.is_empty() {
                 out.push(TirStmt {
@@ -962,26 +962,23 @@ fn elab_stmt(
                 });
                 return Flow::Diverged;
             }
-            match value {
-                Some(value) => {
-                    // Spill the return value so the drops run after it is
-                    // computed (the value may borrow a dropped resource).
-                    let ty = value.type_id;
-                    let (tmp, tmp_name) = cx.alloc_local(ty, "drop_spill");
-                    out.push(let_stmt(&tmp_name, tmp, ty, value));
-                    for live in &drops {
-                        let stmts = drop_one(live, cx);
-                        out.extend(stmts);
-                    }
-                    out.push(return_stmt(Some(local_ref(tmp, &tmp_name, ty))));
+            if let Some(value) = value {
+                // Spill the return value so the drops run after it is
+                // computed (the value may borrow a dropped resource).
+                let ty = value.type_id;
+                let (tmp, tmp_name) = cx.alloc_local(ty, "drop_spill");
+                out.push(let_stmt(&tmp_name, tmp, ty, value));
+                for live in &drops {
+                    let stmts = drop_one(live, cx);
+                    out.extend(stmts);
                 }
-                None => {
-                    for live in &drops {
-                        let stmts = drop_one(live, cx);
-                        out.extend(stmts);
-                    }
-                    out.push(return_stmt(None));
+                out.push(return_stmt(Some(local_ref(tmp, &tmp_name, ty))));
+            } else {
+                for live in &drops {
+                    let stmts = drop_one(live, cx);
+                    out.extend(stmts);
                 }
+                out.push(return_stmt(None));
             }
             Flow::Diverged
         }
@@ -1354,7 +1351,7 @@ fn elab_value_expr(expr: TirExpr, owned: &mut Owned, cx: &mut Cx) -> TirExpr {
                 if kept {
                     continue;
                 }
-                for (o, _, idx) in arm_states.iter() {
+                for (o, _, idx) in &arm_states {
                     if live_arm_idxs.contains(idx) && o[slot].is_some() {
                         append_arm_drop(&mut new_arms[*idx], &live, cx);
                     }

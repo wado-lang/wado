@@ -278,7 +278,7 @@ type "functype//wasi/wasi:http/Fields::copy_all" = fn(i32, i32);  // TypeId(53)
 
 type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(54)
 
-type "functype//wado-compiler/tests/fixtures/http_fields_copy_all.wado/handle" = fn();  // TypeId(55)
+type "functype//wado-compiler/tests/fixtures/http_fields_copy_all.wado/handle" = fn(i32);  // TypeId(55)
 
 type "functype//wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(56)
 
@@ -336,13 +336,15 @@ type "functype//wasi/future-new" = fn() -> i64;  // TypeId(82)
 
 type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(83)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(84)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(84)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(85)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(85)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(86)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(86)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(87)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(87)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(88)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -359,15 +361,16 @@ import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
 import fn wasi/future-new from "wasi/future-new";
 import fn wasi/future-write from "wasi/future-write";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/handle"() {
+fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/handle"(request) {
     let fields: i32;
-    let __b_1: ref "core:prelude//Array<u8>";
+    let __b_2: ref "core:prelude//Array<u8>";
     let v1: ref "core:prelude//Array<u8>";
-    let __b_3: ref "core:prelude//Array<u8>";
+    let __b_4: ref "core:prelude//Array<u8>";
     let v2: ref "core:prelude//Array<u8>";
     let all: ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>>";
     let __v0: i32;
@@ -510,17 +513,17 @@ fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/handle"() {
     let __local_164: i32;
     let __local_165: i32;
     let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
-    let f_182: ref "core:prelude/format.wado//Formatter";
-    let f_187: ref "core:prelude/format.wado//Formatter";
+    let f_183: ref "core:prelude/format.wado//Formatter";
+    let f_188: ref "core:prelude/format.wado//Formatter";
     fields = "wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Fields_new"();
     v1 = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __b_1 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(97), used: 1 };
-        break __seq_lit: __b_1;
+        __b_2 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(97), used: 1 };
+        break __seq_lit: __b_2;
         unreachable;
     };
     v2 = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __b_3 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(98), used: 1 };
-        break __seq_lit: __b_3;
+        __b_4 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(98), used: 1 };
+        break __seq_lit: __b_4;
         unreachable;
     };
     drop("wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Fields_append"(fields, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-first"), used: 7 }, v1));
@@ -545,15 +548,15 @@ fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/handle"() {
             "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_fields_copy_all.wado"), used: 54 });
             "core:prelude/string.wado/String::push"(__local_13, 58);
             __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
-            f_182 = __local_14;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(15, f_182);
+            f_183 = __local_14;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(15, f_183);
             "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: all.len() == 2
 "), used: 27 });
             "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all.len(): "), used: 11 });
             __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
-            f_187 = __local_14;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_187);
+            f_188 = __local_14;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_188);
             "core:prelude/string.wado/String::push"(__local_13, 10);
             break __tmpl: __local_13;
             unreachable;
@@ -897,6 +900,7 @@ condition: all.len() == 2
         drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
     }
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Fields_new"() with Fields {
@@ -1052,7 +1056,7 @@ fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Respons
 }
 
 fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_export__handle"(request) {
-    "wado-compiler/tests/fixtures/http_fields_copy_all.wado/handle"();
+    "wado-compiler/tests/fixtures/http_fields_copy_all.wado/handle"(request);
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {

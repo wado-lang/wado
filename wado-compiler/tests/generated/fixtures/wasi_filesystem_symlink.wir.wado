@@ -367,17 +367,19 @@ type "functype//wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__Clos
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__Closure_8::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";  // TypeId(111)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(112)
+type "functype//wasi/resource-drop:descriptor" = fn(i32);  // TypeId(112)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(113)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(113)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(114)
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(114)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(115)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(115)
 
-type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(116)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(116)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(117)
+type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(117)
+
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(118)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -399,6 +401,7 @@ import fn wasi/wasi:filesystem/Descriptor::readlink_at from "wasi/wasi:filesyste
 import fn wasi/wasi:filesystem/Descriptor::symlink_at from "wasi/wasi:filesystem/Descriptor::symlink_at";
 import fn wasi/wasi:filesystem/Descriptor::unlink_file_at from "wasi/wasi:filesystem/Descriptor::unlink_file_at";
 import memory (1) from "mem/memory";
+import fn wasi/resource-drop:descriptor from "wasi/resource-drop:descriptor";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -451,9 +454,11 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
                 "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink_at: not supported (skipping symlink tests)"), used: 50 });
                 "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir);
                 "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all symlink tests passed"), used: 24 });
+                "wasi/resource-drop:descriptor"(dir);
                 return;
             }
             "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink_at: failed with unexpected error"), used: 40 });
+            "wasi/resource-drop:descriptor"(dir);
             return;
         } else {
         }
@@ -527,6 +532,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
         "wasi/stream-drop-writable"(__mv_hi_1);
         "wasi/future-drop-readable:transmission-cli"(sub);
         "wasi/future-drop-readable:transmission-filesystem"(read_future);
+        "wasi/resource-drop:descriptor"(linked_file);
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("symlink follow: failed to open"), used: 30 });
     }
@@ -538,6 +544,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/run"() with Stdout
     }
     "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all symlink tests passed"), used: 24 });
+    "wasi/resource-drop:descriptor"(dir);
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/test_link_at"(dir) with Stdout, Stderr, Descriptor {

@@ -219,7 +219,7 @@ type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(37)
 
 type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(38)
 
-type "functype//wado-compiler/tests/fixtures/cm_waitable_set_new.wado/handle" = fn();  // TypeId(39)
+type "functype//wado-compiler/tests/fixtures/cm_waitable_set_new.wado/handle" = fn(i32);  // TypeId(39)
 
 type "functype//wado-compiler/tests/fixtures/cm_waitable_set_new.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(40)
 
@@ -243,6 +243,8 @@ type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(49)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(50)
 
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(51)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
@@ -254,8 +256,9 @@ import fn wasi/future-new from "wasi/future-new";
 import fn wasi/future-write from "wasi/future-write";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
-fn "wado-compiler/tests/fixtures/cm_waitable_set_new.wado/handle"() {
+fn "wado-compiler/tests/fixtures/cm_waitable_set_new.wado/handle"(request) {
     let ws: i32;
     let headers: i32;
     let response: i32;
@@ -734,6 +737,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_new.wado/handle"() {
         drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
     }
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/cm_waitable_set_new.wado/__cm_binding__Fields_new"() with Fields {
@@ -763,7 +767,7 @@ fn "wado-compiler/tests/fixtures/cm_waitable_set_new.wado/__cm_binding__Response
 }
 
 fn "wado-compiler/tests/fixtures/cm_waitable_set_new.wado/__cm_export__handle"(request) {
-    "wado-compiler/tests/fixtures/cm_waitable_set_new.wado/handle"();
+    "wado-compiler/tests/fixtures/cm_waitable_set_new.wado/handle"(request);
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {

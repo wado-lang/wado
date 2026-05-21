@@ -321,7 +321,7 @@ type "functype//wasi/wasi:http/Request::get_authority" = fn(i32, i32);  // TypeI
 
 type "functype//wasi/wasi:http/Request::set_authority" = fn(i32, i32, i32, i32) -> i32;  // TypeId(65)
 
-type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/handle" = fn();  // TypeId(66)
+type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/handle" = fn(i32);  // TypeId(66)
 
 type "functype//wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(67)
 
@@ -391,15 +391,17 @@ type "functype//wasi/future-new" = fn() -> i64;  // TypeId(99)
 
 type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(100)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(101)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(101)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(102)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(102)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(103)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(103)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(104)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(104)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(105)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(105)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(106)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -422,27 +424,28 @@ import fn wasi/wasi:http/Request::set_authority from "wasi/wasi:http/Request::se
 import memory (1) from "mem/memory";
 import fn wasi/future-new from "wasi/future-new";
 import fn wasi/future-write from "wasi/future-write";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
-fn "wado-compiler/tests/fixtures/http_request_setter_errors.wado/handle"() with Client {
+fn "wado-compiler/tests/fixtures/http_request_setter_errors.wado/handle"(request) with Client {
     let headers: i32;
     let out_req: i32;
     let ok_path: ref "core:prelude/types.wado//Result<(),()>";
-    let __cond_6: bool;
+    let __cond_7: bool;
     let none_path: ref "core:prelude/types.wado//Result<(),()>";
-    let __cond_8: bool;
     let __cond_9: bool;
+    let __cond_10: bool;
     let none_scheme: ref "core:prelude/types.wado//Result<(),()>";
-    let __cond_11: bool;
     let __cond_12: bool;
+    let __cond_13: bool;
     let none_auth: ref "core:prelude/types.wado//Result<(),()>";
-    let __cond_14: bool;
     let __cond_15: bool;
+    let __cond_16: bool;
     let ok_method: ref "core:prelude/types.wado//Result<(),()>";
-    let __cond_17: bool;
+    let __cond_18: bool;
     let result: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __local_21: ref "core:prelude/string.wado//String";
     let __local_22: ref "core:prelude/format.wado//Formatter";
@@ -603,12 +606,12 @@ fn "wado-compiler/tests/fixtures/http_request_setter_errors.wado/handle"() with 
     __pattern_temp_1 = "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_1, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 });
     out_req = __pattern_temp_1.0;
     ok_path = "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_set_path_with_query"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/valid"), used: 6 });
-    __cond_6 = (if ok_path.discriminant == 0 -> bool {
+    __cond_7 = (if ok_path.discriminant == 0 -> bool {
         1;
     } else {
         0;
     });
-    if __cond_6 == 0 {
+    if __cond_7 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_21 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(111), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
@@ -635,12 +638,12 @@ condition: ok_path matches { Ok(_) }
         unreachable;
     }
     none_path = "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_set_path_with_query"(out_req, ref.null none);
-    __cond_8 = (if none_path.discriminant == 0 -> bool {
+    __cond_9 = (if none_path.discriminant == 0 -> bool {
         1;
     } else {
         0;
     });
-    if __cond_8 == 0 {
+    if __cond_9 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_23 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(113), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_23, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
@@ -668,12 +671,12 @@ condition: none_path matches { Ok(_) }
     }
     let __match_scrut_2: ref null "core:prelude/string.wado//String";
     __match_scrut_2 = "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_get_path_with_query"(out_req);
-    __cond_9 = (if ref.is_null(__match_scrut_2) -> bool {
+    __cond_10 = (if ref.is_null(__match_scrut_2) -> bool {
         1;
     } else {
         0;
     });
-    if __cond_9 == 0 {
+    if __cond_10 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_25 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(132), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
@@ -700,12 +703,12 @@ condition: out_req.get_path_with_query() matches { None }
         unreachable;
     }
     none_scheme = "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_set_scheme"(out_req, ref.null none);
-    __cond_11 = (if none_scheme.discriminant == 0 -> bool {
+    __cond_12 = (if none_scheme.discriminant == 0 -> bool {
         1;
     } else {
         0;
     });
-    if __cond_11 == 0 {
+    if __cond_12 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_27 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(115), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
@@ -733,12 +736,12 @@ condition: none_scheme matches { Ok(_) }
     }
     let __match_scrut_4: ref null "wasi:http/types.wado//Scheme";
     __match_scrut_4 = "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_get_scheme"(out_req);
-    __cond_12 = (if ref.is_null(__match_scrut_4) -> bool {
+    __cond_13 = (if ref.is_null(__match_scrut_4) -> bool {
         1;
     } else {
         0;
     });
-    if __cond_12 == 0 {
+    if __cond_13 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_29 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(123), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_29, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
@@ -765,12 +768,12 @@ condition: out_req.get_scheme() matches { None }
         unreachable;
     }
     none_auth = "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_set_authority"(out_req, ref.null none);
-    __cond_14 = (if none_auth.discriminant == 0 -> bool {
+    __cond_15 = (if none_auth.discriminant == 0 -> bool {
         1;
     } else {
         0;
     });
-    if __cond_14 == 0 {
+    if __cond_15 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_31 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(113), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_31, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
@@ -798,12 +801,12 @@ condition: none_auth matches { Ok(_) }
     }
     let __match_scrut_6: ref null "core:prelude/string.wado//String";
     __match_scrut_6 = "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_get_authority"(out_req);
-    __cond_15 = (if ref.is_null(__match_scrut_6) -> bool {
+    __cond_16 = (if ref.is_null(__match_scrut_6) -> bool {
         1;
     } else {
         0;
     });
-    if __cond_15 == 0 {
+    if __cond_16 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_33 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(126), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_33, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
@@ -830,12 +833,12 @@ condition: out_req.get_authority() matches { None }
         unreachable;
     }
     ok_method = "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Request_set_method"(out_req, struct.new "wasi:http/types.wado//Method" { 0 });
-    __cond_17 = (if ok_method.discriminant == 0 -> bool {
+    __cond_18 = (if ok_method.discriminant == 0 -> bool {
         1;
     } else {
         0;
     });
-    if __cond_17 == 0 {
+    if __cond_18 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_35 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(113), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_35, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
@@ -1196,6 +1199,7 @@ condition: ok_method matches { Ok(_) }
         }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_binding__Fields_new"() with Fields {
@@ -1813,7 +1817,7 @@ fn "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_lift__Clie
 }
 
 fn "wado-compiler/tests/fixtures/http_request_setter_errors.wado/__cm_export__handle"(request) {
-    "wado-compiler/tests/fixtures/http_request_setter_errors.wado/handle"();
+    "wado-compiler/tests/fixtures/http_request_setter_errors.wado/handle"(request);
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {

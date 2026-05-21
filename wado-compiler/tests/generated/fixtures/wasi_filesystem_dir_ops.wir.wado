@@ -245,21 +245,23 @@ type "functype//wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__Clos
 
 type "functype//wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__Closure_3::__call" = fn(i32) -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(74)
 
-type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(75)
+type "functype//wasi/resource-drop:descriptor" = fn(i32);  // TypeId(75)
 
-type "functype//wasi/stream-drop-readable:directory-entry" = fn(i32);  // TypeId(76)
+type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(76)
 
-type "functype//wasi/stream-read:directory-entry" = fn(i32, i32, i32) -> i32;  // TypeId(77)
+type "functype//wasi/stream-drop-readable:directory-entry" = fn(i32);  // TypeId(77)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(78)
+type "functype//wasi/stream-read:directory-entry" = fn(i32, i32, i32) -> i32;  // TypeId(78)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(79)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(79)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(80)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(80)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(81)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(81)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(82)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(82)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(83)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -275,6 +277,7 @@ import fn wasi/wasi:filesystem/Descriptor::read_directory from "wasi/wasi:filesy
 import fn wasi/wasi:filesystem/Descriptor::create_directory_at from "wasi/wasi:filesystem/Descriptor::create_directory_at";
 import fn wasi/wasi:filesystem/Descriptor::remove_directory_at from "wasi/wasi:filesystem/Descriptor::remove_directory_at";
 import memory (1) from "mem/memory";
+import fn wasi/resource-drop:descriptor from "wasi/resource-drop:descriptor";
 import fn wasi/future-drop-readable:transmission-filesystem from "wasi/future-drop-readable:transmission-filesystem";
 import fn wasi/stream-drop-readable:directory-entry from "wasi/stream-drop-readable:directory-entry";
 import fn wasi/stream-read:directory-entry from "wasi/stream-read:directory-entry";
@@ -332,6 +335,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("create_directory_at: succeeded"), used: 30 });
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("create_directory_at: failed"), used: 27 });
+        "wasi/resource-drop:descriptor"(dir);
         return;
     }
     mkdir_dup = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_create_directory_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 }));
@@ -469,6 +473,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("remove_directory_at: should have failed"), used: 39 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all dir_ops tests passed"), used: 24 });
+    "wasi/resource-drop:descriptor"(dir);
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

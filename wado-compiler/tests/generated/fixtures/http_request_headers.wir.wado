@@ -322,13 +322,17 @@ type "functype//wasi/future-new" = fn() -> i64;  // TypeId(81)
 
 type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(82)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(83)
+type "functype//wasi/resource-drop:fields" = fn(i32);  // TypeId(83)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(84)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(84)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(85)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(85)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(86)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(86)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(87)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(88)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -346,6 +350,8 @@ import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
 import fn wasi/future-new from "wasi/future-new";
 import fn wasi/future-write from "wasi/future-write";
+import fn wasi/resource-drop:fields from "wasi/resource-drop:fields";
+import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
@@ -912,6 +918,8 @@ condition: values.len() == 1
         drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
     }
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
+    "wasi/resource-drop:fields"(req_headers);
+    "wasi/resource-drop:request"(request);
 }
 
 fn "wado-compiler/tests/fixtures/http_request_headers.wado/__cm_binding__Request_get_headers"(self) with Request {
