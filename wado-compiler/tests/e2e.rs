@@ -1060,9 +1060,5 @@ test "passes unexpectedly" {
 // labeled-block break null-coercion / shadowed-label fixtures added
 // labeled-block break null-inference error fixtures added
 // match / if all-null inference error fixtures added
-<<<<<<< HEAD
 // resource-cleanup fixtures added (unused request drop, value-block drop)
-||||||| e38dfb8f
-=======
 // uninferable method type parameter error fixture added
->>>>>>> origin/main
