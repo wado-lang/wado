@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779356984307,
+  "lastUpdate": 1779367955572,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24257,6 +24257,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/730d06d34f7f8a75ffa478bb4226389a45652049"
         },
         "date": 1779356983855,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "de53e523f25771119e98ec802262ed13e859ae4f",
+          "message": "Merge pull request #1141 from wado-lang/claude/allocator-test-setup-seBBg\n\ntest: cover freelist allocator behaviors with e2e fixtures",
+          "timestamp": "2026-05-21T21:45:49+09:00",
+          "tree_id": "57a752bf0f00702e2176c162344a8d1e691a6b71",
+          "url": "https://github.com/wado-lang/wado/commit/de53e523f25771119e98ec802262ed13e859ae4f"
+        },
+        "date": 1779367955279,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
