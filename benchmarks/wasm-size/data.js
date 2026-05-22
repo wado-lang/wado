@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779400329689,
+  "lastUpdate": 1779409330709,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24389,6 +24389,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d989487e0bfeabafcf852a9e89642ae84a3c6871"
         },
         "date": 1779400329361,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "48c084ec6778ab525cfe0b971419df857d631da0",
+          "message": "Merge pull request #1144 from wado-lang/claude/clippy-warnings-cleanup-pI1Db\n\nFix all clippy warnings across the project",
+          "timestamp": "2026-05-22T09:14:50+09:00",
+          "tree_id": "c15fcea9d2acb9b35eedfb9d8982ed8dad112279",
+          "url": "https://github.com/wado-lang/wado/commit/48c084ec6778ab525cfe0b971419df857d631da0"
+        },
+        "date": 1779409330364,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
