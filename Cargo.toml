@@ -107,6 +107,19 @@ lto = "thin"
 codegen-units = 1
 strip = "symbols"
 
+# `profiling` is `release` with debug info kept, for sampling profilers
+# (samply, perf, Instruments). It matches the production codegen
+# (`lto`/`codegen-units` are inherited) but keeps symbols and full
+# DWARF so inlined frames resolve. Build with
+# `cargo build --profile profiling --bin wado`. It lives in its own
+# `target/profiling/` dir, so it never invalidates the `release` cache
+# the way overriding release via `CARGO_PROFILE_RELEASE_*` would.
+# See the `profile-compiler` skill.
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false
+
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 disallowed_types = "warn"
