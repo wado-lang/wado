@@ -27,7 +27,7 @@ use tokio::net::TcpListener;
 use tokio::sync::{Notify, mpsc, oneshot, watch};
 use tokio::task::JoinSet;
 use wasmtime::component::{Accessor, AccessorTask, Component};
-use wasmtime::{AsContextMut, Engine, Store};
+use wasmtime::{AsContextMut, Engine, GuestProfiler, Store, UpdateDeadline};
 use wasmtime_wasi_http::p3::Request as WasiRequest;
 use wasmtime_wasi_http::p3::bindings::http::types::ErrorCode as HttpErrorCode;
 use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
@@ -35,7 +35,7 @@ use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags, OptLevel};
 use crate::manifest;
-use crate::runtime::{self, Preopens, WasiState};
+use crate::runtime::{self, Preopens, ProfileMode, WasiState};
 use wado_compiler::LogLevel;
 
 /// Default per-request timeout in seconds. A guest that fails to produce a
@@ -82,6 +82,8 @@ pub struct ServeOptions {
     pub recycle_requests: u64,
     /// Ceiling on concurrently in-flight requests.
     pub max_concurrency: usize,
+    /// Guest profiling mode. `--profile guest` samples a single worker.
+    pub profile: ProfileMode,
 }
 
 #[derive(Clone, Copy)]
@@ -97,6 +99,7 @@ enum Opt {
     Workers,
     RecycleRequests,
     MaxConcurrency,
+    Profile,
     Help,
 }
 
@@ -128,6 +131,13 @@ const MAX_CONCURRENCY_SPEC: args::OptSpec = args::OptSpec {
     desc: "Max concurrently in-flight requests (default: 1024)",
 };
 
+const PROFILE_SPEC: args::OptSpec = args::OptSpec {
+    long: Some("profile"),
+    short: None,
+    value: Some("<mode>"),
+    desc: "Enable guest profiling (forces --workers 1):\n  guest[,path[,interval_ms]]  Cross-platform guest profiling\n                               (default: profile.json, 10ms)\nThe profile is written on shutdown (Ctrl-C).",
+};
+
 impl Opt {
     const ALL: &[Self] = &[
         Self::Addr,
@@ -141,6 +151,7 @@ impl Opt {
         Self::Workers,
         Self::RecycleRequests,
         Self::MaxConcurrency,
+        Self::Profile,
         Self::Help,
     ];
 
@@ -167,6 +178,7 @@ impl Opt {
             Self::Workers => WORKERS_SPEC,
             Self::RecycleRequests => RECYCLE_REQUESTS_SPEC,
             Self::MaxConcurrency => MAX_CONCURRENCY_SPEC,
+            Self::Profile => PROFILE_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -236,6 +248,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut workers: Option<usize> = None;
     let mut recycle_requests: u64 = DEFAULT_RECYCLE_REQUESTS;
     let mut max_concurrency: usize = DEFAULT_MAX_CONCURRENCY;
+    let mut profile = ProfileMode::None;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -278,6 +291,15 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                     })?;
                     max_concurrency = n as usize;
                 }
+                Opt::Profile => {
+                    let spec = args::require_string(&mut parser)?;
+                    profile = crate::run::parse_profile(&spec)?;
+                    if !matches!(profile, ProfileMode::Guest { .. }) {
+                        return Err(CliExit::error(
+                            "wado serve supports only --profile guest".to_string(),
+                        ));
+                    }
+                }
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -312,6 +334,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         workers,
         recycle_requests,
         max_concurrency,
+        profile,
     })
 }
 
@@ -664,6 +687,18 @@ enum WorkerStop {
     Shutdown,
 }
 
+/// Shared guest-profiler handle for `--profile guest`.
+///
+/// The profiler is component-scoped, so it outlives worker recycling: each
+/// fresh worker store generation re-registers the epoch-deadline sampling
+/// callback against the same profiler. The profile is written once on
+/// shutdown.
+#[derive(Clone)]
+struct GuestProfilerHandle {
+    profiler: Arc<Mutex<Option<GuestProfiler>>>,
+    interval: Duration,
+}
+
 /// One step of a worker's dispatch loop.
 enum Step {
     /// A job slot was produced into the loop's `job` local: `Some` is a
@@ -705,10 +740,21 @@ async fn worker_loop(
     recycle_requests: u64,
     timeout_secs: u64,
     fatal: Arc<Notify>,
+    profiler: Option<GuestProfilerHandle>,
 ) {
     // Grace over the client-facing timeout; also clears the 1s epoch-tick
     // granularity so the first-byte 504 reliably precedes the epoch trap.
-    let epoch_ticks = timeout_secs.saturating_add(5);
+    //
+    // When guest profiling is active the epoch ticker runs at the sampling
+    // interval and every tick must reach the deadline callback, so the
+    // deadline is armed at 1 tick. The runaway-guest epoch trap is thereby
+    // disabled for the profiling session; the client-facing first-byte 504
+    // still bounds a stuck request.
+    let epoch_ticks = if profiler.is_some() {
+        1
+    } else {
+        timeout_secs.saturating_add(5)
+    };
     // Idle timeout handed to every `HandlerTask` for its body pump.
     let request_timeout = Duration::from_secs(timeout_secs);
     loop {
@@ -721,6 +767,19 @@ async fn worker_loop(
         // turn (see below), so a healthy worker never trips it; a guest
         // that runs away in pure wasm does.
         store.set_epoch_deadline(epoch_ticks);
+        // Under `--profile guest`, sample the profiler on every epoch
+        // tick. The callback re-arms the deadline at 1 so it fires again
+        // next tick.
+        if let Some(ref handle) = profiler {
+            let profiler = Arc::clone(&handle.profiler);
+            let interval = handle.interval;
+            store.epoch_deadline_callback(move |store_ctx| {
+                if let Some(ref mut p) = *profiler.lock().unwrap() {
+                    p.sample(&store_ctx, interval);
+                }
+                Ok(UpdateDeadline::Continue(1))
+            });
+        }
         let service = match service_pre.instantiate_async(&mut store).await {
             Ok(service) => Arc::new(service),
             Err(e) => {
@@ -829,6 +888,7 @@ async fn run_http_server(
     workers: usize,
     recycle_requests: u64,
     max_concurrency: usize,
+    profile: ProfileMode,
 ) -> Result<()> {
     // `workers` and `max_concurrency` are bounded to `u32` range in
     // `parse_args`, so these conversions never fail.
@@ -847,6 +907,26 @@ async fn run_http_server(
     let instance_pre = linker.instantiate_pre(&component)?;
     let service_pre = Arc::new(ServicePre::<WasiState>::new(instance_pre)?);
     drop(linker);
+
+    // Set up the guest profiler before the component handle is dropped.
+    // The profiler is component-scoped; each worker store re-registers the
+    // sampling callback (see `worker_loop`).
+    let profiler_handle = if let ProfileMode::Guest { interval_ms, .. } = &profile {
+        let interval = Duration::from_millis(*interval_ms);
+        let profiler = GuestProfiler::new_component(
+            &engine,
+            "wado",
+            interval,
+            component.clone(),
+            std::iter::empty::<(String, wasmtime::Module)>(),
+        )?;
+        Some(GuestProfilerHandle {
+            profiler: Arc::new(Mutex::new(Some(profiler))),
+            interval,
+        })
+    } else {
+        None
+    };
     drop(component);
 
     // One worker = one long-lived component instance on its own store and
@@ -874,6 +954,7 @@ async fn run_http_server(
             recycle_requests,
             timeout.as_secs().max(1),
             Arc::clone(&fatal),
+            profiler_handle.clone(),
         )));
     }
     // Coarse server-wide clock for the first-byte timeout. One ticker
@@ -913,6 +994,13 @@ async fn run_http_server(
     // tokio-task ticker would then be starved by the very guest it exists
     // to trap — the epoch would never advance and the server would
     // deadlock. A kernel-scheduled OS thread keeps ticking regardless.
+    // Under `--profile guest` the ticker runs at the sampling interval so
+    // the deadline callback samples at that cadence; otherwise it ticks at
+    // the coarse runaway-guest granularity.
+    let epoch_tick = match &profile {
+        ProfileMode::Guest { interval_ms, .. } => Duration::from_millis(*interval_ms),
+        _ => Duration::from_millis(EPOCH_TICK_MS),
+    };
     let epoch_stop = Arc::new((Mutex::new(false), Condvar::new()));
     let epoch_ticker = {
         let engine = engine.clone();
@@ -921,9 +1009,7 @@ async fn run_http_server(
             let (lock, cvar) = &*epoch_stop;
             let mut stop = lock.lock().unwrap();
             while !*stop {
-                let (next, wait) = cvar
-                    .wait_timeout(stop, Duration::from_millis(EPOCH_TICK_MS))
-                    .unwrap();
+                let (next, wait) = cvar.wait_timeout(stop, epoch_tick).unwrap();
                 stop = next;
                 if wait.timed_out() {
                     engine.increment_epoch();
@@ -1053,6 +1139,23 @@ async fn run_http_server(
     }
     let _ = epoch_ticker.join();
 
+    // Every worker has stopped, so no further samples can land: finish the
+    // guest profile and write it out.
+    if let (Some(handle), ProfileMode::Guest { path, .. }) = (profiler_handle, &profile)
+        && let Some(profiler) = handle.profiler.lock().unwrap().take()
+    {
+        match std::fs::File::create(path) {
+            Ok(file) => match profiler.finish(std::io::BufWriter::new(file)) {
+                Ok(()) => {
+                    eprintln!("Profile written to {path}");
+                    eprintln!("View at https://profiler.firefox.com/");
+                }
+                Err(e) => eprintln!("Failed to write profile to {path}: {e}"),
+            },
+            Err(e) => eprintln!("Failed to create profile file {path}: {e}"),
+        }
+    }
+
     if fatal_shutdown {
         anyhow::bail!("a worker failed to instantiate the component");
     }
@@ -1086,7 +1189,7 @@ pub async fn run(opts: ServeOptions) {
     // An explicit `--workers` is already validated against `--max-concurrency`
     // in `parse_args`; the auto-derived default is clamped so it never sizes
     // more workers than the stack pool can back.
-    let workers = opts
+    let mut workers = opts
         .workers
         .unwrap_or_else(|| {
             std::thread::available_parallelism()
@@ -1094,6 +1197,12 @@ pub async fn run(opts: ServeOptions) {
                 .unwrap_or(1)
         })
         .min(opts.max_concurrency);
+    // Guest profiling samples one worker store; more than one worker would
+    // conflate independent stores into a single profile.
+    if matches!(opts.profile, ProfileMode::Guest { .. }) && workers != 1 {
+        eprintln!("Profiling: forcing --workers 1");
+        workers = 1;
+    }
     if let Err(e) = run_http_server(
         wasm,
         &opts.addr,
@@ -1103,6 +1212,7 @@ pub async fn run(opts: ServeOptions) {
         workers,
         opts.recycle_requests,
         opts.max_concurrency,
+        opts.profile,
     )
     .await
     {
