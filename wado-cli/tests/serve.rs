@@ -170,10 +170,10 @@ fn timeout_returns_504_for_runaway_guest() {
     let start = Instant::now();
     // The client read timeout must be a generous *upper bound on the worst
     // case CI run*, not the test's actual deadline — that lives in the
-    // `elapsed <= 8s` assertion below. A tight client timeout (we used 15s
-    // here originally) panics on `read_to_string` as `WouldBlock` whenever
-    // CI is slower than the 8s assertion would have allowed, hiding the
-    // useful "elapsed was Xs" signal behind an opaque socket-level error.
+    // `elapsed` assertions below. A tight client timeout panics on
+    // `read_to_string` as `WouldBlock` whenever CI is slower than the
+    // assertion would have allowed, hiding the useful "elapsed was Xs"
+    // signal behind an opaque socket-level error.
     let (status, body) = http_get(port, "/", Duration::from_mins(1));
     let elapsed = start.elapsed();
 
@@ -182,16 +182,28 @@ fn timeout_returns_504_for_runaway_guest() {
         body.contains("timed out"),
         "504 body should mention the timeout; got: {body:?}",
     );
-    // The 504 should fire near the configured 2s deadline. Allow a generous
-    // window: epoch ticker granularity is 1s, and CI machines can be slow.
+    // The 504 reaches the client via one of two paths, and which one wins
+    // depends on how CPU-starved the host is:
+    //   * graceful: the first-byte timeout in `dispatch_request` fires at
+    //     ~`--timeout` (2s) — this needs a free tokio worker thread;
+    //   * backstop: when a runaway guest monopolises every tokio worker
+    //     thread (e.g. a single-core CI runner), the first-byte timeout is
+    //     itself starved, so the 504 only resolves once the epoch deadline
+    //     (`--timeout` + 5s grace) traps the guest and frees the runtime.
+    // So the legitimate window is wide. The lower bound proves the timeout
+    // is actually enforced (CPU starvation only ever *delays* the 504, so
+    // it cannot make this bound flaky); the upper bound is generous enough
+    // that only a genuine "timeout never fires" regression — which would
+    // instead hit the 1-minute client read timeout — trips it.
     assert!(
         elapsed >= Duration::from_millis(1500),
         "504 returned in {elapsed:?} — earlier than the configured 2s timeout, \
          which suggests the timeout isn't actually being enforced",
     );
     assert!(
-        elapsed <= Duration::from_secs(8),
-        "504 returned in {elapsed:?} — later than expected for a 2s timeout",
+        elapsed <= Duration::from_secs(20),
+        "504 returned in {elapsed:?} — far later than the 2s timeout or its \
+         epoch-deadline backstop, which suggests the timeout isn't enforced",
     );
 }
 

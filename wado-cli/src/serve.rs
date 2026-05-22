@@ -4,8 +4,8 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::{Pin, pin};
 use std::process;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -44,7 +44,7 @@ use wado_compiler::LogLevel;
 /// trapped by the epoch deadline (see `worker_loop`).
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
-/// Epoch ticker interval. A background task bumps the engine epoch every
+/// Epoch ticker interval. A background thread bumps the engine epoch every
 /// tick; a worker store's deadline counts these ticks, giving
 /// second-granularity runaway-guest detection.
 const EPOCH_TICK_MS: u64 = 1000;
@@ -829,14 +829,28 @@ async fn run_http_server(
     // Background ticker that advances the engine epoch. Each worker store
     // arms an epoch deadline counted in these ticks; without the ticker
     // the deadline would never be reached and runaway guests never trap.
+    //
+    // It runs on a dedicated OS thread, never a tokio task: a guest that
+    // runs away in pure wasm blocks the tokio worker thread polling it,
+    // and on a single-core host that is the only worker thread. A
+    // tokio-task ticker would then be starved by the very guest it exists
+    // to trap — the epoch would never advance and the server would
+    // deadlock. A kernel-scheduled OS thread keeps ticking regardless.
+    let epoch_stop = Arc::new((Mutex::new(false), Condvar::new()));
     let epoch_ticker = {
         let engine = engine.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_millis(EPOCH_TICK_MS));
-            interval.tick().await; // the first tick fires immediately; skip it
-            loop {
-                interval.tick().await;
-                engine.increment_epoch();
+        let epoch_stop = Arc::clone(&epoch_stop);
+        std::thread::spawn(move || {
+            let (lock, cvar) = &*epoch_stop;
+            let mut stop = lock.lock().unwrap();
+            while !*stop {
+                let (next, wait) = cvar
+                    .wait_timeout(stop, Duration::from_millis(EPOCH_TICK_MS))
+                    .unwrap();
+                stop = next;
+                if wait.timed_out() {
+                    engine.increment_epoch();
+                }
             }
         })
     };
@@ -944,7 +958,12 @@ async fn run_http_server(
     for engine_task in engine_tasks {
         let _ = tokio::time::timeout(drain_deadline, engine_task).await;
     }
-    epoch_ticker.abort();
+    {
+        let (lock, cvar) = &*epoch_stop;
+        *lock.lock().unwrap() = true;
+        cvar.notify_all();
+    }
+    let _ = epoch_ticker.join();
 
     if fatal_shutdown {
         anyhow::bail!("a worker failed to instantiate the component");
