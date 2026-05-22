@@ -57,7 +57,7 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
 
 fn fl_push(block: i32, size: i32) {
     let k: i32 = __inline_fl_bin_0: {
-        let k: i32 = ((size - 32) / 16);
+        let k: i32 = ((size - 32) >> 4);
         break __inline_fl_bin_0: core::builtin::select::<i32>((k < 32), k, 32);
     };
     let head: i32 = core::builtin::i32_load((8 + (k * 4)));
@@ -70,17 +70,17 @@ fn fl_push(block: i32, size: i32) {
 }
 
 fn fl_unlink(block: i32) {
-    let k: i32 = __inline_fl_bin_0: {
-        let size: i32 = __inline_fl_size_1: {
-            let tag: i32 = core::builtin::i32_load(block);
-            break __inline_fl_size_1: core::builtin::i32_and(tag, -8);
-        };
-        let k: i32 = ((size - 32) / 16);
-        break __inline_fl_bin_0: core::builtin::select::<i32>((k < 32), k, 32);
-    };
     let next: i32 = core::builtin::i32_load((block + 8));
     let prev: i32 = core::builtin::i32_load((block + 12));
     if (prev == 0) {
+        let k: i32 = __inline_fl_bin_0: {
+            let size: i32 = __inline_fl_size_1: {
+                let tag: i32 = core::builtin::i32_load(block);
+                break __inline_fl_size_1: core::builtin::i32_and(tag, -8);
+            };
+            let k: i32 = ((size - 32) >> 4);
+            break __inline_fl_bin_0: core::builtin::select::<i32>((k < 32), k, 32);
+        };
         core::builtin::i32_store((8 + (k * 4)), next);
     } else {
         core::builtin::i32_store((prev + 8), next);
@@ -148,7 +148,7 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
     }
     let size: i32 = (core::builtin::i32_and((newsize + 15), -16) + 16);
     let mut j: i32 = __inline_fl_bin_7: {
-        let k: i32 = ((size - 32) / 16);
+        let k: i32 = ((size - 32) >> 4);
         break __inline_fl_bin_7: core::builtin::select::<i32>((k < 32), k, 32);
     };
     loop {

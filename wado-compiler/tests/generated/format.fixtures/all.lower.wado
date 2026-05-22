@@ -607,7 +607,7 @@ fn fl_used(tag: i32) -> i32 {
 }
 
 fn fl_bin(size: i32) -> i32 {
-    let k: i32 = ((size - 32) / 16);
+    let k: i32 = ((size - 32) >> 4);
     return if (k < 32) {
         k;
     } else {
@@ -641,10 +641,10 @@ fn fl_push(block: i32, size: i32) {
 }
 
 fn fl_unlink(block: i32) {
-    let k: i32 = core::allocator::fl_bin(core::allocator::fl_size(core::builtin::i32_load(block)));
     let next: i32 = core::builtin::i32_load((block + 8));
     let prev: i32 = core::builtin::i32_load((block + 12));
     if (prev == 0) {
+        let k: i32 = core::allocator::fl_bin(core::allocator::fl_size(core::builtin::i32_load(block)));
         core::allocator::fl_set_bin_head(k, next);
     } else {
         core::builtin::i32_store((prev + 8), next);
