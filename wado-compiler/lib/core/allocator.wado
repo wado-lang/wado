@@ -167,6 +167,11 @@ fn fl_push(block: i32, size: i32) {
 }
 
 /// Remove `block` from its size-class bin (it must currently be linked).
+///
+/// This is the hottest allocator function under `wado serve`, mostly via
+/// coalescing on free. Deferring coalescing to cut those calls was tried
+/// and reverted: it roughly halved `wado serve` throughput by
+/// fragmenting the heap. Eager coalescing — and this hot path — stays.
 fn fl_unlink(block: i32) {
     let next = builtin::i32_load(block + 8);
     let prev = builtin::i32_load(block + 12);
