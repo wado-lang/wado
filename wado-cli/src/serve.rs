@@ -910,6 +910,13 @@ async fn run_http_server(
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
             Either::Left((Ok((stream, remote_addr)), _shutdown)) => {
+                // Disable Nagle's algorithm. Responses are written head-first
+                // and body-second (the body streams in asynchronously from the
+                // guest), so with Nagle on the body write can stall waiting for
+                // the ACK of the head — a classic latency hit under load.
+                if let Err(e) = stream.set_nodelay(true) {
+                    eprintln!("warning: failed to set TCP_NODELAY for {remote_addr}: {e}");
+                }
                 let io = TokioIo::new(stream);
                 let dispatch = Arc::clone(&dispatch);
 
