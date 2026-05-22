@@ -196,7 +196,7 @@ impl Monomorphizer {
                 method_info: None,
             };
             if let Some(mangled) = self.lookup_function_instantiation(&key) {
-                *name = mangled.clone();
+                name.clone_from(mangled);
                 type_args.clear();
             }
         }

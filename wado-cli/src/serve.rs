@@ -611,8 +611,9 @@ enum WorkerStop {
 
 /// One step of a worker's dispatch loop.
 enum Step {
-    /// A job arrived (`Some`), or the request channel closed (`None`).
-    Job(Option<RequestJob>),
+    /// A job slot was produced into the loop's `job` local: `Some` is a
+    /// request to dispatch, `None` means the request channel closed.
+    Job,
     /// An in-flight request finished.
     Drained,
 }
@@ -692,19 +693,24 @@ async fn worker_loop(
                         return stop;
                     }
 
+                    let mut job: Option<RequestJob> = None;
                     let step = if stopping.is_some() {
                         // Draining only — `inflight` is non-empty here.
                         let _ = inflight.next().await;
                         Step::Drained
                     } else if inflight.is_empty() {
                         // Idle — only a new job can wake us.
-                        Step::Job(job_rx.recv().await)
+                        job = job_rx.recv().await;
+                        Step::Job
                     } else {
                         // Accept new jobs and drain in-flight concurrently.
                         let recv = pin!(job_rx.recv());
                         let drain = pin!(inflight.next());
                         match select(recv, drain).await {
-                            Either::Left((job, _drain)) => Step::Job(job),
+                            Either::Left((j, _drain)) => {
+                                job = j;
+                                Step::Job
+                            }
                             Either::Right((_done, _recv)) => Step::Drained,
                         }
                     };
@@ -717,21 +723,23 @@ async fn worker_loop(
 
                     match step {
                         Step::Drained => {}
-                        Step::Job(Some(job)) => {
-                            // The `JoinHandle` is kept in `inflight` so a
-                            // recycle can wait for the request to finish;
-                            // the task itself is driven by `run_concurrent`.
-                            inflight.push(accessor.spawn(HandlerTask {
-                                service: Arc::clone(&service),
-                                job,
-                                idle_timeout: request_timeout,
-                            }));
-                            handled += 1;
-                            if recycle_requests != 0 && handled >= recycle_requests {
-                                stopping = Some(WorkerStop::Recycle);
+                        Step::Job => match job {
+                            Some(job) => {
+                                // The `JoinHandle` is kept in `inflight` so a
+                                // recycle can wait for the request to finish;
+                                // the task itself is driven by `run_concurrent`.
+                                inflight.push(accessor.spawn(HandlerTask {
+                                    service: Arc::clone(&service),
+                                    job,
+                                    idle_timeout: request_timeout,
+                                }));
+                                handled += 1;
+                                if recycle_requests != 0 && handled >= recycle_requests {
+                                    stopping = Some(WorkerStop::Recycle);
+                                }
                             }
-                        }
-                        Step::Job(None) => stopping = Some(WorkerStop::Shutdown),
+                            None => stopping = Some(WorkerStop::Shutdown),
+                        },
                     }
                 }
             })
