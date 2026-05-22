@@ -69,7 +69,7 @@ Unlike Rust:
 
 Like Rust:
 
-- Full generics and traits, except for dynamic dispatch (not yet).
+- Full generics and traits, but no dynamic dispatch (yet).
 - Full pattern matching:
   - `match` statements and expressions.
   - `if let` and `while let`.
