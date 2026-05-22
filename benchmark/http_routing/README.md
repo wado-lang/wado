@@ -17,7 +17,7 @@ benchmark** —
   sharing a radix, dynamic, mixed static/dynamic, `POST`, long static,
   wildcard).
 
-All three servers register the same 12 routes and return the same
+All four servers register the same 12 routes and return the same
 `{ "route": ..., "params": [...] }` JSON shape, so the comparison
 isolates routing + request handling. Load is applied with
 [`oha`](https://github.com/hatoo/oha).
@@ -90,8 +90,7 @@ SLICE=5 ROUNDS=5 CONNECTIONS=100 mise run -C benchmark http-routing
 ## Recent Results
 
 Measured 2026-05-22 on a 4-core cloud VM: servers pinned to 3 cores, the
-`oha` load generator to 1, `SLICE=3 ROUNDS=3`. Absolute numbers are not
-comparable across machines — only the ratios between servers are.
+`oha` load generator to 1, `SLICE=3 ROUNDS=3`.
 
 Environment:
 
