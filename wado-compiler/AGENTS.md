@@ -114,12 +114,21 @@ __DATA__
 
 ### Adding Test Fixtures
 
-After adding new `.wado` files to `tests/fixtures/`, run `touch tests/e2e.rs`
-so `datatest_mini` rediscovers test files.
+`datatest_mini` resolves everything when the `harness!` macro in `tests/e2e.rs`
+expands at compile time, and an incremental `cargo test` will not re-expand it
+unless that file changes. So run `touch tests/e2e.rs` (or `cargo clean`) whenever
+the macro's compile-time inputs change:
 
-`datatest_mini` discovers fixtures at compile time, so without rebuilding
-`tests/e2e.rs` an incremental `cargo test` will not pick up the new fixture.
-This only matters for local development — CI builds from scratch.
+- **After adding or removing `.wado` files under `tests/fixtures/`** — otherwise
+  the new/deleted fixtures are not discovered.
+- **When changing the env vars that gate optimization levels** — O1/O3/Os carry
+  `ignore_unless_env = ["CI", "WADO_FULL_TEST"]`, evaluated at expansion time. To
+  flip them between running and `#[ignore]` (e.g. set `WADO_FULL_TEST=1` to run
+  them locally), touch the file so the new env value is read.
+
+This only matters for local development — CI builds from scratch, so it always
+sees the current fixtures and env. Locally you can also run the ignored levels
+without touching or rebuilding via `cargo test -- --ignored`.
 
 `tests/fixtures` requires data-section test spec, so if you test cross-module features, place the loaded modules in `tests/fixtures/sub`.
 
