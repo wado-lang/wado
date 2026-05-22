@@ -857,13 +857,17 @@ async fn run_http_server(
 
     let addr: SocketAddr = addr.parse()?;
     let listener = TcpListener::bind(addr).await?;
+    // Report the *bound* address, not the requested one: a request for
+    // port 0 is resolved by the kernel to a concrete free port, and
+    // callers (e.g. the e2e harness) parse this line to learn it.
+    let bound_addr = listener.local_addr()?;
 
     let recycle_desc = if recycle_requests == 0 {
         "off".to_string()
     } else {
         format!("every {recycle_requests} req")
     };
-    eprintln!("HTTP server listening on http://{addr}/");
+    eprintln!("HTTP server listening on http://{bound_addr}/");
     eprintln!("Instance reuse: ON — {workers} worker(s), recycle {recycle_desc}");
     eprintln!("Per-request timeout: {}s", timeout.as_secs());
     #[cfg(unix)]

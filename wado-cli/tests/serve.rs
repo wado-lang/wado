@@ -7,7 +7,7 @@
 #![cfg(unix)]
 
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -22,13 +22,13 @@ fn fixture_path(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Reserve a free TCP port by binding to `127.0.0.1:0`, reading the assigned
-/// port, then dropping the listener. There is a tiny TOCTOU window between
-/// drop and the spawned `wado serve` re-binding the port, but in practice
-/// the kernel re-uses ports rarely enough for this to be reliable in CI.
-fn free_port() -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0");
-    listener.local_addr().unwrap().port()
+/// Parse the kernel-assigned port out of the server's startup banner
+/// (`HTTP server listening on http://127.0.0.1:PORT/`).
+fn parse_listening_port(stderr: &str) -> Option<u16> {
+    let line = stderr
+        .lines()
+        .find(|l| l.contains("listening on http://"))?;
+    line.rsplit_once(':')?.1.trim_end_matches('/').parse().ok()
 }
 
 /// Drop guard that kills the spawned server on test exit so a panic
@@ -68,14 +68,16 @@ impl Drop for ServerGuard {
 // calls `kill()` + `wait()` — clippy doesn't see across the type boundary.
 #[allow(clippy::zombie_processes)]
 fn start_serve(fixture: &str, extra_args: &[&str]) -> (ServerGuard, u16, Arc<Mutex<String>>) {
-    let port = free_port();
-    let addr = format!("127.0.0.1:{port}");
-
+    // Bind a kernel-assigned port (`:0`) inside the server process itself.
+    // Pre-reserving a port in the test and letting the child re-bind it
+    // leaves a TOCTOU window in which a parallel test can grab the same
+    // port — so one test's client connects to another test's server and
+    // sees a spurious connection reset when that server is torn down.
     let mut cmd = Command::new(wado_bin());
     cmd.current_dir(project_root())
         .arg("serve")
         .arg("--addr")
-        .arg(&addr)
+        .arg("127.0.0.1:0")
         .arg("-O0")
         .arg("--log-level")
         .arg("off")
@@ -87,7 +89,7 @@ fn start_serve(fixture: &str, extra_args: &[&str]) -> (ServerGuard, u16, Arc<Mut
     let mut child = cmd.spawn().expect("failed to spawn wado serve");
 
     // Drain stderr so the kernel pipe buffer never fills, and capture the
-    // text for assertions.
+    // text for assertions and for the listening-port banner.
     let stderr = child.stderr.take().unwrap();
     let stderr_buf: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
     {
@@ -105,16 +107,33 @@ fn start_serve(fixture: &str, extra_args: &[&str]) -> (ServerGuard, u16, Arc<Mut
 
     // Compile time at -O0 is a few seconds; 60s is generous for slow CI.
     let deadline = Instant::now() + Duration::from_mins(1);
-    let socket_addr: SocketAddr = addr.parse().unwrap();
-    while Instant::now() < deadline {
-        if TcpStream::connect_timeout(&socket_addr, Duration::from_millis(200)).is_ok() {
-            return (ServerGuard { child }, port, stderr_buf);
+    loop {
+        let listening_port = parse_listening_port(&stderr_buf.lock().unwrap());
+        if let Some(port) = listening_port {
+            // The banner is printed right after `bind`, so the socket is
+            // already accepting; one confirming connect keeps the
+            // contract that callers may connect immediately on return.
+            let socket_addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
+            while Instant::now() < deadline {
+                if TcpStream::connect_timeout(&socket_addr, Duration::from_millis(200)).is_ok() {
+                    return (ServerGuard { child }, port, stderr_buf);
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            break;
         }
-        std::thread::sleep(Duration::from_millis(100));
+        if let Ok(Some(status)) = child.try_wait() {
+            let captured = stderr_buf.lock().unwrap().clone();
+            panic!("wado serve exited before listening (status {status}). stderr:\n{captured}");
+        }
+        if Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
     }
 
     let captured = stderr_buf.lock().unwrap().clone();
-    panic!("wado serve did not accept connections within 60s. stderr:\n{captured}");
+    panic!("wado serve did not report a listening port within 60s. stderr:\n{captured}");
 }
 
 /// Send a minimal HTTP/1.1 GET and return the full raw response text
