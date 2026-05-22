@@ -38,5 +38,14 @@ Interactive call tree (and correct kernel symbols): `samply load /tmp/prof.json`
 - **Kernel syscall names from `atos` are wrong** (shared-cache base
   offset). Read syscall cost via the script's "nearest Rust caller"
   attribution, not the syscall name.
+- **Symbolication needs the matching binary.** A saved profile holds only
+  addresses; the script resolves them against the binary at the recorded
+  path, so rebuilding `target/profiling/wado` makes earlier profiles
+  re-symbolicate to garbage. Analyze before rebuilding, or keep the
+  matching binary.
+- **Validate with the profile, not req/s.** The CPU breakdown is
+  reproducible run to run; throughput on a busy dev machine swings by tens
+  of percent. Use the profile to confirm a change landed (e.g. a hot
+  function shrank); measure absolute throughput on a quiet/target host.
 - **macOS only** (`atos`). On Linux use `perf` or `samply load`; the
   weighting/attribution logic ports, the `atos` symbolication does not.
