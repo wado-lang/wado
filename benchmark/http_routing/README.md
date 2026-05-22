@@ -24,7 +24,26 @@ isolates routing + request handling. Load is applied with
 
 Hono's original benchmark is an in-process router microbenchmark
 (`router.match()` under `mitata`). Here the same route/request set is
-driven end to end over HTTP, so the three are compared as whole servers.
+driven end to end over HTTP, so the four are compared as whole servers.
+
+### Stable measurement on a noisy host
+
+Cloud VMs throttle and steal CPU, so a naive "measure each server for N
+seconds in turn" run yields ratios that drift with the host. `bench.sh`
+counters this:
+
+- **CPU pinning** — servers run on one core set, the `oha` load
+  generator on a disjoint set (`taskset`), so the two never contend.
+- **Round-robin interleaving** — every server stays up for the whole
+  run; each request is measured in short slices that rotate across
+  servers, repeated for `ROUNDS` rounds. A throttling episode hits every
+  server within the same time window, so ratios survive it.
+- **Max aggregation** — contention and throttling only ever lower
+  throughput, so the fastest slice across rounds is the cleanest
+  estimate of true capacity. Round 1 also serves as a warmup.
+
+Absolute numbers are not comparable across machines or runs — only the
+ratios between servers within one run are.
 
 The four servers span four runtimes:
 
@@ -59,10 +78,13 @@ toolchain. The driver runs `npm install` for the Hono dependencies and
 `cargo build` for the Axum server on first use. The Bun step is skipped
 gracefully if `bun` is not on `PATH`.
 
-Tunables:
+Tunables (env vars):
 
 ```sh
-DURATION=10s CONNECTIONS=100 mise run -C benchmark http-routing
+# SLICE: seconds per measurement slice (default 3)
+# ROUNDS: rotation rounds; the per-server max is kept (default 3)
+# CONNECTIONS: concurrent connections per slice (default 50)
+SLICE=5 ROUNDS=5 CONNECTIONS=100 mise run -C benchmark http-routing
 ```
 
 ## Recent Results
