@@ -19,7 +19,7 @@
 # ratios between servers within one run are.
 #
 # Env overrides: SLICE (default 3s), ROUNDS (default 3),
-# CONNECTIONS (default 50).
+# CONNECTIONS (default 50), OHA_CORE_COUNT (default nproc/4).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -60,7 +60,10 @@ OHA_BIN="$(command -v oha || true)"
 # arrays safe to expand under `set -u`.
 NPROC="$(nproc)"
 if command -v taskset >/dev/null 2>&1 && [ "$NPROC" -ge 2 ]; then
-  OHA_CORE_COUNT=$((NPROC / 4))
+  # OHA_CORE_COUNT may be overridden to retune the split (e.g. =2 on a
+  # 4-core host gives an even server/oha split, raising the oha
+  # throughput ceiling at the cost of fewer server cores).
+  OHA_CORE_COUNT="${OHA_CORE_COUNT:-$((NPROC / 4))}"
   [ "$OHA_CORE_COUNT" -lt 1 ] && OHA_CORE_COUNT=1
   SERVER_CORE_COUNT=$((NPROC - OHA_CORE_COUNT))
   SERVER_CORES="0-$((SERVER_CORE_COUNT - 1))"
