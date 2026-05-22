@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779412218599,
+  "lastUpdate": 1779448713880,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24477,6 +24477,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/63bee53db08fa513c8b2d16597be238ee3232543"
         },
         "date": 1779412218296,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1ba13fa380fecfd8ec254c4c2b1cff50c6eb1180",
+          "message": "Merge pull request #1147 from wado-lang/claude/serve-mimalloc-nodelay\n\nperf: reduce wado serve native host overhead",
+          "timestamp": "2026-05-22T20:11:44+09:00",
+          "tree_id": "aababea796f9e2205dfce3073a0d9cd96929869e",
+          "url": "https://github.com/wado-lang/wado/commit/1ba13fa380fecfd8ec254c4c2b1cff50c6eb1180"
+        },
+        "date": 1779448713459,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
