@@ -536,18 +536,6 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.check_block(block)?;
             }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.check_expr(scrutinee)?;
-                self.check_block(then_block)?;
-                if let Some(else_blk) = else_block {
-                    self.check_block(else_blk)?;
-                }
-            }
             TirStmtKind::LetDestructure { value, .. } => {
                 self.check_expr(value)?;
             }
@@ -1308,18 +1296,6 @@ fn check_pure_stmt<H: CompilerHost>(
         TirStmtKind::Loop { body } => check_pure_block(checker, body, logger),
         TirStmtKind::Continue => {}
         TirStmtKind::LabeledBlock { block, .. } => check_pure_block(checker, block, logger),
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            check_pure_expr(checker, scrutinee, logger);
-            check_pure_block(checker, then_block, logger);
-            if let Some(else_blk) = else_block {
-                check_pure_block(checker, else_blk, logger);
-            }
-        }
         TirStmtKind::LetDestructure { value, .. } => check_pure_expr(checker, value, logger),
         TirStmtKind::VariadicForOf { .. } => {}
     }

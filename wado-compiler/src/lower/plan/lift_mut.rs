@@ -96,21 +96,6 @@ impl MutBindingLifter {
         );
     }
 
-    /// Same lift, but for an `IfLet`'s `(pattern, then_block)` pair.
-    /// The lift target is the then-block's leading statement list.
-    fn lift_in_iflet(&mut self, pattern: &mut TirPattern, then_block: &mut TirBlock) {
-        let span = then_block.span;
-        let mut prefix_stmts: Vec<TirStmt> = Vec::new();
-        self.lift_in_pattern(pattern, span, &mut prefix_stmts);
-        if prefix_stmts.is_empty() {
-            return;
-        }
-        let original = std::mem::take(&mut then_block.stmts);
-        let mut stmts = prefix_stmts;
-        stmts.extend(original);
-        then_block.stmts = stmts;
-    }
-
     fn lift_in_pattern(
         &mut self,
         pattern: &mut TirPattern,
@@ -187,17 +172,6 @@ impl MutBindingLifter {
 
 impl TirOptVisitor for MutBindingLifter {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
-        // Pre-process IfLet: lift mut bindings before recursing into
-        // the then-block so the freshly-inserted `Let mut` statements
-        // get visited like any other.
-        if let TirStmtKind::IfLet {
-            pattern,
-            then_block,
-            ..
-        } = &mut stmt.kind
-        {
-            self.lift_in_iflet(pattern, then_block);
-        }
         opt_walk_stmt(self, stmt);
         false
     }

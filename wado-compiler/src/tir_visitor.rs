@@ -73,19 +73,6 @@ pub trait TirMutVisitor {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.visit_block(block);
             }
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                self.visit_expr(scrutinee);
-                self.visit_pattern(pattern);
-                self.visit_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.visit_block(else_blk);
-                }
-            }
             TirStmtKind::LetDestructure { pattern, value, .. } => {
                 self.visit_pattern(pattern);
                 self.visit_expr(value);
@@ -349,19 +336,6 @@ pub trait TirRefVisitor {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.visit_block(block);
             }
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                self.visit_expr(scrutinee);
-                self.visit_pattern(pattern);
-                self.visit_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.visit_block(else_blk);
-                }
-            }
             TirStmtKind::LetDestructure { pattern, value, .. } => {
                 self.visit_pattern(pattern);
                 self.visit_expr(value);
@@ -619,20 +593,6 @@ pub fn opt_walk_stmt(visitor: &mut impl TirOptVisitor, stmt: &mut TirStmt) -> bo
         }
         TirStmtKind::Loop { body } => visitor.visit_block(body),
         TirStmtKind::LabeledBlock { block, .. } => visitor.visit_block(block),
-        TirStmtKind::IfLet {
-            scrutinee,
-            pattern,
-            then_block,
-            else_block,
-        } => {
-            let mut changed = visitor.visit_expr(scrutinee);
-            changed |= visitor.visit_pattern(pattern);
-            changed |= visitor.visit_block(then_block);
-            if let Some(eb) = else_block {
-                changed |= visitor.visit_block(eb);
-            }
-            changed
-        }
         TirStmtKind::Continue => false,
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
@@ -802,18 +762,6 @@ pub fn stmt_has_break_to(label: &str, stmt: &TirStmt) -> bool {
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             block_has_break_to(label, body)
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            expr_has_break_to(label, scrutinee)
-                || block_has_break_to(label, then_block)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|b| block_has_break_to(label, b))
         }
         TirStmtKind::Continue => false,
         TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => false,

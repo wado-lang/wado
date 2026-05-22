@@ -95,11 +95,6 @@ fn strip_task_returns_in_stmt(stmt: &mut TirStmt) {
             then_block,
             else_block,
             ..
-        }
-        | TirStmtKind::IfLet {
-            then_block,
-            else_block,
-            ..
         } => {
             strip_task_returns_in_block(then_block);
             if let Some(else_blk) = else_block {
@@ -108,6 +103,21 @@ fn strip_task_returns_in_stmt(stmt: &mut TirStmt) {
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             strip_task_returns_in_block(body);
+        }
+        // `task return` also appears inside `Match` arm bodies — `if let`
+        // lowers to a two-arm `Match`, and the body is a `Block` expr.
+        TirStmtKind::Expr(expr) => strip_task_returns_in_expr(expr),
+        _ => {}
+    }
+}
+
+fn strip_task_returns_in_expr(expr: &mut TirExpr) {
+    match &mut expr.kind {
+        TirExprKind::Block(block) => strip_task_returns_in_block(block),
+        TirExprKind::Match { arms, .. } => {
+            for arm in arms {
+                strip_task_returns_in_expr(&mut arm.body);
+            }
         }
         _ => {}
     }
@@ -178,11 +188,6 @@ fn expand_task_return_in_stmt(
             then_block,
             else_block,
             ..
-        }
-        | TirStmtKind::IfLet {
-            then_block,
-            else_block,
-            ..
         } => {
             expand_task_return_in_block(
                 then_block,
@@ -221,6 +226,61 @@ fn expand_task_return_in_stmt(
                 cm_package,
                 interner,
             );
+        }
+        // `task return` also appears inside `Match` arm bodies — `if let`
+        // lowers to a two-arm `Match`, and the body is a `Block` expr.
+        TirStmtKind::Expr(expr) => expand_task_return_in_expr(
+            expr,
+            flat_return_types,
+            next_local,
+            locals,
+            tir_modules,
+            type_table,
+            wasi_registry,
+            cm_package,
+            interner,
+        ),
+        _ => {}
+    }
+}
+
+fn expand_task_return_in_expr(
+    expr: &mut TirExpr,
+    flat_return_types: &[cm_abi::CmValType],
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &Rc<RefCell<TypeTable>>,
+    wasi_registry: &WasiRegistry,
+    cm_package: &str,
+    interner: &RefCell<ModuleSourceInterner>,
+) {
+    match &mut expr.kind {
+        TirExprKind::Block(block) => expand_task_return_in_block(
+            block,
+            flat_return_types,
+            next_local,
+            locals,
+            tir_modules,
+            type_table,
+            wasi_registry,
+            cm_package,
+            interner,
+        ),
+        TirExprKind::Match { arms, .. } => {
+            for arm in arms {
+                expand_task_return_in_expr(
+                    &mut arm.body,
+                    flat_return_types,
+                    next_local,
+                    locals,
+                    tir_modules,
+                    type_table,
+                    wasi_registry,
+                    cm_package,
+                    interner,
+                );
+            }
         }
         _ => {}
     }

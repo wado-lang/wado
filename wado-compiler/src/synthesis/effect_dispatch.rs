@@ -1221,18 +1221,6 @@ fn lower_dispatch_in_stmt(stmt: &mut TirStmt, env: &DispatchEnv, ctx: &mut Lower
                 lower_dispatch_in_block(eb, env, ctx);
             }
         }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            lower_dispatch_in_expr(scrutinee, env, ctx);
-            lower_dispatch_in_block(then_block, env, ctx);
-            if let Some(eb) = else_block {
-                lower_dispatch_in_block(eb, env, ctx);
-            }
-        }
         TirStmtKind::LetDestructure { value, .. } => {
             lower_dispatch_in_expr(value, env, ctx);
         }
@@ -1479,7 +1467,7 @@ impl crate::tir_visitor::TirRefVisitor for MaxLocalIndex {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
             TirStmtKind::Let { local_index, .. } => self.note(*local_index),
-            TirStmtKind::IfLet { pattern, .. } | TirStmtKind::LetDestructure { pattern, .. } => {
+            TirStmtKind::LetDestructure { pattern, .. } => {
                 self.walk_pattern(pattern);
             }
             TirStmtKind::VariadicForOf { binding_local, .. } => self.note(*binding_local),
@@ -1974,18 +1962,6 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
                 else_block,
             } => {
                 self.visit_expr(condition);
-                self.visit_block(then_block);
-                if let Some(eb) = else_block {
-                    self.visit_block(eb);
-                }
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.visit_expr(scrutinee);
                 self.visit_block(then_block);
                 if let Some(eb) = else_block {
                     self.visit_block(eb);
@@ -2531,18 +2507,6 @@ fn rewrite_calls_in_stmt(stmt: &mut TirStmt, ctx: &RewriteCtx<'_>) {
             else_block,
         } => {
             rewrite_calls_in_expr(condition, ctx);
-            rewrite_calls_in_block(then_block, ctx);
-            if let Some(eb) = else_block {
-                rewrite_calls_in_block(eb, ctx);
-            }
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            rewrite_calls_in_expr(scrutinee, ctx);
             rewrite_calls_in_block(then_block, ctx);
             if let Some(eb) = else_block {
                 rewrite_calls_in_block(eb, ctx);
@@ -3156,18 +3120,6 @@ fn rewrite_resume_in_stmt(stmt: &mut TirStmt) {
             else_block,
         } => {
             rewrite_resume_in_expr(condition);
-            rewrite_resume_in_block(then_block);
-            if let Some(eb) = else_block {
-                rewrite_resume_in_block(eb);
-            }
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            rewrite_resume_in_expr(scrutinee);
             rewrite_resume_in_block(then_block);
             if let Some(eb) = else_block {
                 rewrite_resume_in_block(eb);

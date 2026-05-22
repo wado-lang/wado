@@ -615,19 +615,6 @@ fn renumber_locals_in_stmt(stmt: &mut TirStmt, offset: u32) {
         }
         TirStmtKind::Continue => {}
         TirStmtKind::LabeledBlock { block, .. } => renumber_locals_in_block(block, offset),
-        TirStmtKind::IfLet {
-            scrutinee,
-            pattern,
-            then_block,
-            else_block,
-        } => {
-            renumber_locals_in_expr(scrutinee, offset);
-            renumber_locals_in_pattern(pattern, offset);
-            renumber_locals_in_block(then_block, offset);
-            if let Some(eb) = else_block {
-                renumber_locals_in_block(eb, offset);
-            }
-        }
         TirStmtKind::LetDestructure { pattern, value, .. } => {
             renumber_locals_in_pattern(pattern, offset);
             renumber_locals_in_expr(value, offset);

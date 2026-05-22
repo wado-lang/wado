@@ -2773,11 +2773,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 then_block,
                 else_block: Some(else_block),
                 ..
-            }
-            | TirStmtKind::IfLet {
-                then_block,
-                else_block: Some(else_block),
-                ..
             } => Self::block_always_exits(then_block) && Self::block_always_exits(else_block),
             TirStmtKind::Loop { body } => !Self::loop_body_can_escape(body),
             TirStmtKind::LabeledBlock { block, label } => {
@@ -2866,11 +2861,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
         match &stmt.kind {
             TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            }
-            | TirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
@@ -3033,21 +3023,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             TirStmtKind::Return { value: Some(expr) } => Some(expr.type_id),
             TirStmtKind::Return { value: None } => Some(TypeTable::UNIT),
             TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                if let Some(t) = Self::find_return_type_in_block(then_block) {
-                    return Some(t);
-                }
-                if let Some(else_blk) = else_block
-                    && let Some(t) = Self::find_return_type_in_block(else_blk)
-                {
-                    return Some(t);
-                }
-                None
-            }
-            TirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
@@ -4582,14 +4557,6 @@ fn patch_unresolved_null_in_block(
             patch_unresolved_null(e, target_type, type_table, unresolved);
         }
         TirStmtKind::If {
-            then_block,
-            else_block: Some(eb),
-            ..
-        } => {
-            patch_unresolved_null_in_block(then_block, target_type, type_table, unresolved);
-            patch_unresolved_null_in_block(eb, target_type, type_table, unresolved);
-        }
-        TirStmtKind::IfLet {
             then_block,
             else_block: Some(eb),
             ..

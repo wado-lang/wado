@@ -3922,33 +3922,6 @@ impl<'a> TirUnparser<'a> {
                 self.write_indent();
                 self.output.push_str("}\n");
             }
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                self.write_indent();
-                self.output.push_str("if ");
-                self.unparse_tir_pattern(pattern);
-                self.output.push_str(" = ");
-                self.unparse_expr(scrutinee);
-                self.output.push_str(" {\n");
-                self.indent_level += 1;
-                self.unparse_block(then_block);
-                self.indent_level -= 1;
-                self.write_indent();
-                self.output.push('}');
-                if let Some(else_blk) = else_block {
-                    self.output.push_str(" else {\n");
-                    self.indent_level += 1;
-                    self.unparse_block(else_blk);
-                    self.indent_level -= 1;
-                    self.write_indent();
-                    self.output.push('}');
-                }
-                self.output.push('\n');
-            }
             TirStmtKind::LetDestructure {
                 pattern,
                 is_mut,

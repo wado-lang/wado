@@ -444,9 +444,6 @@ impl FunctionTranslator<'_, '_> {
                 label: label.clone(),
                 block: self.convert_block(block),
             },
-            TirStmtKind::IfLet { .. } => unreachable!(
-                "TirStmtKind::IfLet should be lowered by translate::pattern before convert_function"
-            ),
             TirStmtKind::LetDestructure {
                 pattern,
                 is_mut,

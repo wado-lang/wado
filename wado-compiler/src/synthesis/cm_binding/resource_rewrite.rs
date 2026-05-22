@@ -157,18 +157,6 @@ fn find_record_stream_reads_in_stmt(
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             find_record_stream_reads(body, tt, results);
         }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            find_record_stream_reads_in_expr(scrutinee, tt, results);
-            find_record_stream_reads(then_block, tt, results);
-            if let Some(blk) = else_block {
-                find_record_stream_reads(blk, tt, results);
-            }
-        }
         _ => {}
     }
 }
@@ -688,18 +676,6 @@ fn rewrite_cm_methods_in_stmt(
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             rewrite_cm_methods_in_block(body, tt, entry_source, wasi_registry);
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            rewrite_cm_methods_in_expr(scrutinee, tt, entry_source, wasi_registry);
-            rewrite_cm_methods_in_block(then_block, tt, entry_source, wasi_registry);
-            if let Some(blk) = else_block {
-                rewrite_cm_methods_in_block(blk, tt, entry_source, wasi_registry);
-            }
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {

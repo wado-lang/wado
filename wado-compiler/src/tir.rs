@@ -2945,13 +2945,9 @@ impl TirBlock {
 /// - `Return` / `Break` / `Continue`: diverging statements yield
 ///   `Never`.
 ///
-/// Used by:
-///
-/// - the resolver, to type `let x = { /* block */ }` (the call lives
-///   on `Resolver` for historical reasons but delegates here).
-/// - `lower::translate::pattern`, to assign the synthesized
-///   `Match` the right `type_id` when rewriting an `IfLet` that
-///   appears in expression position.
+/// Used by the resolver, to type `let x = { /* block */ }` (the call
+/// lives on `Resolver` for historical reasons but delegates here) and
+/// to type the `if let` → `Let` + `Match` lowering's arms.
 pub fn block_result_type(block: &TirBlock) -> TypeId {
     block
         .stmts
@@ -2959,11 +2955,6 @@ pub fn block_result_type(block: &TirBlock) -> TypeId {
         .and_then(|s| match &s.kind {
             TirStmtKind::Expr(e) => Some(e.type_id),
             TirStmtKind::If {
-                then_block,
-                else_block: Some(else_block),
-                ..
-            } => agree_branch_types(block_result_type(then_block), block_result_type(else_block)),
-            TirStmtKind::IfLet {
                 then_block,
                 else_block: Some(else_block),
                 ..
@@ -3048,17 +3039,6 @@ pub enum TirStmtKind {
     LabeledBlock {
         label: String,
         block: TirBlock,
-    },
-    /// Pattern match in if condition: `if let Some(x) = expr { ... } else { ... }`
-    IfLet {
-        /// The expression being matched against
-        scrutinee: TirExpr,
-        /// The pattern to match
-        pattern: TirPattern,
-        /// Block executed when pattern matches
-        then_block: TirBlock,
-        /// Optional else block when pattern doesn't match
-        else_block: Option<TirBlock>,
     },
     /// Tuple destructuring let statement: `let [a, b] = tuple_expr;`
     LetDestructure {
