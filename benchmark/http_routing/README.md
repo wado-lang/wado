@@ -89,9 +89,8 @@ SLICE=5 ROUNDS=5 CONNECTIONS=100 mise run -C benchmark http-routing
 
 ## Recent Results
 
-Measured 2026-05-22 on a cloud VM, `oha` driving each request for 6s at
-50 concurrent connections. Cloud VMs are noisy; runs were repeated and
-the more internally consistent one is shown. Absolute numbers are not
+Measured 2026-05-22 on a 4-core cloud VM: servers pinned to 3 cores, the
+`oha` load generator to 1, `SLICE=3 ROUNDS=3`. Absolute numbers are not
 comparable across machines — only the ratios between servers are.
 
 Environment:
@@ -111,24 +110,25 @@ Throughput (requests/sec, higher is better):
 
 | Request                                     | `wado serve` | Hono (Node) | Hono (Bun) | Axum (native) |
 | ------------------------------------------- | -----------: | ----------: | ---------: | ------------: |
-| `GET /user`                                 |       37,344 |      32,808 |     51,510 |       134,636 |
-| `GET /user/comments`                        |       37,129 |      33,585 |     52,159 |       117,526 |
-| `GET /user/lookup/username/hey`             |       35,882 |      34,372 |     48,369 |       118,892 |
-| `GET /event/abcd1234/comments`              |       36,187 |      34,157 |     47,926 |       117,129 |
-| `POST /event/abcd1234/comment`              |       37,753 |      31,106 |     45,849 |       114,574 |
-| `GET /very/deeply/nested/route/hello/there` |       41,078 |      35,552 |     51,000 |       120,052 |
-| `GET /static/index.html`                    |       40,750 |      31,091 |     48,984 |       114,157 |
+| `GET /user`                                 |       54,106 |      40,486 |     71,401 |        93,103 |
+| `GET /user/comments`                        |       50,214 |      44,214 |     73,380 |        92,831 |
+| `GET /user/lookup/username/hey`             |       51,752 |      42,260 |     64,678 |        95,552 |
+| `GET /event/abcd1234/comments`              |       50,771 |      42,425 |     66,314 |        92,374 |
+| `POST /event/abcd1234/comment`              |       50,780 |      33,452 |     66,137 |        92,109 |
+| `GET /very/deeply/nested/route/hello/there` |       50,786 |      45,021 |     71,736 |        92,523 |
+| `GET /static/index.html`                    |       50,553 |      41,972 |     66,981 |        94,257 |
 
 Observations:
 
-- **`wado serve` leads Hono on Node on every request** — ~36k–41k req/s
-  versus Node's ~31k–36k.
-- **Hono on Bun is ~1.3x faster than `wado serve`** — ~46k–52k req/s.
-  Bun's HTTP server is markedly faster than Node's, so the
-  fastest-JS baseline overtakes `wado serve` here.
-- **Axum (native Rust) is ~3x faster than `wado serve`** — ~114k–135k
-  req/s. This is the native-compiled ceiling: no Wasm component
-  instantiation, no component-model boundary, no recycling.
+- **`wado serve` leads Hono on Node on every request** — ~50k–54k req/s
+  versus Node's ~33k–45k.
+- **Hono on Bun is ~1.35x faster than `wado serve`** — ~65k–73k req/s.
+  Bun's HTTP server is markedly faster than Node's, so the fastest-JS
+  baseline still leads `wado serve`.
+- **Axum (native Rust)** is the native-compiled ceiling. Its figure here
+  is load-generator-limited: with `oha` pinned to a single core, Axum
+  saturates the generator (~92k–96k, flat across requests) rather than
+  itself. Its true throughput is higher.
 - `wado serve` throughput is flat across route shapes: path matching via
   `core:router` is not the bottleneck.
 - A whole-stack, cross-runtime comparison (Wasm component on wasmtime vs
