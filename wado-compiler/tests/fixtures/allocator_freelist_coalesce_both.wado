@@ -1,7 +1,6 @@
-/// Test that the freelist allocator coalesces with BOTH neighbours:
-/// freeing a block sandwiched between two free blocks merges all three
-/// into one, so an allocation too large for any single fragment can
-/// still be served from the merged space.
+/// Test that the freelist allocator's deferred coalescing sweep merges
+/// a run of three adjacent free blocks into one, so an allocation too
+/// large for any single fragment is still served from the merged space.
 use { println } from "core:cli";
 
 export fn run() with Stdout {
@@ -12,15 +11,15 @@ export fn run() with Stdout {
     assert b == a + 80, `b={b}, a={a}`;
     assert c == a + 160, `c={c}, a={a}`;
 
-    // Free the outer blocks, then the middle one: freeing b merges
-    // backward into a and forward into c — a single 240-byte block.
+    // Free all three. Deferred coalescing leaves them as three separate
+    // free blocks: a, b and c physically adjacent in [a, a+240).
     builtin::realloc(a, 64, 8, 0);
     builtin::realloc(c, 64, 8, 0);
     builtin::realloc(b, 64, 8, 0);
 
     // A 200-byte payload (224-byte block) does not fit any single
-    // 80-byte fragment, only the 3-way-coalesced block. Reuse must
-    // land back at `a`.
+    // 80-byte fragment. The allocation runs a coalescing sweep that
+    // merges the run of three into one 240-byte block, reused at `a`.
     let merged = builtin::realloc(0, 0, 8, 200);
     assert merged == a, `expected 3-way coalesced reuse: a={a}, merged={merged}`;
 
