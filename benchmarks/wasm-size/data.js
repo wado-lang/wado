@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779409330709,
+  "lastUpdate": 1779412218599,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24433,6 +24433,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/48c084ec6778ab525cfe0b971419df857d631da0"
         },
         "date": 1779409330364,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "63bee53db08fa513c8b2d16597be238ee3232543",
+          "message": "Merge pull request #1146 from wado-lang/claude/clippy-warnings-cleanup-pI1Db\n\nfix: run the epoch ticker on a dedicated OS thread",
+          "timestamp": "2026-05-22T10:03:46+09:00",
+          "tree_id": "e3e14585987748d44b6dd6f6ad5e76004f24690c",
+          "url": "https://github.com/wado-lang/wado/commit/63bee53db08fa513c8b2d16597be238ee3232543"
+        },
+        "date": 1779412218296,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
