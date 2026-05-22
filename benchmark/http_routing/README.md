@@ -87,49 +87,9 @@ Tunables (env vars):
 SLICE=5 ROUNDS=5 CONNECTIONS=100 mise run -C benchmark http-routing
 ```
 
-## Recent Results
+## Results
 
-Measured 2026-05-22 on a 4-core cloud VM: servers pinned to 3 cores, the
-`oha` load generator to 1, `SLICE=3 ROUNDS=3`.
-
-Environment:
-
-| Component | Version            |
-| --------- | ------------------ |
-| Wado      | 0.0.2 (2026-05-22) |
-| wasmtime  | 44.0.0             |
-| Node.js   | 24.14.1            |
-| Bun       | 1.3.14             |
-| Hono      | 4.12.22            |
-| Axum      | 0.8.9              |
-| rustc     | 1.95.0             |
-| oha       | 1.14.0             |
-
-Throughput (requests/sec, higher is better):
-
-| Request                                     | `wado serve` | Hono (Node) | Hono (Bun) | Axum (native) |
-| ------------------------------------------- | -----------: | ----------: | ---------: | ------------: |
-| `GET /user`                                 |       54,106 |      40,486 |     71,401 |        93,103 |
-| `GET /user/comments`                        |       50,214 |      44,214 |     73,380 |        92,831 |
-| `GET /user/lookup/username/hey`             |       51,752 |      42,260 |     64,678 |        95,552 |
-| `GET /event/abcd1234/comments`              |       50,771 |      42,425 |     66,314 |        92,374 |
-| `POST /event/abcd1234/comment`              |       50,780 |      33,452 |     66,137 |        92,109 |
-| `GET /very/deeply/nested/route/hello/there` |       50,786 |      45,021 |     71,736 |        92,523 |
-| `GET /static/index.html`                    |       50,553 |      41,972 |     66,981 |        94,257 |
-
-Observations:
-
-- **`wado serve` leads Hono on Node on every request** — ~50k–54k req/s
-  versus Node's ~33k–45k.
-- **Hono on Bun is ~1.35x faster than `wado serve`** — ~65k–73k req/s.
-  Bun's HTTP server is markedly faster than Node's, so the fastest-JS
-  baseline still leads `wado serve`.
-- **Axum (native Rust)** is the native-compiled ceiling. Its figure here
-  is load-generator-limited: with `oha` pinned to a single core, Axum
-  saturates the generator (~92k–96k, flat across requests) rather than
-  itself. Its true throughput is higher.
-- `wado serve` throughput is flat across route shapes: path matching via
-  `core:router` is not the bottleneck.
-- A whole-stack, cross-runtime comparison (Wasm component on wasmtime vs
-  JS on Node.js/Bun vs native Rust). For routing-algorithm-only numbers,
-  see `example/router_bench.wado`.
+Throughput numbers live in [`benchmark/README.md`](../README.md), the
+single source of truth for all benchmark results. For
+routing-algorithm-only numbers (no HTTP stack), see
+`example/router_bench.wado`.
