@@ -81,28 +81,21 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
     return aligned;
 }
 
-/// Free-list allocator — reclaims freed memory with a *deferred-coalescing*,
+/// Free-list allocator — reclaims freed memory with a *coalescing*,
 /// size-class-segregated free list. Suitable for long-running processes
 /// (e.g. HTTP servers).
 ///
 /// Every block carries an 8-byte header and 8-byte footer (boundary
-/// tags), both holding `block_size | used_bit`.
+/// tags), both holding `block_size | used_bit`. On free, the physically
+/// adjacent previous and next blocks are inspected through their tags
+/// and merged when free, so per-request allocation churn cannot shatter
+/// the heap into unusable fragments.
 ///
 /// Free blocks are kept in segregated free lists — one doubly-linked
 /// list per size class. Bin `k` (k < 32) holds blocks of size exactly
 /// `32 + 16*k`; bin 32 is the catch-all "large" bin (first-fit).
 /// Allocation goes straight to the size class's bin, so the common case
 /// is O(1) rather than a first-fit scan over every free block.
-///
-/// Coalescing is *deferred*: a free never inspects its neighbours, it
-/// just returns the block to its size-class bin. A long-running server
-/// with a repeating per-request allocation pattern therefore reuses each
-/// freed block straight from its exact bin, with no merge/re-split churn.
-/// Adjacent free blocks are merged only by `fl_coalesce_all`, in a single
-/// heap sweep run when an allocation finds no fit — i.e. just before the
-/// heap would otherwise have to grow. That keeps fragmentation bounded
-/// (the heap never grows while coalescing could still satisfy a request)
-/// without taxing every free.
 ///
 /// Block layout (size a multiple of 16):
 ///   [ size|used : i32 ][ pad : i32 ][ payload … ][ size|used : i32 ][ pad : i32 ]
@@ -172,12 +165,10 @@ fn fl_push(block: i32, size: i32) {
 
 /// Remove `block` from its size-class bin (it must currently be linked).
 fn fl_unlink(block: i32) {
+    let k = fl_bin(fl_size(builtin::i32_load(block)));
     let next = builtin::i32_load(block + 8);
     let prev = builtin::i32_load(block + 12);
     if prev == 0 {
-        // Only a head block needs its bin index, so compute it here
-        // rather than unconditionally.
-        let k = fl_bin(fl_size(builtin::i32_load(block)));
         fl_set_bin_head(k, next);
     } else {
         builtin::i32_store(prev + 8, next);
@@ -202,10 +193,68 @@ fn fl_carve(block: i32, block_size: i32, size: i32) {
     }
 }
 
-/// Take a free block of at least `size` bytes from the segregated free
-/// lists, carving off any excess. Returns the payload pointer, or 0 when
-/// no free block fits.
-fn fl_take(size: i32) -> i32 {
+// `oldsize` and `align` are unused: a freed block's size is read from its
+// own boundary tag (authoritative — it includes rounding and any no-split
+// slack), and every block payload is unconditionally 16-byte aligned,
+// which satisfies every alignment `realloc` is called with (Component
+// Model alignments are all <= 8; the widest Wasm alignment, `v128`, is 16).
+#[allocator("freelist")]
+export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
+    // The shared `heap_offset` global starts at 8; on first use, reserve
+    // [8, 8 + 4*33) for the bin-head table and move the heap frontier to
+    // 152 — past the table and congruent to 8 mod 16, so payloads land
+    // 16-byte aligned. Wasm memory is zero-initialised, so the bins start
+    // empty.
+    if heap_offset < 152 {
+        heap_offset = 152;
+    }
+
+    if newsize == 0 {
+        // Free. `oldptr == 0` (freeing null) is a no-op.
+        if oldptr == 0 {
+            return 0;
+        }
+        let mut block = oldptr - 8;
+        let header = builtin::i32_load(block);
+        // Double-free guard: the block is already marked free.
+        if fl_used(header) == 0 {
+            builtin::unreachable();
+        }
+        let mut size = fl_size(header);
+
+        // Coalesce with the physically-following block when it is free.
+        let next = block + size;
+        if next < heap_offset {
+            let next_header = builtin::i32_load(next);
+            if fl_used(next_header) == 0 {
+                fl_unlink(next);
+                size += fl_size(next_header);
+            }
+        }
+        // Coalesce with the physically-preceding block when it is free.
+        // The first block sits at byte 152, so `block > 152` means a
+        // predecessor exists and `block - 8` holds its footer.
+        if block > 152 {
+            let prev_footer = builtin::i32_load(block - 8);
+            if fl_used(prev_footer) == 0 {
+                let prev_size = fl_size(prev_footer);
+                let prev = block - prev_size;
+                fl_unlink(prev);
+                block = prev;
+                size += prev_size;
+            }
+        }
+
+        fl_set_tags(block, size, 0);
+        fl_push(block, size);
+        return 0;
+    }
+
+    // Allocate. Round the payload up to 16 bytes and add the boundary-tag
+    // overhead; the result is a multiple of 16 (keeping every block's
+    // payload 16-byte aligned) and at least the 32-byte minimum block.
+    let size = builtin::i32_and(newsize + 15, -16) + 16;
+
     // Exact size-class bin first, then larger small bins: any block in a
     // bin at index >= fl_bin(size) is large enough.
     let mut j = fl_bin(size);
@@ -232,106 +281,7 @@ fn fl_take(size: i32) -> i32 {
         curr = builtin::i32_load(curr + 8);
     }
 
-    return 0;
-}
-
-/// Merge every run of physically-adjacent free blocks into one block.
-///
-/// Deferred coalescing: `freelist_realloc` keeps frees cheap by never
-/// inspecting neighbours, so the segregated bins keep holding a block of
-/// each freed size for O(1) same-size reuse — the common case for a
-/// long-running server. Fragmentation is reclaimed here instead, in a
-/// single sweep run only when an allocation would otherwise have to grow
-/// the heap.
-fn fl_coalesce_all() {
-    let mut block = 152;
-    while block < heap_offset {
-        let header = builtin::i32_load(block);
-        let size = fl_size(header);
-        if fl_used(header) == 0 {
-            // Extend a run over the following physically-adjacent free
-            // blocks.
-            let mut run_end = block + size;
-            while run_end < heap_offset
-                && fl_used(builtin::i32_load(run_end)) == 0 {
-                run_end += fl_size(builtin::i32_load(run_end));
-            }
-            let merged = run_end - block;
-            if merged != size {
-                // The run spans more than one block: unlink every free
-                // block in it, then relink a single merged block.
-                let mut p = block;
-                while p < run_end {
-                    let p_size = fl_size(builtin::i32_load(p));
-                    fl_unlink(p);
-                    p += p_size;
-                }
-                fl_set_tags(block, merged, 0);
-                fl_push(block, merged);
-            }
-            block = run_end;
-        } else {
-            block += size;
-        }
-    }
-}
-
-// `oldsize` and `align` are unused: a freed block's size is read from its
-// own boundary tag (authoritative — it includes rounding and any no-split
-// slack), and every block payload is unconditionally 16-byte aligned,
-// which satisfies every alignment `realloc` is called with (Component
-// Model alignments are all <= 8; the widest Wasm alignment, `v128`, is 16).
-#[allocator("freelist")]
-export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
-    // The shared `heap_offset` global starts at 8; on first use, reserve
-    // [8, 8 + 4*33) for the bin-head table and move the heap frontier to
-    // 152 — past the table and congruent to 8 mod 16, so payloads land
-    // 16-byte aligned. Wasm memory is zero-initialised, so the bins start
-    // empty.
-    if heap_offset < 152 {
-        heap_offset = 152;
-    }
-
-    if newsize == 0 {
-        // Free. `oldptr == 0` (freeing null) is a no-op.
-        if oldptr == 0 {
-            return 0;
-        }
-        let block = oldptr - 8;
-        let header = builtin::i32_load(block);
-        // Double-free guard: the block is already marked free.
-        if fl_used(header) == 0 {
-            builtin::unreachable();
-        }
-        // Deferred coalescing: return the block to its size-class bin
-        // without inspecting neighbours, so the bins keep a block of
-        // this exact size ready for O(1) reuse. Adjacent free blocks are
-        // merged later by `fl_coalesce_all`, only under allocation
-        // pressure.
-        let size = fl_size(header);
-        fl_set_tags(block, size, 0);
-        fl_push(block, size);
-        return 0;
-    }
-
-    // Allocate. Round the payload up to 16 bytes and add the boundary-tag
-    // overhead; the result is a multiple of 16 (keeping every block's
-    // payload 16-byte aligned) and at least the 32-byte minimum block.
-    let size = builtin::i32_and(newsize + 15, -16) + 16;
-
-    // Serve from the free lists. On a miss, run one coalescing sweep —
-    // deferred coalescing concentrates the merge work here, where it is
-    // actually needed — and retry before growing the heap.
-    let mut payload = fl_take(size);
-    if payload == 0 {
-        fl_coalesce_all();
-        payload = fl_take(size);
-    }
-    if payload != 0 {
-        return payload;
-    }
-
-    // No fit even after coalescing: bump-allocate a fresh block.
+    // No fit: bump-allocate a fresh block at the heap frontier.
     let block = heap_offset;
     let new_offset = block + size;
     if builtin::unlikely(new_offset > builtin::memory_size() * 65536) {

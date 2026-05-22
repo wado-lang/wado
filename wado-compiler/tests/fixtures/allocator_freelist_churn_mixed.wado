@@ -1,7 +1,7 @@
 /// Test that the freelist allocator stays bounded under churn that
 /// mixes many size classes: priming every class then repeatedly
 /// allocating and freeing the whole spread must return the heap to the
-/// same frontier each cycle, exercising the deferred coalescing sweep.
+/// same frontier each cycle, exercising coalescing in both directions.
 use { println } from "core:cli";
 
 export fn run() with Stdout {
@@ -30,7 +30,8 @@ export fn run() with Stdout {
         for let s of sizes {
             live.push(builtin::realloc(0, 0, 8, s));
         }
-        // Free in reverse. `live[k]` was allocated for `sizes[k]`.
+        // Free in reverse so coalescing merges in both directions.
+        // `live[k]` was allocated for `sizes[k]`.
         for let mut k = live.len() - 1; k >= 0; k -= 1 {
             builtin::realloc(live[k], sizes[k], 8, 0);
         }
