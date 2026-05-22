@@ -2177,36 +2177,6 @@ impl Monomorphizer {
                 self.substitute_types_in_expr(expr, substitution, type_table, local_count, locals);
                 *payload_type = self.substitute_type(*payload_type, substitution, type_table);
             }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.substitute_types_in_expr(
-                    scrutinee,
-                    substitution,
-                    type_table,
-                    local_count,
-                    locals,
-                );
-                for arm in arms {
-                    self.substitute_types_in_block(
-                        arm,
-                        substitution,
-                        type_table,
-                        local_count,
-                        locals,
-                    );
-                }
-                self.substitute_types_in_block(
-                    default,
-                    substitution,
-                    type_table,
-                    local_count,
-                    locals,
-                );
-            }
             // A `FuncRef` carries `type_args` when the reference was pinned
             // by turbofish or expected-type inference. When the enclosing
             // function is itself generic, those args may contain `TypeParam`

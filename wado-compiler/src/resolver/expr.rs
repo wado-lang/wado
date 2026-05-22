@@ -3023,20 +3023,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 TirTemplatePart::Literal(_) => false,
             }),
 
-            // `Switch` only appears after `optimize::match_to_switch` — long
-            // past resolve-time validation — but the walker stays sound for
-            // any future post-resolve reuse.
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                Self::any_in_expr(scrutinee, probe)
-                    || arms.iter().any(|arm| Self::any_in_tree(arm, probe))
-                    || Self::any_in_tree(default, probe)
-            }
-
             // Closures stay in their own scope.
             TirExprKind::Closure { .. } => false,
         }

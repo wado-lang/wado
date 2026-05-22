@@ -401,19 +401,6 @@ fn expand_expr(expr: &mut TirExpr, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx
             expand_expr(value, alloc, ctx);
             return;
         }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            expand_expr(scrutinee, alloc, ctx);
-            for arm in arms {
-                expand_block(arm, alloc, ctx);
-            }
-            expand_block(default, alloc, ctx);
-            return;
-        }
         TirExprKind::WithHandler { bindings, body, .. } => {
             for binding in bindings {
                 expand_expr(&mut binding.handler, alloc, ctx);

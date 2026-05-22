@@ -823,18 +823,6 @@ impl BodyLowerer<'_> {
             }
             TirExprKind::GlobalVarSet { value, .. } => Self::remap_locals_in_expr(value, remap),
             TirExprKind::LabeledBlock { block, .. } => Self::remap_locals_in_block(block, remap),
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                Self::remap_locals_in_expr(scrutinee, remap);
-                for arm in arms {
-                    Self::remap_locals_in_block(arm, remap);
-                }
-                Self::remap_locals_in_block(default, remap);
-            }
             TirExprKind::TemplateString { parts } => {
                 for part in parts {
                     if let crate::tir::TirTemplatePart::Interpolation { expr, .. } = part {
@@ -1144,18 +1132,6 @@ impl BodyLowerer<'_> {
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.transform_block(block, address_taken, type_table);
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.transform_expr(scrutinee, address_taken, type_table);
-                for arm in arms {
-                    self.transform_block(arm, address_taken, type_table);
-                }
-                self.transform_block(default, address_taken, type_table);
             }
             // Leaf nodes: no sub-expressions to transform
             TirExprKind::IntLiteral { .. }

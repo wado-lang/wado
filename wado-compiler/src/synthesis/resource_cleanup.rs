@@ -615,19 +615,6 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
                 scan_transfers(&arm.body, true, consumed, cx);
             }
         }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            scan_transfers(scrutinee, true, consumed, cx);
-            for arm in arms {
-                scan_block_transfers(arm, consumed, cx);
-            }
-            scan_block_transfers(default, consumed, cx);
-        }
-
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
                 scan_transfers(&field.value, true, consumed, cx);

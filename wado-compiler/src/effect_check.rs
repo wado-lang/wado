@@ -734,18 +734,6 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             TirExprKind::VariantPayload { expr, .. } => {
                 self.check_expr(expr)?;
             }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.check_expr(scrutinee)?;
-                for arm in arms {
-                    self.check_block(arm)?;
-                }
-                self.check_block(default)?;
-            }
             TirExprKind::WithHandler { bindings, body, .. } => {
                 // Handler expressions are evaluated in the outer scope (no
                 // effect substitution applies to them).
@@ -1243,18 +1231,6 @@ fn check_pure_expr<H: CompilerHost>(
         }
         TirExprKind::VariantPayload { expr: e, .. } => {
             check_pure_expr(checker, e, logger);
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            check_pure_expr(checker, scrutinee, logger);
-            for arm in arms {
-                check_pure_block(checker, arm, logger);
-            }
-            check_pure_block(checker, default, logger);
         }
         TirExprKind::WithHandler { bindings, body, .. } => {
             // `with` blocks install handlers and run a body. They are not

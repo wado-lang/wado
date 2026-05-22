@@ -1286,18 +1286,6 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
                 lower_dispatch_in_expr(&mut arm.body, env, ctx);
             }
         }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            lower_dispatch_in_expr(scrutinee, env, ctx);
-            for arm in arms {
-                lower_dispatch_in_block(arm, env, ctx);
-            }
-            lower_dispatch_in_block(default, env, ctx);
-        }
         TirExprKind::Call { args, .. } => {
             for arg in args {
                 lower_dispatch_in_expr(&mut arg.expr, env, ctx);
@@ -2034,18 +2022,6 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
                     self.visit_expr(&mut arm.body);
                 }
             }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.visit_expr(scrutinee);
-                for arm in arms {
-                    self.visit_block(arm);
-                }
-                self.visit_block(default);
-            }
             TirExprKind::Closure { .. } => {
                 // Closure bodies are a separate function: their
                 // `return`/`break`/`continue` target the closure, not
@@ -2730,18 +2706,6 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 rewrite_calls_in_expr(&mut arm.body, ctx);
             }
         }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            rewrite_calls_in_expr(scrutinee, ctx);
-            for arm in arms {
-                rewrite_calls_in_block(arm, ctx);
-            }
-            rewrite_calls_in_block(default, ctx);
-        }
         TirExprKind::Call { args, .. } => {
             for arg in args {
                 rewrite_calls_in_expr(&mut arg.expr, ctx);
@@ -3244,18 +3208,6 @@ fn rewrite_resume_in_expr(expr: &mut TirExpr) {
                 }
                 rewrite_resume_in_expr(&mut arm.body);
             }
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            rewrite_resume_in_expr(scrutinee);
-            for arm in arms {
-                rewrite_resume_in_block(arm);
-            }
-            rewrite_resume_in_block(default);
         }
         TirExprKind::Closure { body, .. } => rewrite_resume_in_expr(body),
         _ => {}

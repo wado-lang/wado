@@ -239,18 +239,6 @@ pub trait TirMutVisitor {
                     self.visit_expr(arg);
                 }
             }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.visit_expr(scrutinee);
-                for arm in arms {
-                    self.visit_block(arm);
-                }
-                self.visit_block(default);
-            }
             TirExprKind::TemplateString { parts } => {
                 for part in parts {
                     if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
@@ -497,18 +485,6 @@ pub trait TirRefVisitor {
                 for arg in args {
                     self.visit_expr(arg);
                 }
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.visit_expr(scrutinee);
-                for arm in arms {
-                    self.visit_block(arm);
-                }
-                self.visit_block(default);
             }
             TirExprKind::TemplateString { parts } => {
                 for part in parts {
@@ -763,18 +739,6 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
         TirExprKind::GlobalVarSet { value, .. } => {
             changed |= visitor.visit_expr(value);
         }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            changed |= visitor.visit_expr(scrutinee);
-            for arm in arms {
-                changed |= visitor.visit_block(arm);
-            }
-            changed |= visitor.visit_block(default);
-        }
         // Leaf nodes
         TirExprKind::Local { .. }
         | TirExprKind::FuncRef { .. }
@@ -880,16 +844,6 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
                         .is_some_and(|g| expr_has_break_to(label, g))
                         || expr_has_break_to(label, &arm.body)
                 })
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            expr_has_break_to(label, scrutinee)
-                || arms.iter().any(|arm| block_has_break_to(label, arm))
-                || block_has_break_to(label, default)
         }
         TirExprKind::Binary { left, right, .. } => {
             expr_has_break_to(label, left) || expr_has_break_to(label, right)
