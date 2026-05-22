@@ -1270,37 +1270,6 @@ impl Monomorphizer {
                     locals,
                 );
             }
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                self.substitute_types_in_expr(
-                    scrutinee,
-                    substitution,
-                    type_table,
-                    local_count,
-                    locals,
-                );
-                self.substitute_types_in_pattern(pattern, substitution, type_table);
-                self.substitute_types_in_block(
-                    then_block,
-                    substitution,
-                    type_table,
-                    local_count,
-                    locals,
-                );
-                if let Some(else_blk) = else_block {
-                    self.substitute_types_in_block(
-                        else_blk,
-                        substitution,
-                        type_table,
-                        local_count,
-                        locals,
-                    );
-                }
-            }
             TirStmtKind::LetDestructure { pattern, value, .. } => {
                 self.substitute_types_in_pattern(pattern, substitution, type_table);
                 self.substitute_types_in_expr(value, substitution, type_table, local_count, locals);
@@ -2177,36 +2146,6 @@ impl Monomorphizer {
                 self.substitute_types_in_expr(expr, substitution, type_table, local_count, locals);
                 *payload_type = self.substitute_type(*payload_type, substitution, type_table);
             }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.substitute_types_in_expr(
-                    scrutinee,
-                    substitution,
-                    type_table,
-                    local_count,
-                    locals,
-                );
-                for arm in arms {
-                    self.substitute_types_in_block(
-                        arm,
-                        substitution,
-                        type_table,
-                        local_count,
-                        locals,
-                    );
-                }
-                self.substitute_types_in_block(
-                    default,
-                    substitution,
-                    type_table,
-                    local_count,
-                    locals,
-                );
-            }
             // A `FuncRef` carries `type_args` when the reference was pinned
             // by turbofish or expected-type inference. When the enclosing
             // function is itself generic, those args may contain `TypeParam`
@@ -3057,28 +2996,6 @@ impl Monomorphizer {
             }
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.rewrite_variadic_binding_types(block, binding_local, elem_type, type_table);
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.rewrite_variadic_types_in_expr(
-                    scrutinee,
-                    binding_local,
-                    elem_type,
-                    type_table,
-                );
-                self.rewrite_variadic_binding_types(
-                    then_block,
-                    binding_local,
-                    elem_type,
-                    type_table,
-                );
-                if let Some(eb) = else_block {
-                    self.rewrite_variadic_binding_types(eb, binding_local, elem_type, type_table);
-                }
             }
             TirStmtKind::LetDestructure { value, .. } => {
                 self.rewrite_variadic_types_in_expr(value, binding_local, elem_type, type_table);

@@ -1221,18 +1221,6 @@ fn lower_dispatch_in_stmt(stmt: &mut TirStmt, env: &DispatchEnv, ctx: &mut Lower
                 lower_dispatch_in_block(eb, env, ctx);
             }
         }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            lower_dispatch_in_expr(scrutinee, env, ctx);
-            lower_dispatch_in_block(then_block, env, ctx);
-            if let Some(eb) = else_block {
-                lower_dispatch_in_block(eb, env, ctx);
-            }
-        }
         TirStmtKind::LetDestructure { value, .. } => {
             lower_dispatch_in_expr(value, env, ctx);
         }
@@ -1285,18 +1273,6 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
                 }
                 lower_dispatch_in_expr(&mut arm.body, env, ctx);
             }
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            lower_dispatch_in_expr(scrutinee, env, ctx);
-            for arm in arms {
-                lower_dispatch_in_block(arm, env, ctx);
-            }
-            lower_dispatch_in_block(default, env, ctx);
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
@@ -1491,7 +1467,7 @@ impl crate::tir_visitor::TirRefVisitor for MaxLocalIndex {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
             TirStmtKind::Let { local_index, .. } => self.note(*local_index),
-            TirStmtKind::IfLet { pattern, .. } | TirStmtKind::LetDestructure { pattern, .. } => {
+            TirStmtKind::LetDestructure { pattern, .. } => {
                 self.walk_pattern(pattern);
             }
             TirStmtKind::VariadicForOf { binding_local, .. } => self.note(*binding_local),
@@ -1991,18 +1967,6 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
                     self.visit_block(eb);
                 }
             }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.visit_expr(scrutinee);
-                self.visit_block(then_block);
-                if let Some(eb) = else_block {
-                    self.visit_block(eb);
-                }
-            }
         }
     }
 
@@ -2033,18 +1997,6 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
                     }
                     self.visit_expr(&mut arm.body);
                 }
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.visit_expr(scrutinee);
-                for arm in arms {
-                    self.visit_block(arm);
-                }
-                self.visit_block(default);
             }
             TirExprKind::Closure { .. } => {
                 // Closure bodies are a separate function: their
@@ -2560,18 +2512,6 @@ fn rewrite_calls_in_stmt(stmt: &mut TirStmt, ctx: &RewriteCtx<'_>) {
                 rewrite_calls_in_block(eb, ctx);
             }
         }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            rewrite_calls_in_expr(scrutinee, ctx);
-            rewrite_calls_in_block(then_block, ctx);
-            if let Some(eb) = else_block {
-                rewrite_calls_in_block(eb, ctx);
-            }
-        }
         TirStmtKind::LetDestructure { value, .. } => {
             rewrite_calls_in_expr(value, ctx);
         }
@@ -2729,18 +2669,6 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 }
                 rewrite_calls_in_expr(&mut arm.body, ctx);
             }
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            rewrite_calls_in_expr(scrutinee, ctx);
-            for arm in arms {
-                rewrite_calls_in_block(arm, ctx);
-            }
-            rewrite_calls_in_block(default, ctx);
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
@@ -3197,18 +3125,6 @@ fn rewrite_resume_in_stmt(stmt: &mut TirStmt) {
                 rewrite_resume_in_block(eb);
             }
         }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            rewrite_resume_in_expr(scrutinee);
-            rewrite_resume_in_block(then_block);
-            if let Some(eb) = else_block {
-                rewrite_resume_in_block(eb);
-            }
-        }
         TirStmtKind::LetDestructure { value, .. } => rewrite_resume_in_expr(value),
         TirStmtKind::VariadicForOf { iterable, body, .. } => {
             rewrite_resume_in_expr(iterable);
@@ -3244,18 +3160,6 @@ fn rewrite_resume_in_expr(expr: &mut TirExpr) {
                 }
                 rewrite_resume_in_expr(&mut arm.body);
             }
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            rewrite_resume_in_expr(scrutinee);
-            for arm in arms {
-                rewrite_resume_in_block(arm);
-            }
-            rewrite_resume_in_block(default);
         }
         TirExprKind::Closure { body, .. } => rewrite_resume_in_expr(body),
         _ => {}

@@ -236,18 +236,6 @@ fn expand_stmt(stmt: &mut TirStmt, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx
         TirStmtKind::Loop { body } => {
             expand_block(body, alloc, ctx);
         }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            expand_expr(scrutinee, alloc, ctx);
-            expand_block(then_block, alloc, ctx);
-            if let Some(eb) = else_block {
-                expand_block(eb, alloc, ctx);
-            }
-        }
         TirStmtKind::LetDestructure { value, .. } | TirStmtKind::TaskReturn { value, .. } => {
             expand_expr(value, alloc, ctx);
         }
@@ -399,19 +387,6 @@ fn expand_expr(expr: &mut TirExpr, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx
         }
         TirExprKind::GlobalVarSet { value, .. } => {
             expand_expr(value, alloc, ctx);
-            return;
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            expand_expr(scrutinee, alloc, ctx);
-            for arm in arms {
-                expand_block(arm, alloc, ctx);
-            }
-            expand_block(default, alloc, ctx);
             return;
         }
         TirExprKind::WithHandler { bindings, body, .. } => {

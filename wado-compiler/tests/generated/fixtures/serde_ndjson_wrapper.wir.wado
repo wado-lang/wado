@@ -355,33 +355,33 @@ fn "core:json/write_escaped_string"(buf, s) {
     __iter_2 = struct.new "core:prelude/string.wado//StrCharIter" { repr: s.repr, used: s.used, byte_index: 0 };
     b18: block {
         l19: loop {
-            let __sroa___iflet_7_discriminant: i32;
-            let __sroa___iflet_7_payload_0: char;
-            multivalue_bind [__sroa___iflet_7_discriminant, __sroa___iflet_7_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
-            if __sroa___iflet_7_discriminant == 0 {
-                if __sroa___iflet_7_payload_0 == 34 {
+            let __sroa___match_7_discriminant: i32;
+            let __sroa___match_7_payload_0: char;
+            multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
+            if __sroa___match_7_discriminant == 0 {
+                if __sroa___match_7_payload_0 == 34 {
                     "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\\\""), used: 2 });
-                } else if __sroa___iflet_7_payload_0 == 92 {
+                } else if __sroa___match_7_payload_0 == 92 {
                     "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\\\\"), used: 2 });
-                } else if __sroa___iflet_7_payload_0 == 10 {
+                } else if __sroa___match_7_payload_0 == 10 {
                     "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\\n"), used: 2 });
-                } else if __sroa___iflet_7_payload_0 == 13 {
+                } else if __sroa___match_7_payload_0 == 13 {
                     "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\\r"), used: 2 });
-                } else if __sroa___iflet_7_payload_0 == 9 {
+                } else if __sroa___match_7_payload_0 == 9 {
                     "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\\t"), used: 2 });
                 } else {
-                    if __sroa___iflet_7_payload_0 <u 32 {
+                    if __sroa___match_7_payload_0 <u 32 {
                         "core:prelude/string.wado/String::push_str"(buf, __tmpl: block -> ref "core:prelude/string.wado//String" {
                             __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
                             "core:prelude/string.wado/String::push"(__local_5, 92);
                             "core:prelude/string.wado/String::push"(__local_5, 117);
                             __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 4, precision: -1, indent: 0, buf: __local_5 };
-                            "core:prelude/primitive.wado/i32^LowerHex::fmt"(__sroa___iflet_7_payload_0, __local_6);
+                            "core:prelude/primitive.wado/i32^LowerHex::fmt"(__sroa___match_7_payload_0, __local_6);
                             break __tmpl: __local_5;
                             unreachable;
                         });
                     } else {
-                        "core:prelude/string.wado/String::push"(buf, __sroa___iflet_7_payload_0);
+                        "core:prelude/string.wado/String::push"(buf, __sroa___match_7_payload_0);
                     }
                 }
             } else {
@@ -396,12 +396,12 @@ fn "core:json/write_escaped_string"(buf, s) {
 fn "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/ErrorMessage>"(value) {
     let buf: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//SerializeError";
+    let __match_5: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    let __match_scrut_0: ref null "core:serde//SerializeError";
-    __match_scrut_0 = "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/ErrorMessage^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
-    if ref.is_null(__match_scrut_0) {
+    __match_5 = "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/ErrorMessage^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
+    if ref.is_null(__match_5) {
     } else {
-        __qm_e = ref.as_non_null(__match_scrut_0);
+        __qm_e = ref.as_non_null(__match_5);
         return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err" { discriminant: 1, payload_0: __qm_e };
     }
     return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: buf };
@@ -410,12 +410,12 @@ fn "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_ndjson_wrap
 fn "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/Message>"(value) {
     let buf: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//SerializeError";
+    let __match_5: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    let __match_scrut_0: ref null "core:serde//SerializeError";
-    __match_scrut_0 = "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/Message^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
-    if ref.is_null(__match_scrut_0) {
+    __match_5 = "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/Message^Serialize::serialize<core:json/JsonSerializer>"(value, buf);
+    if ref.is_null(__match_5) {
     } else {
-        __qm_e = ref.as_non_null(__match_scrut_0);
+        __qm_e = ref.as_non_null(__match_5);
         return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err" { discriminant: 1, payload_0: __qm_e };
     }
     return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: buf };

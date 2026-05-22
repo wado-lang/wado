@@ -290,18 +290,6 @@ fn body_has_resource(block: &TirBlock, tt: &TypeTable, reg: &WasiRegistry) -> bo
                     .as_ref()
                     .is_some_and(|b| body_has_resource(b, tt, reg))
         }
-        TirStmtKind::IfLet {
-            pattern,
-            then_block,
-            else_block,
-            ..
-        } => {
-            pattern_carries_resource(pattern, tt, reg)
-                || body_has_resource(then_block, tt, reg)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|b| body_has_resource(b, tt, reg))
-        }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             body_has_resource(body, tt, reg)
         }
@@ -615,19 +603,6 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
                 scan_transfers(&arm.body, true, consumed, cx);
             }
         }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            scan_transfers(scrutinee, true, consumed, cx);
-            for arm in arms {
-                scan_block_transfers(arm, consumed, cx);
-            }
-            scan_block_transfers(default, consumed, cx);
-        }
-
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
                 scan_transfers(&field.value, true, consumed, cx);
@@ -705,19 +680,6 @@ fn scan_block_transfers(block: &TirBlock, consumed: &mut Vec<u32>, cx: &Cx) {
                 else_block,
             } => {
                 scan_transfers(condition, true, consumed, cx);
-                scan_block_transfers(then_block, consumed, cx);
-                if let Some(eb) = else_block {
-                    scan_block_transfers(eb, consumed, cx);
-                }
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                let extracts = pattern_extracts_resource(pattern, cx.tt, cx.reg);
-                scan_transfers(scrutinee, extracts, consumed, cx);
                 scan_block_transfers(then_block, consumed, cx);
                 if let Some(eb) = else_block {
                     scan_block_transfers(eb, consumed, cx);
@@ -1056,68 +1018,6 @@ fn elab_stmt(
             out.push(TirStmt {
                 kind: TirStmtKind::If {
                     condition,
-                    then_block: TirBlock {
-                        stmts: then_stmts,
-                        span: then_block.span,
-                    },
-                    else_block: new_else,
-                },
-                span,
-            });
-            if diverged {
-                Flow::Diverged
-            } else {
-                Flow::Normal
-            }
-        }
-
-        TirStmtKind::IfLet {
-            scrutinee,
-            pattern,
-            then_block,
-            else_block,
-        } => {
-            let extracts = pattern_extracts_resource(&pattern, cx.tt, cx.reg);
-            apply_transfers_root(owned, &scrutinee, extracts, cx);
-            let then_pat = pattern_resources(&pattern, cx);
-            let (then_block, then_owned, then_flow) = elab_branch(then_block, owned, &then_pat, cx);
-            let (else_block, else_owned, else_flow) = match else_block {
-                Some(eb) => {
-                    let (b, o, f) = elab_branch(eb, owned, &[], cx);
-                    (Some(b), Some(o), f)
-                }
-                None => (None, None, Flow::Normal),
-            };
-            let mut then_stmts = then_block.stmts;
-            let mut else_stmts = else_block
-                .as_ref()
-                .map(|b| b.stmts.clone())
-                .unwrap_or_default();
-            reconcile(
-                owned,
-                &then_owned,
-                then_flow,
-                &mut then_stmts,
-                else_owned.as_ref(),
-                else_flow,
-                &mut else_stmts,
-                cx,
-            );
-            let diverged = matches!(then_flow, Flow::Diverged)
-                && else_block.is_some()
-                && matches!(else_flow, Flow::Diverged);
-            let new_else = if else_block.is_some() || !else_stmts.is_empty() {
-                Some(TirBlock {
-                    stmts: else_stmts,
-                    span,
-                })
-            } else {
-                None
-            };
-            out.push(TirStmt {
-                kind: TirStmtKind::IfLet {
-                    scrutinee,
-                    pattern,
                     then_block: TirBlock {
                         stmts: then_stmts,
                         span: then_block.span,

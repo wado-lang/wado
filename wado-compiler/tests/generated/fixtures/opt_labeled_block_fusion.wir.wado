@@ -134,12 +134,12 @@ fn "wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado/first_positive"(a
     __iter_1 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: arr.repr, used: arr.used, index: 0 };
     b0: block {
         l1: loop {
-            let __sroa___iflet_3_discriminant: i32;
-            let __sroa___iflet_3_payload_0: i32;
-            multivalue_bind [__sroa___iflet_3_discriminant, __sroa___iflet_3_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_1);
-            if __sroa___iflet_3_discriminant == 0 {
-                if __sroa___iflet_3_payload_0 > 0 {
-                    return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: __sroa___iflet_3_payload_0 };
+            let __sroa___match_3_discriminant: i32;
+            let __sroa___match_3_payload_0: i32;
+            multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_1);
+            if __sroa___match_3_discriminant == 0 {
+                if __sroa___match_3_payload_0 > 0 {
+                    return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: __sroa___match_3_payload_0 };
                 }
             } else {
                 break b0;
@@ -167,9 +167,10 @@ fn "wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado/run"() with Stdou
     let __local_21: ref "core:prelude/format.wado//Formatter";
     let __local_22: ref "core:prelude/string.wado//String";
     let __local_23: ref "core:prelude/format.wado//Formatter";
-    let f_60: ref "core:prelude/format.wado//Formatter";
-    let f_65: ref "core:prelude/format.wado//Formatter";
+    let f_58: ref "core:prelude/format.wado//Formatter";
+    let f_63: ref "core:prelude/format.wado//Formatter";
     __fused___inline_maybe_double_2: block {
+        break __fused___inline_maybe_double_2;
         break __fused___inline_maybe_double_2;
     };
     __cond_5 = block -> bool {
@@ -221,8 +222,8 @@ condition: b matches { None }
                 "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado"), used: 58 });
                 "core:prelude/string.wado/String::push"(__local_20, 58);
                 __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
-                f_60 = __local_21;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(42, f_60);
+                f_58 = __local_21;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(42, f_58);
                 "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: v == 3
 "), used: 19 });
@@ -230,8 +231,8 @@ condition: v == 3
                 "core:prelude/string.wado/String::push"(__local_20, 58);
                 "core:prelude/string.wado/String::push"(__local_20, 32);
                 __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
-                f_65 = __local_21;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(v_9, f_65);
+                f_63 = __local_21;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(v_9, f_63);
                 "core:prelude/string.wado/String::push"(__local_20, 10);
                 break __tmpl: __local_20;
                 unreachable;

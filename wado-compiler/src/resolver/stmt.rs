@@ -7,8 +7,8 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirPattern,
-    TirStmt, TirStmtKind, TirStructField, TirStructPatternField, TypeId, TypeTable,
+    PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirMatchArm,
+    TirPattern, TirStmt, TirStmtKind, TirStructField, TirStructPatternField, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -1071,11 +1071,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Resolve a let-chain condition into a nested sequence of IfLet/If TIR statements.
+    /// Resolve a let-chain condition into a nested sequence of TIR statements.
     ///
-    /// Each element of the chain adds one nesting level: a `Let` element becomes an `IfLet`
-    /// node (scrutinee + pattern), and an `Expr` element becomes an `If` node (boolean guard).
-    /// All levels that fail fall through to `else_block`; the innermost level runs `then_block`.
+    /// Each element of the chain adds one nesting level: a `Let` element becomes a
+    /// two-arm `Match` expression statement (the pattern arm vs. a wildcard else
+    /// arm; the scrutinee stays inline and is hoisted into a temp local later, in
+    /// `translate::pattern`), and an `Expr` element becomes an `If` node (boolean
+    /// guard). All levels that fail fall through to `else_block`; the innermost
+    /// level runs `then_block`.
     ///
     /// The `else_block` TIR is cloned for each failure path. This duplicates else-block code
     /// in the output, but is typically small (e.g., `None` or a single `panic` call).
@@ -1093,7 +1096,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
         // Process the current element first so its bindings are visible when resolving
         // subsequent elements and the then_block (via recursive calls below).
-        let stmt = match &elements[0] {
+        match &elements[0] {
             ConditionElement::Let {
                 pattern,
                 expr,
@@ -1114,15 +1117,57 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ),
                     span,
                 );
-                TirStmt::new(
-                    TirStmtKind::IfLet {
-                        scrutinee,
+                // `if let` is normalized to a two-arm `Match` — NIR's
+                // canonical pattern-matching form. The scrutinee stays
+                // inline: `translate::pattern` hoists it into a temp
+                // local later, after `resource_cleanup` has run, so the
+                // resource-flow analysis sees the same shape it saw for
+                // the old `IfLet` node.
+                let then_type = Self::block_result_type(&inner_block);
+                let else_tir = else_block.cloned();
+                let else_type = else_tir
+                    .as_ref()
+                    .map_or(TypeTable::UNIT, Self::block_result_type);
+                let else_arm_span = else_tir.as_ref().map_or(span, |b| b.span);
+                // Equal types agree; a `Never` arm defers to the other;
+                // an outright mismatch (statement-position `if let` whose
+                // then-block ends in a non-Unit call) falls back to
+                // `Unit`, letting both arm values be dropped.
+                let match_type =
+                    crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
+                let then_body = TirExpr::new(TirExprKind::Block(inner_block), then_type, span);
+                let else_body = match else_tir {
+                    Some(b) => {
+                        let b_span = b.span;
+                        TirExpr::new(TirExprKind::Block(b), else_type, b_span)
+                    }
+                    None => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+                };
+                let arms = vec![
+                    TirMatchArm {
                         pattern: tir_pattern,
-                        then_block: inner_block,
-                        else_block: else_block.cloned(),
+                        guard: None,
+                        body: then_body,
+                        span: *elem_span,
                     },
+                    TirMatchArm {
+                        pattern: TirPattern::Wildcard,
+                        guard: None,
+                        body: else_body,
+                        span: else_arm_span,
+                    },
+                ];
+                vec![TirStmt::new(
+                    TirStmtKind::Expr(TirExpr::new(
+                        TirExprKind::Match {
+                            expr: Box::new(scrutinee),
+                            arms,
+                        },
+                        match_type,
+                        span,
+                    )),
                     span,
-                )
+                )]
             }
             ConditionElement::Expr(expr) => {
                 let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
@@ -1137,17 +1182,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ),
                     span,
                 );
-                TirStmt::new(
+                vec![TirStmt::new(
                     TirStmtKind::If {
                         condition,
                         then_block: inner_block,
                         else_block: else_block.cloned(),
                     },
                     span,
-                )
+                )]
             }
-        };
-        vec![stmt]
+        }
     }
 
     /// Resolve a pattern in an if-pattern context with type information from the scrutinee.

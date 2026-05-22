@@ -123,18 +123,6 @@ impl StringCollector {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.collect_block(block);
             }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.collect_expr(scrutinee);
-                self.collect_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.collect_block(else_blk);
-                }
-            }
             TirStmtKind::LetDestructure { value, .. } => {
                 self.collect_expr(value);
             }
@@ -257,18 +245,6 @@ impl StringCollector {
             | TirExprKind::VariantTest { expr, .. }
             | TirExprKind::VariantPayload { expr, .. } => {
                 self.collect_expr(expr);
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.collect_expr(scrutinee);
-                for arm in arms {
-                    self.collect_block(arm);
-                }
-                self.collect_block(default);
             }
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }

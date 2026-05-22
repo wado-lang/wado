@@ -770,11 +770,6 @@ pub(super) fn collect_local_type_updates(
                 then_block,
                 else_block,
                 ..
-            }
-            | TirStmtKind::IfLet {
-                then_block,
-                else_block,
-                ..
             } => {
                 collect_local_type_updates(then_block, locals, updates);
                 if let Some(blk) = else_block {
@@ -845,24 +840,6 @@ fn rewrite_calls_in_stmt(
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             rewrite_calls_in_block(body, adapters, entry_source, wasi_registry, type_table);
-        }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry, type_table);
-            rewrite_calls_in_block(
-                then_block,
-                adapters,
-                entry_source,
-                wasi_registry,
-                type_table,
-            );
-            if let Some(blk) = else_block {
-                rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry, type_table);
-            }
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
@@ -1434,18 +1411,6 @@ fn rewrite_calls_in_expr(
             rewrite_calls_in_expr(e, adapters, entry_source, wasi_registry, type_table);
             rewrite_calls_in_expr(index, adapters, entry_source, wasi_registry, type_table);
         }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry, type_table);
-            for arm in arms {
-                rewrite_calls_in_block(arm, adapters, entry_source, wasi_registry, type_table);
-            }
-            rewrite_calls_in_block(default, adapters, entry_source, wasi_registry, type_table);
-        }
         TirExprKind::Match {
             expr: scrutinee,
             arms,
@@ -1592,18 +1557,6 @@ fn collect_effect_calls_in_stmt(
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             collect_effect_calls_in_block(body, effects, wasi_registry);
         }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_effect_calls_in_expr(scrutinee, effects, wasi_registry);
-            collect_effect_calls_in_block(then_block, effects, wasi_registry);
-            if let Some(blk) = else_block {
-                collect_effect_calls_in_block(blk, effects, wasi_registry);
-            }
-        }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 collect_effect_calls_in_expr(v, effects, wasi_registry);
@@ -1720,18 +1673,6 @@ fn collect_effect_calls_in_expr(
         } => {
             collect_effect_calls_in_expr(e, effects, wasi_registry);
             collect_effect_calls_in_expr(index, effects, wasi_registry);
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_effect_calls_in_expr(scrutinee, effects, wasi_registry);
-            for arm in arms {
-                collect_effect_calls_in_block(arm, effects, wasi_registry);
-            }
-            collect_effect_calls_in_block(default, effects, wasi_registry);
         }
         TirExprKind::Match {
             expr: scrutinee,

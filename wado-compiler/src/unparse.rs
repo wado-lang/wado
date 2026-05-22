@@ -3922,33 +3922,6 @@ impl<'a> TirUnparser<'a> {
                 self.write_indent();
                 self.output.push_str("}\n");
             }
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                self.write_indent();
-                self.output.push_str("if ");
-                self.unparse_tir_pattern(pattern);
-                self.output.push_str(" = ");
-                self.unparse_expr(scrutinee);
-                self.output.push_str(" {\n");
-                self.indent_level += 1;
-                self.unparse_block(then_block);
-                self.indent_level -= 1;
-                self.write_indent();
-                self.output.push('}');
-                if let Some(else_blk) = else_block {
-                    self.output.push_str(" else {\n");
-                    self.indent_level += 1;
-                    self.unparse_block(else_blk);
-                    self.indent_level -= 1;
-                    self.write_indent();
-                    self.output.push('}');
-                }
-                self.output.push('\n');
-            }
             TirStmtKind::LetDestructure {
                 pattern,
                 is_mut,
@@ -4375,37 +4348,6 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str("__variant_payload(");
                 self.unparse_expr(expr);
                 self.output.push_str(&format!(", case={case_index})"));
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                min_value,
-                arms,
-                default,
-            } => {
-                self.output.push_str("switch ");
-                self.unparse_expr(scrutinee);
-                self.output.push_str(&format!(" (base={min_value}) {{\n"));
-                self.indent_level += 1;
-                for (i, arm) in arms.iter().enumerate() {
-                    self.write_indent();
-                    self.output
-                        .push_str(&format!("{} => {{\n", *min_value + i as i64));
-                    self.indent_level += 1;
-                    self.unparse_block(arm);
-                    self.indent_level -= 1;
-                    self.write_indent();
-                    self.output.push_str("}\n");
-                }
-                self.write_indent();
-                self.output.push_str("_ => {\n");
-                self.indent_level += 1;
-                self.unparse_block(default);
-                self.indent_level -= 1;
-                self.write_indent();
-                self.output.push_str("}\n");
-                self.indent_level -= 1;
-                self.write_indent();
-                self.output.push('}');
             }
             TirExprKind::TemplateString { parts } => {
                 self.output.push('`');

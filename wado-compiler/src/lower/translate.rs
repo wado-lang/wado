@@ -444,9 +444,6 @@ impl FunctionTranslator<'_, '_> {
                 label: label.clone(),
                 block: self.convert_block(block),
             },
-            TirStmtKind::IfLet { .. } => unreachable!(
-                "TirStmtKind::IfLet should be lowered by translate::pattern before convert_function"
-            ),
             TirStmtKind::LetDestructure {
                 pattern,
                 is_mut,
@@ -860,17 +857,6 @@ impl FunctionTranslator<'_, '_> {
                 expr: Box::new(self.convert_expr(expr)),
                 case_index: *case_index,
                 payload_type: *payload_type,
-            },
-            TirExprKind::Switch {
-                scrutinee,
-                min_value,
-                arms,
-                default,
-            } => NirExprKind::Switch {
-                scrutinee: Box::new(self.convert_expr(scrutinee)),
-                min_value: *min_value,
-                arms: arms.iter().map(|b| self.convert_block(b)).collect(),
-                default: self.convert_block(default),
             },
             TirExprKind::TemplateString { .. } => unreachable!(
                 "TirExprKind::TemplateString should be expanded by synthesis::template before lower::translate runs"

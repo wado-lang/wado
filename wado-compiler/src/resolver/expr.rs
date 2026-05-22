@@ -2773,11 +2773,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 then_block,
                 else_block: Some(else_block),
                 ..
-            }
-            | TirStmtKind::IfLet {
-                then_block,
-                else_block: Some(else_block),
-                ..
             } => Self::block_always_exits(then_block) && Self::block_always_exits(else_block),
             TirStmtKind::Loop { body } => !Self::loop_body_can_escape(body),
             TirStmtKind::LabeledBlock { block, label } => {
@@ -2866,11 +2861,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
         match &stmt.kind {
             TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            }
-            | TirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
@@ -3023,20 +3013,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 TirTemplatePart::Literal(_) => false,
             }),
 
-            // `Switch` only appears after `optimize::match_to_switch` — long
-            // past resolve-time validation — but the walker stays sound for
-            // any future post-resolve reuse.
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                Self::any_in_expr(scrutinee, probe)
-                    || arms.iter().any(|arm| Self::any_in_tree(arm, probe))
-                    || Self::any_in_tree(default, probe)
-            }
-
             // Closures stay in their own scope.
             TirExprKind::Closure { .. } => false,
         }
@@ -3047,21 +3023,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             TirStmtKind::Return { value: Some(expr) } => Some(expr.type_id),
             TirStmtKind::Return { value: None } => Some(TypeTable::UNIT),
             TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                if let Some(t) = Self::find_return_type_in_block(then_block) {
-                    return Some(t);
-                }
-                if let Some(else_blk) = else_block
-                    && let Some(t) = Self::find_return_type_in_block(else_blk)
-                {
-                    return Some(t);
-                }
-                None
-            }
-            TirStmtKind::IfLet {
                 then_block,
                 else_block,
                 ..
@@ -4596,14 +4557,6 @@ fn patch_unresolved_null_in_block(
             patch_unresolved_null(e, target_type, type_table, unresolved);
         }
         TirStmtKind::If {
-            then_block,
-            else_block: Some(eb),
-            ..
-        } => {
-            patch_unresolved_null_in_block(then_block, target_type, type_table, unresolved);
-            patch_unresolved_null_in_block(eb, target_type, type_table, unresolved);
-        }
-        TirStmtKind::IfLet {
             then_block,
             else_block: Some(eb),
             ..

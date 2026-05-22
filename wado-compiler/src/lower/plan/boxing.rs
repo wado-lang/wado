@@ -506,16 +506,6 @@ impl BodyLowerer<'_> {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.expand_deref_assigns_in_block(body, local_count, locals, type_table);
             }
-            TirStmtKind::IfLet {
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.expand_deref_assigns_in_block(then_block, local_count, locals, type_table);
-                if let Some(else_block) = else_block {
-                    self.expand_deref_assigns_in_block(else_block, local_count, locals, type_table);
-                }
-            }
             _ => {}
         }
     }
@@ -706,19 +696,6 @@ impl BodyLowerer<'_> {
             TirStmtKind::Break { value: Some(v), .. } => Self::remap_locals_in_expr(v, remap),
             TirStmtKind::Break { value: None, .. } | TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => Self::remap_locals_in_block(block, remap),
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                Self::remap_locals_in_expr(scrutinee, remap);
-                Self::remap_locals_in_pattern(pattern, remap);
-                Self::remap_locals_in_block(then_block, remap);
-                if let Some(eb) = else_block {
-                    Self::remap_locals_in_block(eb, remap);
-                }
-            }
             TirStmtKind::LetDestructure { value, pattern, .. } => {
                 Self::remap_locals_in_expr(value, remap);
                 Self::remap_locals_in_pattern(pattern, remap);
@@ -823,18 +800,6 @@ impl BodyLowerer<'_> {
             }
             TirExprKind::GlobalVarSet { value, .. } => Self::remap_locals_in_expr(value, remap),
             TirExprKind::LabeledBlock { block, .. } => Self::remap_locals_in_block(block, remap),
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                Self::remap_locals_in_expr(scrutinee, remap);
-                for arm in arms {
-                    Self::remap_locals_in_block(arm, remap);
-                }
-                Self::remap_locals_in_block(default, remap);
-            }
             TirExprKind::TemplateString { parts } => {
                 for part in parts {
                     if let crate::tir::TirTemplatePart::Interpolation { expr, .. } = part {
@@ -992,18 +957,6 @@ impl BodyLowerer<'_> {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.transform_block(block, address_taken, type_table);
             }
-            TirStmtKind::IfLet {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.transform_expr(scrutinee, address_taken, type_table);
-                self.transform_block(then_block, address_taken, type_table);
-                if let Some(else_block) = else_block {
-                    self.transform_block(else_block, address_taken, type_table);
-                }
-            }
             TirStmtKind::LetDestructure { value, .. } => {
                 self.transform_expr(value, address_taken, type_table);
             }
@@ -1144,18 +1097,6 @@ impl BodyLowerer<'_> {
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.transform_block(block, address_taken, type_table);
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.transform_expr(scrutinee, address_taken, type_table);
-                for arm in arms {
-                    self.transform_block(arm, address_taken, type_table);
-                }
-                self.transform_block(default, address_taken, type_table);
             }
             // Leaf nodes: no sub-expressions to transform
             TirExprKind::IntLiteral { .. }

@@ -1335,122 +1335,6 @@ impl<'a> PatternLowerer<'a> {
                     self.lower_let_pattern(&pattern, is_mut, value, stmt.span, out, type_table);
                 }
             }
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                // WEP 2026-05-11 Phase 10 makes `Match` NIR's canonical
-                // pattern-matching shape. Convert `IfLet` to an
-                // equivalent TIR `Match` expression and let the Match
-                // arm in `lower_expr` apply the shared arm preprocessing
-                // (or-pattern expansion, refutable sub-pattern
-                // extraction, top-level literal lowering, Ref / MutRef
-                // scrutinee deref). Downstream passes (`boxing`,
-                // `closure`, the translator) then see one unified
-                // Match shape instead of an `If + VariantTest + Let +
-                // VariantPayload` chain.
-                // The result type carried on the produced Match —
-                // and on each arm's `Block` body — must match the
-                // type the source expression actually produces:
-                // statement-position `if let` is Unit-typed, but
-                // expression-position `if let` (wrapped by
-                // `resolve_if_expr` in a `TirExprKind::Block`) yields
-                // the type of the surrounding `let _ = ...` /
-                // function return. Reading the type off the last
-                // `Expr` statement of each branch preserves the
-                // resolver's per-branch type so wir_build's
-                // `translate_match` produces a value-typed
-                // `if … -> T` for non-Unit results.
-                let then_span = then_block.span;
-                let else_span = else_block.as_ref().map_or(stmt.span, |b| b.span);
-                let then_type = block_result_type(&then_block);
-                let else_type = else_block
-                    .as_ref()
-                    .map_or(TypeTable::UNIT, block_result_type);
-                // Join the two arm types the same way the resolver
-                // does for `if` / `if let` (see
-                // `tir::agree_branch_types`): equal types agree, a
-                // `Never` arm defers to the other side, and an
-                // outright mismatch — which is exactly what
-                // statement-position `if let` produces when the
-                // user's then-block happens to end in a non-Unit
-                // call — falls back to `Unit`. Falling back to
-                // `Unit` lets wir_build's `translate_match` skip
-                // the value-producing `if … -> T` shape that would
-                // otherwise demand both arms produce `T`; instead
-                // each arm-body's value is dropped after evaluation.
-                let match_type =
-                    crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
-                let then_body = TirExpr::new(TirExprKind::Block(then_block), then_type, then_span);
-                let else_body = match else_block {
-                    Some(b) => {
-                        let span = b.span;
-                        TirExpr::new(TirExprKind::Block(b), else_type, span)
-                    }
-                    None => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, stmt.span),
-                };
-                let arms = vec![
-                    TirMatchArm {
-                        pattern,
-                        guard: None,
-                        body: then_body,
-                        span: then_span,
-                    },
-                    TirMatchArm {
-                        pattern: TirPattern::Wildcard,
-                        guard: None,
-                        body: else_body,
-                        span: else_span,
-                    },
-                ];
-                // Bind the scrutinee to a temp local before the Match.
-                // The (Let { value: scrutinee }, Match { expr: Local(temp) })
-                // shape is what `labeled_block_fusion` looks for to eliminate
-                // GC allocations produced by inlined `Option<T>`-returning
-                // calls (e.g. `Iterator::next`). With the scrutinee embedded
-                // directly in `Match.expr`, fusion has no Let value to bite
-                // and the optimisation stops firing on iterator-heavy loops.
-                let scrutinee_type = scrutinee.type_id;
-                let scrutinee_span = scrutinee.span;
-                let temp_local = self.alloc_local(scrutinee_type);
-                let temp_name = format!("__iflet_{temp_local}");
-                let mut lowered_scrutinee = scrutinee;
-                self.lower_expr(&mut lowered_scrutinee, type_table);
-                out.push(TirStmt::new(
-                    TirStmtKind::Let {
-                        name: temp_name.clone(),
-                        local_index: temp_local,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: scrutinee_type,
-                        value: lowered_scrutinee,
-                        skip_value_copy: false,
-                    },
-                    stmt.span,
-                ));
-                let scrutinee_local = TirExpr::new(
-                    TirExprKind::Local {
-                        index: temp_local,
-                        name: temp_name,
-                    },
-                    scrutinee_type,
-                    scrutinee_span,
-                );
-                let mut match_expr = TirExpr::new(
-                    TirExprKind::Match {
-                        expr: Box::new(scrutinee_local),
-                        arms,
-                    },
-                    match_type,
-                    stmt.span,
-                );
-                // Drive the Match through the same arm preprocessing
-                // that user-written `match` arms get.
-                self.lower_expr(&mut match_expr, type_table);
-                out.push(TirStmt::new(TirStmtKind::Expr(match_expr), stmt.span));
-            }
             TirStmtKind::Let {
                 value,
                 name,
@@ -1477,6 +1361,48 @@ impl<'a> PatternLowerer<'a> {
                 ));
             }
             TirStmtKind::Expr(mut expr) => {
+                // Hoist a non-trivial statement-position `Match`
+                // scrutinee into a temp local. `labeled_block_fusion`
+                // keys on the `(Let, Match)` pair to eliminate GC
+                // allocations from inlined `Option<T>`-returning calls
+                // (e.g. `Iterator::next` in `while let` loops); with the
+                // scrutinee inline the optimisation stops firing. This
+                // runs after `resource_cleanup`, so the temp does not
+                // perturb resource-flow analysis.
+                if let TirExprKind::Match {
+                    expr: scrutinee, ..
+                } = &mut expr.kind
+                    && !matches!(scrutinee.kind, TirExprKind::Local { .. })
+                {
+                    let placeholder =
+                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, scrutinee.span);
+                    let mut hoisted = std::mem::replace(&mut **scrutinee, placeholder);
+                    self.lower_expr(&mut hoisted, type_table);
+                    let scrutinee_type = hoisted.type_id;
+                    let scrutinee_span = hoisted.span;
+                    let temp = self.alloc_local(scrutinee_type);
+                    let temp_name = format!("__match_{temp}");
+                    out.push(TirStmt::new(
+                        TirStmtKind::Let {
+                            name: temp_name.clone(),
+                            local_index: temp,
+                            is_mut: false,
+                            is_reactive: false,
+                            type_id: scrutinee_type,
+                            value: hoisted,
+                            skip_value_copy: false,
+                        },
+                        stmt.span,
+                    ));
+                    **scrutinee = TirExpr::new(
+                        TirExprKind::Local {
+                            index: temp,
+                            name: temp_name,
+                        },
+                        scrutinee_type,
+                        scrutinee_span,
+                    );
+                }
                 self.lower_expr(&mut expr, type_table);
                 out.push(TirStmt::new(TirStmtKind::Expr(expr), stmt.span));
             }
@@ -2255,18 +2181,6 @@ impl<'a> PatternLowerer<'a> {
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.lower_expr(value, type_table);
             }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.lower_expr(scrutinee, type_table);
-                for arm in arms {
-                    self.lower_block(arm, type_table);
-                }
-                self.lower_block(default, type_table);
-            }
             // Terminals
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
@@ -2305,17 +2219,4 @@ impl TypeTableExt for TypeTable {
             .map(|l| l.type_id)
             .unwrap_or(TypeTable::UNKNOWN)
     }
-}
-
-/// Compute the type of a block when used as an expression. Delegates to
-/// `crate::tir::block_result_type` so we share the same statement-shape
-/// → result-type rules with the resolver (handles `If` / `IfLet` stmts
-/// as the block's last stmt, recursive `Block` last stmts, divergent
-/// `Return` / `Break` / `Continue`, …). Unit is returned for blocks
-/// that don't produce a value — that matches the resolver's expected
-/// type for statement-position `if let` and is the right default for
-/// the synthesised Match `match_type` when neither branch yields a
-/// value.
-fn block_result_type(block: &TirBlock) -> TypeId {
-    crate::tir::block_result_type(block)
 }

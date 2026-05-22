@@ -3,7 +3,10 @@
 //! Provides three visitor traits:
 //! - `TirMutVisitor`: mutable traversal (monomorphizer, lowering)
 //! - `TirRefVisitor`: immutable traversal (analysis, collection)
-//! - `TirOptVisitor`: mutable traversal with change tracking (optimization passes)
+//! - `TirOptVisitor`: mutable traversal with change tracking (optimization
+//!   and synthesis passes); covers every TIR node, including the
+//!   pre-lowering forms (`TaskReturn`, `VariadicForOf`, `WithHandler`,
+//!   `Resume`, `TemplateString`)
 //!
 //! Also provides utility functions for common TIR queries like `block_has_break_to`.
 
@@ -72,19 +75,6 @@ pub trait TirMutVisitor {
             TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.visit_block(block);
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                self.visit_expr(scrutinee);
-                self.visit_pattern(pattern);
-                self.visit_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.visit_block(else_blk);
-                }
             }
             TirStmtKind::LetDestructure { pattern, value, .. } => {
                 self.visit_pattern(pattern);
@@ -239,18 +229,6 @@ pub trait TirMutVisitor {
                     self.visit_expr(arg);
                 }
             }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.visit_expr(scrutinee);
-                for arm in arms {
-                    self.visit_block(arm);
-                }
-                self.visit_block(default);
-            }
             TirExprKind::TemplateString { parts } => {
                 for part in parts {
                     if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
@@ -360,19 +338,6 @@ pub trait TirRefVisitor {
             TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.visit_block(block);
-            }
-            TirStmtKind::IfLet {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                self.visit_expr(scrutinee);
-                self.visit_pattern(pattern);
-                self.visit_block(then_block);
-                if let Some(else_blk) = else_block {
-                    self.visit_block(else_blk);
-                }
             }
             TirStmtKind::LetDestructure { pattern, value, .. } => {
                 self.visit_pattern(pattern);
@@ -497,18 +462,6 @@ pub trait TirRefVisitor {
                 for arg in args {
                     self.visit_expr(arg);
                 }
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.visit_expr(scrutinee);
-                for arm in arms {
-                    self.visit_block(arm);
-                }
-                self.visit_block(default);
             }
             TirExprKind::TemplateString { parts } => {
                 for part in parts {
@@ -643,26 +596,12 @@ pub fn opt_walk_stmt(visitor: &mut impl TirOptVisitor, stmt: &mut TirStmt) -> bo
         }
         TirStmtKind::Loop { body } => visitor.visit_block(body),
         TirStmtKind::LabeledBlock { block, .. } => visitor.visit_block(block),
-        TirStmtKind::IfLet {
-            scrutinee,
-            pattern,
-            then_block,
-            else_block,
-        } => {
-            let mut changed = visitor.visit_expr(scrutinee);
-            changed |= visitor.visit_pattern(pattern);
-            changed |= visitor.visit_block(then_block);
-            if let Some(eb) = else_block {
-                changed |= visitor.visit_block(eb);
-            }
-            changed
-        }
         TirStmtKind::Continue => false,
-        TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        TirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
+        TirStmtKind::TaskReturn { value } => visitor.visit_expr(value),
+        TirStmtKind::VariadicForOf { iterable, body, .. } => {
+            let mut changed = visitor.visit_expr(iterable);
+            changed |= visitor.visit_block(body);
+            changed
         }
     }
 }
@@ -763,18 +702,6 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
         TirExprKind::GlobalVarSet { value, .. } => {
             changed |= visitor.visit_expr(value);
         }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            changed |= visitor.visit_expr(scrutinee);
-            for arm in arms {
-                changed |= visitor.visit_block(arm);
-            }
-            changed |= visitor.visit_block(default);
-        }
         // Leaf nodes
         TirExprKind::Local { .. }
         | TirExprKind::FuncRef { .. }
@@ -789,13 +716,21 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
+        TirExprKind::TemplateString { parts } => {
+            for part in parts {
+                if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                    changed |= visitor.visit_expr(inner);
+                }
+            }
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
+        TirExprKind::WithHandler { bindings, body, .. } => {
+            for binding in bindings {
+                changed |= visitor.visit_expr(&mut binding.handler);
+            }
+            changed |= visitor.visit_block(body);
+        }
+        TirExprKind::Resume { value } => {
+            changed |= visitor.visit_expr(value);
         }
     }
     changed
@@ -839,18 +774,6 @@ pub fn stmt_has_break_to(label: &str, stmt: &TirStmt) -> bool {
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             block_has_break_to(label, body)
         }
-        TirStmtKind::IfLet {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            expr_has_break_to(label, scrutinee)
-                || block_has_break_to(label, then_block)
-                || else_block
-                    .as_ref()
-                    .is_some_and(|b| block_has_break_to(label, b))
-        }
         TirStmtKind::Continue => false,
         TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => false,
     }
@@ -880,16 +803,6 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
                         .is_some_and(|g| expr_has_break_to(label, g))
                         || expr_has_break_to(label, &arm.body)
                 })
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            expr_has_break_to(label, scrutinee)
-                || arms.iter().any(|arm| block_has_break_to(label, arm))
-                || block_has_break_to(label, default)
         }
         TirExprKind::Binary { left, right, .. } => {
             expr_has_break_to(label, left) || expr_has_break_to(label, right)
