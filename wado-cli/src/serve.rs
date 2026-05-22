@@ -7,7 +7,7 @@ use std::process;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use bytes::Bytes;
@@ -24,7 +24,7 @@ use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto;
 use lexopt::Arg::Value;
 use tokio::net::TcpListener;
-use tokio::sync::{Notify, mpsc, oneshot};
+use tokio::sync::{Notify, mpsc, oneshot, watch};
 use tokio::task::JoinSet;
 use wasmtime::component::{Accessor, AccessorTask, Component};
 use wasmtime::{AsContextMut, Engine, Store};
@@ -445,27 +445,35 @@ impl AccessorTask<WasiState> for HandlerTask {
                 // Pump frames until EOF, body error, hyper drops the body,
                 // or the consumer stalls past the idle timeout.
                 //
-                // `frame_tx.send().await` blocks on a full channel, so a
-                // slow consumer back-pressures into the guest. A client
-                // that stops draining entirely but keeps the connection
-                // open never drops `frame_rx`, so the send would otherwise
-                // block forever and pin this task's fiber stack (#1138).
-                // `tokio::time::timeout` bounds each send; it resets per
-                // frame, so a slow-but-progressing client is unaffected.
+                // When the bounded channel has room the send completes
+                // synchronously (`try_send`), so the common case arms no
+                // timer. Only a full channel needs to wait — a slow consumer
+                // back-pressures into the guest, and a client that stops
+                // draining entirely but keeps the connection open never drops
+                // `frame_rx`, so the send would otherwise block forever and
+                // pin this task's fiber stack (#1138). The idle timeout
+                // bounds that wait; it is re-armed per blocking send, so a
+                // slow-but-progressing client is unaffected.
                 let mut body = pin!(body);
                 while let Some(Ok(frame)) = poll_fn(|cx| body.as_mut().poll_frame(cx)).await {
-                    match tokio::time::timeout(idle_timeout, frame_tx.send(frame)).await {
-                        Ok(Ok(())) => {}
+                    match frame_tx.try_send(frame) {
+                        Ok(()) => {}
                         // hyper dropped the body — client disconnected.
-                        Ok(Err(_)) => break,
-                        // The consumer stalled: abort the pump so the fiber
-                        // stack is reclaimed.
-                        Err(_) => {
-                            eprintln!(
-                                "Request body pump aborted: response consumer \
-                                 stalled for more than {idle_timeout:?}"
-                            );
-                            break;
+                        Err(mpsc::error::TrySendError::Closed(_)) => break,
+                        // Channel full: back-pressure, bounded by the idle
+                        // timeout so a stalled consumer cannot pin the fiber.
+                        Err(mpsc::error::TrySendError::Full(frame)) => {
+                            match tokio::time::timeout(idle_timeout, frame_tx.send(frame)).await {
+                                Ok(Ok(())) => {}
+                                Ok(Err(_)) => break,
+                                Err(_) => {
+                                    eprintln!(
+                                        "Request body pump aborted: response consumer \
+                                         stalled for more than {idle_timeout:?}"
+                                    );
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
@@ -506,6 +514,10 @@ impl AccessorTask<WasiState> for HandlerTask {
 struct Dispatch {
     txs: Vec<mpsc::Sender<RequestJob>>,
     next: AtomicUsize,
+    /// Coarse server-wide clock for the first-byte timeout. Each in-flight
+    /// request clones this and checks its own deadline on every tick (see
+    /// `await_first_byte`), so no request arms its own timer.
+    tick_rx: watch::Receiver<()>,
 }
 
 impl Dispatch {
@@ -517,11 +529,61 @@ impl Dispatch {
     }
 }
 
+/// Wait for the response head, bounding the wait by `timeout` without arming
+/// a per-request timer.
+///
+/// `tick_rx` is a server-wide coarse clock (see the ticker in
+/// `run_http_server`); every tick wakes in-flight waiters to re-check their
+/// own deadline. The 504 therefore fires within one tick *after* `timeout`,
+/// never before it — fine for a backstop that only guards against a guest
+/// that never produces a head, and the worker's epoch deadline
+/// (`timeout + 5s`) still trails it comfortably.
+async fn await_first_byte(
+    resp_rx: oneshot::Receiver<HandlerOutcome>,
+    timeout: Duration,
+    mut tick_rx: watch::Receiver<()>,
+) -> HandlerOutcome {
+    let aborted =
+        || HandlerOutcome::Trapped("Handler aborted without producing a response".to_string());
+    let deadline = Instant::now() + timeout;
+    let mut resp_rx = pin!(resp_rx);
+    loop {
+        match select(resp_rx.as_mut(), pin!(tick_rx.changed())).await {
+            // The deadline is authoritative regardless of which branch wins:
+            // a head that lands past it (after the deadline but before the
+            // next tick) is still a timeout, matching the old sleep-vs-recv
+            // race rather than letting a late head slip through.
+            Either::Left((Ok(outcome), _)) => {
+                return if Instant::now() >= deadline {
+                    HandlerOutcome::Timeout
+                } else {
+                    outcome
+                };
+            }
+            Either::Left((Err(_recv), _)) => return aborted(),
+            Either::Right((Ok(()), _)) => {
+                if Instant::now() >= deadline {
+                    return HandlerOutcome::Timeout;
+                }
+            }
+            // Ticker gone (server shutting down). Break out so the borrow of
+            // `resp_rx` from `select` ends, then await the head directly:
+            // deliver it if it still lands; shutdown drains in-flight anyway.
+            Either::Right((Err(_closed), _)) => break,
+        }
+    }
+    match resp_rx.await {
+        Ok(outcome) => outcome,
+        Err(_recv) => aborted(),
+    }
+}
+
 /// Convert a hyper request into a job, submit it to a worker instance, and
 /// render the outcome as a hyper response.
 ///
-/// A first-byte `tokio::time::sleep(timeout)` is raced against the head
-/// oneshot, so a guest that never produces a response head yields a 504.
+/// The first-byte timeout is enforced against a shared coarse tick (see
+/// `await_first_byte`), so a guest that never produces a response head
+/// yields a 504 without each request arming its own timer.
 async fn dispatch_request(
     dispatch: &Dispatch,
     timeout: Duration,
@@ -544,15 +606,8 @@ async fn dispatch_request(
     }
 
     // First-byte timeout. After the head arrives, the body stream is bounded
-    // by the bounded frame channel rather than by this sleep.
-    let timeout_fut = pin!(tokio::time::sleep(timeout));
-    let outcome = match select(pin!(resp_rx), timeout_fut).await {
-        Either::Left((Ok(outcome), _)) => outcome,
-        Either::Left((Err(_recv), _)) => {
-            HandlerOutcome::Trapped("Handler aborted without producing a response".to_string())
-        }
-        Either::Right(((), _resp_rx)) => HandlerOutcome::Timeout,
-    };
+    // by the bounded frame channel rather than by this deadline.
+    let outcome = await_first_byte(resp_rx, timeout, dispatch.tick_rx.clone()).await;
 
     Ok(match outcome {
         HandlerOutcome::Streaming(parts, frame_rx) => {
@@ -638,10 +693,10 @@ enum Step {
 /// and resumes — self-healing rather than dying.
 ///
 /// The epoch deadline is `timeout_secs` plus a grace margin: the
-/// client-facing first-byte timeout (`dispatch_request`) fires at exactly
-/// `timeout_secs` and returns 504, so the epoch trap is only a later
-/// backstop that reclaims the runaway and the worker — the client has
-/// already had a clean 504 by then.
+/// client-facing first-byte timeout (`dispatch_request`) fires within a
+/// coarse tick after `timeout_secs` and returns 504, so the epoch trap is
+/// only a later backstop that reclaims the runaway and the worker — the
+/// client has already had a clean 504 by then.
 async fn worker_loop(
     engine: Engine,
     service_pre: Arc<ServicePre<WasiState>>,
@@ -821,9 +876,31 @@ async fn run_http_server(
             Arc::clone(&fatal),
         )));
     }
+    // Coarse server-wide clock for the first-byte timeout. One ticker
+    // replaces a per-request timer: each in-flight request races the
+    // response head against these ticks and checks its own deadline (see
+    // `await_first_byte`). The tick interval bounds how late the 504 fires,
+    // so keep it small relative to `timeout` but coarse enough to be cheap.
+    // Unlike the epoch ticker this need not run on an OS thread: it backs a
+    // client-facing 504, not the runaway-guest backstop, so it shares the
+    // same scheduling assumptions as the request tasks it wakes.
+    let (tick_tx, tick_rx) = watch::channel(());
+    let first_byte_tick = (timeout / 8).clamp(Duration::from_millis(100), Duration::from_secs(1));
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(first_byte_tick);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            interval.tick().await;
+            // Stops once every receiver (held via `Dispatch`) is gone.
+            if tick_tx.send(()).is_err() {
+                break;
+            }
+        }
+    });
     let dispatch = Arc::new(Dispatch {
         txs,
         next: AtomicUsize::new(0),
+        tick_rx,
     });
 
     // Background ticker that advances the engine epoch. Each worker store
@@ -910,6 +987,13 @@ async fn run_http_server(
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
             Either::Left((Ok((stream, remote_addr)), _shutdown)) => {
+                // Disable Nagle's algorithm. Responses are written head-first
+                // and body-second (the body streams in asynchronously from the
+                // guest), so with Nagle on the body write can stall waiting for
+                // the ACK of the head — a classic latency hit under load.
+                if let Err(e) = stream.set_nodelay(true) {
+                    eprintln!("warning: failed to set TCP_NODELAY for {remote_addr}: {e}");
+                }
                 let io = TokioIo::new(stream);
                 let dispatch = Arc::clone(&dispatch);
 

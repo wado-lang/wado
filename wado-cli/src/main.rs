@@ -1,6 +1,14 @@
 use std::process;
 
 use lexopt::Arg::{Long, Value};
+use mimalloc::MiMalloc;
+
+// `wado serve` allocates and frees a burst of small per-request objects
+// (request/response buffers, header maps, resource tables) on every request.
+// The system allocator's cross-thread contention dominates the host CPU
+// profile under load, so route all allocation through mimalloc.
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[derive(Clone, Copy)]
 enum Cmd {
