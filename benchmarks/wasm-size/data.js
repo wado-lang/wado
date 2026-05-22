@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779448713880,
+  "lastUpdate": 1779455430338,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24521,6 +24521,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1ba13fa380fecfd8ec254c4c2b1cff50c6eb1180"
         },
         "date": 1779448713459,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3cf0d84c403279a617f701d58d6eefe37f28a002",
+          "message": "Merge pull request #1149 from wado-lang/gfx/update_agents\n\ndoc: tweaks for AGENTS.md",
+          "timestamp": "2026-05-22T22:04:04+09:00",
+          "tree_id": "26413b565610cd037e3668cb48a666c1867a903c",
+          "url": "https://github.com/wado-lang/wado/commit/3cf0d84c403279a617f701d58d6eefe37f28a002"
+        },
+        "date": 1779455429885,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
