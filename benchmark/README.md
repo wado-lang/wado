@@ -143,29 +143,32 @@ Notes:
 ## HTTP Routing
 
 End-to-end HTTP throughput of `wado serve` vs an equivalent
-[Hono](https://hono.dev/) server on Node.js vs an equivalent
-[Axum](https://github.com/tokio-rs/axum) server in native Rust. The
-route and request set is Hono's own official router benchmark
-(`honojs/hono`, `benchmarks/routers/`), driven over HTTP with `oha`
-(6s, 50 connections per request).
+[Hono](https://hono.dev/) server on Node.js and on Bun, vs an
+equivalent [Axum](https://github.com/tokio-rs/axum) server in native
+Rust. The route and request set is Hono's own official router benchmark
+(`honojs/hono`, `benchmarks/routers/`), driven over HTTP with `oha`.
+Servers and the load generator run on disjoint pinned cores; each
+request is measured in rotating slices and the fastest is kept.
 
 Throughput (requests/sec, higher is better):
 
-| Request                         | `wado serve` | Hono (Node) | Axum (native) |
-| ------------------------------- | -----------: | ----------: | ------------: |
-| `GET /user`                     |       30,728 |      25,701 |       138,236 |
-| `GET /user/lookup/username/hey` |       29,608 |      21,466 |       119,565 |
-| `GET /event/abcd1234/comments`  |       28,862 |      24,815 |       124,284 |
-| `POST /event/abcd1234/comment`  |       28,721 |      18,772 |       132,484 |
-| `GET /static/index.html`        |       30,326 |      20,907 |       119,672 |
+| Request                         | `wado serve` | Hono (Node) | Hono (Bun) | Axum (native) |
+| ------------------------------- | -----------: | ----------: | ---------: | ------------: |
+| `GET /user`                     |       54,106 |      40,486 |     71,401 |        93,103 |
+| `GET /user/lookup/username/hey` |       51,752 |      42,260 |     64,678 |        95,552 |
+| `GET /event/abcd1234/comments`  |       50,771 |      42,425 |     66,314 |        92,374 |
+| `POST /event/abcd1234/comment`  |       50,780 |      33,452 |     66,137 |        92,109 |
+| `GET /static/index.html`        |       50,553 |      41,972 |     66,981 |        94,257 |
 
-`wado serve` leads Hono on every request (~29k–30k vs ~19k–28k req/s);
-native-Rust Axum is the ceiling at ~4–5x faster (~120k–138k). `wado
-serve` runs a `wasi:http/service` component on wasmtime, dispatching
-through `core:router`, with pooled instance reuse + periodic recycling.
-A cross-runtime comparison (Wasm component on wasmtime vs JS on Node.js
-vs native Rust). See `http_routing/README.md` for the full table and
-methodology.
+`wado serve` leads Hono on Node on every request (~50k–54k vs ~33k–45k
+req/s) but trails Hono on Bun (~65k–73k) — Bun's HTTP server is
+markedly faster than Node's. Native-Rust Axum is the ceiling; its
+figure here is load-generator-limited (`oha` saturates before Axum
+does). `wado serve` runs a `wasi:http/service` component on wasmtime,
+dispatching through `core:router`, with pooled instance reuse +
+periodic recycling. A cross-runtime comparison (Wasm component on
+wasmtime vs JS on Node.js/Bun vs native Rust). See
+`http_routing/README.md` for the full table and methodology.
 
 ## Running
 

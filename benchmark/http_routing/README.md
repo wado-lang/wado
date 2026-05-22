@@ -1,9 +1,9 @@
 # HTTP Routing Benchmark — `wado serve` vs Hono vs Axum
 
 This benchmark compares `wado serve` against an equivalent
-[Hono](https://hono.dev/) server on Node.js and an equivalent
-[Axum](https://github.com/tokio-rs/axum) server compiled as native Rust,
-on an HTTP routing workload.
+[Hono](https://hono.dev/) server on Node.js and on Bun, and an
+equivalent [Axum](https://github.com/tokio-rs/axum) server compiled as
+native Rust, on an HTTP routing workload.
 
 ## What it measures
 
@@ -17,28 +17,51 @@ benchmark** —
   sharing a radix, dynamic, mixed static/dynamic, `POST`, long static,
   wildcard).
 
-All three servers register the same 12 routes and return the same
+All four servers register the same 12 routes and return the same
 `{ "route": ..., "params": [...] }` JSON shape, so the comparison
 isolates routing + request handling. Load is applied with
 [`oha`](https://github.com/hatoo/oha).
 
 Hono's original benchmark is an in-process router microbenchmark
 (`router.match()` under `mitata`). Here the same route/request set is
-driven end to end over HTTP, so the three are compared as whole servers.
+driven end to end over HTTP, so the four are compared as whole servers.
 
-The three servers span three runtimes:
+### Stable measurement on a noisy host
+
+Cloud VMs throttle and steal CPU, so a naive "measure each server for N
+seconds in turn" run yields ratios that drift with the host. `bench.sh`
+counters this:
+
+- **CPU pinning** — servers run on one core set, the `oha` load
+  generator on a disjoint set (`taskset`), so the two never contend.
+- **Round-robin interleaving** — every server stays up for the whole
+  run; each request is measured in short slices that rotate across
+  servers, repeated for `ROUNDS` rounds. A throttling episode hits every
+  server within the same time window, so ratios survive it.
+- **Max aggregation** — contention and throttling only ever lower
+  throughput, so the fastest slice across rounds is the cleanest
+  estimate of true capacity. Round 1 also serves as a warmup.
+
+Absolute numbers are not comparable across machines or runs — only the
+ratios between servers within one run are.
+
+The four servers span four runtimes:
 
 - **`wado serve`** — a `wasi:http/service` component on wasmtime,
   dispatched through `core:router`, with pooled instance reuse +
   periodic recycling.
-- **Hono** — JavaScript on Node.js (`@hono/node-server`), default
+- **Hono (Node)** — JavaScript on Node.js (`@hono/node-server`), default
   `SmartRouter`.
+- **Hono (Bun)** — the same Hono app on Bun (`Bun.serve`); the
+  fastest-JS reference point.
 - **Axum** — native Rust on Tokio; the native-compiled reference point.
 
 ## Files
 
 - `app.wado` — Wado `wasi:http/service` world server.
-- `app.js` — Hono server (`@hono/node-server`).
+- `app.routes.js` — shared Hono route definitions.
+- `app.js` — Hono server entry point for Node.js (`@hono/node-server`).
+- `app.bun.js` — Hono server entry point for Bun (`Bun.serve`).
 - `axum_server.rs` + `Cargo.toml` — Axum server (native Rust).
 - `bench.sh` — driver: builds, starts each server, runs `oha`.
 
@@ -50,55 +73,23 @@ mise run -C benchmark http-routing
 mise run benchmark-http-routing
 ```
 
-Prerequisites: `oha` (`cargo install oha`), Node.js, and a Rust
+Prerequisites: `oha` (`cargo install oha`), Node.js, Bun, and a Rust
 toolchain. The driver runs `npm install` for the Hono dependencies and
-`cargo build` for the Axum server on first use.
+`cargo build` for the Axum server on first use. The Bun step is skipped
+gracefully if `bun` is not on `PATH`.
 
-Tunables:
+Tunables (env vars):
 
 ```sh
-DURATION=10s CONNECTIONS=100 mise run -C benchmark http-routing
+# SLICE: seconds per measurement slice (default 3)
+# ROUNDS: rotation rounds; the per-server max is kept (default 3)
+# CONNECTIONS: concurrent connections per slice (default 50)
+SLICE=5 ROUNDS=5 CONNECTIONS=100 mise run -C benchmark http-routing
 ```
 
-## Recent Results
+## Results
 
-Measured 2026-05-20 on a cloud VM, `oha` driving each request for 6s at
-50 concurrent connections. Cloud VMs are noisy; runs were repeated and
-the more internally consistent one is shown.
-
-Environment:
-
-| Component | Version            |
-| --------- | ------------------ |
-| Wado      | 0.0.2 (2026-05-20) |
-| wasmtime  | 44.0.0             |
-| Node.js   | 24.14.1            |
-| Hono      | 4.12.21            |
-| Axum      | 0.8.9              |
-| rustc     | 1.95.0             |
-| oha       | 1.14.0             |
-
-Throughput (requests/sec, higher is better):
-
-| Request                                     | `wado serve` | Hono (Node) | Axum (native) |
-| ------------------------------------------- | -----------: | ----------: | ------------: |
-| `GET /user`                                 |       30,728 |      25,701 |       138,236 |
-| `GET /user/comments`                        |       29,489 |      28,094 |       124,284 |
-| `GET /user/lookup/username/hey`             |       29,608 |      21,466 |       119,565 |
-| `GET /event/abcd1234/comments`              |       28,862 |      24,815 |       124,284 |
-| `POST /event/abcd1234/comment`              |       28,721 |      18,772 |       132,484 |
-| `GET /very/deeply/nested/route/hello/there` |       29,121 |      21,668 |       131,430 |
-| `GET /static/index.html`                    |       30,326 |      20,907 |       119,672 |
-
-Observations:
-
-- **`wado serve` leads Hono on every request** — ~29k–30k req/s versus
-  Hono's ~19k–28k.
-- **Axum (native Rust) is ~4–5x faster than `wado serve`** — ~120k–138k
-  req/s. This is the native-compiled ceiling: no Wasm component
-  instantiation, no component-model boundary, no recycling.
-- `wado serve` throughput is flat across route shapes: path matching via
-  `core:router` is not the bottleneck.
-- A whole-stack, cross-runtime comparison (Wasm component on wasmtime vs
-  JS on Node.js vs native Rust). For routing-algorithm-only numbers, see
-  `example/router_bench.wado`.
+Throughput numbers live in [`benchmark/README.md`](../README.md), the
+single source of truth for all benchmark results. For
+routing-algorithm-only numbers (no HTTP stack), see
+`example/router_bench.wado`.

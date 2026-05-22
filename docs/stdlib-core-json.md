@@ -23,6 +23,16 @@ Writes a JSON-escaped string (with surrounding quotes) into buf.
 
 Serializes a value to a JSON string.
 
+### `pub fn to_bytes<T: Serialize>(value: &T) -> Result<Array<u8>, SerializeError>`
+
+Serializes a value directly to UTF-8 JSON bytes.
+
+Equivalent to `to_string` followed by a byte-buffer conversion, but
+skips the intermediate re-encoding: the serializer's UTF-8 buffer is
+handed back directly as an `Array<u8>` with no copy. Prefer this over
+`to_string(value).bytes().collect()` whenever the output is consumed
+as bytes (e.g. an HTTP response body).
+
 ### `pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeError>`
 
 Serializes a value to a pretty JSON string.

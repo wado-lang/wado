@@ -2071,18 +2071,38 @@ impl Deserializer for JsonDeserializer {
     }
 }
 
+/// Initial serialization buffer capacity, in bytes. Most JSON values
+/// fit without a reallocation; larger outputs still grow amortized.
+/// Matches `serde_json`'s `to_vec` pre-sizing.
+global SERIALIZE_BUFFER_CAPACITY: i32 = 128;
+
 /// Serializes a value to a JSON string.
 pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
-    let mut buf = "";
+    let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = JsonSerializer { buf: &mut buf };
     value.serialize::<JsonSerializer>(&mut ser)?;
     return Result::Ok(buf);
 }
 
+/// Serializes a value directly to UTF-8 JSON bytes.
+///
+/// Equivalent to `to_string` followed by a byte-buffer conversion, but
+/// skips the intermediate re-encoding: the serializer's UTF-8 buffer is
+/// handed back directly as an `Array<u8>` with no copy. Prefer this over
+/// `to_string(value).bytes().collect()` whenever the output is consumed
+/// as bytes (e.g. an HTTP response body).
+pub fn to_bytes<T: Serialize>(value: &T) -> Result<Array<u8>, SerializeError> {
+    let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
+    let mut ser = JsonSerializer { buf: &mut buf };
+    value.serialize::<JsonSerializer>(&mut ser)?;
+    return Result::Ok(
+        Array::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
+}
+
 /// Serializes a value to a pretty JSON string.
 pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeError> {
     let indent = "  ";
-    let mut buf = "";
+    let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = PrettyJsonSerializer {
         buf: &mut buf,
         indent: &indent,

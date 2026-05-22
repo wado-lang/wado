@@ -128,7 +128,10 @@ fn fl_used(tag: i32) -> i32 {
 /// Size-class bin index for a block of `size` bytes: an exact bin per
 /// 16-byte step for small blocks, bin 32 for everything larger.
 fn fl_bin(size: i32) -> i32 {
-    let k = (size - 32) / 16;
+    // `size` is always a block size >= 32 (the minimum block), so
+    // `size - 32` is non-negative and `>> 4` yields the exact quotient
+    // without the sign-correction a signed `/ 16` would compile to.
+    let k = (size - 32) >> 4;
     return if k < 32 { k } else { 32 };
 }
 
@@ -164,11 +167,18 @@ fn fl_push(block: i32, size: i32) {
 }
 
 /// Remove `block` from its size-class bin (it must currently be linked).
+///
+/// This is the hottest allocator function under `wado serve`, mostly via
+/// coalescing on free. Deferring coalescing to cut those calls was tried
+/// and reverted: it roughly halved `wado serve` throughput by
+/// fragmenting the heap. Eager coalescing — and this hot path — stays.
 fn fl_unlink(block: i32) {
-    let k = fl_bin(fl_size(builtin::i32_load(block)));
     let next = builtin::i32_load(block + 8);
     let prev = builtin::i32_load(block + 12);
     if prev == 0 {
+        // Only a head block needs its bin index, so compute it here
+        // rather than on every unlink.
+        let k = fl_bin(fl_size(builtin::i32_load(block)));
         fl_set_bin_head(k, next);
     } else {
         builtin::i32_store(prev + 8, next);

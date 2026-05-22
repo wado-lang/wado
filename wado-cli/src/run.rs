@@ -132,7 +132,14 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
+/// Parse a `--profile` argument value into a [`ProfileMode`].
+///
+/// Shared by the `run` and `serve` subcommands.
+///
+/// # Errors
+///
+/// Returns an error if the profile mode string is unrecognized.
+pub fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
     if s == "jitdump" {
         return Ok(ProfileMode::JitDump);
     }

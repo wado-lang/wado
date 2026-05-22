@@ -12,7 +12,15 @@ use {
 } from "core:serde";
 use { TreeMap } from "core:collections";
 
-use { to_string, to_string_pretty, from_string, write_escaped_string, PrettyJsonSerializer } from "core:json";
+use { to_string, to_string_pretty, to_bytes, from_string, write_escaped_string, PrettyJsonSerializer } from "core:json";
+
+fn assert_bytes_eq_string(bytes: &Array<u8>, s: &String) {
+    let expected: Array<u8> = s.bytes().collect();
+    assert bytes.len() == expected.len();
+    for let mut i = 0; i < bytes.len(); i += 1 {
+        assert bytes[i] == expected[i];
+    }
+}
 
 struct PrettyUser {
     first_name: String,
@@ -129,6 +137,38 @@ test "serialize nested Array" {
     let v: Option<Array<i32>> = Option::Some([10, 20]);
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "[10,20]" };
+}
+
+test "to_bytes scalar matches to_string" {
+    let n = 42;
+    let bytes = to_bytes(&n).unwrap();
+    assert_bytes_eq_string(&bytes, &to_string(&n).unwrap());
+}
+
+test "to_bytes struct matches to_string" {
+    let user = PrettyUser { first_name: "Alice", age: 30 };
+    let bytes = to_bytes(&user).unwrap();
+    assert_bytes_eq_string(&bytes, &to_string(&user).unwrap());
+}
+
+test "to_bytes string with escapes matches to_string" {
+    let v = "line1\nline2\t\"quoted\"";
+    let bytes = to_bytes(&v).unwrap();
+    assert_bytes_eq_string(&bytes, &to_string(&v).unwrap());
+}
+
+test "to_bytes Array<String> matches to_string" {
+    let v: Array<String> = ["hello", "世界"];
+    let bytes = to_bytes(&v).unwrap();
+    assert_bytes_eq_string(&bytes, &to_string(&v).unwrap());
+}
+
+test "to_bytes empty string" {
+    let v = "";
+    let bytes = to_bytes(&v).unwrap();
+    assert bytes.len() == 2;
+    assert bytes[0] == 34;
+    assert bytes[1] == 34;
 }
 
 test "serialize pretty struct with default indent" {
