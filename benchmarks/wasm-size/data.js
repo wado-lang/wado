@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779455430338,
+  "lastUpdate": 1779457465494,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24580,6 +24580,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 17026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "660815b94eb3222170fcef296e1bc480bc841f0a",
+          "message": "Merge pull request #1148 from wado-lang/claude/nir-wep-migration-reset-sUPnD\n\nReset the NIR migration plan; drop dead TIR Switch / IfLet",
+          "timestamp": "2026-05-22T22:38:09+09:00",
+          "tree_id": "01bcb042be44a9bf541bddb9396079030796eec7",
+          "url": "https://github.com/wado-lang/wado/commit/660815b94eb3222170fcef296e1bc480bc841f0a"
+        },
+        "date": 1779457465037,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
             "unit": "bytes"
           },
           {
