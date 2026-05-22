@@ -118,22 +118,31 @@ fn start_serve(fixture: &str, extra_args: &[&str]) -> (ServerGuard, u16, Arc<Mut
                 if TcpStream::connect_timeout(&socket_addr, Duration::from_millis(200)).is_ok() {
                     return (ServerGuard { child }, port, stderr_buf);
                 }
+                if let Ok(Some(status)) = child.try_wait() {
+                    let captured = stderr_buf.lock().unwrap().clone();
+                    panic!(
+                        "wado serve exited (status {status}) after reporting port {port}. \
+                         stderr:\n{captured}"
+                    );
+                }
                 std::thread::sleep(Duration::from_millis(20));
             }
-            break;
+            let captured = stderr_buf.lock().unwrap().clone();
+            panic!(
+                "wado serve reported port {port} but did not accept connections within 60s. \
+                 stderr:\n{captured}"
+            );
         }
         if let Ok(Some(status)) = child.try_wait() {
             let captured = stderr_buf.lock().unwrap().clone();
             panic!("wado serve exited before listening (status {status}). stderr:\n{captured}");
         }
         if Instant::now() >= deadline {
-            break;
+            let captured = stderr_buf.lock().unwrap().clone();
+            panic!("wado serve did not report a listening port within 60s. stderr:\n{captured}");
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-
-    let captured = stderr_buf.lock().unwrap().clone();
-    panic!("wado serve did not report a listening port within 60s. stderr:\n{captured}");
 }
 
 /// Send a minimal HTTP/1.1 GET and return the full raw response text

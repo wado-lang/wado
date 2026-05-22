@@ -1074,9 +1074,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Resolve a let-chain condition into a nested sequence of TIR statements.
     ///
     /// Each element of the chain adds one nesting level: a `Let` element becomes a
-    /// `Let` + two-arm `Match` pair (scrutinee bound to a temp local, pattern arm vs.
-    /// wildcard else arm), and an `Expr` element becomes an `If` node (boolean guard).
-    /// All levels that fail fall through to `else_block`; the innermost level runs `then_block`.
+    /// two-arm `Match` expression statement (the pattern arm vs. a wildcard else
+    /// arm; the scrutinee stays inline and is hoisted into a temp local later, in
+    /// `translate::pattern`), and an `Expr` element becomes an `If` node (boolean
+    /// guard). All levels that fail fall through to `else_block`; the innermost
+    /// level runs `then_block`.
     ///
     /// The `else_block` TIR is cloned for each failure path. This duplicates else-block code
     /// in the output, but is typically small (e.g., `None` or a single `panic` call).
