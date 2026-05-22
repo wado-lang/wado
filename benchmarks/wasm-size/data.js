@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779457465494,
+  "lastUpdate": 1779490476305,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24609,6 +24609,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/660815b94eb3222170fcef296e1bc480bc841f0a"
         },
         "date": 1779457465037,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "26c683d2c8362e30d7794ca19c7393b72ab16fae",
+          "message": "Merge pull request #1151 from wado-lang/claude/tender-heisenberg-6oZ1k\n\nfeat: json::to_bytes, serve --profile, HTTP benchmark hardening",
+          "timestamp": "2026-05-23T07:48:34+09:00",
+          "tree_id": "e078dfb998948ed8e2879c983dd50296b5efa3a1",
+          "url": "https://github.com/wado-lang/wado/commit/26c683d2c8362e30d7794ca19c7393b72ab16fae"
+        },
+        "date": 1779490475916,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
