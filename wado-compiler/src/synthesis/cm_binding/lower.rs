@@ -28,7 +28,7 @@ use crate::synthesis::common::{
     match_variant_test, synth_span,
 };
 
-use super::types::{binary_add, flatten_param_type, kebab_to_pascal, wasi_type_to_type_id};
+use super::types::{binary_add, flatten_param_type, wasi_type_to_type_id};
 
 /// Synthesize TIR statements that store a Wado value into linear memory.
 ///
@@ -324,11 +324,11 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
     stmts.push(let_stmt("__variant_val", value_local, value_type_id, value));
 
     // Store discriminant byte. The case-name list mirrors the
-    // payload-lowering `Match` arms built below.
-    let case_names: Vec<String> = cases
-        .iter()
-        .map(|case| kebab_to_pascal(&case.cm_name))
-        .collect();
+    // payload-lowering `Match` arms built below. Case names are the
+    // Wado-side names (`wado_name`): `TirPattern::Variant` resolves
+    // cases by the name on the variant declaration, and `cm_name`
+    // can carry acronym casing the Wado name does not.
+    let case_names: Vec<String> = cases.iter().map(|case| case.wado_name.clone()).collect();
     stmts.push(expr_stmt(builtin_call(
         "i32_store8",
         vec![
@@ -366,7 +366,7 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
     let span = synth_span();
     let mut arms: Vec<TirMatchArm> = Vec::with_capacity(cases.len());
     for case in &cases {
-        let case_name = kebab_to_pascal(&case.cm_name);
+        let case_name = case.wado_name.clone();
         if let Some(payload_ty) = &case.payload {
             let payload_type_id = {
                 let mut tt = type_table.borrow_mut();

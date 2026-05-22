@@ -1252,10 +1252,12 @@ pub(super) fn synthesize_result_export_binding(
 ///
 /// Generates:
 /// ```text
-/// flat[0] = variant_tag(value)  // discriminant
-/// if variant_test(value, case_0) { flat[1..] = lower(payload_0) }
-/// if variant_test(value, case_1) { flat[1..] = lower(payload_1) }
-/// ...
+/// flat[0] = match value { Case_0 => 0, Case_1 => 1, ... }  // discriminant
+/// match value {
+///     Case_0(p) => { flat[1..] = lower(p) }
+///     Case_1(p) => { flat[1..] = lower(p) }
+///     ...
+/// }
 /// ```
 pub(super) fn synthesize_variant_lower_to_flat(
     value_local: u32,

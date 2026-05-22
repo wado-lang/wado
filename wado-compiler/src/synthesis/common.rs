@@ -247,7 +247,10 @@ pub fn match_variant_payload(
     let fallback_arm = TirMatchArm {
         pattern: TirPattern::Wildcard,
         guard: None,
-        body: builtin_call("unreachable", Vec::new(), payload_type),
+        // `unreachable` is declared `-> !`; type the call `NEVER` so
+        // divergence is represented correctly. `agree_branch_types`
+        // lets the `NEVER` arm defer to the case arm's `payload_type`.
+        body: builtin_call("unreachable", Vec::new(), TypeTable::NEVER),
         span,
     };
     TirExpr::new(
