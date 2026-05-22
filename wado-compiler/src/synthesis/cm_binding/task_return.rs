@@ -16,8 +16,9 @@ use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule,
-    TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TypeTable,
+    TirPattern, TirStmt, TirStmtKind, TypeTable,
 };
+use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_stmt};
 
 use crate::synthesis::common::{
     alloc_local, assign, cast, cm_raw_call, expr_stmt, i32_const, let_mut_stmt, let_stmt,
@@ -44,44 +45,24 @@ pub(super) fn expand_task_returns_in_func(
     interner: &RefCell<ModuleSourceInterner>,
 ) {
     let mut func = user_func.borrow_mut();
-    let mut next_local = func.local_count;
-    let mut extra_locals: Vec<TirLocal> = Vec::new();
     // Take the body out to avoid simultaneous mutable/immutable borrows of func
     let Some(mut body) = func.body.take() else {
         return;
     };
-    {
-        let mut expand_block = |blk: &mut TirBlock| {
-            let stmts = std::mem::take(&mut blk.stmts);
-            let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(stmts.len());
-            for mut stmt in stmts {
-                if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
-                    if let TirStmtKind::TaskReturn { value } =
-                        std::mem::replace(&mut stmt.kind, TirStmtKind::Continue)
-                    {
-                        new_stmts.extend(generate_inline_task_return(
-                            value,
-                            flat_return_types,
-                            &mut next_local,
-                            &mut extra_locals,
-                            tir_modules,
-                            type_table,
-                            wasi_registry,
-                            cm_package,
-                            interner,
-                        ));
-                    }
-                } else {
-                    new_stmts.push(stmt);
-                }
-            }
-            blk.stmts = new_stmts;
-        };
-        for_each_block(&mut body, &mut expand_block);
-    }
+    let mut expander = TaskReturnExpander {
+        flat_return_types,
+        next_local: func.local_count,
+        extra_locals: Vec::new(),
+        tir_modules,
+        type_table,
+        wasi_registry,
+        cm_package,
+        interner,
+    };
+    expander.visit_block(&mut body);
+    func.local_count = expander.next_local;
+    func.locals.extend(expander.extra_locals);
     func.body = Some(body);
-    func.local_count = next_local;
-    func.locals.extend(extra_locals);
 }
 
 /// Replace every `task return` statement in a function body with a no-op (`Continue`).
@@ -93,186 +74,71 @@ pub(super) fn strip_task_returns_in_func(user_func: &Rc<RefCell<TirFunction>>) {
     let Some(mut body) = func.body.take() else {
         return;
     };
-    for_each_block(&mut body, &mut |blk: &mut TirBlock| {
-        for stmt in &mut blk.stmts {
-            if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
-                stmt.kind = TirStmtKind::Continue;
-            }
-        }
-    });
+    let mut stripper = TaskReturnStripper;
+    stripper.visit_block(&mut body);
     func.body = Some(body);
 }
 
-/// Visit every `TirBlock` reachable from `blk` (pre-order, `blk` first),
-/// applying `visit`. Closure bodies are deliberately skipped: a closure
-/// lowers to its own function and `task return` does not belong to it.
-///
-/// `task return` is a statement, so every `task return` lives directly in
-/// some block — reaching every block reaches every `task return`. This one
-/// structural walk backs both the strip and expand passes so neither can
-/// miss a nesting position (`let x = { … }`, a `match` arm, a `with`
-/// body, …).
-fn for_each_block(blk: &mut TirBlock, visit: &mut impl FnMut(&mut TirBlock)) {
-    visit(blk);
-    for stmt in &mut blk.stmts {
-        for_each_block_in_stmt(stmt, visit);
+/// Rewrites every `task return value;` statement — wherever it is nested —
+/// into the inline CM `task-return` call sequence. `TirOptVisitor`'s walk
+/// reaches every `TirBlock` (it covers the pre-lowering TIR forms too), so
+/// no nesting position is missed; `visit_block` rebuilds each block's
+/// statement list because one `task return` expands to several statements.
+struct TaskReturnExpander<'a> {
+    flat_return_types: &'a [cm_abi::CmValType],
+    next_local: u32,
+    extra_locals: Vec<TirLocal>,
+    tir_modules: &'a IndexMap<ModuleSource, TirModule>,
+    type_table: &'a Rc<RefCell<TypeTable>>,
+    wasi_registry: &'a WasiRegistry,
+    cm_package: &'a str,
+    interner: &'a RefCell<ModuleSourceInterner>,
+}
+
+impl TirOptVisitor for TaskReturnExpander<'_> {
+    fn visit_block(&mut self, block: &mut TirBlock) -> bool {
+        let stmts = std::mem::take(&mut block.stmts);
+        let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(stmts.len());
+        for mut stmt in stmts {
+            if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
+                if let TirStmtKind::TaskReturn { value } =
+                    std::mem::replace(&mut stmt.kind, TirStmtKind::Continue)
+                {
+                    new_stmts.extend(generate_inline_task_return(
+                        value,
+                        self.flat_return_types,
+                        &mut self.next_local,
+                        &mut self.extra_locals,
+                        self.tir_modules,
+                        self.type_table,
+                        self.wasi_registry,
+                        self.cm_package,
+                        self.interner,
+                    ));
+                }
+            } else {
+                new_stmts.push(stmt);
+            }
+        }
+        block.stmts = new_stmts;
+        // Recurse into nested blocks (match arms, `with` bodies, blocks in
+        // `let` values, …); the generated sequences contain no `task return`.
+        opt_walk_block(self, block)
     }
 }
 
-fn for_each_block_in_stmt(stmt: &mut TirStmt, visit: &mut impl FnMut(&mut TirBlock)) {
-    match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
-            for_each_block_in_expr(value, visit);
-        }
-        TirStmtKind::Expr(expr) => for_each_block_in_expr(expr, visit),
-        TirStmtKind::TaskReturn { value } => for_each_block_in_expr(value, visit),
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                for_each_block_in_expr(v, visit);
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            for_each_block_in_expr(condition, visit);
-            for_each_block(then_block, visit);
-            if let Some(eb) = else_block {
-                for_each_block(eb, visit);
-            }
-        }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            for_each_block(body, visit);
-        }
-        TirStmtKind::VariadicForOf { iterable, body, .. } => {
-            for_each_block_in_expr(iterable, visit);
-            for_each_block(body, visit);
-        }
-        TirStmtKind::Continue => {}
-    }
-}
+/// Replaces every `task return` statement with `Continue`. Used for the test
+/// world, where async-export bodies are dropped by DCE and only need to be
+/// kept free of `TaskReturn` so they never reach `monomorphize`.
+struct TaskReturnStripper;
 
-fn for_each_block_in_expr(expr: &mut TirExpr, visit: &mut impl FnMut(&mut TirBlock)) {
-    match &mut expr.kind {
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            for_each_block(block, visit);
+impl TirOptVisitor for TaskReturnStripper {
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
+        if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
+            stmt.kind = TirStmtKind::Continue;
+            return true;
         }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            for_each_block_in_expr(condition, visit);
-            for_each_block(then_branch, visit);
-            if let Some(eb) = else_branch {
-                for_each_block(eb, visit);
-            }
-        }
-        TirExprKind::Match {
-            expr: scrutinee,
-            arms,
-        } => {
-            for_each_block_in_expr(scrutinee, visit);
-            for arm in arms {
-                if let Some(guard) = &mut arm.guard {
-                    for_each_block_in_expr(guard, visit);
-                }
-                for_each_block_in_expr(&mut arm.body, visit);
-            }
-        }
-        TirExprKind::WithHandler { bindings, body, .. } => {
-            for binding in bindings {
-                for_each_block_in_expr(&mut binding.handler, visit);
-            }
-            for_each_block(body, visit);
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            for_each_block_in_expr(left, visit);
-            for_each_block_in_expr(right, visit);
-        }
-        TirExprKind::Assign { target, value } => {
-            for_each_block_in_expr(target, visit);
-            for_each_block_in_expr(value, visit);
-        }
-        TirExprKind::Index { expr: inner, index } => {
-            for_each_block_in_expr(inner, visit);
-            for_each_block_in_expr(index, visit);
-        }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::GlobalVarSet { value: inner, .. }
-        | TirExprKind::Resume { value: inner } => for_each_block_in_expr(inner, visit),
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                for_each_block_in_expr(&mut arg.expr, visit);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            for_each_block_in_expr(receiver, visit);
-            for arg in args {
-                for_each_block_in_expr(&mut arg.expr, visit);
-            }
-        }
-        TirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                for_each_block_in_expr(arg, visit);
-            }
-        }
-        TirExprKind::IndirectCall { callee, args } => {
-            for_each_block_in_expr(callee, visit);
-            for arg in args {
-                for_each_block_in_expr(arg, visit);
-            }
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                for_each_block_in_expr(&mut field.value, visit);
-            }
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                for_each_block_in_expr(elem, visit);
-            }
-        }
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                for_each_block_in_expr(p, visit);
-            }
-        }
-        TirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                    for_each_block_in_expr(inner, visit);
-                }
-            }
-        }
-        // A closure body lowers to its own function; its `task return`
-        // (if any) is not this function's concern.
-        TirExprKind::Closure { .. } => {}
-        // Leaves: no nested blocks.
-        TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::EnumConstruct { .. } => {}
+        opt_walk_stmt(self, stmt)
     }
 }
 

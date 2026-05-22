@@ -3,7 +3,10 @@
 //! Provides three visitor traits:
 //! - `TirMutVisitor`: mutable traversal (monomorphizer, lowering)
 //! - `TirRefVisitor`: immutable traversal (analysis, collection)
-//! - `TirOptVisitor`: mutable traversal with change tracking (optimization passes)
+//! - `TirOptVisitor`: mutable traversal with change tracking (optimization
+//!   and synthesis passes); covers every TIR node, including the
+//!   pre-lowering forms (`TaskReturn`, `VariadicForOf`, `WithHandler`,
+//!   `Resume`, `TemplateString`)
 //!
 //! Also provides utility functions for common TIR queries like `block_has_break_to`.
 
@@ -594,11 +597,13 @@ pub fn opt_walk_stmt(visitor: &mut impl TirOptVisitor, stmt: &mut TirStmt) -> bo
         TirStmtKind::Loop { body } => visitor.visit_block(body),
         TirStmtKind::LabeledBlock { block, .. } => visitor.visit_block(block),
         TirStmtKind::Continue => false,
-        TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-        }
-        TirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
+        TirStmtKind::TaskReturn { value } => visitor.visit_expr(value),
+        TirStmtKind::VariadicForOf {
+            iterable, body, ..
+        } => {
+            let mut changed = visitor.visit_expr(iterable);
+            changed |= visitor.visit_block(body);
+            changed
         }
     }
 }
@@ -713,13 +718,21 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::TemplateString { .. } => {
-            unreachable!("TemplateString should be expanded before this phase")
+        TirExprKind::TemplateString { parts } => {
+            for part in parts {
+                if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                    changed |= visitor.visit_expr(inner);
+                }
+            }
         }
-        TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. } => {
-            unreachable!(
-                "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
-            )
+        TirExprKind::WithHandler { bindings, body, .. } => {
+            for binding in bindings {
+                changed |= visitor.visit_expr(&mut binding.handler);
+            }
+            changed |= visitor.visit_block(body);
+        }
+        TirExprKind::Resume { value } => {
+            changed |= visitor.visit_expr(value);
         }
     }
     changed
