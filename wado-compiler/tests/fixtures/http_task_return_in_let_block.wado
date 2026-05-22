@@ -1,0 +1,28 @@
+// Regression: `task return` nested inside a `match` expression that is the
+// value of a `let` binding. The `task_return` synthesis walker must descend
+// through every block — not just `If` / `Loop` / `Match` *statement*
+// positions — or the `task return` survives to monomorphize and ICEs with
+// "TaskReturn should be eliminated by synthesis before this phase".
+
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export async fn handle(_request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    response.set_status_code(200);
+
+    let selector = 1;
+    let _emitted: i32 = match selector {
+        1 => {
+            task return Result::<Response, ErrorCode>::Ok(response);
+            1
+        },
+        _ => 0,
+    };
+
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

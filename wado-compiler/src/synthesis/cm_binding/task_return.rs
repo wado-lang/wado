@@ -16,7 +16,7 @@ use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule,
-    TirPattern, TirStmt, TirStmtKind, TypeTable,
+    TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TypeTable,
 };
 
 use crate::synthesis::common::{
@@ -50,17 +50,35 @@ pub(super) fn expand_task_returns_in_func(
     let Some(mut body) = func.body.take() else {
         return;
     };
-    expand_task_return_in_block(
-        &mut body,
-        flat_return_types,
-        &mut next_local,
-        &mut extra_locals,
-        tir_modules,
-        type_table,
-        wasi_registry,
-        cm_package,
-        interner,
-    );
+    {
+        let mut expand_block = |blk: &mut TirBlock| {
+            let stmts = std::mem::take(&mut blk.stmts);
+            let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(stmts.len());
+            for mut stmt in stmts {
+                if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
+                    if let TirStmtKind::TaskReturn { value } =
+                        std::mem::replace(&mut stmt.kind, TirStmtKind::Continue)
+                    {
+                        new_stmts.extend(generate_inline_task_return(
+                            value,
+                            flat_return_types,
+                            &mut next_local,
+                            &mut extra_locals,
+                            tir_modules,
+                            type_table,
+                            wasi_registry,
+                            cm_package,
+                            interner,
+                        ));
+                    }
+                } else {
+                    new_stmts.push(stmt);
+                }
+            }
+            blk.stmts = new_stmts;
+        };
+        for_each_block(&mut body, &mut expand_block);
+    }
     func.body = Some(body);
     func.local_count = next_local;
     func.locals.extend(extra_locals);
@@ -75,214 +93,186 @@ pub(super) fn strip_task_returns_in_func(user_func: &Rc<RefCell<TirFunction>>) {
     let Some(mut body) = func.body.take() else {
         return;
     };
-    strip_task_returns_in_block(&mut body);
+    for_each_block(&mut body, &mut |blk: &mut TirBlock| {
+        for stmt in &mut blk.stmts {
+            if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
+                stmt.kind = TirStmtKind::Continue;
+            }
+        }
+    });
     func.body = Some(body);
 }
 
-fn strip_task_returns_in_block(blk: &mut TirBlock) {
+/// Visit every `TirBlock` reachable from `blk` (pre-order, `blk` first),
+/// applying `visit`. Closure bodies are deliberately skipped: a closure
+/// lowers to its own function and `task return` does not belong to it.
+///
+/// `task return` is a statement, so every `task return` lives directly in
+/// some block — reaching every block reaches every `task return`. This one
+/// structural walk backs both the strip and expand passes so neither can
+/// miss a nesting position (`let x = { … }`, a `match` arm, a `with`
+/// body, …).
+fn for_each_block(blk: &mut TirBlock, visit: &mut impl FnMut(&mut TirBlock)) {
+    visit(blk);
     for stmt in &mut blk.stmts {
-        if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
-            stmt.kind = TirStmtKind::Continue;
-        } else {
-            strip_task_returns_in_stmt(stmt);
-        }
+        for_each_block_in_stmt(stmt, visit);
     }
 }
 
-fn strip_task_returns_in_stmt(stmt: &mut TirStmt) {
+fn for_each_block_in_stmt(stmt: &mut TirStmt, visit: &mut impl FnMut(&mut TirBlock)) {
     match &mut stmt.kind {
+        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+            for_each_block_in_expr(value, visit);
+        }
+        TirStmtKind::Expr(expr) => for_each_block_in_expr(expr, visit),
+        TirStmtKind::TaskReturn { value } => for_each_block_in_expr(value, visit),
+        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                for_each_block_in_expr(v, visit);
+            }
+        }
         TirStmtKind::If {
+            condition,
             then_block,
             else_block,
-            ..
         } => {
-            strip_task_returns_in_block(then_block);
-            if let Some(else_blk) = else_block {
-                strip_task_returns_in_block(else_blk);
+            for_each_block_in_expr(condition, visit);
+            for_each_block(then_block, visit);
+            if let Some(eb) = else_block {
+                for_each_block(eb, visit);
             }
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            strip_task_returns_in_block(body);
+            for_each_block(body, visit);
         }
-        // `task return` also appears inside `Match` arm bodies — `if let`
-        // lowers to a two-arm `Match`, and the body is a `Block` expr.
-        TirStmtKind::Expr(expr) => strip_task_returns_in_expr(expr),
-        _ => {}
+        TirStmtKind::VariadicForOf { iterable, body, .. } => {
+            for_each_block_in_expr(iterable, visit);
+            for_each_block(body, visit);
+        }
+        TirStmtKind::Continue => {}
     }
 }
 
-fn strip_task_returns_in_expr(expr: &mut TirExpr) {
+fn for_each_block_in_expr(expr: &mut TirExpr, visit: &mut impl FnMut(&mut TirBlock)) {
     match &mut expr.kind {
-        TirExprKind::Block(block) => strip_task_returns_in_block(block),
-        TirExprKind::Match { arms, .. } => {
-            for arm in arms {
-                strip_task_returns_in_expr(&mut arm.body);
-            }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            for_each_block(block, visit);
         }
-        _ => {}
-    }
-}
-
-fn expand_task_return_in_block(
-    blk: &mut TirBlock,
-    flat_return_types: &[cm_abi::CmValType],
-    next_local: &mut u32,
-    locals: &mut Vec<TirLocal>,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &Rc<RefCell<TypeTable>>,
-    wasi_registry: &WasiRegistry,
-    cm_package: &str,
-    interner: &RefCell<ModuleSourceInterner>,
-) {
-    let stmts = std::mem::take(&mut blk.stmts);
-    let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(stmts.len());
-    for mut stmt in stmts {
-        if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
-            if let TirStmtKind::TaskReturn { value } =
-                std::mem::replace(&mut stmt.kind, TirStmtKind::Continue)
-            {
-                let expanded = generate_inline_task_return(
-                    value,
-                    flat_return_types,
-                    next_local,
-                    locals,
-                    tir_modules,
-                    type_table,
-                    wasi_registry,
-                    cm_package,
-                    interner,
-                );
-                new_stmts.extend(expanded);
-            }
-        } else {
-            expand_task_return_in_stmt(
-                &mut stmt,
-                flat_return_types,
-                next_local,
-                locals,
-                tir_modules,
-                type_table,
-                wasi_registry,
-                cm_package,
-                interner,
-            );
-            new_stmts.push(stmt);
-        }
-    }
-    blk.stmts = new_stmts;
-}
-
-fn expand_task_return_in_stmt(
-    stmt: &mut TirStmt,
-    flat_return_types: &[cm_abi::CmValType],
-    next_local: &mut u32,
-    locals: &mut Vec<TirLocal>,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &Rc<RefCell<TypeTable>>,
-    wasi_registry: &WasiRegistry,
-    cm_package: &str,
-    interner: &RefCell<ModuleSourceInterner>,
-) {
-    match &mut stmt.kind {
-        TirStmtKind::If {
-            then_block,
-            else_block,
-            ..
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
         } => {
-            expand_task_return_in_block(
-                then_block,
-                flat_return_types,
-                next_local,
-                locals,
-                tir_modules,
-                type_table,
-                wasi_registry,
-                cm_package,
-                interner,
-            );
-            if let Some(blk) = else_block {
-                expand_task_return_in_block(
-                    blk,
-                    flat_return_types,
-                    next_local,
-                    locals,
-                    tir_modules,
-                    type_table,
-                    wasi_registry,
-                    cm_package,
-                    interner,
-                );
+            for_each_block_in_expr(condition, visit);
+            for_each_block(then_branch, visit);
+            if let Some(eb) = else_branch {
+                for_each_block(eb, visit);
             }
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            expand_task_return_in_block(
-                body,
-                flat_return_types,
-                next_local,
-                locals,
-                tir_modules,
-                type_table,
-                wasi_registry,
-                cm_package,
-                interner,
-            );
-        }
-        // `task return` also appears inside `Match` arm bodies — `if let`
-        // lowers to a two-arm `Match`, and the body is a `Block` expr.
-        TirStmtKind::Expr(expr) => expand_task_return_in_expr(
-            expr,
-            flat_return_types,
-            next_local,
-            locals,
-            tir_modules,
-            type_table,
-            wasi_registry,
-            cm_package,
-            interner,
-        ),
-        _ => {}
-    }
-}
-
-fn expand_task_return_in_expr(
-    expr: &mut TirExpr,
-    flat_return_types: &[cm_abi::CmValType],
-    next_local: &mut u32,
-    locals: &mut Vec<TirLocal>,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &Rc<RefCell<TypeTable>>,
-    wasi_registry: &WasiRegistry,
-    cm_package: &str,
-    interner: &RefCell<ModuleSourceInterner>,
-) {
-    match &mut expr.kind {
-        TirExprKind::Block(block) => expand_task_return_in_block(
-            block,
-            flat_return_types,
-            next_local,
-            locals,
-            tir_modules,
-            type_table,
-            wasi_registry,
-            cm_package,
-            interner,
-        ),
-        TirExprKind::Match { arms, .. } => {
+        TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } => {
+            for_each_block_in_expr(scrutinee, visit);
             for arm in arms {
-                expand_task_return_in_expr(
-                    &mut arm.body,
-                    flat_return_types,
-                    next_local,
-                    locals,
-                    tir_modules,
-                    type_table,
-                    wasi_registry,
-                    cm_package,
-                    interner,
-                );
+                if let Some(guard) = &mut arm.guard {
+                    for_each_block_in_expr(guard, visit);
+                }
+                for_each_block_in_expr(&mut arm.body, visit);
             }
         }
-        _ => {}
+        TirExprKind::WithHandler { bindings, body, .. } => {
+            for binding in bindings {
+                for_each_block_in_expr(&mut binding.handler, visit);
+            }
+            for_each_block(body, visit);
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            for_each_block_in_expr(left, visit);
+            for_each_block_in_expr(right, visit);
+        }
+        TirExprKind::Assign { target, value } => {
+            for_each_block_in_expr(target, visit);
+            for_each_block_in_expr(value, visit);
+        }
+        TirExprKind::Index { expr: inner, index } => {
+            for_each_block_in_expr(inner, visit);
+            for_each_block_in_expr(index, visit);
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::GlobalVarSet { value: inner, .. }
+        | TirExprKind::Resume { value: inner } => for_each_block_in_expr(inner, visit),
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                for_each_block_in_expr(&mut arg.expr, visit);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            for_each_block_in_expr(receiver, visit);
+            for arg in args {
+                for_each_block_in_expr(&mut arg.expr, visit);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                for_each_block_in_expr(arg, visit);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            for_each_block_in_expr(callee, visit);
+            for arg in args {
+                for_each_block_in_expr(arg, visit);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                for_each_block_in_expr(&mut field.value, visit);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                for_each_block_in_expr(elem, visit);
+            }
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                for_each_block_in_expr(p, visit);
+            }
+        }
+        TirExprKind::TemplateString { parts } => {
+            for part in parts {
+                if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                    for_each_block_in_expr(inner, visit);
+                }
+            }
+        }
+        // A closure body lowers to its own function; its `task return`
+        // (if any) is not this function's concern.
+        TirExprKind::Closure { .. } => {}
+        // Leaves: no nested blocks.
+        TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 

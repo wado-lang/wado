@@ -1128,6 +1128,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let else_type = else_tir
                     .as_ref()
                     .map_or(TypeTable::UNIT, Self::block_result_type);
+                let else_arm_span = else_tir.as_ref().map_or(span, |b| b.span);
                 // Equal types agree; a `Never` arm defers to the other;
                 // an outright mismatch (statement-position `if let` whose
                 // then-block ends in a non-Unit call) falls back to
@@ -1147,13 +1148,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         pattern: tir_pattern,
                         guard: None,
                         body: then_body,
-                        span,
+                        span: *elem_span,
                     },
                     TirMatchArm {
                         pattern: TirPattern::Wildcard,
                         guard: None,
                         body: else_body,
-                        span,
+                        span: else_arm_span,
                     },
                 ];
                 vec![TirStmt::new(
