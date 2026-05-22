@@ -1,0 +1,27 @@
+[package]
+name = "branch-hint-bench"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Standalone harness: runs a wado-produced component under the patched wasmtime
+# (the wado-lang/wasmtime `gfx/branch-hinting-v2` branch) with `branch_hinting`
+# toggled, isolating the cold-block layout effect — the SAME wasm is run both
+# ways. Git-deps that branch so the experiment is reproducible from a clone.
+[dependencies]
+wasmtime = { git = "https://github.com/wado-lang/wasmtime", branch = "gfx/branch-hinting-v2", features = [
+    "default",
+    "component-model",
+    "component-model-async",
+    "component-model-async-bytes",
+    "async",
+    "cranelift",
+    "runtime",
+    "gc",
+    "gc-drc",
+    "gc-copying",
+    "threads",
+] }
+wasmtime-wasi = { git = "https://github.com/wado-lang/wasmtime", branch = "gfx/branch-hinting-v2", features = ["p3"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+anyhow = "1"

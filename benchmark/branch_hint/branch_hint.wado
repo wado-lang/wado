@@ -1,0 +1,37 @@
+// Branch-hinting benchmark: a hot loop with a rarely-taken, data-dependent
+// cold path hinted `unlikely`. Run the SAME compiled wasm under wasmtime with
+// `branch_hinting` on vs off to isolate the cold-block layout effect.
+
+use { println, Stdout } from "core:cli";
+
+fn workload(iters: i64, seed: i64) -> i64 {
+    let mut x: i64 = seed;
+    let mut acc: i64 = 0;
+    let mut i: i64 = 0;
+    while i < iters {
+        // xorshift64 keeps the branch condition data-dependent (not foldable)
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+
+        // hot path (~99.9%)
+        acc = acc + (x & 7);
+
+        // rare cold path (~0.1%); sizeable, feeds acc (survives DCE)
+        if builtin::unlikely((x & 1023) == 0) {
+            acc = acc + x * 2654435761;
+            acc = acc ^ (acc << 21);
+            acc = acc + (x >> 3) * 40503;
+            acc = acc ^ (acc >> 11);
+            acc = acc + (x & 65535) * 7;
+            acc = acc ^ (acc << 5);
+        }
+        i = i + 1;
+    }
+    return acc;
+}
+
+export fn run() with Stdout {
+    let r = workload(500000000, 88172645463325252);
+    println(`{r}`);
+}

@@ -1,0 +1,243 @@
+// Generated: I-cache/fetch-pressure branch-hint benchmark.
+// Many rarely-taken `unlikely` branches with sizeable inline cold
+// bodies; without hoisting the hot path is fragmented across them.
+use { println, Stdout } from "core:cli";
+
+fn workload(iters: i64, seed: i64) -> i64 {
+    let mut x: i64 = seed;
+    let mut acc: i64 = 0;
+    let mut i: i64 = 0;
+    while i < iters {
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 0) {
+            acc = acc + x * 2654435761;
+            acc = acc ^ (acc << 5);
+            acc = acc + (x >> 3) * 40503;
+            acc = acc ^ (acc >> 11);
+            acc = acc + (x & 65535) * 7;
+            acc = acc ^ (acc << 7);
+            acc = acc + x * 2654435778;
+            acc = acc ^ (acc >> 5);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 1) {
+            acc = acc + x * 2655435764;
+            acc = acc ^ (acc << 6);
+            acc = acc + (x >> 4) * 48422;
+            acc = acc ^ (acc >> 12);
+            acc = acc + (x & 65535) * 8;
+            acc = acc ^ (acc << 8);
+            acc = acc + x * 2655435781;
+            acc = acc ^ (acc >> 6);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 2) {
+            acc = acc + x * 2656435767;
+            acc = acc ^ (acc << 7);
+            acc = acc + (x >> 5) * 56341;
+            acc = acc ^ (acc >> 13);
+            acc = acc + (x & 65535) * 9;
+            acc = acc ^ (acc << 9);
+            acc = acc + x * 2656435784;
+            acc = acc ^ (acc >> 7);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 3) {
+            acc = acc + x * 2657435770;
+            acc = acc ^ (acc << 8);
+            acc = acc + (x >> 6) * 64260;
+            acc = acc ^ (acc >> 14);
+            acc = acc + (x & 65535) * 10;
+            acc = acc ^ (acc << 10);
+            acc = acc + x * 2657435787;
+            acc = acc ^ (acc >> 8);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 4) {
+            acc = acc + x * 2658435773;
+            acc = acc ^ (acc << 9);
+            acc = acc + (x >> 7) * 72179;
+            acc = acc ^ (acc >> 15);
+            acc = acc + (x & 65535) * 11;
+            acc = acc ^ (acc << 11);
+            acc = acc + x * 2658435790;
+            acc = acc ^ (acc >> 9);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 5) {
+            acc = acc + x * 2659435776;
+            acc = acc ^ (acc << 10);
+            acc = acc + (x >> 8) * 80098;
+            acc = acc ^ (acc >> 16);
+            acc = acc + (x & 65535) * 12;
+            acc = acc ^ (acc << 12);
+            acc = acc + x * 2659435793;
+            acc = acc ^ (acc >> 10);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 6) {
+            acc = acc + x * 2660435779;
+            acc = acc ^ (acc << 11);
+            acc = acc + (x >> 9) * 88017;
+            acc = acc ^ (acc >> 17);
+            acc = acc + (x & 65535) * 13;
+            acc = acc ^ (acc << 13);
+            acc = acc + x * 2660435796;
+            acc = acc ^ (acc >> 11);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 7) {
+            acc = acc + x * 2661435782;
+            acc = acc ^ (acc << 12);
+            acc = acc + (x >> 10) * 95936;
+            acc = acc ^ (acc >> 18);
+            acc = acc + (x & 65535) * 14;
+            acc = acc ^ (acc << 14);
+            acc = acc + x * 2661435799;
+            acc = acc ^ (acc >> 12);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 8) {
+            acc = acc + x * 2662435785;
+            acc = acc ^ (acc << 13);
+            acc = acc + (x >> 11) * 103855;
+            acc = acc ^ (acc >> 19);
+            acc = acc + (x & 65535) * 15;
+            acc = acc ^ (acc << 15);
+            acc = acc + x * 2662435802;
+            acc = acc ^ (acc >> 13);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 9) {
+            acc = acc + x * 2663435788;
+            acc = acc ^ (acc << 14);
+            acc = acc + (x >> 12) * 111774;
+            acc = acc ^ (acc >> 20);
+            acc = acc + (x & 65535) * 16;
+            acc = acc ^ (acc << 16);
+            acc = acc + x * 2663435805;
+            acc = acc ^ (acc >> 14);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 10) {
+            acc = acc + x * 2664435791;
+            acc = acc ^ (acc << 15);
+            acc = acc + (x >> 13) * 119693;
+            acc = acc ^ (acc >> 21);
+            acc = acc + (x & 65535) * 17;
+            acc = acc ^ (acc << 17);
+            acc = acc + x * 2664435808;
+            acc = acc ^ (acc >> 15);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 11) {
+            acc = acc + x * 2665435794;
+            acc = acc ^ (acc << 16);
+            acc = acc + (x >> 14) * 127612;
+            acc = acc ^ (acc >> 22);
+            acc = acc + (x & 65535) * 18;
+            acc = acc ^ (acc << 18);
+            acc = acc + x * 2665435811;
+            acc = acc ^ (acc >> 16);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 12) {
+            acc = acc + x * 2666435797;
+            acc = acc ^ (acc << 17);
+            acc = acc + (x >> 15) * 135531;
+            acc = acc ^ (acc >> 23);
+            acc = acc + (x & 65535) * 19;
+            acc = acc ^ (acc << 19);
+            acc = acc + x * 2666435814;
+            acc = acc ^ (acc >> 17);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 13) {
+            acc = acc + x * 2667435800;
+            acc = acc ^ (acc << 18);
+            acc = acc + (x >> 16) * 143450;
+            acc = acc ^ (acc >> 11);
+            acc = acc + (x & 65535) * 20;
+            acc = acc ^ (acc << 20);
+            acc = acc + x * 2667435817;
+            acc = acc ^ (acc >> 18);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 14) {
+            acc = acc + x * 2668435803;
+            acc = acc ^ (acc << 19);
+            acc = acc + (x >> 17) * 151369;
+            acc = acc ^ (acc >> 12);
+            acc = acc + (x & 65535) * 21;
+            acc = acc ^ (acc << 21);
+            acc = acc + x * 2668435820;
+            acc = acc ^ (acc >> 19);
+        }
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        acc = acc + (x & 7);
+        if builtin::unlikely((x & 1023) == 15) {
+            acc = acc + x * 2669435806;
+            acc = acc ^ (acc << 20);
+            acc = acc + (x >> 18) * 159288;
+            acc = acc ^ (acc >> 13);
+            acc = acc + (x & 65535) * 22;
+            acc = acc ^ (acc << 22);
+            acc = acc + x * 2669435823;
+            acc = acc ^ (acc >> 20);
+        }
+        i = i + 1;
+    }
+    return acc;
+}
+
+export fn run() with Stdout {
+    let r = workload(60000000, 88172645463325252);
+    println(`{r}`);
+}
