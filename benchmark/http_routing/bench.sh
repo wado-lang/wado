@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# HTTP routing benchmark: `wado serve` vs Hono (Node.js) vs Axum (native Rust).
+# HTTP routing benchmark: `wado serve` vs Hono on Node.js and Bun vs
+# Axum (native Rust).
 #
 # Starts each server in turn and drives load with `oha` against Hono's
 # official router-benchmark request set (honojs/hono,
@@ -14,6 +15,7 @@ CONNECTIONS="${CONNECTIONS:-50}"
 WADO_ADDR="127.0.0.1:8080"
 HONO_PORT="3000"
 AXUM_PORT="3001"
+BUN_PORT="3002"
 WADO_BIN="../../target/release/wado"
 
 # Hono's official router-benchmark request set ("METHOD PATH" per entry):
@@ -84,6 +86,18 @@ SERVER_PID=$!
 wait_ready "http://127.0.0.1:${HONO_PORT}/status"
 bench "http://127.0.0.1:${HONO_PORT}"
 stop_server
+
+echo
+echo "=== Hono (Bun) ==="
+if command -v bun >/dev/null 2>&1; then
+  PORT="$BUN_PORT" bun run app.bun.js >/dev/null 2>&1 &
+  SERVER_PID=$!
+  wait_ready "http://127.0.0.1:${BUN_PORT}/status"
+  bench "http://127.0.0.1:${BUN_PORT}"
+  stop_server
+else
+  echo "  SKIP: bun not found (install bun or add it to benchmark/mise.toml)"
+fi
 
 echo
 echo "=== Axum (native Rust) ==="
