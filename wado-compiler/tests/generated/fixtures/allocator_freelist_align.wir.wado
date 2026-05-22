@@ -140,11 +140,11 @@ fn "wado-compiler/tests/fixtures/allocator_freelist_align.wado/run"() with Stdou
     __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: sizes.repr, used: 7, index: 0 };
     b0: block {
         l1: loop {
-            let __sroa___iflet_11_discriminant: i32;
-            let __sroa___iflet_11_payload_0: i32;
-            multivalue_bind [__sroa___iflet_11_discriminant, __sroa___iflet_11_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
-            if __sroa___iflet_11_discriminant == 0 {
-                p = "mem/realloc"(0, 0, 16, __sroa___iflet_11_payload_0);
+            let __sroa___match_11_discriminant: i32;
+            let __sroa___match_11_payload_0: i32;
+            multivalue_bind [__sroa___match_11_discriminant, __sroa___match_11_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
+            if __sroa___match_11_discriminant == 0 {
+                p = "mem/realloc"(0, 0, 16, __sroa___match_11_payload_0);
                 __v0 = p & 15;
                 __cond = __v0 == 0;
                 if __cond == 0 {
@@ -181,7 +181,7 @@ fn "wado-compiler/tests/fixtures/allocator_freelist_align.wado/run"() with Stdou
                             "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" for size "), used: 10 });
                             __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
                             f_45 = __local_8;
-                            "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa___iflet_11_payload_0, f_45);
+                            "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa___match_11_payload_0, f_45);
                             "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" is not 16-aligned"), used: 18 });
                             break __tmpl: __local_7;
                             unreachable;

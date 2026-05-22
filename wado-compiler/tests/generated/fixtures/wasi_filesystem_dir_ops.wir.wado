@@ -307,15 +307,15 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     let __local_17: ref "core:prelude/string.wado//String";
     let __local_18: ref "core:prelude/format.wado//Formatter";
     let __pattern_temp_0: ref "tuple//[Stream<wasi:filesystem/types.wado/DirectoryEntry>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
-    let __iflet_22: ref null "wasi:filesystem/types.wado//DirectoryEntry";
-    let other_31: ref "core:prelude/string.wado//String";
-    let len_a_32: i32;
-    let other_34: ref "core:prelude/string.wado//String";
-    let len_a_35: i32;
-    let other_37: ref "core:prelude/string.wado//String";
-    let len_a_38: i32;
-    let other_40: ref "core:prelude/string.wado//String";
-    let len_a_41: i32;
+    let __match_20: ref null "wasi:filesystem/types.wado//DirectoryEntry";
+    let other_27: ref "core:prelude/string.wado//String";
+    let len_a_28: i32;
+    let other_30: ref "core:prelude/string.wado//String";
+    let len_a_31: i32;
+    let other_33: ref "core:prelude/string.wado//String";
+    let len_a_34: i32;
+    let other_36: ref "core:prelude/string.wado//String";
+    let len_a_37: i32;
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
@@ -361,17 +361,17 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     __iter_13 = struct.new "core:prelude/array.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: entries.repr, used: entries.used, index: 0 };
     b5: block {
         l6: loop {
-            __iflet_22 = "core:prelude/array.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(__iter_13);
-            if ref.is_null(__iflet_22) == 0 {
-                entry = ref.as_non_null(__iflet_22);
+            __match_20 = "core:prelude/array.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(__iter_13);
+            if ref.is_null(__match_20) == 0 {
+                entry = ref.as_non_null(__match_20);
                 entry_count = entry_count + 1;
                 if __inline_String_Eq__eq_5: block -> bool {
-                    other_31 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 };
-                    len_a_32 = entry.name.used;
-                    if len_a_32 != other_31.used {
+                    other_27 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 };
+                    len_a_28 = entry.name.used;
+                    if len_a_28 != other_27.used {
                         break __inline_String_Eq__eq_5: 0;
                     }
-                    break __inline_String_Eq__eq_5: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_31.repr, len_a_32);
+                    break __inline_String_Eq__eq_5: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_27.repr, len_a_28);
                     unreachable;
                 } {
                     found_hello = 1;
@@ -382,23 +382,23 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
                     }
                 }
                 if __inline_String_Eq__eq_6: block -> bool {
-                    other_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("binary.dat"), used: 10 };
-                    len_a_35 = entry.name.used;
-                    if len_a_35 != other_34.used {
+                    other_30 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("binary.dat"), used: 10 };
+                    len_a_31 = entry.name.used;
+                    if len_a_31 != other_30.used {
                         break __inline_String_Eq__eq_6: 0;
                     }
-                    break __inline_String_Eq__eq_6: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_34.repr, len_a_35);
+                    break __inline_String_Eq__eq_6: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_30.repr, len_a_31);
                     unreachable;
                 } {
                     found_binary = 1;
                 }
                 if __inline_String_Eq__eq_7: block -> bool {
-                    other_37 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("subdir"), used: 6 };
-                    len_a_38 = entry.name.used;
-                    if len_a_38 != other_37.used {
+                    other_33 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("subdir"), used: 6 };
+                    len_a_34 = entry.name.used;
+                    if len_a_34 != other_33.used {
                         break __inline_String_Eq__eq_7: 0;
                     }
-                    break __inline_String_Eq__eq_7: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_37.repr, len_a_38);
+                    break __inline_String_Eq__eq_7: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_33.repr, len_a_34);
                     unreachable;
                 } {
                     found_subdir = 1;
@@ -409,12 +409,12 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
                     }
                 }
                 if __inline_String_Eq__eq_8: block -> bool {
-                    other_40 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 };
-                    len_a_41 = entry.name.used;
-                    if len_a_41 != other_40.used {
+                    other_36 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 };
+                    len_a_37 = entry.name.used;
+                    if len_a_37 != other_36.used {
                         break __inline_String_Eq__eq_8: 0;
                     }
-                    break __inline_String_Eq__eq_8: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_40.repr, len_a_41);
+                    break __inline_String_Eq__eq_8: "core:prelude/string.wado/String^Eq::eq_bytes"(entry.name.repr, other_36.repr, len_a_37);
                     unreachable;
                 } {
                     found_newdir = 1;

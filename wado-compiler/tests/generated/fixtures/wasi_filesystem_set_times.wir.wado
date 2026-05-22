@@ -358,8 +358,8 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/run"() with Stdo
     let stat: ref "wasi:filesystem/types.wado//DescriptorStat";
     let no_change_result: ref null "wasi:filesystem/types.wado//ErrorCode";
     let times_at_result: ref null "wasi:filesystem/types.wado//ErrorCode";
-    let __local_20: ref null "wasi:clocks/system_clock.wado//Instant";
-    let __local_21: ref null "wasi:clocks/system_clock.wado//Instant";
+    let __local_17: ref null "wasi:clocks/system_clock.wado//Instant";
+    let __local_18: ref null "wasi:clocks/system_clock.wado//Instant";
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
@@ -399,14 +399,14 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/run"() with Stdo
         stat_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__Descriptor_stat"(file));
         if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat_result) {
             stat = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat_result).payload_0;
-            __local_20 = stat.data_access_timestamp;
-            if ref.is_null(__local_20) == 0 {
+            __local_17 = stat.data_access_timestamp;
+            if ref.is_null(__local_17) == 0 {
                 "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_times: access timestamp is set"), used: 34 });
             } else {
                 "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_times: access timestamp is null"), used: 35 });
             }
-            __local_21 = stat.data_modification_timestamp;
-            if ref.is_null(__local_21) == 0 {
+            __local_18 = stat.data_modification_timestamp;
+            if ref.is_null(__local_18) == 0 {
                 "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_times: modification timestamp is set"), used: 40 });
             } else {
                 "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_times: modification timestamp is null"), used: 41 });

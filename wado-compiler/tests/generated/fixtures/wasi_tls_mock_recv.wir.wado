@@ -186,6 +186,7 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/run"() with Stdout, Con
     let s: ref "core:prelude/string.wado//String";
     let __local_14: ref "core:prelude/string.wado//String";
     let __pattern_temp_3: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]";
+    let __match_19: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
     conn = "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_new"();
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
@@ -202,11 +203,10 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/run"() with Stdout, Con
     __pattern_temp_3 = "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_receive"(conn, __mv_lo_2);
     tls_rx = __pattern_temp_3.0;
     "wasi/stream-drop-writable"(__mv_hi_2);
-    let __match_scrut_0: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
-    __match_scrut_0 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_connect"(conn, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mock.example"), used: 12 }));
-    if __match_scrut_0.discriminant == 0 {
+    __match_19 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/__cm_binding__Connector_connect"(conn, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mock.example"), used: 12 }));
+    if __match_19.discriminant == 0 {
     } else {
-        e = ref.cast "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>::Err"(__match_scrut_0).payload_0;
+        e = ref.cast "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>::Err"(__match_19).payload_0;
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(46), used: 0 };
             "core:prelude/string.wado/String::push_str"(__local_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected handshake failure: "), used: 30 });
@@ -232,11 +232,11 @@ fn "wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado/run"() with Stdout, Con
         };
     };
     "wasi/stream-drop-readable"(tls_rx);
-    let __sroa___match_scrut_1_discriminant: i32;
-    let __sroa___match_scrut_1_payload_0: ref null "core:prelude/string.wado//String";
-    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_payload_0] = "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>>"(received);
-    if __sroa___match_scrut_1_discriminant == 0 {
-        s = ref.as_non_null(__sroa___match_scrut_1_payload_0);
+    let __sroa___match_20_discriminant: i32;
+    let __sroa___match_20_payload_0: ref null "core:prelude/string.wado//String";
+    multivalue_bind [__sroa___match_20_discriminant, __sroa___match_20_payload_0] = "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>>"(received);
+    if __sroa___match_20_discriminant == 0 {
+        s = ref.as_non_null(__sroa___match_20_payload_0);
         "core:cli/println"(s);
     } else {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("recv was not valid UTF-8"), used: 24 });
@@ -571,16 +571,16 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>
     iter = struct.new "core:prelude/array.wado//ArrayIter<u8>" { repr: bytes.repr, used: bytes.used, index: 0 };
     b23: block {
         l24: loop {
-            let __sroa___iflet_11_discriminant: i32;
-            let __sroa___iflet_11_payload_0: u8;
-            multivalue_bind [__sroa___iflet_11_discriminant, __sroa___iflet_11_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
-            if __sroa___iflet_11_discriminant == 0 {
+            let __sroa___match_11_discriminant: i32;
+            let __sroa___match_11_payload_0: u8;
+            multivalue_bind [__sroa___match_11_discriminant, __sroa___match_11_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+            if __sroa___match_11_discriminant == 0 {
                 code = 0;
-                if __sroa___iflet_11_payload_0 <u 128 {
-                    code = __sroa___iflet_11_payload_0;
-                } else if __sroa___iflet_11_payload_0 <u 194 {
+                if __sroa___match_11_payload_0 <u 128 {
+                    code = __sroa___match_11_payload_0;
+                } else if __sroa___match_11_payload_0 <u 194 {
                     return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: unexpected byte"), used: 30 };
-                } else if __sroa___iflet_11_payload_0 <u 224 {
+                } else if __sroa___match_11_payload_0 <u 224 {
                     let __sroa___local_12_discriminant: i32;
                     let __sroa___local_12_payload_0: u8;
                     multivalue_bind [__sroa___local_12_discriminant, __sroa___local_12_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
@@ -592,11 +592,11 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>
                         }) {
                             return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 };
                         }
-                        code = ((__sroa___iflet_11_payload_0 & 31) << 6) | (__sroa___local_12_payload_0 & 63);
+                        code = ((__sroa___match_11_payload_0 & 31) << 6) | (__sroa___local_12_payload_0 & 63);
                     } else {
                         return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
                     }
-                } else if __sroa___iflet_11_payload_0 <u 240 {
+                } else if __sroa___match_11_payload_0 <u 240 {
                     let __sroa___local_13_discriminant: i32;
                     let __sroa___local_13_payload_0: u8;
                     multivalue_bind [__sroa___local_13_discriminant, __sroa___local_13_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
@@ -605,14 +605,14 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>
                         let __sroa___local_14_payload_0: u8;
                         multivalue_bind [__sroa___local_14_discriminant, __sroa___local_14_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
                         if __sroa___local_14_discriminant == 0 {
-                            if (if __sroa___iflet_11_payload_0 == 224 -> i32 {
+                            if (if __sroa___match_11_payload_0 == 224 -> i32 {
                                 __sroa___local_13_payload_0 <u 160;
                             } else {
                                 0;
                             }) {
                                 return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: overlong sequence"), used: 32 };
                             }
-                            if (if __sroa___iflet_11_payload_0 == 237 -> i32 {
+                            if (if __sroa___match_11_payload_0 == 237 -> i32 {
                                 __sroa___local_13_payload_0 >=u 160;
                             } else {
                                 0;
@@ -633,14 +633,14 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>
                             }) {
                                 return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 };
                             }
-                            code = (((__sroa___iflet_11_payload_0 & 15) << 12) | ((__sroa___local_13_payload_0 & 63) << 6)) | (__sroa___local_14_payload_0 & 63);
+                            code = (((__sroa___match_11_payload_0 & 15) << 12) | ((__sroa___local_13_payload_0 & 63) << 6)) | (__sroa___local_14_payload_0 & 63);
                         } else {
                             return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
                         }
                     } else {
                         return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
                     }
-                } else if __sroa___iflet_11_payload_0 <u 245 {
+                } else if __sroa___match_11_payload_0 <u 245 {
                     let __sroa___local_15_discriminant: i32;
                     let __sroa___local_15_payload_0: u8;
                     multivalue_bind [__sroa___local_15_discriminant, __sroa___local_15_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
@@ -653,14 +653,14 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>
                             let __sroa___local_17_payload_0: u8;
                             multivalue_bind [__sroa___local_17_discriminant, __sroa___local_17_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
                             if __sroa___local_17_discriminant == 0 {
-                                if (if __sroa___iflet_11_payload_0 == 240 -> i32 {
+                                if (if __sroa___match_11_payload_0 == 240 -> i32 {
                                     __sroa___local_15_payload_0 <u 144;
                                 } else {
                                     0;
                                 }) {
                                     return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: overlong sequence"), used: 32 };
                                 }
-                                if (if __sroa___iflet_11_payload_0 == 244 -> i32 {
+                                if (if __sroa___match_11_payload_0 == 244 -> i32 {
                                     __sroa___local_15_payload_0 >u 143;
                                 } else {
                                     0;
@@ -688,7 +688,7 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>
                                 }) {
                                     return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 };
                                 }
-                                code = ((((__sroa___iflet_11_payload_0 & 7) << 18) | ((__sroa___local_15_payload_0 & 63) << 12)) | ((__sroa___local_16_payload_0 & 63) << 6)) | (__sroa___local_17_payload_0 & 63);
+                                code = ((((__sroa___match_11_payload_0 & 7) << 18) | ((__sroa___local_15_payload_0 & 63) << 12)) | ((__sroa___local_16_payload_0 & 63) << 6)) | (__sroa___local_17_payload_0 & 63);
                             } else {
                                 return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 };
                             }
