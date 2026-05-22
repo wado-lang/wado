@@ -521,7 +521,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__De
     __async_outptr = "mem/realloc"(0, 0, 4, 20);
     __params_buf = "mem/realloc"(0, 0, 8, 56);
     builtin::store_i32(__params_buf, self);
-    builtin::store_u8(__params_buf + 8, data_access_timestamp.discriminant);
+    builtin::store_u8(__params_buf + 8, (if data_access_timestamp.discriminant == 0 -> i32 {
+        0;
+    } else if data_access_timestamp.discriminant == 1 -> i32 {
+        1;
+    } else {
+        2;
+    }));
     if data_access_timestamp.discriminant == 0 {
     } else if data_access_timestamp.discriminant == 1 {
     } else {
@@ -529,7 +535,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__De
         builtin::store_i64((__params_buf + 8) + 8, __local_6.seconds);
         builtin::store_i32(((__params_buf + 8) + 8) + 8, __local_6.nanoseconds);
     }
-    builtin::store_u8(__params_buf + 32, data_modification_timestamp.discriminant);
+    builtin::store_u8(__params_buf + 32, (if data_modification_timestamp.discriminant == 0 -> i32 {
+        0;
+    } else if data_modification_timestamp.discriminant == 1 -> i32 {
+        1;
+    } else {
+        2;
+    }));
     if data_modification_timestamp.discriminant == 0 {
     } else if data_modification_timestamp.discriminant == 1 {
     } else {
@@ -563,7 +575,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__De
     builtin::store_u8(__params_buf + 4, path_flags);
     builtin::store_i32(__params_buf + 8, builtin::i32_wrap_i64(__path_packed));
     builtin::store_i32(__params_buf + 12, builtin::i32_wrap_i64(__path_packed >> 32_i64));
-    builtin::store_u8(__params_buf + 16, data_access_timestamp.discriminant);
+    builtin::store_u8(__params_buf + 16, (if data_access_timestamp.discriminant == 0 -> i32 {
+        0;
+    } else if data_access_timestamp.discriminant == 1 -> i32 {
+        1;
+    } else {
+        2;
+    }));
     if data_access_timestamp.discriminant == 0 {
     } else if data_access_timestamp.discriminant == 1 {
     } else {
@@ -571,7 +589,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_times.wado/__cm_binding__De
         builtin::store_i64((__params_buf + 16) + 8, __local_9.seconds);
         builtin::store_i32(((__params_buf + 16) + 8) + 8, __local_9.nanoseconds);
     }
-    builtin::store_u8(__params_buf + 40, data_modification_timestamp.discriminant);
+    builtin::store_u8(__params_buf + 40, (if data_modification_timestamp.discriminant == 0 -> i32 {
+        0;
+    } else if data_modification_timestamp.discriminant == 1 -> i32 {
+        1;
+    } else {
+        2;
+    }));
     if data_modification_timestamp.discriminant == 0 {
     } else if data_modification_timestamp.discriminant == 1 {
     } else {
@@ -1274,13 +1298,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     __for_0: block {
         i = 0;
         block {
-            l224: loop {
+            l232: loop {
                 if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
                 i = i + 1;
-                continue l224;
+                continue l232;
             };
         };
     };
@@ -1292,13 +1316,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l227: loop {
+            l235: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l227;
+                continue l235;
             };
         };
     };
@@ -1442,16 +1466,16 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesy
             break __inline_cm_waitable_join_0: handle_1;
             unreachable;
         });
-        b234: block {
-            l235: loop {
+        b242: block {
+            l243: loop {
                 let event_mv_code: i32;
                 let event_mv_handle: i32;
                 let event_mv_payload: u32;
                 multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if event_mv_payload == 2 {
-                    break b234;
+                    break b242;
                 }
-                continue l235;
+                continue l243;
             };
         };
         "wasi/subtask-drop"(handle_1);
@@ -1478,16 +1502,16 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:fil
             break __inline_cm_waitable_join_0: handle_1;
             unreachable;
         });
-        b239: block {
-            l240: loop {
+        b247: block {
+            l248: loop {
                 let event_mv_code: i32;
                 let event_mv_handle: i32;
                 let event_mv_payload: u32;
                 multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if event_mv_payload == 2 {
-                    break b239;
+                    break b247;
                 }
-                continue l240;
+                continue l248;
             };
         };
         "wasi/subtask-drop"(handle_1);
@@ -1514,16 +1538,16 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesy
             break __inline_cm_waitable_join_0: handle_1;
             unreachable;
         });
-        b244: block {
-            l245: loop {
+        b252: block {
+            l253: loop {
                 let event_mv_code: i32;
                 let event_mv_handle: i32;
                 let event_mv_payload: u32;
                 multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if event_mv_payload == 2 {
-                    break b244;
+                    break b252;
                 }
-                continue l245;
+                continue l253;
             };
         };
         "wasi/subtask-drop"(handle_1);
@@ -1558,13 +1582,13 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/
     __for_0: block {
         i = 0;
         block {
-            l249: loop {
+            l257: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "tuple//[Descriptor, String]">(new_repr, i, builtin::array_get<ref "tuple//[Descriptor, String]">(old_repr, i));
                 i = i + 1;
-                continue l249;
+                continue l257;
             };
         };
     };
