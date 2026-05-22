@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779490476305,
+  "lastUpdate": 1779491420390,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24653,6 +24653,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/26c683d2c8362e30d7794ca19c7393b72ab16fae"
         },
         "date": 1779490475916,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "98d2352e177d9c18b5c2a2245bd03c8b5daabc0f",
+          "message": "Merge pull request #1150 from wado-lang/datatest-mini-0.4-ignore-opt-levels\n\ntest: ignore O1/O3/Os via datatest-mini 0.4 ignore_unless_env",
+          "timestamp": "2026-05-23T08:02:50+09:00",
+          "tree_id": "64d46b3ea40625132d3731de789dc0f8f5e645b2",
+          "url": "https://github.com/wado-lang/wado/commit/98d2352e177d9c18b5c2a2245bd03c8b5daabc0f"
+        },
+        "date": 1779491420191,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
