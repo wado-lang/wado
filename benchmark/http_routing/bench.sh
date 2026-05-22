@@ -51,19 +51,27 @@ OHA_BIN="$(command -v oha || true)"
 [ -z "$OHA_BIN" ] && OHA_BIN="$HOME/.cargo/bin/oha"
 
 # CPU pinning: split cores between the servers and the load generator so
-# they never share a core. `env` is a no-op prefix when pinning is off,
-# which keeps the command arrays safe to expand under `set -u`.
+# they never share a core. The load generator gets a quarter of the
+# cores (at least one), the servers the rest — `oha` is far lighter than
+# a server, and an even split would cram a multi-worker server onto too
+# few cores. Multi-threaded servers are then sized to the server core
+# count (see SERVER_CORE_COUNT below) so none is over-threaded.
+# `env` is a no-op prefix when pinning is off, which keeps the command
+# arrays safe to expand under `set -u`.
 NPROC="$(nproc)"
 if command -v taskset >/dev/null 2>&1 && [ "$NPROC" -ge 2 ]; then
-  HALF=$((NPROC / 2))
-  SERVER_CORES="0-$((HALF - 1))"
-  OHA_CORES="${HALF}-$((NPROC - 1))"
+  OHA_CORE_COUNT=$((NPROC / 4))
+  [ "$OHA_CORE_COUNT" -lt 1 ] && OHA_CORE_COUNT=1
+  SERVER_CORE_COUNT=$((NPROC - OHA_CORE_COUNT))
+  SERVER_CORES="0-$((SERVER_CORE_COUNT - 1))"
+  OHA_CORES="${SERVER_CORE_COUNT}-$((NPROC - 1))"
   SERVER_PIN=(taskset -c "$SERVER_CORES")
   OHA_PIN=(taskset -c "$OHA_CORES")
-  echo "CPU pinning: servers on cores ${SERVER_CORES}, oha on cores ${OHA_CORES}"
+  echo "CPU pinning: servers on cores ${SERVER_CORES} (${SERVER_CORE_COUNT}), oha on cores ${OHA_CORES}"
 else
   SERVER_PIN=(env)
   OHA_PIN=(env)
+  SERVER_CORE_COUNT="$NPROC"
   echo "CPU pinning: disabled (nproc=${NPROC}, taskset unavailable)"
 fi
 
@@ -102,8 +110,13 @@ register() {
   SERVER_URLS+=("$2")
 }
 
+# Multi-threaded servers are sized to the server core budget so none is
+# over-threaded onto its pinned cores: `wado serve` via --workers, Axum
+# (Tokio) via TOKIO_WORKER_THREADS. Node and Bun drive their HTTP server
+# from a single thread and need no knob.
 echo "=== Starting servers ==="
-"${SERVER_PIN[@]}" "$WADO_BIN" serve --addr "$WADO_ADDR" app.wado >/dev/null 2>&1 &
+"${SERVER_PIN[@]}" "$WADO_BIN" serve --addr "$WADO_ADDR" \
+  --workers "$SERVER_CORE_COUNT" app.wado >/dev/null 2>&1 &
 PIDS+=($!)
 register "wado serve" "http://${WADO_ADDR}"
 
@@ -119,7 +132,8 @@ else
   echo "  SKIP: bun not found (install bun or add it to benchmark/mise.toml)"
 fi
 
-PORT="$AXUM_PORT" "${SERVER_PIN[@]}" ./target/release/axum_server >/dev/null 2>&1 &
+PORT="$AXUM_PORT" TOKIO_WORKER_THREADS="$SERVER_CORE_COUNT" \
+  "${SERVER_PIN[@]}" ./target/release/axum_server >/dev/null 2>&1 &
 PIDS+=($!)
 register "Axum (native)" "http://127.0.0.1:${AXUM_PORT}"
 
