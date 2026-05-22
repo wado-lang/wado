@@ -549,7 +549,17 @@ async fn await_first_byte(
     let mut resp_rx = pin!(resp_rx);
     loop {
         match select(resp_rx.as_mut(), pin!(tick_rx.changed())).await {
-            Either::Left((Ok(outcome), _)) => return outcome,
+            // The deadline is authoritative regardless of which branch wins:
+            // a head that lands past it (after the deadline but before the
+            // next tick) is still a timeout, matching the old sleep-vs-recv
+            // race rather than letting a late head slip through.
+            Either::Left((Ok(outcome), _)) => {
+                return if Instant::now() >= deadline {
+                    HandlerOutcome::Timeout
+                } else {
+                    outcome
+                };
+            }
             Either::Left((Err(_recv), _)) => return aborted(),
             Either::Right((Ok(()), _)) => {
                 if Instant::now() >= deadline {

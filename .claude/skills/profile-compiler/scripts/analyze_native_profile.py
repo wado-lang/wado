@@ -23,6 +23,7 @@ Usage:
 """
 import argparse
 import json
+import platform
 import re
 import subprocess
 from collections import defaultdict
@@ -68,7 +69,7 @@ def thread_func_keys(thread):
     return keys
 
 
-def symbolicate(profile, binary, main_base):
+def symbolicate(profile, binary, main_base, arch):
     """(lib_index, rva) -> cleaned symbol, via atos batched per lib."""
     libs = profile["libs"]
     all_keys = set()
@@ -92,7 +93,7 @@ def symbolicate(profile, binary, main_base):
         addrs = [hex(base + r) for r in rvas]
         try:
             lines = subprocess.run(
-                ["atos", "-o", path, "-arch", "arm64", "-l", hex(base), *addrs],
+                ["atos", "-o", path, "-arch", arch, "-l", hex(base), *addrs],
                 capture_output=True, text=True, timeout=180,
             ).stdout.splitlines()
         except (OSError, subprocess.SubprocessError):
@@ -113,11 +114,13 @@ def main():
     ap.add_argument("--binary", default="wado", help="main executable lib name")
     ap.add_argument("--main-base", default="0x100000000",
                     help="__TEXT vmaddr of the main executable")
+    ap.add_argument("--arch", default=platform.machine(),
+                    help="atos -arch (defaults to the host arch, e.g. arm64 / x86_64)")
     args = ap.parse_args()
 
     profile = json.load(open(args.profile))
     libs = profile["libs"]
-    keyname = symbolicate(profile, args.binary, int(args.main_base, 16))
+    keyname = symbolicate(profile, args.binary, int(args.main_base, 16), args.arch)
 
     self_by = defaultdict(float)
     incl_by = defaultdict(float)
