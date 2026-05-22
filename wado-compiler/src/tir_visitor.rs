@@ -598,9 +598,7 @@ pub fn opt_walk_stmt(visitor: &mut impl TirOptVisitor, stmt: &mut TirStmt) -> bo
         TirStmtKind::LabeledBlock { block, .. } => visitor.visit_block(block),
         TirStmtKind::Continue => false,
         TirStmtKind::TaskReturn { value } => visitor.visit_expr(value),
-        TirStmtKind::VariadicForOf {
-            iterable, body, ..
-        } => {
+        TirStmtKind::VariadicForOf { iterable, body, .. } => {
             let mut changed = visitor.visit_expr(iterable);
             changed |= visitor.visit_block(body);
             changed
