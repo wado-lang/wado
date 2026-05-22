@@ -908,31 +908,25 @@ fn fixture_test_o2(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 }
 
 /// Test function for O1 (development optimization)
-/// Skipped by default locally. Runs in CI or when `WADO_FULL_TEST=1` is set.
+/// `#[ignore]`d unless `CI` or `WADO_FULL_TEST` is set at build time (see the
+/// `harness!` entry below). Run locally with `cargo test -- --ignored`.
 fn fixture_test_o1(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
-    if std::env::var("CI").is_err() && std::env::var("WADO_FULL_TEST").is_err() {
-        return Ok(()); // Skip locally by default
-    }
     run_fixture_test_with_opt(path, content, OptLevel::O1);
     Ok(())
 }
 
 /// Test function for O3 (aggressive optimization)
-/// Skipped by default locally. Runs in CI or when `WADO_FULL_TEST=1` is set.
+/// `#[ignore]`d unless `CI` or `WADO_FULL_TEST` is set at build time (see the
+/// `harness!` entry below). Run locally with `cargo test -- --ignored`.
 fn fixture_test_o3(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
-    if std::env::var("CI").is_err() && std::env::var("WADO_FULL_TEST").is_err() {
-        return Ok(()); // Skip locally by default
-    }
     run_fixture_test_with_opt(path, content, OptLevel::O3);
     Ok(())
 }
 
 /// Test function for Os (size optimization)
-/// Skipped by default locally. Runs in CI or when `WADO_FULL_TEST=1` is set.
+/// `#[ignore]`d unless `CI` or `WADO_FULL_TEST` is set at build time (see the
+/// `harness!` entry below). Run locally with `cargo test -- --ignored`.
 fn fixture_test_os(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
-    if std::env::var("CI").is_err() && std::env::var("WADO_FULL_TEST").is_err() {
-        return Ok(()); // Skip locally by default
-    }
     run_fixture_test_with_opt(path, content, OptLevel::Os);
     Ok(())
 }
@@ -974,12 +968,20 @@ fn keep_wasm_artifacts(dir: &str, fixture_name: &str, opt_name: &str, wasm: &[u8
 
 datatest_mini::harness! {
     // Pattern matches .wado files directly in fixtures/ but not in subdirectories
-    // (subdirectories contain helper modules that are imported, not run as tests)
+    // (subdirectories contain helper modules that are imported, not run as tests).
+    //
+    // O1/O3/Os are `#[ignore]`d unless CI or WADO_FULL_TEST is set at build time.
+    // The env is read at macro expansion, so toggling requires re-expanding the
+    // macro (touch this file or `cargo clean`); locally, run them on demand with
+    // `cargo test -- --ignored`.
     { test = fixture_test_o0, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
-    { test = fixture_test_o1, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
+    { test = fixture_test_o1, root = "tests/fixtures", pattern = r"^[^/]+\.wado$",
+      ignore_unless_env = ["CI", "WADO_FULL_TEST"] },
     { test = fixture_test_o2, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
-    { test = fixture_test_o3, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
-    { test = fixture_test_os, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
+    { test = fixture_test_o3, root = "tests/fixtures", pattern = r"^[^/]+\.wado$",
+      ignore_unless_env = ["CI", "WADO_FULL_TEST"] },
+    { test = fixture_test_os, root = "tests/fixtures", pattern = r"^[^/]+\.wado$",
+      ignore_unless_env = ["CI", "WADO_FULL_TEST"] },
 }
 
 /// End-to-end check on the `#![TODO]` wrapper: a module-level `#![TODO]` whose
