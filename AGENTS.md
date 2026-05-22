@@ -63,23 +63,26 @@ Unlike Rust:
 - No lifetimes. No borrow checker. No ownership. Just GC.
 - Value semantics: every value is deeply copied when assigned or passed to a function, except for references and `builtin::array<T>` (an internal type, not user-facing).
 - Wado splits Rust's `enum` into `variant` for sum types with payloads and `enum` for plain discriminants (no payload). Bitmask types use `flags`.
+- No macros.
 - No `unsafe`. No raw pointers.
 - Semicolons are just separators. Functions that return values must use `return`.
 
 Like Rust:
 
-- Full generics and traits, but no dynamic dispatch (yet).
+- Full generics and traits, except for dynamic dispatch (not yet).
 - Full pattern matching:
   - `match` statements and expressions.
-  - `matches` operator, similar to Rust's `matches!` macro.
   - `if let` and `while let`.
 
-A few Wado-specific features:
+Wado-specific features:
 
-- Effect system: effect annotations and handlers.
+- Effect system: effect signatures and handlers.
 - Wasm CM builtins and direct WASI P3 bindings.
+- `scrutinee matches { PATTERN }` operator, similar to Rust's `matches!` macro.
 - `task return` for Wasm async functions.
 - `assert` statements with power-assert-like diagnostics. Assertions cannot be disabled, so they are always reliable.
+- ES-Modules-like import statements.
+- Template string literals with Rust-like `{expr:specifier}` formatting.
 
 ## The Compiler
 

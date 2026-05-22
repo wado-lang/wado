@@ -6,6 +6,7 @@ This is the wado-compiler crate.
 
 - The principle: `codegen.rs` emits the `Package` as is, which does not have the knowledge of the previous phases.
 - Use utilities in `name.rs` to handle name mangling and monomorphization. Other components must not know the details of name formats.
+- If applicable, use visitor utilities instead of walking IR nodes by hand.
 
 ## Standard Libraries
 
