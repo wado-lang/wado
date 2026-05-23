@@ -1452,21 +1452,28 @@ async fn run_pipeline(
         })
     };
 
-    // All seven tasks (3 stages + 4 collectors) await concurrently via
-    // `tokio::join!`. Worker-level panics are already caught by
-    // `compile_artifact` / `load_module` / `run_single_test_safe`, so
-    // the stage drivers themselves return cleanly. A panic that does
-    // escape here indicates a real pipeline bug, not a per-fixture
-    // failure — letting it propagate is the right thing to do.
-    let (compiled_count, load_ok, _exec_unit, todos, cfails, lfails, results) = tokio::join!(
-        compile_future,
-        load_future,
-        execute_future,
-        collect_into_vec(todo_rx),
-        collect_into_vec(cfail_rx),
-        collect_into_vec(lfail_rx),
-        collect_into_vec(result_rx),
-    );
+    // All seven tasks (3 stages + 4 collectors) run concurrently as
+    // independent runtime tasks. Per-fixture panics are already caught
+    // by `compile_artifact` / `load_module` / `run_single_test_safe`,
+    // so the stage drivers themselves return cleanly. Sequential
+    // `.await` of the handles is fine for concurrency (the tasks
+    // progress in parallel on the runtime; await just gathers their
+    // results) and lets us avoid the `tokio::macros` feature.
+    let compile_task = tokio::spawn(compile_future);
+    let load_task = tokio::spawn(load_future);
+    let execute_task = tokio::spawn(execute_future);
+    let todo_task = tokio::spawn(collect_into_vec(todo_rx));
+    let cfail_task = tokio::spawn(collect_into_vec(cfail_rx));
+    let lfail_task = tokio::spawn(collect_into_vec(lfail_rx));
+    let result_task = tokio::spawn(collect_into_vec(result_rx));
+
+    let compiled_count = compile_task.await.expect("compile stage panicked");
+    let load_ok = load_task.await.expect("load stage panicked");
+    execute_task.await.expect("execute stage panicked");
+    let todos = todo_task.await.expect("todo collector panicked");
+    let cfails = cfail_task.await.expect("cfail collector panicked");
+    let lfails = lfail_task.await.expect("lfail collector panicked");
+    let results = result_task.await.expect("result collector panicked");
 
     drop(epoch_ticker); // Stops the tick thread.
 
