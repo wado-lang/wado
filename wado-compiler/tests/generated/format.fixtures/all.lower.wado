@@ -5428,12 +5428,14 @@ pub fn i128::from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntErro
 
 pub fn i128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let [is_negative, digit_start] = "$value_copy$T238"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
         },
-    });
+    };
+    let is_negative: bool = __pattern_temp_0.0;
+    let digit_start: i32 = __pattern_temp_0.1;
     let max_pos: u128 = "core::prelude/int128.wado::u128::from_pair"(18446744073709551615, 9223372036854775807 as u64);
     let max_neg_abs: u128 = "core::prelude/int128.wado::u128::from_pair"(0, 9223372036854775808);
     return match "core::prelude/intparse.wado::parse_u128_digits"(s, digit_start, end, radix) {
@@ -6344,12 +6346,14 @@ pub fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
 
 pub fn parse_i64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let [is_negative, digit_start] = "$value_copy$T238"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
         },
-    });
+    };
+    let is_negative: bool = __pattern_temp_0.0;
+    let digit_start: i32 = __pattern_temp_0.1;
     return match "core::prelude/intparse.wado::parse_u64_digits"(s, digit_start, end, radix) {
         Ok(v) => if is_negative {
             if (v > min_abs) {
@@ -14655,25 +14659,28 @@ fn tuple_array_literals() {
 
 fn destructuring_examples() {
     let p: Point = Point { x: 1, y: 2 };
-    let __pattern_temp_0: Point = "$value_copy$T26"(p);
+    let __pattern_temp_0: Point = p;
     let x: i32 = __pattern_temp_0.x;
     let y: i32 = __pattern_temp_0.y;
-    let __pattern_temp_1: Point = "$value_copy$T26"(p);
+    let __pattern_temp_1: Point = p;
     let px: i32 = __pattern_temp_1.x;
     let py: i32 = __pattern_temp_1.y;
-    let __pattern_temp_2: Point = "$value_copy$T26"(p);
+    let __pattern_temp_2: Point = p;
     let hx: i32 = __pattern_temp_2.x;
     let vy: i32 = __pattern_temp_2.y;
-    let __pattern_temp_3: Point = "$value_copy$T26"(p);
+    let __pattern_temp_3: Point = p;
     let dx: i32 = __pattern_temp_3.x;
     let t: [i32, i32, i32] = [1, 2, 3];
-    let [a, b, c] = "$value_copy$T438"(t);
-    let __pattern_temp_4: [i32, i32, i32] = "$value_copy$T438"(t);
-    let first: i32 = __pattern_temp_4.0;
-    let __pattern_temp_5: [i32, i32, i32] = "$value_copy$T438"(t);
-    let a2: i32 = __pattern_temp_5.0;
-    let b2: i32 = __pattern_temp_5.1;
-    let __pattern_temp_6: [i32, i32, i32] = "$value_copy$T438"(t);
+    let __pattern_temp_4: [i32, i32, i32] = t;
+    let a: i32 = __pattern_temp_4.0;
+    let b: i32 = __pattern_temp_4.1;
+    let c: i32 = __pattern_temp_4.2;
+    let __pattern_temp_5: [i32, i32, i32] = t;
+    let first: i32 = __pattern_temp_5.0;
+    let __pattern_temp_6: [i32, i32, i32] = t;
+    let a2: i32 = __pattern_temp_6.0;
+    let b2: i32 = __pattern_temp_6.1;
+    let __pattern_temp_7: [i32, i32, i32] = t;
     ((((((((((((x + y) + px) + py) + hx) + vy) + dx) + a) + b) + c) + first) + a2) + b2);
     let points: Array<Point> = __seq_lit: {
         let mut __b: Array<Point> = "core::prelude/array.wado::Array<wado-compiler/tests/format.fixtures/all.dirty.wado/Point>^SequenceLiteralBuilder::new_literal"(0);
@@ -14682,8 +14689,8 @@ fn destructuring_examples() {
     __for_of_17: {
         let mut __iter_17: ArrayIter<wado-compiler/tests/format.fixtures/all.dirty.wado/Point> = points."Array<wado-compiler/tests/format.fixtures/all.dirty.wado/Point>^IntoIterator::into_iter"();
         loop {
-            let __match_27: Option<Point> = __iter_17."ArrayIter<wado-compiler/tests/format.fixtures/all.dirty.wado/Point>^Iterator::next"();
-            match __match_27 {
+            let __match_28: Option<Point> = __iter_17."ArrayIter<wado-compiler/tests/format.fixtures/all.dirty.wado/Point>^Iterator::next"();
+            match __match_28 {
                 Some({ x, y }) => {
                     (x + y);
                 },
@@ -14715,7 +14722,7 @@ fn match_as_stmt(color: Color, opt: Option<i32>) {
 
 fn kv_list_long(entries: Array<[String, i32]>) {
     let long: [[String, i32], [String, i32], [String, i32], [String, i32], [String, i32], [String, i32]] = [["first-key", 100], ["second-key", 200], ["third-key", 300], ["fourth-key", 400], ["fifth-key", 500], ["sixth-key", 600]];
-    "$value_copy$T447"(long);
+    long;
 }
 
 fn hold_ref(p: &Point) -> Holder with stores[p] {
@@ -20345,7 +20352,7 @@ fn "__Closure_0^Inspect::inspect"(self: &__Closure_0, f: &mut Formatter) {
 }
 
 fn "__Closure_0^InspectAlt::inspect_alt"(self: &__Closure_0, f: &mut Formatter) {
-    f.Formatter::write_str("|c: char| Box<char> { value: c }.char::to_ascii_lowercase()");
+    f.Formatter::write_str("|c: char| c.char::to_ascii_lowercase()");
 }
 
 fn __Closure_1::__call(self: &__Closure_1, c: char) -> char {
@@ -20357,7 +20364,7 @@ fn "__Closure_1^Inspect::inspect"(self: &__Closure_1, f: &mut Formatter) {
 }
 
 fn "__Closure_1^InspectAlt::inspect_alt"(self: &__Closure_1, f: &mut Formatter) {
-    f.Formatter::write_str("|c: char| Box<char> { value: c }.char::to_ascii_uppercase()");
+    f.Formatter::write_str("|c: char| c.char::to_ascii_uppercase()");
 }
 
 fn __Closure_2::__call(self: &__Closure_2, x: i32) -> i32 {
@@ -20460,7 +20467,7 @@ fn "__Closure_9^Inspect::inspect"(self: &__Closure_9, f: &mut Formatter) {
 }
 
 fn "__Closure_9^InspectAlt::inspect_alt"(self: &__Closure_9, f: &mut Formatter) {
-    f.Formatter::write_str("|| captures[__ref_count] {\n    __deref_cap_0.value = (__deref_cap_0.value + 1);\n}");
+    f.Formatter::write_str("|| captures[__ref_count] {\n    *__deref_cap_0 = (*__deref_cap_0 + 1);\n}");
 }
 
 fn __initialize_modules() {
