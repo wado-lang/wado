@@ -2182,9 +2182,6 @@ fn "core:prelude/array.wado/Array<Fn<1,i32>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<Fn<1,i32>>;
-    let old_repr: ref builtin::array<Fn<1,i32>>;
-    let used: i32;
-    let i: i32;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
@@ -2193,21 +2190,7 @@ fn "core:prelude/array.wado/Array<Fn<1,i32>>::grow"(self) {
         unreachable;
     };
     new_repr = builtin::array_new<ref struct>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l129: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref struct>(new_repr, i, builtin::array_get<ref struct>(old_repr, i));
-                i = i + 1;
-                continue l129;
-            };
-        };
-    };
+    builtin::array_copy<ref struct>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -2270,13 +2253,13 @@ fn "wado-compiler/tests/fixtures/closure_2.wado/__Closure_24::__call"(n) {
     __for_0: block {
         i = 1;
         block {
-            l132: loop {
+            l129: loop {
                 if i > n {
                     break __for_0;
                 }
                 result = result * i;
                 i = i + 1;
-                continue l132;
+                continue l129;
             };
         };
     };
@@ -2288,14 +2271,14 @@ fn "wado-compiler/tests/fixtures/closure_2.wado/__Closure_28::__call"(n) {
     let i: i32;
     sum = 0;
     i = 1;
-    b134: block {
-        l135: loop {
+    b131: block {
+        l132: loop {
             if i > n {
-                break b134;
+                break b131;
             }
             sum = sum + i;
             i = i + 1;
-            continue l135;
+            continue l132;
         };
     };
     return sum;

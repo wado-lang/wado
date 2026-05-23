@@ -1176,9 +1176,6 @@ fn "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/treeset_mut_ref_d
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/LitToken>";
-    let old_repr: ref "builtin::array<wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado/LitToken>";
-    let used: i32;
-    let i: i32;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
@@ -1187,21 +1184,7 @@ fn "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/treeset_mut_ref_d
         unreachable;
     };
     new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//LitToken">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l91: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//LitToken">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//LitToken">(old_repr, i));
-                i = i + 1;
-                continue l91;
-            };
-        };
-    };
+    builtin::array_copy<ref "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//LitToken">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -1327,8 +1310,8 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,()>::find_index"(se
     _licm_used_17 = _licm_entries_14.used;
     _licm_repr_18 = _licm_entries_14.repr;
     _licm_used_23 = key.used;
-    b105: block {
-        l106: loop {
+    b102: block {
+        l103: loop {
             let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
             __match_scrut_0 = current;
             if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) {
@@ -1368,9 +1351,9 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,()>::find_index"(se
                     current = n.right;
                 }
             } else {
-                break b105;
+                break b102;
             }
-            continue l106;
+            continue l103;
         };
     };
     return -1;
@@ -1380,9 +1363,6 @@ fn "core:prelude/array.wado/Array<core:collections/TreeMapEntry<core:prelude/str
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:collections/TreeMapEntry<core:prelude/string.wado/String,()>>";
-    let old_repr: ref "builtin::array<core:collections/TreeMapEntry<core:prelude/string.wado/String,()>>";
-    let used: i32;
-    let i: i32;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
@@ -1391,21 +1371,7 @@ fn "core:prelude/array.wado/Array<core:collections/TreeMapEntry<core:prelude/str
         unreachable;
     };
     new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l115: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>">(new_repr, i, builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>">(old_repr, i));
-                i = i + 1;
-                continue l115;
-            };
-        };
-    };
+    builtin::array_copy<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -1580,9 +1546,6 @@ fn "core:prelude/array.wado/Array<core:collections/TreeMapNode<core:prelude/stri
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
-    let old_repr: ref "builtin::array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
-    let used: i32;
-    let i: i32;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
@@ -1591,21 +1554,7 @@ fn "core:prelude/array.wado/Array<core:collections/TreeMapNode<core:prelude/stri
         unreachable;
     };
     new_repr = builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l141: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(new_repr, i, builtin::array_get<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(old_repr, i));
-                i = i + 1;
-                continue l141;
-            };
-        };
-    };
+    builtin::array_copy<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 

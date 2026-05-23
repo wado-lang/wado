@@ -2557,18 +2557,18 @@ fn "core:prelude/array.wado/Array<i32>::sort_by"(self, cmp) {
     src = self.repr;
     buf = builtin::array_new<i32>(n);
     width = 1;
-    __for_11: block {
+    __for_5: block {
         block {
             l130: loop {
                 if width >= n {
-                    break __for_11;
+                    break __for_5;
                 }
-                __for_12: block {
+                __for_6: block {
                     start = 0;
                     block {
                         l133: loop {
                             if start >= n {
-                                break __for_12;
+                                break __for_6;
                             }
                             mid = start + width;
                             if mid < n {
@@ -2579,12 +2579,12 @@ fn "core:prelude/array.wado/Array<i32>::sort_by"(self, cmp) {
                                 };
                                 i = start;
                                 j = mid;
-                                __for_13: block {
+                                __for_7: block {
                                     k = start;
                                     block {
                                         l137: loop {
                                             if k >= end {
-                                                break __for_13;
+                                                break __for_7;
                                             }
                                             if i < mid {
                                                 if j < end {
@@ -2784,9 +2784,6 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<i32>;
-    let old_repr: ref builtin::array<i32>;
-    let used: i32;
-    let i: i32;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
@@ -2795,21 +2792,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
         unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l164: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
-                i = i + 1;
-                continue l164;
-            };
-        };
-    };
+    builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -2886,18 +2869,18 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/Array<i32>::sort_by$__Closure_18
     src = self.repr;
     buf = builtin::array_new<i32>(n);
     width = 1;
-    __for_11: block {
+    __for_5: block {
         block {
-            l170: loop {
+            l167: loop {
                 if width >= n {
-                    break __for_11;
+                    break __for_5;
                 }
-                __for_12: block {
+                __for_6: block {
                     start = 0;
                     block {
-                        l173: loop {
+                        l170: loop {
                             if start >= n {
-                                break __for_12;
+                                break __for_6;
                             }
                             mid = start + width;
                             if mid < n {
@@ -2908,12 +2891,12 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/Array<i32>::sort_by$__Closure_18
                                 };
                                 i = start;
                                 j = mid;
-                                __for_13: block {
+                                __for_7: block {
                                     k = start;
                                     block {
-                                        l177: loop {
+                                        l174: loop {
                                             if k >= end {
-                                                break __for_13;
+                                                break __for_7;
                                             }
                                             if i < mid {
                                                 if j < end {
@@ -2945,19 +2928,19 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/Array<i32>::sort_by$__Closure_18
                                                 j = j + 1;
                                             }
                                             k = k + 1;
-                                            continue l177;
+                                            continue l174;
                                         };
                                     };
                                 };
                                 builtin::array_copy<i32>(src, start, buf, start, end - start);
                             }
                             start = start + (width * 2);
-                            continue l173;
+                            continue l170;
                         };
                     };
                 };
                 width = width * 2;
-                continue l170;
+                continue l167;
             };
         };
     };
@@ -2985,18 +2968,18 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/Array<i32>::sort_by$__Closure_19
     src = self.repr;
     buf = builtin::array_new<i32>(n);
     width = 1;
-    __for_11: block {
+    __for_5: block {
         block {
-            l186: loop {
+            l183: loop {
                 if width >= n {
-                    break __for_11;
+                    break __for_5;
                 }
-                __for_12: block {
+                __for_6: block {
                     start = 0;
                     block {
-                        l189: loop {
+                        l186: loop {
                             if start >= n {
-                                break __for_12;
+                                break __for_6;
                             }
                             mid = start + width;
                             if mid < n {
@@ -3007,12 +2990,12 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/Array<i32>::sort_by$__Closure_19
                                 };
                                 i = start;
                                 j = mid;
-                                __for_13: block {
+                                __for_7: block {
                                     k = start;
                                     block {
-                                        l193: loop {
+                                        l190: loop {
                                             if k >= end {
-                                                break __for_13;
+                                                break __for_7;
                                             }
                                             if i < mid {
                                                 if j < end {
@@ -3044,19 +3027,19 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/Array<i32>::sort_by$__Closure_19
                                                 j = j + 1;
                                             }
                                             k = k + 1;
-                                            continue l193;
+                                            continue l190;
                                         };
                                     };
                                 };
                                 builtin::array_copy<i32>(src, start, buf, start, end - start);
                             }
                             start = start + (width * 2);
-                            continue l189;
+                            continue l186;
                         };
                     };
                 };
                 width = width * 2;
-                continue l186;
+                continue l183;
             };
         };
     };
