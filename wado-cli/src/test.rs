@@ -568,18 +568,19 @@ impl PipelineBudget {
     }
 }
 
-/// Per-stage wall-clock timing observable from outside.
+/// Per-stage timing observable from outside.
 ///
-/// `record_input` / `record_output` are called by the stage driver each
-/// time it pulls an item from its input channel / pushes one to its
-/// output channel. The reported duration is `last_output - first_input`,
-/// i.e. the actual span during which the stage was doing work — not the
-/// span from spawn (which would include time spent waiting for the
-/// first upstream input to arrive, making downstream stages
-/// indistinguishable from upstream-bound).
+/// `record_input` / `record_output` mark the wall-clock span during
+/// which the stage was producing output. `add_work` is the more useful
+/// number for understanding bottlenecks: it accumulates the actual
+/// per-fixture / per-test work time across all workers, so the
+/// reported per-stage figure equals `Σ worker_duration` rather than
+/// the streaming span (which, for a well-overlapped pipeline, is
+/// indistinguishable from total wall-clock for every stage).
 struct StageObserver {
     first_input_at: Mutex<Option<Instant>>,
     last_output_at: Mutex<Option<Instant>>,
+    work_time: Mutex<Duration>,
 }
 
 impl StageObserver {
@@ -587,6 +588,7 @@ impl StageObserver {
         Self {
             first_input_at: Mutex::new(None),
             last_output_at: Mutex::new(None),
+            work_time: Mutex::new(Duration::ZERO),
         }
     }
 
@@ -601,13 +603,12 @@ impl StageObserver {
         *lock_resilient(&self.last_output_at) = Some(Instant::now());
     }
 
-    fn duration(&self) -> Duration {
-        let start = *lock_resilient(&self.first_input_at);
-        let end = *lock_resilient(&self.last_output_at);
-        match (start, end) {
-            (Some(s), Some(e)) => e.saturating_duration_since(s),
-            _ => Duration::ZERO,
-        }
+    fn add_work(&self, d: Duration) {
+        *lock_resilient(&self.work_time) += d;
+    }
+
+    fn work_time(&self) -> Duration {
+        *lock_resilient(&self.work_time)
     }
 }
 
@@ -795,12 +796,14 @@ async fn compile_artifact(
     path: String,
     flags: Arc<CompileFlags>,
     overall_start: Instant,
+    observer: Arc<StageObserver>,
 ) -> CompileOutcome {
     let compile_start = Instant::now();
     let panic_or_result = AssertUnwindSafe(compile::try_compile(&path, &flags))
         .catch_unwind()
         .await;
     let compile_duration = compile_start.elapsed();
+    observer.add_work(compile_duration);
     let elapsed = format_duration(overall_start.elapsed());
     let dur = format_duration(compile_duration);
 
@@ -850,6 +853,7 @@ fn load_module(
     opt_level: wasmtime::OptLevel,
     overall_start: Instant,
     module_permit: OwnedSemaphorePermit,
+    observer: Arc<StageObserver>,
 ) -> LoadOutcome {
     let load_start = Instant::now();
     let panic_or_result = std::panic::catch_unwind(AssertUnwindSafe(|| -> Result<_> {
@@ -859,6 +863,7 @@ fn load_module(
         Ok((engine, component, linker))
     }));
     let load_duration = load_start.elapsed();
+    observer.add_work(load_duration);
     let elapsed = format_duration(overall_start.elapsed());
     let load_dur = format_duration(load_duration);
 
@@ -959,6 +964,7 @@ async fn run_compile_stage(
             observer.record_input();
             let flags = Arc::clone(&flags);
             let cpu_budget = Arc::clone(&cpu_budget);
+            let observer_inner = Arc::clone(&observer);
             // Spawn each per-fixture worker as an independent task so
             // its CPU-permit acquire/release happens on the runtime,
             // not gated by `buffer_unordered`'s outer polling state.
@@ -981,7 +987,12 @@ async fn run_compile_stage(
                             .build()
                     }));
                     match panic_or_runtime {
-                        Ok(Ok(rt)) => rt.block_on(compile_artifact(path, flags, overall_start)),
+                        Ok(Ok(rt)) => rt.block_on(compile_artifact(
+                            path,
+                            flags,
+                            overall_start,
+                            observer_inner,
+                        )),
                         Ok(Err(e)) => {
                             let elapsed = format_duration(overall_start.elapsed());
                             eprintln!(
@@ -1071,6 +1082,7 @@ async fn run_load_stage(
             observer.record_input();
             let modules_budget = Arc::clone(&modules_budget);
             let cpu_budget = Arc::clone(&cpu_budget);
+            let observer_inner = Arc::clone(&observer);
             let path_for_failure = artifact.path.clone();
             // Each load worker is its own task so that, like compile,
             // its CPU/modules permit acquire+release runs on the
@@ -1092,7 +1104,13 @@ async fn run_load_stage(
                     .await
                     .expect("cpu semaphore closed");
                 tokio::task::spawn_blocking(move || {
-                    load_module(artifact, opt_level, overall_start, module_permit)
+                    load_module(
+                        artifact,
+                        opt_level,
+                        overall_start,
+                        module_permit,
+                        observer_inner,
+                    )
                 })
                 .await
                 .unwrap_or_else(|join_err| {
@@ -1188,6 +1206,7 @@ async fn run_execute_stage(
 
     while let Some(join_result) = stream.next().await {
         let result = join_result.expect("test task panicked");
+        observer.add_work(result.duration);
         if result_tx.send(result).await.is_ok() {
             observer.record_output();
         }
@@ -1429,9 +1448,9 @@ async fn run_pipeline(
         compile_failures: cfails,
         load_failures: lfails,
         timings: StageTimings {
-            compile: compile_observer.duration(),
-            load: load_observer.duration(),
-            execute: execute_observer.duration(),
+            compile: compile_observer.work_time(),
+            load: load_observer.work_time(),
+            execute: execute_observer.work_time(),
         },
     }
 }
