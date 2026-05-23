@@ -476,11 +476,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         });
     }
 
-    // Default to half of available CPUs (minimum 2)
-    // This accounts for hyperthreading and leaves headroom for the system
+    // Default `jobs` = `cpus` (saturates physical cores for compile and
+    // execute). The load stage internally derives a lower cap because
+    // wasmtime's Cranelift JIT is itself multi-threaded — see `run`.
+    // The `.max(2)` floor handles single-core / containerised
+    // environments where `available_parallelism` reports 1.
     let jobs = jobs.unwrap_or_else(|| {
         let cpus = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
-        (cpus / 2).max(2)
+        cpus.max(2)
     });
 
     Ok(TestOptions {
@@ -539,31 +542,30 @@ struct LoadFailure {
 
 /// Shared resource budget for the whole pipeline.
 ///
-/// `cpu` caps the combined number of in-flight CPU-bound tasks across
-/// the compile and load stages — both run on the blocking pool and
-/// would otherwise oversubscribe a small CI runner (e.g. 2 vCPUs with
-/// `jobs = 2` per stage = 4 CPU tasks against 2 cores). The shared
-/// permit pool preserves the original "at most `jobs` CPU tasks live
-/// at once" guarantee that the pre-pipeline runner had.
-///
 /// `modules` caps the number of fully-loaded wasmtime `Component`s
 /// alive simultaneously, regardless of how the inter-stage channels
 /// buffer. A `LoadedModule` acquires one permit before `Component::new`
 /// and holds it via `_module_permit` until the last `Arc<LoadedModule>`
 /// drops at the end of the execute stage. This bounds peak memory: with
-/// `modules = 2 * jobs` and `jobs = 2`, at most 4 wasmtime Components
-/// are live, even if load completes far ahead of execute.
+/// `modules = compile_jobs + execute_jobs`, even if load completes far
+/// ahead of execute the number of fully-loaded wasmtime Components
+/// stays predictable.
+///
+/// CPU concurrency is controlled per-stage by each stage driver's
+/// `buffer_unordered` cap, not by a shared semaphore. Each stage
+/// `tokio::spawn`s its workers, so the per-stage `buffer_unordered`
+/// limit directly bounds the number of concurrently-running tasks
+/// without the cross-stage deadlock the shared-semaphore design was
+/// prone to.
 struct PipelineBudget {
-    cpu: Arc<Semaphore>,
     modules: Arc<Semaphore>,
 }
 
 impl PipelineBudget {
-    fn new(jobs: usize) -> Self {
-        let jobs = jobs.max(1);
+    fn new(compile_jobs: usize, execute_jobs: usize) -> Self {
+        let cap = compile_jobs.max(1) + execute_jobs.max(1);
         Self {
-            cpu: Arc::new(Semaphore::new(jobs)),
-            modules: Arc::new(Semaphore::new(jobs * 2)),
+            modules: Arc::new(Semaphore::new(cap)),
         }
     }
 }
@@ -949,7 +951,7 @@ fn receiver_stream<T: Send + 'static>(
 async fn run_compile_stage(
     paths: Vec<String>,
     flags: Arc<CompileFlags>,
-    cpu_budget: Arc<Semaphore>,
+    parallelism: usize,
     overall_start: Instant,
     observer: Arc<StageObserver>,
     artifact_tx: mpsc::Sender<CompiledArtifact>,
@@ -957,28 +959,18 @@ async fn run_compile_stage(
     cfail_tx: mpsc::Sender<CompileFailure>,
 ) -> usize {
     let mut compiled_count = 0_usize;
-    let permits = cpu_budget.available_permits().max(1);
 
     let mut stream = stream::iter(paths)
         .map(|path| {
             observer.record_input();
             let flags = Arc::clone(&flags);
-            let cpu_budget = Arc::clone(&cpu_budget);
             let observer_inner = Arc::clone(&observer);
             // Spawn each per-fixture worker as an independent task so
-            // its CPU-permit acquire/release happens on the runtime,
-            // not gated by `buffer_unordered`'s outer polling state.
-            // If the outer loop is briefly parked on `artifact_tx.send`
-            // (channel full), the spawned tasks still progress, release
-            // their CPU permits, and let the load stage take them.
-            // Without `tokio::spawn` the in-flight workers hold their
-            // permits across the entire outer-await window, which can
-            // deadlock with load's permit acquire on cross-stage pause.
+            // its progress is not gated by `buffer_unordered`'s outer
+            // polling state. If the outer loop is briefly parked on
+            // `artifact_tx.send` (channel full), the spawned tasks
+            // still progress.
             tokio::spawn(async move {
-                let _permit = cpu_budget
-                    .acquire_owned()
-                    .await
-                    .expect("cpu semaphore closed");
                 let path_for_failure = path.clone();
                 tokio::task::spawn_blocking(move || {
                     let panic_or_runtime = std::panic::catch_unwind(AssertUnwindSafe(|| {
@@ -1025,7 +1017,7 @@ async fn run_compile_stage(
                 })
             })
         })
-        .buffer_unordered(permits * 2);
+        .buffer_unordered(parallelism.max(1));
 
     while let Some(join_result) = stream.next().await {
         let outcome = join_result.expect("compile task panicked");
@@ -1066,7 +1058,7 @@ async fn run_compile_stage(
 async fn run_load_stage(
     artifact_rx: mpsc::Receiver<CompiledArtifact>,
     opt_level: wasmtime::OptLevel,
-    cpu_budget: Arc<Semaphore>,
+    parallelism: usize,
     modules_budget: Arc<Semaphore>,
     overall_start: Instant,
     observer: Arc<StageObserver>,
@@ -1075,21 +1067,18 @@ async fn run_load_stage(
     epoch_ticker: Arc<EpochTicker>,
 ) -> usize {
     let mut ok_count = 0_usize;
-    let permits = cpu_budget.available_permits().max(1);
 
     let mut stream = receiver_stream(artifact_rx)
         .map(|artifact| {
             observer.record_input();
             let modules_budget = Arc::clone(&modules_budget);
-            let cpu_budget = Arc::clone(&cpu_budget);
             let observer_inner = Arc::clone(&observer);
             let path_for_failure = artifact.path.clone();
-            // Each load worker is its own task so that, like compile,
-            // its CPU/modules permit acquire+release runs on the
-            // runtime independent of `buffer_unordered`'s outer poll.
+            // Each load worker is its own task so its progress is not
+            // gated by `buffer_unordered`'s outer poll.
             tokio::spawn(async move {
                 // `modules` permit caps simultaneously-live wasmtime
-                // `Component`s globally; acquired first so the wait
+                // `Component`s globally; acquired here so the wait
                 // shows as channel backpressure (small in-flight set
                 // of wasm bytes), not as inflated load duration once
                 // we actually start `Component::new`.
@@ -1097,12 +1086,6 @@ async fn run_load_stage(
                     .acquire_owned()
                     .await
                     .expect("modules semaphore closed");
-                // `cpu` permit caps combined compile + load CPU work
-                // so the streaming overlap doesn't oversubscribe.
-                let _cpu_permit = cpu_budget
-                    .acquire_owned()
-                    .await
-                    .expect("cpu semaphore closed");
                 tokio::task::spawn_blocking(move || {
                     load_module(
                         artifact,
@@ -1125,7 +1108,7 @@ async fn run_load_stage(
                 })
             })
         })
-        .buffer_unordered(permits * 2);
+        .buffer_unordered(parallelism.max(1));
 
     while let Some(join_result) = stream.next().await {
         let outcome = join_result.expect("load task panicked");
@@ -1335,23 +1318,25 @@ impl Drop for EpochTicker {
 async fn run_pipeline(
     paths: &[String],
     flags: Arc<CompileFlags>,
-    jobs: usize,
+    compile_jobs: usize,
+    load_jobs: usize,
     execute_jobs: usize,
     preopened_dirs: Arc<Vec<(String, String)>>,
     overall_start: Instant,
     no_run: bool,
 ) -> PipelineOutcome {
     let opt_level = flags.opt_level.to_wasmtime();
-    let budget = Arc::new(PipelineBudget::new(jobs));
+    let budget = Arc::new(PipelineBudget::new(compile_jobs, execute_jobs));
 
-    // Inter-stage channel capacities: small. The semaphores in
-    // `PipelineBudget` are what actually limit concurrency and memory;
-    // the channels just need enough slack to keep each stage's
-    // dequeue/enqueue from forming a strict rendezvous.
-    let artifact_cap = jobs.max(1);
-    let loaded_cap = jobs.max(1);
+    // Inter-stage channel capacities: small. The `modules` semaphore
+    // and per-stage `buffer_unordered` caps are what actually limit
+    // concurrency and memory; the channels just need enough slack to
+    // keep each stage's dequeue/enqueue from forming a strict
+    // rendezvous.
+    let artifact_cap = compile_jobs.max(1);
+    let loaded_cap = load_jobs.max(1);
     let result_cap = execute_jobs.max(1) * 2;
-    let sink_cap = jobs.max(1);
+    let sink_cap = compile_jobs.max(1);
 
     let (artifact_tx, artifact_rx) = mpsc::channel::<CompiledArtifact>(artifact_cap);
     let (loaded_tx, loaded_rx) = mpsc::channel::<Arc<LoadedModule>>(loaded_cap);
@@ -1372,7 +1357,7 @@ async fn run_pipeline(
     let compile_future = run_compile_stage(
         paths_owned,
         flags.clone(),
-        budget.cpu.clone(),
+        compile_jobs,
         overall_start,
         compile_observer.clone(),
         artifact_tx,
@@ -1385,7 +1370,7 @@ async fn run_pipeline(
             Box::pin(run_load_stage(
                 artifact_rx,
                 opt_level,
-                budget.cpu.clone(),
+                load_jobs,
                 budget.modules.clone(),
                 overall_start,
                 load_observer.clone(),
@@ -1840,7 +1825,8 @@ fn print_load_failures_section(failures: &[LoadFailure]) {
 async fn run_one_package(
     pkg_run: &PackageRun,
     flags: Arc<CompileFlags>,
-    jobs: usize,
+    compile_jobs: usize,
+    load_jobs: usize,
     execute_jobs: usize,
     preopened_dirs: Arc<Vec<(String, String)>>,
     overall_start: Instant,
@@ -1855,7 +1841,8 @@ async fn run_one_package(
     let outcome = run_pipeline(
         &pkg_run.paths,
         flags,
-        jobs,
+        compile_jobs,
+        load_jobs,
         execute_jobs,
         preopened_dirs,
         overall_start,
@@ -2012,29 +1999,35 @@ pub async fn run(opts: TestOptions) {
     let package_runs = opts.package_runs;
     let preopened_dirs = Arc::new(opts.preopened_dirs);
 
-    // `jobs` (= `--parallel N`, default `(cpus/2).max(2)`) caps the
-    // **combined** CPU-bound parallelism of compile + load via the
-    // pipeline's shared `cpu` semaphore. Execute is async I/O-dominated
-    // (`instantiate_async`, wasi-host calls, guest wasm with epoch-based
-    // preemption) and runs on the multi-thread runtime, so it gets its
-    // own independent concurrency budget.
-    let execute_jobs = jobs;
+    // `jobs` (= `--parallel N`, default = `cpus`) caps the compile and
+    // execute stages independently. Load uses `jobs / 2` because
+    // wasmtime's Cranelift JIT is itself multi-threaded — over half
+    // the cores' worth of concurrent loads thrashes more than it
+    // helps. Stages cap themselves locally via `buffer_unordered`;
+    // they no longer share a CPU semaphore (the per-stage workers
+    // are `tokio::spawn`'d so peak combined CPU = compile + load is
+    // bounded by their separate caps, not by an over-engineered
+    // global one).
+    let compile_jobs = jobs.max(1);
+    let load_jobs = (jobs / 2).max(1);
+    let execute_jobs = jobs.max(1);
 
-    // Prewarm the stdlib snapshot on `jobs` distinct worker threads
-    // before stage 1 starts. Each worker would otherwise build the
-    // snapshot (~120 ms) on its first compile and steal that time from
-    // the first batch of compiles; running the builds in parallel
+    // Prewarm the stdlib snapshot on `compile_jobs` distinct worker
+    // threads before stage 1 starts. Each worker would otherwise build
+    // the snapshot (~120 ms) on its first compile and steal that time
+    // from the first batch of compiles; running the builds in parallel
     // up-front amortises the cost and leaves the tokio blocking-pool
     // threads in the steady state that the compile stage's
     // `spawn_blocking` tasks can re-use.
-    prewarm_stdlib_snapshot_on_workers(jobs).await;
+    prewarm_stdlib_snapshot_on_workers(compile_jobs).await;
 
     let mut grand = PackageTotals::default();
     for pkg_run in &package_runs {
         let totals = run_one_package(
             pkg_run,
             Arc::clone(&flags),
-            jobs,
+            compile_jobs,
+            load_jobs,
             execute_jobs,
             preopened_dirs.clone(),
             overall_start,
