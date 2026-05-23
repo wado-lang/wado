@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779523223226,
+  "lastUpdate": 1779526693225,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25005,6 +25005,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8dad63b6d75f510fdd7488b862e31621ad2148fd"
         },
         "date": 1779523222778,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8f93acac1ebd2c23e5c67d778ca811ee5c3d2bf7",
+          "message": "Merge pull request #1159 from wado-lang/fix/pattern-skip-value-copy-regression\n\nFix SROA regression on pattern-destructured bindings (#1158 follow-up)",
+          "timestamp": "2026-05-23T17:52:00+09:00",
+          "tree_id": "0b73aacd62c40e4862d80b3c676306966d02a510",
+          "url": "https://github.com/wado-lang/wado/commit/8f93acac1ebd2c23e5c67d778ca811ee5c3d2bf7"
+        },
+        "date": 1779526692774,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
