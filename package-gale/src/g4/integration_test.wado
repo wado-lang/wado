@@ -224,11 +224,6 @@ test "parse RustLexer.g4" {
     assert g.lexer_rules.len() > 20;
 }
 
-// The Rust grammar is the largest in the corpus; on small (≤2 vCPU)
-// CI runners it parses near the default 5 s budget. Give it explicit
-// headroom so the test reflects parser correctness, not transient
-// scheduler oversubscription.
-#[timeout_ms(15000)]
 test "parse RustParser.g4" {
     let input = #include_str("../../tests/grammars/RustParser.g4");
     let result = parse(input);
@@ -324,10 +319,6 @@ test "merge TypeScript grammars" {
     assert merged.parser_rules.len() > 20;
 }
 
-// Same headroom as `parse RustParser.g4`: this test parses both
-// halves of the (largest-in-corpus) Rust grammar plus runs the merge,
-// so it's the most CPU-heavy fixture in this file.
-#[timeout_ms(15000)]
 test "merge Rust grammars" {
     let lexer_g = parse(#include_str("../../tests/grammars/RustLexer.g4")).unwrap();
     let parser_g = parse(#include_str("../../tests/grammars/RustParser.g4")).unwrap();

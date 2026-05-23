@@ -543,14 +543,13 @@ struct LoadFailure {
 /// Shared resource budget for the whole pipeline.
 ///
 /// `cpu` caps the **total** number of CPU-bound tasks executing across
-/// all three stages, sized to `cpus`. Every worker — compile, load,
-/// and execute — acquires one permit before doing its work and holds
-/// it until done. This gives a hard guarantee: at no moment does the
-/// pipeline have more than `cpus` tasks competing for the physical
-/// cores, irrespective of per-stage `buffer_unordered` caps. Critical
-/// for correctness on small CI runners where the per-test default
-/// timeout (5 s) would otherwise be tripped by CPU contention from
-/// the streaming overlap.
+/// all three stages, sized to `--parallel N` (default `cpus`). Every
+/// worker — compile, load, and execute — acquires one permit before
+/// doing its work and holds it until done. This gives a hard
+/// guarantee: peak in-flight CPU tasks never exceed `N`, irrespective
+/// of per-stage `buffer_unordered` caps. `--parallel N` is therefore
+/// a truthful cap, not a per-stage knob the streaming overlap can
+/// secretly multiply.
 ///
 /// `modules` caps the number of fully-loaded wasmtime `Component`s
 /// alive simultaneously, regardless of how the inter-stage channels
@@ -564,8 +563,8 @@ struct PipelineBudget {
 }
 
 impl PipelineBudget {
-    fn new(cpus: usize, compile_jobs: usize, execute_jobs: usize) -> Self {
-        let cpu_cap = cpus.max(1);
+    fn new(parallel_cap: usize, compile_jobs: usize, execute_jobs: usize) -> Self {
+        let cpu_cap = parallel_cap.max(1);
         let modules_cap = compile_jobs.max(1) + execute_jobs.max(1);
         Self {
             cpu: Arc::new(Semaphore::new(cpu_cap)),
@@ -1356,7 +1355,7 @@ impl Drop for EpochTicker {
 async fn run_pipeline(
     paths: &[String],
     flags: Arc<CompileFlags>,
-    cpus: usize,
+    parallel_cap: usize,
     compile_jobs: usize,
     load_jobs: usize,
     execute_jobs: usize,
@@ -1365,7 +1364,11 @@ async fn run_pipeline(
     no_run: bool,
 ) -> PipelineOutcome {
     let opt_level = flags.opt_level.to_wasmtime();
-    let budget = Arc::new(PipelineBudget::new(cpus, compile_jobs, execute_jobs));
+    let budget = Arc::new(PipelineBudget::new(
+        parallel_cap,
+        compile_jobs,
+        execute_jobs,
+    ));
 
     // Inter-stage channel capacities: small. The `modules` semaphore
     // and per-stage `buffer_unordered` caps are what actually limit
@@ -1867,7 +1870,7 @@ fn print_load_failures_section(failures: &[LoadFailure]) {
 async fn run_one_package(
     pkg_run: &PackageRun,
     flags: Arc<CompileFlags>,
-    cpus: usize,
+    parallel_cap: usize,
     compile_jobs: usize,
     load_jobs: usize,
     execute_jobs: usize,
@@ -1884,7 +1887,7 @@ async fn run_one_package(
     let outcome = run_pipeline(
         &pkg_run.paths,
         flags,
-        cpus,
+        parallel_cap,
         compile_jobs,
         load_jobs,
         execute_jobs,
@@ -2043,20 +2046,19 @@ pub async fn run(opts: TestOptions) {
     let package_runs = opts.package_runs;
     let preopened_dirs = Arc::new(opts.preopened_dirs);
 
-    // `jobs` (= `--parallel N`, default `cpus`) is the per-stage cap
-    // — each of compile / load / execute can have up to its own cap
-    // spawned at once. The hard guarantee that "total active CPU
-    // work ≤ cpus" comes from the pipeline's shared `cpu` semaphore
-    // (`PipelineBudget::cpu`), which every per-fixture worker
-    // acquires before doing CPU work. Per-stage caps just shape the
-    // queueing; `cpu` is the truth.
+    // `jobs` (= `--parallel N`, default `cpus`) is the **true** cap
+    // on peak in-flight CPU work, enforced by the pipeline's shared
+    // `cpu` semaphore (`PipelineBudget::cpu`): every per-fixture
+    // worker — compile, load, execute — acquires one CPU permit
+    // before doing its work. Per-stage `*_jobs` caps below only
+    // shape queueing depth and how upstream backpressure is
+    // distributed; they cannot exceed `jobs` in actual concurrency.
     //
-    // Load is given `jobs / 2` per-stage cap because wasmtime's
+    // Load gets `jobs / 2` per-stage cap because wasmtime's
     // Cranelift JIT is itself multi-threaded — doubling external
     // load workers on top of internal Cranelift threading thrashes
-    // more than it helps. The cpu semaphore enforces the cross-stage
-    // total either way.
-    let cpus = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
+    // more than it helps. The shared cpu semaphore enforces the
+    // cross-stage total either way.
     let compile_jobs = jobs.max(1);
     let load_jobs = (jobs / 2).max(1);
     let execute_jobs = jobs.max(1);
@@ -2075,7 +2077,7 @@ pub async fn run(opts: TestOptions) {
         let totals = run_one_package(
             pkg_run,
             Arc::clone(&flags),
-            cpus,
+            jobs,
             compile_jobs,
             load_jobs,
             execute_jobs,
