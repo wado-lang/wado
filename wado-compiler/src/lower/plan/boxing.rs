@@ -1,23 +1,6 @@
-//! Type-table and parameter-shadow preparation for the boxing scheme.
-//!
-//! Two pre-passes run here, both producing facts the TIR → NIR fold in
-//! [`crate::lower::translate`] consumes:
-//!
-//! 1. [`prepare_types`] mints a `Box<T>` struct for every `&primitive`
-//!    / `&variant` / `&fn` and redefines the corresponding `Ref` /
-//!    `MutRef` `TypeId`s to those structs. The package's `structs`
-//!    list grows; the type table is mutated. Returns a [`BoxPlan`].
-//! 2. [`shadow_params`] handles address-taken locals at function level:
-//!    for `param` locals, it allocates a `Box<T>`-typed shadow local,
-//!    prepends a `Let __boxed_param_N = Box { value: param_read }` to
-//!    the body, and remaps every Local read of the param to the shadow.
-//!    For non-param address-taken locals, it retypes the local entry to
-//!    its `Box<T>` type. The body itself is otherwise untouched —
-//!    every expression-level rewrite (`&primitive → Box{...}`,
-//!    `Local(addr-taken) → FieldAccess(.value)`, `*box → .value`,
-//!    deref-assign struct field expansion, etc.) is the fold's job.
-//!
-//! See `docs/wep-2026-05-11-nir.md` (WEP Step 5 Phase B).
+//! Type-table and parameter-shadow preparation for the boxing
+//! scheme. Body-level rewrites live in the TIR → NIR fold
+//! ([`crate::lower::translate`]).
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -31,33 +14,16 @@ use crate::tir::{
 use crate::token::Span;
 
 /// Type-level boxing facts produced by [`prepare_types`].
-///
-/// By the time a `BoxPlan` exists, [`prepare_types`] has already
-/// redefined every `Ref(boxable)` / `MutRef(boxable)` `TypeId` in the
-/// shared [`TypeTable`] to its `Box<T>` struct type and appended the
-/// generated `Box<T>` struct definitions to the package. This struct
-/// carries the lookup maps the fold (and [`shadow_params`]) need:
-///
-/// - `box_struct_types` maps an inner `TypeId` to the canonical `Box<T>`
-///   struct `TypeId` minted for it. Read by the fold to detect when
-///   `Unary(Ref, primitive)` should materialise a `Box<T>` literal and
-///   by the Let arm to wrap initial values of address-taken primitive
-///   locals.
-/// - `box_type_ids` is the set of *every* `TypeId` that now denotes a
-///   `Box<T>` struct — both the canonical wrapper ids and the
-///   redefined `Ref` / `MutRef` ids. Read by the fold to detect when a
-///   `Unary(Deref, _)` operand is box-shaped (and thus `.value`-
-///   projected) versus an opaque struct reference (deref is a no-op).
 pub struct BoxPlan {
+    /// Inner `TypeId` → canonical `Box<T>` struct `TypeId`.
     pub box_struct_types: IndexMap<TypeId, TypeId>,
+    /// Every `TypeId` now denoting a `Box<T>` struct: the canonical
+    /// wrapper ids *and* the redefined `Ref` / `MutRef` ids.
     pub box_type_ids: IndexSet<TypeId>,
 }
 
 impl BoxPlan {
-    /// Inner `TypeId` for a `Box<T>` struct, looked up by reverse-scanning
-    /// `box_struct_types`. Returns `None` when `type_id` is not a Box
-    /// wrapper — callers should fall back to the expression's original
-    /// `type_id` in that case.
+    /// Reverse lookup: `Box<T>` `TypeId` → `T`.
     pub fn get_box_inner_type(&self, type_id: TypeId) -> Option<TypeId> {
         self.box_struct_types
             .iter()
@@ -102,17 +68,10 @@ pub fn prepare_types(flat: &mut FlatPackage) -> BoxPlan {
     }
 }
 
-/// For every function with at least one address-taken parameter:
-/// allocate a `Box<T>` shadow local, prepend a
-/// `Let __boxed_param_N = Box { value: param_read }` to the body, and
-/// remap every Local read of the parameter to the shadow. For non-param
-/// address-taken locals, retag the local entry's type to its `Box<T>`
-/// type so the fold's `Local` rewrite sees the box-shaped declaration.
-///
-/// The function body is otherwise left intact — `&primitive` rewriting,
-/// `Local → FieldAccess(.value)`, `*box → .value`, deref-assign struct
-/// expansion, and the address-taken-local Let-value wrap all happen in
-/// the fold (`lower::translate`).
+/// Per function: for address-taken parameters, allocate a `Box`
+/// shadow local + prelude `Let` + remap reads; for non-param
+/// address-taken locals, retag the declaration to its box type.
+/// Function bodies are otherwise untouched.
 pub fn shadow_params(flat: &mut FlatPackage, plan: &BoxPlan) {
     let type_table = flat.type_table.clone();
     let type_table = type_table.borrow();
@@ -148,10 +107,8 @@ fn shadow_one_function(func: &mut crate::tir::TirFunction, plan: &BoxPlan, type_
             effective_address_taken.insert(shadow_idx);
             shadowed_params.push((local_idx, shadow_idx, box_type_id, local_type_id, name));
         } else {
-            // Non-param address-taken local: the fold's `Local` rewrite
-            // looks up the box type when emitting
-            // `FieldAccess(Local(box-typed), .value)`. Retag the local
-            // declaration so `convert_local` sees the box type.
+            // Retag the declaration so `convert_local` sees the box
+            // type without the fold having to consult `BoxPlan`.
             func.locals[local_idx as usize].type_id = box_type_id;
         }
     }
@@ -218,22 +175,14 @@ fn shadow_one_function(func: &mut crate::tir::TirFunction, plan: &BoxPlan, type_
     func.address_taken_locals = effective_address_taken;
 }
 
-/// Builds `Box<T>` struct types and rewrites the type table. Used only
-/// by [`prepare_types`].
 struct TypeBuilder {
-    /// Mapping from inner `TypeId` to Box<T> struct type ID.
-    /// e.g., `TypeTable::I32` → `TypeId` for Struct("Box<i32>")
     box_struct_types: IndexMap<TypeId, TypeId>,
-    /// Set of all Box<T> struct type IDs (for fast lookup).
     box_type_ids: IndexSet<TypeId>,
-    /// Generated Box<T> struct definitions to add to the module.
     generated_structs: Vec<TirStruct>,
-    /// Module source for registering Box types in the type table.
-    /// Resolved via `TypeTable::compiler_items().struct_module(CompilerItem::Box)`
-    /// (registered from `#[compiler_item("box")]` on `struct Box<T>` in the prelude).
+    /// `#[compiler_item("box")]` on `struct Box<T>` in the prelude.
     box_module_source: ModuleSource,
-    /// Variant names from all modules, used to identify `GenericInstance` types
-    /// that are variants and need boxing.
+    /// `GenericInstance` whose name is one of these is a variant
+    /// and needs boxing.
     variant_names: IndexSet<String>,
 }
 

@@ -1,35 +1,13 @@
 //! Plan Wado's value-copy semantics.
 //!
-//! Runs as part of [`super::plan`], i.e. after the TIR-mutating sub-passes
-//! and before the TIR → NIR translator.
+//! [`analyze::collect_seed_types`] returns the set of `TypeId`s the
+//! fold will wrap in `$value_copy$T(...)`;
+//! [`synthesize::synthesize_helpers`] generates a per-type helper for
+//! the seed plus its transitive closure of nested value-typed fields.
+//! The fold (`lower::translate`) emits wrap calls directly using
+//! [`ValueCopyPlan::name_for_type`].
 //!
-//! - [`analyze::collect_seed_types`] walks every function body read-only,
-//!   mirroring the fold's wrap-site predicates, and returns the set of
-//!   `TypeId`s the translator will wrap in `$value_copy$T(...)` calls. The
-//!   set also includes element types of `array_clone::<T>(...)` calls,
-//!   which codegen routes through the same helper.
-//! - [`synthesize::synthesize_helpers`] consumes the seed, iteratively
-//!   generates per-type `$value_copy$T<id>` helper functions until the
-//!   transitive closure of nested value-typed fields is covered, and
-//!   pushes the helpers into [`FlatPackage::functions`]. Returns the
-//!   `TypeId → (ModuleSource, helper-name)` map.
-//!
-//! The translator consumes [`ValueCopyPlan::name_for_type`] to emit a
-//! direct `$value_copy$T(value)` call at every wrap site in user
-//! function bodies (see [`analyze::should_wrap`] for the predicate the
-//! fold and the seed walker share). User-program TIR carries no
-//! `builtin::copy_value::<T>(x)` markers after Phase A of WEP
-//! 2026-05-11 Step 5.
-//!
-//! Synthesized helper bodies still contain
-//! `builtin::copy_value::<NestedT>(x)` markers for nested value-typed
-//! fields; the translator's existing `convert_call` arm rewrites those
-//! into the same `$value_copy$NestedT` calls.
-//!
-//! Wrapper elision happens later in `optimize::value_copy_elide`, which
-//! runs as a regular pass inside the optimizer fixed-point loop so that
-//! newly-exposed `$value_copy$T(...)` patterns from inlining or SROA get
-//! collapsed in the same iteration that exposes them.
+//! Wrapper elision runs later in `optimize::value_copy_elide`.
 
 pub mod analyze;
 pub mod synthesize;
@@ -39,52 +17,29 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-/// Result of value-copy planning.
-///
-/// `name_for_type` is consumed by the TIR → NIR translator at every
-/// wrap site to emit a direct call to the per-type `$value_copy$T<id>`
-/// helper function registered in [`FlatPackage::functions`]. The same
-/// map drives the marker rewrite in `convert_call` that handles
-/// `builtin::copy_value::<NestedT>(...)` markers inside synthesized
-/// helper bodies (the only place markers still appear after Phase A
-/// of WEP 2026-05-11 Step 5).
+/// `TypeId` → `(ModuleSource, $value_copy$T<id>)` for every helper
+/// `synthesize_helpers` registered in [`FlatPackage::functions`].
 pub struct ValueCopyPlan {
     pub name_for_type: IndexMap<TypeId, (ModuleSource, String)>,
 }
 
-/// Run the value-copy planner.
-///
-/// 1. Walks every function body read-only and collects the seed set of
-///    `TypeId`s the translator will wrap.
-/// 2. Iteratively generates `$value_copy$T<id>` helpers for the seed and
-///    every type reached transitively through synthesized helper bodies,
-///    and registers each helper in [`FlatPackage::functions`]. Returns the
-///    map the translator uses to emit wrap calls and to rewrite the
-///    `copy_value::<NestedT>` markers that still appear inside helper
-///    bodies.
 pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
     let seed = analyze::collect_seed_types(flat);
     let name_for_type = synthesize::synthesize_helpers(flat, seed);
     ValueCopyPlan { name_for_type }
 }
 
-/// True when a value of `type_id` must be deep-copied on assignment or
-/// parameter passing.
+/// True when a value of `type_id` must be deep-copied on assignment
+/// or parameter passing.
 ///
-/// Shared between [`analyze::should_wrap`] (which the fold and the
-/// seed walker consult to decide whether a wrap site needs a
-/// `$value_copy$T(...)` call) and `synthesize::make_field_copy` (which
-/// decides whether a synthesized helper's per-field projection also
-/// needs to recurse into a nested value-typed struct). The two callers
-/// must agree: when this returns `true`,
-/// `synthesize::generate_copy_function` emits a `$value_copy$T<id>`
-/// helper, and any caller — user code or another synthesized helper —
-/// must route through it. If we wrapped fields whose helper would be
-/// identity (`return v;`), the helper would still be typed at WIR
-/// level as `(T) -> T` non-null, and any nullable source (e.g. a
-/// `None`-initialised `Option<&T>` global) would hit a
-/// `(ref X) / nullref` mismatch — an invalid Wasm module at compile
-/// time.
+/// `analyze::should_wrap` and `synthesize::make_field_copy` MUST
+/// agree: a `true` here means `synthesize::generate_copy_function`
+/// emits a non-identity helper, and every caller routes through it.
+/// Wrapping a type whose helper is identity (`return v;`) leaves the
+/// helper typed as `(T) -> T` non-null at the WIR level, and a
+/// nullable source (e.g. a `None`-initialised `Option<&T>` global,
+/// `ref.null` at lowering) trips a `(ref X) / (ref null X)`
+/// validation mismatch.
 pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
     let items = type_table.compiler_items();
     let box_name = items.struct_name(crate::compiler_item::CompilerItem::Box);

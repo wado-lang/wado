@@ -11,19 +11,15 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Coerce a by-value `value` to a reference-typed pattern binding.
+/// Coerce a by-value `value` to a `&T` / `&mut T` pattern binding.
 ///
-/// Match ergonomics let a `&T` / `&mut T` binding capture a value
-/// `T`; the binding's `Let` value must then be a reference to that
-/// value. When pattern lowering runs after `boxing::prepare_types`,
-/// the binding's reference type has been redefined to a `Box<T>`
-/// struct, so the coercion materialises a `Box<T>` struct literal
-/// rather than a `Ref` / `MutRef` unary — the fold's
-/// `try_boxing_ref` would have rewritten a raw `&value` the same way,
-/// but the pattern-lowered Let needs to land in that shape directly so
-/// that downstream NIR sees a uniform Box-literal at the binding site.
-/// A `value` that is itself a reference (a `Ref` / `MutRef`, or an
-/// already-boxed reference) is returned unchanged.
+/// Match ergonomics binds a reference to a value scrutinee. Pattern
+/// lowering runs after `boxing::prepare_types`, so the binding's
+/// reference type may have been redefined to a `Box<T>` struct —
+/// in that case we materialise a `Box{value}` literal directly
+/// rather than a `Ref` / `MutRef` unary the fold would have to
+/// rewrite afterwards. A `value` that is already a reference is
+/// returned unchanged.
 fn coerce_value_to_binding(
     value: TirExpr,
     binding_type: TypeId,

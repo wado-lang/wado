@@ -48,15 +48,9 @@ pub struct SpecializedLocal {
 pub struct ClosurePlan {
     pub functor_infos: Vec<ClosureFunctor>,
     pub specialized_locals: IndexMap<(ModuleSource, String), Vec<SpecializedLocal>>,
-    /// Set of `functor_id`s for which the safety analyser
-    /// (`ClosureSafetyAnalyzer`) determined the closure can be passed
-    /// as a direct `&__Closure_N` reference rather than through the
-    /// canonical `fn(...)` shape. The TIR → NIR fold reads this set to
-    /// emit a raw `StructLiteral` for specialisable closure literals
-    /// and a `ClosureToCanonical` wrap for the remainder. Before Phase C
-    /// of WEP 2026-05-11 Step 5, `ClosureCallSiteLowerer` rewrote
-    /// `TirExprKind::Closure → StructLiteral` in place for the same
-    /// set; the rewrite now lives in the fold.
+    /// Functors safe to pass as `&__Closure_N` directly (analysed by
+    /// `ClosureSafetyAnalyzer`). The fold emits a raw `StructLiteral`
+    /// for these and a `ClosureToCanonical` wrap for the rest.
     pub specializable: IndexSet<u32>,
 }
 
@@ -189,13 +183,8 @@ struct CollectedClosure {
     /// the canonical return type even when the body is a Block expr.
     func_type_id: TypeId,
     span: Span,
-    /// Closure-scope address-taken locals, captured from the
-    /// `TirExprKind::Closure` node. Carried through so the synthesized
-    /// `__call` method's `address_taken_locals` can be populated — the
-    /// fold reads it when rewriting `&local` / `Local` reads inside the
-    /// closure body. Indices are in the closure's own local-index
-    /// namespace; they are shifted by +1 when transplanted onto
-    /// `__call` to make room for the synthetic `self` parameter.
+    /// Closure-scope address-taken locals (closure-local indices).
+    /// Shifted by +1 onto `__call` to make room for `self`.
     address_taken_locals: crate::hashmap::IndexSet<u32>,
 }
 
@@ -646,11 +635,8 @@ impl ClosureLowerer {
                 span: collected.span,
                 local_count,
                 locals,
-                // Shift the closure's own address-taken set by +1 to
-                // account for the synthetic `self` parameter inserted at
-                // local index 0; the fold's boxing arm reads this set on
-                // `__call` to rewrite `&local` / `Local` of captured-by-
-                // ref locals inside the cloned body.
+                // Shift to match `ClosureBodyTransformer`'s +1 on
+                // body-side Local indices.
                 address_taken_locals: collected
                     .address_taken_locals
                     .iter()
@@ -1695,16 +1681,9 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         match &mut expr.kind {
             TirExprKind::Closure { functor_id, .. } => {
-                // `Closure → StructLiteral` is now the fold's job
-                // (WEP 2026-05-11 Step 5 Phase C). The translator reads
-                // `ClosurePlan::specializable` and emits a raw
-                // `StructLiteral` for specialisable closure literals or
-                // a `ClosureToCanonical` wrap for the rest. Here we
-                // only check the `functor_id` is present so downstream
-                // passes can rely on every surviving `Closure` carrying
-                // a stable id; the body is never recursed into because
-                // its locals belong to the synthesized `__call`
-                // method's local-index namespace.
+                // Don't recurse: closure body lives in `__call`'s own
+                // local-index namespace. The fold handles
+                // `Closure → StructLiteral` / `ClosureToCanonical`.
                 assert!(
                     functor_id.is_some(),
                     "Closure node missing functor_id; the collect pass should assign it (span: {:?})",

@@ -1,26 +1,10 @@
-//! Read-only analysis pass that mirrors the fold's value-copy wrap decision.
+//! Read-only seed walker for the fold's value-copy decision.
 //!
-//! Before Phase A of WEP 2026-05-11 Step 5, `insert.rs` mutated user-program
-//! TIR by wrapping every wrap-site expression in `builtin::copy_value::<T>(x)`.
-//! The translator then rewrote those markers into `$value_copy$T(x)` calls.
-//!
-//! After Phase A, the translator (TIR → NIR fold) emits the `$value_copy$T`
-//! call directly at wrap sites; no TIR markers are inserted. This module
-//! provides two things:
-//!
-//! 1. The shape predicates ([`should_wrap`], [`is_fresh_value`],
-//!    [`is_source_immutable`]) that the fold consults at every wrap site.
-//! 2. [`collect_seed_types`] — a read-only walker that mirrors the fold's
-//!    wrap-site decisions across all function bodies, returning every
-//!    `TypeId` the fold would wrap. The set seeds
-//!    [`super::synthesize::synthesize_helpers`] so the helpers are registered
-//!    in `FlatPackage::functions` before the translator runs.
-//!
-//! Synthesized helper bodies still contain `builtin::copy_value::<NestedT>(x)`
-//! markers (the synthesizer emits them for nested value-typed fields); the
-//! translator's existing `convert_call` arm rewrites those markers uniformly.
-//! The marker path is only used by synthesized helpers; user-program TIR
-//! never carries markers after Phase A.
+//! The fold (`lower::translate`) emits a `$value_copy$T(...)` wrap
+//! directly at each wrap site, using the shared predicates exported
+//! here ([`should_wrap`], [`is_fresh_value`], [`is_source_immutable`]).
+//! [`collect_seed_types`] walks every function with the same
+//! predicates to feed [`super::synthesize::synthesize_helpers`].
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
@@ -29,10 +13,9 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// Collect every `TypeId` for which the fold will emit a `$value_copy$T(...)`
-/// wrap call, plus every value-semantic element type referenced by an
-/// `array_clone::<T>(...)` call. The returned set seeds
-/// [`super::synthesize::synthesize_helpers`].
+/// Every `TypeId` the fold will wrap in `$value_copy$T(...)`, plus
+/// element types of `array_clone::<T>(...)` calls that codegen
+/// routes through the same helper.
 pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
     let mut walker = SeedWalker {
@@ -117,10 +100,8 @@ impl TirRefVisitor for SeedWalker<'_> {
                 }
             }
             TirExprKind::Assign { target, value } => {
-                // Only `Local` targets receive a defensive copy.
-                // `FieldAccess` / `Index` writes mutate an existing
-                // aggregate slot — the WIR-side semantics let the
-                // reference flow through without an extra wrap.
+                // Field / index writes mutate an existing slot, no
+                // defensive copy needed.
                 if matches!(&target.kind, TirExprKind::Local { .. }) {
                     self.record_if_wrap(value);
                 }
@@ -131,26 +112,17 @@ impl TirRefVisitor for SeedWalker<'_> {
     }
 }
 
-/// Predicate shared with the fold. Returns true iff a wrap call should be
-/// emitted around `expr` when it appears at a wrap site (`Let` value,
-/// `LetDestructure` value, mut `Call` / `MethodCall` arg, any
-/// `IndirectCall` arg, or `Assign` value whose target is a non-SROA
-/// `Local`).
-///
-/// Wrap-site gating that depends on context (`skip_value_copy`,
-/// `is_source_immutable` for `Let`, the Local/non-SROA target check for
-/// `Assign`) is the caller's responsibility — see [`is_source_immutable`].
+/// Shape predicate shared with the fold. Site-specific gating
+/// (e.g. `skip_value_copy`, `is_source_immutable` for `Let`, the
+/// `Local`-target check for `Assign`) is the caller's job.
 pub fn should_wrap(expr: &TirExpr, type_table: &TypeTable) -> bool {
     super::needs_value_copy(expr.type_id, type_table)
         && !is_copy_value_call(expr)
         && !is_fresh_value(expr)
 }
 
-/// True when `expr` is already a `builtin::copy_value` call. The fold never
-/// produces this shape in user code (it emits `$value_copy$T` directly), but
-/// synthesized helper bodies contain `copy_value::<NestedT>(...)` markers, so
-/// the predicate exists to skip re-wrapping when the helper body itself is
-/// processed by the fold.
+/// Avoid re-wrapping the `copy_value::<NestedT>(...)` markers
+/// `synthesize_helpers` plants inside helper bodies.
 fn is_copy_value_call(expr: &TirExpr) -> bool {
     matches!(
         &expr.kind,
@@ -159,9 +131,9 @@ fn is_copy_value_call(expr: &TirExpr) -> bool {
     )
 }
 
-/// Mirror of `wir_build::value_copy::is_fresh_value`: a fresh expression
-/// does not alias existing data and therefore does not need a defensive
-/// copy. Same shape predicate `insert.rs` used pre-Phase A.
+/// A fresh expression does not alias existing data, so no
+/// defensive copy is needed. Mirrors
+/// `wir_build::value_copy::is_fresh_value`.
 pub fn is_fresh_value(expr: &TirExpr) -> bool {
     is_fresh_in_context(expr, &IndexSet::default())
 }
@@ -292,9 +264,9 @@ fn scan_expr_for_breaks(
     }
 }
 
-/// Mirror of `wir_build::value_copy::is_source_immutable`: when the source
-/// expression is rooted at a local known to be immutable, an immutable
-/// destination binding can safely alias it without a copy.
+/// An immutable destination binding can alias an immutable-rooted
+/// source without a defensive copy. Mirrors
+/// `wir_build::value_copy::is_source_immutable`.
 pub fn is_source_immutable(expr: &TirExpr, immutable_locals: &IndexSet<u32>) -> bool {
     match &expr.kind {
         TirExprKind::Local { index, .. } => immutable_locals.contains(index),
