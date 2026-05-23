@@ -274,9 +274,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     lb.span,
                 )
             }
-            Expr::Matches(_) => {
-                panic!("Matches expression should have been desugared to if-let before resolver")
-            }
+            Expr::Matches(m) => self.resolve_matches_expr(m, ctx, expected_type),
             Expr::Spread(..) => {
                 panic!("Spread expression should only appear inside TupleLiteral handling")
             }

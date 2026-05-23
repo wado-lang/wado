@@ -1189,15 +1189,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
     }
 
-    /// Resolve a comparison chain (already desugared, but handle anyway)
+    /// Resolve a comparison chain `a OP1 b OP2 c` by expanding to the
+    /// equivalent `(a OP1 b) && (b OP2 c)` AST and resolving it. The
+    /// middle terms appear in two comparisons each; cloning the AST
+    /// mirrors the original `desugar_comparison_chain`. A future
+    /// improvement could materialise the middle terms into temporaries
+    /// once, but that needs a fresh `AstId` allocator on the resolver
+    /// side which is out of scope for the desugar dismantlement.
     pub(super) fn resolve_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // This should have been desugared to binary && chain
-        // Just resolve the first expression for now
-        self.resolve_expr(&chain.first, ctx, None)
+        let expanded = expand_comparison_chain(chain);
+        self.resolve_expr(&expanded, ctx, None)
     }
 
     /// Single TIR-level builder for every operator that dispatches to a
@@ -1376,4 +1381,50 @@ impl<H: CompilerHost> Resolver<'_, H> {
             span,
         )
     }
+}
+
+/// Expand `a OP1 b OP2 c` into the equivalent
+/// `(a OP1 b) && (b OP2 c)` AST. Middle terms are cloned (each appears
+/// in two comparisons). Returns the first expression unchanged when the
+/// chain has no comparisons, mirroring `desugar_comparison_chain`.
+fn expand_comparison_chain(chain: &ast::ComparisonChainExpr) -> ast::Expr {
+    if chain.comparisons.is_empty() {
+        return chain.first.clone();
+    }
+
+    if chain.comparisons.len() == 1 {
+        let cmp = &chain.comparisons[0];
+        return ast::Expr::Binary(Box::new(ast::BinaryExpr {
+            id: chain.id,
+            left: chain.first.clone(),
+            op: cmp.op,
+            right: cmp.right.clone(),
+            span: chain.span,
+        }));
+    }
+
+    let mut result: Option<ast::Expr> = None;
+    let mut prev = chain.first.clone();
+    for cmp in &chain.comparisons {
+        let right = cmp.right.clone();
+        let comparison = ast::Expr::Binary(Box::new(ast::BinaryExpr {
+            id: chain.id,
+            left: prev.clone(),
+            op: cmp.op,
+            right: right.clone(),
+            span: cmp.op_span,
+        }));
+        result = Some(match result {
+            None => comparison,
+            Some(acc) => ast::Expr::Binary(Box::new(ast::BinaryExpr {
+                id: chain.id,
+                left: acc,
+                op: ast::BinaryOp::And,
+                right: comparison,
+                span: chain.span,
+            })),
+        });
+        prev = right;
+    }
+    result.expect("chain.comparisons is non-empty after the early returns")
 }

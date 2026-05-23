@@ -1501,17 +1501,6 @@ pub struct AssertStmt {
     /// Optional message expression (typically a String literal or template string)
     pub message: Option<Expr>,
     pub span: Span,
-    /// Source text of the condition as the user wrote it, captured before
-    /// any AST-level desugaring (compound assign → assign, comparison chain
-    /// → AND chain, `matches!` → `match`, …) rewrites the expression.
-    ///
-    /// Used by `resolver::Resolver::lower_assert` to render the
-    /// power-assert failure message in the user's own words rather than in
-    /// the desugared form the resolver eventually sees.
-    ///
-    /// `None` at parse time. The desugar phase populates it via
-    /// `unparse_expr_simple` before any condition-rewriting kicks in.
-    pub original_condition_source: Option<String>,
 }
 
 #[derive(Debug, Clone)]

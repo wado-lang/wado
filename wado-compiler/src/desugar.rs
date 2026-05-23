@@ -9,14 +9,14 @@
 // LSP queries land on the user's original `assert cond, msg;` text.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AstId, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
-    ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ConditionElement, ContinueStmt, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
-    Function, GlobalDecl, IfExpr, IfStmt, ImplBlock, IndexExpr, InterfaceDecl, Item,
-    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr,
-    Module, Newtype, Pattern, ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl,
-    StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
-    TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseItem, WhileStmt,
+    AssignExpr, AstId, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ClosureExpr,
+    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
+    ContinueStmt, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt, Function,
+    GlobalDecl, IfExpr, IfStmt, ImplBlock, IndexExpr, InterfaceDecl, Item, LabeledBlockStmt,
+    LetStmt, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Newtype, Pattern, ReturnStmt,
+    StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr, StructLiteralField, TaskReturnStmt,
+    TemplatePart, TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr,
+    UnaryOp, UseItem, WhileStmt,
 };
 use crate::ast_folder::{AstFolder, default_fold_expr, default_fold_pattern, default_fold_type};
 
@@ -336,23 +336,13 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
         Stmt::While(w) => desugar_while(w, ctx),
         Stmt::For(f) => desugar_for(f, ctx),
         Stmt::ForOf(f) => desugar_for_of(f, ctx),
-        // Assert is preserved through desugar; the power-assert expansion
-        // runs at TIR lowering time in `resolver::Resolver::lower_assert`.
-        // We still recurse into the condition / message so other Expr-level
-        // desugars (compound assign, comparison chain, `matches!`, …) apply
-        // and the resolver sees a form it can handle. The user's original
-        // condition source is captured *before* rewriting so power-assert's
-        // failure message reads in the user's own words.
-        Stmt::Assert(a) => {
-            let original_condition_source = crate::unparse::unparse_expr_simple(&a.condition);
-            Stmt::Assert(AssertStmt {
-                id: a.id,
-                condition: desugar_expr(&a.condition),
-                message: a.message.as_ref().map(desugar_expr),
-                span: a.span,
-                original_condition_source: Some(original_condition_source),
-            })
-        }
+        // Assert is preserved verbatim through desugar; both the
+        // condition and the optional message reach the resolver as the
+        // user wrote them. `resolver::Resolver::lower_assert` runs the
+        // power-assert expansion at TIR-lowering time, using the raw
+        // condition for the failure message and the resolver's native
+        // handlers for `matches` / `ComparisonChain` / `CompoundAssign`.
+        Stmt::Assert(a) => Stmt::Assert(a.clone()),
         Stmt::Loop(l) => {
             // Save and clear for_loop_labels - breaks inside this loop should
             // target this loop, not an outer for loop
@@ -461,8 +451,23 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         // Desugar compound assignment: x += y → x = x + y
         Expr::CompoundAssign(ca) => desugar_compound_assign(ca),
 
-        // Desugar comparison chain: a < b < c → (a < b) && (b < c)
-        Expr::ComparisonChain(chain) => desugar_comparison_chain(chain),
+        // `a < b < c` is preserved through desugar; the resolver expands
+        // it natively in `Resolver::resolve_comparison_chain`. We still
+        // recurse into the operands so other Expr-level desugars apply.
+        Expr::ComparisonChain(chain) => Expr::ComparisonChain(Box::new(ComparisonChainExpr {
+            id: chain.id,
+            first: desugar_expr(&chain.first),
+            comparisons: chain
+                .comparisons
+                .iter()
+                .map(|c| crate::ast::ChainedComparison {
+                    op: c.op,
+                    right: desugar_expr(&c.right),
+                    op_span: c.op_span,
+                })
+                .collect(),
+            span: chain.span,
+        })),
 
         // Recursively desugar other expressions
         Expr::Ident(i) => Expr::Ident(i.clone()),
@@ -648,10 +653,18 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 }))
             }
         }
-        // Desugar matches expression: `expr matches { pattern && guard }`
-        // becomes: `if let pattern = expr { guard } else { false }`
-        // or if no guard: `if let pattern = expr { true } else { false }`
-        Expr::Matches(m) => desugar_matches_expr(m),
+        // `matches` operator is preserved through desugar; its
+        // expansion to `match` runs at TIR-lowering time in
+        // `resolver::Resolver::resolve_matches_expr`, so LSP queries see
+        // `s matches { p }` as the user wrote it. We still recurse into
+        // the scrutinee / guard so other Expr-level desugars apply.
+        Expr::Matches(m) => Expr::Matches(Box::new(crate::ast::MatchesExpr {
+            id: m.id,
+            expr: desugar_expr(&m.expr),
+            pattern: m.pattern.clone(),
+            guard: m.guard.as_ref().map(desugar_expr),
+            span: m.span,
+        })),
         Expr::Spread(inner, span) => Expr::Spread(Box::new(desugar_expr(inner)), *span),
         Expr::TryOp(qm) => Expr::TryOp(Box::new(crate::ast::TryOpExpr {
             id: qm.id,
@@ -701,54 +714,6 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
     }
 }
 
-/// Desugar matches expression: `expr matches { pattern && guard }`
-/// becomes: `match expr { pattern => guard, _ => false }`
-/// or if no guard: `match expr { pattern => true, _ => false }`
-fn desugar_matches_expr(m: &crate::ast::MatchesExpr) -> Expr {
-    let scrutinee = desugar_expr(&m.expr);
-
-    // The match arm body: guard expression or `true` if no guard
-    let match_body = if let Some(ref guard) = m.guard {
-        desugar_expr(guard)
-    } else {
-        Expr::Literal(LiteralExpr {
-            id: m.id,
-            value: Literal::Bool(true),
-            span: m.span,
-        })
-    };
-
-    // The wildcard arm: `false`
-    let wildcard_body = Expr::Literal(LiteralExpr {
-        id: m.id,
-        value: Literal::Bool(false),
-        span: m.span,
-    });
-
-    // Build a match expression
-    Expr::Match(Box::new(MatchExpr {
-        id: m.id,
-        expr: scrutinee,
-        arms: vec![
-            MatchArm {
-                id: m.id,
-                pattern: m.pattern.clone(),
-                guard: None,
-                body: match_body,
-                span: m.span,
-            },
-            MatchArm {
-                id: m.id,
-                pattern: Pattern::Wildcard,
-                guard: None,
-                body: wildcard_body,
-                span: m.span,
-            },
-        ],
-        span: m.span,
-    }))
-}
-
 /// Desugar compound assignment: `x += y` → `x = x + y`
 fn desugar_compound_assign(ca: &CompoundAssignExpr) -> Expr {
     let target = desugar_expr(&ca.target);
@@ -784,56 +749,6 @@ fn desugar_compound_assign(ca: &CompoundAssignExpr) -> Expr {
 }
 
 /// Desugar comparison chain: `a < b < c` → `(a < b) && (b < c)`
-fn desugar_comparison_chain(chain: &ComparisonChainExpr) -> Expr {
-    let first = desugar_expr(&chain.first);
-
-    if chain.comparisons.is_empty() {
-        return first;
-    }
-
-    if chain.comparisons.len() == 1 {
-        // Single comparison, just a binary expr
-        let cmp = &chain.comparisons[0];
-        return Expr::Binary(Box::new(BinaryExpr {
-            id: chain.id,
-            left: first,
-            op: cmp.op,
-            right: desugar_expr(&cmp.right),
-            span: chain.span,
-        }));
-    }
-
-    // Build chain: (a < b) && (b < c) && ...
-    let mut result: Option<Expr> = None;
-    let mut prev = first;
-
-    for cmp in &chain.comparisons {
-        let right = desugar_expr(&cmp.right);
-        let comparison = Expr::Binary(Box::new(BinaryExpr {
-            id: chain.id,
-            left: prev.clone(),
-            op: cmp.op,
-            right: right.clone(),
-            span: cmp.op_span,
-        }));
-
-        result = Some(match result {
-            None => comparison,
-            Some(acc) => Expr::Binary(Box::new(BinaryExpr {
-                id: chain.id,
-                left: acc,
-                op: BinaryOp::And,
-                right: comparison,
-                span: chain.span,
-            })),
-        });
-
-        prev = right;
-    }
-
-    result.unwrap()
-}
-
 fn desugar_template_string(t: &TemplateStringExpr) -> TemplateStringExpr {
     TemplateStringExpr {
         id: t.id,
@@ -1166,7 +1081,20 @@ fn desugar_for_of(f: &ForOfStmt, ctx: &mut DesugarContext) -> Stmt {
 /// `strip_ns_from_item`: only Function / Impl / Trait / Test / Global
 /// bodies are visited. Struct / Enum / Variant / etc. field types are
 /// left untouched because the resolver already accepts the prefixed
-/// form for those declarations.
+/// form for those declarations. This selectivity is pinned by the
+/// `ns_stripper_only_visits_function_and_global_bodies` unit test —
+/// any future "just delegate to `default_fold_item`" refactor would
+/// break that test.
+///
+/// Within the bodies that *are* visited, recursion is more thorough
+/// than the historical hand-rolled `strip_ns_from_expr`: the
+/// `default_fold_expr` defaults reach into `Closure` parameter
+/// defaults, `WithHandler` effect types, and `Pattern::Or` arms — all
+/// places where the old code stopped early. The expansion is
+/// behaviour-preserving for every existing namespace fixture (no
+/// regressions in e2e) and arguably a fix for the corners where a
+/// `use ns namespace` would previously have surfaced an "unknown
+/// name" diagnostic.
 struct NsStripper {
     namespace_names: Vec<String>,
 }
@@ -1421,65 +1349,86 @@ mod tests {
         }
     }
 
+    /// `NsStripper` must strip `<ns>::foo` (single `Ident` with a
+    /// prefix in its name string) inside Function / Test / Global
+    /// bodies, but must NOT recurse into `Struct` / `Enum` / `Variant`
+    /// items — that's the historical selectivity the resolver relies on
+    /// and the reason `fold_item` is overridden rather than delegating
+    /// to `default_fold_item`.
     #[test]
-    fn test_desugar_comparison_chain() {
-        use crate::ast::ChainedComparison;
+    fn ns_stripper_only_visits_function_and_global_bodies() {
+        use crate::ast::Function;
+        use crate::lexer::Lexer;
+        use crate::parser::Parser;
 
-        // 0 < x < 10
-        let chain = ComparisonChainExpr {
-            id: crate::ast::AstId::fresh(),
-            first: Expr::Literal(LiteralExpr {
-                id: crate::ast::AstId::fresh(),
-                value: crate::ast::Literal::Number("0".to_string()),
-                span: dummy_span(),
-            }),
-            comparisons: vec![
-                ChainedComparison {
-                    op: BinaryOp::Lt,
-                    right: Expr::Ident(IdentExpr {
-                        id: crate::ast::AstId::fresh(),
-                        name: "x".to_string(),
-                        segments: Vec::new(),
-                        type_args: Vec::new(),
-                        span: dummy_span(),
-                    }),
-                    op_span: dummy_span(),
-                },
-                ChainedComparison {
-                    op: BinaryOp::Lt,
-                    right: Expr::Literal(LiteralExpr {
-                        id: crate::ast::AstId::fresh(),
-                        value: crate::ast::Literal::Number("10".to_string()),
-                        span: dummy_span(),
-                    }),
-                    op_span: dummy_span(),
-                },
-            ],
-            span: dummy_span(),
-        };
-
-        let desugared = desugar_comparison_chain(&chain);
-
-        // Should be (0 < x) && (x < 10)
-        match desugared {
-            Expr::Binary(and) => {
-                assert_eq!(and.op, BinaryOp::And);
-                // Left should be 0 < x
-                match &and.left {
-                    Expr::Binary(lt) => {
-                        assert_eq!(lt.op, BinaryOp::Lt);
-                    }
-                    _ => panic!("expected binary"),
-                }
-                // Right should be x < 10
-                match &and.right {
-                    Expr::Binary(lt) => {
-                        assert_eq!(lt.op, BinaryOp::Lt);
-                    }
-                    _ => panic!("expected binary"),
-                }
-            }
-            _ => panic!("expected binary (and)"),
+        fn parse(source: &str) -> Module {
+            let tokens = Lexer::new(source).tokenize().expect("lex");
+            let mut parser = Parser::new(tokens);
+            parser.parse().expect("parse")
         }
+
+        // - `helper::add(1, 2)` inside a function body → `add(1, 2)` (stripped).
+        // - `helper::HELPER_BASE` in a struct field default → MUST NOT be
+        //   stripped because NsStripper.fold_item skips `Item::Struct`.
+        //   This pins the selectivity: a future "just delegate to default"
+        //   regression would break this assertion.
+        let module = parse(
+            r#"
+use helper from "./helper.wado";
+
+struct WithDefault {
+    base: i32 = helper::HELPER_BASE,
+}
+
+fn pick() -> i32 {
+    return helper::add(1, 2);
+}
+"#,
+        );
+
+        let stripped = NsStripper::for_module(&module).strip(module.items.clone());
+
+        let mut saw_func_call_stripped = false;
+        let mut saw_struct_default_preserved = false;
+        for item in &stripped {
+            match item {
+                Item::Function(Function { name, body, .. }) if name == "pick" => {
+                    let body = body.as_ref().expect("pick has a body");
+                    // Drill: return helper::add(...) → return add(...).
+                    for s in &body.stmts {
+                        if let Stmt::Return(r) = s
+                            && let Some(Expr::Call(c)) = r.value.as_ref()
+                            && let Expr::Ident(ident) = &c.callee
+                        {
+                            assert_eq!(
+                                ident.name, "add",
+                                "function-body call should have its namespace prefix stripped"
+                            );
+                            saw_func_call_stripped = true;
+                        }
+                    }
+                }
+                Item::Struct(s) => {
+                    let field = s.fields.first().expect("WithDefault has a field");
+                    let default = field.default.as_ref().expect("base has a default");
+                    if let Expr::Ident(ident) = default {
+                        assert_eq!(
+                            ident.name, "helper::HELPER_BASE",
+                            "struct field default must keep the namespace prefix \
+                             (NsStripper.fold_item must skip Item::Struct)"
+                        );
+                        saw_struct_default_preserved = true;
+                    } else {
+                        panic!("expected Ident default, got {default:?}");
+                    }
+                }
+                _ => {}
+            }
+        }
+        assert!(saw_func_call_stripped, "didn't observe the stripped call");
+        assert!(
+            saw_struct_default_preserved,
+            "didn't observe the preserved struct default"
+        );
     }
 }

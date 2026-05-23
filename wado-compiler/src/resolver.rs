@@ -17,6 +17,7 @@ mod expr;
 mod handlers;
 mod infer;
 mod item;
+mod matches;
 mod method_call;
 mod method_lookup;
 mod module;
@@ -524,6 +525,37 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
         None
+    }
+
+    /// Allocate a fresh [`AstId`] for a synthetic AST node produced by a
+    /// lowering pass (e.g. the panic call inside `lower_assert`).
+    ///
+    /// Synthetic ids land *above* the current module's
+    /// `Module::ast_id_count()`, so they cannot collide with any
+    /// parser-allocated id. As a consequence, any `record_reference_opt`
+    /// / `record_local_symbol` calls keyed on a synthetic id are
+    /// invisible to LSP queries: `Annotated::ast_id_at` only ever
+    /// returns parser ids, so the polluted entries are unreachable
+    /// through the cursor → `AstId` lookup path.
+    pub(in crate::resolver) fn alloc_synth_ast_id(
+        &self,
+        ctx: &mut crate::resolver::types::FunctionContext,
+    ) -> crate::ast::AstId {
+        // Lazy init: on the first call for this `FunctionContext`, read
+        // the current module's parser-allocated count and start the
+        // synthetic range just above it. Every subsequent call reuses
+        // the field directly.
+        let start = if let Some(n) = ctx.next_synth_ast_id {
+            n
+        } else {
+            let module = self
+                .loaded_modules
+                .get(&self.current_module_source)
+                .expect("current module is loaded");
+            module.ast_id_count()
+        };
+        ctx.next_synth_ast_id = Some(start + 1);
+        crate::ast::AstId(start)
     }
 
     /// Record a local binding's [`Symbol`] so that LSP hover on a use site can

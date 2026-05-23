@@ -27,13 +27,12 @@
 
 use crate::ast::{
     self, AssertStmt, AstId, Block, CallExpr, Condition, Expr, ExprStmt, FormatSpec, IdentExpr,
-    IfStmt, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, Pattern, TemplatePart,
-    TemplateStringExpr, UnaryExpr, UnaryOp,
+    IfStmt, Literal, LiteralExpr, TemplatePart, TemplateStringExpr, UnaryExpr, UnaryOp,
 };
 use crate::ast_folder::{AstFolder, default_fold_expr};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
-use crate::tir::TirStmt;
+use crate::tir::{TirBlock, TirStmt, TirStmtKind};
 use crate::unparse::unparse_expr_simple;
 
 use super::Resolver;
@@ -51,56 +50,97 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
         let span = assert_stmt.span;
-        let parent_id = assert_stmt.id;
+
+        // Every synthetic AST node produced by this expansion uses one
+        // shared `AstId` allocated above `Module::ast_id_count()`. That
+        // keeps the synthetic id disjoint from every parser-allocated id,
+        // so any `record_reference_opt` / `record_local_symbol` writes
+        // routed through it are unreachable from `Annotated::ast_id_at`
+        // — LSP queries that translate a cursor position to an `AstId`
+        // never see this id, and therefore never see the synthetic
+        // entries.
+        //
+        // Sharing one id across the synthetic nodes (instead of one per
+        // node) is fine because those collisions are themselves
+        // unreachable from LSP for the same reason.
+        let synth_id = self.alloc_synth_ast_id(ctx);
 
         // Power-assert capture: rewrite the condition so each interesting
         // sub-expression is replaced by a fresh `__vK` identifier, with a
         // matching `(source_text, expr)` pair recorded for later let binding.
-        let mut capture = CaptureFolder::new(parent_id);
+        // The captured `value` keeps the user's original `AstId`s, so
+        // resolving it still records use→def edges for the user's idents
+        // exactly as if no rewrite had happened.
+        let mut capture = CaptureFolder::new(synth_id);
         let rewritten_condition = capture.fold_condition_expr(assert_stmt.condition.clone());
         let captures = capture.finish();
 
-        // Build the synthetic block body (let bindings + check + panic).
-        let mut stmts: Vec<ast::Stmt> = Vec::with_capacity(captures.len() + 2);
+        // Allocate a fresh scope for the synthetic locals so they fall out
+        // of `ctx.scopes` when this expansion finishes.
+        ctx.enter_scope();
+        let mut inner_stmts: Vec<TirStmt> = Vec::with_capacity(captures.len() + 2);
 
+        // Emit each captured intermediate as a TIR `Let` directly.
+        //
+        // We deliberately skip `Resolver::resolve_let` here, for two reasons:
+        // 1. We pass `defining_ast_id: None` to `add_local`, so synthetic
+        //    locals do not register `local_symbols` entries keyed on
+        //    `assert_stmt.id` — that would shadow the assert in LSP queries
+        //    such as `Annotated::symbol_at(assert_stmt.id)`.
+        // 2. We never synthesise a `Pattern::Ident { id: synth_id, … }`,
+        //    so no `record_local_symbol` / `record_reference_opt` writes
+        //    are made against `synth_id` either.
         for cap in &captures {
-            stmts.push(ast::Stmt::Let(LetStmt {
-                id: parent_id,
-                pattern: Pattern::Ident {
-                    id: parent_id,
+            let value_tir = self.resolve_expr(&cap.value, ctx, None);
+            let type_id = value_tir.type_id;
+            let local_index = ctx.add_local(cap.name.clone(), type_id, false, None);
+            inner_stmts.push(TirStmt::new(
+                TirStmtKind::Let {
                     name: cap.name.clone(),
-                    span,
+                    local_index,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id,
+                    value: value_tir,
+                    skip_value_copy: false,
                 },
-                name_span: span,
-                is_mut: false,
-                is_reactive: false,
-                ty: None,
-                value: Some(cap.value.clone()),
                 span,
-            }));
+            ));
         }
 
+        // `let __cond = <rewritten condition>;` — resolved without a type
+        // expectation so the condition's natural shape decides typing
+        // (matches the historic `let __cond = …;` synthesised by desugar).
+        // A `bool` expectation here would propagate into branch types of
+        // `Expr::If` / `Expr::Match` etc. and break conditions that
+        // contain those constructs.
+        let cond_tir = self.resolve_expr(&rewritten_condition, ctx, None);
+        let cond_type = cond_tir.type_id;
         let cond_name = "__cond".to_string();
-        stmts.push(ast::Stmt::Let(LetStmt {
-            id: parent_id,
-            pattern: Pattern::Ident {
-                id: parent_id,
+        let cond_local_index = ctx.add_local(cond_name.clone(), cond_type, false, None);
+        inner_stmts.push(TirStmt::new(
+            TirStmtKind::Let {
                 name: cond_name.clone(),
-                span,
+                local_index: cond_local_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id: cond_type,
+                value: cond_tir,
+                skip_value_copy: false,
             },
-            name_span: span,
-            is_mut: false,
-            is_reactive: false,
-            ty: None,
-            value: Some(rewritten_condition),
             span,
-        }));
+        ));
 
-        let panic_message = build_panic_message(assert_stmt, &captures, parent_id, span);
+        // `if !__cond { panic(<template>); }` — synthesised as AST and
+        // routed through `resolve_stmt`. The block has no `let`, so the
+        // symbol-pollution concern above does not apply here. We rely on
+        // the standard `resolve_ident` lookup of `__cond` and the
+        // template-string + `panic` resolution paths.
+        let panic_message = build_panic_message(assert_stmt, &captures, synth_id, span);
         let panic_call = Expr::Call(Box::new(CallExpr {
-            id: parent_id,
+            id: synth_id,
             callee: Expr::Ident(IdentExpr {
-                id: parent_id,
+                id: synth_id,
                 name: "panic".to_string(),
                 segments: Vec::new(),
                 type_args: Vec::new(),
@@ -111,14 +151,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             has_trailing_comma: false,
             span,
         }));
-
-        let if_stmt = ast::Stmt::If(IfStmt {
-            id: parent_id,
+        let if_ast = ast::Stmt::If(IfStmt {
+            id: synth_id,
             condition: Condition::Expr(Expr::Unary(Box::new(UnaryExpr {
-                id: parent_id,
+                id: synth_id,
                 op: UnaryOp::Not,
                 expr: Expr::Ident(IdentExpr {
-                    id: parent_id,
+                    id: synth_id,
                     name: cond_name,
                     segments: Vec::new(),
                     type_args: Vec::new(),
@@ -127,9 +166,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 span,
             }))),
             then_block: Block {
-                id: parent_id,
+                id: synth_id,
                 stmts: vec![ast::Stmt::Expr(ExprStmt {
-                    id: parent_id,
+                    id: synth_id,
                     expr: panic_call,
                     span,
                 })],
@@ -138,28 +177,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
             else_block: None,
             span,
         });
-        stmts.push(if_stmt);
+        inner_stmts.extend(self.resolve_stmt(&if_ast, ctx));
 
-        // Wrap in a labeled block so the synthetic locals are scoped to this
-        // expansion. The label name mirrors the historical desugar output so
-        // any external diagnostic that referenced `__assert_N` is unaffected.
-        let labeled = ast::Stmt::LabeledBlock(LabeledBlockStmt {
-            id: parent_id,
-            // Label uses the assert's `AstId` so it is unique across all
-            // asserts in the same function without needing a separate counter.
-            label: format!("__assert_{}", parent_id.0),
-            block: Block {
-                id: parent_id,
-                stmts,
-                span,
+        ctx.exit_scope();
+
+        // Wrap the whole expansion in a labeled block. The label uses a
+        // per-function serial counter so the Nth assert in a function is
+        // `__assert_{N-1}` — short, monotonic, and matches the historical
+        // desugar output that downstream WIR dumps assume.
+        let assert_serial = ctx.next_assert_id;
+        ctx.next_assert_id += 1;
+        vec![TirStmt::new(
+            TirStmtKind::LabeledBlock {
+                label: format!("__assert_{assert_serial}"),
+                block: TirBlock::new(inner_stmts, span),
             },
             span,
-        });
-
-        // Resolve the synthetic wrapper through the standard statement path.
-        // The expansion is a single TirStmt (a labeled block); returning it as
-        // a one-element vec keeps `resolve_stmt`'s `Vec<TirStmt>` shape.
-        self.resolve_stmt(&labeled, ctx)
+        )]
     }
 }
 
@@ -178,7 +212,7 @@ struct Capture {
 /// every interesting sub-expression as a `Capture` and replacing it with a
 /// reference to a freshly-named `__vK` local.
 struct CaptureFolder {
-    parent_id: AstId,
+    synth_id: AstId,
     captures: Vec<Capture>,
     /// `source_text -> capture index` for dedup. Two structurally identical
     /// sub-expressions share one `__vK` so the failure message stays terse
@@ -196,9 +230,9 @@ struct CaptureFolder {
 }
 
 impl CaptureFolder {
-    fn new(parent_id: AstId) -> Self {
+    fn new(synth_id: AstId) -> Self {
         Self {
-            parent_id,
+            synth_id,
             captures: Vec::new(),
             seen: IndexMap::default(),
             is_root: true,
@@ -233,7 +267,7 @@ impl CaptureFolder {
             name
         };
         Expr::Ident(IdentExpr {
-            id: self.parent_id,
+            id: self.synth_id,
             name,
             segments: Vec::new(),
             type_args: Vec::new(),
@@ -352,14 +386,14 @@ impl AstFolder for CaptureFolder {
 fn build_panic_message(
     assert_stmt: &AssertStmt,
     captures: &[Capture],
-    parent_id: AstId,
+    synth_id: AstId,
     span: crate::token::Span,
 ) -> Expr {
     let mut parts: Vec<TemplatePart> = Vec::new();
 
     let make_loc = |value: Literal| {
         Expr::Literal(LiteralExpr {
-            id: parent_id,
+            id: synth_id,
             value,
             span,
         })
@@ -389,14 +423,10 @@ fn build_panic_message(
         });
     }
 
-    // Prefer the pre-desugar source captured by the desugar phase so
-    // `condition: …` reads in the user's own words; fall back to a printout
-    // of the (possibly-desugared) condition when the assert was constructed
-    // outside the normal pipeline (e.g. unit tests).
-    let condition_source = assert_stmt
-        .original_condition_source
-        .clone()
-        .unwrap_or_else(|| unparse_expr_simple(&assert_stmt.condition));
+    // The condition reaches lower_assert unmodified by desugar, so its
+    // printout reads in the user's own words (`s matches { p }`,
+    // `a < b < c`, …) rather than the resolver-internal expansion.
+    let condition_source = unparse_expr_simple(&assert_stmt.condition);
     parts.push(TemplatePart::String(format!(
         "\ncondition: {condition_source}\n"
     )));
@@ -405,7 +435,7 @@ fn build_panic_message(
         parts.push(TemplatePart::String(format!("{}: ", cap.source)));
         parts.push(TemplatePart::Interpolation {
             expr: Box::new(Expr::Ident(IdentExpr {
-                id: parent_id,
+                id: synth_id,
                 name: cap.name.clone(),
                 segments: Vec::new(),
                 type_args: Vec::new(),
@@ -419,7 +449,7 @@ fn build_panic_message(
     }
 
     Expr::TemplateString(Box::new(TemplateStringExpr {
-        id: parent_id,
+        id: synth_id,
         parts,
         span,
     }))

@@ -243,7 +243,7 @@ pub fn default_fold_stmt<F: AstFolder>(folder: &mut F, stmt: Stmt) -> Stmt {
             }
             Stmt::Break(b)
         }
-        Stmt::Continue(_) => stmt,
+        Stmt::Continue(c) => Stmt::Continue(c),
         Stmt::Assert(mut a) => {
             a.condition = folder.fold_expr(a.condition);
             if let Some(msg) = a.message.take() {
