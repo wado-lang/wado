@@ -1,8 +1,8 @@
 //! Generate `$value_copy$T<id>` helper functions for every type that the
-//! marker pass [`super::insert::insert_value_copy_calls`] has wrapped in
-//! `builtin::copy_value::<T>(x)`. Pushes the helpers into
-//! [`FlatPackage::functions`] and returns the
-//! `TypeId → (ModuleSource, name)` map.
+//! fold needs at a wrap site, plus the transitive closure of nested
+//! value-typed fields. The seed comes from [`super::analyze::collect_seed_types`];
+//! the loop in [`synthesize_helpers`] iterates until no new types appear
+//! in newly-generated helper bodies.
 //!
 //! For struct types the body is a `StructLiteral` with field-by-field
 //! shallow projections, plus `builtin::array_clone::<T>` for raw
@@ -10,12 +10,12 @@
 //! recurse into nested aggregates. For variant / option / fall-through
 //! types the body is `return v;` (identity).
 //!
-//! Rewriting the `builtin::copy_value::<T>(x)` markers into calls to the
-//! generated helpers is the translator's job (see
-//! [`crate::lower::translate`]). Both user-function bodies and the
-//! synthesized helper bodies (which themselves contain
-//! `copy_value::<NestedT>(...)` for nested value-typed fields) flow
-//! through the same TIR → NIR fold and pick up the rewrite uniformly.
+//! Synthesized helper bodies contain `builtin::copy_value::<NestedT>(x)`
+//! markers for nested value-typed fields. The translator rewrites those
+//! markers via [`crate::lower::translate`]'s `convert_call` arm. User
+//! function bodies, in contrast, get the wrap call emitted directly by
+//! the fold — they carry no markers after Phase A of WEP 2026-05-11
+//! Step 5.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -33,8 +33,10 @@ use crate::token::Span;
 
 use super::needs_value_copy;
 
-pub fn synthesize_helpers(project: &mut FlatPackage) -> IndexMap<TypeId, (ModuleSource, String)> {
-    let initial = collect_copy_value_types(project);
+pub fn synthesize_helpers(
+    project: &mut FlatPackage,
+    initial: IndexSet<TypeId>,
+) -> IndexMap<TypeId, (ModuleSource, String)> {
     if initial.is_empty() {
         return IndexMap::default();
     }
@@ -78,21 +80,11 @@ pub fn synthesize_helpers(project: &mut FlatPackage) -> IndexMap<TypeId, (Module
     name_for_type
 }
 
-fn collect_copy_value_types(project: &FlatPackage) -> IndexSet<TypeId> {
-    let type_table = project.type_table.borrow();
-    let mut collector = Collector {
-        out: IndexSet::default(),
-        type_table: &type_table,
-    };
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        if let Some(ref body) = func.body {
-            collector.visit_block(body);
-        }
-    }
-    collector.out
-}
-
+/// Walk a newly-generated helper body and collect every `TypeId` that
+/// appears as a nested `copy_value::<NestedT>` marker (so the worklist
+/// closes the transitive set of helpers) and every `array_clone::<T>`
+/// element type (so codegen's per-element `$value_copy$T` call finds a
+/// registered helper at lower time).
 struct Collector<'a> {
     out: IndexSet<TypeId>,
     type_table: &'a TypeTable,

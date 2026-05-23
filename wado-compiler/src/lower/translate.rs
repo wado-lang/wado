@@ -1,18 +1,10 @@
-//! TIR → NIR translator: a single fold that consumes a [`FlatPackage`]
-//! together with a [`LowerPlan`] and produces a [`NirPackage`].
+//! TIR → NIR translator: a single fold consuming a [`FlatPackage`]
+//! plus a [`LowerPlan`], producing a [`NirPackage`].
 //!
-//! Pre-lower-only TIR variants (`Closure`, `Capture`, `FuncRef`,
-//! `TupleSpread`, …) must have been eliminated by `lower::plan`
-//! sub-passes before the translator runs — they `unreachable!()` here.
-//! `IfLet` is eliminated by `translate::pattern`, run over every
-//! function at the start of `translate` before the fold begins, so the
-//! `IfLet` arm is likewise unreachable. String / bytes literal
-//! collection then runs over the pattern-lowered bodies.
-//!
-//! Some translator arms consume facts from `plan` to rewrite TIR
-//! markers into resolved NIR forms (the value-copy marker rewrite in
-//! the `Call` arm; the `i128` / `u128` match → if-else chain in the
-//! `Match` arm).
+//! Every expression-shape rewrite (value-copy wraps, boxing, closure
+//! literals, specialised-callee plumbing, wide-int `Match`) lives in
+//! this fold. Pattern lowering and string-literal collection run
+//! over each function body before the fold proper.
 //!
 //! See `docs/wep-2026-05-11-nir.md`.
 
@@ -23,7 +15,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::{LocalMethodName, MethodName};
 use crate::nir;
@@ -40,33 +32,24 @@ use crate::tir::{
     TirEnumCase, TirExpr, TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
     TirImport, TirLiteralPattern, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
     TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TirTest, TirTypeParam,
-    TirVariantCase, TirVariantDecl, TypeTable,
+    TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable,
 };
 
 /// Translate a [`FlatPackage`] (TIR-shaped) into a [`NirPackage`] (NIR-shaped).
 ///
-/// Takes ownership of `flat` so owned containers (`Vec`s, `IndexMap`s,
-/// `String`s, `BuiltinRegistry`, the trait env, …) move straight into the
-/// `NirPackage` instead of being cloned. Body-shape Vecs (`structs`,
-/// `enums`, …) iterate by reference because the per-element conversion
-/// helpers take `&T` and clone the few owned `String` fields they keep —
-/// a per-helper rewrite to fully-move plumbing is out of scope here.
-/// Function `Rc`s are destructured via `.borrow().clone()` because each
-/// one is shared with one or more `ClosureFunctor::call_method`; the
-/// closure-functor conversion looks up the fresh `NirFunction` `Rc` in
-/// `func_map` so the optimizer's `Rc::ptr_eq`-based closure-type DCE
-/// pass keeps matching.
+/// Takes ownership of `flat` so owned containers move straight into
+/// the `NirPackage`. The closure-functor conversion looks up the
+/// fresh `NirFunction` `Rc` in `func_map` so the optimizer's
+/// `Rc::ptr_eq`-based closure-type DCE pass keeps matching.
 pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     let LowerPlan {
+        box_plan,
         closure,
         value_copy,
     } = plan;
-    // Pattern-lower every function before the fold (WEP Phase 10
-    // Step 2b): `IfLet` / `LetDestructure` / or-patterns become
-    // explicit `Let` + `Match` that the fold consumes. This runs
-    // before string collection below because pattern lowering
-    // synthesises string-literal expressions (string-literal pattern
-    // guards) that the data section must register.
+    // Pattern lowering runs before string collection: it synthesises
+    // string-literal expressions (string-literal pattern guards) the
+    // data section must register.
     {
         let pattern = pattern::Lowering::new(&flat);
         let type_table = flat.type_table.borrow();
@@ -74,7 +57,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
             pattern.lower_function(&mut func_rc.borrow_mut(), &type_table);
         }
     }
-    // Collect string / bytes literals from the pattern-lowered bodies.
     let strings = crate::lower::plan::string::plan(&flat);
     let FlatPackage {
         entry_module_source,
@@ -105,10 +87,20 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         trait_env,
     } = flat;
 
+    // For `try_expand_deref_struct_assign`.
+    let mut struct_fields_map: IndexMap<
+        (String, crate::module_source::ModuleSource),
+        Vec<crate::tir::TirField>,
+    > = IndexMap::default();
+    for s in &structs {
+        struct_fields_map.insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
+    }
     let translator = Translator {
+        box_plan: &box_plan,
         value_copy: &value_copy,
         closure: &closure,
         type_table: Rc::clone(&type_table),
+        struct_fields_map,
     };
 
     let mut func_map: IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>> =
@@ -168,36 +160,30 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
 }
 
 struct Translator<'a> {
+    box_plan: &'a crate::lower::plan::boxing::BoxPlan,
     value_copy: &'a value_copy::ValueCopyPlan,
     closure: &'a closure::ClosurePlan,
-    /// Shared with the consumed `FlatPackage`; used by translator arms
-    /// that need to inspect resolved types during the walk (e.g.
-    /// detecting wide-int `Match` scrutinees for the if-else rewrite).
     type_table: Rc<RefCell<TypeTable>>,
+    struct_fields_map:
+        IndexMap<(String, crate::module_source::ModuleSource), Vec<crate::tir::TirField>>,
 }
 
 /// Per-function translation context. Created fresh for each function
 /// the translator walks (top-level functions, generated `__call`
-/// methods, fn-param specialized callees). Holds the per-function
-/// state that the per-arm rewrites need; the previous `Cell`-based
-/// shared slot on `Translator` is gone.
+/// methods, fn-param specialized callees).
 struct FunctionTranslator<'a, 'p> {
     base: &'a Translator<'p>,
-    /// Specialized-locals entries for this function if it is a
-    /// synthesized fn-param-specialized callee, otherwise `None`. Read
-    /// by `Local` retag, `IndirectCall` → `MethodCall`, and
-    /// fn-param-`Local` arg-slot wrap.
+    /// `Some` only inside a synthesized fn-param-specialized callee.
     specialized: Option<&'p [closure::SpecializedLocal]>,
-    /// Locals to append onto the resulting `NirFunction`. The wide-int
-    /// `Match` rewrite uses this to hoist side-effecting scrutinees
-    /// into a fresh slot. `None` for `for_top_level` contexts that
-    /// don't own a function's local list.
+    /// `None` for global initializers / struct field defaults, where
+    /// `alloc_local` would have no function to attach to.
     extra: Option<ExtraLocals>,
+    immutable_locals: IndexSet<u32>,
+    address_taken: IndexSet<u32>,
 }
 
-/// Per-function local extension state. Indices issued by `alloc_local`
-/// are `base_count + extra.len()`, so they don't collide with the
-/// function's existing locals.
+/// `alloc_local` issues indices at `base_count + locals.len()` so
+/// they don't collide with the function's existing locals.
 struct ExtraLocals {
     base_count: u32,
     locals: RefCell<Vec<TirLocal>>,
@@ -211,6 +197,14 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .specialized_locals
             .get(&key)
             .map(std::vec::Vec::as_slice);
+        let immutable_locals = func
+            .locals
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| !l.is_mut)
+            .map(|(i, _)| u32::try_from(i).unwrap())
+            .collect();
+        let address_taken = func.address_taken_locals.clone();
         Self {
             base,
             specialized,
@@ -218,6 +212,8 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 base_count: func.local_count,
                 locals: RefCell::new(Vec::new()),
             }),
+            immutable_locals,
+            address_taken,
         }
     }
 
@@ -232,6 +228,8 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             base,
             specialized: None,
             extra: None,
+            immutable_locals: IndexSet::default(),
+            address_taken: IndexSet::default(),
         }
     }
 
@@ -356,10 +354,11 @@ impl Translator<'_> {
         cf: &ClosureFunctor,
         func_map: &IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>>,
     ) -> nir::ClosureFunctor {
-        // Reuse the converted function `Rc` when the functor's `call_method`
-        // shares its allocation with one of the package's top-level functions
-        // (the common case). Fall back to a fresh conversion only if the
-        // functor's call_method is not present in the package's function list.
+        // The functor's `call_method` is normally shared with a
+        // top-level function (`Rc::ptr_eq` keyed); reuse the already-
+        // converted `Rc` so the optimizer's closure-type DCE still
+        // matches. The fallback covers methods that never made the
+        // top-level list (e.g. inline-only).
         let call_method = func_map
             .get(&Rc::as_ptr(&cf.call_method))
             .cloned()
@@ -383,9 +382,300 @@ impl Translator<'_> {
 }
 
 impl FunctionTranslator<'_, '_> {
+    fn should_wrap_value_copy(&self, value: &TirExpr) -> bool {
+        value_copy::analyze::should_wrap(value, &self.base.type_table.borrow())
+    }
+
+    /// Apply a boxing-derived rewrite to `expr`, returning `Some` if
+    /// one fires. Matches raw TIR shapes — see the per-case helpers
+    /// for the four rewrites (`Local` retag, `&local` collapse, `&x`
+    /// wrap, `*box` projection).
+    fn try_boxing_rewrite(&self, expr: &TirExpr) -> Option<NirExpr> {
+        match &expr.kind {
+            TirExprKind::Local { index, name } if self.address_taken.contains(index) => {
+                let original_type = expr.type_id;
+                let box_type_id = *self.base.box_plan.box_struct_types.get(&original_type)?;
+                let local_expr = NirExpr {
+                    kind: NirExprKind::Local {
+                        index: *index,
+                        name: name.clone(),
+                    },
+                    type_id: box_type_id,
+                    span: expr.span,
+                };
+                Some(NirExpr {
+                    kind: NirExprKind::FieldAccess {
+                        expr: Box::new(local_expr),
+                        field_index: 0,
+                        field_name: "value".to_string(),
+                    },
+                    type_id: original_type,
+                    span: expr.span,
+                })
+            }
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: inner,
+            } => self.try_boxing_ref(inner, expr.span),
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: inner,
+            } => self.try_boxing_deref(inner, expr.type_id, expr.span),
+            _ => None,
+        }
+    }
+
+    fn try_boxing_ref(&self, inner: &TirExpr, span: crate::token::Span) -> Option<NirExpr> {
+        // `&local` of an address-taken primitive: the Box IS the
+        // address, so collapse to the Local without re-wrapping.
+        if let TirExprKind::Local { index, name } = &inner.kind
+            && self.address_taken.contains(index)
+            && let Some(&box_type_id) = self.base.box_plan.box_struct_types.get(&inner.type_id)
+        {
+            return Some(NirExpr {
+                kind: NirExprKind::Local {
+                    index: *index,
+                    name: name.clone(),
+                },
+                type_id: box_type_id,
+                span,
+            });
+        }
+        // `&primitive_expr` → fresh `Box<T> { value: expr }`.
+        let inner_nir = self.convert_expr(inner);
+        Some(self.wrap_in_box(
+            inner_nir,
+            *self.base.box_plan.box_struct_types.get(&inner.type_id)?,
+        ))
+    }
+
+    fn wrap_in_box(&self, value: NirExpr, box_type: tir::TypeId) -> NirExpr {
+        let span = value.span;
+        let box_struct_name = if let crate::tir::ResolvedType::Struct { name, .. } =
+            self.base.type_table.borrow().get(box_type)
+        {
+            name.clone()
+        } else {
+            panic!("Box type should be a struct");
+        };
+        NirExpr {
+            kind: NirExprKind::StructLiteral {
+                struct_type: box_type,
+                struct_name: box_struct_name,
+                fields: vec![NirStructField {
+                    name: "value".to_string(),
+                    value,
+                    field_index: 0,
+                }],
+            },
+            type_id: box_type,
+            span,
+        }
+    }
+
+    /// Expand `*ref_to_struct = value` (non-Box ref) into field-by-
+    /// field assignments through two fresh temp locals. Box-shaped
+    /// deref-assigns lower as a single statement via the regular
+    /// `try_boxing_rewrite` `Deref` arm.
+    fn try_expand_deref_struct_assign(&self, stmt: &TirStmt) -> Option<Vec<NirStmt>> {
+        let TirStmtKind::Expr(expr) = &stmt.kind else {
+            return None;
+        };
+        let TirExprKind::Assign { target, value } = &expr.kind else {
+            return None;
+        };
+        let TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: ref_expr,
+        } = &target.kind
+        else {
+            return None;
+        };
+
+        // Box-typed Deref-Assigns are handled by the regular fold path
+        // (Unary(Deref, Box) → FieldAccess(.value)). Only non-Box struct
+        // refs reach the expansion.
+        let ref_type_id = ref_expr.type_id;
+        if self.base.box_plan.box_type_ids.contains(&ref_type_id) {
+            return None;
+        }
+        let inner_type_id = match self.base.type_table.borrow().get(ref_type_id) {
+            crate::tir::ResolvedType::MutRef(inner) => *inner,
+            _ => return None,
+        };
+
+        let (struct_name, struct_module) = if let crate::tir::ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } = self.base.type_table.borrow().get(inner_type_id)
+        {
+            (name.clone(), module_source.clone())
+        } else {
+            return None;
+        };
+        let fields = self
+            .base
+            .struct_fields_map
+            .get(&(struct_name, struct_module))?
+            .clone();
+        if fields.is_empty() {
+            return None;
+        }
+
+        let span = expr.span;
+        let ref_idx = self.alloc_local(ref_type_id, "__deref_ref".to_string());
+        let val_idx = self.alloc_local(inner_type_id, "__deref_val".to_string());
+
+        let ref_nir = self.convert_expr(ref_expr);
+        let val_nir = self.convert_expr(value);
+
+        let mut out: Vec<NirStmt> = Vec::with_capacity(2 + fields.len());
+        out.push(NirStmt {
+            kind: NirStmtKind::Let {
+                name: format!("__deref_ref_{ref_idx}"),
+                local_index: ref_idx,
+                is_mut: false,
+                is_reactive: false,
+                type_id: ref_type_id,
+                value: ref_nir,
+                // Translator-synthesized binding — never a user-visible
+                // defensive copy. See the equivalent flag on the
+                // wide-int rewrite's `__wide_scrut` binding.
+                skip_value_copy: true,
+            },
+            span,
+        });
+        out.push(NirStmt {
+            kind: NirStmtKind::Let {
+                name: format!("__deref_val_{val_idx}"),
+                local_index: val_idx,
+                is_mut: false,
+                is_reactive: false,
+                type_id: inner_type_id,
+                value: val_nir,
+                skip_value_copy: true,
+            },
+            span,
+        });
+        for field in &fields {
+            let ref_local = NirExpr {
+                kind: NirExprKind::Local {
+                    index: ref_idx,
+                    name: format!("__deref_ref_{ref_idx}"),
+                },
+                type_id: ref_type_id,
+                span,
+            };
+            let val_local = NirExpr {
+                kind: NirExprKind::Local {
+                    index: val_idx,
+                    name: format!("__deref_val_{val_idx}"),
+                },
+                type_id: inner_type_id,
+                span,
+            };
+            let target_field = NirExpr {
+                kind: NirExprKind::FieldAccess {
+                    expr: Box::new(ref_local),
+                    field_index: field.index,
+                    field_name: field.name.clone(),
+                },
+                type_id: field.type_id,
+                span,
+            };
+            let value_field = NirExpr {
+                kind: NirExprKind::FieldAccess {
+                    expr: Box::new(val_local),
+                    field_index: field.index,
+                    field_name: field.name.clone(),
+                },
+                type_id: field.type_id,
+                span,
+            };
+            out.push(NirStmt {
+                kind: NirStmtKind::Expr(NirExpr {
+                    kind: NirExprKind::Assign {
+                        target: Box::new(target_field),
+                        value: Box::new(value_field),
+                    },
+                    type_id: field.type_id,
+                    span,
+                }),
+                span,
+            });
+        }
+        Some(out)
+    }
+
+    fn try_boxing_deref(
+        &self,
+        inner: &TirExpr,
+        outer_type_id: tir::TypeId,
+        span: crate::token::Span,
+    ) -> Option<NirExpr> {
+        let inner_type_id = inner.type_id;
+        if !self.base.box_plan.box_type_ids.contains(&inner_type_id) {
+            // For non-box refs (struct refs, etc.) `Deref` is a
+            // transparent no-op at the Wasm level — leave the NIR
+            // `Unary(Deref)` in place via the default path.
+            return None;
+        }
+        let result_type = self
+            .base
+            .box_plan
+            .get_box_inner_type(inner_type_id)
+            .unwrap_or(outer_type_id);
+        let inner_nir = self.convert_expr(inner);
+        Some(NirExpr {
+            kind: NirExprKind::FieldAccess {
+                expr: Box::new(inner_nir),
+                field_index: 0,
+                field_name: "value".to_string(),
+            },
+            type_id: result_type,
+            span,
+        })
+    }
+
+    /// Emit a call to the `$value_copy$T(...)` helper. Panics if no
+    /// helper was registered for `type_id` (seed walker out of sync).
+    fn wrap_value_copy(&self, value: NirExpr, type_id: tir::TypeId) -> NirExpr {
+        let span = value.span;
+        let (helper_module, helper_name) =
+            self.base.value_copy.name_for_type.get(&type_id).expect(
+                "value-copy helper missing for wrap site; planner seed walker is out of sync",
+            );
+        NirExpr {
+            kind: NirExprKind::Call {
+                func: nir::FunctionRef {
+                    module_source: helper_module.clone(),
+                    name: helper_name.clone(),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: vec![],
+                args: vec![nir::CallArg {
+                    expr: value,
+                    is_mut: false,
+                }],
+            },
+            type_id,
+            span,
+        }
+    }
+
     fn convert_block(&self, block: &TirBlock) -> NirBlock {
+        let mut stmts: Vec<NirStmt> = Vec::with_capacity(block.stmts.len());
+        for s in &block.stmts {
+            if let Some(expanded) = self.try_expand_deref_struct_assign(s) {
+                stmts.extend(expanded);
+            } else {
+                stmts.push(self.convert_stmt(s));
+            }
+        }
         NirBlock {
-            stmts: block.stmts.iter().map(|s| self.convert_stmt(s)).collect(),
+            stmts,
             span: block.span,
         }
     }
@@ -407,15 +697,45 @@ impl FunctionTranslator<'_, '_> {
                 type_id,
                 value,
                 skip_value_copy,
-            } => NirStmtKind::Let {
-                name: name.clone(),
-                local_index: *local_index,
-                is_mut: *is_mut,
-                is_reactive: *is_reactive,
-                type_id: *type_id,
-                value: self.convert_expr(value),
-                skip_value_copy: *skip_value_copy,
-            },
+            } => {
+                // Address-taken primitive locals are box-typed at the
+                // declaration site (via `shadow_params`); retype the
+                // Let to match and wrap its initial value. Mutually
+                // exclusive with the value-copy wrap below: primitives
+                // are not value-semantic.
+                let (effective_type, box_wrap_type) = if self.address_taken.contains(local_index)
+                    && let Some(&box_type) = self.base.box_plan.box_struct_types.get(type_id)
+                {
+                    (box_type, Some(box_type))
+                } else {
+                    (*type_id, None)
+                };
+                let needs_value_copy_wrap = box_wrap_type.is_none()
+                    && !*skip_value_copy
+                    && (*is_mut
+                        || !value_copy::analyze::is_source_immutable(
+                            value,
+                            &self.immutable_locals,
+                        ))
+                    && self.should_wrap_value_copy(value);
+                let value_nir = self.convert_expr(value);
+                let value_nir = if let Some(box_type) = box_wrap_type {
+                    self.wrap_in_box(value_nir, box_type)
+                } else if needs_value_copy_wrap {
+                    self.wrap_value_copy(value_nir, *type_id)
+                } else {
+                    value_nir
+                };
+                NirStmtKind::Let {
+                    name: name.clone(),
+                    local_index: *local_index,
+                    is_mut: *is_mut,
+                    is_reactive: *is_reactive,
+                    type_id: effective_type,
+                    value: value_nir,
+                    skip_value_copy: *skip_value_copy,
+                }
+            }
             TirStmtKind::Expr(expr) => NirStmtKind::Expr(self.convert_expr(expr)),
             TirStmtKind::Return { value } => NirStmtKind::Return {
                 value: value.as_ref().map(|v| self.convert_expr(v)),
@@ -448,11 +768,21 @@ impl FunctionTranslator<'_, '_> {
                 pattern,
                 is_mut,
                 value,
-            } => NirStmtKind::LetDestructure {
-                pattern: self.convert_pattern(pattern),
-                is_mut: *is_mut,
-                value: self.convert_expr(value),
-            },
+            } => {
+                let needs_wrap = self.should_wrap_value_copy(value);
+                let value_type = value.type_id;
+                let value_nir = self.convert_expr(value);
+                let value_nir = if needs_wrap {
+                    self.wrap_value_copy(value_nir, value_type)
+                } else {
+                    value_nir
+                };
+                NirStmtKind::LetDestructure {
+                    pattern: self.convert_pattern(pattern),
+                    is_mut: *is_mut,
+                    value: value_nir,
+                }
+            }
             TirStmtKind::VariadicForOf { .. } => unreachable!(
                 "TirStmtKind::VariadicForOf should be expanded by monomorphize before lower::translate runs"
             ),
@@ -460,24 +790,16 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn convert_expr(&self, expr: &TirExpr) -> NirExpr {
-        // Wide-int (`i128` / `u128`) match → if-else chain. Done before
-        // dispatching `convert_expr_kind` so the rewrite can use the
-        // outer expression's `type_id` / `span` for the synthesized
-        // `If` nodes; arm bodies and nested wide-int matches are then
-        // processed by the recursive `convert_expr` call.
+        // Wide-int (`i128` / `u128`) `match` → if-else chain.
         if let TirExprKind::Match {
             expr: scrutinee,
             arms,
         } = &expr.kind
             && wide_int::should_rewrite(scrutinee.type_id, arms, &self.base.type_table.borrow())
         {
-            // Hoist the scrutinee into a fresh local so it evaluates
-            // exactly once even though `build_if_chain` clones it into
-            // every arm's `Eq::eq` condition (and the `Binding` arm's
-            // `Let` value). Without this hoist a side-effecting
-            // scrutinee like `match observe() { 10 => ..., 20 => ... }`
-            // re-runs `observe()` per arm. `wir_build::pattern_match`
-            // does the same hoist for normal `Match` expressions.
+            // Hoist into a fresh local; `build_if_chain` clones the
+            // scrutinee into each arm's `Eq::eq` condition, so a
+            // side-effecting expression would re-run per arm.
             let scrut_idx = self.alloc_local(scrutinee.type_id, "__wide_scrut".to_string());
             let scrut_local = TirExpr::new(
                 TirExprKind::Local {
@@ -502,7 +824,11 @@ impl FunctionTranslator<'_, '_> {
                     is_reactive: false,
                     type_id: scrutinee.type_id,
                     value: (**scrutinee).clone(),
-                    skip_value_copy: false,
+                    // Translator-synthesized; invisible to
+                    // `value_copy::analyze`'s seed walker, so any
+                    // wrap would look up a helper that was never
+                    // registered.
+                    skip_value_copy: true,
                 },
                 scrutinee.span,
             );
@@ -517,13 +843,10 @@ impl FunctionTranslator<'_, '_> {
             );
             return self.convert_expr(&block_expr);
         }
-        // Remaining `Closure` nodes (those the closure planner's
-        // specialized call-site rewriter did not turn into a
-        // `StructLiteral` at a `Let` binding) become
-        // `NirExprKind::ClosureToCanonical` wrapping a `StructLiteral`
-        // of the functor's captures. Do not recurse into the closure
-        // body — the body lives in the generated `__call` method,
-        // which `convert_function` walks separately.
+        // `Closure` → raw `StructLiteral` (specialisable) or
+        // `ClosureToCanonical` wrap (otherwise). The body is never
+        // recursed into; it lives in the synthesized `__call`
+        // method which `convert_function` walks separately.
         if let TirExprKind::Closure {
             functor_id: Some(closure_id),
             captures,
@@ -540,6 +863,9 @@ impl FunctionTranslator<'_, '_> {
                 type_id: functor.ref_type_id,
                 span: expr.span,
             };
+            if self.base.closure.specializable.contains(closure_id) {
+                return nir_struct;
+            }
             return NirExpr {
                 kind: NirExprKind::ClosureToCanonical {
                     functor: Box::new(nir_struct),
@@ -621,6 +947,9 @@ impl FunctionTranslator<'_, '_> {
                 type_id: expr.type_id,
                 span: expr.span,
             };
+        }
+        if let Some(nir) = self.try_boxing_rewrite(expr) {
+            return nir;
         }
         NirExpr {
             kind: self.convert_expr_kind(&expr.kind),
@@ -710,10 +1039,25 @@ impl FunctionTranslator<'_, '_> {
                 op: convert_unary_op(*op),
                 expr: Box::new(self.convert_expr(expr)),
             },
-            TirExprKind::Assign { target, value } => NirExprKind::Assign {
-                target: Box::new(self.convert_expr(target)),
-                value: Box::new(self.convert_expr(value)),
-            },
+            TirExprKind::Assign { target, value } => {
+                // Only `Local` targets receive a defensive copy.
+                // `FieldAccess` / `Index` writes mutate an existing
+                // aggregate slot — the WIR-side semantics let the
+                // reference flow through without an extra wrap.
+                let needs_wrap = matches!(&target.kind, TirExprKind::Local { .. })
+                    && self.should_wrap_value_copy(value);
+                let value_type = value.type_id;
+                let value_nir = self.convert_expr(value);
+                let value_nir = if needs_wrap {
+                    self.wrap_value_copy(value_nir, value_type)
+                } else {
+                    value_nir
+                };
+                NirExprKind::Assign {
+                    target: Box::new(self.convert_expr(target)),
+                    value: Box::new(value_nir),
+                }
+            }
             TirExprKind::Cast { expr, target_type } => NirExprKind::Cast {
                 expr: Box::new(self.convert_expr(expr)),
                 target_type: *target_type,
@@ -806,7 +1150,23 @@ impl FunctionTranslator<'_, '_> {
             ),
             TirExprKind::IndirectCall { callee, args } => NirExprKind::IndirectCall {
                 callee: Box::new(self.convert_expr(callee)),
-                args: args.iter().map(|a| self.convert_expr(a)).collect(),
+                // Indirect-call args take an unconditional defensive
+                // copy when the value semantics require it: the callee
+                // signature is opaque here, so the wrap predicate is
+                // applied to every arg regardless of an `is_mut`
+                // marker.
+                args: args
+                    .iter()
+                    .map(|a| {
+                        let needs_wrap = self.should_wrap_value_copy(a);
+                        let nir = self.convert_expr(a);
+                        if needs_wrap {
+                            self.wrap_value_copy(nir, a.type_id)
+                        } else {
+                            nir
+                        }
+                    })
+                    .collect(),
             },
             TirExprKind::VariantConstruct {
                 variant_type,
@@ -870,10 +1230,10 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Translate a TIR `Call`, rewriting `builtin::copy_value::<T>(x)`
-    /// markers (placed by [`crate::lower::plan::value_copy::insert`]) into
-    /// direct calls to the `$value_copy$T<id>` helper registered in
-    /// [`crate::lower::plan::value_copy::synthesize`].
+    /// Rewrites `builtin::copy_value::<T>(x)` markers, which only
+    /// appear inside synthesized helper bodies (user-program TIR
+    /// carries no markers — the fold emits the helper call directly
+    /// at each wrap site via [`Self::wrap_value_copy`]).
     fn convert_call(
         &self,
         func: &FunctionRef,
@@ -1003,11 +1363,22 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn convert_call_arg(&self, arg: &CallArg) -> nir::CallArg {
-        // Specialized callee bodies need fn-param `Local` arg slots
-        // (expected to be `fn(...)` at the callee) to be wrapped in
-        // `ClosureToCanonical`.
+        // `is_mut` value-semantic args get a defensive
+        // `$value_copy$T` wrap; specialised-callee fn-param `Local`
+        // args get a `ClosureToCanonical` wrap. They don't interact:
+        // the value-copy predicate matches on the raw TIR, the
+        // specialised wrap on the converted NIR (always non-value-
+        // semantic).
+        let needs_value_copy = arg.is_mut && self.should_wrap_value_copy(&arg.expr);
+        let value_type = arg.expr.type_id;
+        let converted = self.convert_specialized_arg_expr(&arg.expr);
+        let expr = if needs_value_copy {
+            self.wrap_value_copy(converted, value_type)
+        } else {
+            converted
+        };
         nir::CallArg {
-            expr: self.convert_specialized_arg_expr(&arg.expr),
+            expr,
             is_mut: arg.is_mut,
         }
     }

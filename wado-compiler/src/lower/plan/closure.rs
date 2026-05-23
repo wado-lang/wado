@@ -48,6 +48,10 @@ pub struct SpecializedLocal {
 pub struct ClosurePlan {
     pub functor_infos: Vec<ClosureFunctor>,
     pub specialized_locals: IndexMap<(ModuleSource, String), Vec<SpecializedLocal>>,
+    /// Functors safe to pass as `&__Closure_N` directly (analysed by
+    /// `ClosureSafetyAnalyzer`). The fold emits a raw `StructLiteral`
+    /// for these and a `ClosureToCanonical` wrap for the rest.
+    pub specializable: IndexSet<u32>,
 }
 
 /// Run the closure planner.
@@ -63,6 +67,7 @@ pub fn plan(flat: &mut FlatPackage) -> ClosurePlan {
     ClosurePlan {
         functor_infos: std::mem::take(&mut closure_lowerer.functor_infos),
         specialized_locals: std::mem::take(&mut closure_lowerer.specialized_locals),
+        specializable: std::mem::take(&mut closure_lowerer.specializable),
     }
 }
 
@@ -178,6 +183,9 @@ struct CollectedClosure {
     /// the canonical return type even when the body is a Block expr.
     func_type_id: TypeId,
     span: Span,
+    /// Closure-scope address-taken locals (closure-local indices).
+    /// Shifted by +1 onto `__call` to make room for `self`.
+    address_taken_locals: crate::hashmap::IndexSet<u32>,
 }
 
 /// Signature of a top-level function or impl method, used by Phase 0 to
@@ -627,7 +635,13 @@ impl ClosureLowerer {
                 span: collected.span,
                 local_count,
                 locals,
-                address_taken_locals: IndexSet::default(),
+                // Shift to match `ClosureBodyTransformer`'s +1 on
+                // body-side Local indices.
+                address_taken_locals: collected
+                    .address_taken_locals
+                    .iter()
+                    .map(|i| i + 1)
+                    .collect(),
                 stores_aliased_locals: IndexSet::default(),
                 is_cm_binding: false,
                 is_dispatch_wrapper: false,
@@ -1106,6 +1120,7 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
             params,
             body,
             captures,
+            address_taken_locals,
             ..
         } = &expr.kind
         {
@@ -1117,6 +1132,7 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
                 return_type: body.type_id,
                 func_type_id,
                 span,
+                address_taken_locals: address_taken_locals.clone(),
             });
         }
     }
@@ -1664,30 +1680,15 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         match &mut expr.kind {
-            TirExprKind::Closure {
-                captures,
-                functor_id,
-                ..
-            } => {
-                let closure_id = functor_id.unwrap_or_else(|| {
-                    panic!(
-                        "Closure node missing functor_id; the collect pass should assign it (span: {:?})",
-                        expr.span,
-                    )
-                });
-                // Don't recurse into the body — its locals belong to a
-                // different namespace and are processed via the generated
-                // `__call` method.
-                if self.specializable.contains(&closure_id)
-                    && let Some(functor) = self.functor_infos.get(closure_id as usize)
-                {
-                    expr.kind = TirExprKind::StructLiteral {
-                        struct_type: functor.struct_type_id,
-                        struct_name: functor.struct_name.clone(),
-                        fields: build_capture_fields(captures, expr.span),
-                    };
-                    expr.type_id = functor.ref_type_id;
-                }
+            TirExprKind::Closure { functor_id, .. } => {
+                // Don't recurse: closure body lives in `__call`'s own
+                // local-index namespace. The fold handles
+                // `Closure → StructLiteral` / `ClosureToCanonical`.
+                assert!(
+                    functor_id.is_some(),
+                    "Closure node missing functor_id; the collect pass should assign it (span: {:?})",
+                    expr.span,
+                );
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.visit_expr(callee);

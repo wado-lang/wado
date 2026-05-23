@@ -1,19 +1,10 @@
-//! Lift `mut` value-semantic bindings out of `Match` arm and `IfLet`
-//! patterns into explicit `Let mut` statements at the start of the
-//! corresponding arm body / then-block.
+//! Lift `mut` bindings out of `Match` arm and `IfLet` patterns into
+//! explicit `Let mut` statements at the arm body / then-block start.
 //!
-//! Why this exists separately from pattern lowering: the lift produces
-//! `let mut original_local = fresh_local;` statements that
-//! [`value_copy::insert`](super::value_copy::insert) wraps in
-//! `builtin::copy_value::<T>(...)` markers. Pattern lowering itself can
-//! then move into the [translator](crate::lower::translate) (Phase 10
-//! Step 2b) without forcing `value_copy` to learn pattern walking — the
-//! lifted `Let mut` is exactly the shape `value_copy` already keys on.
-//!
-//! Mirror of the previous `PatternLowerer::lift_mut_payload_bindings` /
-//! `lift_mut_in_pattern` (the latter recurses through compound patterns
-//! so or-pattern alternatives and nested destructures all get the same
-//! lift).
+//! Runs as a pre-pass (not inside `translate::pattern`) so the lifted
+//! `Let mut` statements are visible to `value_copy::analyze`'s seed
+//! walker — moving the lift after the seed walker would leave the
+//! wrap helpers unregistered.
 
 use crate::flat_package::FlatPackage;
 use crate::tir::{
@@ -23,12 +14,7 @@ use crate::tir::{
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
 use crate::token::Span;
 
-/// Walk every function body and lift `mut` payload bindings inside
-/// `Match` arms and `IfLet` patterns. After this runs, every `mut`
-/// binding inside a pattern has been replaced with a fresh non-mut
-/// binding, and a `let mut original = fresh` statement is prepended to
-/// the corresponding arm body / then-block. Idempotent — running twice
-/// is a no-op because the second walk finds no `mut` bindings to lift.
+/// Idempotent: a second walk finds no `mut` bindings to lift.
 pub fn lift_mut_match_bindings(project: &mut FlatPackage) {
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -65,14 +51,12 @@ impl MutBindingLifter {
             .is_some_and(|l| l.is_mut)
     }
 
-    /// Walk `arm.pattern` looking for `Binding`s whose local is `mut`.
-    /// For each, allocate a fresh non-mut local of the same type, swap
-    /// it into the pattern slot, and prepend `let mut original_local =
-    /// fresh_local` to the arm body. The fresh local lands in the
-    /// pattern slot so `wir_build::pattern_match::emit_pattern_bindings`
-    /// writes the variant payload into a private slot; the `Let mut`
-    /// then copies (via `value_copy::insert`) into the user-visible
-    /// binding.
+    /// Replace each `mut` binding in `arm.pattern` with a fresh
+    /// non-mut local and prepend `let mut original = fresh` to the
+    /// arm body. `wir_build::pattern_match::emit_pattern_bindings`
+    /// writes the payload into the fresh slot;
+    /// `value_copy::analyze` picks up the `Let mut` and the fold
+    /// wraps it.
     fn lift_in_match_arm(&mut self, arm: &mut TirMatchArm) {
         let span = arm.span;
         let mut prefix_stmts: Vec<TirStmt> = Vec::new();

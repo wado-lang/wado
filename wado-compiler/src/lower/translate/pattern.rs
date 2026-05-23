@@ -11,17 +11,15 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Coerce a by-value `value` to a reference-typed pattern binding.
+/// Coerce a by-value `value` to a `&T` / `&mut T` pattern binding.
 ///
-/// Match ergonomics let a `&T` / `&mut T` binding capture a value
-/// `T`; the binding's `Let` value must then be a reference to that
-/// value. When pattern lowering runs after `boxing::prepare_types`,
-/// the binding's reference type has been redefined to a `Box<T>`
-/// struct, so the coercion materialises a `Box<T>` struct literal
-/// rather than a `Ref` / `MutRef` unary — `boxing::lower_bodies`
-/// would have rewritten a raw `&value` the same way, but it has
-/// already run. A `value` that is itself a reference (a `Ref` /
-/// `MutRef`, or an already-boxed reference) is returned unchanged.
+/// Match ergonomics binds a reference to a value scrutinee. Pattern
+/// lowering runs after `boxing::prepare_types`, so the binding's
+/// reference type may have been redefined to a `Box<T>` struct —
+/// in that case we materialise a `Box{value}` literal directly
+/// rather than a `Ref` / `MutRef` unary the fold would have to
+/// rewrite afterwards. A `value` that is already a reference is
+/// returned unchanged.
 fn coerce_value_to_binding(
     value: TirExpr,
     binding_type: TypeId,
@@ -640,7 +638,7 @@ impl<'a> PatternLowerer<'a> {
                                         is_reactive: false,
                                         type_id: *type_id,
                                         value: payload_expr,
-                                        skip_value_copy: false,
+                                        skip_value_copy: true,
                                     },
                                     span,
                                 ));
@@ -816,7 +814,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: *type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -835,7 +833,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -866,7 +864,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -917,7 +915,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -978,7 +976,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1082,7 +1080,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1133,7 +1131,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1342,7 +1340,7 @@ impl<'a> PatternLowerer<'a> {
                 is_mut,
                 is_reactive,
                 type_id,
-                ..
+                skip_value_copy,
             } => {
                 // Lower expressions inside the Let value
                 let mut value = value;
@@ -1355,7 +1353,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive,
                         type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy,
                     },
                     stmt.span,
                 ));
@@ -1390,7 +1388,7 @@ impl<'a> PatternLowerer<'a> {
                             is_reactive: false,
                             type_id: scrutinee_type,
                             value: hoisted,
-                            skip_value_copy: false,
+                            skip_value_copy: true,
                         },
                         stmt.span,
                     ));
@@ -1489,7 +1487,7 @@ impl<'a> PatternLowerer<'a> {
                 is_reactive: false,
                 type_id: binding_type,
                 value,
-                skip_value_copy: false,
+                skip_value_copy: true,
             },
             span,
         ));
@@ -1548,7 +1546,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1613,7 +1611,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1661,7 +1659,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1755,7 +1753,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1820,7 +1818,7 @@ impl<'a> PatternLowerer<'a> {
                             is_reactive: false,
                             type_id: value.type_id,
                             value,
-                            skip_value_copy: false,
+                            skip_value_copy: true,
                         },
                         span,
                     );
@@ -1866,7 +1864,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
