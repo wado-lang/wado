@@ -54,6 +54,7 @@ pub mod string;
 pub mod value_copy;
 
 pub struct LowerPlan {
+    pub box_plan: boxing::BoxPlan,
     pub closure: closure::ClosurePlan,
     pub value_copy: value_copy::ValueCopyPlan,
 }
@@ -61,7 +62,13 @@ pub struct LowerPlan {
 pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     globals::extract(flat);
     let box_plan = boxing::prepare_types(flat);
-    boxing::lower_bodies(flat, &box_plan);
+    // Box-aware parameter shadowing must happen before closure /
+    // `value_copy` planning so the synthesized prelude `Let`s and the
+    // updated `address_taken_locals` set are visible. Body-level
+    // boxing rewrites (`&primitive → Box{...}`, `Local → .value`,
+    // `*box → .value`, deref-assign struct expansion) now run in the
+    // fold; see `lower::translate`.
+    boxing::shadow_params(flat, &box_plan);
     let closure = closure::plan(flat);
     globals::build_initialize_modules(flat);
     flat.rebuild_variant_indices();
@@ -71,6 +78,7 @@ pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     lift_mut::lift_mut_match_bindings(flat);
     let value_copy = value_copy::plan(flat);
     LowerPlan {
+        box_plan,
         closure,
         value_copy,
     }

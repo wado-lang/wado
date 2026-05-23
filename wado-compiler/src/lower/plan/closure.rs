@@ -178,6 +178,14 @@ struct CollectedClosure {
     /// the canonical return type even when the body is a Block expr.
     func_type_id: TypeId,
     span: Span,
+    /// Closure-scope address-taken locals, captured from the
+    /// `TirExprKind::Closure` node. Carried through so the synthesized
+    /// `__call` method's `address_taken_locals` can be populated — the
+    /// fold reads it when rewriting `&local` / `Local` reads inside the
+    /// closure body. Indices are in the closure's own local-index
+    /// namespace; they are shifted by +1 when transplanted onto
+    /// `__call` to make room for the synthetic `self` parameter.
+    address_taken_locals: crate::hashmap::IndexSet<u32>,
 }
 
 /// Signature of a top-level function or impl method, used by Phase 0 to
@@ -627,7 +635,16 @@ impl ClosureLowerer {
                 span: collected.span,
                 local_count,
                 locals,
-                address_taken_locals: IndexSet::default(),
+                // Shift the closure's own address-taken set by +1 to
+                // account for the synthetic `self` parameter inserted at
+                // local index 0; the fold's boxing arm reads this set on
+                // `__call` to rewrite `&local` / `Local` of captured-by-
+                // ref locals inside the cloned body.
+                address_taken_locals: collected
+                    .address_taken_locals
+                    .iter()
+                    .map(|i| i + 1)
+                    .collect(),
                 stores_aliased_locals: IndexSet::default(),
                 is_cm_binding: false,
                 is_dispatch_wrapper: false,
@@ -1106,6 +1123,7 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
             params,
             body,
             captures,
+            address_taken_locals,
             ..
         } = &expr.kind
         {
@@ -1117,6 +1135,7 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
                 return_type: body.type_id,
                 func_type_id,
                 span,
+                address_taken_locals: address_taken_locals.clone(),
             });
         }
     }
