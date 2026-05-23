@@ -117,12 +117,21 @@ Effects map directly to WASI capabilities, making side effects explicit and cont
 ```wado
 use { println, Stdout } from "core:cli";
 use { Url } from "core:url";
-use { Client, Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+use { Client, Request, Response, ErrorCode, Fields, Scheme, Trailers } from "wasi:http";
+
+fn scheme_of(url: Url) -> Scheme {
+    return match url.scheme {
+        "http" => Scheme::Http,
+        "https" => Scheme::Https,
+        scheme => Scheme::Other(scheme),
+    };
+}
 
 fn send_get(url: Url) -> Response with Client {
     let headers = Fields::new();
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [req, _req_future] = Request::new(headers, null, trailers_rx, null);
+    req.set_scheme(Option::Some(scheme_of(url)));
     req.set_authority(Option::Some(url.authority()));
     req.set_path_with_query(Option::Some(url.path_with_query()));
 
