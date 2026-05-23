@@ -978,13 +978,16 @@ impl FunctionTranslator<'_, '_> {
             );
             return self.convert_expr(&block_expr);
         }
-        // Remaining `Closure` nodes (those the closure planner's
-        // specialized call-site rewriter did not turn into a
-        // `StructLiteral` at a `Let` binding) become
-        // `NirExprKind::ClosureToCanonical` wrapping a `StructLiteral`
-        // of the functor's captures. Do not recurse into the closure
-        // body — the body lives in the generated `__call` method,
-        // which `convert_function` walks separately.
+        // Every surviving `Closure` node becomes either a raw
+        // `StructLiteral` (if the safety analyser marked the
+        // functor `specializable`) or a `ClosureToCanonical` wrap
+        // (otherwise). Pre-Phase-C of WEP 2026-05-11 Step 5 the
+        // specialisable rewrite happened in `ClosureCallSiteLowerer`
+        // before the fold ran; the fold now consults
+        // `ClosurePlan::specializable` directly, so a single Closure
+        // arm covers both shapes. The closure body is never
+        // recursed into — it lives in the synthesized `__call`
+        // method which `convert_function` walks separately.
         if let TirExprKind::Closure {
             functor_id: Some(closure_id),
             captures,
@@ -1001,6 +1004,9 @@ impl FunctionTranslator<'_, '_> {
                 type_id: functor.ref_type_id,
                 span: expr.span,
             };
+            if self.base.closure.specializable.contains(closure_id) {
+                return nir_struct;
+            }
             return NirExpr {
                 kind: NirExprKind::ClosureToCanonical {
                     functor: Box::new(nir_struct),

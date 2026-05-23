@@ -48,6 +48,16 @@ pub struct SpecializedLocal {
 pub struct ClosurePlan {
     pub functor_infos: Vec<ClosureFunctor>,
     pub specialized_locals: IndexMap<(ModuleSource, String), Vec<SpecializedLocal>>,
+    /// Set of `functor_id`s for which the safety analyser
+    /// (`ClosureSafetyAnalyzer`) determined the closure can be passed
+    /// as a direct `&__Closure_N` reference rather than through the
+    /// canonical `fn(...)` shape. The TIR → NIR fold reads this set to
+    /// emit a raw `StructLiteral` for specialisable closure literals
+    /// and a `ClosureToCanonical` wrap for the remainder. Before Phase C
+    /// of WEP 2026-05-11 Step 5, `ClosureCallSiteLowerer` rewrote
+    /// `TirExprKind::Closure → StructLiteral` in place for the same
+    /// set; the rewrite now lives in the fold.
+    pub specializable: IndexSet<u32>,
 }
 
 /// Run the closure planner.
@@ -63,6 +73,7 @@ pub fn plan(flat: &mut FlatPackage) -> ClosurePlan {
     ClosurePlan {
         functor_infos: std::mem::take(&mut closure_lowerer.functor_infos),
         specialized_locals: std::mem::take(&mut closure_lowerer.specialized_locals),
+        specializable: std::mem::take(&mut closure_lowerer.specializable),
     }
 }
 
@@ -1683,30 +1694,23 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         match &mut expr.kind {
-            TirExprKind::Closure {
-                captures,
-                functor_id,
-                ..
-            } => {
-                let closure_id = functor_id.unwrap_or_else(|| {
+            TirExprKind::Closure { functor_id, .. } => {
+                // `Closure → StructLiteral` is now the fold's job
+                // (WEP 2026-05-11 Step 5 Phase C). The translator reads
+                // `ClosurePlan::specializable` and emits a raw
+                // `StructLiteral` for specialisable closure literals or
+                // a `ClosureToCanonical` wrap for the rest. Here we
+                // only assert the `functor_id` is present so downstream
+                // passes can rely on every surviving `Closure` carrying
+                // a stable id; the body is never recursed into because
+                // its locals belong to the synthesized `__call`
+                // method's local-index namespace.
+                functor_id.unwrap_or_else(|| {
                     panic!(
                         "Closure node missing functor_id; the collect pass should assign it (span: {:?})",
                         expr.span,
                     )
                 });
-                // Don't recurse into the body — its locals belong to a
-                // different namespace and are processed via the generated
-                // `__call` method.
-                if self.specializable.contains(&closure_id)
-                    && let Some(functor) = self.functor_infos.get(closure_id as usize)
-                {
-                    expr.kind = TirExprKind::StructLiteral {
-                        struct_type: functor.struct_type_id,
-                        struct_name: functor.struct_name.clone(),
-                        fields: build_capture_fields(captures, expr.span),
-                    };
-                    expr.type_id = functor.ref_type_id;
-                }
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.visit_expr(callee);
