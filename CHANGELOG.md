@@ -1,6 +1,7 @@
 # Changelog
 
 ## [v0.0.4](https://github.com/wado-lang/wado/compare/v0.0.3...v0.0.4) - 2026-05-23
+
 - fix: create tagpr release as draft so release.yml can upload assets by @gfx in https://github.com/wado-lang/wado/pull/1156
 - NIR WEP Step 5: lower's body rewrites move into the TIR→NIR fold by @gfx in https://github.com/wado-lang/wado/pull/1158
 
