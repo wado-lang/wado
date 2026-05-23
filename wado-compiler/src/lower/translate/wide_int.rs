@@ -123,7 +123,7 @@ pub(super) fn build_if_chain(
                         is_reactive: false,
                         type_id: *type_id,
                         value: scrutinee.clone(),
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );

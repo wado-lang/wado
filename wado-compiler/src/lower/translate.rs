@@ -23,7 +23,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::{LocalMethodName, MethodName};
 use crate::nir;
@@ -193,6 +193,11 @@ struct FunctionTranslator<'a, 'p> {
     /// into a fresh slot. `None` for `for_top_level` contexts that
     /// don't own a function's local list.
     extra: Option<ExtraLocals>,
+    /// Set of local indices declared `let` (not `let mut`) on the
+    /// current function. The value-copy wrap predicate consults this
+    /// to decide whether an immutable `Let` binding can safely alias
+    /// an immutable source without a defensive copy.
+    immutable_locals: IndexSet<u32>,
 }
 
 /// Per-function local extension state. Indices issued by `alloc_local`
@@ -211,6 +216,13 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .specialized_locals
             .get(&key)
             .map(std::vec::Vec::as_slice);
+        let immutable_locals = func
+            .locals
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| !l.is_mut)
+            .map(|(i, _)| u32::try_from(i).unwrap())
+            .collect();
         Self {
             base,
             specialized,
@@ -218,6 +230,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 base_count: func.local_count,
                 locals: RefCell::new(Vec::new()),
             }),
+            immutable_locals,
         }
     }
 
@@ -232,6 +245,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             base,
             specialized: None,
             extra: None,
+            immutable_locals: IndexSet::default(),
         }
     }
 
@@ -383,6 +397,50 @@ impl Translator<'_> {
 }
 
 impl FunctionTranslator<'_, '_> {
+    /// True when a value at the given wrap-site requires a defensive
+    /// `$value_copy$T` call.
+    ///
+    /// Pre-Phase A of WEP 2026-05-11 Step 5 this decision was made by
+    /// `lower::plan::value_copy::insert`, which mutated TIR to wrap
+    /// values in `builtin::copy_value::<T>(x)` markers; the translator
+    /// then rewrote the markers into helper calls. After Phase A the
+    /// translator emits the helper call directly at the wrap site, so
+    /// the predicate (shared with [`value_copy::analyze::should_wrap`])
+    /// now drives both the seed walker and the fold.
+    fn should_wrap_value_copy(&self, value: &TirExpr) -> bool {
+        value_copy::analyze::should_wrap(value, &self.base.type_table.borrow())
+    }
+
+    /// Wrap `value` in a direct call to the `$value_copy$T(...)` helper
+    /// registered by [`value_copy::synthesize::synthesize_helpers`].
+    /// Callers must have established that the wrap is required (see
+    /// [`Self::should_wrap_value_copy`]); calling this without a helper
+    /// for `type_id` is a planner bug.
+    fn wrap_value_copy(&self, value: NirExpr, type_id: tir::TypeId) -> NirExpr {
+        let span = value.span;
+        let (helper_module, helper_name) =
+            self.base.value_copy.name_for_type.get(&type_id).expect(
+                "value-copy helper missing for wrap site; planner seed walker is out of sync",
+            );
+        NirExpr {
+            kind: NirExprKind::Call {
+                func: nir::FunctionRef {
+                    module_source: helper_module.clone(),
+                    name: helper_name.clone(),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: vec![],
+                args: vec![nir::CallArg {
+                    expr: value,
+                    is_mut: false,
+                }],
+            },
+            type_id,
+            span,
+        }
+    }
+
     fn convert_block(&self, block: &TirBlock) -> NirBlock {
         NirBlock {
             stmts: block.stmts.iter().map(|s| self.convert_stmt(s)).collect(),
@@ -407,15 +465,35 @@ impl FunctionTranslator<'_, '_> {
                 type_id,
                 value,
                 skip_value_copy,
-            } => NirStmtKind::Let {
-                name: name.clone(),
-                local_index: *local_index,
-                is_mut: *is_mut,
-                is_reactive: *is_reactive,
-                type_id: *type_id,
-                value: self.convert_expr(value),
-                skip_value_copy: *skip_value_copy,
-            },
+            } => {
+                // `skip_value_copy` is set by LICM / SROA / template
+                // hoisting to flag a binding as safe to alias. An
+                // immutable binding from an immutable source is also
+                // safe. Both gates mirror the pre-Phase-A behaviour of
+                // `value_copy::insert::visit_stmt`.
+                let needs_wrap = !*skip_value_copy
+                    && (*is_mut
+                        || !value_copy::analyze::is_source_immutable(
+                            value,
+                            &self.immutable_locals,
+                        ))
+                    && self.should_wrap_value_copy(value);
+                let value_nir = self.convert_expr(value);
+                let value_nir = if needs_wrap {
+                    self.wrap_value_copy(value_nir, *type_id)
+                } else {
+                    value_nir
+                };
+                NirStmtKind::Let {
+                    name: name.clone(),
+                    local_index: *local_index,
+                    is_mut: *is_mut,
+                    is_reactive: *is_reactive,
+                    type_id: *type_id,
+                    value: value_nir,
+                    skip_value_copy: *skip_value_copy,
+                }
+            }
             TirStmtKind::Expr(expr) => NirStmtKind::Expr(self.convert_expr(expr)),
             TirStmtKind::Return { value } => NirStmtKind::Return {
                 value: value.as_ref().map(|v| self.convert_expr(v)),
@@ -448,11 +526,21 @@ impl FunctionTranslator<'_, '_> {
                 pattern,
                 is_mut,
                 value,
-            } => NirStmtKind::LetDestructure {
-                pattern: self.convert_pattern(pattern),
-                is_mut: *is_mut,
-                value: self.convert_expr(value),
-            },
+            } => {
+                let needs_wrap = self.should_wrap_value_copy(value);
+                let value_type = value.type_id;
+                let value_nir = self.convert_expr(value);
+                let value_nir = if needs_wrap {
+                    self.wrap_value_copy(value_nir, value_type)
+                } else {
+                    value_nir
+                };
+                NirStmtKind::LetDestructure {
+                    pattern: self.convert_pattern(pattern),
+                    is_mut: *is_mut,
+                    value: value_nir,
+                }
+            }
             TirStmtKind::VariadicForOf { .. } => unreachable!(
                 "TirStmtKind::VariadicForOf should be expanded by monomorphize before lower::translate runs"
             ),
@@ -502,7 +590,12 @@ impl FunctionTranslator<'_, '_> {
                     is_reactive: false,
                     type_id: scrutinee.type_id,
                     value: (**scrutinee).clone(),
-                    skip_value_copy: false,
+                    // Synthesized at translate time, after the seed
+                    // walker has already run; flag the binding as
+                    // alias-preserving so the fold's value-copy
+                    // wrapper logic does not try to look up a helper
+                    // that was never registered.
+                    skip_value_copy: true,
                 },
                 scrutinee.span,
             );
@@ -710,10 +803,27 @@ impl FunctionTranslator<'_, '_> {
                 op: convert_unary_op(*op),
                 expr: Box::new(self.convert_expr(expr)),
             },
-            TirExprKind::Assign { target, value } => NirExprKind::Assign {
-                target: Box::new(self.convert_expr(target)),
-                value: Box::new(self.convert_expr(value)),
-            },
+            TirExprKind::Assign { target, value } => {
+                // Only Local targets receive a defensive copy. Field /
+                // index writes on existing containers reuse the
+                // reference. SROA-renamed locals (`__sroa_*`) are
+                // alias-preserving and also skip.
+                let needs_wrap = matches!(
+                    &target.kind,
+                    TirExprKind::Local { name, .. } if !name.starts_with("__sroa_")
+                ) && self.should_wrap_value_copy(value);
+                let value_type = value.type_id;
+                let value_nir = self.convert_expr(value);
+                let value_nir = if needs_wrap {
+                    self.wrap_value_copy(value_nir, value_type)
+                } else {
+                    value_nir
+                };
+                NirExprKind::Assign {
+                    target: Box::new(self.convert_expr(target)),
+                    value: Box::new(value_nir),
+                }
+            }
             TirExprKind::Cast { expr, target_type } => NirExprKind::Cast {
                 expr: Box::new(self.convert_expr(expr)),
                 target_type: *target_type,
@@ -806,7 +916,23 @@ impl FunctionTranslator<'_, '_> {
             ),
             TirExprKind::IndirectCall { callee, args } => NirExprKind::IndirectCall {
                 callee: Box::new(self.convert_expr(callee)),
-                args: args.iter().map(|a| self.convert_expr(a)).collect(),
+                // Indirect-call args take an unconditional defensive
+                // copy when the value semantics require it: the callee
+                // signature is opaque here, so the wrap predicate is
+                // applied to every arg regardless of an `is_mut`
+                // marker.
+                args: args
+                    .iter()
+                    .map(|a| {
+                        let needs_wrap = self.should_wrap_value_copy(a);
+                        let nir = self.convert_expr(a);
+                        if needs_wrap {
+                            self.wrap_value_copy(nir, a.type_id)
+                        } else {
+                            nir
+                        }
+                    })
+                    .collect(),
             },
             TirExprKind::VariantConstruct {
                 variant_type,
@@ -871,9 +997,14 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Translate a TIR `Call`, rewriting `builtin::copy_value::<T>(x)`
-    /// markers (placed by [`crate::lower::plan::value_copy::insert`]) into
-    /// direct calls to the `$value_copy$T<id>` helper registered in
-    /// [`crate::lower::plan::value_copy::synthesize`].
+    /// markers into direct calls to the `$value_copy$T<id>` helper
+    /// registered in [`crate::lower::plan::value_copy::synthesize`].
+    ///
+    /// After Phase A of WEP 2026-05-11 Step 5, user-program TIR carries no
+    /// `copy_value` markers (the fold emits the helper call directly at
+    /// each wrap site via [`Self::wrap_value_copy`]). Synthesized helper
+    /// bodies still contain `copy_value::<NestedT>(x)` markers for nested
+    /// value-typed fields, and this arm rewrites those uniformly.
     fn convert_call(
         &self,
         func: &FunctionRef,
@@ -1003,11 +1134,29 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn convert_call_arg(&self, arg: &CallArg) -> nir::CallArg {
-        // Specialized callee bodies need fn-param `Local` arg slots
-        // (expected to be `fn(...)` at the callee) to be wrapped in
-        // `ClosureToCanonical`.
+        // Two independent rewrites can fire on a single call argument:
+        //
+        // 1. `is_mut` value-semantic args receive a defensive
+        //    `$value_copy$T` wrap (mirrors `value_copy::insert`'s
+        //    pre-Phase-A behaviour).
+        // 2. Specialized-callee fn-param `Local` arg slots get a
+        //    `ClosureToCanonical` wrap so the callee sees the original
+        //    function-shaped view (see `convert_specialized_arg_expr`).
+        //
+        // The value-copy wrap fires on the raw TIR shape; the
+        // specialized-arg wrap fires on the converted NIR shape and
+        // never produces a value-semantic struct, so the two rewrites
+        // do not interact.
+        let needs_value_copy = arg.is_mut && self.should_wrap_value_copy(&arg.expr);
+        let value_type = arg.expr.type_id;
+        let converted = self.convert_specialized_arg_expr(&arg.expr);
+        let expr = if needs_value_copy {
+            self.wrap_value_copy(converted, value_type)
+        } else {
+            converted
+        };
         nir::CallArg {
-            expr: self.convert_specialized_arg_expr(&arg.expr),
+            expr,
             is_mut: arg.is_mut,
         }
     }

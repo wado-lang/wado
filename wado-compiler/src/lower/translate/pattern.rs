@@ -640,7 +640,7 @@ impl<'a> PatternLowerer<'a> {
                                         is_reactive: false,
                                         type_id: *type_id,
                                         value: payload_expr,
-                                        skip_value_copy: false,
+                                        skip_value_copy: true,
                                     },
                                     span,
                                 ));
@@ -816,7 +816,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: *type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -835,7 +835,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -866,7 +866,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -917,7 +917,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -978,7 +978,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1082,7 +1082,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1133,7 +1133,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1342,7 +1342,7 @@ impl<'a> PatternLowerer<'a> {
                 is_mut,
                 is_reactive,
                 type_id,
-                ..
+                skip_value_copy,
             } => {
                 // Lower expressions inside the Let value
                 let mut value = value;
@@ -1355,7 +1355,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive,
                         type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy,
                     },
                     stmt.span,
                 ));
@@ -1390,7 +1390,7 @@ impl<'a> PatternLowerer<'a> {
                             is_reactive: false,
                             type_id: scrutinee_type,
                             value: hoisted,
-                            skip_value_copy: false,
+                            skip_value_copy: true,
                         },
                         stmt.span,
                     ));
@@ -1489,7 +1489,7 @@ impl<'a> PatternLowerer<'a> {
                 is_reactive: false,
                 type_id: binding_type,
                 value,
-                skip_value_copy: false,
+                skip_value_copy: true,
             },
             span,
         ));
@@ -1548,7 +1548,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1613,7 +1613,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1661,7 +1661,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1755,7 +1755,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );
@@ -1820,7 +1820,7 @@ impl<'a> PatternLowerer<'a> {
                             is_reactive: false,
                             type_id: value.type_id,
                             value,
-                            skip_value_copy: false,
+                            skip_value_copy: true,
                         },
                         span,
                     );
@@ -1866,7 +1866,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: false,
+                        skip_value_copy: true,
                     },
                     span,
                 );

@@ -3,27 +3,35 @@
 //! Runs as part of [`super::plan`], i.e. after the TIR-mutating sub-passes
 //! and before the TIR → NIR translator.
 //!
-//! - [`insert::insert_value_copy_calls`] wraps every defensive deep-copy
-//!   position in `builtin::copy_value::<T>(x)` (TIR-mutating).
-//! - [`synthesize::synthesize_helpers`] generates per-type
-//!   `$value_copy$T<id>` helper functions, pushes them into
-//!   [`FlatPackage::functions`], and returns the
+//! - [`analyze::collect_seed_types`] walks every function body read-only,
+//!   mirroring the fold's wrap-site predicates, and returns the set of
+//!   `TypeId`s the translator will wrap in `$value_copy$T(...)` calls. The
+//!   set also includes element types of `array_clone::<T>(...)` calls,
+//!   which codegen routes through the same helper.
+//! - [`synthesize::synthesize_helpers`] consumes the seed, iteratively
+//!   generates per-type `$value_copy$T<id>` helper functions until the
+//!   transitive closure of nested value-typed fields is covered, and
+//!   pushes the helpers into [`FlatPackage::functions`]. Returns the
 //!   `TypeId → (ModuleSource, helper-name)` map.
 //!
-//! The translator consumes [`ValueCopyPlan::name_for_type`] to rewrite the
-//! `builtin::copy_value::<T>(x)` markers into direct calls to the helpers
-//! during TIR → NIR translation. Marker rewriting therefore does not
-//! happen at the planner stage — the translator is the single point that
-//! turns markers into resolved calls, for both user code and synthesized
-//! helper bodies (which contain `builtin::copy_value::<NestedT>(...)` for
-//! nested value-typed fields).
+//! The translator consumes [`ValueCopyPlan::name_for_type`] to emit a
+//! direct `$value_copy$T(value)` call at every wrap site in user
+//! function bodies (see [`analyze::should_wrap`] for the predicate the
+//! fold and the seed walker share). User-program TIR carries no
+//! `builtin::copy_value::<T>(x)` markers after Phase A of WEP
+//! 2026-05-11 Step 5.
+//!
+//! Synthesized helper bodies still contain
+//! `builtin::copy_value::<NestedT>(x)` markers for nested value-typed
+//! fields; the translator's existing `convert_call` arm rewrites those
+//! into the same `$value_copy$NestedT` calls.
 //!
 //! Wrapper elision happens later in `optimize::value_copy_elide`, which
 //! runs as a regular pass inside the optimizer fixed-point loop so that
 //! newly-exposed `$value_copy$T(...)` patterns from inlining or SROA get
 //! collapsed in the same iteration that exposes them.
 
-pub mod insert;
+pub mod analyze;
 pub mod synthesize;
 
 use crate::flat_package::FlatPackage;
@@ -43,15 +51,17 @@ pub struct ValueCopyPlan {
 
 /// Run the value-copy planner.
 ///
-/// 1. Inserts `builtin::copy_value::<T>(x)` markers at every TIR position
-///    that requires a defensive deep-copy (TIR-mutating).
-/// 2. Walks the marked TIR, generates one `$value_copy$T<id>` helper for
-///    every type reached transitively, and registers each helper in
-///    [`FlatPackage::functions`]. Returns the map the translator uses to
-///    resolve marker calls.
+/// 1. Walks every function body read-only and collects the seed set of
+///    `TypeId`s the translator will wrap.
+/// 2. Iteratively generates `$value_copy$T<id>` helpers for the seed and
+///    every type reached transitively through synthesized helper bodies,
+///    and registers each helper in [`FlatPackage::functions`]. Returns the
+///    map the translator uses to emit wrap calls and to rewrite the
+///    `copy_value::<NestedT>` markers that still appear inside helper
+///    bodies.
 pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
-    insert::insert_value_copy_calls(flat);
-    let name_for_type = synthesize::synthesize_helpers(flat);
+    let seed = analyze::collect_seed_types(flat);
+    let name_for_type = synthesize::synthesize_helpers(flat, seed);
     ValueCopyPlan { name_for_type }
 }
 
