@@ -1177,14 +1177,12 @@ impl FunctionTranslator<'_, '_> {
                 expr: Box::new(self.convert_expr(expr)),
             },
             TirExprKind::Assign { target, value } => {
-                // Only Local targets receive a defensive copy. Field /
-                // index writes on existing containers reuse the
-                // reference. SROA-renamed locals (`__sroa_*`) are
-                // alias-preserving and also skip.
-                let needs_wrap = matches!(
-                    &target.kind,
-                    TirExprKind::Local { name, .. } if !name.starts_with("__sroa_")
-                ) && self.should_wrap_value_copy(value);
+                // Only `Local` targets receive a defensive copy.
+                // `FieldAccess` / `Index` writes mutate an existing
+                // aggregate slot — the WIR-side semantics let the
+                // reference flow through without an extra wrap.
+                let needs_wrap = matches!(&target.kind, TirExprKind::Local { .. })
+                    && self.should_wrap_value_copy(value);
                 let value_type = value.type_id;
                 let value_nir = self.convert_expr(value);
                 let value_nir = if needs_wrap {

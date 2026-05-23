@@ -117,9 +117,11 @@ impl TirRefVisitor for SeedWalker<'_> {
                 }
             }
             TirExprKind::Assign { target, value } => {
-                if let TirExprKind::Local { name, .. } = &target.kind
-                    && !name.starts_with("__sroa_")
-                {
+                // Only `Local` targets receive a defensive copy.
+                // `FieldAccess` / `Index` writes mutate an existing
+                // aggregate slot — the WIR-side semantics let the
+                // reference flow through without an extra wrap.
+                if matches!(&target.kind, TirExprKind::Local { .. }) {
                     self.record_if_wrap(value);
                 }
             }
