@@ -959,7 +959,16 @@ async fn run_compile_stage(
             observer.record_input();
             let flags = Arc::clone(&flags);
             let cpu_budget = Arc::clone(&cpu_budget);
-            async move {
+            // Spawn each per-fixture worker as an independent task so
+            // its CPU-permit acquire/release happens on the runtime,
+            // not gated by `buffer_unordered`'s outer polling state.
+            // If the outer loop is briefly parked on `artifact_tx.send`
+            // (channel full), the spawned tasks still progress, release
+            // their CPU permits, and let the load stage take them.
+            // Without `tokio::spawn` the in-flight workers hold their
+            // permits across the entire outer-await window, which can
+            // deadlock with load's permit acquire on cross-stage pause.
+            tokio::spawn(async move {
                 let _permit = cpu_budget
                     .acquire_owned()
                     .await
@@ -1003,11 +1012,12 @@ async fn run_compile_stage(
                         path: path_for_failure,
                     })
                 })
-            }
+            })
         })
         .buffer_unordered(permits * 2);
 
-    while let Some(outcome) = stream.next().await {
+    while let Some(join_result) = stream.next().await {
+        let outcome = join_result.expect("compile task panicked");
         match outcome {
             CompileOutcome::Compiled(a) => {
                 compiled_count += 1;
@@ -1062,7 +1072,10 @@ async fn run_load_stage(
             let modules_budget = Arc::clone(&modules_budget);
             let cpu_budget = Arc::clone(&cpu_budget);
             let path_for_failure = artifact.path.clone();
-            async move {
+            // Each load worker is its own task so that, like compile,
+            // its CPU/modules permit acquire+release runs on the
+            // runtime independent of `buffer_unordered`'s outer poll.
+            tokio::spawn(async move {
                 // `modules` permit caps simultaneously-live wasmtime
                 // `Component`s globally; acquired first so the wait
                 // shows as channel backpressure (small in-flight set
@@ -1092,11 +1105,12 @@ async fn run_load_stage(
                         path: path_for_failure,
                     })
                 })
-            }
+            })
         })
         .buffer_unordered(permits * 2);
 
-    while let Some(outcome) = stream.next().await {
+    while let Some(join_result) = stream.next().await {
+        let outcome = join_result.expect("load task panicked");
         match outcome {
             LoadOutcome::Loaded(module) => {
                 ok_count += 1;
@@ -1156,11 +1170,24 @@ async fn run_execute_stage(
         .map(|job| {
             observer.record_input();
             let preopened_dirs = preopened_dirs.clone();
-            async move { run_single_test_safe(job, &preopened_dirs).await }
+            // Spawn each test as an independent task. Dropping the
+            // outer stream does NOT cancel a running guest wasm
+            // function — but `EpochTicker`'s background epoch
+            // increments will trap a runaway test at its
+            // `#[timeout_ms]` deadline regardless of polling state,
+            // so a long-running test still terminates cleanly when
+            // the pipeline is torn down. The spawn also breaks the
+            // same outer-await-pause cycle that the compile and
+            // load stages had with their CPU permits: a paused
+            // execute loop on `result_tx.send` no longer freezes
+            // the in-flight test futures (which hold
+            // `Arc<LoadedModule>` and thus modules-budget permits).
+            tokio::spawn(async move { run_single_test_safe(job, &preopened_dirs).await })
         })
         .buffer_unordered(parallelism.max(1));
 
-    while let Some(result) = stream.next().await {
+    while let Some(join_result) = stream.next().await {
+        let result = join_result.expect("test task panicked");
         if result_tx.send(result).await.is_ok() {
             observer.record_output();
         }
