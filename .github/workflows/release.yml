@@ -49,26 +49,35 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # `asset_id` matches `$(uname -s | tr A-Z a-z)-$(uname -m)` on the
+          # host platform so that install scripts can use `uname` output
+          # directly without an arch/os normalization table. Note that macOS
+          # `uname -m` returns `arm64` (not `aarch64`).
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             ext: ''
             archive: tar.gz
+            asset_id: linux-x86_64
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm     # native ARM runner; no `*-latest` alias exists
             ext: ''
             archive: tar.gz
+            asset_id: linux-aarch64
           - target: aarch64-apple-darwin
             os: macos-latest         # `macos-latest` is Apple Silicon since macos-14
             ext: ''
             archive: tar.gz
+            asset_id: darwin-arm64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             ext: '.exe'
             archive: zip
+            asset_id: windows-x86_64
           - target: aarch64-pc-windows-msvc
             os: windows-11-arm       # native ARM Windows runner; no `*-latest` alias
             ext: '.exe'
             archive: zip
+            asset_id: windows-aarch64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -91,7 +100,7 @@ jobs:
       - name: Stage artifacts
         shell: bash
         run: |
-          name="wado-${{ needs.validate.outputs.tag }}-${{ matrix.target }}"
+          name="wado-${{ needs.validate.outputs.tag }}-${{ matrix.asset_id }}"
           mkdir -p "dist/$name"
           cp "target/${{ matrix.target }}/release/wado${{ matrix.ext }}" "dist/$name/"
           cp LICENSE README.md "dist/$name/"
