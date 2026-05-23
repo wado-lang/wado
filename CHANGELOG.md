@@ -1,6 +1,7 @@
 # Changelog
 
 ## [v0.0.5](https://github.com/wado-lang/wado/compare/v0.0.4...v0.0.5) - 2026-05-23
+
 - Fix SROA regression on pattern-destructured bindings (#1158 follow-up) by @gfx in https://github.com/wado-lang/wado/pull/1159
 - refactor(stdlib): replace manual element-copy loops with builtin::array_copy by @gfx in https://github.com/wado-lang/wado/pull/1161
 - ci(release): rename assets to `<os>-<arch>` matching `uname` output by @gfx in https://github.com/wado-lang/wado/pull/1164
