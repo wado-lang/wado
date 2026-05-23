@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779507858148,
+  "lastUpdate": 1779510442483,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24873,6 +24873,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e46fbd8307285aca69ba56f87b51633c6606d475"
         },
         "date": 1779507857699,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6bc81d9cc58d799109e0c71e060f97a092df01ac",
+          "message": "Merge pull request #1156 from wado-lang/claude/release-workflow-immutable-assets-Y1sCb\n\nfix: create tagpr release as draft so release.yml can upload assets",
+          "timestamp": "2026-05-23T13:20:48+09:00",
+          "tree_id": "d4203e3ef420550a63abcfb5e4fdce298898a899",
+          "url": "https://github.com/wado-lang/wado/commit/6bc81d9cc58d799109e0c71e060f97a092df01ac"
+        },
+        "date": 1779510442223,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
