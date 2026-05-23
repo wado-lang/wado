@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779531145627,
+  "lastUpdate": 1779568793234,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25093,6 +25093,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cc56fdc1412a749610b984f78be558c490fe902d"
         },
         "date": 1779531145321,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17246,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 462125,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "409907d6e24564776c899f44f15e376f8c6c67fe",
+          "message": "Merge pull request #1164 from wado-lang/claude/zealous-cray-34cZp\n\nci(release): rename assets to `<os>-<arch>` matching `uname` output",
+          "timestamp": "2026-05-24T05:33:30+09:00",
+          "tree_id": "6ac1e3d19648ef0623b9a3f62a6fdf36d7fb493f",
+          "url": "https://github.com/wado-lang/wado/commit/409907d6e24564776c899f44f15e376f8c6c67fe"
+        },
+        "date": 1779568792772,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
