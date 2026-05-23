@@ -1649,18 +1649,19 @@ fn print_three_axis(totals: &PackageTotals, duration: Option<&str>) {
         println!("{todo_line}");
     }
     if let Some(d) = duration {
-        println!("({d})");
+        println!("(wall: {d})");
     }
 }
 
-/// Render a stage's wall-time tag for the summary line. Returns an
-/// empty string when the stage did no work (so the line stays clean for
-/// e.g. `--no-run`, where load and execute report zero).
+/// Render a stage's cumulative-work-time tag for the summary line —
+/// `Σ worker_duration` for the stage, NOT a wall-clock span. Returns
+/// an empty string when the stage did no work (so the line stays
+/// clean for e.g. `--no-run`, where load and execute report zero).
 fn format_stage_duration(d: Duration) -> String {
     if d.is_zero() {
         String::new()
     } else {
-        format!("  [{}]", format_duration(d))
+        format!("  [cpu: {}]", format_duration(d))
     }
 }
 
@@ -2050,7 +2051,7 @@ pub async fn run(opts: TestOptions) {
         println!("=== aggregate ===");
         print_three_axis(&grand, Some(&total_dur));
     } else {
-        println!("({total_dur})");
+        println!("(wall: {total_dur})");
     }
 
     if grand.compile_failed > 0
