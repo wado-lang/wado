@@ -1,10 +1,10 @@
 //! Owning, immutable-fold-style AST transformer.
 //!
-//! Provides the [`AstFolder`] trait used by desugar-style passes that need to
-//! rewrite parts of the AST while keeping the surrounding structure intact
-//! (namespace stripping, assert lowering, future desugar dismantlement steps).
-//! Splitting this out of `ast.rs` keeps the type-definition module focused on
-//! the AST node shapes themselves.
+//! [`AstFolder`] is the recursion skeleton used by desugar passes that
+//! rewrite parts of the AST while keeping the surrounding structure
+//! intact. Implementers override only the `fold_*` methods for the
+//! kinds they care about; everything else passes through via
+//! `default_fold_*`.
 
 use crate::ast::{
     Block, Condition, ConditionElement, Expr, Function, Item, Literal, LiteralExpr, MatchArm,

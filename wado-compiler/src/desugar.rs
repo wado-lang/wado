@@ -1,12 +1,23 @@
-// Desugaring pass for Wado AST
-//
-// Transforms high-level AST constructs to simpler forms for codegen:
-// - CompoundAssignExpr (x += y) → AssignExpr (x = x + y)
-// - ComparisonChainExpr (a < b < c) → BinaryExpr chain ((a < b) && (b < c))
-//
-// `assert` is preserved by this phase; the power-assert expansion lives in
-// `resolver::Resolver::lower_assert`, which keeps the source AST untouched so
-// LSP queries land on the user's original `assert cond, msg;` text.
+//! AST→AST desugaring of the parsed surface syntax. The output AST is
+//! what the resolver sees.
+//!
+//! What this phase desugars:
+//!
+//! - `CompoundAssignExpr` (`x += y`) → `AssignExpr` (`x = x + y`)
+//! - `while` / `for` / `for-of` loops → explicit `loop` + `break`
+//! - template strings → `Display`/`Inspect`-driven concatenation skeletons
+//! - `use … namespace` prefixes erased from idents and type names in
+//!   function / impl / trait / test / global bodies (see [`NsStripper`])
+//!
+//! What this phase deliberately leaves alone, deferring desugar to the
+//! resolver (which has typed sub-expressions to work with):
+//!
+//! - `assert cond[, msg];` → `Resolver::desugar_assert`
+//! - `expr matches { pat [&& guard] }` → `Resolver::desugar_matches_expr`
+//! - `a < b < c` (`Expr::ComparisonChain`) → `Resolver::desugar_comparison_chain`
+//!
+//! Keeping those three in the AST also means LSP queries (hover,
+//! jump-to-def, references) land on the user's text as written.
 
 use crate::ast::{
     AssignExpr, AstId, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ClosureExpr,
@@ -336,12 +347,9 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
         Stmt::While(w) => desugar_while(w, ctx),
         Stmt::For(f) => desugar_for(f, ctx),
         Stmt::ForOf(f) => desugar_for_of(f, ctx),
-        // Assert is preserved verbatim through desugar; both the
-        // condition and the optional message reach the resolver as the
-        // user wrote them. `resolver::Resolver::lower_assert` runs the
-        // power-assert expansion at TIR-lowering time, using the raw
-        // condition for the failure message and the resolver's native
-        // handlers for `matches` / `ComparisonChain` / `CompoundAssign`.
+        // Desugared by `Resolver::desugar_assert`, which needs typed
+        // sub-expressions to pick the right `Inspect` impl for each
+        // power-assert capture.
         Stmt::Assert(a) => Stmt::Assert(a.clone()),
         Stmt::Loop(l) => {
             // Save and clear for_loop_labels - breaks inside this loop should
@@ -451,9 +459,9 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         // Desugar compound assignment: x += y → x = x + y
         Expr::CompoundAssign(ca) => desugar_compound_assign(ca),
 
-        // `a < b < c` is preserved through desugar; the resolver expands
-        // it natively in `Resolver::resolve_comparison_chain`. We still
-        // recurse into the operands so other Expr-level desugars apply.
+        // Desugared by `Resolver::desugar_comparison_chain` (cross-type
+        // literal coercion across the chain needs operand types). We
+        // still fold operands so other Expr-level rewrites apply.
         Expr::ComparisonChain(chain) => Expr::ComparisonChain(Box::new(ComparisonChainExpr {
             id: chain.id,
             first: desugar_expr(&chain.first),
@@ -653,11 +661,9 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 }))
             }
         }
-        // `matches` operator is preserved through desugar; its
-        // expansion to `match` runs at TIR-lowering time in
-        // `resolver::Resolver::resolve_matches_expr`, so LSP queries see
-        // `s matches { p }` as the user wrote it. We still recurse into
-        // the scrutinee / guard so other Expr-level desugars apply.
+        // Desugared by `Resolver::desugar_matches_expr` so LSP queries
+        // land on `s matches { p }` as written. We still fold the
+        // scrutinee / guard so other Expr-level rewrites apply.
         Expr::Matches(m) => Expr::Matches(Box::new(crate::ast::MatchesExpr {
             id: m.id,
             expr: desugar_expr(&m.expr),
@@ -1070,31 +1076,23 @@ fn desugar_for_of(f: &ForOfStmt, ctx: &mut DesugarContext) -> Stmt {
     })
 }
 
-/// Second pass: strip `use … namespace` prefixes from identifiers, types,
-/// patterns, and struct-literal names so the resolver sees the canonical
-/// (unprefixed) name. Implemented as an [`AstFolder`] so the structural
-/// recursion through every node kind is generated once by
-/// `default_fold_*`; this struct only overrides the leaf nodes where a
-/// name actually needs stripping.
+/// Strip `use … namespace` prefixes from identifiers, types, patterns,
+/// and struct-literal names so the resolver sees the canonical
+/// (unprefixed) name.
 ///
-/// Selectivity at the item level mirrors the historical
-/// `strip_ns_from_item`: only Function / Impl / Trait / Test / Global
-/// bodies are visited. Struct / Enum / Variant / etc. field types are
-/// left untouched because the resolver already accepts the prefixed
-/// form for those declarations. This selectivity is pinned by the
-/// `ns_stripper_only_visits_function_and_global_bodies` unit test —
-/// any future "just delegate to `default_fold_item`" refactor would
-/// break that test.
+/// Only Function / Impl / Trait / Test / Global bodies are visited; the
+/// other item shapes (`Struct` / `Enum` / `Variant` / `Newtype` /
+/// `Flags` / `TupleTypeDecl` / `Use` / `Interface` / `Resource` /
+/// `World`) pass through unchanged because the resolver accepts the
+/// prefixed form when looking up those declarations directly. The
+/// selectivity is pinned by
+/// `tests::ns_stripper_only_visits_function_and_global_bodies`.
 ///
-/// Within the bodies that *are* visited, recursion is more thorough
-/// than the historical hand-rolled `strip_ns_from_expr`: the
-/// `default_fold_expr` defaults reach into `Closure` parameter
-/// defaults, `WithHandler` effect types, and `Pattern::Or` arms — all
-/// places where the old code stopped early. The expansion is
-/// behaviour-preserving for every existing namespace fixture (no
-/// regressions in e2e) and arguably a fix for the corners where a
-/// `use ns namespace` would previously have surfaced an "unknown
-/// name" diagnostic.
+/// Within the visited bodies the recursion is exhaustive — the
+/// `default_fold_*` defaults reach into `Closure` parameter defaults,
+/// `WithHandler` effect types, function param defaults, `Pattern::Or`
+/// arms, and so on — so any unprefixed reference the resolver can
+/// reach is reachable from here too.
 struct NsStripper {
     namespace_names: Vec<String>,
 }
@@ -1146,9 +1144,8 @@ impl NsStripper {
 
 impl AstFolder for NsStripper {
     fn fold_item(&mut self, item: Item) -> Item {
-        // Mirrors the original `strip_ns_from_item`: only recurse into the
-        // items that have user-written expressions / statements / types
-        // exposed to namespace use.
+        // Selective override of `default_fold_item` — see the type-level
+        // doc for which item shapes are visited and why.
         match item {
             Item::Function(f) => Item::Function(self.fold_function(f)),
             Item::Impl(mut i) => {
@@ -1181,22 +1178,6 @@ impl AstFolder for NsStripper {
             }
             other => other,
         }
-    }
-
-    fn fold_function(&mut self, mut f: Function) -> Function {
-        for param in &mut f.params {
-            let ty = std::mem::replace(&mut param.ty, Type::Tuple(Vec::new()));
-            param.ty = self.fold_type(ty);
-            // Param defaults intentionally left untouched (matches historical
-            // strip_ns_from_function behavior).
-        }
-        if let Some(ret) = f.return_type.take() {
-            f.return_type = Some(self.fold_type(ret));
-        }
-        if let Some(body) = f.body.take() {
-            f.body = Some(self.fold_block(body));
-        }
-        f
     }
 
     fn fold_expr(&mut self, expr: Expr) -> Expr {
@@ -1349,12 +1330,10 @@ mod tests {
         }
     }
 
-    /// `NsStripper` must strip `<ns>::foo` (single `Ident` with a
-    /// prefix in its name string) inside Function / Test / Global
-    /// bodies, but must NOT recurse into `Struct` / `Enum` / `Variant`
-    /// items — that's the historical selectivity the resolver relies on
-    /// and the reason `fold_item` is overridden rather than delegating
-    /// to `default_fold_item`.
+    /// Pins [`NsStripper`]'s item-level selectivity: `<ns>::foo` is
+    /// stripped inside Function / Test / Global bodies, but kept inside
+    /// `Struct` / `Enum` / `Variant` fields. A regression that lets
+    /// `fold_item` delegate to `default_fold_item` would break this.
     #[test]
     fn ns_stripper_only_visits_function_and_global_bodies() {
         use crate::ast::Function;

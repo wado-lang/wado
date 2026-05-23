@@ -1,12 +1,12 @@
-//! AST→TIR lowering for `assert` statements.
+//! Desugar `assert` at TIR-lowering time into a power-assert-style
+//! expansion:
 //!
-//! `assert cond[, msg];` becomes (conceptually):
 //! ```text
-//! {
+//! __assert_N: {
 //!     let __v0 = <intermediate0>;
 //!     let __v1 = <intermediate1>;
 //!     ...
-//!     let __cond = <reconstructed condition>;
+//!     let __cond = <rewritten condition>;
 //!     if !__cond {
 //!         panic(`Assertion failed in {#function} at {#file}:{#line}[: msg]
 //! condition: <source>
@@ -16,14 +16,13 @@
 //! }
 //! ```
 //!
-//! Each captured sub-expression is bound once so that side-effecting sub-terms
-//! evaluate exactly once even when they appear multiple times in `cond` or in
-//! enclosing expressions.
+//! Interesting sub-expressions of `cond` are captured into `__vK` locals
+//! that the rewritten condition (and the failure-message lines) refer
+//! to, so side-effecting sub-terms evaluate exactly once.
 //!
-//! Implementation: the capture-and-rewrite pass is driven by [`AstFolder`].
-//! `default_fold_expr` handles structural recursion through every `Expr`
-//! variant, so adding a new variant to the AST is a compile-error rather than
-//! a silent miss in the assert lowering.
+//! The capture walk is an [`AstFolder`] — `default_fold_expr` covers
+//! every `Expr` variant structurally, so a newly added variant trips
+//! the compiler before it can silently miss capture.
 
 use crate::ast::{
     self, AssertStmt, AstId, Block, CallExpr, Condition, Expr, ExprStmt, FormatSpec, IdentExpr,
@@ -39,57 +38,43 @@ use super::Resolver;
 use super::types::FunctionContext;
 
 impl<H: CompilerHost> Resolver<'_, H> {
-    /// Lower an `assert` AST statement to a sequence of TIR statements.
-    ///
-    /// The AST `assert` is preserved verbatim upstream (parser → bind →
-    /// annotate); the expansion only happens here at TIR-lowering time so that
-    /// LSP queries see the user's `assert cond, msg;` as-written.
-    pub(super) fn lower_assert(
+    /// Desugar `assert cond[, msg];` into TIR. See the module doc for
+    /// the expansion shape.
+    pub(super) fn desugar_assert(
         &mut self,
         assert_stmt: &AssertStmt,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
         let span = assert_stmt.span;
 
-        // Every synthetic AST node produced by this expansion uses one
-        // shared `AstId` allocated above `Module::ast_id_count()`. That
-        // keeps the synthetic id disjoint from every parser-allocated id,
-        // so any `record_reference_opt` / `record_local_symbol` writes
-        // routed through it are unreachable from `Annotated::ast_id_at`
-        // — LSP queries that translate a cursor position to an `AstId`
-        // never see this id, and therefore never see the synthetic
-        // entries.
-        //
-        // Sharing one id across the synthetic nodes (instead of one per
-        // node) is fine because those collisions are themselves
-        // unreachable from LSP for the same reason.
+        // One synthetic `AstId` shared by every node this expansion
+        // creates. Allocated above the module's parser range, so
+        // `record_reference_opt` / `record_local_symbol` entries keyed
+        // on it are unreachable from `Annotated::ast_id_at` and never
+        // pollute LSP cursor → AstId lookups. Sharing one id across
+        // multiple nodes is safe for the same reason — the collisions
+        // are unreachable too.
         let synth_id = self.alloc_synth_ast_id(ctx);
 
-        // Power-assert capture: rewrite the condition so each interesting
-        // sub-expression is replaced by a fresh `__vK` identifier, with a
-        // matching `(source_text, expr)` pair recorded for later let binding.
-        // The captured `value` keeps the user's original `AstId`s, so
-        // resolving it still records use→def edges for the user's idents
-        // exactly as if no rewrite had happened.
+        // Walk the condition: select sub-expressions to capture and
+        // rewrite each in place to `Ident(__vK)`. The captured `value`
+        // keeps the user's original `AstId`s so the use→def edges for
+        // the user's idents still get recorded.
         let mut capture = CaptureFolder::new(synth_id);
         let rewritten_condition = capture.fold_condition_expr(assert_stmt.condition.clone());
         let captures = capture.finish();
 
-        // Allocate a fresh scope for the synthetic locals so they fall out
-        // of `ctx.scopes` when this expansion finishes.
+        // Scope the synthetic locals to this expansion.
         ctx.enter_scope();
         let mut inner_stmts: Vec<TirStmt> = Vec::with_capacity(captures.len() + 2);
 
-        // Emit each captured intermediate as a TIR `Let` directly.
-        //
-        // We deliberately skip `Resolver::resolve_let` here, for two reasons:
-        // 1. We pass `defining_ast_id: None` to `add_local`, so synthetic
-        //    locals do not register `local_symbols` entries keyed on
-        //    `assert_stmt.id` — that would shadow the assert in LSP queries
-        //    such as `Annotated::symbol_at(assert_stmt.id)`.
-        // 2. We never synthesise a `Pattern::Ident { id: synth_id, … }`,
-        //    so no `record_local_symbol` / `record_reference_opt` writes
-        //    are made against `synth_id` either.
+        // Emit each captured intermediate as a `TirStmt::Let` directly,
+        // bypassing `resolve_let` so:
+        //  - `add_local` receives `defining_ast_id = None` and skips
+        //    the `local_symbols` insert that would otherwise key on
+        //    `synth_id` and shadow other entries via LSP queries; and
+        //  - we never synthesise a `Pattern::Ident` whose id would
+        //    trigger `record_local_symbol` / `record_reference_opt`.
         for cap in &captures {
             let value_tir = self.resolve_expr(&cap.value, ctx, None);
             let type_id = value_tir.type_id;
@@ -108,12 +93,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ));
         }
 
-        // `let __cond = <rewritten condition>;` — resolved without a type
-        // expectation so the condition's natural shape decides typing
-        // (matches the historic `let __cond = …;` synthesised by desugar).
-        // A `bool` expectation here would propagate into branch types of
-        // `Expr::If` / `Expr::Match` etc. and break conditions that
-        // contain those constructs.
+        // `let __cond = <rewritten condition>;`. We pass `None` for
+        // the expected type: a `bool` expectation here would propagate
+        // into branch types of an `Expr::If` / `Expr::Match` inside
+        // the condition and reject valid asserts whose branches
+        // produce a non-bool value compared against something else.
         let cond_tir = self.resolve_expr(&rewritten_condition, ctx, None);
         let cond_type = cond_tir.type_id;
         let cond_name = "__cond".to_string();
@@ -132,10 +116,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ));
 
         // `if !__cond { panic(<template>); }` — synthesised as AST and
-        // routed through `resolve_stmt`. The block has no `let`, so the
-        // symbol-pollution concern above does not apply here. We rely on
-        // the standard `resolve_ident` lookup of `__cond` and the
-        // template-string + `panic` resolution paths.
+        // routed through `resolve_stmt`. No `let` lives inside, so the
+        // symbol-pollution concern above does not apply; the standard
+        // ident lookup of `__cond` and the template-string + `panic`
+        // resolution paths take over.
         let panic_message = build_panic_message(assert_stmt, &captures, synth_id, span);
         let panic_call = Expr::Call(Box::new(CallExpr {
             id: synth_id,
@@ -181,10 +165,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         ctx.exit_scope();
 
-        // Wrap the whole expansion in a labeled block. The label uses a
-        // per-function serial counter so the Nth assert in a function is
-        // `__assert_{N-1}` — short, monotonic, and matches the historical
-        // desugar output that downstream WIR dumps assume.
+        // `__assert_N` — one labeled block per assert, numbered in
+        // source order within the enclosing function. The label
+        // scopes any future `break __assert_N` and keeps the synthetic
+        // locals named predictably in WIR dumps.
         let assert_serial = ctx.next_assert_id;
         ctx.next_assert_id += 1;
         vec![TirStmt::new(
@@ -208,9 +192,9 @@ struct Capture {
     value: Expr,
 }
 
-/// `AstFolder` that rewrites a condition expression in place, collecting
-/// every interesting sub-expression as a `Capture` and replacing it with a
-/// reference to a freshly-named `__vK` local.
+/// Walks a condition expression, replacing each captured sub-expression
+/// in place with `Ident(__vK)` and recording the original (pre-rewrite)
+/// source text and value in [`Capture`] entries.
 struct CaptureFolder {
     synth_id: AstId,
     captures: Vec<Capture>,
@@ -218,14 +202,15 @@ struct CaptureFolder {
     /// sub-expressions share one `__vK` so the failure message stays terse
     /// and we do not re-evaluate identical sub-terms.
     seen: IndexMap<String, usize>,
-    /// `true` only for the outermost call (the condition itself). Root nodes
-    /// of "captureable container" kinds (Binary, Unary) are not captured —
-    /// they reduce to `__cond` anyway.
+    /// `true` only for the outermost call (the condition itself). The
+    /// root `Binary` / `Unary` is not captured because it would just
+    /// duplicate `__cond`.
     is_root: bool,
-    /// `true` while descending into `Call` / `MethodCall` / `StaticMethodCall` args.
-    /// Bare-`Ident` args in this position are function-reference coercions; we
-    /// must not extract them into `let __vK = name;` (the inferencer would
-    /// see `unknown` for the binding and break dispatch).
+    /// `true` while descending into `Call` / `MethodCall` /
+    /// `StaticMethodCall` arguments. A bare `Ident` in that position
+    /// is a function-reference coercion site; extracting it into
+    /// `let __vK = name;` loses the coercion context and the
+    /// inferencer would see `unknown` for the binding.
     in_call_arg: bool,
 }
 
@@ -278,8 +263,8 @@ impl CaptureFolder {
 
 impl AstFolder for CaptureFolder {
     fn fold_expr(&mut self, expr: Expr) -> Expr {
-        // Snapshot the original source BEFORE folding children, otherwise the
-        // captured text would already contain `__vK` references.
+        // Snapshot the original source before folding children — the
+        // captured text must read in the user's words, not `__vK`.
         let original_source = unparse_expr_simple(&expr);
         let span = expr.span();
         let is_root = std::mem::replace(&mut self.is_root, false);
@@ -288,7 +273,7 @@ impl AstFolder for CaptureFolder {
         match expr {
             Expr::Ident(ident) => {
                 if in_call_arg {
-                    // Bare-ident call arg: function-reference coercion.
+                    // Function-reference coercion site — leave as-is.
                     return Expr::Ident(ident);
                 }
                 self.capture(ident.name.clone(), Expr::Ident(ident), span)
@@ -301,22 +286,22 @@ impl AstFolder for CaptureFolder {
                 self.capture(original_source, rewritten, span)
             }
             Expr::Unary(u) => {
-                // Skip negated numeric literals: extracting them into an
-                // intermediate breaks bidirectional coercion (e.g. an
-                // `i64 == -50` site needs `-50` typed as `i64`, not `i32`).
+                // Skip negated numeric literals: capturing them breaks
+                // bidirectional coercion (e.g. `i64 == -50` needs `-50`
+                // typed as `i64`, not `i32`).
                 if u.op == UnaryOp::Neg
                     && matches!(&u.expr, Expr::Literal(lit) if matches!(&lit.value, Literal::Number(_)))
                 {
                     return Expr::Unary(u);
                 }
-                // `&fn_name` is the function-reference coercion; extracting
-                // either it or its operand loses the coercion context.
+                // `&fn_name` is the function-reference coercion;
+                // capturing either it or its operand loses the context.
                 if u.op == UnaryOp::Ref && matches!(&u.expr, Expr::Ident(_)) {
                     return Expr::Unary(u);
                 }
-                // `&mut <expr>` requires a mutable lvalue; a fresh
-                // `let __v = <expr>` is immutable, so the reconstructed
-                // `&mut __v` would fail to typecheck.
+                // `&mut <expr>` requires a mutable lvalue; an
+                // immutable `let __v = <expr>` would make the
+                // reconstructed `&mut __v` reject at typecheck.
                 if u.op == UnaryOp::MutRef {
                     return Expr::Unary(u);
                 }
@@ -327,10 +312,10 @@ impl AstFolder for CaptureFolder {
                 self.capture(original_source, rewritten, span)
             }
             Expr::Call(mut c) => {
-                // Callee stays untouched: it is almost always a bare function
-                // identifier and recursing through it would either capture it
-                // (as a useless intermediate) or convert a direct call into an
-                // indirect one.
+                // Callee stays untouched: it is almost always a bare
+                // function ident, and capturing it would either
+                // produce a useless intermediate or turn a direct
+                // call into an indirect one.
                 c.args = c
                     .args
                     .into_iter()
@@ -343,8 +328,13 @@ impl AstFolder for CaptureFolder {
                 self.capture(original_source, rewritten, span)
             }
             Expr::MethodCall(mut m) => {
-                // Receiver recursion is deferred (see desugar's notes on
-                // `Inspect` / `Fn<…>` dispatch gaps).
+                // Receiver recursion is intentionally skipped:
+                // extracting `<recv>` into a temp forces auto-derived
+                // `Inspect` on the receiver's type, which trips
+                // unrelated gaps (`Fn<…>` and CM resource handles
+                // have no `Inspect`; receiver-module-dispatch keyed
+                // by bare mangled name confuses same-name generics
+                // across modules).
                 m.args = m
                     .args
                     .into_iter()
@@ -369,14 +359,15 @@ impl AstFolder for CaptureFolder {
                 self.capture(original_source, rewritten, span)
             }
             Expr::FieldAccess(_) | Expr::Index(_) => {
-                // Receiver / index recursion deferred to a later step (mirrors
-                // current MethodCall behavior). Capture the access whole.
+                // Receiver / index recursion deferred (same reason as
+                // `MethodCall`): capture the access whole.
                 self.capture(original_source, expr, span)
             }
-            // Other expressions are left as leaves for the power-assert
-            // walk: they are not captured, and their children are not
-            // recursed into. This intentionally mirrors the historical
-            // desugar so the failure-message shape stays stable.
+            // Every other `Expr` variant is treated as an opaque leaf:
+            // it is neither captured nor recursed into. This keeps
+            // the failure-message shape predictable on shapes (`If`,
+            // `Match`, `Closure`, …) whose children are not
+            // meaningfully inspectable in isolation.
             _ => expr,
         }
     }
@@ -423,8 +414,8 @@ fn build_panic_message(
         });
     }
 
-    // The condition reaches lower_assert unmodified by desugar, so its
-    // printout reads in the user's own words (`s matches { p }`,
+    // The condition reaches `desugar_assert` unmodified, so its
+    // printout reads in the user's words (`s matches { p }`,
     // `a < b < c`, …) rather than the resolver-internal expansion.
     let condition_source = unparse_expr_simple(&assert_stmt.condition);
     parts.push(TemplatePart::String(format!(

@@ -98,7 +98,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt, ctx)],
             Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt)],
-            Stmt::Assert(a) => self.lower_assert(a, ctx),
+            Stmt::Assert(a) => self.desugar_assert(a, ctx),
             Stmt::LabeledBlock(labeled_block) => {
                 vec![self.resolve_labeled_block(labeled_block, ctx)]
             }

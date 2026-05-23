@@ -188,7 +188,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.resolve_struct_literal(struct_lit, ctx, expected_type)
             }
             Expr::CompoundAssign(compound) => self.resolve_compound_assign(compound, ctx),
-            Expr::ComparisonChain(chain) => self.resolve_comparison_chain(chain, ctx),
+            Expr::ComparisonChain(chain) => self.desugar_comparison_chain(chain, ctx),
             Expr::TupleLiteral(tuple_lit) => {
                 self.resolve_tuple_literal(tuple_lit, ctx, expected_type)
             }
@@ -274,7 +274,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     lb.span,
                 )
             }
-            Expr::Matches(m) => self.resolve_matches_expr(m, ctx, expected_type),
+            Expr::Matches(m) => self.desugar_matches_expr(m, ctx, expected_type),
             Expr::Spread(..) => {
                 panic!("Spread expression should only appear inside TupleLiteral handling")
             }

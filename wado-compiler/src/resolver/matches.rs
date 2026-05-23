@@ -1,11 +1,10 @@
-//! AST→TIR lowering for the `matches` operator.
+//! Desugar the `matches` operator at TIR-lowering time.
 //!
-//! `s matches { p [&& guard] }` is preserved by the desugar phase and
-//! expanded here, at type-resolution time, into the equivalent
+//! `s matches { p [&& guard] }` is synthesised as
 //! `match s { p => guard_or_true, _ => false }` and routed through
-//! [`Resolver::resolve_match_expr`]. Keeping the AST `MatchesExpr` until
-//! TIR lowering means LSP queries (hover, jump-to-def, references) land on
-//! the user's `matches` text as-written instead of on a synthetic match arm.
+//! [`Resolver::resolve_match_expr`]. Keeping the AST `MatchesExpr`
+//! until here means LSP queries (hover, jump-to-def, references) land
+//! on the user's `matches` text rather than on a synthetic match arm.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
@@ -15,15 +14,14 @@ use super::Resolver;
 use super::types::FunctionContext;
 
 impl<H: CompilerHost> Resolver<'_, H> {
-    /// Expand a `matches` expression into its `match`-shaped equivalent and
-    /// resolve it. The expansion mirrors the historical desugar in
-    /// `desugar::desugar_matches_expr`:
+    /// Desugar `matches` into its `match`-shaped equivalent and resolve:
     ///
     /// - No guard: `s matches { p }` → `match s { p => true, _ => false }`
     /// - Guarded:  `s matches { p && g }` → `match s { p => g, _ => false }`
-    ///   (the guard expression becomes the arm body; if it returns `false`
-    ///   the overall expression is `false`, matching the original semantics.)
-    pub(super) fn resolve_matches_expr(
+    ///
+    /// When the pattern matches, the arm body returns the guard's value
+    /// (or `true` if absent); the wildcard arm returns `false`.
+    pub(super) fn desugar_matches_expr(
         &mut self,
         m: &ast::MatchesExpr,
         ctx: &mut FunctionContext,
