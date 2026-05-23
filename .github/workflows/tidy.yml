@@ -56,10 +56,8 @@ jobs:
       # committed caches in sync, mirroring how WIR golden fixtures are handled.
       # `--no-run` skips the wasmtime execution phase — Phase 1 (compile) is all
       # that's needed to rewrite each `<primary>.kiln.json`, and the actual Gale
-      # test matrix already runs in `ci.yml`. -O0 minimises compile time; the
-      # kiln cache is the generator's output and is independent of the
-      # optimization level used to compile consumers.
-      - run: ./target/debug/wado test --no-run -O0 package-gale
+      # test matrix already runs in `ci.yml`.
+      - run: ./target/debug/wado test --no-run package-gale
       - run: mise run format
 
       - name: Commit and push changes
