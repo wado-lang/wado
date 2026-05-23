@@ -365,6 +365,34 @@ fn test_test_compile_failure_reported_on_compile_axis() {
 }
 
 #[test]
+fn test_test_no_run_skips_phase_two() {
+    // `--no-run` must (a) compile the file successfully — Phase 1 still
+    // runs, which is where Kiln caches get refreshed; (b) skip the
+    // wasmtime execution phase so the two tests in `test_decl.wado` do
+    // not run; (c) exit 0. The compile axis shows 1 ok and the test
+    // axis shows zero passes.
+    wado()
+        .args([
+            "test",
+            "--no-run",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("compile: 1 ok, 0 failed"))
+        .stdout(predicate::str::contains("test:    0 passed, 0 failed"));
+}
+
+#[test]
+fn test_test_no_run_help_lists_flag() {
+    wado()
+        .args(["test", "--help"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("--no-run"));
+}
+
+#[test]
 fn test_test_filter_drops_non_matching_path() {
     // No path matches the pattern, so no test files remain to run.
     wado()

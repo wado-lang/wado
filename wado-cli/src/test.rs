@@ -44,6 +44,11 @@ pub struct TestOptions {
     pub allocator: Option<String>,
     /// Preopened directories as `(host_path, guest_path)` pairs.
     pub preopened_dirs: Vec<(String, String)>,
+    /// `true` when `--no-run` is set: compile every discovered file
+    /// (which still writes `<primary>.kiln.json` as a side-effect of the
+    /// compile pipeline) but skip Phase 2 — the wasmtime execution.
+    /// Mirrors `cargo test --no-run`.
+    pub no_run: bool,
 }
 
 impl TestOptions {
@@ -83,6 +88,7 @@ enum Opt {
     Allocator,
     Dir,
     NoDir,
+    NoRun,
     Help,
 }
 
@@ -98,6 +104,7 @@ impl Opt {
         Self::Allocator,
         Self::Dir,
         Self::NoDir,
+        Self::NoRun,
         Self::Help,
     ];
 
@@ -128,6 +135,12 @@ impl Opt {
             Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Dir => args::DIR_SPEC,
             Self::NoDir => args::NO_DIR_SPEC,
+            Self::NoRun => args::OptSpec {
+                long: Some("no-run"),
+                short: None,
+                value: None,
+                desc: "Compile (and refresh Kiln caches) but skip the wasmtime execution phase",
+            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -353,6 +366,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
     let mut explicit_dirs = false;
     let mut no_dir = false;
+    let mut no_run = false;
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
@@ -391,6 +405,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                     explicit_dirs = true;
                 }
                 Opt::NoDir => no_dir = true,
+                Opt::NoRun => no_run = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -471,6 +486,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         opt_iterations,
         allocator,
         preopened_dirs,
+        no_run,
     })
 }
 
@@ -1214,6 +1230,7 @@ async fn run_one_package(
     preopened_dirs: Arc<Vec<(String, String)>>,
     overall_start: Instant,
     show_banner: bool,
+    no_run: bool,
 ) -> Result<PackageTotals> {
     if show_banner {
         println!();
@@ -1241,6 +1258,23 @@ async fn run_one_package(
         // Still emit the three-axis summary so the compile total is visible.
         let totals = PackageTotals {
             compile_ok,
+            ..PackageTotals::default()
+        };
+        println!();
+        print_three_axis(&totals, None);
+        return Ok(totals);
+    }
+
+    // `--no-run`: Phase 1 already wrote each test fixture's
+    // `<primary>.kiln.json` via the compile pipeline, which is the whole
+    // point of the flag. Skip Phase 2 and report a compile-only summary;
+    // `compile_failed` (if any) still propagates, so a stale-cache run
+    // that fails to compile is not silently swallowed.
+    if no_run {
+        print_compile_failures_section(&compile_failures);
+        let totals = PackageTotals {
+            compile_ok,
+            compile_failed,
             ..PackageTotals::default()
         };
         println!();
@@ -1337,6 +1371,7 @@ pub async fn run(opts: TestOptions) {
     let multi_pkg = opts.package_runs.len() > 1;
     let flags = Arc::new(opts.compile_flags());
     let jobs = opts.jobs;
+    let no_run = opts.no_run;
     let package_runs = opts.package_runs;
     let preopened_dirs = Arc::new(opts.preopened_dirs);
 
@@ -1358,6 +1393,7 @@ pub async fn run(opts: TestOptions) {
             preopened_dirs.clone(),
             overall_start,
             multi_pkg,
+            no_run,
         )
         .await
         {
