@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779526693225,
+  "lastUpdate": 1779531145627,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25069,6 +25069,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cc56fdc1412a749610b984f78be558c490fe902d",
+          "message": "Merge pull request #1161 from wado-lang/claude/stdlib-array-copy-refactor-evkY8\n\nrefactor(stdlib): replace manual element-copy loops with builtin::array_copy",
+          "timestamp": "2026-05-23T19:06:22+09:00",
+          "tree_id": "df5966866aaf9beb4f8eef8289319e2edc316733",
+          "url": "https://github.com/wado-lang/wado/commit/cc56fdc1412a749610b984f78be558c490fe902d"
+        },
+        "date": 1779531145321,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17246,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 462125,
             "unit": "bytes"
           }
         ]
