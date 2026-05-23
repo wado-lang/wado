@@ -102,6 +102,7 @@ if [ -n "$CLAUDE_ENV_FILE" ]; then
 export PATH="$HOME/.local/bin:$PATH"
 export MISE_YES=true
 export MISE_TRUSTED_CONFIG_PATHS="$HOME:$PWD"
+export MISE_GITHUB_TOKEN=$(gh auth token)
 eval "$(mise activate bash)"
 EOF
     log "Environment persisted to CLAUDE_ENV_FILE"
