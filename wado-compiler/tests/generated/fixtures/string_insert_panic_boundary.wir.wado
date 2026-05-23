@@ -423,28 +423,12 @@ condition: self.is_char_boundary(byte_index)
 fn "core:prelude/string.wado/String::insert_unchecked"(self, byte_index, ch) {
     let char_len: i32;
     let new_used: i32;
-    let i: i32;
-    let _licm_repr_7: ref builtin::array<u8>;
     char_len = "core:prelude/primitive.wado/char::len_utf8"(ch);
     new_used = self.used + char_len;
     if new_used > builtin::array_len(self.repr) {
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
-    i = self.used - 1;
-    _licm_repr_7 = self.repr;
-    b33: block {
-        l34: loop {
-            if i < byte_index {
-                break b33;
-            }
-            builtin::array_set_u8(_licm_repr_7, i + char_len, builtin::array_get_u8(_licm_repr_7, i));
-            if i == 0 {
-                break b33;
-            }
-            i = i - 1;
-            continue l34;
-        };
-    };
+    builtin::array_copy<u8>(self.repr, byte_index + char_len, self.repr, byte_index, self.used - byte_index);
     if ch <u 128 {
         builtin::array_set_u8(self.repr, byte_index, ch & 255);
     } else if ch <u 2048 {
@@ -470,13 +454,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l41: loop {
+            l37: loop {
                 if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l41;
+                continue l37;
             };
         };
     };
