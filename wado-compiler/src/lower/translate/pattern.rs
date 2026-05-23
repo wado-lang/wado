@@ -18,10 +18,12 @@ use crate::token::Span;
 /// value. When pattern lowering runs after `boxing::prepare_types`,
 /// the binding's reference type has been redefined to a `Box<T>`
 /// struct, so the coercion materialises a `Box<T>` struct literal
-/// rather than a `Ref` / `MutRef` unary — `boxing::lower_bodies`
-/// would have rewritten a raw `&value` the same way, but it has
-/// already run. A `value` that is itself a reference (a `Ref` /
-/// `MutRef`, or an already-boxed reference) is returned unchanged.
+/// rather than a `Ref` / `MutRef` unary — the fold's
+/// `try_boxing_ref` would have rewritten a raw `&value` the same way,
+/// but the pattern-lowered Let needs to land in that shape directly so
+/// that downstream NIR sees a uniform Box-literal at the binding site.
+/// A `value` that is itself a reference (a `Ref` / `MutRef`, or an
+/// already-boxed reference) is returned unchanged.
 fn coerce_value_to_binding(
     value: TirExpr,
     binding_type: TypeId,

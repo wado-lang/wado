@@ -1700,17 +1700,16 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                 // `ClosurePlan::specializable` and emits a raw
                 // `StructLiteral` for specialisable closure literals or
                 // a `ClosureToCanonical` wrap for the rest. Here we
-                // only assert the `functor_id` is present so downstream
+                // only check the `functor_id` is present so downstream
                 // passes can rely on every surviving `Closure` carrying
                 // a stable id; the body is never recursed into because
                 // its locals belong to the synthesized `__call`
                 // method's local-index namespace.
-                functor_id.unwrap_or_else(|| {
-                    panic!(
-                        "Closure node missing functor_id; the collect pass should assign it (span: {:?})",
-                        expr.span,
-                    )
-                });
+                assert!(
+                    functor_id.is_some(),
+                    "Closure node missing functor_id; the collect pass should assign it (span: {:?})",
+                    expr.span,
+                );
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.visit_expr(callee);

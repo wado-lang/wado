@@ -41,10 +41,13 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Result of value-copy planning.
 ///
-/// `name_for_type` is consumed by the TIR → NIR translator to rewrite
-/// `builtin::copy_value::<T>(x)` markers into direct calls to the
-/// `$value_copy$T<id>` helper functions registered in
-/// [`FlatPackage::functions`].
+/// `name_for_type` is consumed by the TIR → NIR translator at every
+/// wrap site to emit a direct call to the per-type `$value_copy$T<id>`
+/// helper function registered in [`FlatPackage::functions`]. The same
+/// map drives the marker rewrite in `convert_call` that handles
+/// `builtin::copy_value::<NestedT>(...)` markers inside synthesized
+/// helper bodies (the only place markers still appear after Phase A
+/// of WEP 2026-05-11 Step 5).
 pub struct ValueCopyPlan {
     pub name_for_type: IndexMap<TypeId, (ModuleSource, String)>,
 }
@@ -68,13 +71,13 @@ pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
 /// True when a value of `type_id` must be deep-copied on assignment or
 /// parameter passing.
 ///
-/// Shared between [`insert::insert_value_copy_calls`] (which decides
-/// where in user-program TIR to wrap expressions in
-/// `builtin::copy_value::<T>(x)`) and [`synthesize::make_field_copy`]
-/// (which decides whether a synthesized helper's per-field projection
-/// also needs to recurse into a nested value-typed struct). The two
-/// callers must agree: when this returns `true`,
-/// [`synthesize::generate_copy_function`] emits a `$value_copy$T<id>`
+/// Shared between [`analyze::should_wrap`] (which the fold and the
+/// seed walker consult to decide whether a wrap site needs a
+/// `$value_copy$T(...)` call) and `synthesize::make_field_copy` (which
+/// decides whether a synthesized helper's per-field projection also
+/// needs to recurse into a nested value-typed struct). The two callers
+/// must agree: when this returns `true`,
+/// `synthesize::generate_copy_function` emits a `$value_copy$T<id>`
 /// helper, and any caller — user code or another synthesized helper —
 /// must route through it. If we wrapped fields whose helper would be
 /// identity (`return v;`), the helper would still be typed at WIR

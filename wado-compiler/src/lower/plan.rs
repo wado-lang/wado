@@ -1,46 +1,52 @@
 //! Lower planner: gathers analysis facts and synthesized artefacts from
 //! TIR before [`translate`](super::translate::translate) walks TIR → NIR.
 //!
-//! The planner is allowed to mutate the input [`FlatPackage`] when the
-//! mutation is annotation-style (inserting `builtin::copy_value::<T>(...)`
-//! markers, pushing synthesized helper functions, rewriting `Closure` /
-//! `&primitive` nodes in place). The translator is purely a fold over
-//! TIR; everything that needs global analysis happens here.
+//! After WEP 2026-05-11 Step 5 Phases A/B/C, the planner's allowed
+//! mutations are confined to:
 //!
-//! Pattern lowering (`IfLet` / `LetDestructure` / or-patterns →
-//! explicit `Let` + `Match`) is no longer a `plan` sub-pass: it runs
-//! at the start of [`translate`](super::translate::translate), before
-//! the fold (WEP 2026-05-11 Phase 10 Step 2b — see
-//! [`translate::pattern`](super::translate::pattern)). String/bytes
-//! literal collection (`string`) likewise runs inside `translate`,
-//! *after* pattern lowering — pattern lowering synthesises
-//! string-literal expressions (string-literal pattern guards) that
-//! the data section must register.
+//! - **Type-table changes** — `boxing::prepare_types` redefines
+//!   `Ref` / `MutRef` `TypeId`s to `Box<T>` struct types.
+//! - **Additive synthesis** — `globals::extract` /
+//!   `build_initialize_modules`, the closure planner's
+//!   `__Closure_N` structs and `__call` methods, and
+//!   `value_copy::synthesize_helpers`'s `$value_copy$T` helpers.
+//! - **Per-function declaration-shape edits** —
+//!   `boxing::shadow_params` (parameter-shadow prelude `Let`s and
+//!   non-param address-taken local retags) and
+//!   `lift_mut::lift_mut_match_bindings` (pattern-bound `mut`
+//!   payload lift). Both touch `func.locals` / `func.body` at the
+//!   declaration level, not expression-shape rewrites.
+//!
+//! Every expression-shape rewrite (`&primitive` → `Box{...}`,
+//! `Local(addr-taken) → .value`, `*box → .value`,
+//! `Closure → StructLiteral`, value-copy wrap emission) happens in
+//! the fold. Pattern lowering (`IfLet` / `LetDestructure` /
+//! or-patterns → `Let` + `Match`) and string / bytes literal
+//! collection likewise run inside [`translate`](super::translate),
+//! *after* this planner finishes.
 //!
 //! Sub-pass order:
 //!
-//! 1. `globals::extract` — extract non-constant initializers into a
-//!    per-module `__initialize_module` function (one per source
-//!    module; disambiguated by `module_source`).
+//! 1. `globals::extract` — move non-constant initializers into
+//!    per-module `__initialize_module` functions.
 //! 2. `boxing::prepare_types` — mint `Box<T>` struct types and
-//!    redefine `Ref` / `MutRef` `TypeIds`; `boxing::lower_bodies` —
-//!    rewrite `&primitive` / `&mut primitive` into `Box<T>` struct
-//!    operations.
-//! 3. `closure` — closures → `__Closure_N` functor structs with
-//!    `__call` methods; returns `ClosurePlan`.
-//! 4. `globals::build_initialize_modules` — combine per-module init
+//!    redefine `Ref` / `MutRef` `TypeId`s. Returns [`BoxPlan`].
+//! 3. `boxing::shadow_params` — per-function: allocate `Box`-typed
+//!    shadow locals for address-taken parameters, prepend prelude
+//!    `Let`s, retag non-param address-taken locals.
+//! 4. `closure::plan` — closures → `__Closure_N` functor structs
+//!    with `__call` methods; analyse fn-param specialisation;
+//!    returns [`ClosurePlan`].
+//! 5. `globals::build_initialize_modules` — combine per-module init
 //!    functions into the top-level `__initialize_modules`.
-//! 5. `lift_mut::lift_mut_match_bindings` — lift `mut` payload
-//!    bindings inside `Match` arm and `IfLet` patterns into explicit
-//!    `Let mut` statements at the arm body / then-block start, the
-//!    shape `value_copy::insert` keys on for its defensive-copy
-//!    wrap — see [`lift_mut`] module docs.
-//! 6. `value_copy` — insert `builtin::copy_value::<T>(x)` markers and
-//!    synthesize `$value_copy$T<id>` helpers; returns `ValueCopyPlan`.
-//!
-//! Only the sub-passes that need to pass data through to the translator
-//! carry a `*Plan` struct in [`LowerPlan`]; the others mutate `flat`
-//! and return `()`.
+//! 6. `lift_mut::lift_mut_match_bindings` — lift `mut` payload
+//!    bindings inside `Match` arm patterns into explicit `Let mut`
+//!    statements at the arm body start. The lifted `Let mut` is
+//!    the shape `value_copy::analyze` keys on for its
+//!    defensive-copy wrap; see [`lift_mut`] module docs.
+//! 7. `value_copy::plan` — read-only seed walk (the fold's wrap
+//!    predicate applied at every wrap site) + transitive synthesis
+//!    of `$value_copy$T` helpers; returns [`ValueCopyPlan`].
 //!
 //! See `docs/wep-2026-05-11-nir.md`.
 

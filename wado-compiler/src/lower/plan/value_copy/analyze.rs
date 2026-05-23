@@ -22,9 +22,6 @@
 //! The marker path is only used by synthesized helpers; user-program TIR
 //! never carries markers after Phase A.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
@@ -37,9 +34,9 @@ use crate::tir_visitor::TirRefVisitor;
 /// `array_clone::<T>(...)` call. The returned set seeds
 /// [`super::synthesize::synthesize_helpers`].
 pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
-    let type_table = project.type_table.clone();
+    let type_table = project.type_table.borrow();
     let mut walker = SeedWalker {
-        type_table,
+        type_table: &type_table,
         out: IndexSet::default(),
         immutable_locals: IndexSet::default(),
     };
@@ -59,30 +56,29 @@ pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
     walker.out
 }
 
-struct SeedWalker {
-    type_table: Rc<RefCell<TypeTable>>,
+struct SeedWalker<'a> {
+    type_table: &'a TypeTable,
     out: IndexSet<TypeId>,
     immutable_locals: IndexSet<u32>,
 }
 
-impl SeedWalker {
+impl SeedWalker<'_> {
     fn record_if_wrap(&mut self, expr: &TirExpr) {
-        if should_wrap(expr, &self.type_table.borrow()) {
+        if should_wrap(expr, self.type_table) {
             self.out.insert(expr.type_id);
         }
     }
 
     fn record_array_clone_element(&mut self, expr: &TirExpr) {
-        if let Some(t) = array_clone_element_type_arg(expr) {
-            let tt = self.type_table.borrow();
-            if super::needs_value_copy(t, &tt) {
-                self.out.insert(t);
-            }
+        if let Some(t) = array_clone_element_type_arg(expr)
+            && super::needs_value_copy(t, self.type_table)
+        {
+            self.out.insert(t);
         }
     }
 }
 
-impl TirRefVisitor for SeedWalker {
+impl TirRefVisitor for SeedWalker<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
             TirStmtKind::Let {
@@ -153,7 +149,7 @@ pub fn should_wrap(expr: &TirExpr, type_table: &TypeTable) -> bool {
 /// synthesized helper bodies contain `copy_value::<NestedT>(...)` markers, so
 /// the predicate exists to skip re-wrapping when the helper body itself is
 /// processed by the fold.
-pub fn is_copy_value_call(expr: &TirExpr) -> bool {
+fn is_copy_value_call(expr: &TirExpr) -> bool {
     matches!(
         &expr.kind,
         TirExprKind::Call { func, .. }

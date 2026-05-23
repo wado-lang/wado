@@ -1,7 +1,7 @@
 //! TIR → NIR translator: a single fold that consumes a [`FlatPackage`]
 //! together with a [`LowerPlan`] and produces a [`NirPackage`].
 //!
-//! Pre-lower-only TIR variants (`Closure`, `Capture`, `FuncRef`,
+//! Pre-lower-only TIR variants (`Capture`, `FuncRef`,
 //! `TupleSpread`, …) must have been eliminated by `lower::plan`
 //! sub-passes before the translator runs — they `unreachable!()` here.
 //! `IfLet` is eliminated by `translate::pattern`, run over every
@@ -9,10 +9,32 @@
 //! `IfLet` arm is likewise unreachable. String / bytes literal
 //! collection then runs over the pattern-lowered bodies.
 //!
-//! Some translator arms consume facts from `plan` to rewrite TIR
-//! markers into resolved NIR forms (the value-copy marker rewrite in
-//! the `Call` arm; the `i128` / `u128` match → if-else chain in the
-//! `Match` arm).
+//! Per WEP 2026-05-11 Step 5 Phases A/B/C, the translator owns every
+//! expression-shape rewrite that historically lived in
+//! `lower::plan::*` body walks:
+//!
+//! - **Value-copy wraps** ([`FunctionTranslator::wrap_value_copy`])
+//!   — emitted directly at `Let` / `LetDestructure` /
+//!   `Call`-`is_mut`-arg / `IndirectCall`-arg / `Assign`-`Local`
+//!   sites, driven by the seed walker
+//!   [`crate::lower::plan::value_copy::analyze`]. The remaining
+//!   `Call`-arm `copy_value` marker rewrite handles markers inside
+//!   synthesized helper bodies only.
+//! - **Boxing** ([`FunctionTranslator::try_boxing_rewrite`]) — the
+//!   seven shape rules (`&primitive`, `Local(addr-taken)`,
+//!   `*box`, …) plus deref-assign struct-field expansion
+//!   ([`FunctionTranslator::try_expand_deref_struct_assign`]),
+//!   driven by `BoxPlan` and per-function `address_taken_locals`.
+//! - **Closure literals** — the `Closure` arm at the top of
+//!   `convert_expr` emits a raw `StructLiteral` for specialisable
+//!   functors and a `ClosureToCanonical` wrap otherwise, driven by
+//!   `ClosurePlan::specializable`.
+//! - **Specialised-callee plumbing** — fn-param `Local` retag,
+//!   `IndirectCall` → `MethodCall` redirection, and the
+//!   `ClosureToCanonical` arg-slot wrap. All read
+//!   `ClosurePlan::specialized_locals`.
+//! - **Wide-int match** — the `Match` arm rewrites `i128` / `u128`
+//!   scrutinees into an if-else chain.
 //!
 //! See `docs/wep-2026-05-11-nir.md`.
 
@@ -445,15 +467,16 @@ impl FunctionTranslator<'_, '_> {
 
     /// Attempt to apply a boxing-derived rewrite to `expr`. Returns
     /// `Some(NirExpr)` when one fires, otherwise `None` (the caller
-    /// falls through to the default dispatch). The rewrites are:
+    /// falls through to the default dispatch). The patterns match raw
+    /// TIR shapes (no recursive rewrite of inner subtrees first):
     ///
-    /// - `Local { index }` for address-taken locals with a `Box<T>` →
-    ///   `FieldAccess(Local(box-typed), .value)` with outer type kept
-    ///   as the primitive.
-    /// - `Unary(Ref|MutRef, FieldAccess(Local(addr-taken Box), .value))`
-    ///   → just `Local(box)` (the Box reference IS the address).
-    /// - `Unary(Ref|MutRef, primitive)` where the inner has a Box
-    ///   mapping → `StructLiteral(Box, fields: [value: inner])`.
+    /// - `Local { index }` for address-taken locals with a `Box<T>`
+    ///   mapping → `FieldAccess(Local(box-typed), .value)` with the
+    ///   outer type kept as the primitive.
+    /// - `Unary(Ref|MutRef, Local(addr-taken))` → just `Local(box)`
+    ///   (the Box reference IS the address; no extra wrap).
+    /// - `Unary(Ref|MutRef, primitive_expr)` where the inner has a
+    ///   Box mapping → `StructLiteral(Box, fields: [value: inner])`.
     /// - `Unary(Deref, _)` where the inner type is a Box wrapper →
     ///   `FieldAccess(_, .value)` with the inner element type.
     ///
@@ -495,62 +518,35 @@ impl FunctionTranslator<'_, '_> {
 
     fn try_boxing_ref(&self, inner: &TirExpr, span: crate::token::Span) -> Option<NirExpr> {
         // Case 1: `&local` (or `&mut local`) where `local` is an
-        // address-taken primitive. After the Local fold rule rewrites
-        // the inner Local read into `FieldAccess(Local(box), .value)`,
-        // taking its address just yields the Box itself.
-        if let TirExprKind::Local { index, .. } = &inner.kind
+        // address-taken primitive. The Box reference IS the address —
+        // taking it just yields the Box itself, no extra wrap.
+        if let TirExprKind::Local { index, name } = &inner.kind
             && self.address_taken.contains(index)
             && let Some(&box_type_id) = self.base.box_plan.box_struct_types.get(&inner.type_id)
         {
             return Some(NirExpr {
                 kind: NirExprKind::Local {
                     index: *index,
-                    name: match &inner.kind {
-                        TirExprKind::Local { name, .. } => name.clone(),
-                        _ => unreachable!(),
-                    },
+                    name: name.clone(),
                 },
                 type_id: box_type_id,
                 span,
             });
         }
         // Case 2: `&primitive_expr` → `Box<T> { value: expr }`.
-        let inner_type_id = inner.type_id;
-        let box_type_id = *self.base.box_plan.box_struct_types.get(&inner_type_id)?;
-        let box_struct_name = if let crate::tir::ResolvedType::Struct { name, .. } =
-            self.base.type_table.borrow().get(box_type_id)
-        {
-            name.clone()
-        } else {
-            panic!("Box type should be a struct");
-        };
         let inner_nir = self.convert_expr(inner);
-        Some(NirExpr {
-            kind: NirExprKind::StructLiteral {
-                struct_type: box_type_id,
-                struct_name: box_struct_name,
-                fields: vec![NirStructField {
-                    name: "value".to_string(),
-                    value: inner_nir,
-                    field_index: 0,
-                }],
-            },
-            type_id: box_type_id,
-            span,
-        })
+        Some(self.wrap_in_box(
+            inner_nir,
+            *self.base.box_plan.box_struct_types.get(&inner.type_id)?,
+        ))
     }
 
     /// Wrap `value` in a `Box<T> { value: <inner> }` `StructLiteral`.
-    /// Used by the Let arm to box the initial value of an address-taken
-    /// primitive local. `box_type` is the canonical Box wrapper struct
-    /// `TypeId` from `BoxPlan::box_struct_types`; `inner_type` is the
-    /// original (primitive) type for the field's value annotation.
-    fn wrap_in_box(
-        &self,
-        value: NirExpr,
-        box_type: tir::TypeId,
-        _inner_type: tir::TypeId,
-    ) -> NirExpr {
+    /// Used by [`Self::try_boxing_ref`] Case 2 and by the Let arm when
+    /// initialising an address-taken primitive local. `box_type` is the
+    /// canonical Box wrapper struct `TypeId` from
+    /// `BoxPlan::box_struct_types`.
+    fn wrap_in_box(&self, value: NirExpr, box_type: tir::TypeId) -> NirExpr {
         let span = value.span;
         let box_struct_name = if let crate::tir::ResolvedType::Struct { name, .. } =
             self.base.type_table.borrow().get(box_type)
@@ -846,7 +842,7 @@ impl FunctionTranslator<'_, '_> {
                     && self.should_wrap_value_copy(value);
                 let value_nir = self.convert_expr(value);
                 let value_nir = if let Some(box_type) = box_wrap_type {
-                    self.wrap_in_box(value_nir, box_type, value.type_id)
+                    self.wrap_in_box(value_nir, box_type)
                 } else if needs_value_copy_wrap {
                     self.wrap_value_copy(value_nir, *type_id)
                 } else {
@@ -1514,8 +1510,9 @@ impl FunctionTranslator<'_, '_> {
         // Two independent rewrites can fire on a single call argument:
         //
         // 1. `is_mut` value-semantic args receive a defensive
-        //    `$value_copy$T` wrap (mirrors `value_copy::insert`'s
-        //    pre-Phase-A behaviour).
+        //    `$value_copy$T` wrap. The predicate is the one
+        //    `value_copy::analyze`'s seed walker also uses, so the
+        //    helper is guaranteed to be registered when the fold fires.
         // 2. Specialized-callee fn-param `Local` arg slots get a
         //    `ClosureToCanonical` wrap so the callee sees the original
         //    function-shaped view (see `convert_specialized_arg_expr`).

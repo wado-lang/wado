@@ -4,11 +4,13 @@
 //!
 //! Why this exists separately from pattern lowering: the lift produces
 //! `let mut original_local = fresh_local;` statements that
-//! [`value_copy::insert`](super::value_copy::insert) wraps in
-//! `builtin::copy_value::<T>(...)` markers. Pattern lowering itself can
-//! then move into the [translator](crate::lower::translate) (Phase 10
-//! Step 2b) without forcing `value_copy` to learn pattern walking — the
-//! lifted `Let mut` is exactly the shape `value_copy` already keys on.
+//! [`super::value_copy::analyze::collect_seed_types`] records (and the
+//! TIR → NIR fold then wraps with a `$value_copy$T(...)` call). Pattern
+//! lowering itself runs inside the translator (WEP 2026-05-11 Phase 10
+//! Step 2b), so the lift has to happen *before* `value_copy`'s seed
+//! walker runs — otherwise the lifted Lets would be invisible to the
+//! walker. The lifted `Let mut` is exactly the shape `value_copy::analyze`
+//! keys on.
 //!
 //! Mirror of the previous `PatternLowerer::lift_mut_payload_bindings` /
 //! `lift_mut_in_pattern` (the latter recurses through compound patterns
@@ -71,8 +73,8 @@ impl MutBindingLifter {
     /// fresh_local` to the arm body. The fresh local lands in the
     /// pattern slot so `wir_build::pattern_match::emit_pattern_bindings`
     /// writes the variant payload into a private slot; the `Let mut`
-    /// then copies (via `value_copy::insert`) into the user-visible
-    /// binding.
+    /// is then picked up by `value_copy::analyze` (the fold wraps it
+    /// in `$value_copy$T(...)`) and lands in the user-visible binding.
     fn lift_in_match_arm(&mut self, arm: &mut TirMatchArm) {
         let span = arm.span;
         let mut prefix_stmts: Vec<TirStmt> = Vec::new();
