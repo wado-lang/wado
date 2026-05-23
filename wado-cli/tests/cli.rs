@@ -393,6 +393,30 @@ fn test_test_no_run_help_lists_flag() {
 }
 
 #[test]
+fn test_test_no_run_surfaces_todo_compile_errors() {
+    // A `#![TODO]` module whose expected compile error fires is
+    // module-level TODO-pending. Under `--no-run` we can't observe
+    // test-level TODO resolution, but the module-level outcome is
+    // detectable at compile time and must stay visible — both as a
+    // `todo: N pending` summary line and in the consolidated
+    // `TODO tests:` section, matching the normal-run path's parity.
+    wado()
+        .args([
+            "test",
+            "--no-run",
+            "wado-compiler/tests/fixtures/module_attr_todo_compile_error.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("compile: 1 ok, 0 failed"))
+        .stdout(predicate::str::contains("todo:    1 pending"))
+        .stdout(predicate::str::contains(
+            "wado-compiler/tests/fixtures/module_attr_todo_compile_error.wado",
+        ))
+        .stdout(predicate::str::contains("#![TODO] module"));
+}
+
+#[test]
 fn test_test_filter_drops_non_matching_path() {
     // No path matches the pattern, so no test files remain to run.
     wado()

@@ -1540,12 +1540,28 @@ async fn run_one_package(
     // `--no-run`: stages 2 and 3 were short-circuited. The compile stage
     // wrote each fixture's `<primary>.kiln.json` as a side effect, which
     // is the whole point of the flag. We still surface compile failures
-    // so a stale-cache run that fails to compile isn't silently swallowed.
+    // (so a stale-cache run that fails to compile isn't silently
+    // swallowed) and `#![TODO]` modules whose expected compile-error
+    // fired (so the TODO surface stays visible in summary parity with
+    // the normal-run path — only test-level TODO resolution is
+    // unobservable here, since we never executed any tests).
     if no_run {
+        let todo_entries: Vec<TodoEntry> = todo_compile_errors
+            .iter()
+            .map(|e| TodoEntry {
+                file_path: e.path.clone(),
+                display_name: "#![TODO] module".to_string(),
+                resolved: false,
+            })
+            .collect();
+        let todo_pending = u32::try_from(todo_compile_errors.len()).unwrap_or(u32::MAX);
+
         print_compile_failures_section(&compile_failures);
+        print_todo_section(&todo_entries, 0);
         let totals = PackageTotals {
             compile_ok,
             compile_failed,
+            todo_pending,
             timings,
             ..PackageTotals::default()
         };
