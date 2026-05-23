@@ -115,11 +115,37 @@ wado run example/fizzbuzz.wado
 Effects map directly to WASI capabilities, making side effects explicit and controllable:
 
 ```wado
-fn download_and_save(url: String, path: String) with Http, FileSystem {
-    let data = Http::get(url).body;
-    FileSystem::write(path, data);
+use { println, Stdout } from "core:cli";
+use { Url } from "core:url";
+use { Client, Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+fn send_get(url: Url) -> Response with Client {
+    let headers = Fields::new();
+    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [req, _req_future] = Request::new(headers, null, trailers_rx, null);
+    req.set_authority(Option::Some(url.authority()));
+    req.set_path_with_query(Option::Some(url.path_with_query()));
+
+    let result = Client::send(req).wait();
+    trailers_tx.write(Result::Ok(null));
+
+    return match result {
+        Ok(resp) => resp,
+        Err(e) => panic(`HTTP request failed: {e}`),
+    };
+}
+
+export fn run() with Stdout, Client {
+    let url = Url::parse("https://httpbin.org/get").unwrap();
+    let resp = send_get(url);
+    println(`Status: {resp.get_status_code() as i32}`);
 }
 ```
+
+`Client::send(...).wait()` is colorless async: the `wait()` suspends the task while the
+runtime drives the request, without coloring `send_get` or `run` as `async`. See
+[`example/http_get.wado`](example/http_get.wado) for the full version (request body,
+streaming the response body, scheme handling).
 
 The `with` clause tells you exactly what a function can do. This enables:
 
