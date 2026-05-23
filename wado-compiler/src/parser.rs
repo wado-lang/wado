@@ -1681,6 +1681,7 @@ impl Parser {
             condition,
             message,
             span: start_span.merge(&semi_span),
+            original_condition_source: None,
         }))
     }
 

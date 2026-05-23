@@ -65,7 +65,7 @@ The loader runs `lexer → parser → bind → desugar` on every loaded module:
 - The lexer extracts the optional `__DATA__` section and tokenizes the rest.
 - The parser builds a faithful AST. Compound assigns, comparison chains, struct shorthand, and `&self` parameters are kept verbatim so `wado format` round-trips; sugar is removed in `desugar.rs`.
 - `bind.rs` performs local name resolution, scope/mutability checking, and use-before-define detection.
-- `desugar.rs` rewrites `x += y` to `x = x + y`, `a < b < c` to a conjunction, for/while loops to explicit loop blocks, and other purely syntactic constructs.
+- `desugar.rs` rewrites `x += y` to `x = x + y`, `a < b < c` to a conjunction, for/while loops to explicit loop blocks, and other purely syntactic constructs. The `assert` statement is intentionally preserved here — its power-assert expansion runs at TIR-lowering time (`resolver/assert.rs::lower_assert`) so the AST keeps the user's original `assert cond, msg;` for LSP. AST→AST transforms within this phase are written as [`AstFolder`](../wado-compiler/src/ast.rs) impls (see `NsStripper` in `desugar.rs`); the `default_fold_*` defaults guarantee structural recursion is exhaustive across every AST variant.
 
 ## Annotate (Analyze + Resolve + TIR Lowering)
 

@@ -98,10 +98,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt, ctx)],
             Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt)],
-            Stmt::Assert(_) => {
-                // Assert statements are desugared in the desugar phase before resolution
-                panic!("Assert should be desugared before resolving");
-            }
+            Stmt::Assert(a) => self.lower_assert(a, ctx),
             Stmt::LabeledBlock(labeled_block) => {
                 vec![self.resolve_labeled_block(labeled_block, ctx)]
             }

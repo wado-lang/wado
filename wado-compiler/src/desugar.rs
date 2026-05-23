@@ -3,25 +3,24 @@
 // Transforms high-level AST constructs to simpler forms for codegen:
 // - CompoundAssignExpr (x += y) → AssignExpr (x = x + y)
 // - ComparisonChainExpr (a < b < c) → BinaryExpr chain ((a < b) && (b < c))
-// - Assert (assert cond, msg) → LabeledBlock with intermediates, if, and panic
+//
+// `assert` is preserved by this phase; the power-assert expansion lives in
+// `resolver::Resolver::lower_assert`, which keeps the source AST untouched so
+// LSP queries land on the user's original `assert cond, msg;` text.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AstId, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
-    ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    AssertStmt, AssignExpr, AstFolder, AstId, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr,
+    CastExpr, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
     ConditionElement, ContinueStmt, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
-    FormatSpec, Function, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, IndexExpr,
-    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
-    MatchExpr, MethodCallExpr, Module, Newtype, Pattern, ReturnStmt, StaticMethodCallExpr, Stmt,
-    StructDecl, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplatePart,
-    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseItem,
-    WhileStmt,
+    Function, GlobalDecl, IfExpr, IfStmt, ImplBlock, IndexExpr, InterfaceDecl, Item,
+    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr,
+    Module, Newtype, Pattern, ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl,
+    StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
+    TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseItem, WhileStmt,
 };
-use crate::unparse::unparse_expr_simple;
 
 /// Context for desugaring, holding state that needs to be tracked across the process.
 struct DesugarContext {
-    /// Counter for generating unique assert block labels
-    assert_counter: u32,
     /// Counter for generating unique loop labels (for break/continue handling)
     loop_counter: u32,
     /// Stack of loop labels for break/continue transformation in For loops
@@ -29,8 +28,6 @@ struct DesugarContext {
     /// - `outer_label`: target for unlabeled break
     /// - `body_label`: target for unlabeled continue (to skip to update)
     for_loop_labels: Vec<(String, String)>,
-    /// Namespace import names (e.g., "shapes" from `use shapes from "..."`)
-    namespace_names: Vec<String>,
     /// `AstId` of the AST node currently being desugared. Synthetic nodes produced
     /// during desugaring inherit this id so that `Module::ast_id_count` remains
     /// parser-allocated and `AstIds` stay dense in `0..ast_id_count`. The desugar
@@ -60,28 +57,9 @@ impl DesugarContext {
 
 /// Desugar a module, transforming high-level constructs to simpler forms.
 pub fn desugar_module(module: &Module) -> Module {
-    let namespace_names: Vec<String> = module
-        .items
-        .iter()
-        .filter_map(|item| {
-            if let Item::Use(u) = item {
-                u.items.iter().find_map(|ui| {
-                    if let UseItem::Namespace { name } = ui {
-                        Some(name.clone())
-                    } else {
-                        None
-                    }
-                })
-            } else {
-                None
-            }
-        })
-        .collect();
     let mut ctx = DesugarContext {
-        assert_counter: 0,
         loop_counter: 0,
         for_loop_labels: Vec::new(),
-        namespace_names,
         current_parent_id: None,
     };
     let items: Vec<Item> = module
@@ -89,14 +67,7 @@ pub fn desugar_module(module: &Module) -> Module {
         .iter()
         .map(|item| desugar_item(item, &mut ctx))
         .collect();
-    let items = if ctx.namespace_names.is_empty() {
-        items
-    } else {
-        items
-            .into_iter()
-            .map(|item| strip_ns_from_item(item, &ctx))
-            .collect()
-    };
+    let items = NsStripper::for_module(module).strip(items);
     Module::with_metadata(
         items,
         module.inner_attributes().to_vec(),
@@ -121,52 +92,6 @@ fn strip_namespace_prefix<'a>(name: &'a str, namespace_names: &[String]) -> &'a 
         }
     }
     name
-}
-
-fn desugar_type(ty: &Type, ctx: &DesugarContext) -> Type {
-    if ctx.namespace_names.is_empty() {
-        return ty.clone();
-    }
-    match ty {
-        Type::Named(n) => {
-            let stripped = strip_namespace_prefix(&n.name, &ctx.namespace_names);
-            if stripped.len() == n.name.len() {
-                Type::Named(n.clone())
-            } else {
-                Type::Named(crate::ast::NamedType {
-                    id: n.id,
-                    name: stripped.to_string(),
-                    span: n.span,
-                    source_interface: None,
-                })
-            }
-        }
-        Type::Generic(g) => {
-            let stripped = strip_namespace_prefix(&g.name, &ctx.namespace_names);
-            Type::Generic(crate::ast::GenericType {
-                id: g.id,
-                name: if stripped.len() == g.name.len() {
-                    g.name.clone()
-                } else {
-                    stripped.to_string()
-                },
-                args: g.args.iter().map(|a| desugar_type(a, ctx)).collect(),
-                span: g.span,
-            })
-        }
-        Type::Tuple(types) => Type::Tuple(types.iter().map(|t| desugar_type(t, ctx)).collect()),
-        Type::Reference(inner) => Type::Reference(Box::new(desugar_type(inner, ctx))),
-        Type::MutReference(inner) => Type::MutReference(Box::new(desugar_type(inner, ctx))),
-        Type::Function(f) => Type::Function(Box::new(crate::ast::FunctionType {
-            is_mut: f.is_mut,
-            params: f.params.iter().map(|p| desugar_type(p, ctx)).collect(),
-            return_type: desugar_type(&f.return_type, ctx),
-            effects: f.effects.clone(),
-            effect_ids: f.effect_ids.clone(),
-            stores: f.stores.clone(),
-        })),
-        Type::NamespacedGeneric(_) | Type::TypePackSpread(..) => ty.clone(),
-    }
 }
 
 fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
@@ -410,7 +335,23 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
         Stmt::While(w) => desugar_while(w, ctx),
         Stmt::For(f) => desugar_for(f, ctx),
         Stmt::ForOf(f) => desugar_for_of(f, ctx),
-        Stmt::Assert(a) => desugar_assert(a, ctx),
+        // Assert is preserved through desugar; the power-assert expansion
+        // runs at TIR lowering time in `resolver::Resolver::lower_assert`.
+        // We still recurse into the condition / message so other Expr-level
+        // desugars (compound assign, comparison chain, `matches!`, …) apply
+        // and the resolver sees a form it can handle. The user's original
+        // condition source is captured *before* rewriting so power-assert's
+        // failure message reads in the user's own words.
+        Stmt::Assert(a) => {
+            let original_condition_source = crate::unparse::unparse_expr_simple(&a.condition);
+            Stmt::Assert(AssertStmt {
+                id: a.id,
+                condition: desugar_expr(&a.condition),
+                message: a.message.as_ref().map(desugar_expr),
+                span: a.span,
+                original_condition_source: Some(original_condition_source),
+            })
+        }
         Stmt::Loop(l) => {
             // Save and clear for_loop_labels - breaks inside this loop should
             // target this loop, not an outer for loop
@@ -595,10 +536,8 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             } else {
                 // No context - create a temporary one (rare case)
                 let mut temp_ctx = DesugarContext {
-                    assert_counter: 0,
                     loop_counter: 0,
                     for_loop_labels: Vec::new(),
-                    namespace_names: Vec::new(),
                     current_parent_id: Some(b.id),
                 };
                 Expr::Block(Box::new(desugar_block(b, &mut temp_ctx)))
@@ -615,10 +554,8 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 }))
             } else {
                 let mut temp_ctx = DesugarContext {
-                    assert_counter: 0,
                     loop_counter: 0,
                     for_loop_labels: Vec::new(),
-                    namespace_names: Vec::new(),
                     current_parent_id: Some(i.id),
                 };
                 Expr::If(Box::new(IfExpr {
@@ -698,10 +635,8 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 }))
             } else {
                 let mut ctx = DesugarContext {
-                    assert_counter: 0,
                     loop_counter: 0,
                     for_loop_labels: Vec::new(),
-                    namespace_names: Vec::new(),
                     current_parent_id: Some(lb.id),
                 };
                 Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
@@ -744,10 +679,8 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 desugar_block(&w.body, ctx)
             } else {
                 let mut ctx = DesugarContext {
-                    assert_counter: 0,
                     loop_counter: 0,
                     for_loop_labels: Vec::new(),
-                    namespace_names: Vec::new(),
                     current_parent_id: Some(w.id),
                 };
                 desugar_block(&w.body, &mut ctx)
@@ -1221,879 +1154,214 @@ fn desugar_for_of(f: &ForOfStmt, ctx: &mut DesugarContext) -> Stmt {
     })
 }
 
-/// Desugar an assert statement into a labeled block with intermediate value caching.
+/// Second pass: strip `use … namespace` prefixes from identifiers, types,
+/// patterns, and struct-literal names so the resolver sees the canonical
+/// (unprefixed) name. Implemented as an [`AstFolder`] so the structural
+/// recursion through every node kind is generated once by
+/// `default_fold_*`; this struct only overrides the leaf nodes where a
+/// name actually needs stripping.
 ///
-/// `assert condition, message;` becomes:
-/// ```text
-/// __assert_N: {
-///     let __v0 = <intermediate0>;
-///     let __v1 = <intermediate1>;
-///     ...
-///     let __cond = <reconstructed_condition>;
-///     if !__cond {
-///         panic(`Assertion failed:
-/// condition: <source>
-/// <intermediate0_source>: {__v0}
-/// ...`);
-///     }
-/// }
-/// ```
-fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
-    let assert_id = ctx.assert_counter;
-    ctx.assert_counter += 1;
-    let span = assert_stmt.span;
-
-    // Collect intermediate expressions and generate substitution
-    let mut intermediates: Vec<(String, String, Expr)> = Vec::new(); // (var_name, source, expr)
-    let mut var_counter = 0;
-
-    // Desugar the condition first (handles CompoundAssign, ComparisonChain, etc.)
-    let desugared_condition = desugar_expr(&assert_stmt.condition);
-
-    // Collect intermediates from the desugared condition
-    collect_intermediates(
-        &desugared_condition,
-        &mut intermediates,
-        &mut var_counter,
-        true,
-    );
-
-    // Build the list of let statements for intermediates.
-    // Each binding's value is reconstructed using only earlier intermediates
-    // so a sub-expression already cached in `__vK` is not re-evaluated
-    // (e.g. `double(get_value())` calls `get_value` exactly once even though
-    // both `get_value()` and `double(get_value())` are captured).
-    let mut stmts: Vec<Stmt> = Vec::new();
-
-    for (i, (var_name, _source, expr)) in intermediates.iter().enumerate() {
-        let value = reconstruct_with_intermediates(expr, &intermediates[..i]);
-        let let_id = ctx.synth_id();
-        stmts.push(Stmt::Let(LetStmt {
-            id: let_id,
-            pattern: Pattern::Ident {
-                id: let_id,
-                name: var_name.clone(),
-                span,
-            },
-            name_span: span,
-            is_mut: false,
-            is_reactive: false,
-            ty: None,
-            value: Some(value),
-            span,
-        }));
-    }
-
-    // Build the condition expression using the intermediate variables
-    let reconstructed_condition =
-        reconstruct_with_intermediates(&desugared_condition, &intermediates);
-
-    // Store condition in a variable (scoped to this labeled block)
-    let cond_var = "__cond".to_string();
-    let cond_let_id = ctx.synth_id();
-    stmts.push(Stmt::Let(LetStmt {
-        id: cond_let_id,
-        pattern: Pattern::Ident {
-            id: cond_let_id,
-            name: cond_var.clone(),
-            span,
-        },
-        name_span: span,
-        is_mut: false,
-        is_reactive: false,
-        ty: None,
-        value: Some(reconstructed_condition),
-        span,
-    }));
-
-    // Build the error message template string
-    let condition_source = unparse_expr_simple(&assert_stmt.condition);
-    let mut template_parts: Vec<TemplatePart> = Vec::new();
-
-    // Helper to create #function literal expression
-    let function_expr = Expr::Literal(LiteralExpr {
-        id: ctx.synth_id(),
-        value: Literal::LocationFunction,
-        span,
-    });
-    // Helper to create #file literal expression
-    let file_expr = Expr::Literal(LiteralExpr {
-        id: ctx.synth_id(),
-        value: Literal::LocationFile,
-        span,
-    });
-    // Helper to create #line literal expression
-    let line_expr = Expr::Literal(LiteralExpr {
-        id: ctx.synth_id(),
-        value: Literal::LocationLine,
-        span,
-    });
-
-    // Format: "Assertion failed in <function> at <file>:<line>: <message (if any)>"
-    // All on one line for Sentry issue title compatibility
-    template_parts.push(TemplatePart::String("Assertion failed in ".to_string()));
-    template_parts.push(TemplatePart::Interpolation {
-        expr: Box::new(function_expr),
-        format: None,
-    });
-    template_parts.push(TemplatePart::String(" at ".to_string()));
-    template_parts.push(TemplatePart::Interpolation {
-        expr: Box::new(file_expr),
-        format: None,
-    });
-    template_parts.push(TemplatePart::String(":".to_string()));
-    template_parts.push(TemplatePart::Interpolation {
-        expr: Box::new(line_expr),
-        format: None,
-    });
-    if let Some(msg) = &assert_stmt.message {
-        template_parts.push(TemplatePart::String(": ".to_string()));
-        template_parts.push(TemplatePart::Interpolation {
-            expr: Box::new(desugar_expr(msg)),
-            format: None,
-        });
-    }
-    template_parts.push(TemplatePart::String(format!(
-        "\ncondition: {condition_source}\n"
-    )));
-
-    // Add each intermediate value using inspect format
-    for (var_name, source, _) in &intermediates {
-        template_parts.push(TemplatePart::String(format!("{source}: ")));
-        template_parts.push(TemplatePart::Interpolation {
-            expr: Box::new(Expr::Ident(IdentExpr {
-                id: ctx.synth_id(),
-                name: var_name.clone(),
-                segments: Vec::new(),
-                type_args: Vec::new(),
-                span,
-            })),
-            format: Some(FormatSpec {
-                spec: "?".to_string(),
-            }),
-        });
-        template_parts.push(TemplatePart::String("\n".to_string()));
-    }
-
-    let error_message = Expr::TemplateString(Box::new(TemplateStringExpr {
-        id: ctx.synth_id(),
-        parts: template_parts,
-        span,
-    }));
-
-    // Build: panic(error_message)
-    let panic_call = Expr::Call(Box::new(CallExpr {
-        id: ctx.synth_id(),
-        callee: Expr::Ident(IdentExpr {
-            id: ctx.synth_id(),
-            name: "panic".to_string(),
-            segments: Vec::new(),
-            type_args: Vec::new(),
-            span,
-        }),
-        type_args: vec![],
-        args: vec![error_message],
-        has_trailing_comma: false,
-        span,
-    }));
-
-    // Build: if !__cond { panic(...); }
-    let if_stmt = Stmt::If(IfStmt {
-        id: ctx.synth_id(),
-        condition: Condition::Expr(Expr::Unary(Box::new(UnaryExpr {
-            id: ctx.synth_id(),
-            op: UnaryOp::Not,
-            expr: Expr::Ident(IdentExpr {
-                id: ctx.synth_id(),
-                name: cond_var,
-                segments: Vec::new(),
-                type_args: Vec::new(),
-                span,
-            }),
-            span,
-        }))),
-        then_block: Block {
-            id: ctx.synth_id(),
-            stmts: vec![Stmt::Expr(ExprStmt {
-                id: ctx.synth_id(),
-                expr: panic_call,
-                span,
-            })],
-            span,
-        },
-        else_block: None,
-        span,
-    });
-    stmts.push(if_stmt);
-
-    // Wrap everything in a labeled block
-    Stmt::LabeledBlock(LabeledBlockStmt {
-        id: ctx.synth_id(),
-        label: format!("__assert_{assert_id}"),
-        block: Block {
-            id: ctx.synth_id(),
-            stmts,
-            span,
-        },
-        span,
-    })
+/// Selectivity at the item level mirrors the historical
+/// `strip_ns_from_item`: only Function / Impl / Trait / Test / Global
+/// bodies are visited. Struct / Enum / Variant / etc. field types are
+/// left untouched because the resolver already accepts the prefixed
+/// form for those declarations.
+struct NsStripper {
+    namespace_names: Vec<String>,
 }
 
-/// Recurse into a Call/MethodCall/StaticMethodCall argument.
-///
-/// Bare-`Ident` arguments are skipped intentionally: in argument position a
-/// bare function name is coerced from `fn` to a function reference, and
-/// extracting it into `let __vK = name;` loses that coercion context (the
-/// inferencer then sees `__vK` as `unknown`, breaking `Inspect` dispatch).
-/// Non-`Ident` arguments are recursed into normally so composite arg
-/// expressions still yield power-assert intermediates.
-fn collect_call_arg(
-    arg: &Expr,
-    intermediates: &mut Vec<(String, String, Expr)>,
-    counter: &mut u32,
-) {
-    if matches!(arg, Expr::Ident(_)) {
-        return;
-    }
-    collect_intermediates(arg, intermediates, counter, false);
-}
-
-/// Push an intermediate entry, skipping if an entry with the same source text
-/// already exists. Deduplication keeps the failure message terse and avoids
-/// re-evaluating identical sub-expressions in their let bindings.
-fn push_intermediate(
-    intermediates: &mut Vec<(String, String, Expr)>,
-    counter: &mut u32,
-    source: String,
-    expr: Expr,
-) {
-    if intermediates.iter().any(|(_, s, _)| s == &source) {
-        return;
-    }
-    let var_name = format!("__v{}", *counter);
-    *counter += 1;
-    intermediates.push((var_name, source, expr));
-}
-
-/// Collect intermediate expressions that should be cached for power-assert display.
-/// Returns (`var_name`, `source_text`, `original_expr`) for each intermediate.
-fn collect_intermediates(
-    expr: &Expr,
-    intermediates: &mut Vec<(String, String, Expr)>,
-    counter: &mut u32,
-    is_root: bool,
-) {
-    match expr {
-        Expr::Binary(bin) => {
-            // Recursively collect from operands
-            collect_intermediates(&bin.left, intermediates, counter, false);
-            collect_intermediates(&bin.right, intermediates, counter, false);
-
-            // Don't collect the root comparison itself (it's shown as "condition: ...")
-            if !is_root {
-                push_intermediate(
-                    intermediates,
-                    counter,
-                    unparse_expr_simple(expr),
-                    expr.clone(),
-                );
-            }
-        }
-        Expr::Ident(ident) => {
-            // Always collect identifiers - they're the most useful values
-            push_intermediate(intermediates, counter, ident.name.clone(), expr.clone());
-        }
-        Expr::Call(call) => {
-            // Recurse into args (inner-first), then collect the call itself.
-            // The callee is intentionally skipped: it is almost always a bare
-            // function identifier whose runtime value (`<function 'foo'>`) is
-            // not interesting and whose extraction would turn a direct call
-            // into an indirect one.
-            for arg in &call.args {
-                collect_call_arg(arg, intermediates, counter);
-            }
-            push_intermediate(
-                intermediates,
-                counter,
-                unparse_expr_simple(expr),
-                expr.clone(),
-            );
-        }
-        Expr::MethodCall(mc) => {
-            // The receiver is intentionally NOT recursed into in step 1.
-            // Extracting `<recv>` as `let __v = <recv>;` forces auto-derived
-            // `Inspect` on the receiver's type, which surfaces unrelated
-            // synthesis gaps (`Fn<...>` and CM resource handles have no
-            // `Inspect`; receiver-module-dispatch keyed by bare mangled
-            // name confuses same-name generics across modules). Step 2
-            // revisits receiver recursion once those gaps close.
-            for arg in &mc.args {
-                collect_call_arg(arg, intermediates, counter);
-            }
-            push_intermediate(
-                intermediates,
-                counter,
-                unparse_expr_simple(expr),
-                expr.clone(),
-            );
-        }
-        Expr::StaticMethodCall(smc) => {
-            for arg in &smc.args {
-                collect_call_arg(arg, intermediates, counter);
-            }
-            push_intermediate(
-                intermediates,
-                counter,
-                unparse_expr_simple(expr),
-                expr.clone(),
-            );
-        }
-        Expr::FieldAccess(_) | Expr::Index(_) => {
-            // Receiver / index recursion deferred to step 2 (see `MethodCall`).
-            push_intermediate(
-                intermediates,
-                counter,
-                unparse_expr_simple(expr),
-                expr.clone(),
-            );
-        }
-        Expr::Unary(unary) => {
-            // Skip negated numeric literals — extracting them into intermediates
-            // would lose the literal status needed for bidirectional type coercion
-            // (e.g., `x_i64 == -50` should coerce -50 to i64, not default to i32)
-            if unary.op == UnaryOp::Neg
-                && matches!(&unary.expr, Expr::Literal(lit) if matches!(&lit.value, Literal::Number(_)))
-            {
-                return;
-            }
-            // `&Ident` is the function-reference coercion (`&fn_name`).
-            // Extracting it (or its operand) loses the coercion context — the
-            // inferencer then sees both `let __v = fn_name` and
-            // `let __v = &fn_name` as `unknown`. Skip the whole subtree;
-            // the call enclosing `&fn_name` still gets its own intermediate.
-            if unary.op == UnaryOp::Ref && matches!(&unary.expr, Expr::Ident(_)) {
-                return;
-            }
-            // `&mut <expr>` requires a mutable lvalue. Extracting the operand
-            // into a fresh `let __v = <expr>` produces an immutable binding,
-            // so the reconstructed `&mut __v` then fails with "cannot take
-            // &mut of immutable variable". Don't extract the operand at all;
-            // the `&mut <expr>` itself stays as one intermediate when this
-            // node sits inside a Call/MethodCall arg (its outer context
-            // already drives the necessary captures).
-            if unary.op == UnaryOp::MutRef {
-                return;
-            }
-            // Recurse into operand
-            collect_intermediates(&unary.expr, intermediates, counter, false);
-            // Also collect the unary expression itself if not root
-            if !is_root {
-                push_intermediate(
-                    intermediates,
-                    counter,
-                    unparse_expr_simple(expr),
-                    expr.clone(),
-                );
-            }
-        }
-        // Literals and other expressions don't need to be cached
-        _ => {}
-    }
-}
-
-/// Reconstruct the condition expression using intermediate variable references.
-fn reconstruct_with_intermediates(expr: &Expr, intermediates: &[(String, String, Expr)]) -> Expr {
-    // Find if this expression matches an intermediate
-    let source = unparse_expr_simple(expr);
-    for (var_name, int_source, _) in intermediates {
-        if &source == int_source {
-            return Expr::Ident(IdentExpr {
-                id: expr.id(),
-                name: var_name.clone(),
-                segments: Vec::new(),
-                type_args: Vec::new(),
-                span: expr.span(),
-            });
-        }
-    }
-
-    // Otherwise, recursively reconstruct.
-    // Must mirror the shapes recursed into by `collect_intermediates`, otherwise
-    // sub-expressions captured as intermediates would be re-evaluated inside the
-    // outer let binding (defeating the side-effect-once guarantee).
-    match expr {
-        Expr::Binary(bin) => Expr::Binary(Box::new(BinaryExpr {
-            id: bin.id,
-            left: reconstruct_with_intermediates(&bin.left, intermediates),
-            op: bin.op,
-            right: reconstruct_with_intermediates(&bin.right, intermediates),
-            span: bin.span,
-        })),
-        Expr::Unary(unary) => Expr::Unary(Box::new(UnaryExpr {
-            id: unary.id,
-            op: unary.op,
-            expr: reconstruct_with_intermediates(&unary.expr, intermediates),
-            span: unary.span,
-        })),
-        Expr::Call(call) => Expr::Call(Box::new(CallExpr {
-            id: call.id,
-            callee: call.callee.clone(),
-            type_args: call.type_args.clone(),
-            args: call
-                .args
-                .iter()
-                .map(|a| reconstruct_with_intermediates(a, intermediates))
-                .collect(),
-            has_trailing_comma: call.has_trailing_comma,
-            span: call.span,
-        })),
-        Expr::MethodCall(mc) => Expr::MethodCall(Box::new(MethodCallExpr {
-            id: mc.id,
-            receiver: reconstruct_with_intermediates(&mc.receiver, intermediates),
-            method: mc.method.clone(),
-            method_id: mc.method_id,
-            method_span: mc.method_span,
-            type_args: mc.type_args.clone(),
-            args: mc
-                .args
-                .iter()
-                .map(|a| reconstruct_with_intermediates(a, intermediates))
-                .collect(),
-            has_trailing_comma: mc.has_trailing_comma,
-            span: mc.span,
-        })),
-        Expr::StaticMethodCall(smc) => Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
-            id: smc.id,
-            target_type: smc.target_type.clone(),
-            method: smc.method.clone(),
-            method_id: smc.method_id,
-            method_span: smc.method_span,
-            type_args: smc.type_args.clone(),
-            args: smc
-                .args
-                .iter()
-                .map(|a| reconstruct_with_intermediates(a, intermediates))
-                .collect(),
-            has_trailing_comma: smc.has_trailing_comma,
-            span: smc.span,
-        })),
-        Expr::FieldAccess(fa) => Expr::FieldAccess(Box::new(FieldAccessExpr {
-            id: fa.id,
-            expr: reconstruct_with_intermediates(&fa.expr, intermediates),
-            field: fa.field.clone(),
-            field_id: fa.field_id,
-            field_span: fa.field_span,
-            span: fa.span,
-        })),
-        Expr::Index(idx) => Expr::Index(Box::new(IndexExpr {
-            id: idx.id,
-            expr: reconstruct_with_intermediates(&idx.expr, intermediates),
-            index: reconstruct_with_intermediates(&idx.index, intermediates),
-            span: idx.span,
-        })),
-        // For other expressions, return as-is (they might be intermediates or literals)
-        _ => expr.clone(),
-    }
-}
-
-fn strip_ns_from_item(item: Item, ctx: &DesugarContext) -> Item {
-    match item {
-        Item::Function(f) => Item::Function(strip_ns_from_function(f, ctx)),
-        Item::Impl(mut i) => {
-            i.ty = desugar_type(&i.ty, ctx);
-            if let Some(ref t) = i.trait_type {
-                i.trait_type = Some(desugar_type(t, ctx));
-            }
-            i.methods = i
-                .methods
-                .into_iter()
-                .map(|f| strip_ns_from_function(f, ctx))
-                .collect();
-            Item::Impl(i)
-        }
-        Item::Trait(mut t) => {
-            t.methods = t
-                .methods
-                .into_iter()
-                .map(|f| strip_ns_from_function(f, ctx))
-                .collect();
-            Item::Trait(t)
-        }
-        Item::Test(mut t) => {
-            t.body = strip_ns_from_block(t.body, ctx);
-            Item::Test(t)
-        }
-        Item::Global(mut g) => {
-            g.initializer = strip_ns_from_expr(g.initializer, ctx);
-            Item::Global(g)
-        }
-        other => other,
-    }
-}
-
-fn strip_ns_from_function(mut f: Function, ctx: &DesugarContext) -> Function {
-    for param in &mut f.params {
-        param.ty = desugar_type(&param.ty, ctx);
-    }
-    if let Some(ref ret) = f.return_type {
-        f.return_type = Some(desugar_type(ret, ctx));
-    }
-    if let Some(body) = f.body {
-        f.body = Some(strip_ns_from_block(body, ctx));
-    }
-    f
-}
-
-fn strip_ns_from_block(mut block: Block, ctx: &DesugarContext) -> Block {
-    block.stmts = block
-        .stmts
-        .into_iter()
-        .map(|s| strip_ns_from_stmt(s, ctx))
-        .collect();
-    block
-}
-
-fn strip_ns_from_stmt(stmt: Stmt, ctx: &DesugarContext) -> Stmt {
-    match stmt {
-        Stmt::Let(mut l) => {
-            l.ty = l.ty.as_ref().map(|t| desugar_type(t, ctx));
-            l.value = l.value.map(|e| strip_ns_from_expr(e, ctx));
-            l.pattern = strip_ns_from_pattern(l.pattern, ctx);
-            Stmt::Let(l)
-        }
-        Stmt::Expr(mut e) => {
-            e.expr = strip_ns_from_expr(e.expr, ctx);
-            Stmt::Expr(e)
-        }
-        Stmt::Return(mut r) => {
-            r.value = r.value.map(|e| strip_ns_from_expr(e, ctx));
-            Stmt::Return(r)
-        }
-        Stmt::If(mut i) => {
-            i.condition = strip_ns_from_condition(i.condition, ctx);
-            i.then_block = strip_ns_from_block(i.then_block, ctx);
-            i.else_block = i.else_block.map(|b| strip_ns_from_block(b, ctx));
-            Stmt::If(i)
-        }
-        Stmt::While(mut w) => {
-            w.condition = strip_ns_from_condition(w.condition, ctx);
-            w.body = strip_ns_from_block(w.body, ctx);
-            Stmt::While(w)
-        }
-        Stmt::For(mut f) => {
-            f.init = f.init.map(|s| Box::new(strip_ns_from_stmt(*s, ctx)));
-            f.condition = f.condition.map(|c| strip_ns_from_condition(c, ctx));
-            f.update = f.update.map(|e| strip_ns_from_expr(e, ctx));
-            f.body = strip_ns_from_block(f.body, ctx);
-            Stmt::For(f)
-        }
-        Stmt::ForOf(mut f) => {
-            f.iterable = strip_ns_from_expr(f.iterable, ctx);
-            f.body = strip_ns_from_block(f.body, ctx);
-            f.binding = strip_ns_from_pattern(f.binding, ctx);
-            Stmt::ForOf(f)
-        }
-        Stmt::Loop(mut l) => {
-            l.body = strip_ns_from_block(l.body, ctx);
-            Stmt::Loop(l)
-        }
-        Stmt::LabeledBlock(mut l) => {
-            l.block = strip_ns_from_block(l.block, ctx);
-            Stmt::LabeledBlock(l)
-        }
-        Stmt::Match(mut m) => {
-            m.expr = strip_ns_from_expr(m.expr, ctx);
-            m.arms = m
-                .arms
-                .into_iter()
-                .map(|mut arm| {
-                    arm.pattern = strip_ns_from_pattern(arm.pattern, ctx);
-                    arm.body = strip_ns_from_expr(arm.body, ctx);
-                    arm.guard = arm.guard.map(|g| strip_ns_from_expr(g, ctx));
-                    arm
-                })
-                .collect();
-            Stmt::Match(m)
-        }
-        Stmt::Assert(mut a) => {
-            a.condition = strip_ns_from_expr(a.condition, ctx);
-            a.message = a.message.map(|e| strip_ns_from_expr(e, ctx));
-            Stmt::Assert(a)
-        }
-        Stmt::TaskReturn(mut t) => {
-            t.value = strip_ns_from_expr(t.value, ctx);
-            Stmt::TaskReturn(t)
-        }
-        Stmt::Break(_) | Stmt::Continue(_) => stmt,
-    }
-}
-
-fn strip_ns_from_condition(cond: Condition, ctx: &DesugarContext) -> Condition {
-    match cond {
-        Condition::Expr(e) => Condition::Expr(strip_ns_from_expr(e, ctx)),
-        Condition::LetChain { elements, span } => Condition::LetChain {
-            elements: elements
-                .into_iter()
-                .map(|e| match e {
-                    ConditionElement::Let {
-                        pattern,
-                        expr,
-                        span,
-                    } => ConditionElement::Let {
-                        pattern: Box::new(strip_ns_from_pattern(*pattern, ctx)),
-                        expr: strip_ns_from_expr(expr, ctx),
-                        span,
-                    },
-                    ConditionElement::Expr(expr) => {
-                        ConditionElement::Expr(strip_ns_from_expr(expr, ctx))
-                    }
-                })
-                .collect(),
-            span,
-        },
-    }
-}
-
-fn strip_ns_from_pattern(pattern: Pattern, ctx: &DesugarContext) -> Pattern {
-    match pattern {
-        Pattern::Variant {
-            variant_name,
-            variant_qualifier,
-            name_id,
-            name_span,
-            bindings,
-            span,
-        } => {
-            let stripped = strip_namespace_prefix(&variant_name, &ctx.namespace_names);
-            Pattern::Variant {
-                variant_name: if stripped.len() == variant_name.len() {
-                    variant_name
+impl NsStripper {
+    /// Collect every `use <name> from "..."` (the namespace-style import)
+    /// declared in `module`. The result is the prefix set we strip.
+    fn for_module(module: &Module) -> Self {
+        let namespace_names = module
+            .items
+            .iter()
+            .filter_map(|item| {
+                if let Item::Use(u) = item {
+                    u.items.iter().find_map(|ui| {
+                        if let UseItem::Namespace { name } = ui {
+                            Some(name.clone())
+                        } else {
+                            None
+                        }
+                    })
                 } else {
-                    stripped.to_string()
-                },
+                    None
+                }
+            })
+            .collect();
+        Self { namespace_names }
+    }
+
+    fn strip(mut self, items: Vec<Item>) -> Vec<Item> {
+        if self.namespace_names.is_empty() {
+            return items;
+        }
+        items.into_iter().map(|item| self.fold_item(item)).collect()
+    }
+
+    /// Try to strip a namespace prefix from `name`, returning the new
+    /// owned `String` only when a prefix actually matched. Returning
+    /// `Option<String>` lets call sites short-circuit on the common
+    /// no-match path without an extra allocation.
+    fn maybe_strip(&self, name: &str) -> Option<String> {
+        let stripped = strip_namespace_prefix(name, &self.namespace_names);
+        if stripped.len() == name.len() {
+            None
+        } else {
+            Some(stripped.to_string())
+        }
+    }
+}
+
+impl crate::ast::AstFolder for NsStripper {
+    fn fold_item(&mut self, item: Item) -> Item {
+        // Mirrors the original `strip_ns_from_item`: only recurse into the
+        // items that have user-written expressions / statements / types
+        // exposed to namespace use.
+        match item {
+            Item::Function(f) => Item::Function(self.fold_function(f)),
+            Item::Impl(mut i) => {
+                i.ty = self.fold_type(i.ty);
+                if let Some(t) = i.trait_type.take() {
+                    i.trait_type = Some(self.fold_type(t));
+                }
+                i.methods = i
+                    .methods
+                    .into_iter()
+                    .map(|m| self.fold_function(m))
+                    .collect();
+                Item::Impl(i)
+            }
+            Item::Trait(mut t) => {
+                t.methods = t
+                    .methods
+                    .into_iter()
+                    .map(|m| self.fold_function(m))
+                    .collect();
+                Item::Trait(t)
+            }
+            Item::Test(mut t) => {
+                t.body = self.fold_block(t.body);
+                Item::Test(t)
+            }
+            Item::Global(mut g) => {
+                g.initializer = self.fold_expr(g.initializer);
+                Item::Global(g)
+            }
+            other => other,
+        }
+    }
+
+    fn fold_function(&mut self, mut f: Function) -> Function {
+        for param in &mut f.params {
+            let ty = std::mem::replace(&mut param.ty, Type::Tuple(Vec::new()));
+            param.ty = self.fold_type(ty);
+            // Param defaults intentionally left untouched (matches historical
+            // strip_ns_from_function behavior).
+        }
+        if let Some(ret) = f.return_type.take() {
+            f.return_type = Some(self.fold_type(ret));
+        }
+        if let Some(body) = f.body.take() {
+            f.body = Some(self.fold_block(body));
+        }
+        f
+    }
+
+    fn fold_expr(&mut self, expr: Expr) -> Expr {
+        match expr {
+            Expr::Ident(mut i) => {
+                if let Some(stripped) = self.maybe_strip(&i.name) {
+                    i.name = stripped;
+                }
+                Expr::Ident(i)
+            }
+            Expr::StructLiteral(mut s) => {
+                if let Some(name) = s.name.as_ref()
+                    && let Some(stripped) = self.maybe_strip(name)
+                {
+                    s.name = Some(stripped);
+                }
+                s.fields = s
+                    .fields
+                    .into_iter()
+                    .map(|mut f| {
+                        f.value = self.fold_expr(f.value);
+                        f
+                    })
+                    .collect();
+                Expr::StructLiteral(s)
+            }
+            other => crate::ast::default_fold_expr(self, other),
+        }
+    }
+
+    fn fold_pattern(&mut self, pat: Pattern) -> Pattern {
+        match pat {
+            Pattern::Variant {
+                variant_name,
                 variant_qualifier,
                 name_id,
                 name_span,
-                bindings: bindings
-                    .into_iter()
-                    .map(|p| strip_ns_from_pattern(p, ctx))
-                    .collect(),
+                bindings,
                 span,
-            }
-        }
-        Pattern::Struct {
-            type_name,
-            fields,
-            has_rest,
-            span,
-        } => {
-            let stripped_type = type_name.as_ref().map(|n| {
-                let s = strip_namespace_prefix(n, &ctx.namespace_names);
-                if s.len() == n.len() {
-                    n.clone()
-                } else {
-                    s.to_string()
+            } => {
+                let new_name = self.maybe_strip(&variant_name).unwrap_or(variant_name);
+                Pattern::Variant {
+                    variant_name: new_name,
+                    variant_qualifier: variant_qualifier.map(|t| self.fold_type(t)),
+                    name_id,
+                    name_span,
+                    bindings: bindings.into_iter().map(|p| self.fold_pattern(p)).collect(),
+                    span,
                 }
-            });
+            }
             Pattern::Struct {
-                type_name: stripped_type,
-                fields: fields
-                    .into_iter()
-                    .map(|mut f| {
-                        f.pattern = strip_ns_from_pattern(f.pattern, ctx);
-                        f
-                    })
-                    .collect(),
+                type_name,
+                fields,
                 has_rest,
                 span,
-            }
-        }
-        Pattern::Tuple(patterns, has_rest) => Pattern::Tuple(
-            patterns
-                .into_iter()
-                .map(|p| strip_ns_from_pattern(p, ctx))
-                .collect(),
-            has_rest,
-        ),
-        _ => pattern,
-    }
-}
-
-fn strip_ns_from_expr(expr: Expr, ctx: &DesugarContext) -> Expr {
-    match expr {
-        Expr::Ident(mut i) => {
-            let stripped = strip_namespace_prefix(&i.name, &ctx.namespace_names);
-            if stripped.len() != i.name.len() {
-                i.name = stripped.to_string();
-            }
-            Expr::Ident(i)
-        }
-        Expr::Binary(mut b) => {
-            b.left = strip_ns_from_expr(b.left, ctx);
-            b.right = strip_ns_from_expr(b.right, ctx);
-            Expr::Binary(b)
-        }
-        Expr::Unary(mut u) => {
-            u.expr = strip_ns_from_expr(u.expr, ctx);
-            Expr::Unary(u)
-        }
-        Expr::Assign(mut a) => {
-            a.target = strip_ns_from_expr(a.target, ctx);
-            a.value = strip_ns_from_expr(a.value, ctx);
-            Expr::Assign(a)
-        }
-        Expr::Call(mut c) => {
-            c.callee = strip_ns_from_expr(c.callee, ctx);
-            c.args = c
-                .args
-                .into_iter()
-                .map(|a| strip_ns_from_expr(a, ctx))
-                .collect();
-            Expr::Call(c)
-        }
-        Expr::MethodCall(mut m) => {
-            m.receiver = strip_ns_from_expr(m.receiver, ctx);
-            m.args = m
-                .args
-                .into_iter()
-                .map(|a| strip_ns_from_expr(a, ctx))
-                .collect();
-            Expr::MethodCall(m)
-        }
-        Expr::StaticMethodCall(mut s) => {
-            s.target_type = desugar_type(&s.target_type, ctx);
-            s.type_args = s.type_args.iter().map(|t| desugar_type(t, ctx)).collect();
-            s.args = s
-                .args
-                .into_iter()
-                .map(|a| strip_ns_from_expr(a, ctx))
-                .collect();
-            Expr::StaticMethodCall(s)
-        }
-        Expr::FieldAccess(mut f) => {
-            f.expr = strip_ns_from_expr(f.expr, ctx);
-            Expr::FieldAccess(f)
-        }
-        Expr::Index(mut i) => {
-            i.expr = strip_ns_from_expr(i.expr, ctx);
-            i.index = strip_ns_from_expr(i.index, ctx);
-            Expr::Index(i)
-        }
-        Expr::Block(mut b) => {
-            *b = strip_ns_from_block(*b, ctx);
-            Expr::Block(b)
-        }
-        Expr::If(mut i) => {
-            i.condition = strip_ns_from_condition(i.condition, ctx);
-            i.then_block = strip_ns_from_block(i.then_block, ctx);
-            i.else_block = i.else_block.map(|b| strip_ns_from_block(b, ctx));
-            Expr::If(i)
-        }
-        Expr::Match(mut m) => {
-            m.expr = strip_ns_from_expr(m.expr, ctx);
-            m.arms = m
-                .arms
-                .into_iter()
-                .map(|mut arm| {
-                    arm.pattern = strip_ns_from_pattern(arm.pattern, ctx);
-                    arm.body = strip_ns_from_expr(arm.body, ctx);
-                    arm.guard = arm.guard.map(|g| strip_ns_from_expr(g, ctx));
-                    arm
-                })
-                .collect();
-            Expr::Match(m)
-        }
-        Expr::Matches(mut m) => {
-            m.expr = strip_ns_from_expr(m.expr, ctx);
-            m.pattern = strip_ns_from_pattern(m.pattern, ctx);
-            m.guard = m.guard.map(|g| strip_ns_from_expr(g, ctx));
-            Expr::Matches(m)
-        }
-        Expr::Closure(mut c) => {
-            for p in &mut c.params {
-                p.ty = p.ty.as_ref().map(|t| desugar_type(t, ctx));
-            }
-            c.body = strip_ns_from_expr(c.body, ctx);
-            Expr::Closure(c)
-        }
-        Expr::TemplateString(mut t) => {
-            t.parts = t
-                .parts
-                .into_iter()
-                .map(|part| match part {
-                    TemplatePart::Interpolation { expr, format } => TemplatePart::Interpolation {
-                        expr: Box::new(strip_ns_from_expr(*expr, ctx)),
-                        format,
-                    },
-                    other => other,
-                })
-                .collect();
-            Expr::TemplateString(t)
-        }
-        Expr::Cast(mut c) => {
-            c.expr = strip_ns_from_expr(c.expr, ctx);
-            c.target_type = desugar_type(&c.target_type, ctx);
-            Expr::Cast(c)
-        }
-        Expr::StructLiteral(mut s) => {
-            if let Some(ref name) = s.name {
-                let stripped = strip_namespace_prefix(name, &ctx.namespace_names);
-                if stripped.len() != name.len() {
-                    s.name = Some(stripped.to_string());
+            } => {
+                let new_type_name = type_name.map(|n| self.maybe_strip(&n).unwrap_or(n));
+                Pattern::Struct {
+                    type_name: new_type_name,
+                    fields: fields
+                        .into_iter()
+                        .map(|mut f| {
+                            f.pattern = self.fold_pattern(f.pattern);
+                            f
+                        })
+                        .collect(),
+                    has_rest,
+                    span,
                 }
             }
-            s.fields = s
-                .fields
-                .into_iter()
-                .map(|mut f| {
-                    f.value = strip_ns_from_expr(f.value, ctx);
-                    f
-                })
-                .collect();
-            Expr::StructLiteral(s)
+            other => crate::ast::default_fold_pattern(self, other),
         }
-        Expr::TupleLiteral(mut t) => {
-            t.elements = t
-                .elements
-                .into_iter()
-                .map(|e| strip_ns_from_expr(e, ctx))
-                .collect();
-            Expr::TupleLiteral(t)
+    }
+
+    fn fold_type(&mut self, ty: Type) -> Type {
+        match ty {
+            Type::Named(mut n) => {
+                if let Some(stripped) = self.maybe_strip(&n.name) {
+                    n.name = stripped;
+                    // Reset the (cached) source interface — the resolver
+                    // re-derives it from the unprefixed name.
+                    n.source_interface = None;
+                }
+                Type::Named(n)
+            }
+            Type::Generic(mut g) => {
+                if let Some(stripped) = self.maybe_strip(&g.name) {
+                    g.name = stripped;
+                }
+                g.args = g.args.into_iter().map(|a| self.fold_type(a)).collect();
+                Type::Generic(g)
+            }
+            other => crate::ast::default_fold_type(self, other),
         }
-        Expr::LabeledBlock(mut l) => {
-            l.block = strip_ns_from_block(l.block, ctx);
-            Expr::LabeledBlock(l)
-        }
-        Expr::TryOp(mut t) => {
-            t.expr = strip_ns_from_expr(t.expr, ctx);
-            Expr::TryOp(t)
-        }
-        Expr::Spread(mut inner, span) => {
-            *inner = strip_ns_from_expr(*inner, ctx);
-            Expr::Spread(inner, span)
-        }
-        Expr::Range(mut range) => {
-            range.start = strip_ns_from_expr(range.start, ctx);
-            range.end = strip_ns_from_expr(range.end, ctx);
-            Expr::Range(range)
-        }
-        Expr::WithHandler(mut w) => {
-            w.handlers = w
-                .handlers
-                .into_iter()
-                .map(|mut b| {
-                    b.handler = strip_ns_from_expr(b.handler, ctx);
-                    b
-                })
-                .collect();
-            w.body = strip_ns_from_block(w.body, ctx);
-            Expr::WithHandler(w)
-        }
-        Expr::Resume(mut r) => {
-            r.value = strip_ns_from_expr(r.value, ctx);
-            Expr::Resume(r)
-        }
-        Expr::Literal(_) | Expr::CompoundAssign(_) | Expr::ComparisonChain(_) => expr,
     }
 }
 
