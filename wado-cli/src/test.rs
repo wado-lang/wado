@@ -1648,16 +1648,16 @@ pub async fn run(opts: TestOptions) {
     let package_runs = opts.package_runs;
     let preopened_dirs = Arc::new(opts.preopened_dirs);
 
-    // Per-stage concurrency. Compile and load are CPU-bound: hyperthread
-    // overhead and (for load) Cranelift's own internal parallelism mean
-    // overshooting physical core count costs more than it gains. Execute
-    // is mostly async I/O — tasks spend time in `instantiate_async` and
-    // wasi-host calls — so doubling the slot count fills the idle
-    // headroom that compile/load can't use. `--parallel N` scales all
-    // three: the proportional bump on execute is preserved.
+    // Per-stage concurrency. All three stages share the user's
+    // `--parallel N` setting. The 3-stage pipeline itself is the main
+    // win; over-subscribing execute (e.g. `cpus`) on top of a
+    // pre-`(cpus/2).max(2)` floor pushes 2-vCPU CI runners into 2×
+    // oversubscription, which inflates per-test wall time and tripped
+    // the default 5s timeout on the slowest O3-optimized Gale fixtures.
+    // Keep all stages at the same proven concurrency.
     let compile_jobs = jobs;
     let load_jobs = jobs;
-    let execute_jobs = jobs.saturating_mul(2).max(jobs);
+    let execute_jobs = jobs;
 
     // Prewarm the stdlib snapshot on `compile_jobs` distinct worker
     // threads before stage 1 starts. Each worker would otherwise build
