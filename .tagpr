@@ -4,8 +4,10 @@
 #   1. tagpr.yml runs on every push to main.
 #   2. tagpr maintains an open "Release v<next>" PR that bumps the version
 #      and updates CHANGELOG.md based on PRs merged since the previous tag.
-#   3. Merging that PR triggers tagpr to push tag `v<next>`.
-#   4. release.yml runs on the tag push and publishes the release.
+#   3. Merging that PR triggers tagpr to push tag `v<next>` and create a
+#      draft GitHub Release (see `release = draft` below).
+#   4. release.yml runs on the tag push, uploads build artifacts to that
+#      draft release, and publishes it.
 #
 # Default bump is patch. Override per-PR with labels:
 #   tagpr:patch | tagpr:minor | tagpr:major
@@ -16,6 +18,18 @@
 [tagpr]
 	vPrefix = true
 	releaseBranch = main
+
+	# Create the GitHub Release as a draft so release.yml can upload build
+	# artifacts to it. The repository has "Immutable releases" enabled, which
+	# forbids adding assets after a release is published — assets must be
+	# uploaded to a draft and the draft is then published.
+	#
+	# Flow:
+	#   tagpr        — pushes the tag and creates a draft release (with notes).
+	#   release.yml  — finds the draft, uploads artifacts, then publishes it
+	#                  (softprops/action-gh-release@v3 uploads assets before
+	#                  flipping draft=false).
+	release = draft
 
 	# tagpr has no native Cargo.toml handler but its generic version-file
 	# regex is line-anchored, matching `version = "..."` only at the start

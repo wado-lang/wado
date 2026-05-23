@@ -134,6 +134,11 @@ jobs:
           sha256sum wado-* > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
+      # tagpr creates the release as a draft (see `.tagpr`). The repository
+      # has "Immutable releases" enabled, which forbids uploading assets to
+      # a published release — assets must go onto a draft. action-gh-release@v3
+      # uploads files before flipping draft=false, so leaving `draft` unset
+      # (default false) uploads to the existing draft and then publishes it.
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.validate.outputs.tag }}
