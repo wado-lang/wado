@@ -42,11 +42,7 @@ impl Array<T> {
         let capacity = builtin::array_len(self.repr);
         let new_capacity = i32_max(capacity * 2, 4);
         let new_repr: builtin::array<T> = builtin::array_new(new_capacity);
-        let old_repr = self.repr;
-        let used = self.used;
-        for let mut i = 0; i < used; i += 1 {
-            builtin::array_set(new_repr, i, builtin::array_get(old_repr, i));
-        }
+        builtin::array_copy(new_repr, 0, self.repr, 0, self.used);
         self.repr = new_repr;
     }
 
@@ -57,11 +53,7 @@ impl Array<T> {
         }
         let new_capacity = i32_max(i32_max(capacity * 2, min_capacity), 4);
         let new_repr: builtin::array<T> = builtin::array_new(new_capacity);
-        let old_repr = self.repr;
-        let used = self.used;
-        for let mut i = 0; i < used; i += 1 {
-            builtin::array_set(new_repr, i, builtin::array_get(old_repr, i));
-        }
+        builtin::array_copy(new_repr, 0, self.repr, 0, self.used);
         self.repr = new_repr;
     }
 
@@ -141,11 +133,7 @@ impl Array<T> {
             self.grow();
         }
         // Shift elements right
-        let mut i = self.used;
-        while i > index {
-            builtin::array_set(self.repr, i, builtin::array_get(self.repr, i - 1));
-            i -= 1;
-        }
+        builtin::array_copy(self.repr, index + 1, self.repr, index, self.used - index);
         builtin::array_set(self.repr, index, value);
         self.used += 1;
     }
@@ -156,9 +144,7 @@ impl Array<T> {
         assert index >= 0 && index < self.used, "index out of bounds";
         let value = builtin::array_get(self.repr, index);
         // Shift elements left
-        for let mut i = index; i < self.used - 1; i += 1 {
-            builtin::array_set(self.repr, i, builtin::array_get(self.repr, i + 1));
-        }
+        builtin::array_copy(self.repr, index, self.repr, index + 1, self.used - 1 - index);
         self.used -= 1;
         return value;
     }
@@ -197,9 +183,7 @@ impl Array<T> {
         let capacity = builtin::array_len(self.repr);
         if capacity > self.used {
             let new_repr: builtin::array<T> = builtin::array_new(self.used);
-            for let mut i = 0; i < self.used; i += 1 {
-                builtin::array_set(new_repr, i, builtin::array_get(self.repr, i));
-            }
+            builtin::array_copy(new_repr, 0, self.repr, 0, self.used);
             self.repr = new_repr;
         }
     }
@@ -235,12 +219,8 @@ impl Array<T> {
     pub fn repeat(&self, n: i32) -> Array<T> {
         let total = self.used * n;
         let new_repr: builtin::array<T> = builtin::array_new(total);
-        let mut offset = 0;
         for let mut r = 0; r < n; r += 1 {
-            for let mut i = 0; i < self.used; i += 1 {
-                builtin::array_set(new_repr, offset, builtin::array_get(self.repr, i));
-                offset += 1;
-            }
+            builtin::array_copy(new_repr, r * self.used, self.repr, 0, self.used);
         }
         return Array { repr: new_repr, used: total };
     }
@@ -255,19 +235,15 @@ impl Array<T> {
         if builtin::unlikely(new_used > capacity) {
             let new_capacity = i32_max(new_used, capacity * 2);
             let new_repr: builtin::array<T> = builtin::array_new(new_capacity);
-            // Use element-by-element loop: Wasm array.copy is a libcall in wasmtime
-            // (~3μs/element), while a JIT-compiled loop runs at ~1ns/element.
-            let old_repr = self.repr;
-            let old_used = self.used;
-            for let mut i = 0; i < old_used; i += 1 {
-                builtin::array_set(new_repr, i, builtin::array_get(old_repr, i));
-            }
+            builtin::array_copy(new_repr, 0, self.repr, 0, self.used);
             self.repr = new_repr;
         }
         let raw = self.repr;
         let base = self.used;
-        // Forward copy is correct for non-overlapping (any order works) and for
-        // overlapping back-references where src < dst (DEFLATE run-length expansion).
+        // Forward element-by-element copy intentionally propagates just-written
+        // values for DEFLATE-style run-length back-references (src < dst, overlap).
+        // `builtin::array_copy` uses copy-as-if-buffered semantics, so it cannot
+        // replace this loop.
         for let mut i = 0; i < count; i += 1 {
             builtin::array_set(raw, base + i, builtin::array_get(raw, src_start + i));
         }

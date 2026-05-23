@@ -856,14 +856,7 @@ impl String {
             self.grow(new_used);
         }
         // Shift bytes right
-        let mut i = self.used - 1;
-        while i >= byte_index {
-            builtin::array_set_u8(self.repr, i + char_len, builtin::array_get_u8(self.repr, i));
-            if i == 0 {
-                break;
-            }
-            i -= 1;
-        }
+        builtin::array_copy(self.repr, byte_index + char_len, self.repr, byte_index, self.used - byte_index);
         // Write encoded char
         if code < 0x80 {
             builtin::array_set_u8(self.repr, byte_index, code as u8);
@@ -905,14 +898,7 @@ impl String {
             self.grow(new_used);
         }
         // Shift bytes right
-        let mut i = self.used - 1;
-        while i >= byte_index {
-            builtin::array_set_u8(self.repr, i + s_len, builtin::array_get_u8(self.repr, i));
-            if i == 0 {
-                break;
-            }
-            i -= 1;
-        }
+        builtin::array_copy(self.repr, byte_index + s_len, self.repr, byte_index, self.used - byte_index);
         // Copy inserted string
         builtin::array_copy(self.repr, byte_index, s.internal_raw_bytes(), 0, s_len);
         self.used = new_used;
@@ -960,10 +946,7 @@ impl String {
             (b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F;
         };
         // Shift bytes left
-        let src = byte_index + char_len;
-        for let mut i = src; i < self.used; i += 1 {
-            builtin::array_set_u8(self.repr, i - char_len, builtin::array_get_u8(self.repr, i));
-        }
+        builtin::array_copy(self.repr, byte_index, self.repr, byte_index + char_len, self.used - byte_index - char_len);
         self.used -= char_len;
         return char::from_u32_unchecked(code);
     }
