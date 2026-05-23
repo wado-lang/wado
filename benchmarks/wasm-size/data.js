@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779497365063,
+  "lastUpdate": 1779502524870,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24741,6 +24741,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/55ec6a163255373a7a94dcb8245a491e5ad9e328"
         },
         "date": 1779497364596,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9bf2dcd9c345347e7ab16da1d2eeee30c08bf4f9",
+          "message": "Merge pull request #1154 from wado-lang/claude/busy-mccarthy-hoGCA\n\nchore: export MISE_GITHUB_TOKEN in mise-setup hook",
+          "timestamp": "2026-05-23T11:09:07+09:00",
+          "tree_id": "25379c8bf171584f8126005ab9b7d0b8b593ed8a",
+          "url": "https://github.com/wado-lang/wado/commit/9bf2dcd9c345347e7ab16da1d2eeee30c08bf4f9"
+        },
+        "date": 1779502524452,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
