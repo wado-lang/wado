@@ -26,10 +26,11 @@
 //! a silent miss in the assert lowering.
 
 use crate::ast::{
-    self, AssertStmt, AstFolder, AstId, Block, CallExpr, Condition, Expr, ExprStmt, FormatSpec,
-    IdentExpr, IfStmt, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, Pattern, TemplatePart,
-    TemplateStringExpr, UnaryExpr, UnaryOp, default_fold_expr,
+    self, AssertStmt, AstId, Block, CallExpr, Condition, Expr, ExprStmt, FormatSpec, IdentExpr,
+    IfStmt, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, Pattern, TemplatePart,
+    TemplateStringExpr, UnaryExpr, UnaryOp,
 };
+use crate::ast_folder::{AstFolder, default_fold_expr};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
 use crate::tir::TirStmt;

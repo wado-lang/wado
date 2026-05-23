@@ -9,8 +9,8 @@
 // LSP queries land on the user's original `assert cond, msg;` text.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AstFolder, AstId, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr,
-    CastExpr, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    AssertStmt, AssignExpr, AstId, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
+    ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
     ConditionElement, ContinueStmt, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
     Function, GlobalDecl, IfExpr, IfStmt, ImplBlock, IndexExpr, InterfaceDecl, Item,
     LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr,
@@ -18,6 +18,7 @@ use crate::ast::{
     StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
     TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseItem, WhileStmt,
 };
+use crate::ast_folder::{AstFolder, default_fold_expr, default_fold_pattern, default_fold_type};
 
 /// Context for desugaring, holding state that needs to be tracked across the process.
 struct DesugarContext {
@@ -1215,7 +1216,7 @@ impl NsStripper {
     }
 }
 
-impl crate::ast::AstFolder for NsStripper {
+impl AstFolder for NsStripper {
     fn fold_item(&mut self, item: Item) -> Item {
         // Mirrors the original `strip_ns_from_item`: only recurse into the
         // items that have user-written expressions / statements / types
@@ -1294,7 +1295,7 @@ impl crate::ast::AstFolder for NsStripper {
                     .collect();
                 Expr::StructLiteral(s)
             }
-            other => crate::ast::default_fold_expr(self, other),
+            other => default_fold_expr(self, other),
         }
     }
 
@@ -1338,7 +1339,7 @@ impl crate::ast::AstFolder for NsStripper {
                     span,
                 }
             }
-            other => crate::ast::default_fold_pattern(self, other),
+            other => default_fold_pattern(self, other),
         }
     }
 
@@ -1360,7 +1361,7 @@ impl crate::ast::AstFolder for NsStripper {
                 g.args = g.args.into_iter().map(|a| self.fold_type(a)).collect();
                 Type::Generic(g)
             }
-            other => crate::ast::default_fold_type(self, other),
+            other => default_fold_type(self, other),
         }
     }
 }

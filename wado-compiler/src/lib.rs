@@ -1,6 +1,7 @@
 pub mod analyze;
 pub mod annotate;
 pub mod ast;
+pub mod ast_folder;
 pub mod ast_index;
 pub mod bind;
 pub mod builtin_registry;
