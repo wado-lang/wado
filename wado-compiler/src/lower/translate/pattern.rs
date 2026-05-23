@@ -638,7 +638,7 @@ impl<'a> PatternLowerer<'a> {
                                         is_reactive: false,
                                         type_id: *type_id,
                                         value: payload_expr,
-                                        skip_value_copy: true,
+                                        skip_value_copy: false,
                                     },
                                     span,
                                 ));
@@ -814,7 +814,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: *type_id,
                         value,
-                        skip_value_copy: true,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -833,7 +833,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: true,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -864,7 +864,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: true,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -915,7 +915,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: true,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -976,7 +976,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: true,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1080,7 +1080,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: true,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1131,7 +1131,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: true,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1388,7 +1388,7 @@ impl<'a> PatternLowerer<'a> {
                             is_reactive: false,
                             type_id: scrutinee_type,
                             value: hoisted,
-                            skip_value_copy: true,
+                            skip_value_copy: false,
                         },
                         stmt.span,
                     ));
@@ -1487,7 +1487,7 @@ impl<'a> PatternLowerer<'a> {
                 is_reactive: false,
                 type_id: binding_type,
                 value,
-                skip_value_copy: true,
+                skip_value_copy: false,
             },
             span,
         ));
@@ -1546,7 +1546,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: true,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1611,7 +1611,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: true,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1659,7 +1659,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: true,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1753,7 +1753,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: true,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1818,7 +1818,7 @@ impl<'a> PatternLowerer<'a> {
                             is_reactive: false,
                             type_id: value.type_id,
                             value,
-                            skip_value_copy: true,
+                            skip_value_copy: false,
                         },
                         span,
                     );
@@ -1864,7 +1864,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
-                        skip_value_copy: true,
+                        skip_value_copy: false,
                     },
                     span,
                 );
