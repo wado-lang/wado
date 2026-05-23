@@ -6,8 +6,6 @@
 //! - `CompoundAssignExpr` (`x += y`) → `AssignExpr` (`x = x + y`)
 //! - `while` / `for` / `for-of` loops → explicit `loop` + `break`
 //! - template strings → `Display`/`Inspect`-driven concatenation skeletons
-//! - `use … namespace` prefixes erased from idents and type names in
-//!   function / impl / trait / test / global bodies (see [`NsStripper`])
 //!
 //! What this phase deliberately leaves alone, deferring desugar to the
 //! resolver (which has typed sub-expressions to work with):
@@ -15,9 +13,9 @@
 //! - `assert cond[, msg];` → `Resolver::desugar_assert`
 //! - `expr matches { pat [&& guard] }` → `Resolver::desugar_matches_expr`
 //! - `a < b < c` (`Expr::ComparisonChain`) → `Resolver::desugar_comparison_chain`
-//!
-//! Keeping those three in the AST also means LSP queries (hover,
-//! jump-to-def, references) land on the user's text as written.
+//! - `use … namespace` prefixes (e.g. `helper::foo`) — canonicalized at
+//!   lookup time by `Resolver::strip_ns_prefix` so the AST keeps the
+//!   user's text and LSP cursors land on the prefixed form as written.
 
 use crate::ast::{
     AssignExpr, AstId, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ClosureExpr,
@@ -26,10 +24,9 @@ use crate::ast::{
     GlobalDecl, IfExpr, IfStmt, ImplBlock, IndexExpr, InterfaceDecl, Item, LabeledBlockStmt,
     LetStmt, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Newtype, Pattern, ReturnStmt,
     StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr, StructLiteralField, TaskReturnStmt,
-    TemplatePart, TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr,
-    UnaryOp, UseItem, WhileStmt,
+    TemplatePart, TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, UnaryExpr, UnaryOp,
+    WhileStmt,
 };
-use crate::ast_folder::{AstFolder, default_fold_expr, default_fold_pattern, default_fold_type};
 
 /// Context for desugaring, holding state that needs to be tracked across the process.
 struct DesugarContext {
@@ -79,7 +76,6 @@ pub fn desugar_module(module: &Module) -> Module {
         .iter()
         .map(|item| desugar_item(item, &mut ctx))
         .collect();
-    let items = NsStripper::for_module(module).strip(items);
     Module::with_metadata(
         items,
         module.inner_attributes().to_vec(),
@@ -88,22 +84,6 @@ pub fn desugar_module(module: &Module) -> Module {
         module.include_paths().clone(),
         module.ast_id_count(),
     )
-}
-
-fn strip_namespace_prefix<'a>(name: &'a str, namespace_names: &[String]) -> &'a str {
-    for ns in namespace_names {
-        if let Some(rest) = name.strip_prefix(ns.as_str())
-            && let Some(rest) = rest.strip_prefix("::")
-        {
-            // Keep the namespace prefix for type-qualified names (e.g., "ns::Type::method")
-            // so the resolver can identify which module the type belongs to.
-            if rest.contains("::") {
-                return name;
-            }
-            return rest;
-        }
-    }
-    name
 }
 
 fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
@@ -1076,205 +1056,6 @@ fn desugar_for_of(f: &ForOfStmt, ctx: &mut DesugarContext) -> Stmt {
     })
 }
 
-/// Strip `use … namespace` prefixes from identifiers, types, patterns,
-/// and struct-literal names so the resolver sees the canonical
-/// (unprefixed) name.
-///
-/// Only Function / Impl / Trait / Test / Global bodies are visited; the
-/// other item shapes (`Struct` / `Enum` / `Variant` / `Newtype` /
-/// `Flags` / `TupleTypeDecl` / `Use` / `Interface` / `Resource` /
-/// `World`) pass through unchanged because the resolver accepts the
-/// prefixed form when looking up those declarations directly. The
-/// selectivity is pinned by
-/// `tests::ns_stripper_only_visits_function_and_global_bodies`.
-///
-/// Within the visited bodies the recursion is exhaustive — the
-/// `default_fold_*` defaults reach into `Closure` parameter defaults,
-/// `WithHandler` effect types, function param defaults, `Pattern::Or`
-/// arms, and so on — so any unprefixed reference the resolver can
-/// reach is reachable from here too.
-struct NsStripper {
-    namespace_names: Vec<String>,
-}
-
-impl NsStripper {
-    /// Collect every `use <name> from "..."` (the namespace-style import)
-    /// declared in `module`. The result is the prefix set we strip.
-    fn for_module(module: &Module) -> Self {
-        let namespace_names = module
-            .items
-            .iter()
-            .filter_map(|item| {
-                if let Item::Use(u) = item {
-                    u.items.iter().find_map(|ui| {
-                        if let UseItem::Namespace { name } = ui {
-                            Some(name.clone())
-                        } else {
-                            None
-                        }
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect();
-        Self { namespace_names }
-    }
-
-    fn strip(mut self, items: Vec<Item>) -> Vec<Item> {
-        if self.namespace_names.is_empty() {
-            return items;
-        }
-        items.into_iter().map(|item| self.fold_item(item)).collect()
-    }
-
-    /// Try to strip a namespace prefix from `name`, returning the new
-    /// owned `String` only when a prefix actually matched. Returning
-    /// `Option<String>` lets call sites short-circuit on the common
-    /// no-match path without an extra allocation.
-    fn maybe_strip(&self, name: &str) -> Option<String> {
-        let stripped = strip_namespace_prefix(name, &self.namespace_names);
-        if stripped.len() == name.len() {
-            None
-        } else {
-            Some(stripped.to_string())
-        }
-    }
-}
-
-impl AstFolder for NsStripper {
-    fn fold_item(&mut self, item: Item) -> Item {
-        // Selective override of `default_fold_item` — see the type-level
-        // doc for which item shapes are visited and why.
-        match item {
-            Item::Function(f) => Item::Function(self.fold_function(f)),
-            Item::Impl(mut i) => {
-                i.ty = self.fold_type(i.ty);
-                if let Some(t) = i.trait_type.take() {
-                    i.trait_type = Some(self.fold_type(t));
-                }
-                i.methods = i
-                    .methods
-                    .into_iter()
-                    .map(|m| self.fold_function(m))
-                    .collect();
-                Item::Impl(i)
-            }
-            Item::Trait(mut t) => {
-                t.methods = t
-                    .methods
-                    .into_iter()
-                    .map(|m| self.fold_function(m))
-                    .collect();
-                Item::Trait(t)
-            }
-            Item::Test(mut t) => {
-                t.body = self.fold_block(t.body);
-                Item::Test(t)
-            }
-            Item::Global(mut g) => {
-                g.initializer = self.fold_expr(g.initializer);
-                Item::Global(g)
-            }
-            other => other,
-        }
-    }
-
-    fn fold_expr(&mut self, expr: Expr) -> Expr {
-        match expr {
-            Expr::Ident(mut i) => {
-                if let Some(stripped) = self.maybe_strip(&i.name) {
-                    i.name = stripped;
-                }
-                Expr::Ident(i)
-            }
-            Expr::StructLiteral(mut s) => {
-                if let Some(name) = s.name.as_ref()
-                    && let Some(stripped) = self.maybe_strip(name)
-                {
-                    s.name = Some(stripped);
-                }
-                s.fields = s
-                    .fields
-                    .into_iter()
-                    .map(|mut f| {
-                        f.value = self.fold_expr(f.value);
-                        f
-                    })
-                    .collect();
-                Expr::StructLiteral(s)
-            }
-            other => default_fold_expr(self, other),
-        }
-    }
-
-    fn fold_pattern(&mut self, pat: Pattern) -> Pattern {
-        match pat {
-            Pattern::Variant {
-                variant_name,
-                variant_qualifier,
-                name_id,
-                name_span,
-                bindings,
-                span,
-            } => {
-                let new_name = self.maybe_strip(&variant_name).unwrap_or(variant_name);
-                Pattern::Variant {
-                    variant_name: new_name,
-                    variant_qualifier: variant_qualifier.map(|t| self.fold_type(t)),
-                    name_id,
-                    name_span,
-                    bindings: bindings.into_iter().map(|p| self.fold_pattern(p)).collect(),
-                    span,
-                }
-            }
-            Pattern::Struct {
-                type_name,
-                fields,
-                has_rest,
-                span,
-            } => {
-                let new_type_name = type_name.map(|n| self.maybe_strip(&n).unwrap_or(n));
-                Pattern::Struct {
-                    type_name: new_type_name,
-                    fields: fields
-                        .into_iter()
-                        .map(|mut f| {
-                            f.pattern = self.fold_pattern(f.pattern);
-                            f
-                        })
-                        .collect(),
-                    has_rest,
-                    span,
-                }
-            }
-            other => default_fold_pattern(self, other),
-        }
-    }
-
-    fn fold_type(&mut self, ty: Type) -> Type {
-        match ty {
-            Type::Named(mut n) => {
-                if let Some(stripped) = self.maybe_strip(&n.name) {
-                    n.name = stripped;
-                    // Reset the (cached) source interface — the resolver
-                    // re-derives it from the unprefixed name.
-                    n.source_interface = None;
-                }
-                Type::Named(n)
-            }
-            Type::Generic(mut g) => {
-                if let Some(stripped) = self.maybe_strip(&g.name) {
-                    g.name = stripped;
-                }
-                g.args = g.args.into_iter().map(|a| self.fold_type(a)).collect();
-                Type::Generic(g)
-            }
-            other => default_fold_type(self, other),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1330,84 +1111,4 @@ mod tests {
         }
     }
 
-    /// Pins [`NsStripper`]'s item-level selectivity: `<ns>::foo` is
-    /// stripped inside Function / Test / Global bodies, but kept inside
-    /// `Struct` / `Enum` / `Variant` fields. A regression that lets
-    /// `fold_item` delegate to `default_fold_item` would break this.
-    #[test]
-    fn ns_stripper_only_visits_function_and_global_bodies() {
-        use crate::ast::Function;
-        use crate::lexer::Lexer;
-        use crate::parser::Parser;
-
-        fn parse(source: &str) -> Module {
-            let tokens = Lexer::new(source).tokenize().expect("lex");
-            let mut parser = Parser::new(tokens);
-            parser.parse().expect("parse")
-        }
-
-        // - `helper::add(1, 2)` inside a function body → `add(1, 2)` (stripped).
-        // - `helper::HELPER_BASE` in a struct field default → MUST NOT be
-        //   stripped because NsStripper.fold_item skips `Item::Struct`.
-        //   This pins the selectivity: a future "just delegate to default"
-        //   regression would break this assertion.
-        let module = parse(
-            r#"
-use helper from "./helper.wado";
-
-struct WithDefault {
-    base: i32 = helper::HELPER_BASE,
-}
-
-fn pick() -> i32 {
-    return helper::add(1, 2);
-}
-"#,
-        );
-
-        let stripped = NsStripper::for_module(&module).strip(module.items.clone());
-
-        let mut saw_func_call_stripped = false;
-        let mut saw_struct_default_preserved = false;
-        for item in &stripped {
-            match item {
-                Item::Function(Function { name, body, .. }) if name == "pick" => {
-                    let body = body.as_ref().expect("pick has a body");
-                    // Drill: return helper::add(...) → return add(...).
-                    for s in &body.stmts {
-                        if let Stmt::Return(r) = s
-                            && let Some(Expr::Call(c)) = r.value.as_ref()
-                            && let Expr::Ident(ident) = &c.callee
-                        {
-                            assert_eq!(
-                                ident.name, "add",
-                                "function-body call should have its namespace prefix stripped"
-                            );
-                            saw_func_call_stripped = true;
-                        }
-                    }
-                }
-                Item::Struct(s) => {
-                    let field = s.fields.first().expect("WithDefault has a field");
-                    let default = field.default.as_ref().expect("base has a default");
-                    if let Expr::Ident(ident) = default {
-                        assert_eq!(
-                            ident.name, "helper::HELPER_BASE",
-                            "struct field default must keep the namespace prefix \
-                             (NsStripper.fold_item must skip Item::Struct)"
-                        );
-                        saw_struct_default_preserved = true;
-                    } else {
-                        panic!("expected Ident default, got {default:?}");
-                    }
-                }
-                _ => {}
-            }
-        }
-        assert!(saw_func_call_stripped, "didn't observe the stripped call");
-        assert!(
-            saw_struct_default_preserved,
-            "didn't observe the preserved struct default"
-        );
-    }
 }

@@ -20,15 +20,18 @@
 //! that the rewritten condition (and the failure-message lines) refer
 //! to, so side-effecting sub-terms evaluate exactly once.
 //!
-//! The capture walk is an [`AstFolder`] — `default_fold_expr` covers
-//! every `Expr` variant structurally, so a newly added variant trips
-//! the compiler before it can silently miss capture.
+//! The capture walk is hand-written rather than a general visitor: only
+//! the handful of expression shapes that have meaningful intermediate
+//! values participate, and each makes its own decision about whether
+//! to recurse into children (`Binary` / `Unary` do) or capture whole
+//! (`MethodCall` / `FieldAccess` / `Index` do, to keep their
+//! receiver-typed dispatch context). Variants not listed are treated as
+//! opaque leaves.
 
 use crate::ast::{
     self, AssertStmt, AstId, Block, CallExpr, Condition, Expr, ExprStmt, FormatSpec, IdentExpr,
     IfStmt, Literal, LiteralExpr, TemplatePart, TemplateStringExpr, UnaryExpr, UnaryOp,
 };
-use crate::ast_folder::{AstFolder, default_fold_expr};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
 use crate::tir::{TirBlock, TirStmt, TirStmtKind};
@@ -261,7 +264,7 @@ impl CaptureFolder {
     }
 }
 
-impl AstFolder for CaptureFolder {
+impl CaptureFolder {
     fn fold_expr(&mut self, expr: Expr) -> Expr {
         // Snapshot the original source before folding children — the
         // captured text must read in the user's words, not `__vK`.
@@ -278,8 +281,10 @@ impl AstFolder for CaptureFolder {
                 }
                 self.capture(ident.name.clone(), Expr::Ident(ident), span)
             }
-            Expr::Binary(_) => {
-                let rewritten = default_fold_expr(self, expr);
+            Expr::Binary(mut b) => {
+                b.left = self.fold_expr(b.left);
+                b.right = self.fold_expr(b.right);
+                let rewritten = Expr::Binary(b);
                 if is_root {
                     return rewritten;
                 }
@@ -305,7 +310,9 @@ impl AstFolder for CaptureFolder {
                 if u.op == UnaryOp::MutRef {
                     return Expr::Unary(u);
                 }
-                let rewritten = default_fold_expr(self, Expr::Unary(u));
+                let mut u = u;
+                u.expr = self.fold_expr(u.expr);
+                let rewritten = Expr::Unary(u);
                 if is_root {
                     return rewritten;
                 }

@@ -469,6 +469,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
+        // Canonicalize `<ns>::<member>` (single `::`, prefix is a namespace
+        // import alias) to the bare `<member>` form. Every lookup table below
+        // is keyed by canonical names; the rewritten ident keeps the original
+        // `id` so use→def edges still resolve back to the user's text.
+        let canonical_ident;
+        let ident = if let Some(stripped) = self.strip_ns_prefix(&ident.name) {
+            canonical_ident = ast::IdentExpr {
+                id: ident.id,
+                name: stripped.to_string(),
+                segments: ident.segments.clone(),
+                type_args: ident.type_args.clone(),
+                span: ident.span,
+            };
+            &canonical_ident
+        } else {
+            ident
+        };
+
         // Check local variables, including captures from outer scope
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
             match var_ref {
@@ -3074,8 +3092,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TirExpr {
         // Handle implicit struct literals (name is None) — anonymous struct inference
-        let Some(name) = &struct_lit.name else {
+        let Some(raw_name) = &struct_lit.name else {
             return self.resolve_anonymous_struct_literal(struct_lit, ctx);
+        };
+        // `<ns>::<Struct>` canonicalizes to bare `<Struct>` for all the
+        // registry lookups below (struct_fields, symbols, …).
+        let canonical_name;
+        let name = if let Some(stripped) = self.strip_ns_prefix(raw_name) {
+            canonical_name = stripped.to_string();
+            &canonical_name
+        } else {
+            raw_name
         };
 
         // Record use→def reference for the struct type name.

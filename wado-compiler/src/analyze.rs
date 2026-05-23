@@ -834,8 +834,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             // no symbols to register
                         }
                         UseItem::Namespace { .. } => {
-                            // Namespace import: register all pub symbols from source module
-                            // The desugar phase has already stripped ns:: prefixes from idents
+                            // Namespace import: register all pub symbols from
+                            // source module by their bare names. The resolver
+                            // canonicalizes `<ns>::<member>` to `<member>` at
+                            // lookup time (see `Resolver::strip_ns_prefix`),
+                            // so a symbol registered under its bare name is
+                            // reachable both as `member` and as `ns::member`.
                             let symbols: Vec<(String, SymbolKey)> = self
                                 .symbols
                                 .get_module_symbols(&module_source)

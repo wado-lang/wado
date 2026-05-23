@@ -315,6 +315,29 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
     }
 
+    /// Canonicalize a `<ns>::<member>` reference (single `::`, prefix is a
+    /// namespace import alias) to the bare `<member>` form. Returns `None`
+    /// when the name isn't of that shape — including multi-segment cases like
+    /// `<ns>::<Type>::<case>`, which the resolver routes through dedicated
+    /// namespace paths (see `resolve_ident` / `resolve_call`).
+    ///
+    /// The AST keeps the user-written `ns::member` so LSP cursors land on it
+    /// as typed; the name lookups against `imported_functions`,
+    /// `imported_globals`, struct registries, etc. see the canonical form
+    /// they were populated with.
+    pub(super) fn strip_ns_prefix<'s>(&self, name: &'s str) -> Option<&'s str> {
+        let pos = name.find("::")?;
+        let prefix = &name[..pos];
+        let suffix = &name[pos + 2..];
+        if suffix.contains("::") {
+            return None;
+        }
+        if !self.namespace_imports.contains_key(prefix) {
+            return None;
+        }
+        Some(suffix)
+    }
+
     pub(super) fn lookup_struct_fields(&self, name: &str) -> Option<&StructFieldInfo> {
         self.type_lookup().struct_fields(name)
     }
