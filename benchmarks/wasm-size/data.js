@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779510442483,
+  "lastUpdate": 1779521659456,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24917,6 +24917,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6bc81d9cc58d799109e0c71e060f97a092df01ac"
         },
         "date": 1779510442223,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "19b97b2892997c8b27e271733460fa34554b4ca5",
+          "message": "Merge pull request #1158 from wado-lang/claude/nir-wep-review-9Wc3L\n\nNIR WEP Step 5: lower's body rewrites move into the TIR→NIR fold",
+          "timestamp": "2026-05-23T16:28:09+09:00",
+          "tree_id": "bfa8b642f5af3df8cd7d19a285c4839e1f93755d",
+          "url": "https://github.com/wado-lang/wado/commit/19b97b2892997c8b27e271733460fa34554b4ca5"
+        },
+        "date": 1779521659004,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
