@@ -1,6 +1,7 @@
 # Changelog
 
 ## [v0.0.3](https://github.com/wado-lang/wado/compare/v0.0.2...v0.0.3) - 2026-05-23
+
 - refactor(name): split interning and `ModuleSource` out of `name.rs` by @gfx in https://github.com/wado-lang/wado/pull/1045
 - refactor(gale): introduce GIR lower(Grammar) -> LoweredGrammar and wire codegen through it by @gfx in https://github.com/wado-lang/wado/pull/1044
 - docs(wep): propose Normalized IR (NIR) layer at the lower boundary by @gfx in https://github.com/wado-lang/wado/pull/1047
