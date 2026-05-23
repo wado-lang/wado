@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779502524870,
+  "lastUpdate": 1779504238551,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -24785,6 +24785,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9bf2dcd9c345347e7ab16da1d2eeee30c08bf4f9"
         },
         "date": 1779502524452,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17032,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460016,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "400c7528667fae9773659ed5fc262a28da76fa40",
+          "message": "Merge pull request #1155 from wado-lang/claude/hopeful-bardeen-UUhsj\n\nUpdate README HTTP example to match real wasi:http API",
+          "timestamp": "2026-05-23T11:37:58+09:00",
+          "tree_id": "aa7252d5b2b018a8f1f6050087d5d6d96bebd8ea",
+          "url": "https://github.com/wado-lang/wado/commit/400c7528667fae9773659ed5fc262a28da76fa40"
+        },
+        "date": 1779504238262,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
