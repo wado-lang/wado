@@ -1,17 +1,21 @@
+use std::any::Any;
 use std::fmt::Write as _;
+use std::future::Future;
+use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process;
-use std::sync::Arc;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
+use futures::FutureExt;
 use futures::stream::{self, StreamExt};
 use glob::Pattern;
 use lexopt::Arg::Value;
-use tokio::sync::mpsc;
+use tokio::sync::OwnedSemaphorePermit;
+use tokio::sync::{Semaphore, mpsc};
 use wado_compiler::hashmap::IndexMap;
 use wasmtime::Engine;
 use wasmtime::component::{Component, Linker};
@@ -510,19 +514,125 @@ struct CompiledArtifact {
 /// The `Linker` is built once per engine alongside loading; every test
 /// in the module instantiates against the same linker so the WASI binding
 /// registration (`p3::add_to_linker` × 4) is paid once instead of per-test.
+///
+/// Holds an `OwnedSemaphorePermit` for the pipeline's `modules` budget:
+/// when the last `Arc<LoadedModule>` drops, the permit releases and a
+/// new module is allowed to load. This caps simultaneously-live
+/// wasmtime `Component`s (the heaviest in-flight resource by far)
+/// regardless of how channels between stages buffer.
 struct LoadedModule {
     path: String,
     engine: Arc<Engine>,
     component: Arc<Component>,
     linker: Arc<Linker<WasiState>>,
     tests: Vec<ParsedTest>,
+    _module_permit: OwnedSemaphorePermit,
 }
 
 /// A non-TODO module that failed the **load** stage (wasmtime
-/// `Component::new` / `create_linker` failed). Counted on the `load`
-/// axis of the summary; does not abort the run.
+/// `Component::new` / `create_linker` failed, or the load worker
+/// panicked). Counted on the `load` axis of the summary; does not
+/// abort the run.
 struct LoadFailure {
     path: String,
+}
+
+/// Shared resource budget for the whole pipeline.
+///
+/// `cpu` caps the combined number of in-flight CPU-bound tasks across
+/// the compile and load stages — both run on the blocking pool and
+/// would otherwise oversubscribe a small CI runner (e.g. 2 vCPUs with
+/// `jobs = 2` per stage = 4 CPU tasks against 2 cores). The shared
+/// permit pool preserves the original "at most `jobs` CPU tasks live
+/// at once" guarantee that the pre-pipeline runner had.
+///
+/// `modules` caps the number of fully-loaded wasmtime `Component`s
+/// alive simultaneously, regardless of how the inter-stage channels
+/// buffer. A `LoadedModule` acquires one permit before `Component::new`
+/// and holds it via `_module_permit` until the last `Arc<LoadedModule>`
+/// drops at the end of the execute stage. This bounds peak memory: with
+/// `modules = 2 * jobs` and `jobs = 2`, at most 4 wasmtime Components
+/// are live, even if load completes far ahead of execute.
+struct PipelineBudget {
+    cpu: Arc<Semaphore>,
+    modules: Arc<Semaphore>,
+}
+
+impl PipelineBudget {
+    fn new(jobs: usize) -> Self {
+        let jobs = jobs.max(1);
+        Self {
+            cpu: Arc::new(Semaphore::new(jobs)),
+            modules: Arc::new(Semaphore::new(jobs * 2)),
+        }
+    }
+}
+
+/// Per-stage wall-clock timing observable from outside.
+///
+/// `record_input` / `record_output` are called by the stage driver each
+/// time it pulls an item from its input channel / pushes one to its
+/// output channel. The reported duration is `last_output - first_input`,
+/// i.e. the actual span during which the stage was doing work — not the
+/// span from spawn (which would include time spent waiting for the
+/// first upstream input to arrive, making downstream stages
+/// indistinguishable from upstream-bound).
+struct StageObserver {
+    first_input_at: Mutex<Option<Instant>>,
+    last_output_at: Mutex<Option<Instant>>,
+}
+
+impl StageObserver {
+    fn new() -> Self {
+        Self {
+            first_input_at: Mutex::new(None),
+            last_output_at: Mutex::new(None),
+        }
+    }
+
+    fn record_input(&self) {
+        let mut guard = lock_resilient(&self.first_input_at);
+        if guard.is_none() {
+            *guard = Some(Instant::now());
+        }
+    }
+
+    fn record_output(&self) {
+        *lock_resilient(&self.last_output_at) = Some(Instant::now());
+    }
+
+    fn duration(&self) -> Duration {
+        let start = *lock_resilient(&self.first_input_at);
+        let end = *lock_resilient(&self.last_output_at);
+        match (start, end) {
+            (Some(s), Some(e)) => e.saturating_duration_since(s),
+            _ => Duration::ZERO,
+        }
+    }
+}
+
+/// `lock().unwrap()` panics if any previous holder of the mutex
+/// panicked while holding it, which would silently take down the
+/// `EpochTicker` thread and disable timeout enforcement for the rest
+/// of the run. Recover the inner value instead — none of the data we
+/// protect with these mutexes is logically invalidated by a panic in
+/// an unrelated holder.
+fn lock_resilient<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Format a panic payload into a one-line message suitable for the
+/// per-fixture failure log. Recovers `&'static str` and `String`
+/// payloads (the two `panic!` macro produces); anything else collapses
+/// to a placeholder.
+fn format_panic_payload(payload: &Box<dyn Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<&'static str>() {
+        (*s).to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "<non-string panic payload>".to_string()
+    }
 }
 
 /// A single test job to execute, carrying the module it belongs to so
@@ -673,6 +783,11 @@ struct ParsedTest {
 /// emit the wasm bytes. No wasmtime touched here, so `--no-run` can cut
 /// the pipeline immediately after this stage and pay zero Cranelift cost.
 ///
+/// Wrapped in `catch_unwind` so a panic in `compile::try_compile`
+/// (allocator OOM, a real compiler bug surfacing on one input) is
+/// downgraded to a per-file `CompileFailure` — the other fixtures in
+/// the run still get a chance to compile and report.
+///
 /// Per-file log lines are emitted as compilation finishes; under parallel
 /// scheduling they interleave across workers, but the leading `[elapsed]`
 /// prefix records actual completion time.
@@ -681,15 +796,22 @@ async fn compile_artifact(
     flags: Arc<CompileFlags>,
     overall_start: Instant,
 ) -> CompileOutcome {
-    // `flags.target_world` is pinned to `test` by the caller so test
-    // functions become component exports and non-test code is subject to
-    // DCE; allocator is left at the caller's choice (None auto-selects
-    // the debug allocator for the test world).
     let compile_start = Instant::now();
-    let compile_result = compile::try_compile(&path, &flags).await;
+    let panic_or_result = AssertUnwindSafe(compile::try_compile(&path, &flags))
+        .catch_unwind()
+        .await;
     let compile_duration = compile_start.elapsed();
     let elapsed = format_duration(overall_start.elapsed());
     let dur = format_duration(compile_duration);
+
+    let compile_result = match panic_or_result {
+        Ok(r) => r,
+        Err(payload) => {
+            let cause = format_panic_payload(&payload);
+            eprintln!("[{elapsed}] FAILED to compile {path} ({dur}): panicked: {cause}");
+            return CompileOutcome::CompileFailure(CompileFailure { path });
+        }
+    };
 
     match compile_result {
         Ok(result) => {
@@ -714,21 +836,45 @@ async fn compile_artifact(
 /// `Engine`, AOT-compile the `Component`, build the WASI P3 `Linker`,
 /// and discover the test exports. This is the expensive Cranelift step
 /// — kept off the critical path of `--no-run` and of stage 1.
+///
+/// `module_permit` is acquired by the caller (so the wait is observable
+/// as backpressure on the load channel, not as inflated `load_duration`)
+/// and moved into the resulting `LoadedModule` so the budget slot is
+/// held for the module's entire downstream lifetime.
+///
+/// Wrapped in `catch_unwind` so a `Component::new` panic on malformed
+/// wasm (debug-build assertions in wasmtime/cranelift) becomes a per-file
+/// `LoadFailure` rather than aborting the whole pipeline.
 fn load_module(
     artifact: CompiledArtifact,
     opt_level: wasmtime::OptLevel,
     overall_start: Instant,
+    module_permit: OwnedSemaphorePermit,
 ) -> LoadOutcome {
     let load_start = Instant::now();
-    let load_result: Result<_> = (|| {
+    let panic_or_result = std::panic::catch_unwind(AssertUnwindSafe(|| -> Result<_> {
         let engine = Arc::new(runtime::create_test_engine(opt_level)?);
         let component = Arc::new(Component::new(&engine, &artifact.wasm)?);
         let linker = Arc::new(runtime::create_linker(&engine)?);
         Ok((engine, component, linker))
-    })();
+    }));
     let load_duration = load_start.elapsed();
     let elapsed = format_duration(overall_start.elapsed());
     let load_dur = format_duration(load_duration);
+
+    let load_result = match panic_or_result {
+        Ok(r) => r,
+        Err(payload) => {
+            let cause = format_panic_payload(&payload);
+            eprintln!(
+                "[{elapsed}] FAILED to load {} ({load_dur}): panicked: {cause}",
+                artifact.path
+            );
+            return LoadOutcome::LoadFailure(LoadFailure {
+                path: artifact.path,
+            });
+        }
+    };
 
     match load_result {
         Ok((engine, component, linker)) => {
@@ -751,6 +897,7 @@ fn load_module(
                 component,
                 linker,
                 tests,
+                _module_permit: module_permit,
             })
         }
         Err(e) => {
@@ -780,93 +927,192 @@ fn receiver_stream<T: Send + 'static>(
     }))
 }
 
-/// **Stage 1 driver** — fan paths out over `parallelism` blocking
-/// workers and route each per-file outcome to its sink. Returns when
-/// the input is exhausted; the senders dropped on return signal stage
-/// completion to downstream stages.
+/// **Stage 1 driver** — fan paths out over the shared CPU budget, run
+/// the wado compiler on each, and route each per-file outcome to its
+/// sink. Returns when the input is exhausted; the senders dropped on
+/// return signal stage completion to downstream stages.
 ///
 /// The compile future borrows `Cell`/`RefCell` internals (non-Send), so
 /// we can't `tokio::spawn` it onto the multi-thread runtime. Instead,
 /// each file is driven by a per-thread current-thread runtime on the
 /// blocking pool — the non-Send state never crosses threads.
+///
+/// Returns `(stage_wall_clock, compiled_count)`. `compiled_count`
+/// counts every `CompileOutcome::Compiled` emitted (irrespective of
+/// what happens downstream), so the caller can compute `compile_ok`
+/// additively even when `--no-run` drains the load stage.
 async fn run_compile_stage(
     paths: Vec<String>,
     flags: Arc<CompileFlags>,
-    parallelism: usize,
+    cpu_budget: Arc<Semaphore>,
     overall_start: Instant,
+    observer: Arc<StageObserver>,
     artifact_tx: mpsc::Sender<CompiledArtifact>,
     todo_tx: mpsc::Sender<TodoCompileError>,
     cfail_tx: mpsc::Sender<CompileFailure>,
-) -> Duration {
-    let stage_start = Instant::now();
+) -> usize {
+    let mut compiled_count = 0_usize;
+    let permits = cpu_budget.available_permits().max(1);
+
     let mut stream = stream::iter(paths)
         .map(|path| {
+            observer.record_input();
             let flags = Arc::clone(&flags);
-            tokio::task::spawn_blocking(move || -> Result<CompileOutcome> {
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .map_err(|e| anyhow!("failed to create compile runtime: {e}"))?;
-                Ok(rt.block_on(compile_artifact(path, flags, overall_start)))
-            })
+            let cpu_budget = Arc::clone(&cpu_budget);
+            async move {
+                let _permit = cpu_budget
+                    .acquire_owned()
+                    .await
+                    .expect("cpu semaphore closed");
+                let path_for_failure = path.clone();
+                tokio::task::spawn_blocking(move || {
+                    let panic_or_runtime = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                        tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                    }));
+                    match panic_or_runtime {
+                        Ok(Ok(rt)) => rt.block_on(compile_artifact(path, flags, overall_start)),
+                        Ok(Err(e)) => {
+                            let elapsed = format_duration(overall_start.elapsed());
+                            eprintln!(
+                                "[{elapsed}] FAILED to compile {path}: \
+                                 unable to create compile runtime: {e}"
+                            );
+                            CompileOutcome::CompileFailure(CompileFailure { path })
+                        }
+                        Err(payload) => {
+                            let cause = format_panic_payload(&payload);
+                            let elapsed = format_duration(overall_start.elapsed());
+                            eprintln!(
+                                "[{elapsed}] FAILED to compile {path}: \
+                                 compile worker panicked: {cause}"
+                            );
+                            CompileOutcome::CompileFailure(CompileFailure { path })
+                        }
+                    }
+                })
+                .await
+                .unwrap_or_else(|join_err| {
+                    let elapsed = format_duration(overall_start.elapsed());
+                    eprintln!(
+                        "[{elapsed}] FAILED to compile {path_for_failure}: \
+                         blocking-task join error: {join_err}"
+                    );
+                    CompileOutcome::CompileFailure(CompileFailure {
+                        path: path_for_failure,
+                    })
+                })
+            }
         })
-        .buffer_unordered(parallelism.max(1));
+        .buffer_unordered(permits * 2);
 
-    while let Some(join_result) = stream.next().await {
-        let outcome = join_result
-            .expect("compile worker panicked")
-            .expect("compile runtime setup failed");
+    while let Some(outcome) = stream.next().await {
         match outcome {
             CompileOutcome::Compiled(a) => {
-                let _ = artifact_tx.send(a).await;
+                compiled_count += 1;
+                if artifact_tx.send(a).await.is_ok() {
+                    observer.record_output();
+                }
             }
             CompileOutcome::TodoCompileError(t) => {
-                let _ = todo_tx.send(t).await;
+                if todo_tx.send(t).await.is_ok() {
+                    observer.record_output();
+                }
             }
             CompileOutcome::CompileFailure(f) => {
-                let _ = cfail_tx.send(f).await;
+                if cfail_tx.send(f).await.is_ok() {
+                    observer.record_output();
+                }
             }
         }
     }
-    stage_start.elapsed()
+    compiled_count
 }
 
 /// **Stage 2 driver** — consume `CompiledArtifact`s as they stream in
-/// from stage 1, run wasmtime `Component::new` on the blocking pool with
-/// `parallelism` slots, and route to the loaded/failure sinks. Each
-/// loaded engine is registered with the epoch ticker so timeouts work
-/// from the moment the module is ready.
+/// from stage 1, acquire a `modules` permit (capping live wasmtime
+/// `Component`s globally), run `Component::new` under the shared CPU
+/// budget, and route to the loaded/failure sinks. Each loaded engine is
+/// registered with the epoch ticker (via `Weak<Engine>` so dropping the
+/// module also removes its tick obligation).
+///
+/// The module permit is acquired BEFORE `spawn_blocking` so the wait
+/// shows up as channel backpressure on stage 1, not as inflated load
+/// duration. The permit is then moved into `LoadedModule` and lives
+/// until the last `Arc<LoadedModule>` drops, releasing the slot for
+/// the next module.
 async fn run_load_stage(
     artifact_rx: mpsc::Receiver<CompiledArtifact>,
     opt_level: wasmtime::OptLevel,
-    parallelism: usize,
+    cpu_budget: Arc<Semaphore>,
+    modules_budget: Arc<Semaphore>,
     overall_start: Instant,
+    observer: Arc<StageObserver>,
     loaded_tx: mpsc::Sender<Arc<LoadedModule>>,
     lfail_tx: mpsc::Sender<LoadFailure>,
-    epoch_engines: Arc<Mutex<Vec<Arc<Engine>>>>,
-) -> (Duration, usize) {
-    let stage_start = Instant::now();
+    epoch_ticker: Arc<EpochTicker>,
+) -> usize {
     let mut ok_count = 0_usize;
+    let permits = cpu_budget.available_permits().max(1);
+
     let mut stream = receiver_stream(artifact_rx)
         .map(|artifact| {
-            tokio::task::spawn_blocking(move || load_module(artifact, opt_level, overall_start))
+            observer.record_input();
+            let modules_budget = Arc::clone(&modules_budget);
+            let cpu_budget = Arc::clone(&cpu_budget);
+            let path_for_failure = artifact.path.clone();
+            async move {
+                // `modules` permit caps simultaneously-live wasmtime
+                // `Component`s globally; acquired first so the wait
+                // shows as channel backpressure (small in-flight set
+                // of wasm bytes), not as inflated load duration once
+                // we actually start `Component::new`.
+                let module_permit = modules_budget
+                    .acquire_owned()
+                    .await
+                    .expect("modules semaphore closed");
+                // `cpu` permit caps combined compile + load CPU work
+                // so the streaming overlap doesn't oversubscribe.
+                let _cpu_permit = cpu_budget
+                    .acquire_owned()
+                    .await
+                    .expect("cpu semaphore closed");
+                tokio::task::spawn_blocking(move || {
+                    load_module(artifact, opt_level, overall_start, module_permit)
+                })
+                .await
+                .unwrap_or_else(|join_err| {
+                    let elapsed = format_duration(overall_start.elapsed());
+                    eprintln!(
+                        "[{elapsed}] FAILED to load {path_for_failure}: \
+                         blocking-task join error: {join_err}"
+                    );
+                    LoadOutcome::LoadFailure(LoadFailure {
+                        path: path_for_failure,
+                    })
+                })
+            }
         })
-        .buffer_unordered(parallelism.max(1));
+        .buffer_unordered(permits * 2);
 
-    while let Some(join_result) = stream.next().await {
-        let outcome = join_result.expect("load worker panicked");
+    while let Some(outcome) = stream.next().await {
         match outcome {
             LoadOutcome::Loaded(module) => {
                 ok_count += 1;
-                epoch_engines.lock().unwrap().push(module.engine.clone());
-                let _ = loaded_tx.send(Arc::new(module)).await;
+                epoch_ticker.register(&module.engine);
+                if loaded_tx.send(Arc::new(module)).await.is_ok() {
+                    observer.record_output();
+                }
             }
             LoadOutcome::LoadFailure(f) => {
-                let _ = lfail_tx.send(f).await;
+                if lfail_tx.send(f).await.is_ok() {
+                    observer.record_output();
+                }
             }
         }
     }
-    (stage_start.elapsed(), ok_count)
+    ok_count
 }
 
 /// **Stage 3 driver** — consume `LoadedModule`s as they stream in,
@@ -874,13 +1120,18 @@ async fn run_load_stage(
 /// to `parallelism` jobs concurrently. Results stream through
 /// `result_tx` so the collector can attach them to the per-file display
 /// order without waiting for the full pipeline to drain.
+///
+/// Each job is a bare async future (not `tokio::spawn`'d) so that
+/// dropping the outer stream — for example because the pipeline is
+/// being torn down — actually cancels the in-flight test rather than
+/// leaving it as a detached background task.
 async fn run_execute_stage(
     loaded_rx: mpsc::Receiver<Arc<LoadedModule>>,
     parallelism: usize,
     preopened_dirs: Arc<Vec<(String, String)>>,
+    observer: Arc<StageObserver>,
     result_tx: mpsc::Sender<TestResult>,
-) -> Duration {
-    let stage_start = Instant::now();
+) {
     // Each loaded module fans out into 0+ test jobs. `flat_map` keeps
     // backpressure honest: as soon as one module's jobs are queued, the
     // next module can start loading without waiting for the first
@@ -903,16 +1154,17 @@ async fn run_execute_stage(
 
     let mut stream = jobs_stream
         .map(|job| {
+            observer.record_input();
             let preopened_dirs = preopened_dirs.clone();
-            tokio::spawn(async move { run_single_test(&job, &preopened_dirs).await })
+            async move { run_single_test_safe(job, &preopened_dirs).await }
         })
         .buffer_unordered(parallelism.max(1));
 
-    while let Some(join_result) = stream.next().await {
-        let result = join_result.expect("execute worker panicked");
-        let _ = result_tx.send(result).await;
+    while let Some(result) = stream.next().await {
+        if result_tx.send(result).await.is_ok() {
+            observer.record_output();
+        }
     }
-    stage_start.elapsed()
 }
 
 /// Per-stage wall-clock timing reported in the three-axis summary so the
@@ -938,10 +1190,17 @@ impl StageTimings {
 /// sorted into the bucket the caller needs for reporting, plus the
 /// per-stage wall-clock breakdown.
 ///
+/// `compiled_count` is the number of `CompileOutcome::Compiled` items
+/// emitted by stage 1 — needed so `compile_ok` can be derived
+/// additively in both run and `--no-run` modes from the same formula:
+/// `compile_ok = compiled_count + todo_compile_errors.len()`.
+///
 /// `load_ok` is the count of modules that cleared the load stage (and
 /// therefore reached the execute stage); it's tracked explicitly because
-/// modules with zero `#[test]` exports leave no trace in `test_results`.
+/// modules with zero `#[test]` exports leave no trace in `test_results`,
+/// and under `--no-run` the load stage doesn't run so `load_ok = 0`.
 struct PipelineOutcome {
+    compiled_count: usize,
     load_ok: usize,
     test_results: Vec<TestResult>,
     todo_compile_errors: Vec<TodoCompileError>,
@@ -951,25 +1210,38 @@ struct PipelineOutcome {
 }
 
 /// Background thread that increments the wasmtime epoch on every
-/// registered engine. Engines are added as the load stage produces them,
-/// so timeouts are armed from the moment a test could start.
+/// registered engine. The registry holds `Weak<Engine>`, so once the
+/// last `LoadedModule` for an engine drops the engine is freed and the
+/// ticker stops ticking it (and lazily prunes the dead entry on the
+/// next tick). This avoids the monotonic growth the previous
+/// `Vec<Arc<Engine>>` design suffered when many modules loaded over the
+/// course of one package run.
 struct EpochTicker {
-    engines: Arc<Mutex<Vec<Arc<Engine>>>>,
+    engines: Arc<Mutex<Vec<Weak<Engine>>>>,
     stop: Arc<AtomicBool>,
     handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl EpochTicker {
     fn start() -> Self {
-        let engines: Arc<Mutex<Vec<Arc<Engine>>>> = Arc::new(Mutex::new(Vec::new()));
+        let engines: Arc<Mutex<Vec<Weak<Engine>>>> = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::new(AtomicBool::new(false));
         let stop_clone = stop.clone();
         let engines_clone = engines.clone();
         let handle = std::thread::spawn(move || {
             while !stop_clone.load(Ordering::Relaxed) {
                 std::thread::sleep(Duration::from_millis(EPOCH_INTERVAL_MS));
-                let guard = engines_clone.lock().unwrap();
-                for engine in guard.iter() {
+                // Clone the Arcs we still need, then release the lock
+                // before doing the actual epoch increments. Keeps the
+                // critical section short — the lock is also taken by
+                // `register`, which must not block the load stage on
+                // per-engine work.
+                let live: Vec<Arc<Engine>> = {
+                    let mut guard = lock_resilient(&engines_clone);
+                    guard.retain(|w| w.strong_count() > 0);
+                    guard.iter().filter_map(Weak::upgrade).collect()
+                };
+                for engine in &live {
                     engine.increment_epoch();
                 }
             }
@@ -979,6 +1251,10 @@ impl EpochTicker {
             stop,
             handle: Some(handle),
         }
+    }
+
+    fn register(&self, engine: &Arc<Engine>) {
+        lock_resilient(&self.engines).push(Arc::downgrade(engine));
     }
 }
 
@@ -992,124 +1268,143 @@ impl Drop for EpochTicker {
 }
 
 /// Drive the three pipeline stages with bounded mpsc channels between
-/// them. Each stage runs as its own spawned task; the channels apply
-/// backpressure so a slow stage (e.g. the Cranelift JIT in load) keeps
-/// upstream from racing ahead and ballooning memory. Sink channels
-/// (todo / compile-failure / load-failure / test-result) are drained by
-/// dedicated collector tasks in parallel.
+/// them. Each stage runs concurrently; the channels apply backpressure
+/// so a slow stage keeps upstream from racing ahead. Sink channels
+/// (todo / compile-failure / load-failure / test-result) are drained
+/// by dedicated collector tasks in parallel.
+///
+/// Resource bounds are owned by `PipelineBudget`, not by the channel
+/// buffers: a shared CPU semaphore caps combined compile + load
+/// parallelism so the streaming overlap doesn't oversubscribe physical
+/// cores, and a `modules` semaphore caps the number of fully-loaded
+/// wasmtime `Component`s alive at any moment so peak memory stays
+/// bounded regardless of stage-rate skew. Inter-stage channels are
+/// therefore small (just enough to keep the pipeline non-bursty), with
+/// the real limits enforced at the per-task-acquire points.
 ///
 /// Under `--no-run`, the load and execute stages are replaced with
-/// "drain to /dev/null" sinks so the compile stage producers don't
+/// "drain to /dev/null" tasks so the compile stage producers don't
 /// block on a full channel — all the work after stage 1 disappears.
 #[allow(clippy::too_many_arguments)]
 async fn run_pipeline(
     paths: &[String],
     flags: Arc<CompileFlags>,
-    compile_jobs: usize,
-    load_jobs: usize,
+    jobs: usize,
     execute_jobs: usize,
     preopened_dirs: Arc<Vec<(String, String)>>,
     overall_start: Instant,
     no_run: bool,
 ) -> PipelineOutcome {
     let opt_level = flags.opt_level.to_wasmtime();
-    let buffer = compile_jobs.max(1).max(load_jobs.max(1)) * 2;
+    let budget = Arc::new(PipelineBudget::new(jobs));
 
-    let (artifact_tx, artifact_rx) = mpsc::channel::<CompiledArtifact>(buffer);
-    let (loaded_tx, loaded_rx) = mpsc::channel::<Arc<LoadedModule>>(buffer);
-    let (todo_tx, todo_rx) = mpsc::channel::<TodoCompileError>(buffer);
-    let (cfail_tx, cfail_rx) = mpsc::channel::<CompileFailure>(buffer);
-    let (lfail_tx, lfail_rx) = mpsc::channel::<LoadFailure>(buffer);
-    let (result_tx, result_rx) = mpsc::channel::<TestResult>(buffer.max(execute_jobs * 2));
+    // Inter-stage channel capacities: small. The semaphores in
+    // `PipelineBudget` are what actually limit concurrency and memory;
+    // the channels just need enough slack to keep each stage's
+    // dequeue/enqueue from forming a strict rendezvous.
+    let artifact_cap = jobs.max(1);
+    let loaded_cap = jobs.max(1);
+    let result_cap = execute_jobs.max(1) * 2;
+    let sink_cap = jobs.max(1);
+
+    let (artifact_tx, artifact_rx) = mpsc::channel::<CompiledArtifact>(artifact_cap);
+    let (loaded_tx, loaded_rx) = mpsc::channel::<Arc<LoadedModule>>(loaded_cap);
+    let (todo_tx, todo_rx) = mpsc::channel::<TodoCompileError>(sink_cap);
+    let (cfail_tx, cfail_rx) = mpsc::channel::<CompileFailure>(sink_cap);
+    let (lfail_tx, lfail_rx) = mpsc::channel::<LoadFailure>(sink_cap);
+    let (result_tx, result_rx) = mpsc::channel::<TestResult>(result_cap);
+
+    let compile_observer = Arc::new(StageObserver::new());
+    let load_observer = Arc::new(StageObserver::new());
+    let execute_observer = Arc::new(StageObserver::new());
 
     // Epoch ticker lives only when execute will run; in `--no-run` mode
-    // no engines exist and there's nothing to tick.
-    let epoch_ticker = (!no_run).then(EpochTicker::start);
+    // no engines are loaded and there's nothing to tick.
+    let epoch_ticker = (!no_run).then(|| Arc::new(EpochTicker::start()));
 
-    // Stage 1 (always): paths → CompiledArtifact / TodoCompileError / CompileFailure
     let paths_owned: Vec<String> = paths.to_vec();
-    let compile_flags = flags.clone();
-    let compile_handle = tokio::spawn(run_compile_stage(
+    let compile_future = run_compile_stage(
         paths_owned,
-        compile_flags,
-        compile_jobs,
+        flags.clone(),
+        budget.cpu.clone(),
         overall_start,
+        compile_observer.clone(),
         artifact_tx,
         todo_tx,
         cfail_tx,
-    ));
+    );
 
-    // Stage 2 (only when running): artifact → LoadedModule / LoadFailure.
-    // Under `--no-run`, drop the downstream senders and just drain the
-    // channel — keeps the compile stage from blocking on a backed-up
-    // bounded queue.
-    let load_handle = if let Some(ref ticker) = epoch_ticker {
-        let engines = ticker.engines.clone();
-        tokio::spawn(run_load_stage(
-            artifact_rx,
-            opt_level,
-            load_jobs,
-            overall_start,
-            loaded_tx,
-            lfail_tx,
-            engines,
-        ))
-    } else {
-        drop(loaded_tx);
-        drop(lfail_tx);
-        tokio::spawn(async move {
-            let mut rx = artifact_rx;
-            while rx.recv().await.is_some() {}
-            (Duration::ZERO, 0_usize)
-        })
-    };
+    let load_future: Pin<Box<dyn Future<Output = usize> + Send>> =
+        if let Some(ticker) = epoch_ticker.as_ref() {
+            Box::pin(run_load_stage(
+                artifact_rx,
+                opt_level,
+                budget.cpu.clone(),
+                budget.modules.clone(),
+                overall_start,
+                load_observer.clone(),
+                loaded_tx,
+                lfail_tx,
+                ticker.clone(),
+            ))
+        } else {
+            // Drain the artifact channel so compile-stage producers don't
+            // stall on a closed sink. Drop downstream senders explicitly
+            // to short-circuit later stages.
+            drop(loaded_tx);
+            drop(lfail_tx);
+            Box::pin(async move {
+                let mut rx = artifact_rx;
+                while rx.recv().await.is_some() {}
+                0
+            })
+        };
 
-    // Stage 3 (only when running): LoadedModule → TestResult.
-    let execute_handle = if epoch_ticker.is_some() {
-        tokio::spawn(run_execute_stage(
+    let execute_future: Pin<Box<dyn Future<Output = ()> + Send>> = if epoch_ticker.is_some() {
+        Box::pin(run_execute_stage(
             loaded_rx,
             execute_jobs,
             preopened_dirs,
+            execute_observer.clone(),
             result_tx,
         ))
     } else {
         drop(result_tx);
-        tokio::spawn(async move {
+        Box::pin(async move {
             let mut rx = loaded_rx;
             while rx.recv().await.is_some() {}
-            Duration::ZERO
         })
     };
 
-    // Sink collectors run in parallel — each drains its own channel
-    // until the stage producing it closes. Using one collector per sink
-    // (rather than `tokio::select!` on all four) keeps the control flow
-    // boring: each terminates exactly when its upstream finishes.
-    let todo_collector = tokio::spawn(collect_into_vec(todo_rx));
-    let cfail_collector = tokio::spawn(collect_into_vec(cfail_rx));
-    let lfail_collector = tokio::spawn(collect_into_vec(lfail_rx));
-    let result_collector = tokio::spawn(collect_into_vec(result_rx));
-
-    let compile_dur = compile_handle.await.expect("compile stage panicked");
-    let (load_dur, load_ok) = load_handle.await.expect("load stage panicked");
-    let execute_dur = execute_handle.await.expect("execute stage panicked");
-    let todos = todo_collector.await.expect("todo collector panicked");
-    let cfails = cfail_collector.await.expect("cfail collector panicked");
-    let lfails = lfail_collector.await.expect("lfail collector panicked");
-    let results = result_collector.await.expect("result collector panicked");
+    // All seven tasks (3 stages + 4 collectors) await concurrently via
+    // `tokio::join!`. Worker-level panics are already caught by
+    // `compile_artifact` / `load_module` / `run_single_test_safe`, so
+    // the stage drivers themselves return cleanly. A panic that does
+    // escape here indicates a real pipeline bug, not a per-fixture
+    // failure — letting it propagate is the right thing to do.
+    let (compiled_count, load_ok, _exec_unit, todos, cfails, lfails, results) = tokio::join!(
+        compile_future,
+        load_future,
+        execute_future,
+        collect_into_vec(todo_rx),
+        collect_into_vec(cfail_rx),
+        collect_into_vec(lfail_rx),
+        collect_into_vec(result_rx),
+    );
 
     drop(epoch_ticker); // Stops the tick thread.
 
     PipelineOutcome {
+        compiled_count,
         load_ok,
         test_results: results,
         todo_compile_errors: todos,
         compile_failures: cfails,
         load_failures: lfails,
         timings: StageTimings {
-            compile: compile_dur,
-            load: load_dur,
-            execute: execute_dur,
+            compile: compile_observer.duration(),
+            load: load_observer.duration(),
+            execute: execute_observer.duration(),
         },
     }
 }
@@ -1132,6 +1427,20 @@ fn fail_result(job: &TestJob, error: String, start: Instant) -> TestResult {
         error: Some(error),
         duration: start.elapsed(),
     }
+}
+
+/// `run_single_test` wrapped in `catch_unwind` so a panic anywhere
+/// inside (host-side bug, wasmtime debug assertion, allocator OOM)
+/// becomes a per-test `Fail` rather than aborting the whole pipeline.
+async fn run_single_test_safe(job: TestJob, preopened_dirs: &[(String, String)]) -> TestResult {
+    let start = Instant::now();
+    let panic_or_result = AssertUnwindSafe(run_single_test(&job, preopened_dirs))
+        .catch_unwind()
+        .await;
+    panic_or_result.unwrap_or_else(|payload| {
+        let cause = format_panic_payload(&payload);
+        fail_result(&job, format!("test worker panicked: {cause}"), start)
+    })
 }
 
 /// Run a single test in its own Store
@@ -1484,8 +1793,7 @@ fn print_load_failures_section(failures: &[LoadFailure]) {
 async fn run_one_package(
     pkg_run: &PackageRun,
     flags: Arc<CompileFlags>,
-    compile_jobs: usize,
-    load_jobs: usize,
+    jobs: usize,
     execute_jobs: usize,
     preopened_dirs: Arc<Vec<(String, String)>>,
     overall_start: Instant,
@@ -1500,8 +1808,7 @@ async fn run_one_package(
     let outcome = run_pipeline(
         &pkg_run.paths,
         flags,
-        compile_jobs,
-        load_jobs,
+        jobs,
         execute_jobs,
         preopened_dirs,
         overall_start,
@@ -1510,6 +1817,7 @@ async fn run_one_package(
     .await;
 
     let PipelineOutcome {
+        compiled_count,
         load_ok,
         test_results,
         todo_compile_errors,
@@ -1518,22 +1826,15 @@ async fn run_one_package(
         timings,
     } = outcome;
 
-    // `compile_ok` counts every file whose wado compile finished without
-    // a non-TODO error. `#![TODO]` modules whose expected compile error
-    // fired also count as compile-passed because the compile-level outcome
-    // was as declared. Files that compiled but later failed the load
-    // stage still count here as compile-passed; they appear on the `load`
-    // axis instead. With `--no-run`, the load stage never runs, so the
-    // raw artifact count comes from the pipeline's "drain" branch which
-    // reports `load_ok = 0` — for the no-run summary we therefore have
-    // to count via `compile_failures` + non-failed artifacts, which is
-    // exactly `total_inputs - compile_failures.len()`.
-    let total_inputs = pkg_run.paths.len();
-    let compile_ok = if no_run {
-        total_inputs - compile_failures.len()
-    } else {
-        load_ok + load_failures.len() + todo_compile_errors.len()
-    };
+    // Compile_ok is additive in both modes: every file that produced a
+    // `CompileOutcome::Compiled` (= `compiled_count`) or a
+    // `TodoCompileError` (= TODO module whose expected compile-error
+    // fired) is compile-passed. Files that compiled but later failed
+    // the load stage still count here as compile-passed; they appear
+    // separately on the `load` axis. The same formula holds under
+    // `--no-run` because `compiled_count` is tracked in stage 1
+    // directly, independent of whether stages 2/3 run.
+    let compile_ok = compiled_count + todo_compile_errors.len();
     let compile_failed = compile_failures.len();
     let load_failed = load_failures.len();
 
@@ -1618,7 +1919,7 @@ async fn run_one_package(
 /// task.  A `std::sync::Barrier` keeps every prewarm task running
 /// simultaneously so tokio's blocking pool allocates `parallelism`
 /// distinct threads; those same threads are then reused for the
-/// `spawn_blocking` compile tasks scheduled by [`collect_test_jobs`],
+/// `spawn_blocking` compile tasks scheduled by [`run_compile_stage`],
 /// turning each first-compile from a cold miss into a cache hit.
 async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
     let parallelism = parallelism.max(1);
@@ -1664,33 +1965,29 @@ pub async fn run(opts: TestOptions) {
     let package_runs = opts.package_runs;
     let preopened_dirs = Arc::new(opts.preopened_dirs);
 
-    // Per-stage concurrency. All three stages share the user's
-    // `--parallel N` setting. The 3-stage pipeline itself is the main
-    // win; over-subscribing execute (e.g. `cpus`) on top of a
-    // pre-`(cpus/2).max(2)` floor pushes 2-vCPU CI runners into 2×
-    // oversubscription, which inflates per-test wall time and tripped
-    // the default 5s timeout on the slowest O3-optimized Gale fixtures.
-    // Keep all stages at the same proven concurrency.
-    let compile_jobs = jobs;
-    let load_jobs = jobs;
+    // `jobs` (= `--parallel N`, default `(cpus/2).max(2)`) caps the
+    // **combined** CPU-bound parallelism of compile + load via the
+    // pipeline's shared `cpu` semaphore. Execute is async I/O-dominated
+    // (`instantiate_async`, wasi-host calls, guest wasm with epoch-based
+    // preemption) and runs on the multi-thread runtime, so it gets its
+    // own independent concurrency budget.
     let execute_jobs = jobs;
 
-    // Prewarm the stdlib snapshot on `compile_jobs` distinct worker
-    // threads before stage 1 starts. Each worker would otherwise build
-    // the snapshot (~120 ms) on its first compile and steal that time
-    // from the first batch of compiles; running the builds in parallel
+    // Prewarm the stdlib snapshot on `jobs` distinct worker threads
+    // before stage 1 starts. Each worker would otherwise build the
+    // snapshot (~120 ms) on its first compile and steal that time from
+    // the first batch of compiles; running the builds in parallel
     // up-front amortises the cost and leaves the tokio blocking-pool
     // threads in the steady state that the compile stage's
     // `spawn_blocking` tasks can re-use.
-    prewarm_stdlib_snapshot_on_workers(compile_jobs).await;
+    prewarm_stdlib_snapshot_on_workers(jobs).await;
 
     let mut grand = PackageTotals::default();
     for pkg_run in &package_runs {
         let totals = run_one_package(
             pkg_run,
             Arc::clone(&flags),
-            compile_jobs,
-            load_jobs,
+            jobs,
             execute_jobs,
             preopened_dirs.clone(),
             overall_start,
