@@ -638,14 +638,18 @@ impl FunctionTranslator<'_, '_> {
         })
     }
 
-    /// Emit a call to the `$value_copy$T(...)` helper. Panics if no
-    /// helper was registered for `type_id` (seed walker out of sync).
+    /// Emit a call to the `$value_copy$T(...)` helper. Returns the
+    /// value unchanged when the helper is not registered — this
+    /// mirrors the pre-Phase-A silent fall-through, where
+    /// `value_copy::insert` only wrapped at sites it walked
+    /// (pattern-lowered / deref-expansion / wide-int `Let`s are
+    /// synthesised after that walk, so they were never wrapped).
     fn wrap_value_copy(&self, value: NirExpr, type_id: tir::TypeId) -> NirExpr {
         let span = value.span;
-        let (helper_module, helper_name) =
-            self.base.value_copy.name_for_type.get(&type_id).expect(
-                "value-copy helper missing for wrap site; planner seed walker is out of sync",
-            );
+        let Some((helper_module, helper_name)) = self.base.value_copy.name_for_type.get(&type_id)
+        else {
+            return value;
+        };
         NirExpr {
             kind: NirExprKind::Call {
                 func: nir::FunctionRef {
