@@ -20,13 +20,19 @@
 //! that the rewritten condition (and the failure-message lines) refer
 //! to, so side-effecting sub-terms evaluate exactly once.
 //!
-//! The capture walk is hand-written rather than a general visitor: only
-//! the handful of expression shapes that have meaningful intermediate
-//! values participate, and each makes its own decision about whether
-//! to recurse into children (`Binary` / `Unary` do) or capture whole
-//! (`MethodCall` / `FieldAccess` / `Index` do, to keep their
-//! receiver-typed dispatch context). Variants not listed are treated as
-//! opaque leaves.
+//! The pass runs in two phases so the AST is never mutated — it stays
+//! the source of truth, and LSP queries land on the user's text as
+//! written:
+//!
+//! 1. [`CaptureScanner`] walks the AST condition read-only, deciding
+//!    which sub-expressions should be captured. Captures are deduped by
+//!    source text (so `a + a` evaluates `a` once) and indexed by the
+//!    sub-expression's source span.
+//! 2. The condition is resolved to TIR untouched.
+//!    [`TirCaptureWalker`] then traverses that TIR post-order; every
+//!    `TirExpr` whose span matches a captured AST span is extracted
+//!    into a fresh `let __vK = <tir>;` and replaced with `Local(__vK)`.
+//!    Post-order keeps inner captures evaluated first.
 
 use crate::ast::{
     self, AssertStmt, AstId, Block, CallExpr, Condition, Expr, ExprStmt, FormatSpec, IdentExpr,
@@ -34,7 +40,9 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
-use crate::tir::{TirBlock, TirStmt, TirStmtKind};
+use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeId};
+use crate::tir_visitor::TirMutVisitor;
+use crate::token::Span;
 use crate::unparse::unparse_expr_simple;
 
 use super::Resolver;
@@ -59,49 +67,48 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // are unreachable too.
         let synth_id = self.alloc_synth_ast_id(ctx);
 
-        // Walk the condition: select sub-expressions to capture and
-        // rewrite each in place to `Ident(__vK)`. The captured `value`
-        // keeps the user's original `AstId`s so the use→def edges for
-        // the user's idents still get recorded.
-        let mut capture = CaptureFolder::new(synth_id);
-        let rewritten_condition = capture.fold_condition_expr(assert_stmt.condition.clone());
-        let captures = capture.finish();
+        // Phase 1: read-only AST scan to decide captures.
+        let mut scanner = CaptureScanner::new();
+        scanner.scan_root(&assert_stmt.condition);
+        let captures = scanner.captures;
+        let span_to_capture = scanner.span_to_capture;
 
         // Scope the synthetic locals to this expansion.
         ctx.enter_scope();
         let mut inner_stmts: Vec<TirStmt> = Vec::with_capacity(captures.len() + 2);
 
-        // Emit each captured intermediate as a `TirStmt::Let` directly,
-        // bypassing `resolve_let` so:
-        //  - `add_local` receives `defining_ast_id = None` and skips
-        //    the `local_symbols` insert that would otherwise key on
-        //    `synth_id` and shadow other entries via LSP queries; and
-        //  - we never synthesise a `Pattern::Ident` whose id would
-        //    trigger `record_local_symbol` / `record_reference_opt`.
-        for cap in &captures {
-            let value_tir = self.resolve_expr(&cap.value, ctx, None);
-            let type_id = value_tir.type_id;
-            let local_index = ctx.add_local(cap.name.clone(), type_id, false, None);
-            inner_stmts.push(TirStmt::new(
-                TirStmtKind::Let {
-                    name: cap.name.clone(),
-                    local_index,
-                    is_mut: false,
-                    is_reactive: false,
-                    type_id,
-                    value: value_tir,
-                    skip_value_copy: false,
-                },
-                span,
-            ));
-        }
+        // Phase 2a: resolve the unmodified AST condition to TIR.
+        // We pass `None` for the expected type: a `bool` expectation
+        // here would propagate into branch types of an `Expr::If` /
+        // `Expr::Match` inside the condition and reject valid asserts
+        // whose branches produce a non-bool value compared against
+        // something else.
+        let cond_tir = self.resolve_expr(&assert_stmt.condition, ctx, None);
 
-        // `let __cond = <rewritten condition>;`. We pass `None` for
-        // the expected type: a `bool` expectation here would propagate
-        // into branch types of an `Expr::If` / `Expr::Match` inside
-        // the condition and reject valid asserts whose branches
-        // produce a non-bool value compared against something else.
-        let cond_tir = self.resolve_expr(&rewritten_condition, ctx, None);
+        // Phase 2b: walk the resulting TIR post-order; each sub-expression
+        // whose span matches a captured AST sub-expression is extracted
+        // into a fresh `let __vK = ...;` (pushed onto `inner_stmts`) and
+        // replaced with `Local(__vK)`.
+        //
+        // `add_local` receives `defining_ast_id = None` so the synthetic
+        // locals do not leak into `local_symbols` (which would key on
+        // `synth_id` and shadow other entries via LSP queries).
+        let cond_tir = {
+            let mut walker = TirCaptureWalker {
+                captures: &captures,
+                span_to_capture: &span_to_capture,
+                ctx,
+                emitted: IndexMap::default(),
+                emitted_lets: Vec::with_capacity(captures.len()),
+                excluded_spans: Vec::new(),
+            };
+            let mut cond_tir = cond_tir;
+            walker.visit_expr(&mut cond_tir);
+            inner_stmts.extend(walker.emitted_lets);
+            cond_tir
+        };
+
+        // `let __cond = <cond_tir>;`
         let cond_type = cond_tir.type_id;
         let cond_name = "__cond".to_string();
         let cond_local_index = ctx.add_local(cond_name.clone(), cond_type, false, None);
@@ -184,91 +191,76 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 }
 
-/// One sub-expression captured during the power-assert walk.
+/// One sub-expression captured during the power-assert scan.
 struct Capture {
     /// Variable name (`__v0`, `__v1`, …) the rewritten condition refers to.
     name: String,
     /// Source text of the original sub-expression, used in the failure message.
     source: String,
-    /// The (already-rewritten) expression to bind. Children already point at
-    /// earlier `__vK`s so the binding evaluates each sub-term exactly once.
-    value: Expr,
 }
 
-/// Walks a condition expression, replacing each captured sub-expression
-/// in place with `Ident(__vK)` and recording the original (pre-rewrite)
-/// source text and value in [`Capture`] entries.
-struct CaptureFolder {
-    synth_id: AstId,
+/// Read-only AST scanner: decides which sub-expressions of the assert
+/// condition deserve a `__vK` capture and records each capture's source
+/// span so the matching TIR node can later be extracted by
+/// [`TirCaptureWalker`].
+struct CaptureScanner {
     captures: Vec<Capture>,
-    /// `source_text -> capture index` for dedup. Two structurally identical
-    /// sub-expressions share one `__vK` so the failure message stays terse
-    /// and we do not re-evaluate identical sub-terms.
-    seen: IndexMap<String, usize>,
-    /// `true` only for the outermost call (the condition itself). The
-    /// root `Binary` / `Unary` is not captured because it would just
+    /// Source span of each captureable sub-expression → its capture index.
+    /// Two AST nodes with the same source text share one capture entry
+    /// (dedup keeps the failure message terse and avoids re-evaluating
+    /// identical sub-terms); both spans map to the same index here.
+    span_to_capture: IndexMap<Span, usize>,
+    /// Source text → capture index, used to dedup before allocating a
+    /// new `__vK`. Discarded after the scan.
+    source_to_idx: IndexMap<String, usize>,
+    /// `true` only for the root call (the condition itself). The root
+    /// `Binary` / `Unary` is not captured because it would just
     /// duplicate `__cond`.
     is_root: bool,
     /// `true` while descending into `Call` / `MethodCall` /
     /// `StaticMethodCall` arguments. A bare `Ident` in that position
     /// is a function-reference coercion site; extracting it into
-    /// `let __vK = name;` loses the coercion context and the
+    /// `let __vK = name;` would lose the coercion context and the
     /// inferencer would see `unknown` for the binding.
     in_call_arg: bool,
 }
 
-impl CaptureFolder {
-    fn new(synth_id: AstId) -> Self {
+impl CaptureScanner {
+    fn new() -> Self {
         Self {
-            synth_id,
             captures: Vec::new(),
-            seen: IndexMap::default(),
+            span_to_capture: IndexMap::default(),
+            source_to_idx: IndexMap::default(),
             is_root: true,
             in_call_arg: false,
         }
     }
 
-    fn finish(self) -> Vec<Capture> {
-        self.captures
-    }
-
-    /// Fold the root condition expression, returning the rewritten form.
-    fn fold_condition_expr(&mut self, expr: Expr) -> Expr {
+    fn scan_root(&mut self, expr: &Expr) {
         self.is_root = true;
-        self.fold_expr(expr)
+        self.scan(expr);
     }
 
-    /// Add a capture (dedup'd by source text) and return the matching
-    /// `Ident(__vK)` replacement.
-    fn capture(&mut self, source: String, value: Expr, span: crate::token::Span) -> Expr {
-        let name = if let Some(&idx) = self.seen.get(&source) {
-            self.captures[idx].name.clone()
+    /// Add a capture (dedup'd by source text); the sub-expression's span
+    /// is recorded so the TIR walker can match the corresponding TIR
+    /// node.
+    fn add(&mut self, source: String, span: Span) {
+        let idx = if let Some(&idx) = self.source_to_idx.get(&source) {
+            idx
         } else {
             let idx = self.captures.len();
             let name = format!("__v{idx}");
             self.captures.push(Capture {
-                name: name.clone(),
+                name,
                 source: source.clone(),
-                value,
             });
-            self.seen.insert(source, idx);
-            name
+            self.source_to_idx.insert(source, idx);
+            idx
         };
-        Expr::Ident(IdentExpr {
-            id: self.synth_id,
-            name,
-            segments: Vec::new(),
-            type_args: Vec::new(),
-            span,
-        })
+        self.span_to_capture.insert(span, idx);
     }
-}
 
-impl CaptureFolder {
-    fn fold_expr(&mut self, expr: Expr) -> Expr {
-        // Snapshot the original source before folding children — the
-        // captured text must read in the user's words, not `__vK`.
-        let original_source = unparse_expr_simple(&expr);
+    fn scan(&mut self, expr: &Expr) {
         let span = expr.span();
         let is_root = std::mem::replace(&mut self.is_root, false);
         let in_call_arg = std::mem::replace(&mut self.in_call_arg, false);
@@ -277,18 +269,16 @@ impl CaptureFolder {
             Expr::Ident(ident) => {
                 if in_call_arg {
                     // Function-reference coercion site — leave as-is.
-                    return Expr::Ident(ident);
+                    return;
                 }
-                self.capture(ident.name.clone(), Expr::Ident(ident), span)
+                self.add(ident.name.clone(), span);
             }
-            Expr::Binary(mut b) => {
-                b.left = self.fold_expr(b.left);
-                b.right = self.fold_expr(b.right);
-                let rewritten = Expr::Binary(b);
-                if is_root {
-                    return rewritten;
+            Expr::Binary(b) => {
+                self.scan(&b.left);
+                self.scan(&b.right);
+                if !is_root {
+                    self.add(unparse_expr_simple(expr), span);
                 }
-                self.capture(original_source, rewritten, span)
             }
             Expr::Unary(u) => {
                 // Skip negated numeric literals: capturing them breaks
@@ -297,44 +287,36 @@ impl CaptureFolder {
                 if u.op == UnaryOp::Neg
                     && matches!(&u.expr, Expr::Literal(lit) if matches!(&lit.value, Literal::Number(_)))
                 {
-                    return Expr::Unary(u);
+                    return;
                 }
                 // `&fn_name` is the function-reference coercion;
                 // capturing either it or its operand loses the context.
                 if u.op == UnaryOp::Ref && matches!(&u.expr, Expr::Ident(_)) {
-                    return Expr::Unary(u);
+                    return;
                 }
                 // `&mut <expr>` requires a mutable lvalue; an
                 // immutable `let __v = <expr>` would make the
                 // reconstructed `&mut __v` reject at typecheck.
                 if u.op == UnaryOp::MutRef {
-                    return Expr::Unary(u);
+                    return;
                 }
-                let mut u = u;
-                u.expr = self.fold_expr(u.expr);
-                let rewritten = Expr::Unary(u);
-                if is_root {
-                    return rewritten;
+                self.scan(&u.expr);
+                if !is_root {
+                    self.add(unparse_expr_simple(expr), span);
                 }
-                self.capture(original_source, rewritten, span)
             }
-            Expr::Call(mut c) => {
+            Expr::Call(c) => {
                 // Callee stays untouched: it is almost always a bare
                 // function ident, and capturing it would either
                 // produce a useless intermediate or turn a direct
                 // call into an indirect one.
-                c.args = c
-                    .args
-                    .into_iter()
-                    .map(|arg| {
-                        self.in_call_arg = true;
-                        self.fold_expr(arg)
-                    })
-                    .collect();
-                let rewritten = Expr::Call(c);
-                self.capture(original_source, rewritten, span)
+                for arg in &c.args {
+                    self.in_call_arg = true;
+                    self.scan(arg);
+                }
+                self.add(unparse_expr_simple(expr), span);
             }
-            Expr::MethodCall(mut m) => {
+            Expr::MethodCall(m) => {
                 // Receiver recursion is intentionally skipped:
                 // extracting `<recv>` into a temp forces auto-derived
                 // `Inspect` on the receiver's type, which trips
@@ -342,41 +324,144 @@ impl CaptureFolder {
                 // have no `Inspect`; receiver-module-dispatch keyed
                 // by bare mangled name confuses same-name generics
                 // across modules).
-                m.args = m
-                    .args
-                    .into_iter()
-                    .map(|arg| {
-                        self.in_call_arg = true;
-                        self.fold_expr(arg)
-                    })
-                    .collect();
-                let rewritten = Expr::MethodCall(m);
-                self.capture(original_source, rewritten, span)
+                for arg in &m.args {
+                    self.in_call_arg = true;
+                    self.scan(arg);
+                }
+                self.add(unparse_expr_simple(expr), span);
             }
-            Expr::StaticMethodCall(mut s) => {
-                s.args = s
-                    .args
-                    .into_iter()
-                    .map(|arg| {
-                        self.in_call_arg = true;
-                        self.fold_expr(arg)
-                    })
-                    .collect();
-                let rewritten = Expr::StaticMethodCall(s);
-                self.capture(original_source, rewritten, span)
+            Expr::StaticMethodCall(s) => {
+                for arg in &s.args {
+                    self.in_call_arg = true;
+                    self.scan(arg);
+                }
+                self.add(unparse_expr_simple(expr), span);
             }
             Expr::FieldAccess(_) | Expr::Index(_) => {
                 // Receiver / index recursion deferred (same reason as
                 // `MethodCall`): capture the access whole.
-                self.capture(original_source, expr, span)
+                self.add(unparse_expr_simple(expr), span);
             }
             // Every other `Expr` variant is treated as an opaque leaf:
             // it is neither captured nor recursed into. This keeps
             // the failure-message shape predictable on shapes (`If`,
             // `Match`, `Closure`, …) whose children are not
             // meaningfully inspectable in isolation.
-            _ => expr,
+            _ => {}
         }
+    }
+}
+
+/// Bookkeeping for a capture that's already been extracted: the TIR
+/// walker stores this on first match so a second occurrence of the same
+/// source span reuses the same local without emitting another `let`.
+#[derive(Clone)]
+struct EmittedCapture {
+    name: String,
+    local_index: u32,
+    type_id: TypeId,
+}
+
+/// TIR walker: pre-order traversal of the resolved condition TIR. The
+/// outermost `TirExpr` whose span matches a [`CaptureScanner`] entry is
+/// extracted into a fresh `let __vK = …;` (appended to `emitted_lets`)
+/// and replaced with `Local(__vK)`. The walker then recurses into the
+/// captured subtree to surface any nested captures (so inner `__vK`s
+/// bind before the outer one that references them).
+///
+/// Span exclusion: the resolver inherits the parent's span when it
+/// synthesises auto-ref / auto-deref wrappers around a receiver (see
+/// `adjust_receiver_for_self_kind`). Naively matching by span would
+/// trip on those wrappers and capture them instead of the outer
+/// method call. `excluded_spans` holds the spans we've already
+/// captured at, so when we descend into the captured subtree the
+/// immediate synthesised children (which share the parent's span) are
+/// passed through untouched.
+struct TirCaptureWalker<'a, 'ctx> {
+    captures: &'a [Capture],
+    span_to_capture: &'a IndexMap<Span, usize>,
+    ctx: &'ctx mut FunctionContext,
+    emitted: IndexMap<usize, EmittedCapture>,
+    emitted_lets: Vec<TirStmt>,
+    excluded_spans: Vec<Span>,
+}
+
+impl TirMutVisitor for TirCaptureWalker<'_, '_> {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        // Resolver-synthesised wrapper around an already-captured node:
+        // recurse but never match.
+        if self.excluded_spans.contains(&expr.span) {
+            self.walk_expr(expr);
+            return;
+        }
+
+        let Some(&cap_idx) = self.span_to_capture.get(&expr.span) else {
+            // Not a capture target; walk children normally.
+            self.walk_expr(expr);
+            return;
+        };
+
+        if let Some(emitted) = self.emitted.get(&cap_idx).cloned() {
+            // Same source text already captured — reuse its local
+            // instead of emitting another `let`.
+            *expr = TirExpr::new(
+                TirExprKind::Local {
+                    index: emitted.local_index,
+                    name: emitted.name,
+                },
+                emitted.type_id,
+                expr.span,
+            );
+            return;
+        }
+
+        // Take the matching TIR subtree out so we can recurse into it
+        // for nested captures. The placeholder we leave behind is
+        // overwritten with the final `Local(__vK)` below.
+        let cap_name = self.captures[cap_idx].name.clone();
+        let type_id = expr.type_id;
+        let cap_span = expr.span;
+        let local_index = self.ctx.add_local(cap_name.clone(), type_id, false, None);
+        let mut captured = std::mem::replace(
+            expr,
+            TirExpr::new(
+                TirExprKind::Local {
+                    index: local_index,
+                    name: cap_name.clone(),
+                },
+                type_id,
+                cap_span,
+            ),
+        );
+
+        // Surface nested captures inside `captured`. The captured node
+        // itself is skipped (we're already capturing it); its
+        // descendants are walked, with the same-span synthesised
+        // wrappers excluded by `excluded_spans`.
+        self.excluded_spans.push(cap_span);
+        self.walk_expr(&mut captured);
+        self.excluded_spans.pop();
+
+        self.emitted_lets.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: cap_name.clone(),
+                local_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id,
+                value: captured,
+                skip_value_copy: false,
+            },
+            cap_span,
+        ));
+        self.emitted.insert(
+            cap_idx,
+            EmittedCapture {
+                name: cap_name,
+                local_index,
+                type_id,
+            },
+        );
     }
 }
 
