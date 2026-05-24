@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779623549082,
+  "lastUpdate": 1779629669868,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25641,6 +25641,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 461792,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "da6aefd4951efcfd3b55387ad0adf665ff8c6a8f",
+          "message": "Merge pull request #1183 from wado-lang/claude/package-gale-pending-tests-3zcTM\n\nfeat(gale): per-rule parse_<rule>(input) entries and token-only group kind-check",
+          "timestamp": "2026-05-24T22:29:06+09:00",
+          "tree_id": "2eb725d8ac0c8c5efe085ffc30fe0f57c0399283",
+          "url": "https://github.com/wado-lang/wado/commit/da6aefd4951efcfd3b55387ad0adf665ff8c6a8f"
+        },
+        "date": 1779629669489,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9805,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17192,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 465275,
             "unit": "bytes"
           }
         ]
