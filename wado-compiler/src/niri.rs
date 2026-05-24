@@ -972,10 +972,17 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Rewrite an `if` expression. A constant-bool condition collapses
-    /// the node to the chosen arm's block; a non-constant but
-    /// speculatable condition with both arms reducing to the same
-    /// `Const(v)` collapses to that literal.
+    /// Rewrite an `if` expression. Three reductions:
+    ///
+    /// 1. **Const condition splice** — `if true { A } else { B }` → `A`,
+    ///    `if false { A } else { B }` → `B` (or `()` when no else).
+    /// 2. **Bool-arms collapse** — `if cond { true } else { false }` →
+    ///    `cond`, and `if cond { false } else { true }` → `!cond`.
+    ///    Preserves `cond`'s evaluation, so no speculatable-ness gate
+    ///    applies. Common shape from `match X { V => true, _ => false }`
+    ///    lowering and from explicit user-written bool selection.
+    /// 3. **Both-arms-equal collapse** — `if cond { K } else { K }` →
+    ///    `K`. Drops `cond`, so requires `cond` to be speculatable.
     fn rewrite_if_expr(&mut self, expr: &mut NirExpr) -> bool {
         let NirExprKind::If {
             condition,
@@ -987,10 +994,11 @@ impl<'a> Interpreter<'a> {
         };
         let cond_lat = self.expr_to_lattice(condition);
 
-        // Constant condition → splice the chosen arm. The unreachable arm
-        // is dropped without ever being asked for a lattice value, so a
-        // trapping `else { panic(…) }` does not contaminate the result —
-        // this is the SCCP "infeasible edge" treatment.
+        // (1) Constant condition → splice the chosen arm. The
+        // unreachable arm is dropped without ever being asked for a
+        // lattice value, so a trapping `else { panic(…) }` does not
+        // contaminate the result — this is the SCCP "infeasible edge"
+        // treatment.
         if let Lattice::Const(Value::Bool(b)) = cond_lat {
             let NirExprKind::If {
                 then_branch,
@@ -1009,17 +1017,12 @@ impl<'a> Interpreter<'a> {
             return true;
         }
 
-        // Non-constant condition: consider the both-arms-equal collapse.
-        // This is safe only when the condition is effect-free, since
-        // dropping the `if` drops its evaluation. See
-        // [`is_speculatable`] for what counts as effect-free.
-        //
-        // Require *both* arms to reduce to the same `Const(v)`. Using
-        // `Lattice::join` here would be tempting but unsound: join's
-        // `Unevaluated ⊔ Const(v) → Const(v)` rule encodes an SCCP
-        // infeasible-edge semantic that does not apply when both edges
-        // are feasible (an `Unevaluated` arm here means "reachable but
-        // value not known", not "unreachable"). Match `Const(_)` on
+        // The remaining rules require both arms to fold to `Const(_)`.
+        // Using `Lattice::join` here would be tempting but unsound:
+        // join's `Unevaluated ⊔ Const(v) → Const(v)` rule encodes an
+        // SCCP infeasible-edge semantic that does not apply when both
+        // edges are feasible (an `Unevaluated` arm here means "reachable
+        // but value not known", not "unreachable"). Match `Const(_)` on
         // both sides explicitly so an arm we couldn't analyze never
         // erases the surrounding `if`.
         let NirExprKind::If {
@@ -1030,9 +1033,6 @@ impl<'a> Interpreter<'a> {
         else {
             unreachable!();
         };
-        if !is_speculatable(condition) {
-            return false;
-        }
         let Lattice::Const(t) = self.block_lattice(then_branch) else {
             return false;
         };
@@ -1042,7 +1042,47 @@ impl<'a> Interpreter<'a> {
         let Lattice::Const(e) = self.block_lattice(eb) else {
             return false;
         };
+
+        // (2) Bool-arms collapse. The condition is preserved (under
+        // `Not` in the inverted case), so no `is_speculatable` gate is
+        // required — runtime evaluation order matches the original
+        // `if`. The `t != e` precondition for the inverted case follows
+        // from t and e being distinct Bool literals, which is handled
+        // by the `t_b != e_b` pattern below.
+        if let (Value::Bool(t_b), Value::Bool(e_b)) = (t, e)
+            && t_b != e_b
+        {
+            let NirExprKind::If { condition, .. } =
+                std::mem::replace(&mut expr.kind, NirExprKind::Unit)
+            else {
+                unreachable!();
+            };
+            if t_b {
+                // `if cond { true } else { false }` → `cond`. Unwrap
+                // the box and replace `expr.kind` with the condition's.
+                // `expr.type_id` stays as the if-expression's bool type,
+                // which equals `condition.type_id` (the resolver always
+                // types an `if` condition as bool).
+                let inner = *condition;
+                expr.kind = inner.kind;
+            } else {
+                // `if cond { false } else { true }` → `!cond`. Wrap in
+                // Unary::Not; bool stays bool.
+                expr.kind = NirExprKind::Unary {
+                    op: NirUnaryOp::Not,
+                    expr: condition,
+                };
+            }
+            return true;
+        }
+
+        // (3) Both-arms-equal collapse. Drops `cond`, so requires
+        // `is_speculatable(cond)` — anything observable in `cond`
+        // (calls, traps, mutations) cannot be erased.
         if t != e {
+            return false;
+        }
+        if !is_speculatable(condition) {
             return false;
         }
         expr.kind = value_to_expr_kind(t);

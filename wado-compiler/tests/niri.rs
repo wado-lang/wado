@@ -1267,6 +1267,108 @@ fn reduce_local_collapses_equal_arm_if_to_literal() {
 }
 
 #[test]
+fn reduce_local_rewrites_if_true_false_to_cond() {
+    // `if cond { true } else { false }` → `cond`. Common shape produced
+    // by `match X { V => true, _ => false }` → branch lowering and by
+    // user-written explicit bool selection. The condition is preserved
+    // unchanged so the speculatable-ness gate the both-arms-equal rule
+    // requires does not apply here.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = if_expr(
+        local_expr(0, TypeTable::BOOL),
+        block_with_tail_expr(bool_lit(true)),
+        Some(block_with_tail_expr(bool_lit(false))),
+        TypeTable::BOOL,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let NirExprKind::Local { index, .. } = expr.kind else {
+        panic!("expected Local (the original condition), got {:?}", expr.kind);
+    };
+    assert_eq!(index, 0);
+    assert_eq!(expr.type_id, TypeTable::BOOL);
+}
+
+#[test]
+fn reduce_local_rewrites_if_false_true_to_not_cond() {
+    // `if cond { false } else { true }` → `!cond`. The Unary::Not wrap
+    // preserves the same observable behaviour as the original `if` —
+    // truth and falsity are swapped, evaluation order is identical
+    // (cond is evaluated, then negated).
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = if_expr(
+        local_expr(0, TypeTable::BOOL),
+        block_with_tail_expr(bool_lit(false)),
+        Some(block_with_tail_expr(bool_lit(true))),
+        TypeTable::BOOL,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let NirExprKind::Unary { op, expr: inner } = &expr.kind else {
+        panic!("expected Unary::Not, got {:?}", expr.kind);
+    };
+    assert!(matches!(op, NirUnaryOp::Not));
+    let NirExprKind::Local { index, .. } = inner.kind else {
+        panic!("expected Local inside Unary::Not, got {:?}", inner.kind);
+    };
+    assert_eq!(index, 0);
+    assert_eq!(expr.type_id, TypeTable::BOOL);
+}
+
+#[test]
+fn reduce_local_rewrites_if_true_false_with_non_speculatable_cond() {
+    // The cond-preservation rule does NOT require `is_speculatable(cond)`
+    // because the rewrite keeps the condition's evaluation intact. Use a
+    // `Match` expression as the cond (not speculatable per niri's check)
+    // and verify the rule still fires.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let impure_cond = match_expr(
+        local_expr(0, TypeTable::I32),
+        vec![
+            arm(lit_pat_i128(0), bool_lit(true)),
+            arm(NirPattern::Wildcard, bool_lit(false)),
+        ],
+        TypeTable::BOOL,
+    );
+    let mut expr = if_expr(
+        impure_cond,
+        block_with_tail_expr(bool_lit(true)),
+        Some(block_with_tail_expr(bool_lit(false))),
+        TypeTable::BOOL,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    // After rewrite, the if is replaced by the (still-non-speculatable)
+    // cond expression itself — the Match.
+    assert!(
+        matches!(expr.kind, NirExprKind::Match { .. }),
+        "expected the original Match condition to survive as the result, got {:?}",
+        expr.kind
+    );
+}
+
+#[test]
+fn reduce_local_leaves_if_mixed_bool_int_arms_alone() {
+    // Defensive: when arms have different types (bool then-arm, int
+    // else-arm) the bool-arms rule must not fire. The (Bool, Bool)
+    // tuple pattern in the rule guards against this.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let mut expr = if_expr(
+        local_expr(0, TypeTable::BOOL),
+        block_with_tail_expr(bool_lit(true)),
+        Some(block_with_tail_expr(int_lit(0, TypeTable::I32, "0"))),
+        // Type intentionally mismatched between if-expr and arms — a
+        // resolver-level invariant, but we want the rule to stay silent
+        // regardless.
+        TypeTable::BOOL,
+    );
+    let before = format!("{:?}", expr.kind);
+    assert!(!interp.reduce_local(&mut expr));
+    assert_eq!(format!("{:?}", expr.kind), before);
+}
+
+#[test]
 fn reduce_local_block_splices_const_true_if_stmt() {
     // Stmt-form `if true { stmts… }` → splice stmts into the parent.
     let table = TypeTable::new();
