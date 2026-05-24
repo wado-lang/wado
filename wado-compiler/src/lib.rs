@@ -10,7 +10,6 @@ pub mod comment;
 pub mod compiler_host;
 pub mod compiler_item;
 pub mod component_model;
-pub mod desugar;
 pub mod doc;
 pub mod effect_check;
 pub mod flat_package;
@@ -129,10 +128,8 @@ pub struct DumpResult {
     pub source: String,
     /// Tokens from lexer
     pub tokens: Vec<token::Token>,
-    /// The main module's AST (after parser)
+    /// The main module's AST (after parser).
     pub ast: ast::Module,
-    /// Desugared AST (after desugar pass)
-    pub desugared_ast: ast::Module,
     /// Symbol table after analysis
     pub symbols: symbol::SymbolTable,
     /// Loaded module sources
@@ -243,8 +240,8 @@ pub async fn compile_with_options<H: CompilerHost>(
     }
 
     // === Phase 1: Load all modules ===
-    // Loader performs: lex → parse → bind → desugar for each module
-    // Also preserves the original (non-desugared) entry AST for tooling
+    // Loader performs: lex → parse → bind for each module, and preserves
+    // the entry AST for tooling that takes it by value.
     let load_result = {
         let module_loader = loader::ModuleLoader::new(host, log_level)
             .with_invocations(options.invocations.clone());
@@ -605,7 +602,7 @@ fn compile_after_load<H: CompilerHost>(
         codegen::emit_wasm(&nir, &wir_package)
     };
 
-    // Return the original (non-desugared) entry AST for tooling
+    // Return the entry AST for tooling
     Ok((
         wasm,
         entry_ast,
@@ -650,7 +647,7 @@ fn snapshot_tir_modules(
 /// This runs the compilation pipeline up through optimization (without code generation)
 /// and returns diagnostic information about the internal state.
 ///
-/// Pipeline: lexer -> parser -> bind -> desugar -> load -> analyze -> resolve -> lower -> link -> optimize
+/// Pipeline: lexer -> parser -> bind -> load -> analyze -> resolve -> lower -> link -> optimize
 pub async fn dump_with_host<H: CompilerHost>(
     source: &str,
     host: &H,
@@ -713,13 +710,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         binder.bind_module(&ast)?;
     }
 
-    // === Phase 4: Desugar ===
-    let desugared_ast = {
-        let _span = logger.span("desugar");
-        desugar::desugar_module(&ast)
-    };
-
-    // === Phase 5: Load all modules ===
+    // === Phase 4: Load all modules ===
     let load_result = {
         let module_loader = loader::ModuleLoader::new(host, compiler_host::LogLevel::default());
         module_loader
@@ -902,7 +893,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         source: source.to_string(),
         tokens: tokens_for_dump,
         ast,
-        desugared_ast,
         symbols,
         loaded_modules: load_result.modules.keys().cloned().collect(),
         implicit_modules: load_result.implicit_modules.into_iter().collect(),

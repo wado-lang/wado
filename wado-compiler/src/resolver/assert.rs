@@ -69,14 +69,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> Vec<TirStmt> {
         let span = assert_stmt.span;
 
-        // One synthetic `AstId` shared by every node this expansion
-        // creates. Allocated above the module's parser range, so
-        // `record_reference_opt` / `record_local_symbol` entries keyed
-        // on it are unreachable from `Annotated::ast_id_at` and never
-        // pollute LSP cursor → AstId lookups. Sharing one id across
-        // multiple nodes is safe for the same reason — the collisions
-        // are unreachable too.
-        let synth_id = self.alloc_synth_ast_id(ctx);
+        // Every scaffold node this expansion creates shares
+        // `AstId::SYNTHETIC`. The sentinel is outside any parser
+        // allocation range (`u32::MAX`), so it can never be returned by
+        // `AstIndex::ast_id_at`; collisions inside the resolver's
+        // record maps are therefore unreachable from any LSP query.
+        let synth_id = AstId::SYNTHETIC;
 
         // Phase 1: read-only AST scan to decide captures.
         let mut scanner = CaptureScanner::new();

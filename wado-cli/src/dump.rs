@@ -13,7 +13,6 @@ pub struct DumpOptions {
     pub inputs: Vec<String>,
     pub show_tokens: bool,
     pub show_ast: bool,
-    pub show_desugared: bool,
     pub show_symbols: bool,
     pub show_modules: bool,
     pub show_types: bool,
@@ -31,7 +30,6 @@ pub struct DumpOptions {
 enum Opt {
     Tokens,
     Ast,
-    Desugared,
     Modules,
     Symbols,
     Types,
@@ -50,7 +48,6 @@ impl Opt {
     const ALL: &[Self] = &[
         Self::Tokens,
         Self::Ast,
-        Self::Desugared,
         Self::Modules,
         Self::Symbols,
         Self::Types,
@@ -78,12 +75,6 @@ impl Opt {
                 short: None,
                 value: None,
                 desc: "Show parsed AST",
-            },
-            Self::Desugared => args::OptSpec {
-                long: Some("desugared"),
-                short: None,
-                value: None,
-                desc: "Show desugared AST",
             },
             Self::Modules => args::OptSpec {
                 long: Some("modules"),
@@ -169,7 +160,6 @@ fn format_usage() -> String {
             &[
                 Opt::Tokens,
                 Opt::Ast,
-                Opt::Desugared,
                 Opt::Modules,
                 Opt::Symbols,
                 Opt::Types,
@@ -219,7 +209,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut inputs: Vec<String> = Vec::new();
     let mut show_tokens = false;
     let mut show_ast = false;
-    let mut show_desugared = false;
     let mut show_symbols = false;
     let mut show_modules = false;
     let mut show_types = false;
@@ -242,10 +231,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                 }
                 Opt::Ast => {
                     show_ast = true;
-                    any_phase = true;
-                }
-                Opt::Desugared => {
-                    show_desugared = true;
                     any_phase = true;
                 }
                 Opt::Symbols => {
@@ -329,7 +314,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         inputs,
         show_tokens,
         show_ast,
-        show_desugared,
         show_symbols,
         show_modules,
         show_types,
@@ -411,15 +395,6 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         println!("=== AST ===");
         let unparser = wado_compiler::unparse::Unparser::new().with_trivia(&result.trivia);
         let unparsed = unparser.unparse(&result.ast);
-        println!("{unparsed}");
-        println!();
-    }
-
-    // Desugared AST section
-    if opts.show_desugared {
-        println!("=== Desugared AST ===");
-        let unparser = wado_compiler::unparse::Unparser::new().with_trivia(&result.trivia);
-        let unparsed = unparser.unparse(&result.desugared_ast);
         println!("{unparsed}");
         println!();
     }

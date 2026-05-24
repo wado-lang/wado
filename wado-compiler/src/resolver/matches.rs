@@ -6,7 +6,7 @@
 //! until here means LSP queries (hover, jump-to-def, references) land
 //! on the user's `matches` text rather than on a synthetic match arm.
 
-use crate::ast;
+use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::tir::{TirExpr, TypeId};
 
@@ -21,6 +21,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ///
     /// When the pattern matches, the arm body returns the guard's value
     /// (or `true` if absent); the wildcard arm returns `false`.
+    ///
+    /// Every node in the synthesised `MatchExpr` uses [`AstId::SYNTHETIC`],
+    /// keeping the scaffold disjoint from LSP-visible parser ids — the
+    /// user's cursor on a `matches` expression resolves to `m.id`, which
+    /// is preserved on the original `MatchesExpr` and never overwritten
+    /// by the scaffold.
     pub(super) fn desugar_matches_expr(
         &mut self,
         m: &ast::MatchesExpr,
@@ -29,7 +35,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> TirExpr {
         let bool_lit = |value: bool| {
             ast::Expr::Literal(ast::LiteralExpr {
-                id: m.id,
+                id: AstId::SYNTHETIC,
                 value: ast::Literal::Bool(value),
                 span: m.span,
             })
@@ -38,18 +44,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let match_body = m.guard.clone().unwrap_or_else(|| bool_lit(true));
 
         let synthetic = ast::MatchExpr {
-            id: m.id,
+            id: AstId::SYNTHETIC,
             expr: m.expr.clone(),
             arms: vec![
                 ast::MatchArm {
-                    id: m.id,
+                    id: AstId::SYNTHETIC,
                     pattern: m.pattern.clone(),
                     guard: None,
                     body: match_body,
                     span: m.span,
                 },
                 ast::MatchArm {
-                    id: m.id,
+                    id: AstId::SYNTHETIC,
                     pattern: ast::Pattern::Wildcard,
                     guard: None,
                     body: bool_lit(false),

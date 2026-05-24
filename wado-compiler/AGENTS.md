@@ -145,10 +145,10 @@ This crate must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `s
 Pipeline:
 
 ```
-parse → bind → desugar → load → analyze → annotate → lower_tir → monomorphize → lower → optimize → codegen
+parse → bind → load → analyze → annotate → lower_tir → monomorphize → lower → optimize → codegen
 ```
 
-- `annotate` is AST-preserving type resolution; returns `Annotated` (see `src/annotate.rs`). Used by both LSP and batch compilation.
+- `annotate` is AST-preserving type resolution; returns `Annotated` (see `src/annotate.rs`). Used by both LSP and batch compilation. Surface rewrites (`x += y`, `while`, C-style `for`, `assert`, `matches`, comparison chain, …) all happen inside the resolver — either by building TIR directly or via short-lived AST scaffolds with `AstId::SYNTHETIC` ids — so the parsed AST stays parser-shaped end to end.
 - `lower_tir` emits TIR from `&Annotated`; used only by batch compilation.
 - `(ModuleSource, AstId)` (`SymbolKey`) is the canonical identity for every semantic entity that originates in source. `AstId` is dense over `Block` / `Stmt` / `Expr` / `Pattern` / `Type` / `Item` / `Decl`, so every source position resolves to a key via `Module::ast_id_at`. Builtins live in `ModuleSource::Builtin` with their own dense ID range.
 - AST is the source of truth: `annotate` attaches facts, never mutates or moves AST nodes. Decl-backed `ResolvedType` variants and `Symbol` both carry `defined_at: SymbolKey`.

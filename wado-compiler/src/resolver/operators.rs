@@ -1145,48 +1145,56 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
     }
 
-    /// Resolve a compound assignment (already desugared, but handle anyway)
+    /// Resolve `target op= value` as the equivalent `target = target op value`
+    /// by routing through [`Self::resolve_assign`]. That helper knows how to
+    /// emit `GlobalVarSet` for globals, an `IndexAssign` trait call for
+    /// indexed assignment on custom types, etc. — duplicating that dispatch
+    /// here would silently break those cases (see the
+    /// `for global mut` regression that surfaced when the desugar phase
+    /// stopped pre-rewriting compound assignments).
+    ///
+    /// The synthetic `AssignExpr` and `BinaryExpr` reuse `compound.id` /
+    /// `compound.span`; their ids never re-enter LSP-visible paths because
+    /// the use → def edges produced during resolution are keyed on the
+    /// inner user-AST sub-expressions (`compound.target.id`, `compound.value.id`),
+    /// not on the synthetic wrapper nodes.
+    ///
+    /// Note: `target` is mentioned twice in the desugared form. For pure
+    /// l-values (locals, globals, fields of locals) that is fine; for impure
+    /// l-values like `arr[bump()] += 1` the inner sub-expressions run twice,
+    /// matching the historical desugar-phase behaviour. Binding impure
+    /// sub-expressions to temporaries first is a separate concern.
     pub(super) fn resolve_compound_assign(
         &mut self,
         compound: &ast::CompoundAssignExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // This should have been desugared, but handle it anyway
-        let target = self.resolve_expr(&compound.target, ctx, None);
-        let value = self.resolve_expr(&compound.value, ctx, Some(target.type_id));
-
         let op = match compound.op {
-            ast::CompoundAssignOp::Add => TirBinaryOp::Add,
-            ast::CompoundAssignOp::Sub => TirBinaryOp::Sub,
-            ast::CompoundAssignOp::Mul => TirBinaryOp::Mul,
-            ast::CompoundAssignOp::Div => TirBinaryOp::Div,
-            ast::CompoundAssignOp::Mod => TirBinaryOp::Mod,
-            ast::CompoundAssignOp::BitAnd => TirBinaryOp::BitAnd,
-            ast::CompoundAssignOp::BitOr => TirBinaryOp::BitOr,
-            ast::CompoundAssignOp::BitXor => TirBinaryOp::BitXor,
-            ast::CompoundAssignOp::Shl => TirBinaryOp::Shl,
-            ast::CompoundAssignOp::Shr => TirBinaryOp::Shr,
+            ast::CompoundAssignOp::Add => ast::BinaryOp::Add,
+            ast::CompoundAssignOp::Sub => ast::BinaryOp::Sub,
+            ast::CompoundAssignOp::Mul => ast::BinaryOp::Mul,
+            ast::CompoundAssignOp::Div => ast::BinaryOp::Div,
+            ast::CompoundAssignOp::Mod => ast::BinaryOp::Mod,
+            ast::CompoundAssignOp::BitAnd => ast::BinaryOp::BitAnd,
+            ast::CompoundAssignOp::BitOr => ast::BinaryOp::BitOr,
+            ast::CompoundAssignOp::BitXor => ast::BinaryOp::BitXor,
+            ast::CompoundAssignOp::Shl => ast::BinaryOp::Shl,
+            ast::CompoundAssignOp::Shr => ast::BinaryOp::Shr,
         };
-
-        // target = target op value
-        let binary = TirExpr::new(
-            TirExprKind::Binary {
-                left: Box::new(target.clone()),
-                op,
-                right: Box::new(value),
-            },
-            target.type_id,
-            compound.span,
-        );
-
-        TirExpr::new(
-            TirExprKind::Assign {
-                target: Box::new(target),
-                value: Box::new(binary),
-            },
-            TypeTable::UNIT,
-            compound.span,
-        )
+        let binary = ast::Expr::Binary(Box::new(ast::BinaryExpr {
+            id: ast::AstId::SYNTHETIC,
+            left: compound.target.clone(),
+            op,
+            right: compound.value.clone(),
+            span: compound.span,
+        }));
+        let assign = ast::AssignExpr {
+            id: ast::AstId::SYNTHETIC,
+            target: compound.target.clone(),
+            value: binary,
+            span: compound.span,
+        };
+        self.resolve_assign(&assign, ctx)
     }
 
     /// Desugar `a OP1 b OP2 c [OP3 d …]` to the equivalent
@@ -1199,18 +1207,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         chain: &ast::ComparisonChainExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let expanded = self.desugar_comparison_chain_ast(chain, ctx);
+        let expanded = Self::desugar_comparison_chain_ast(chain);
         self.resolve_expr(&expanded, ctx, None)
     }
 
     /// Build the AST that [`Self::desugar_comparison_chain`] resolves.
     /// Split out so the tests can exercise the structural rewrite
     /// without going through the full resolver.
-    fn desugar_comparison_chain_ast(
-        &self,
-        chain: &ast::ComparisonChainExpr,
-        ctx: &mut FunctionContext,
-    ) -> ast::Expr {
+    fn desugar_comparison_chain_ast(chain: &ast::ComparisonChainExpr) -> ast::Expr {
         if chain.comparisons.is_empty() {
             return chain.first.clone();
         }
@@ -1218,7 +1222,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Single comparison — no middle term, nothing to bind.
             let cmp = &chain.comparisons[0];
             return ast::Expr::Binary(Box::new(ast::BinaryExpr {
-                id: chain.id,
+                id: ast::AstId::SYNTHETIC,
                 left: chain.first.clone(),
                 op: cmp.op,
                 right: cmp.right.clone(),
@@ -1239,12 +1243,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Tail operand only used once.
                 (cmp.right.clone(), cmp.right.clone())
             } else {
-                let synth_id = self.alloc_synth_ast_id(ctx);
                 let name = format!("__m{idx}");
                 stmts.push(ast::Stmt::Let(ast::LetStmt {
-                    id: synth_id,
+                    id: ast::AstId::SYNTHETIC,
                     pattern: ast::Pattern::Ident {
-                        id: synth_id,
+                        id: ast::AstId::SYNTHETIC,
                         name: name.clone(),
                         span: chain.span,
                     },
@@ -1256,7 +1259,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     span: chain.span,
                 }));
                 let ident = ast::Expr::Ident(ast::IdentExpr {
-                    id: synth_id,
+                    id: ast::AstId::SYNTHETIC,
                     name,
                     segments: Vec::new(),
                     type_args: Vec::new(),
@@ -1266,7 +1269,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             };
 
             let cmp_expr = ast::Expr::Binary(Box::new(ast::BinaryExpr {
-                id: chain.id,
+                id: ast::AstId::SYNTHETIC,
                 left: prev,
                 op: cmp.op,
                 right: right_for_comp,
@@ -1275,7 +1278,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             and_chain = Some(match and_chain {
                 None => cmp_expr,
                 Some(acc) => ast::Expr::Binary(Box::new(ast::BinaryExpr {
-                    id: chain.id,
+                    id: ast::AstId::SYNTHETIC,
                     left: acc,
                     op: ast::BinaryOp::And,
                     right: cmp_expr,
@@ -1286,14 +1289,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         let result = and_chain.expect("non-empty: short-circuited above for 0/1 comparisons");
-        let block_id = self.alloc_synth_ast_id(ctx);
         stmts.push(ast::Stmt::Expr(ast::ExprStmt {
-            id: block_id,
+            id: ast::AstId::SYNTHETIC,
             expr: result,
             span: chain.span,
         }));
         ast::Expr::Block(Box::new(ast::Block {
-            id: block_id,
+            id: ast::AstId::SYNTHETIC,
             stmts,
             span: chain.span,
         }))
