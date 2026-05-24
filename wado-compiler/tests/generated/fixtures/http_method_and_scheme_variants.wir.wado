@@ -421,7 +421,7 @@ fn "wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/handle"(re
     let s_26: ref "wasi:http/types.wado//Scheme";
     let name: ref "core:prelude/string.wado//String";
     let __v1_29: bool;
-    let __v2: bool;
+    let __v3: bool;
     let __cond_32: bool;
     let resp_headers: i32;
     let response: i32;
@@ -635,8 +635,8 @@ fn "wado-compiler/tests/fixtures/http_method_and_scheme_variants.wado/handle"(re
     let len_a_390: i32;
     let f_398: ref "core:prelude/format.wado//Formatter";
     let f_404: ref "core:prelude/format.wado//Formatter";
-    let f_409: ref "core:prelude/format.wado//Formatter";
-    let self_412: ref "core:prelude/string.wado//String";
+    let f_410: ref "core:prelude/format.wado//Formatter";
+    let self_413: ref "core:prelude/string.wado//String";
     custom = struct.new "wasi:http/types.wado//Method::Other" { discriminant: 9, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PURGE"), used: 5 } };
     __v0_2 = block -> ref "core:prelude/string.wado//String" {
         block -> ref "core:prelude/string.wado//String" {
@@ -1261,7 +1261,7 @@ condition: scheme_name(Scheme::Other(\"wss\")) == \"wss\"
             break __inline_String_Eq__eq_115: "core:prelude/string.wado/String^Eq::eq_bytes"(name.repr, other_382.repr, len_a_383);
             unreachable;
         };
-        __v2 = __inline_String_Eq__eq_120: block -> bool {
+        __v3 = __inline_String_Eq__eq_120: block -> bool {
             other_389 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("https"), used: 5 };
             len_a_390 = name.used;
             if len_a_390 != other_389.used {
@@ -1273,11 +1273,11 @@ condition: scheme_name(Scheme::Other(\"wss\")) == \"wss\"
         __cond_32 = (if __v1_29 -> i32 {
             1;
         } else {
-            __v2;
+            __v3;
         });
         if __cond_32 == 0 {
             "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-                __local_60 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(209), used: 0 };
+                __local_60 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(232), used: 0 };
                 "core:prelude/string.wado/String::push_str"(__local_60, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
                 "core:prelude/string.wado/String::push"(__local_60, 104);
                 "core:prelude/string.wado/String::push"(__local_60, 97);
@@ -1315,10 +1315,19 @@ condition: name == \"http\" || name == \"https\"
                     struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
                 }));
                 "core:prelude/string.wado/String::push"(__local_60, 10);
+                "core:prelude/string.wado/String::push"(__local_60, 110);
+                "core:prelude/string.wado/String::push"(__local_60, 97);
+                "core:prelude/string.wado/String::push"(__local_60, 109);
+                "core:prelude/string.wado/String::push"(__local_60, 101);
+                "core:prelude/string.wado/String::push"(__local_60, 58);
+                "core:prelude/string.wado/String::push"(__local_60, 32);
+                __local_61 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_60 };
+                "core:prelude/format.wado/String^Inspect::inspect"(name, __local_61);
+                "core:prelude/string.wado/String::push"(__local_60, 10);
                 "core:prelude/string.wado/String::push_str"(__local_60, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("name == \"https\": "), used: 17 });
                 __local_61 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_60 };
-                f_409 = __local_61;
-                "core:prelude/format.wado/Formatter::pad"(f_409, (if __v2 -> ref "core:prelude/string.wado//String" {
+                f_410 = __local_61;
+                "core:prelude/format.wado/Formatter::pad"(f_410, (if __v3 -> ref "core:prelude/string.wado//String" {
                     struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
                 } else {
                     struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -1656,9 +1665,9 @@ condition: name == \"http\" || name == \"https\"
         }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    "core:internal/cm_stream_write_u8"(__mv_hi_2, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(__inline_String__bytes_136: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
-        self_412 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
-        break __inline_String__bytes_136: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_412.repr, used: self_412.used, index: 0 };
+    "core:internal/cm_stream_write_u8"(__mv_hi_2, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(__inline_String__bytes_137: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
+        self_413 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
+        break __inline_String__bytes_137: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_413.repr, used: self_413.used, index: 0 };
         unreachable;
     }));
     "wasi/stream-drop-writable"(__mv_hi_2);

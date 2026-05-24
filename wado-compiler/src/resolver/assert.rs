@@ -151,8 +151,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // resolution paths take over.
         //
         // Only slots whose hook fired contribute lines to the failure
-        // message — a slot stays with `emitted == false` when its AST
-        // node evaporates during resolution (e.g. reflexive
+        // message — a slot stays `emitted == false` when its AST node
+        // evaporates during resolution (e.g. reflexive
         // `T::from(T_val)` returns its argument directly, so the outer
         // `Call` is never resolved as a node and `resolve_expr` is
         // never called on its `AstId`). The corresponding `__vK` would
@@ -300,10 +300,10 @@ struct Capture {
     name: String,
     /// Source text of the original sub-expression, used in the failure message.
     source: String,
-    /// Set to `true` once the resolver hook fires for this slot.
-    /// Slots that stay `false` had their AST node evaporate during
-    /// resolution (e.g. reflexive `T::from(T_val)` returns its argument
-    /// directly, so the outer `Call` is never resolved as a node and
+    /// `true` once the resolver hook has fired for this slot. Slots that
+    /// stay `false` had their AST node evaporate during resolution
+    /// (e.g. reflexive `T::from(T_val)` returns its argument directly,
+    /// so the outer `Call` is never resolved as a node and
     /// `resolve_expr` is never called on its `AstId`). Those slots are
     /// dropped from the failure message — `resolve_ident` would
     /// otherwise reject the unbound `__vK` reference.
@@ -346,16 +346,18 @@ impl AssertCaptureContext {
 /// condition deserve a `__vK` capture and records each capture's
 /// originating [`AstId`] so the resolver hook in `resolve_expr` can find
 /// it.
+///
+/// One slot per capturable `Expr` — no source-text deduplication. Two
+/// syntactically identical sub-terms (e.g. `f() == f()`) each get their
+/// own `__vK` and evaluate independently, matching the source as
+/// written. Such code is degenerate anyway; the dedup logic the old
+/// AST-substitution `CaptureFolder` ran for it isn't worth the
+/// complexity in the new hook.
 struct CaptureScanner {
     slots: Vec<Capture>,
     /// `AstId` of each captureable sub-expression → its capture slot
-    /// index. Two AST nodes with the same source text share one slot
-    /// (dedup keeps the failure message terse and avoids re-evaluating
-    /// identical sub-terms); both ids map to the same slot here.
+    /// index.
     ast_id_to_slot: IndexMap<AstId, usize>,
-    /// Source text → slot index, used to dedup before allocating a new
-    /// `__vK`. Discarded after the scan.
-    source_to_idx: IndexMap<String, usize>,
     /// `true` only for the root call (the condition itself). The root
     /// `Binary` / `Unary` is not captured because it would just
     /// duplicate `__cond`.
@@ -373,7 +375,6 @@ impl CaptureScanner {
         Self {
             slots: Vec::new(),
             ast_id_to_slot: IndexMap::default(),
-            source_to_idx: IndexMap::default(),
             is_root: true,
             in_call_arg: false,
         }
@@ -384,22 +385,16 @@ impl CaptureScanner {
         self.scan(expr);
     }
 
-    /// Add a capture (dedup'd by source text); the sub-expression's
-    /// `AstId` is recorded so the resolver hook can match it.
+    /// Add a capture; the sub-expression's `AstId` is recorded so the
+    /// resolver hook can match it.
     fn add(&mut self, source: String, ast_id: AstId) {
-        let idx = if let Some(&idx) = self.source_to_idx.get(&source) {
-            idx
-        } else {
-            let idx = self.slots.len();
-            let name = format!("__v{idx}");
-            self.slots.push(Capture {
-                name,
-                source: source.clone(),
-                emitted: false,
-            });
-            self.source_to_idx.insert(source, idx);
-            idx
-        };
+        let idx = self.slots.len();
+        let name = format!("__v{idx}");
+        self.slots.push(Capture {
+            name,
+            source,
+            emitted: false,
+        });
         self.ast_id_to_slot.insert(ast_id, idx);
     }
 
