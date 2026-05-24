@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779613122509,
+  "lastUpdate": 1779614439991,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25489,6 +25489,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c46d2d864515053012414c8ebc4123f967ac9e1c"
         },
         "date": 1779613122027,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17246,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 461807,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8147645bf2d4fb04adf63c966796f63d687aa479",
+          "message": "Merge pull request #1177 from wado-lang/claude/nice-clarke-0kppT\n\ntest(e2e): surface the wasmtime Trap kind on test-world trap",
+          "timestamp": "2026-05-24T18:14:28+09:00",
+          "tree_id": "75a062def4f8202d868c76aa7d347e7955a845b0",
+          "url": "https://github.com/wado-lang/wado/commit/8147645bf2d4fb04adf63c966796f63d687aa479"
+        },
+        "date": 1779614439513,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
