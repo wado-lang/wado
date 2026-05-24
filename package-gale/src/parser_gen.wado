@@ -2247,9 +2247,29 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
 /// `gen_op_repeat_with_follow_override`'s non-storable Group arm.
 fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, rep_op: &RepeatOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
     let op = &rep_op.body;
+    // `lower_repeat_op`'s list-label branch lowers `lab.element` (the
+    // Group inside `name+=(...)`) directly into `rep_op.body`, so
+    // `body_shape == StorableGroup` describes the inner Group. The
+    // surface element handed in here, however, is the un-unwrapped
+    // `rep.element` — for `name+=(INT | FLOAT)*` that's still the
+    // outer `Label(Group)`. `gen_op_storable_group_inner` peels its
+    // own surface element via `if let Group(g) = elem`, so without
+    // this unwrap it panics with `surface element is not Group`
+    // (ParserExec/ListLabelsOnSet was the regression). Strip the
+    // list-Label wrapper here so the surface side stays in lockstep
+    // with lower's body op.
+    let unwrapped_elem = if let Label(lab) = elem {
+        if lab.list {
+            &lab.element;
+        } else {
+            elem;
+        }
+    } else {
+        elem;
+    };
     return match rep_op.body_shape {
         LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts),
-        StorableGroup => gen_op_storable_group_inner(w, op, elem, ctx, name_counts, outer_follow),
+        StorableGroup => gen_op_storable_group_inner(w, op, unwrapped_elem, ctx, name_counts, outer_follow),
         TransparentGroup => panic(
             "gen_op_inner_for_storable_repeat: TransparentGroup body is not storable here — caller must dispatch via the non-storable arm",
         ),

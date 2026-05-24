@@ -1185,6 +1185,28 @@ WS : [ \\t\\n\\r]+ -> skip ;
     assert str_contains(&output, &"first_char == 'B'"), `tokenize dispatch must include 'B':\n{output}`;
 }
 
+test "set list-label `name+=(A | B)*` emits Array<Token> + match_set" {
+    // `val+=(INT | FLOAT)*` is a list-label whose inner is a Group of
+    // single-token alts. Previously `gen_op_inner_for_storable_repeat`
+    // forwarded the un-unwrapped `Label(Group)` surface element to
+    // `gen_op_storable_group_inner`, which panicked with
+    // `surface element is not Group` (no Wado was emitted). Covers
+    // ANTLR4 runtime-testsuite ParserExec/ListLabelsOnSet.
+    let input = "grammar T;
+b : ID val+=(INT | FLOAT)* ;
+ID : 'a'..'z'+ ;
+INT : '0'..'9'+ ;
+FLOAT : [0-9]+ '.' [0-9]+ ;
+WS : (' '|'\\n') -> skip ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    let body = extract_fn_body(&output, &"fn _parse_b(");
+    assert str_contains(&body, &"let mut val: Array<Token>"), `set list-label must allocate Array<Token>:\n{body}`;
+    assert str_contains(&body, &"p.match_set([TK_INT, TK_FLOAT])"), `set list-label must dispatch via match_set:\n{body}`;
+    assert str_contains(&body, &"val.push("), `set list-label must push into the container:\n{body}`;
+}
+
 test "non-greedy optional (??) emits an Option<T> field, not Array<T>" {
     // Non-greedy `(elem)??` and greedy `(elem)?` produce the same parse
     // tree shape (0 or 1 occurrence wrapped in `Option<T>`); only the
