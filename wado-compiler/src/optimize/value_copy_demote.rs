@@ -11,7 +11,15 @@
 //! synthesized shallow sibling helper that uses `array_clone_shallow`.
 //!
 //! The element-immutability analysis (`fn`s prefixed `analyze_`/`verify_`) is
-//! written to be reused by future passes (e.g. a `container_sroa` migration).
+//! shape-compatible with what `container_sroa` needs but currently kept
+//! private to this module.
+//!
+//! TODO(optimizer): expose the element-immutability analysis so
+//! `container_sroa` can replace its hardcoded method-shape whitelist
+//! with this richer query, and so nested-`Array<Array<T>>` demotion can
+//! reuse the recursive immutability proof. The recursion guard at
+//! `is_element_immutable_method` returns `false` for any recursive
+//! call site, suppressing self-recursive and mutually-recursive helpers.
 
 use std::cell::RefCell;
 use std::rc::Rc;

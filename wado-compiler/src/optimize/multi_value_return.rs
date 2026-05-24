@@ -1,4 +1,4 @@
-//! Multi-value return ABI classification (TIR-level).
+//! Multi-value return ABI classification (NIR-level).
 //!
 //! Decides which aggregate-returning user functions should use the
 //! multi-value Wasm return ABI (each tuple element / struct field a
@@ -17,17 +17,17 @@
 //!
 //! Historically this work lived in `wir_optimize::sroa_variant_return`
 //! (then named `sroa_return`), which pattern-matched on WIR `StructNew`
-//! returns and `StructGet` call-site reads. Moving the decision to TIR
+//! returns and `StructGet` call-site reads. Moving the decision to NIR
 //! has three benefits:
 //!
-//! 1. **Better visibility**: TIR analysis sees `TupleLiteral` /
+//! 1. **Better visibility**: NIR analysis sees `TupleLiteral` /
 //!    `StructLiteral` / `FieldAccess` directly — high-level intent —
 //!    rather than re-deriving it from low-level WIR shapes that may
 //!    have already been rewritten by intermediate passes.
-//! 2. **Cross-function context**: function ABI is a TIR-level concept,
+//! 2. **Cross-function context**: function ABI is a NIR-level concept,
 //!    so inliner / DCE can use the marker (e.g. an inlined multi-value
 //!    call can be fused without first guessing the ABI).
-//! 3. **Foundation for stack-only types**: the TIR multi-value
+//! 3. **Foundation for stack-only types**: the NIR multi-value
 //!    framework lays groundwork for further ABI work.
 //!
 //! ## Eligibility
@@ -54,7 +54,7 @@
 //!
 //! Candidates that survive both checks have their `return_abi` set to
 //! `MultiValue { result_types, field_names }` carrying the per-field
-//! TIR types and names.
+//! NIR types and names.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -66,7 +66,7 @@ use crate::nir_package::NirPackage;
 use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-/// Per-candidate body-only info: the per-field TIR types and field names
+/// Per-candidate body-only info: the per-field NIR types and field names
 /// (in declaration order). For tuples, `field_names` is `["0", "1", ...]`.
 /// For user structs, the struct's actual field names.
 #[derive(Clone, Debug)]
@@ -291,7 +291,7 @@ fn aggregate_field_info(
         let s = structs
             .iter()
             .find(|s| s.name == *name && s.module_source == *module_source)?;
-        // Skip generic / template structs that shouldn't be in optimised TIR.
+        // Skip generic / template structs that shouldn't be in optimised NIR.
         if !s.type_params.is_empty() {
             return None;
         }
@@ -302,12 +302,12 @@ fn aggregate_field_info(
     None
 }
 
-/// Whether a TIR type can occupy a slot of a multi-value Wasm result.
+/// Whether a NIR type can occupy a slot of a multi-value Wasm result.
 ///
 /// All concrete types Wasm GC supports as either a value type
 /// (i32 / i64 / f32 / f64 / v128) or a `(ref T)` slot are eligible.
 /// Type variables and pre-mono placeholders (`TypeParam`, `TypePack`,
-/// `AssocTypeProjection`) shouldn't appear in optimised TIR's tuple
+/// `AssocTypeProjection`) shouldn't appear in optimised NIR's tuple
 /// positions — be conservative and reject them so the analysis stays
 /// safe even if the invariant is ever broken.
 fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) -> bool {
@@ -451,6 +451,15 @@ fn expr_returns_match(expr: &NirExpr, expected: &ExpectedShape) -> bool {
             // alternative is invalid Wasm at return-side unwrap time
             // when a non-literal break value flows past the
             // multi-value signature.
+            //
+            // TODO(optimizer): track break labels so we can distinguish
+            // breaks that target *this* block (which must match the
+            // expected shape) from breaks that target an enclosing
+            // loop / labelled block (which leave the function via a
+            // different path and don't constrain the return ABI). The
+            // current over-requirement rejects multi-value for any
+            // `return label: { … break label: f(x) … }` helper whose
+            // breaks carry computed values.
             all_returns_match_shape(b, expected)
                 && block_tail_returns_match(b, expected)
                 && all_break_values_match_shape(b, expected)

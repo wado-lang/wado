@@ -1,15 +1,15 @@
-# WEP: TIR Interpreter (`tiri`) Evolution Plan
+# WEP: NIR Interpreter (`niri`) Evolution Plan
 
 ## Context
 
 The Wado optimizer relies on constant folding to reduce literal-only
 expressions to a single literal node. Until now the folding logic lived
 inside `optimize/const_folding.rs` as a hand-rolled set of
-operator helpers, mixed with the TIR visitor that drove it.
+operator helpers, mixed with the NIR visitor that drove it.
 
 This commit splits the engine out into a new top-level module,
-`wado_compiler::tiri` ("TIR Interpreter"), exposing
-`Interpreter::reduce(&TirExpr) -> TirExpr` as the canonical API.
+`wado_compiler::niri` ("NIR Interpreter"), exposing
+`Interpreter::reduce(&NirExpr) -> NirExpr` as the canonical API.
 `const_folding.rs` becomes a thin visitor that delegates each visited
 node's local rewrite to `Interpreter::reduce_local`.
 
@@ -19,8 +19,8 @@ expression.
 
 ## Decision
 
-`tiri` evolves into a **partial evaluator** for TIR. The public surface
-keeps a single shape — `reduce(&TirExpr) -> TirExpr` — and each stage
+`niri` evolves into a **partial evaluator** for NIR. The public surface
+keeps a single shape — `reduce(&NirExpr) -> NirExpr` — and each stage
 extends what kinds of expressions can be reduced. Beyond a single-process
 interpreter, a complementary **wasm-CTFE backend** runs full pure
 function calls through `wasmtime`, leveraging Wado's effect system as a
@@ -28,15 +28,15 @@ type-checked purity gate.
 
 ### Why two backends
 
-|              | tiri (in-process)                                  | wasm execution                                          |
+|              | niri (in-process)                                  | wasm execution                                          |
 | ------------ | -------------------------------------------------- | ------------------------------------------------------- |
 | Sweet spot   | `2+3 → 5`, identity simplification, branch pruning | `fib(20)`, lookup-table generation, full pure-call CTFE |
 | Cost / call  | µs, memoizable                                     | ms (codegen + instantiate), amortized via module cache  |
 | Partial eval | Yes (residuals)                                    | No (whole-call)                                         |
 | Coverage     | Whatever we hand-write                             | All of Wado, for free                                   |
 
-These are complementary, not alternatives. tiri stays sub-quadratic and
-fine-grained; wasm execution covers anything tiri would balk at.
+These are complementary, not alternatives. niri stays sub-quadratic and
+fine-grained; wasm execution covers anything niri would balk at.
 
 ## Stages
 
@@ -44,13 +44,13 @@ fine-grained; wasm execution covers anything tiri would balk at.
 
 Status: done.
 
-- [x] `wado_compiler::tiri` exists with `Value`, `Interpreter`,
-      `reduce(&TirExpr) -> TirExpr`, `reduce_local(&mut TirExpr) -> bool`,
-      and `reduce_to_value(&TirExpr) -> Option<Value>`.
+- [x] `wado_compiler::niri` exists with `Value`, `Interpreter`,
+      `reduce(&NirExpr) -> NirExpr`, `reduce_local(&mut NirExpr) -> bool`,
+      and `reduce_to_value(&NirExpr) -> Option<Value>`.
 - [x] `const_folding.rs` is a thin visitor.
-- [x] Identity simplification for `&&` / `||` lives in tiri, not the
+- [x] Identity simplification for `&&` / `||` lives in niri, not the
       visitor.
-- [x] Integration tests at `wado-compiler/tests/tiri.rs` cover the four
+- [x] Integration tests at `wado-compiler/tests/niri.rs` cover the four
       arithmetic ops on i32/i64/u8/u32/f32/f64 plus `reduce`-API
       contracts (repr preservation, short-circuit, binary collapse).
 
@@ -80,10 +80,10 @@ Status: done.
       ```
 
       Names favour readability over the academic `Bottom` / `Top`.
-      Comments in `tiri.rs` reference the SCCP lattice for readers
+      Comments in `niri.rs` reference the SCCP lattice for readers
       familiar with the abstract-interpretation literature.
 
-- [x] `reduce_to_lattice(&TirExpr) -> Lattice` is the canonical engine
+- [x] `reduce_to_lattice(&NirExpr) -> Lattice` is the canonical engine
       API. Callers that only need "is this a literal?" use
       `Lattice::as_const() -> Option<Value>` — kept as a _projection_,
       not a separate function, so the lattice is always the source of
@@ -91,14 +91,14 @@ Status: done.
 - [x] `env: IndexMap<LocalId, Lattice>` on `Interpreter` for `let`-bound
       constants. Immutable bindings are captured as `Const(v)` when the
       RHS reduces; `let mut` and assignments invalidate to `NonConst`.
-      Reads of `TirExprKind::Local` consult `env`.
+      Reads of `NirExprKind::Local` consult `env`.
 - [x] `GlobalEnv: IndexMap<(ModuleSource, String), Lattice>` on
       `Interpreter` for module-scope globals. The driving visitor
       (`const_folding`) builds the env once per pass by walking
       `FlatPackage::globals`: each `global FOO: T = init;` whose
       initializer reduces to `Const(v)` is recorded as `Const(v)`,
       mutable globals as `NonConst`. Reads of
-      `TirExprKind::GlobalVarGet` consult `globals` and bare reads of
+      `NirExprKind::GlobalVarGet` consult `globals` and bare reads of
       a `Const(v)` global rewrite to the literal via the same
       leaf-rewrite path as a `Local`. Initializers are reduced
       through a fresh `Interpreter` with the partially-built env
@@ -164,10 +164,10 @@ since the lattice work for variant payloads is more involved than scalar
       (both expr-form and stmt-form). The legacy pass now only handles
       trivial-block / labeled-block simplifications and keeps a doc
       pointer at the top of `const_branch_prune.rs` redirecting future
-      `if`-related rewrites to tiri. Removing those branches and
+      `if`-related rewrites to niri. Removing those branches and
       observing every existing fixture still pass is the equivalence
       proof.
-- [x] `wado-compiler/tests/tiri.rs` covers `Lattice::join`, the
+- [x] `wado-compiler/tests/niri.rs` covers `Lattice::join`, the
       feasible-edge constant-true / constant-false / no-else cases, the
       both-arms-equal collapse, the structurally-unequal-arms negative
       case, the Unevaluated-arm regression, and the stmt-form splice
@@ -227,7 +227,7 @@ scalar / payload-free matching today without committing to a heap-aware
 - [x] `reduce_in_place` recurses into the scrutinee, every arm guard,
       and every arm body so the visitor-driven path sees fully-folded
       operands at each match node.
-- [x] Unit tests at `wado-compiler/tests/tiri.rs` cover: literal-arm
+- [x] Unit tests at `wado-compiler/tests/niri.rs` cover: literal-arm
       first-match selection, wildcard fallthrough, char and range
       patterns (inclusive / exclusive bounds, signed / unsigned mix,
       char codepoint ordering), or-patterns (match / no-match / mixed),
@@ -237,7 +237,7 @@ scalar / payload-free matching today without committing to a heap-aware
       Unevaluated-arm regression under non-constant scrutinee,
       env-resolved local scrutinee, first-match wins on overlap, and
       visitor-driven `reduce_local` rewrites. Single e2e fixture
-      `tiri_match_const_fold.wado` checks observable end-to-end fold
+      `niri_match_const_fold.wado` checks observable end-to-end fold
       (constant-scrutinee match's chosen arm body survives at -O2,
       non-chosen arms are gone).
 
@@ -245,7 +245,7 @@ scalar / payload-free matching today without committing to a heap-aware
 
 - [ ] Extend `pattern_matches` to handle `Enum { case_index }`
       patterns when the scrutinee is structurally an `EnumConstruct`
-      (no [`Value`] enrichment needed — peek the TIR shape at match
+      (no [`Value`] enrichment needed — peek the NIR shape at match
       time). Same trick for `Variant { variant_name }` against a
       `VariantConstruct` scrutinee.
 - [ ] Lets the engine drop arms that are definitely infeasible
@@ -267,7 +267,7 @@ scalar / payload-free matching today without committing to a heap-aware
       handles variant scrutinees.
 - [ ] At this point `value_to_expr_kind` needs a fallible variant
       that can report "not representable as a primitive literal" when
-      asked to materialize an `Enum` / `Variant` value back into TIR
+      asked to materialize an `Enum` / `Variant` value back into NIR
       (we don't always have the case_name handy). The all-arms-equal
       collapse skips those cases.
 
@@ -282,7 +282,7 @@ heap-aware return values stay deferred (call them Stage 3.5+).
       driving visitor (`const_folding`) builds the map once per pass
       by walking `FlatPackage::functions` and admitting every function
       that passes [`is_ctfe_eligible`]. Values are
-      `Rc<RefCell<TirFunction>>` handles aliased with
+      `Rc<RefCell<NirFunction>>` handles aliased with
       `FlatPackage::functions`, not body clones, so per-iteration
       rebuild costs only refcount bumps. The interpreter reads each
       callee body via `RefCell::try_borrow`; failure means the visitor
@@ -307,7 +307,7 @@ heap-aware return values stay deferred (call them Stage 3.5+).
       return x*2 }`, expression-bodied helpers, single-tail-`if`
       bodies). Multi-stmt bodies (let-sequences, multi-return) are
       deferred — bailing here costs an optimization, not correctness.
-- [x] `Interpreter::try_call_fold(&TirExpr) -> Lattice`: matches on
+- [x] `Interpreter::try_call_fold(&NirExpr) -> Lattice`: matches on
       `Call`, looks the callee up, reduces every arg to a `Value` via
       `expr_to_lattice(...).as_const()`, refuses if the callee key is
       already on `self.call_stack` (recursion guard) or
@@ -335,7 +335,7 @@ heap-aware return values stay deferred (call them Stage 3.5+).
       the outer `Call` therefore stays unfolded. A recursive function
       with a const-condition base case (`fn f(n) { return if n==0 {
       A } else { f(n-1) } }` invoked as `f(0)`) still folds because
-      tiri's `if` rule treats the unreachable else-arm as an SCCP
+      niri's `if` rule treats the unreachable else-arm as an SCCP
       infeasible edge — the recursive call inside it never gets
       asked. This is by design: classical CTFE engines key their
       recursion guard on `(callee, arg-values)` to allow deep
@@ -363,7 +363,7 @@ heap-aware return values stay deferred (call them Stage 3.5+).
   - User-facing `const fn` / `#[const_eval]` syntax.
   - Salvaging recursive depth — Stage 5 (wasm-CTFE) covers anything
     Stage 3's recursion guard refuses.
-- [x] Unit tests at `wado-compiler/tests/tiri.rs` cover: const-args
+- [x] Unit tests at `wado-compiler/tests/niri.rs` cover: const-args
       via `Return` and via tail-expr bodies, two-level chained folds,
       non-const arg left intact, effectful callee left intact,
       multi-stmt body left intact, direct self-recursion bails via
@@ -372,7 +372,7 @@ heap-aware return values stay deferred (call them Stage 3.5+).
       and no-callee-map paths, every `is_ctfe_eligible` rejection
       branch (`async`, `inline(never)`, no body, accept default), and
       composition with the outer `if`-fold rule. E2E fixture
-      `tiri_pure_call_fold.wado` checks observable end-to-end fold —
+      `niri_pure_call_fold.wado` checks observable end-to-end fold —
       a recursive function called at its base-case argument folds to
       a literal in WIR at -O2 even though the inliner refuses
       recursive functions outright.
@@ -390,8 +390,8 @@ heap-aware return values stay deferred (call them Stage 3.5+).
       `CompilerHost` with `run_compile_time_eval(component_wasm, args)`
       (mirroring today's `run_generator`). Hosts with a Wasm runtime —
       `wado-cli` via `wasmtime` — implement it; LSP and browser hosts
-      return `Unsupported` and tiri stays in-process.
-- [ ] tiri compiles a pure callee to wasm using the existing pipeline,
+      return `Unsupported` and niri stays in-process.
+- [ ] niri compiles a pure callee to wasm using the existing pipeline,
       caches the resulting component bytes per
       `(FunctionKey, monomorph_args)`, and hands them to the host with
       the constant args. The host runs the component (with fuel /
@@ -401,7 +401,7 @@ heap-aware return values stay deferred (call them Stage 3.5+).
       into a `Value` is used as if the in-process evaluator had
       produced it.
 - [ ] Enables `compute_lookup_table(256)` and similar workloads at
-      compile time without re-implementing every TIR construct, and
+      compile time without re-implementing every NIR construct, and
       without breaking wasm32 compatibility of `wado-compiler`.
 
 ## Cost model
@@ -417,7 +417,7 @@ production compilers use:
   expression re-evaluates when one of its inputs becomes constant,
   not on every fixed-point iteration. This is what lets LLVM's
   `InstCombine` settle in a single iteration (LLVM D154579).
-- **No internal fixed-point loop in tiri** — each invocation is
+- **No internal fixed-point loop in niri** — each invocation is
   monotone (only `Top → Const` transitions). The optimizer's outer
   loop is the one fixed-point.
 
@@ -448,10 +448,10 @@ incurs one codegen.
 ## Consequences
 
 - `const_folding.rs` shrinks to a thin glue file, and stays that way.
-- `tiri` covers immutable-global folding through Stage 1's
+- `niri` covers immutable-global folding through Stage 1's
   `GlobalEnv`. May further absorb parts of `const_branch_prune` and
   `inline` — to be evaluated as later stages land.
-- Stage 2.5's match-fold is observable in the TIR optimize phase even
+- Stage 2.5's match-fold is observable in the NIR optimize phase even
   though `lower_patterns` runs before `optimize`: not every match is
   desugared by `lower_patterns` (some shapes survive to optimize
   intact), and Stage 3's pure-call inlining will produce fresh match
@@ -462,7 +462,7 @@ incurs one codegen.
   for `wasm32-unknown-unknown`). The wasm-CTFE backend instead routes
   through `CompilerHost`, just like Kiln generator execution does today.
   Hosts without a Wasm runtime (LSP, browser) decline the call and
-  tiri falls back to in-process reduction — no `cfg`-gated backend in
+  niri falls back to in-process reduction — no `cfg`-gated backend in
   the compiler crate itself.
 - Effect-system guarantees become load-bearing for CTFE soundness. A bug
   in effect inference could cause non-pure functions to be CTFE-evaluated.
@@ -487,7 +487,7 @@ incurs one codegen.
 
 ### Lattice ownership vs. `Option<Value>`
 
-Resolved as part of Stage 1: tiri owns
+Resolved as part of Stage 1: niri owns
 `Lattice { Unevaluated, Const(Value), NonConst }`. `Option<Value>` is
 dropped — it conflated four meanings, making memoization unsafe to add
 later. Lattice is exposed via `reduce_to_lattice`; the

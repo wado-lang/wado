@@ -1,4 +1,4 @@
-//! Write-only local elimination for Wado TIR.
+//! Write-only local elimination for Wado NIR.
 //!
 //! Eliminates `let x = expr;` bindings where the local `x` is never read,
 //! never has its address taken, and never escapes via closure capture or a
@@ -6,7 +6,7 @@
 //! otherwise the binding is replaced by `Expr(expr)` so the side effect still
 //! runs.
 //!
-//! TIR analog of `wir_optimize/elide_local.rs`. Running at TIR exposes the
+//! NIR analog of `wir_optimize/elide_local.rs`. Running at NIR exposes the
 //! freshly dead expressions to the rest of the fixed-point loop
 //! (`copy_prop` / `const_fold` / `dce`), which the WIR-level pass cannot.
 
@@ -46,7 +46,7 @@ fn elide_in_function(func: &mut NirFunction) -> bool {
     //
     // `address_taken_locals` is *not* used as a kept-set source. That
     // field is set during `lower::plan::boxing` and reflects a static "address
-    // ever taken" property of the source TIR. After `inline` /
+    // ever taken" property of the source NIR. After `inline` /
     // `ref_elim` strip away `&local` references, the field is stale —
     // including it would re-pin locals whose address-taking sites are
     // no longer in the body. Source 1 already catches every live

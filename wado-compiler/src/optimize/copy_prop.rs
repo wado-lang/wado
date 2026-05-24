@@ -1,4 +1,4 @@
-//! Copy propagation optimization for Wado TIR
+//! Copy propagation optimization for Wado NIR.
 //!
 //! This module eliminates trivial copy bindings like `let x = y`, `let x = 42`,
 //! `let x = &y`, or `let x = &mut y` by propagating the source value to all
@@ -7,10 +7,16 @@
 //! The optimization is safe when:
 //! - The target variable is not assigned after initialization
 //! - The target variable does not have its address taken
-//! - The target variable is not captured by a closure
 //! - For local-to-local copies: the source is not modified after the copy
 //! - For value types: the source is dead after the binding (`read_count` is 1)
 //! - For ref/mut-ref copies: the target is single-use and the source is not reassigned
+//!
+//! Closure captures: NIR materialises captures into `NirCapture` entries on
+//! a separate `ClosureFunctor`, evaluated at functor construction time.
+//! Substituting a copy-bound local's source through a `ClosureToCanonical`
+//! literal evaluates the source at the same program point the original
+//! local would have been read, so no closure-capture safety gate is
+//! needed.
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
@@ -71,8 +77,6 @@ struct LocalUsage {
     has_field_mutation: bool,
     /// Whether the local has its address taken
     address_taken: bool,
-    /// Whether the local is captured by a closure
-    is_captured: bool,
 }
 
 /// If `expr` is `builtin::copy_value::<T>(inner)`, return `inner`; otherwise
@@ -312,7 +316,7 @@ fn analyze_expr(
             ..
         } => {
             // A method call mutates its receiver when the method's first parameter
-            // is `&mut Self`. In TIR, auto-ref is implicit: the receiver expression
+            // is `&mut Self`. In NIR, auto-ref is implicit: the receiver expression
             // has type `T` even when the method is declared as `fn f(&mut self)`.
             // Check both the receiver type (already `&mut T`) and the function's
             // first param type (for the case where receiver is still plain `T`).
@@ -494,12 +498,6 @@ fn can_propagate_copy(
         return false;
     }
 
-    // Don't propagate if target is captured by a closure
-    // (closure captures need to preserve the value at capture time)
-    if target_usage.is_captured {
-        return false;
-    }
-
     match &binding.source {
         CopySource::Local { index, .. } => {
             // For local-to-local copy:
@@ -533,15 +531,10 @@ fn can_propagate_copy(
 
             if let Some(su) = source_usage
                 && !single_use_value_copy
+                && su.address_taken
             {
-                // Source could be modified through a reference
-                if su.address_taken {
-                    return false;
-                }
-                // Source could be modified by a mutable closure capture
-                if su.is_captured {
-                    return false;
-                }
+                // Source could be modified through a reference.
+                return false;
             }
 
             // For value types (structs, arrays, tuples, strings), only propagate
@@ -550,11 +543,9 @@ fn can_propagate_copy(
             if is_value_type
                 && !single_use_value_copy
                 && let Some(su) = source_usage
+                && (su.read_count > 1 || su.address_taken)
             {
-                // Source must only be read once (in this binding) and not captured
-                if su.read_count > 1 || su.address_taken || su.is_captured {
-                    return false;
-                }
+                return false;
             }
             // If no usage info, source is unused - safe to eliminate
 

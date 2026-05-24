@@ -523,7 +523,7 @@ fn record_defs_from_expr(expr: &NirExpr, defs: &mut DefMap) {
 }
 
 /// Eliminate implied-false conditions within a statement.
-/// TIR visitor that eliminates loop-guard-implied false bounds checks.
+/// NIR visitor that eliminates loop-guard-implied false bounds checks.
 ///
 /// When a loop guard proves `i < bound`, inner conditions `i >= bound` are
 /// replaced with `false`. Dominating if-conditions are also tracked to extend
@@ -605,7 +605,7 @@ impl NirOptVisitor for ConditionEliminator<'_> {
     }
 }
 
-/// TIR visitor that eliminates bitmask-bounded false bounds checks.
+/// NIR visitor that eliminates bitmask-bounded false bounds checks.
 ///
 /// Pattern: `if (x & MASK) >= BOUND { panic(...) }` where `BOUND > MASK >= 0`
 /// Since `(x & MASK)` is always in `[0, MASK]`, the condition is always false.

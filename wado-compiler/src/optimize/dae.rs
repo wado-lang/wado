@@ -1,10 +1,10 @@
-//! Dead Argument Elimination for Wado TIR.
+//! Dead Argument Elimination for Wado NIR.
 //!
 //! Removes parameters that the callee body never reads, together with the
 //! corresponding argument expressions at every call site. The dropped
 //! arguments must be pure so removal cannot change observable behaviour.
 //!
-//! TIR analog of `wir_optimize/dae.rs`. Running at TIR exposes the freshly
+//! NIR analog of `wir_optimize/dae.rs`. Running at NIR exposes the freshly
 //! dead expressions to the rest of the fixed-point loop (`copy_prop` /
 //! `const_fold` / `dce`), and it shrinks signatures *before* `inline` so the
 //! inliner is not deterred by parameters that would never be read in the

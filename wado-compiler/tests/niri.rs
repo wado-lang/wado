@@ -1,7 +1,7 @@
-//! Integration tests for [`wado_compiler::tiri`] — the TIR interpreter
+//! Integration tests for [`wado_compiler::niri`] — the NIR interpreter
 //! that powers constant folding (and, eventually, branch / loop reduction).
 //!
-//! Each test builds a tiny TIR expression, runs it through
+//! Each test builds a tiny NIR expression, runs it through
 //! [`Interpreter::reduce_to_lattice`], and checks the resulting
 //! [`Lattice`]. The focus here is the four arithmetic ops across a
 //! handful of representative integer / float types — the goal being to
@@ -19,8 +19,8 @@ use wado_compiler::nir::{
     NirFunction, NirLiteralPattern, NirLocal, NirMatchArm, NirParam, NirPattern, NirStmt,
     NirStmtKind, NirUnaryOp, ReturnAbi,
 };
+use wado_compiler::niri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
 use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
-use wado_compiler::tiri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
 
 fn char_lit(c: char) -> NirExpr {
     NirExpr::new(
@@ -696,7 +696,7 @@ fn local_node_itself_is_not_rewritten_in_place() {
     // A Local with env = Const should be readable via reduce_to_lattice
     // but NOT mutated when seen on its own. This protects assignment
     // LHS targets from being rewritten into literals (which would
-    // produce malformed TIR).
+    // produce malformed NIR).
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     interp.bind_local(
@@ -1106,7 +1106,7 @@ fn if_const_false_picks_else_arm() {
 
 #[test]
 fn if_const_false_no_else_yields_unit() {
-    // `if false { … }` (no else) has type Unit; tiri models Unit as
+    // `if false { … }` (no else) has type Unit; niri models Unit as
     // having no representable Const — so the lattice is Unevaluated.
     // Crucially, the Unevaluated *result* must not poison a surrounding
     // join with a Const peer (covered by the non-const-condition
@@ -1835,7 +1835,7 @@ fn char_literal_reduces_to_const() {
 #[test]
 fn char_arithmetic_is_unreducible() {
     // char does not implement Add — the resolver rejects it, but if a
-    // synthesized node ever reaches tiri it must not fold.
+    // synthesized node ever reaches niri it must not fold.
     let e = binary(
         NirBinaryOp::Add,
         char_lit('A'),
@@ -2286,7 +2286,7 @@ fn match_nonconst_scrut_with_unevaluated_arm_does_not_fold() {
 
 #[test]
 fn match_with_guard_under_const_scrut_does_not_rewrite() {
-    // Guards inspect bindings tiri does not model; the engine cannot
+    // Guards inspect bindings niri does not model; the engine cannot
     // commit to the guarded arm even when its pattern would
     // otherwise definitely match. The lattice can still be `Const(7)`
     // (the only candidate body produces 7; the trap-on-guard-failure

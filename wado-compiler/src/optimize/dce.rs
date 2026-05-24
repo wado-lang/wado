@@ -1,4 +1,4 @@
-//! Dead Code Elimination (DCE) for Wado TIR
+//! Dead Code Elimination (DCE) for Wado NIR
 //!
 //! This module provides dead code elimination at two levels:
 //!
@@ -91,7 +91,7 @@ pub fn analyze_project(project: &mut NirPackage) -> IndexSet<usize> {
     let mut reachable = compute_reachable_from_entries(project, &call_graph);
 
     // Phase 3: extend reachable set with optimizer-induced virtual edges.
-    // Optimizer passes (e.g. `tir/string_push`) may *synthesize* new calls
+    // Optimizer passes (e.g. `nir/string_push`) may *synthesize* new calls
     // during the optimization loop. Functions those passes call must
     // survive the early DCE that runs before the loop, otherwise the
     // synthesis target is gone and the rewrite cannot fire. The virtual
@@ -123,8 +123,8 @@ fn compute_reachable_positions(
         .collect()
 }
 
-/// Add functions that the TIR optimizer's rewrites may *synthesize* calls
-/// to. For now this is a single pair: `tir/string_push` rewrites
+/// Add functions that the NIR optimizer's rewrites may *synthesize* calls
+/// to. For now this is a single pair: `nir/string_push` rewrites
 /// `String::push_str("short")` calls into `String::push(c)` calls, so
 /// `String::push` (the function flagged with `string_push_char`) must
 /// survive early DCE whenever the function flagged with `string_push_str`
@@ -158,14 +158,21 @@ fn extend_reachable_for_optimizer_passes(
     }
 
     // `$value_copy$T<id>` helpers synthesized by `lower::plan::value_copy` are
-    // reached through two paths: (a) direct TIR-level
+    // reached through two paths: (a) direct NIR-level
     // `copy_value::<T>(...)` callers, which the regular call graph
     // already covers; and (b) the per-element clone hidden inside
     // `array_clone::<T>(arr)` for value-typed `T`, which lowers to a
     // `WirInstr::ArrayClone { element_copy_func: Some("$value_copy$T<id>") }`
     // — the helper name appears as a *string* in the WIR instr at
-    // codegen time, not as a TIR call edge, so DCE wouldn't otherwise
+    // codegen time, not as a NIR call edge, so DCE wouldn't otherwise
     // see it.
+    //
+    // TODO(optimizer): instead of replaying the string-named helper
+    // lookup post-hoc, have `lower::plan::value_copy` register the
+    // synthesized helper as a real call-graph edge on the function that
+    // calls `array_clone::<T>(...)` (or on `array_clone` itself). That
+    // would let the regular reachability walk subsume this fixpoint
+    // and remove the only place in DCE that requires multiple passes.
     //
     // Walk every reachable function body and, for each
     // `array_clone::<T>(...)` call where `T` is value-typed, mark the
@@ -226,7 +233,7 @@ fn extend_reachable_for_optimizer_passes(
 }
 
 /// Walk `block`'s expression tree and collect every `T` such that
-/// `builtin::array_clone::<T>(...)` appears as a TIR call. The
+/// `builtin::array_clone::<T>(...)` appears as a NIR call. The
 /// corresponding `$value_copy$T<id>` helper has to survive DCE because
 /// codegen will reach it by *name* at WIR time.
 fn collect_array_clone_element_types(
@@ -646,7 +653,7 @@ type FuncPositions = IndexMap<FunctionId, usize>;
 /// edges are gated by the inspectable-signature set and added after the
 /// fact by `apply_inspect_edges`.
 ///
-/// `func_pos` maps each TIR-function `FunctionId` back to its position in
+/// `func_pos` maps each NIR-function `FunctionId` back to its position in
 /// `project.functions` so that `remove_unreachable_functions` can keep
 /// surviving functions by index instead of rebuilding `FunctionId`s and
 /// hashing them again.
@@ -657,7 +664,7 @@ struct AnalysisGraph {
     func_positions: FuncPositions,
 }
 
-/// Build the call graph in a single pass over all TIR function bodies.
+/// Build the call graph in a single pass over all NIR function bodies.
 fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
     let mut call_graph: CallGraph = IndexMap::default();
     let mut effect_usage: EffectUsageMap = IndexMap::default();
@@ -729,7 +736,7 @@ fn apply_inspect_edges(
     }
 }
 
-/// Walk all TIR function bodies and collect every `(arity, return_type)`
+/// Walk all NIR function bodies and collect every `(arity, return_type)`
 /// signature that is the receiver type of a `Fn<arity, ret>^Inspect` or
 /// `Fn<arity, ret>^InspectAlt` method call. Used by the DCE call-graph
 /// builder to gate the per-functor `inspect` / `inspect_alt` root
@@ -770,7 +777,7 @@ fn collect_inspectable_signatures_from_reachable(
     sigs
 }
 
-/// Compute the `FunctionId` used by the call graph for a TIR function.
+/// Compute the `FunctionId` used by the call graph for a NIR function.
 /// Mirrors the keying logic in `build_analysis_graph`; centralising
 /// it here so other passes (notably the inspectable-signatures scan)
 /// can compare against the call graph's reachable set.
@@ -862,7 +869,7 @@ fn scan_inspect_signatures_stmt(
     s.visit_stmt(stmt);
 }
 
-/// Analyze a TIR function for callees and effect usage
+/// Analyze a NIR function for callees and effect usage
 fn analyze_function(
     func: &NirFunction,
     current_module: &ModuleSource,
@@ -1627,9 +1634,9 @@ fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
         // by function DCE), the functor's struct / ref types must stay
         // live too. `wir_build::register_closure_wrappers` reads
         // `ClosureFunctor::ref_type_id` to emit the wrapper's `ref.cast`,
-        // and TIR DAE may have removed the struct ref from
+        // and NIR DAE may have removed the struct ref from
         // `call_method.params[0]` (dropping the env `self`) — at which
-        // point the only remaining TIR-side reference is the
+        // point the only remaining NIR-side reference is the
         // `ClosureFunctor` record itself. Without this insertion, that
         // type-table lookup panics with `TypeId not found`.
         // The functor's `call_method` and `project.functions[i]` are the
@@ -2231,7 +2238,7 @@ pub fn remove_unreachable_types(project: &mut NirPackage) {
 // Global variable DCE
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Remove unreachable global variables from the project's TIR modules.
+/// Remove unreachable global variables from the project's NIR modules.
 ///
 /// A global is considered "used" if any surviving function references it via
 /// `GlobalVarGet`. Globals only referenced by `GlobalVarSet` (e.g., their

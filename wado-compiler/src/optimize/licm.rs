@@ -1,4 +1,4 @@
-//! Loop-Invariant Code Motion (LICM) for Wado TIR
+//! Loop-Invariant Code Motion (LICM) for Wado NIR
 //!
 //! This module hoists loop-invariant computations out of loops to improve performance.
 //! It identifies field accesses on variables that don't change within a loop and moves
@@ -359,7 +359,12 @@ fn mark_assignment_target_as_modified(expr: &NirExpr, modified: &mut ModifiedVar
                 // Single-level field assignment: `buf.field = x` — only that field is modified
                 modified.insert_field(*index, *field_index);
             } else {
-                // Deeper nesting: `a.b.c = x` — conservatively mark root as fully modified
+                // Deeper nesting: `a.b.c = x` — conservatively mark root as fully modified.
+                //
+                // TODO(optimizer): track field paths (e.g. `(b, c)`)
+                // rather than collapsing to "fully modified" so that a
+                // hoist of `self.repr.len` survives a sibling write
+                // like `self.other.flag = true`.
                 mark_local_as_fully_modified(inner, modified);
             }
         }
