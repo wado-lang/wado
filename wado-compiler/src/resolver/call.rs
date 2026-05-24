@@ -47,6 +47,63 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
+    /// Walk a callee expression down to its *root place* identifier so
+    /// `(h.f)()`, `(a.b.c.f)()`, `arr[i]()`, and `(arr[i].f)()` all
+    /// resolve to the underlying local binding (`h`, `a`, `arr`).
+    /// Returns `None` for callees whose root is not a binding the
+    /// function context can see — typically a temporary such as a call
+    /// result or a literal. Mirrors `MutatedVarsCollector::root_ident_of_lvalue`.
+    fn place_root_ident(callee: &Expr) -> Option<&ast::IdentExpr> {
+        match callee {
+            Expr::Ident(id) => Some(id),
+            Expr::FieldAccess(fa) => Self::place_root_ident(&fa.expr),
+            Expr::Index(idx) => Self::place_root_ident(&idx.expr),
+            _ => None,
+        }
+    }
+
+    /// Enforce Rust's `FnMut` rule: when the callee type is `fn mut`,
+    /// the *root* of the place expression must be a mutable place.
+    /// A no-op when `fn_is_mut` is false or the root is a temporary
+    /// (no binding to check). A binding is a mutable place when it is
+    /// declared `mut` *or* its type is `&mut T` — in the latter case
+    /// the place is mutable through the reference even though the
+    /// binding itself cannot be reassigned (matches Rust's rule for
+    /// `&mut self`).
+    fn check_fn_mut_root_mutability(
+        &mut self,
+        callee: &Expr,
+        ctx: &FunctionContext,
+        fn_is_mut: bool,
+    ) {
+        if !fn_is_mut {
+            return;
+        }
+        let Some(root) = Self::place_root_ident(callee) else {
+            return; // Temporary root — no binding to require `mut` on.
+        };
+        if root.name.contains("::") {
+            return; // Qualified name (e.g. `Type::method`) — not a local.
+        }
+        let Some(local) = ctx.lookup(&root.name) else {
+            return; // Not a local — must be a top-level fn or capture seen later.
+        };
+        if local.is_mut {
+            return;
+        }
+        let is_mut_ref = matches!(
+            self.type_table.borrow().get(local.type_id),
+            ResolvedType::MutRef(_)
+        );
+        if is_mut_ref {
+            return;
+        }
+        let _ = self.logger.error(TypeError::ClosureMutBindingRequired {
+            name: root.name.clone(),
+            span: root.span,
+        });
+    }
+
     pub(super) fn resolve_call(
         &mut self,
         call: &ast::CallExpr,
@@ -61,16 +118,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         {
             let local_index = local.index;
             let local_type_id = local.type_id;
-            let local_is_mut = local.is_mut;
 
-            // `fn mut` closures need a `mut` callee binding — mirrors
-            // Rust's FnMut rule.
-            if sig.is_mut && !local_is_mut {
-                let _ = self.logger.error(TypeError::ClosureMutBindingRequired {
-                    name: ident.name.clone(),
-                    span: ident.span,
-                });
-            }
+            // `fn mut` closures need a `mut` root binding — mirrors
+            // Rust's FnMut rule. The check goes through the same helper
+            // used by the indirect-call path below so identifier and
+            // non-identifier callees share one code path.
+            self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
 
             let local_expr = TirExpr::new(
                 TirExprKind::Local {
@@ -103,6 +156,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let callee_expr = self.resolve_expr(&call.callee, ctx, None);
 
             if let Some(sig) = self.as_fn_signature(callee_expr.type_id) {
+                // Enforce `fn mut` root-mutability for non-identifier
+                // callees too: `(h.f)()`, `arr[i]()`, `(arr[i].f)()`, …
+                // require the root binding to be `mut`. A temporary root
+                // (call result, literal, …) has no binding and is OK.
+                self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
                 return self.build_indirect_call(
                     call,
                     ctx,

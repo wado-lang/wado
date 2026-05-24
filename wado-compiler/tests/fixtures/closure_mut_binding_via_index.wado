@@ -1,0 +1,31 @@
+// Companion to closure_mut_binding_required_via_index_error.wado:
+// when the root binding *is* `mut`, calling a `fn mut` closure through
+// an index path is accepted. See issue #1098.
+
+struct Counter {
+    f: fn mut() -> (),
+}
+
+test "index: let mut allows fn mut call" {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    let mut arr = [inc];
+    arr[0]();
+    arr[0]();
+    assert count == 2;
+}
+
+test "index+field: let mut on the array allows fn mut call" {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    let mut arr = [Counter { f: inc }];
+    (arr[0].f)();
+    assert count == 1;
+}
+
+__DATA__
+{"test": {}}
