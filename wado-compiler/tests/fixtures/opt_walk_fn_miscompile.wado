@@ -18,10 +18,11 @@
 //   negative by exactly `alternatives` for each subsequent
 //   `gen_walk_fn` call.
 //
-// The fixture ships its own `Dec: Display` whose `fmt` mirrors
-// `i32::fmt_decimal` / `count_digits_i64`, marked `#[inline(always)]`,
-// so the reproduction does not depend on the stdlib inlining
-// threshold and fires at the default -O1 / -O2 / -O3 / -Os.
+// The fixture ships its own minimal `Dec: Display` whose `fmt`
+// reproduces the shape of `i32::fmt_decimal` (early-return + tight
+// digit-counting loop) via `dec_count_digits`. Both are marked
+// `#[inline(always)]` so the reproduction does not depend on the
+// stdlib inlining threshold and fires at default -O1 / -O2 / -O3 / -Os.
 //
 // Shape of the miscompiled caller (in the source below):
 //
@@ -44,20 +45,16 @@
 //       w.end();                                    // fn end
 //   }
 
-use { Display, Formatter } from "core:prelude";
-
-// Standalone copy of `i32::fmt_decimal` (and `count_digits_i64`) from
-// `wado-compiler/lib/core/prelude/primitive.wado`. Templating with the
-// stdlib `{i:_}` for an i32 only inlines fmt_decimal at threshold ≥ 28
-// (~size of count_digits_i64-plus-fmt_decimal after inline), so the
-// real package-gale bug only fires at -O3 default. Re-implementing the
-// same shape here as a `Display` impl on a newtype lets the fixture
-// drive the same inline + copy_prop interaction independently of the
-// stdlib threshold.
+// Minimal `Dec: Display` whose `fmt` (via `dec_count_digits`) mirrors
+// the early-return + tight loop shape of the stdlib `i32::fmt_decimal`
+// + `count_digits_i64` pair. The `if val == 0 { return 1; }` early
+// return is what copy_prop chokes on after inlining; stripping it
+// makes the bug disappear. With `#[inline(always)]` on both, the
+// repro fires at default -O1 / -O2 / -O3 / -Os.
 pub struct Dec { value: i32 }
 
 #[inline(always)]
-fn dec_count_digits(val: i64) -> i32 {
+fn dec_count_digits(val: i32) -> i32 {
     if val == 0 {
         return 1;
     }
@@ -71,26 +68,7 @@ fn dec_count_digits(val: i64) -> i32 {
 impl Display for Dec {
     #[inline(always)]
     fn fmt(&self, f: &mut Formatter) {
-        let is_negative = self.value < 0;
-        let abs_val: i64 = if is_negative { 0 - self.value as i64 } else { self.value as i64 };
-        let digit_count = dec_count_digits(abs_val);
-        if is_negative {
-            f.buf.push('-');
-        }
-        let mut digits: Array<char> = [];
-        if abs_val == 0 {
-            digits.push('0');
-        }
-        let mut t = abs_val;
-        for let mut k = 0; k < digit_count && t > 0; k += 1 {
-            digits.push(char::from_u32(((t % 10) as i32 + ('0' as i32)) as u32).unwrap());
-            t = t / 10;
-        }
-        let mut j = digits.len() - 1;
-        while j >= 0 {
-            f.buf.push(digits[j]);
-            j -= 1;
-        }
+        f.width = dec_count_digits(self.value);
     }
 }
 
