@@ -1,0 +1,29 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source descriptor: ParseTrees/TwoAltLoop (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).
+//
+// Stage B sub-tree: [output] is the labelled child 'a' subtree,
+// not the start rule's full tree. Navigate via find_first_child_node.
+
+use t from "../../grammars/ParseTrees/TwoAltLoop.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/antlr4_compat_b/ParseTrees/TwoAltLoop",
+        },
+    };
+use { normalize_tree } from "../../grammars/ParseTrees/TwoAltLoop.g4";
+
+test "stage_b_sub: ParseTrees/TwoAltLoop" {
+    let input = "xyyxyxz";
+    let expected = "(a x y y x y x z)";
+    let root = t::parse(&input).unwrap();
+    let tree = t::to_tree(&root);
+    let sub = t::find_first_child_node(&tree, &"a").unwrap();
+    let actual = sub.to_string_tree();
+    let norm = normalize_tree(&expected);
+    assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
+}
