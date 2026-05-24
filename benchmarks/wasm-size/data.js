@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779603754186,
+  "lastUpdate": 1779613122509,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25445,6 +25445,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ea70f9adfd346d3333cfc505a96a4d466da43ff5"
         },
         "date": 1779603753726,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17246,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 461807,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c46d2d864515053012414c8ebc4123f967ac9e1c",
+          "message": "Merge pull request #1174 from wado-lang/claude/package-gale-todo-review-9nkUN\n\ngale: collapse Stage E / L buckets into Stage A claim (b/c/d)",
+          "timestamp": "2026-05-24T17:50:43+09:00",
+          "tree_id": "65373a594de52c7fc5a90447601a731eed33e3d7",
+          "url": "https://github.com/wado-lang/wado/commit/c46d2d864515053012414c8ebc4123f967ac9e1c"
+        },
+        "date": 1779613122027,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
