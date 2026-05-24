@@ -1,0 +1,21 @@
+// Test: assert diagnostic preserves source-level escape sequences as
+// literal text. `\n`, `\t`, `\"`, `\\` in the condition's string literal
+// stay as the 2-char escape in the printed `condition: ...` line, rather
+// than being expanded to their interpreted control char. This avoids
+// embedded control chars mangling the diagnostic and mirrors Rust-style
+// `{:?}` debug formatting.
+
+export fn run() with Stdout {
+    let s = "actual";
+    assert s == "want:\n\t\"\\";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "Assertion failed in run at",
+        "condition: s == \"want:\\n\\t\\\"\\\\\"",
+        "s: \"actual\""
+    ]
+}
