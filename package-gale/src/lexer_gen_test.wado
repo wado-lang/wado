@@ -154,3 +154,24 @@ test "gen_token_constants: named type(X) override emits no extra global" {
     // Expected globals: TK_A, TK_B, TK_EOF, TK_ERROR.
     assert count_occurrences(&out, "global TK_") == 4, out;
 }
+
+// A user lexer rule named `ERROR` owns the `TK_ERROR` identifier; the
+// internal no-match sentinel collapses onto the same kind rather than
+// emitting a duplicate definition (the canonical `ERROR : .;` shape is
+// semantically a catch-all and aligns with the sentinel's role).
+// Covers ANTLR4 runtime-testsuite descriptors
+// Performance/ExpressionGrammar_{1,2}.
+test "gen_token_constants: user ERROR rule suppresses sentinel emit" {
+    let out = token_globals_for("grammar T; a : ID; ID: [a-z]+; ERROR: .;");
+    assert count_occurrences(&out, "global TK_ERROR:") == 1, out;
+}
+
+// EOF is intentionally NOT collapsible: ANTLR4 reserves `EOF` as a
+// built-in token id and the generated parser relies on `kind == TK_EOF`
+// meaning end-of-stream. The sentinel is always emitted regardless of
+// user rules; corpus does not include a user EOF lexer rule today, so
+// this just locks in the current behaviour.
+test "gen_token_constants: TK_EOF sentinel is always emitted" {
+    let out = token_globals_for("grammar T; a : ID; ID: [a-z]+;");
+    assert count_occurrences(&out, "global TK_EOF:") == 1, out;
+}

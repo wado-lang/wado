@@ -143,12 +143,33 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, l
             idx += 1;
         }
     }
+    // ANTLR4 token names are `[A-Z][A-Za-z0-9_]*`, so `ERROR` is a legal
+    // user-rule name even though Gale also uses `TK_ERROR` as its no-match
+    // sentinel (referenced from `gen_lexer_match_fns` and `gen_tokenize_fn`).
+    // When the user declares `ERROR : ...;` we let that rule own the
+    // `TK_ERROR` identifier — the canonical `ERROR : .;` shape is itself a
+    // catch-all, semantically the same role Gale's sentinel plays, so
+    // collapsing the two yields a single error kind that flows through
+    // both code paths without behaviour drift. Skipping the sentinel emit
+    // is required because emitting the same identifier twice rejects with
+    // `duplicate definition 'TK_ERROR'` from wado compile; covers
+    // ANTLR4 runtime-testsuite descriptors Performance/ExpressionGrammar_{1,2}
+    // (`grammar Expr; ... ERROR: .;`).
+    //
+    // `TK_EOF` is not collapsible the same way — ANTLR4 reserves `EOF` as
+    // a built-in token id (-1) and the generated parser relies on
+    // `kind == TK_EOF` meaning end-of-stream. No grammar in the corpus
+    // defines `EOF` as a lexer rule today; if one ever does, the
+    // collision must be diagnosed at the g4-parse layer rather than
+    // collapsed here.
     let eof_init = `{idx}`;
     GlobalSpec::new("TK_EOF", "i32", &eof_init).emit(w);
     idx += 1;
-    let err_init = `{idx}`;
-    GlobalSpec::new("TK_ERROR", "i32", &err_init).emit(w);
-    idx += 1;
+    if !rule_name_exists(lexer_rules, &"ERROR") {
+        let err_init = `{idx}`;
+        GlobalSpec::new("TK_ERROR", "i32", &err_init).emit(w);
+        idx += 1;
+    }
     for let lit of lit_tokens {
         let init = `{idx}`;
         GlobalSpec::new(&lit.const_name, "i32", &init).emit(w);
@@ -1962,7 +1983,13 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, li
         }
     }
     w.line(&"TK_EOF => \"Eof\",");
-    w.line(&"TK_ERROR => \"Error\",");
+    // When the user declared an `ERROR` rule, `gen_token_constants`
+    // suppressed the sentinel global emit and the rule already owns
+    // the `TK_ERROR => "ERROR"` arm above; emitting the sentinel arm
+    // here would shadow it as dead code.
+    if !rule_name_exists(lexer_rules, &"ERROR") {
+        w.line(&"TK_ERROR => \"Error\",");
+    }
     for let lit of lit_tokens {
         let name = lit.const_name;
         w.line(&`{name} => "{name}",`);

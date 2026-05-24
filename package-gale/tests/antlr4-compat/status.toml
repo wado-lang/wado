@@ -78,8 +78,6 @@
 "ParserExec/Labels" = "list-label `b2+=b*` shadows the container array with the per-iteration RuleRef result (`let mut b2: Array<BNode> = []; let b2 = _parse_b(p)?; b2.push(b2);`). wado compile rejects with `no method push found on BNode`. Literal labels like `b3+=';'` work because the temp is derived from the literal text"
 "ParserExec/ListLabelsOnSet" = "set list-label `val+=(INT | FLOAT)*` panics inside Gale's parser_gen: gen_op_storable_group_inner → `surface element is not Group`; no Wado is emitted"
 "ParserExec/ReservedWordsEscaping" = "Gale renames rules whose names hit Wado keywords (`if → if_` etc.); the renamed identifier then collides with the list-label container (same root as ParserExec/Labels). wado compile rejects with `cannot redeclare 'if_' in the same scope`"
-"Performance/ExpressionGrammar_1" = "user-defined `ERROR: .;` lexer rule collides with Gale's internal TK_ERROR sentinel global; wado compile rejects with `duplicate definition 'TK_ERROR'`. The all-binary-op LR rewrite path is clean — verified by renaming `ERROR` and recompiling. Min repro: tests/grammars/lexer_user_error_collides_with_sentinel.g4"
-"Performance/ExpressionGrammar_2" = "user-defined `ERROR: .;` lexer rule collides with Gale's internal TK_ERROR sentinel global; wado compile rejects with `duplicate definition 'TK_ERROR'`. The all-binary-op LR rewrite path is clean — verified by renaming `ERROR` and recompiling. Min repro: tests/grammars/lexer_user_error_collides_with_sentinel.g4"
 
 [stage_b_todo]
 "LeftRecursion/SemPredFailOption" = "Stage B parse-tree shape diverges because action bodies are skipped (the predicate guard is dropped) — Stage C territory"
