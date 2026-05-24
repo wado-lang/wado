@@ -8,6 +8,7 @@
 //! All type resolution happens in this phase. The output TIR has fully
 //! resolved types on every expression, making code generation mechanical.
 
+mod assert;
 mod call;
 mod callee;
 mod closure;
@@ -16,6 +17,7 @@ mod expr;
 mod handlers;
 mod infer;
 mod item;
+mod matches;
 mod method_call;
 mod method_lookup;
 mod module;
@@ -313,6 +315,29 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
     }
 
+    /// Canonicalize a `<ns>::<member>` reference (single `::`, prefix is a
+    /// namespace import alias) to the bare `<member>` form. Returns `None`
+    /// when the name isn't of that shape — including multi-segment cases like
+    /// `<ns>::<Type>::<case>`, which the resolver routes through dedicated
+    /// namespace paths (see `resolve_ident` / `resolve_call`).
+    ///
+    /// The AST keeps the user-written `ns::member` so LSP cursors land on it
+    /// as typed; the name lookups against `imported_functions`,
+    /// `imported_globals`, struct registries, etc. see the canonical form
+    /// they were populated with.
+    pub(super) fn strip_ns_prefix<'s>(&self, name: &'s str) -> Option<&'s str> {
+        let pos = name.find("::")?;
+        let prefix = &name[..pos];
+        let suffix = &name[pos + 2..];
+        if suffix.contains("::") {
+            return None;
+        }
+        if !self.namespace_imports.contains_key(prefix) {
+            return None;
+        }
+        Some(suffix)
+    }
+
     pub(super) fn lookup_struct_fields(&self, name: &str) -> Option<&StructFieldInfo> {
         self.type_lookup().struct_fields(name)
     }
@@ -523,6 +548,37 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
         None
+    }
+
+    /// Allocate a fresh [`AstId`] for a synthetic AST node produced by a
+    /// lowering pass (e.g. the panic call inside `lower_assert`).
+    ///
+    /// Synthetic ids land *above* the current module's
+    /// `Module::ast_id_count()`, so they cannot collide with any
+    /// parser-allocated id. As a consequence, any `record_reference_opt`
+    /// / `record_local_symbol` calls keyed on a synthetic id are
+    /// invisible to LSP queries: `Annotated::ast_id_at` only ever
+    /// returns parser ids, so the polluted entries are unreachable
+    /// through the cursor → `AstId` lookup path.
+    pub(in crate::resolver) fn alloc_synth_ast_id(
+        &self,
+        ctx: &mut crate::resolver::types::FunctionContext,
+    ) -> crate::ast::AstId {
+        // Lazy init: on the first call for this `FunctionContext`, read
+        // the current module's parser-allocated count and start the
+        // synthetic range just above it. Every subsequent call reuses
+        // the field directly.
+        let start = if let Some(n) = ctx.next_synth_ast_id {
+            n
+        } else {
+            let module = self
+                .loaded_modules
+                .get(&self.current_module_source)
+                .expect("current module is loaded");
+            module.ast_id_count()
+        };
+        ctx.next_synth_ast_id = Some(start + 1);
+        crate::ast::AstId(start)
     }
 
     /// Record a local binding's [`Symbol`] so that LSP hover on a use site can

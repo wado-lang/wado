@@ -98,10 +98,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt, ctx)],
             Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt)],
-            Stmt::Assert(_) => {
-                // Assert statements are desugared in the desugar phase before resolution
-                panic!("Assert should be desugared before resolving");
-            }
+            Stmt::Assert(a) => self.desugar_assert(a, ctx),
             Stmt::LabeledBlock(labeled_block) => {
                 vec![self.resolve_labeled_block(labeled_block, ctx)]
             }
@@ -831,9 +828,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some(expected_name) = type_name
                     && let Some(actual_name) = &struct_name
                 {
-                    // Compare the short name (strip module prefix if needed)
+                    // Compare the short name (strip module prefix if needed,
+                    // and any `<ns>::` namespace-import prefix the user wrote).
+                    let expected_short = self
+                        .strip_ns_prefix(expected_name)
+                        .unwrap_or(expected_name.as_str());
                     let actual_short = actual_name.rsplit("::").next().unwrap_or(actual_name);
-                    if actual_short != expected_name {
+                    if actual_short != expected_short {
                         let _ = self.logger.error(TypeError::PatternTypeMismatch {
                             expected: expected_name.clone(),
                             found: self.type_table.borrow().type_name(type_id),
@@ -1417,7 +1418,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 bindings,
                 span,
             } => {
-                let normalized_variant_name = variant_name.as_str();
+                // `<ns>::<Case>` (single `::`, prefix is a namespace import
+                // alias) canonicalizes to the bare `<Case>`; the registries
+                // below are keyed by canonical names. Multi-segment forms
+                // (`<ns>::<Type>::<case>`) reach pattern resolution as a
+                // `variant_qualifier` Type, not embedded in `variant_name`.
+                let normalized_variant_name = self
+                    .strip_ns_prefix(variant_name)
+                    .unwrap_or(variant_name.as_str());
                 let qualified_variant_name =
                     self.format_pattern_case_name(variant_name, variant_qualifier.as_ref());
                 // Bare uppercase identifier that is not a known case of the scrutinee type.
@@ -1688,8 +1696,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some(expected_name) = type_name {
                     let resolved = self.type_table.borrow().get(scrutinee_type).clone();
                     if let ResolvedType::Struct { ref name, .. } = resolved {
+                        let expected_short = self
+                            .strip_ns_prefix(expected_name)
+                            .unwrap_or(expected_name.as_str());
                         let actual_short = name.rsplit("::").next().unwrap_or(name);
-                        if actual_short != expected_name {
+                        if actual_short != expected_short {
                             let _ = self.logger.error(TypeError::PatternTypeMismatch {
                                 expected: expected_name.clone(),
                                 found: self.type_table.borrow().type_name(scrutinee_type),

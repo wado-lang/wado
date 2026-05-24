@@ -65,7 +65,7 @@ The loader runs `lexer → parser → bind → desugar` on every loaded module:
 - The lexer extracts the optional `__DATA__` section and tokenizes the rest.
 - The parser builds a faithful AST. Compound assigns, comparison chains, struct shorthand, and `&self` parameters are kept verbatim so `wado format` round-trips; sugar is removed in `desugar.rs`.
 - `bind.rs` performs local name resolution, scope/mutability checking, and use-before-define detection.
-- `desugar.rs` rewrites `x += y` to `x = x + y`, `a < b < c` to a conjunction, for/while loops to explicit loop blocks, and other purely syntactic constructs.
+- `desugar.rs` rewrites `x += y` to `x = x + y`, for/while loops to explicit loop blocks, and other purely syntactic constructs. The `assert` statement, the `matches` operator, the comparison chain `a < b < c`, and `use … namespace` prefixes (`helper::foo`) are deferred to the resolver (`desugar_assert`, `desugar_matches_expr`, `desugar_comparison_chain` in `resolver/{assert,matches,operators}.rs`; `Resolver::strip_ns_prefix` in `resolver.rs`) because they either need typed sub-expressions or rely on the canonical `imported_functions` / `namespace_imports` tables. Keeping the AST intact also lets LSP queries land on the user's text.
 
 ## Annotate (Analyze + Resolve + TIR Lowering)
 

@@ -1189,15 +1189,114 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
     }
 
-    /// Resolve a comparison chain (already desugared, but handle anyway)
-    pub(super) fn resolve_comparison_chain(
+    /// Desugar `a OP1 b OP2 c [OP3 d …]` to the equivalent
+    /// `(a OP1 b) && (b OP2 c) [&& (c OP3 d) …]`. Middle terms appear
+    /// in two comparisons each, so they are bound to a `__mK` local
+    /// inside a synthetic block — `foo() < bar() < baz()` calls
+    /// `bar()` exactly once.
+    pub(super) fn desugar_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // This should have been desugared to binary && chain
-        // Just resolve the first expression for now
-        self.resolve_expr(&chain.first, ctx, None)
+        let expanded = self.desugar_comparison_chain_ast(chain, ctx);
+        self.resolve_expr(&expanded, ctx, None)
+    }
+
+    /// Build the AST that [`Self::desugar_comparison_chain`] resolves.
+    /// Split out so the tests can exercise the structural rewrite
+    /// without going through the full resolver.
+    fn desugar_comparison_chain_ast(
+        &self,
+        chain: &ast::ComparisonChainExpr,
+        ctx: &mut FunctionContext,
+    ) -> ast::Expr {
+        if chain.comparisons.is_empty() {
+            return chain.first.clone();
+        }
+        if chain.comparisons.len() == 1 {
+            // Single comparison — no middle term, nothing to bind.
+            let cmp = &chain.comparisons[0];
+            return ast::Expr::Binary(Box::new(ast::BinaryExpr {
+                id: chain.id,
+                left: chain.first.clone(),
+                op: cmp.op,
+                right: cmp.right.clone(),
+                span: chain.span,
+            }));
+        }
+
+        // Multi-comparison chain. Each non-last `cmp.right` is bound to a
+        // `__mK` local so it evaluates once and is shared by the two
+        // comparisons that reference it.
+        let mut stmts: Vec<ast::Stmt> = Vec::new();
+        let mut prev = chain.first.clone();
+        let mut and_chain: Option<ast::Expr> = None;
+        let last = chain.comparisons.len() - 1;
+
+        for (idx, cmp) in chain.comparisons.iter().enumerate() {
+            let (right_for_comp, next_prev) = if idx == last {
+                // Tail operand only used once.
+                (cmp.right.clone(), cmp.right.clone())
+            } else {
+                let synth_id = self.alloc_synth_ast_id(ctx);
+                let name = format!("__m{idx}");
+                stmts.push(ast::Stmt::Let(ast::LetStmt {
+                    id: synth_id,
+                    pattern: ast::Pattern::Ident {
+                        id: synth_id,
+                        name: name.clone(),
+                        span: chain.span,
+                    },
+                    name_span: chain.span,
+                    is_mut: false,
+                    is_reactive: false,
+                    ty: None,
+                    value: Some(cmp.right.clone()),
+                    span: chain.span,
+                }));
+                let ident = ast::Expr::Ident(ast::IdentExpr {
+                    id: synth_id,
+                    name,
+                    segments: Vec::new(),
+                    type_args: Vec::new(),
+                    span: chain.span,
+                });
+                (ident.clone(), ident)
+            };
+
+            let cmp_expr = ast::Expr::Binary(Box::new(ast::BinaryExpr {
+                id: chain.id,
+                left: prev,
+                op: cmp.op,
+                right: right_for_comp,
+                span: cmp.op_span,
+            }));
+            and_chain = Some(match and_chain {
+                None => cmp_expr,
+                Some(acc) => ast::Expr::Binary(Box::new(ast::BinaryExpr {
+                    id: chain.id,
+                    left: acc,
+                    op: ast::BinaryOp::And,
+                    right: cmp_expr,
+                    span: chain.span,
+                })),
+            });
+            prev = next_prev;
+        }
+
+        let result = and_chain.expect("non-empty: short-circuited above for 0/1 comparisons");
+        let block_id = self.alloc_synth_ast_id(ctx);
+        stmts.push(ast::Stmt::Expr(ast::ExprStmt {
+            id: block_id,
+            expr: result,
+            span: chain.span,
+        }));
+        ast::Expr::Block(Box::new(ast::Block {
+            id: block_id,
+            stmts,
+            span: chain.span,
+        }))
     }
 
     /// Single TIR-level builder for every operator that dispatches to a

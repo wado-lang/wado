@@ -1,0 +1,27 @@
+// `a < b < c` desugars to `let __m0 = b; (a < __m0) && (__m0 < c)`,
+// so the middle term is evaluated exactly once. Without that binding
+// the middle term would be called twice — verified by side-effect
+// counts.
+
+use { println } from "core:cli";
+
+global mut CALL_COUNT: i32 = 0;
+
+fn counted(value: i32) -> i32 {
+    CALL_COUNT = CALL_COUNT + 1;
+    return value;
+}
+
+export fn run() with Stdout {
+    // One middle term: must be evaluated once.
+    assert 0 < counted(5) < 10;
+    println(`{CALL_COUNT}`);
+
+    // Two middle terms: each must be evaluated once.
+    CALL_COUNT = 0;
+    assert 0 < counted(3) < counted(7) < 10;
+    println(`{CALL_COUNT}`);
+}
+
+__DATA__
+{"stdout": "1\n2\n"}

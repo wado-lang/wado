@@ -138,6 +138,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
+        // Power-assert capture hook. While `desugar_assert` is resolving
+        // an assert condition, the scanner-flagged sub-expressions are
+        // extracted into `let __vK = <resolved>;` bindings and replaced
+        // with `Local(__vK)`. Common case (no assert in flight): a
+        // single `Option` discriminant check, so the cost on the hot
+        // path is negligible. See `resolver/assert.rs` for the design.
+        if let Some(cap_ctx) = ctx.assert_capture_ctx.as_ref() {
+            let ast_id = expr.id();
+            if let Some(slot_idx) = cap_ctx.slot_for(ast_id) {
+                return self.resolve_with_assert_capture(
+                    ast_id,
+                    slot_idx,
+                    expr,
+                    ctx,
+                    expected_type,
+                );
+            }
+        }
+
         // Try literal coercion when expected type is known
         if let Some(target_type) = expected_type
             && let Some(coerced) = self.try_coerce(expr, ctx, target_type)
@@ -188,7 +207,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.resolve_struct_literal(struct_lit, ctx, expected_type)
             }
             Expr::CompoundAssign(compound) => self.resolve_compound_assign(compound, ctx),
-            Expr::ComparisonChain(chain) => self.resolve_comparison_chain(chain, ctx),
+            Expr::ComparisonChain(chain) => self.desugar_comparison_chain(chain, ctx),
             Expr::TupleLiteral(tuple_lit) => {
                 self.resolve_tuple_literal(tuple_lit, ctx, expected_type)
             }
@@ -274,9 +293,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     lb.span,
                 )
             }
-            Expr::Matches(_) => {
-                panic!("Matches expression should have been desugared to if-let before resolver")
-            }
+            Expr::Matches(m) => self.desugar_matches_expr(m, ctx, expected_type),
             Expr::Spread(..) => {
                 panic!("Spread expression should only appear inside TupleLiteral handling")
             }
@@ -471,6 +488,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
+        // Canonicalize `<ns>::<member>` (single `::`, prefix is a namespace
+        // import alias) to the bare `<member>` form. Every lookup table below
+        // is keyed by canonical names; the rewritten ident keeps the original
+        // `id` so use→def edges still resolve back to the user's text.
+        let canonical_ident;
+        let ident = if let Some(stripped) = self.strip_ns_prefix(&ident.name) {
+            canonical_ident = ast::IdentExpr {
+                id: ident.id,
+                name: stripped.to_string(),
+                segments: ident.segments.clone(),
+                type_args: ident.type_args.clone(),
+                span: ident.span,
+            };
+            &canonical_ident
+        } else {
+            ident
+        };
+
         // Check local variables, including captures from outer scope
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
             match var_ref {
@@ -3076,8 +3111,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TirExpr {
         // Handle implicit struct literals (name is None) — anonymous struct inference
-        let Some(name) = &struct_lit.name else {
+        let Some(raw_name) = &struct_lit.name else {
             return self.resolve_anonymous_struct_literal(struct_lit, ctx);
+        };
+        // `<ns>::<Struct>` canonicalizes to bare `<Struct>` for all the
+        // registry lookups below (struct_fields, symbols, …).
+        let canonical_name;
+        let name = if let Some(stripped) = self.strip_ns_prefix(raw_name) {
+            canonical_name = stripped.to_string();
+            &canonical_name
+        } else {
+            raw_name
         };
 
         // Record use→def reference for the struct type name.

@@ -1176,6 +1176,28 @@ pub(super) struct FunctionContext {
     /// `impl Effect for Type` block, i.e. an effect handler operation.
     /// `resume value` is only valid in such contexts.
     pub(super) in_handler_method: bool,
+    /// Per-function serial counter used to name the labeled block that
+    /// scopes each `assert` expansion. Each `assert` in the same function
+    /// gets `__assert_0`, `__assert_1`, … so the names stay short and
+    /// monotonic; the counter is reset per `FunctionContext::new`.
+    pub(super) next_assert_id: u32,
+    /// Power-assert capture side-channel. `Some` only while
+    /// [`Resolver::desugar_assert`] is resolving an assert condition;
+    /// the [`Resolver::resolve_expr`] entry consults it to extract
+    /// scanner-flagged sub-expressions into `let __vK = …;` bindings
+    /// as they are resolved. Outside an assert this is always `None`,
+    /// so the hook is a single `Option` discriminant check on the hot
+    /// path.
+    pub(super) assert_capture_ctx: Option<super::assert::AssertCaptureContext>,
+    /// Per-function allocator for synthetic `AstId`s used by lowering
+    /// passes such as `lower_assert`. `None` until first use, then
+    /// initialised by [`Resolver::alloc_synth_ast_id`] to start above
+    /// the current module's `Module::ast_id_count()`. Synthetic ids land
+    /// in a range that is disjoint from the parser-allocated range, so
+    /// they cannot collide with — or pollute — the `(ModuleSource,
+    /// AstId)` keys that LSP queries (`Annotated::referenced_symbol`,
+    /// `symbol_at`, …) reach through `AstIndex`.
+    pub(super) next_synth_ast_id: Option<u32>,
 }
 
 impl FunctionContext {
@@ -1197,6 +1219,9 @@ impl FunctionContext {
             outer_box_types: IndexMap::default(),
             closure_defaults: IndexMap::default(),
             in_handler_method: false,
+            next_assert_id: 0,
+            next_synth_ast_id: None,
+            assert_capture_ctx: None,
         }
     }
 
@@ -1251,6 +1276,9 @@ impl FunctionContext {
             // handler methods — `resume` returns from the enclosing
             // operation, not from the closure.
             in_handler_method: false,
+            next_assert_id: 0,
+            next_synth_ast_id: None,
+            assert_capture_ctx: None,
         }
     }
 
