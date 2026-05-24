@@ -2156,7 +2156,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     span: for_of.span,
                 });
             }
-            self.resolve_iterator_for_of(for_of, is_enumerate, ctx)
+            self.resolve_iterator_for_of(for_of, ctx)
         };
 
         ctx.for_continue_labels = saved_continue;
@@ -2535,10 +2535,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// with `method_id: None`, so no use→def edges are recorded against
     /// `for_of.id` either — clicking the `for` keyword no longer drags the
     /// user into `Iterator::next` in `core:prelude/array.wado`.
+    ///
+    /// `for_of.iterable` is resolved as-is — if the user wrote
+    /// `for let item of expr.enumerate()`, the `.enumerate()` is part of
+    /// the AST and flows naturally into the iterator chain. (The previous
+    /// `is_enumerate` parameter survived only because `resolve_tuple_for_of`
+    /// uses it to special-case the index binding; the iterator path has
+    /// nothing to do with it. The pre-refactor implementation wrapped the
+    /// already-enumerated AST in a second `.enumerate()`, producing
+    /// `IterEnumerate<IterEnumerate<…>>` and ICE-ing at codegen with
+    /// "unsubstituted AssocTypeProjection `Item` reached codegen" — see
+    /// `tests/fixtures/for_of_iterator_enumerate.wado`.)
     fn resolve_iterator_for_of(
         &mut self,
         for_of: &ForOfStmt,
-        is_enumerate: bool,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
         use super::method_call::MethodCallInput;
@@ -2548,29 +2558,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let iter_var = format!("__iter_{unique_id}");
         let label = format!("__for_of_{unique_id}");
 
-        // Resolve the iterable receiver from AST. When the user wrote
-        // `for let v of expr.enumerate()`, `for_of.iterable` is the full
-        // `expr.enumerate()` AST and `is_enumerate` is true; we then
-        // dispatch a further `.enumerate()` on top — matching the
-        // pre-refactor behaviour exactly so existing fixtures stay green
-        // at O0/O2. (The double-enumerate is almost certainly a
-        // pre-existing bug for non-tuple iterables, but no test
-        // exercises this branch; cleanup belongs in a separate change.)
-        let mut into_iter_receiver = self.resolve_expr(&for_of.iterable, ctx, None);
-        if is_enumerate {
-            into_iter_receiver = self.resolve_method_call_with(
-                MethodCallInput {
-                    receiver: into_iter_receiver,
-                    method_name: "enumerate",
-                    method_id: None,
-                    type_args: vec![],
-                    args: &[],
-                    expected_type: None,
-                    span,
-                },
-                ctx,
-            );
-        }
+        // Resolve the iterable receiver verbatim, then dispatch `.into_iter()`
+        // on it. Whatever adapter chain the user wrote (e.g. `.enumerate()`,
+        // `.filter(…)`, `.map(…)`) is already part of `for_of.iterable`.
+        let into_iter_receiver = self.resolve_expr(&for_of.iterable, ctx, None);
 
         // `<receiver>.into_iter()`
         let into_iter_call = self.resolve_method_call_with(
