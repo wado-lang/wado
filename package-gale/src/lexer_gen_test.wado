@@ -2,10 +2,12 @@
 //! parser-rule literals like `'x'` that ANTLR4 auto-promotes to anonymous
 //! lexer tokens must be discovered by `collect_literal_tokens` regardless
 //! of which IR transformer (`Not`, `Label`, `Group`, `Repeat`) wraps them.
+//! `gen_token_constants` also handles `-> type(N)` numeric overrides.
 
 use { Grammar } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
-use { collect_literal_tokens, LitToken } from "./lexer_gen.wado";
+use { collect_literal_tokens, gen_token_constants, LitToken } from "./lexer_gen.wado";
+use { CodeWriter } from "./wadopoet.wado";
 
 fn parse_grammar(input: String) -> Grammar {
     let mut g = parse(input).unwrap();
@@ -88,4 +90,67 @@ test "collect_literal_tokens: literal inside Wildcard is ignored" {
     let names = const_names(&lits);
     assert names.len() == 1, `len={names.len()}`;
     assert names[0] == "TK_LIT_X", names[0];
+}
+
+fn token_globals_for(input: String) -> String {
+    let g = parse_grammar(input);
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let mut w = CodeWriter::new();
+    gen_token_constants(&mut w, &g.lexer_rules, &lits);
+    return w.to_string();
+}
+
+fn count_occurrences(haystack: &String, needle: String) -> i32 {
+    let needle_len = needle.len();
+    if needle_len == 0 {
+        return 0;
+    }
+    let mut count = 0;
+    let mut remainder = *haystack;
+    loop {
+        match remainder.find(needle) {
+            Some(idx) => {
+                count += 1;
+                remainder = remainder.substr_bytes(idx + needle_len, remainder.len());
+            },
+            None => { break; },
+        }
+    }
+    return count;
+}
+
+// `-> type(N)` with numeric N emits a separate `TK_<N>` global whose value
+// is `N - 1` so the runtime's `kind + 1` remap (runtime.wado:to_lexer_string)
+// round-trips to ANTLR4's literal type id N. Covers ANTLR4 runtime-testsuite
+// descriptor LexerExec/TokenType0xFFFF (`type(65535)`).
+test "gen_token_constants: numeric type(N) override emits TK_<N>" {
+    let out = token_globals_for("lexer grammar L; T_FFFF: 'FFFF' -> type(65535);");
+    assert out.contains("global TK_T_FFFF: i32 = 0"), out;
+    assert out.contains("global TK_EOF: i32 = 1"), out;
+    assert out.contains("global TK_ERROR: i32 = 2"), out;
+    assert out.contains("global TK_65535: i32 = 65534"), out;
+}
+
+// Multiple rules can target the same numeric type id; only one global is
+// emitted (dedup keeps the codegen well-formed).
+test "gen_token_constants: duplicate type(N) overrides emit one global" {
+    let out = token_globals_for("lexer grammar L; A: 'a' -> type(99); B: 'b' -> type(99);");
+    assert count_occurrences(&out, "global TK_99:") == 1, out;
+}
+
+// `type(0)` would emit a kind of `-1` which collides with the lexer's
+// `best_end = -1` sentinel; skip the global so the generator stays sound.
+// ANTLR4 reserves type id 0 (INVALID_TYPE) anyway, so this is also a
+// no-op against the spec.
+test "gen_token_constants: type(0) is skipped (would yield negative kind)" {
+    let out = token_globals_for("lexer grammar L; A: 'a' -> type(0);");
+    assert !out.contains("TK_0:"), out;
+}
+
+// Non-numeric overrides (`type(SomeOtherToken)`) defer to the regular
+// `TK_<name>` global owned by the named rule and emit nothing extra.
+test "gen_token_constants: named type(X) override emits no extra global" {
+    let out = token_globals_for("lexer grammar L; A: 'a' -> type(B); B: 'b';");
+    // Expected globals: TK_A, TK_B, TK_EOF, TK_ERROR.
+    assert count_occurrences(&out, "global TK_") == 4, out;
 }

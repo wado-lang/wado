@@ -154,7 +154,70 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, l
         GlobalSpec::new(&lit.const_name, "i32", &init).emit(w);
         idx += 1;
     }
+    // ANTLR4's `-> type(N)` with a numeric N assigns the emitted token an
+    // explicit type id of exactly N (spec: vendor/antlr4/doc/lexer-rules.md).
+    // The lexer body references `TK_<N>` at the assignment site, so the
+    // constant has to exist as a global.
+    //
+    // Value of the constant: Gale stores kinds as 0-based and remaps to
+    // ANTLR4's 1-based type id with `kind + 1` inside `to_lexer_string`
+    // (runtime.wado). For a `type(N)` override the ANTLR4-visible type id
+    // must round-trip to exactly N, so the Gale-side kind is `N - 1`. We
+    // require N >= 1 since N == 0 would store a negative kind that
+    // collides with the lexer's `best_end = -1` sentinel and N == -1 is
+    // already reserved by ANTLR4 for EOF.
+    let mut emitted_numeric: Array<i32> = [];
+    for let rule of lexer_rules {
+        if rule.is_fragment {
+            continue;
+        }
+        if let Some(target) = &rule.type_override {
+            if let Some(n) = parse_token_type_numeric(target) {
+                if n < 1 {
+                    continue;
+                }
+                if rule_name_exists(lexer_rules, &`{n}`) {
+                    continue;
+                }
+                if emitted_numeric.contains(&n) {
+                    continue;
+                }
+                GlobalSpec::new(&`TK_{n}`, "i32", &`{n - 1}`).emit(w);
+                emitted_numeric.push(n);
+            }
+        }
+    }
     w.blank();
+}
+
+/// Returns `Some(n)` when `s` is a non-negative base-10 integer that fits in
+/// `i32` (the runtime token-kind type). Anything else — a token name, an
+/// overflowing value, an empty string — returns `None` so the caller can
+/// defer to the regular `TK_<name>` path.
+fn parse_token_type_numeric(s: &String) -> Option<i32> {
+    if s.is_empty() {
+        return null;
+    }
+    let mut acc: i64 = 0;
+    for let c of s.chars() {
+        if c < '0' || c > '9' {
+            return null;
+        }
+        acc = acc * 10 + ((c as i32) - ('0' as i32)) as i64;
+        if acc > i32::MAX as i64 {
+            return null;
+        }
+    }
+    return Option::<i32>::Some(acc as i32);
+}
+
+fn rule_name_exists(lexer_rules: &Array<LexerRule>, name: &String) -> bool {
+    for let rule of lexer_rules {
+        if !rule.is_fragment && rule.name == *name {
+            return true;
+        }
+    }
+    return false;
 }
 
 pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
