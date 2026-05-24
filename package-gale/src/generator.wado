@@ -19,7 +19,7 @@
 
 use { Request, Response, Error, OutputFile } from "core:kiln";
 use { parse } from "./g4/parser.wado";
-use { Grammar, merge_grammars, check_references } from "./ir.wado";
+use { Grammar, merge_grammars, check_references, synthesize_implicit_tokens } from "./ir.wado";
 use { generate as codegen_generate, GenerateOptions } from "./codegen.wado";
 use { to_snake_case } from "./gen_util.wado";
 
@@ -69,6 +69,13 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     }
 
     let mut grammar = merge_grammars(grammars);
+
+    // ANTLR4-compatible implicit-token synthesis: a parser rule may
+    // reference an uppercase identifier that has no defining lexer rule,
+    // and ANTLR4 silently treats it as an implicit token type. Run this
+    // before `check_references` so the synthesized virtual rules satisfy
+    // the unresolved-token check.
+    synthesize_implicit_tokens(&mut grammar);
 
     match check_references(&grammar) {
         Ok(_) => {

@@ -1,7 +1,7 @@
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { parse } from "./g4/parser.wado";
-use { Grammar, merge_grammars, check_references } from "./ir.wado";
+use { Grammar, merge_grammars, check_references, synthesize_implicit_tokens } from "./ir.wado";
 use { generate, GenerateOptions } from "./codegen.wado";
 
 export fn run() with Stdout, Stderr, Environment, Preopens {
@@ -89,6 +89,11 @@ fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr,
     }
 
     let mut merged = merge_grammars(grammars);
+    // Synthesize virtual lexer rules for any uppercase token name a parser
+    // rule references but no lexer rule defines (ANTLR4-compatible implicit
+    // token types). Must run before `check_references` so the synthesized
+    // rules satisfy the unresolved-token check.
+    synthesize_implicit_tokens(&mut merged);
     // Run ANTLR4-compatible semantic rule-reference validation after the
     // split-grammar halves are combined. This is the same check ANTLR4's
     // `SymbolChecks.checkForUnresolvedRuleRefs` performs; we defer it

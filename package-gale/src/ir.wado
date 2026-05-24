@@ -143,6 +143,51 @@ pub struct Grammar {
 ///     `lexer grammar`); token refs and parser refs are vacuously absent.
 ///   - `Parser`: parser-rule refs are checked locally; token refs are
 ///     skipped because the sibling lexer grammar hasn't been merged yet.
+/// Synthesize a virtual lexer rule for every uppercase token name a parser
+/// rule references but no lexer rule defines. Mirrors ANTLR4, which treats
+/// an unresolved uppercase identifier in a parser rule as an implicit
+/// token type declaration (vendor/antlr4/doc/lexer-rules.md): downstream
+/// codegen still needs the `TK_<name>` constant so emit can compile, even
+/// though the lexer cannot produce the token on its own (the user is
+/// expected to supply it via a sibling grammar, a `tokens { }` block, or
+/// `-> type(<name>)` in another rule). Without this pass, grammars like
+/// `LeftRecursion/WhitespaceInfluence_{1,2}` are rejected with
+/// `reference to undefined token "K_IN"` before codegen.
+///
+/// Synthesis only fires for `Combined` grammars (post-merge, the only
+/// context where the lexer side is final). `Parser`-side grammars still
+/// have a pending merge against a sibling lexer; running here would
+/// prematurely shadow names the lexer half is about to bring in.
+pub fn synthesize_implicit_tokens(grammar: &mut Grammar) {
+    if !(grammar.kind matches { Combined }) {
+        return;
+    }
+    let mut synthesized: Array<String> = [];
+    for let r of &grammar.pending_refs {
+        if !(r.kind matches { TokenRef }) {
+            continue;
+        }
+        if r.referenced_name == "EOF" {
+            continue;
+        }
+        let mut defined = false;
+        for let lr of &grammar.lexer_rules {
+            if lr.name == r.referenced_name {
+                defined = true;
+                break;
+            }
+        }
+        if defined {
+            continue;
+        }
+        if synthesized.contains(&r.referenced_name) {
+            continue;
+        }
+        grammar.lexer_rules.push(LexerRule::virtual_token(r.referenced_name));
+        synthesized.push(r.referenced_name);
+    }
+}
+
 pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
     for let r of &grammar.pending_refs {
         match &r.kind {
