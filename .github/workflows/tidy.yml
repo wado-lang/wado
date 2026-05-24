@@ -54,9 +54,10 @@ jobs:
       # merge of it) changes; the Gale O1/O2/O3 jobs then cache-miss on every
       # fixture and run slow without ever failing. Regenerating here keeps the
       # committed caches in sync, mirroring how WIR golden fixtures are handled.
-      # -O0 minimises compile time; the kiln cache is the generator's output and
-      # is independent of the optimization level used to compile consumers.
-      - run: ./target/debug/wado test -O0 package-gale
+      # `--no-run` skips the wasmtime execution phase — Phase 1 (compile) is all
+      # that's needed to rewrite each `<primary>.kiln.json`, and the actual Gale
+      # test matrix already runs in `ci.yml`.
+      - run: ./target/debug/wado test --no-run package-gale
       - run: mise run format
 
       - name: Commit and push changes

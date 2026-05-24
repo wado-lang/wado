@@ -541,6 +541,23 @@ fn test_allocator() {
     assert_eq!(opts.allocator, Some("bump".to_string()));
 }
 
+#[test]
+fn test_no_run_defaults_to_false() {
+    // Without the flag, `wado test` runs Phase 2 as usual.
+    let parser = Parser::from_args(&["a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert!(!opts.no_run);
+}
+
+#[test]
+fn test_no_run_flag() {
+    // `--no-run` mirrors `cargo test --no-run`: compile (with Kiln
+    // refresh as a side-effect) but skip the wasmtime execution phase.
+    let parser = Parser::from_args(&["--no-run", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert!(opts.no_run);
+}
+
 // ---- format ----
 
 #[test]
