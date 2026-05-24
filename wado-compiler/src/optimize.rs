@@ -1,30 +1,46 @@
-//! Optimization pass for Wado TIR
+//! Optimization passes for Wado NIR.
 //!
-//! This module coordinates the following optimization passes:
-//! - Dead Code Elimination (DCE) via `dce` module
-//! - Function inlining via `inline` module
-//! - Labeled block fusion via `labeled_block_fusion` module
-//! - Match → Switch rewrite for dense int/enum scrutinees via `match_to_switch` module
-//! - Reference elimination via `ref_elim` module
-//! - Container SROA (AoS→SoA for `Array<Tuple<...>>`) via `container_sroa` module
-//! - Scalar Replacement of Aggregates (SROA) via `sroa` module
-//! - Copy propagation via `copy_prop` module
-//! - Common Subexpression Elimination (CSE) via `cse` module
-//! - Store-to-load forwarding via `store_load_forward` module
-//! - Constant optimizations (propagation, folding, global promotion, branch pruning) via `const_*` modules
-//! - Loop-Invariant Code Motion (LICM) via `licm` module
-//! - Condition implication elimination via `condition_implication` module
-//! - Template buffer hoisting via `tmpl_hoist` module
-//! - Hot Field Scalarization (HFS) via `field_scalarize` module
-//! - Select lowering via `select_lowering` module
-//! - Value-copy elision via `value_copy_elide` module
-//! - Short `push_str` simplification via `string_push` module
+//! The optimizer rewrites the [`NirPackage`] in place. The full pass list and
+//! ordering rationale lives in [`docs/optimizer.md`](../../../docs/optimizer.md);
+//! the inventory below is just an index of the modules under `optimize/`.
+//!
+//! Fixed-point loop ([`run_optimization_passes`], in order):
+//! 1.  `match_to_switch` — dense `Match` → `Switch` lowering.
+//! 2.  `container_sroa` — `AoS` → `SoA` for `Array<Tuple<...>>` / `Array<Struct>`.
+//! 3.  `value_copy_elide` — strip `$value_copy$T<id>` wrappers on read-only
+//!     bindings.
+//! 4.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine
+//!     copy when elements are provably immutable through the binding.
+//! 5.  `string_push` — `buf.push_str("short")` → per-byte `push`.
+//! 6.  `inline` — function inlining.
+//! 7.  `labeled_block_fusion` — collapse inlined-helper `Option<T>` allocations.
+//! 8.  `ref_elim` — drop unnecessary reference bindings exposed by inlining.
+//! 9.  `sroa` — Scalar Replacement of Aggregates.
+//! 10. `copy_prop` — copy propagation.
+//! 11. `dae` — Dead Argument Elimination.
+//! 12. `drve` — Dead Return Value Elimination.
+//! 13. `elide_local` — Write-Only Local Elimination.
+//! 14. `cse` — Loop-level Common Subexpression Elimination.
+//! 15. `store_load_forward` — store-to-load forwarding.
+//! 16. `const_folding` — partial evaluation via [`crate::niri`] (also drives
+//!     alias-aware field-knowledge tracking; see `alias`).
+//! 17. `const_global_promotion` — re-promote globals that fold to constants.
+//! 18. `const_branch_prune` — constant-condition branch / trivial-block cleanup.
+//! 19. `licm` — Loop-Invariant Code Motion.
+//! 20. `condition_implication` — eliminate conditions implied by dominators.
+//! 21. `tmpl_hoist` — hoist template-string backing buffers out of loops.
+//!
+//! Once after the loop converges: `field_scalarize` (Hot Field Scalarization).
+//!
+//! Outside the loop ([`optimize`]): Dead Code Elimination (`dce`, around the
+//! loop) plus the always-on post-optimization rewrites the Wasm backend
+//! depends on — `select_lowering` and `multi_value_return` classification.
 //!
 //! The `$value_copy$T` insertion + synthesis steps that materialize Wado's
-//! value-copy semantics live in the lower phase (`lower::plan::value_copy`) — by
-//! the time TIR reaches the optimizer, every defensive deep-copy is
-//! explicit. The optimizer only *removes* redundant copies via
-//! `value_copy_elide`, which runs as a regular pass in the fixed-point loop.
+//! value-copy semantics live in the lower phase (`lower::plan::value_copy`) —
+//! by the time NIR reaches the optimizer, every defensive deep-copy is
+//! explicit. The optimizer only *removes* redundant copies, via
+//! `value_copy_elide` (full strip) and `value_copy_demote` (deep → shallow).
 
 mod alias;
 mod condition_implication;
@@ -177,7 +193,7 @@ pub fn optimize(
             // `builtin::unreachable`, which lowers to Wasm
             // `unreachable` directly and is never DCE'd, so ordering
             // around DCE is irrelevant.
-            run_pass("tir/match_to_switch", &mut project, profiler, |p| {
+            run_pass("nir/match_to_switch", &mut project, profiler, |p| {
                 match_to_switch(p)
             });
         }
@@ -236,9 +252,9 @@ pub fn optimize(
     }
 
     // Post-optimization rewrites: select lowering for branchless Wasm
-    profiler.span_start("tir/select_lowering");
+    profiler.span_start("nir/select_lowering");
     select_lowering::select_lowering(&mut project);
-    profiler.span_end("tir/select_lowering");
+    profiler.span_end("nir/select_lowering");
 
     // Multi-value return ABI classification: marks tuple- or
     // user-struct-returning functions whose every return site is a fresh
@@ -251,15 +267,15 @@ pub fn optimize(
     // `FieldAccess` reads going to the split locals directly. Runs after
     // every other transformation so the analysis sees the final TIR
     // shape.
-    profiler.span_start("tir/multi_value_return");
+    profiler.span_start("nir/multi_value_return");
     multi_value_return::classify_multi_value_returns(&mut project);
-    profiler.span_end("tir/multi_value_return");
+    profiler.span_end("nir/multi_value_return");
 
     project
 }
 
 fn run_dce(project: &mut NirPackage, profiler: &dyn SpanEmitter) {
-    profiler.span_start("tir/dce");
+    profiler.span_start("nir/dce");
     // Single pass per `run_dce` invocation. `remove_unreachable_globals`
     // can rewrite function bodies (it drops `GlobalVarSet` for dead
     // globals), which may orphan calls inside the dropped initializers,
@@ -274,7 +290,7 @@ fn run_dce(project: &mut NirPackage, profiler: &dyn SpanEmitter) {
     filter_bytes_literals(project);
     remove_unreachable_closure_functors(project);
     project.rebuild_variant_indices();
-    profiler.span_end("tir/dce");
+    profiler.span_end("nir/dce");
 }
 
 /// Run a single optimization pass with profiling, returning whether it changed anything.
@@ -356,9 +372,9 @@ pub mod pass_dump {
 
     /// Returns true if `name` matches one of the comma-separated entries in
     /// the `WADO_SKIP_PASS` env var. Each entry is matched against the bare
-    /// pass name (e.g., `tir/ref_elim`) and against `<pass>@<n>` where `<n>`
+    /// pass name (e.g., `nir/ref_elim`) and against `<pass>@<n>` where `<n>`
     /// is the 1-based occurrence number — letting bisection target a
-    /// specific iteration (e.g., `tir/ref_elim@2`).
+    /// specific iteration (e.g., `nir/ref_elim@2`).
     pub fn should_skip_pass(name: &str) -> bool {
         static COUNTS: OnceLock<Mutex<IndexMap<String, u32>>> = OnceLock::new();
         let list = skip_list();
@@ -410,37 +426,21 @@ pub mod pass_dump {
 
 /// Run optimization passes with a fixed-point iteration strategy.
 ///
-/// Each iteration runs the following passes in order. Container SROA runs
-/// first because it needs to see `Array<T>` *method calls* (push, `index_value`,
-/// `index_assign`, len, ...) before inline expands them into raw field-accesses
-/// and `builtin::array_get`/`array_set` pairs. Running it before `inline` in
-/// each iteration — rather than only in iteration 0 — also lets the
-/// optimization loop re-run container SROA on newly-inlined code that
-/// exposes fresh `Array<Tuple<...>>` locals.
+/// Container SROA runs early because it needs to see `Array<T>` *method
+/// calls* (push, `index_value`, `index_assign`, len, ...) before `inline`
+/// expands them into raw field-accesses and `builtin::array_get` /
+/// `array_set` pairs. Running it before `inline` in each iteration — rather
+/// than only in iteration 0 — also lets the optimization loop re-run
+/// container SROA on newly-inlined code that exposes fresh
+/// `Array<Tuple<...>>` locals.
 ///
-///  1. Match → Switch (`match_to_switch`)
-///  2. Container SROA (`container_sroa`)
-///  3. Value-copy elision (`value_copy_elide`)
-///  4. Short `push_str` simplification (`string_push`)
-///  5. Function inlining (`inline`)
-///  6. Labeled block fusion (`labeled_block_fusion`)
-///  7. Reference elimination (`ref_elim`)
-///  8. Scalar Replacement of Aggregates (`sroa`)
-///  9. Copy propagation (`copy_prop`)
-/// 10. Dead Argument Elimination (`dae`)
-/// 11. Dead Return Value Elimination (`drve`)
-/// 12. Write-only local elimination (`elide_local`)
-/// 13. Common Subexpression Elimination (`cse`)
-/// 14. Store-to-load forwarding (`store_load_forward`)
-/// 15. Constant folding (`const_fold`)
-/// 16. Constant global promotion (`const_global_promotion`)
-/// 17. Constant branch pruning (`branch_prune`)
-/// 18. Loop-invariant code motion (`licm`)
-/// 19. Condition implication elimination (`condition_implication`)
-/// 20. Template buffer hoisting (`tmpl_hoist`)
+/// The exact in-loop pass list and its ordering rationale lives on the
+/// module doc above; the `step!` calls below are the canonical source for
+/// pass names and order.
 ///
-/// The `config` parameter controls the number of iterations and inline threshold.
-/// More iterations can find more optimization opportunities but take longer.
+/// The `config` parameter controls the number of iterations and inline
+/// threshold. More iterations can find more optimization opportunities but
+/// take longer.
 ///
 /// Hot Field Scalarization (HFS) runs once after the loop converges; see
 /// `optimize` for the rationale.
@@ -452,7 +452,7 @@ fn run_optimization_passes(
     let threshold = config.inline_threshold;
     let trace_loop = crate::trace::filter().enabled("opt_loop");
     for i in 0..config.iterations {
-        profiler.span_start(&format!("tir/iteration {}", i + 1));
+        profiler.span_start(&format!("nir/iteration {}", i + 1));
         let mut changed = false;
         let mut iter_changed: Vec<&'static str> = Vec::new();
         macro_rules! step {
@@ -473,7 +473,7 @@ fn run_optimization_passes(
         // already handle. Subsequent iterations only see fresh `Match`
         // shapes if `inline` (or a future shape-rewriting pass) plants
         // them, in which case this pass reconverges on iteration N+1.
-        step!("tir/match_to_switch", match_to_switch);
+        step!("nir/match_to_switch", match_to_switch);
         // Container SROA must run *before* inline in each iteration: inline
         // expands trait methods like `IndexValue::index_value` into raw
         // `builtin::array_get` + field-access pairs, after which the
@@ -481,7 +481,7 @@ fn run_optimization_passes(
         // also means we see the `SequenceLiteralBuilder` desugaring for `[]`
         // while its inner `Constructor` call is still a plain `Call` node,
         // which `recognize_init` can match structurally.
-        step!("tir/container_sroa", scalarize_containers);
+        step!("nir/container_sroa", scalarize_containers);
         // Run value-copy elision *before* inlining: the inliner expands
         // every reachable `$value_copy$T<id>` body into a labeled
         // block, after which the `Call($value_copy$T, [arg])` shape the
@@ -499,7 +499,7 @@ fn run_optimization_passes(
         // catches those, and if the loop converges (no pass returned
         // `changed`) the inliner did nothing this round, so no new
         // wrappers were introduced.
-        run_pass("tir/value_copy_elide", project, profiler, |p| {
+        run_pass("nir/value_copy_elide", project, profiler, |p| {
             elide_synthesized_value_copies(p);
             false
         });
@@ -507,9 +507,9 @@ fn run_optimization_passes(
         // copies when the binding's elements are provably never mutated
         // through it. Runs alongside `value_copy_elide`: elide removes a
         // copy whose target is read-only; demote weakens a copy whose target
-        // is only spine-mutated. Both before `tir/inline` for the same
+        // is only spine-mutated. Both before `nir/inline` for the same
         // `$value_copy$T(arg)`-shape-visibility reason.
-        run_pass("tir/value_copy_demote", project, profiler, |p| {
+        run_pass("nir/value_copy_demote", project, profiler, |p| {
             demote_value_copies(p);
             false
         });
@@ -518,23 +518,23 @@ fn run_optimization_passes(
         // gone and the literal-recognising rewrite can no longer match,
         // leaving short-string formatting paths (e.g. `fpfmt.wado`'s
         // `buf.push_str("0.")`) paying full per-call allocation cost.
-        step!("tir/string_push", simplify_short_push_str);
-        step!("tir/inline", |p| inline_functions(p, threshold));
-        step!("tir/labeled_block_fusion", fuse_labeled_blocks);
-        step!("tir/ref_elim", eliminate_unnecessary_refs);
-        step!("tir/sroa", scalar_replace_aggregates);
-        step!("tir/copy_prop", propagate_copies);
+        step!("nir/string_push", simplify_short_push_str);
+        step!("nir/inline", |p| inline_functions(p, threshold));
+        step!("nir/labeled_block_fusion", fuse_labeled_blocks);
+        step!("nir/ref_elim", eliminate_unnecessary_refs);
+        step!("nir/sroa", scalar_replace_aggregates);
+        step!("nir/copy_prop", propagate_copies);
         // DAE / DRVE / write-only local elimination after `copy_prop` shrinks
         // signatures and discards unused let-bindings before `cse` /
         // `const_fold` revisit the simplified body. Running here (rather
         // than at WIR level) lets `inline` see the slimmer signatures on
         // the next iteration and lets `dce` clean up the freshly dead
         // computation in the same fixed-point loop.
-        step!("tir/dae", eliminate_dead_arguments);
-        step!("tir/drve", eliminate_dead_return_values);
-        step!("tir/elide_local", elide_write_only_locals);
-        step!("tir/cse", eliminate_common_subexprs);
-        step!("tir/store_load_forward", forward_stores_to_loads);
+        step!("nir/dae", eliminate_dead_arguments);
+        step!("nir/drve", eliminate_dead_return_values);
+        step!("nir/elide_local", elide_write_only_locals);
+        step!("nir/cse", eliminate_common_subexprs);
+        step!("nir/store_load_forward", forward_stores_to_loads);
         // `field_forward`'s rewrite responsibilities are absorbed by
         // `const_fold` (see `optimize::const_folding::ConstFoldVisitor`).
         // Both passes used to alternate one statement at a time on
@@ -546,13 +546,13 @@ fn run_optimization_passes(
         // chain of pushes folds in a single iteration. The alias and
         // value-copy-helper analyses migrated to
         // `optimize::alias`.
-        step!("tir/const_fold", fold_constants);
-        step!("tir/const_global_promotion", promote_constant_globals);
-        step!("tir/branch_prune", prune_constant_branches);
-        step!("tir/licm", apply_licm);
-        step!("tir/condition_implication", eliminate_implied_conditions);
-        step!("tir/tmpl_hoist", hoist_template_buffers);
-        profiler.span_end(&format!("tir/iteration {}", i + 1));
+        step!("nir/const_fold", fold_constants);
+        step!("nir/const_global_promotion", promote_constant_globals);
+        step!("nir/branch_prune", prune_constant_branches);
+        step!("nir/licm", apply_licm);
+        step!("nir/condition_implication", eliminate_implied_conditions);
+        step!("nir/tmpl_hoist", hoist_template_buffers);
+        profiler.span_end(&format!("nir/iteration {}", i + 1));
         if trace_loop {
             crate::compiler_trace!(
                 "opt_loop",
@@ -563,7 +563,7 @@ fn run_optimization_passes(
         }
         if !changed {
             profiler.debug(&format!(
-                "TIR optimizer converged after {} iteration(s)",
+                "NIR optimizer converged after {} iteration(s)",
                 i + 1
             ));
             break;
@@ -573,7 +573,7 @@ fn run_optimization_passes(
     // Running inside the loop would cause the write-back/re-read stmts it
     // inserts to be counted as new field accesses on the next iteration,
     // triggering spurious re-scalarization of the same fields.
-    run_pass("tir/field_scalarize", project, profiler, |p| {
+    run_pass("nir/field_scalarize", project, profiler, |p| {
         scalarize_hot_fields(p);
         true // always runs once, mark as changed for profiling visibility
     });

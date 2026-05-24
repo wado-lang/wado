@@ -1,6 +1,6 @@
-//! TIR Interpreter (tiri).
+//! NIR Interpreter (niri).
 //!
-//! Compile-time partial evaluator for Wado TIR. The public entry point is
+//! Compile-time partial evaluator for Wado NIR. The public entry point is
 //! [`Interpreter::reduce`], which takes a [`NirExpr`] and returns the most
 //! reduced form possible (a literal node when the expression is fully
 //! known, the original tree otherwise). Constant folding is the first
@@ -126,7 +126,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 /// fixes this at the type level.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Lattice {
-    /// No information yet. Default for un-bound locals and TIR kinds
+    /// No information yet. Default for un-bound locals and NIR kinds
     /// the engine doesn't currently understand (e.g. a `Call` whose
     /// callee isn't pure-foldable, `Block` past a single tail
     /// expression).
@@ -236,7 +236,7 @@ impl Value {
         }
     }
 
-    /// Render the value as a TIR-compatible literal repr string.
+    /// Render the value as a NIR-compatible literal repr string.
     #[must_use]
     pub fn format_repr(&self) -> String {
         match self {
@@ -252,7 +252,7 @@ impl Value {
     /// `None` for non-literal shapes (`Local`, `Call`, `Binary`, …),
     /// for `String` / `Bytes` / `Null` / `Unit` (no `Value` carrier),
     /// for the bignum primitives `i128` / `u128` (intentionally
-    /// out-of-scope for tiri folding), and for any literal whose
+    /// out-of-scope for niri folding), and for any literal whose
     /// `type_id` doesn't resolve to a primitive (defensive — the
     /// resolver shouldn't produce these).
     ///
@@ -330,7 +330,7 @@ pub type GlobalKey = (ModuleSource, String);
 /// reducing each non-`mut` global's initializer through a fresh
 /// [`Interpreter`] (so initializers like `1 + 2`, `i32::MAX - 1`, or
 /// pure-call expressions all collapse to `Const(_)`). Mutable globals
-/// are mapped to [`Lattice::NonConst`] so reads through tiri stay
+/// are mapped to [`Lattice::NonConst`] so reads through niri stay
 /// conservative even while the global is in scope.
 ///
 /// The map is read at every `GlobalVarGet` lookup; absent keys default
@@ -568,7 +568,7 @@ impl<'a> Interpreter<'a> {
         self.alias_info = AliasInfo::default();
         debug_assert!(
             self.call_stack.is_empty(),
-            "tiri call_stack leaked across function boundary",
+            "niri call_stack leaked across function boundary",
         );
     }
 
@@ -769,8 +769,8 @@ impl<'a> Interpreter<'a> {
     ///
     /// Internal: the only public entry points are [`reduce`] and
     /// [`reduce_local`]. `reduce` clones into `reduce_in_place`; visitor
-    /// drivers that already walk every TIR kind via
-    /// `tir_visitor::opt_walk_expr` should call `reduce_local` directly.
+    /// drivers that already walk every NIR kind via
+    /// `nir_visitor::opt_walk_expr` should call `reduce_local` directly.
     ///
     /// [`reduce`]: Self::reduce
     /// [`reduce_local`]: Self::reduce_local
@@ -862,8 +862,8 @@ impl<'a> Interpreter<'a> {
     /// into children. Returns `true` when `expr` was rewritten.
     ///
     /// This is the right entry point when the caller is already driving a
-    /// TIR walk (for example via `tir_visitor::opt_walk_expr`) and wants
-    /// to slot tiri's local rewrites into each visited node. The rules
+    /// NIR walk (for example via `nir_visitor::opt_walk_expr`) and wants
+    /// to slot niri's local rewrites into each visited node. The rules
     /// are constant folding for Binary / Unary / Cast, short-circuit
     /// identity simplifications for `&&` / `||`, pure-call inlining,
     /// constant-condition or both-arms-equal `if` collapse, and the
@@ -1283,7 +1283,7 @@ impl<'a> Interpreter<'a> {
     ///
     /// - When the scrutinee is `Const(v)`, walk arms in source order. The
     ///   first arm whose pattern provably matches (and has no guard, since
-    ///   guards inspect bindings tiri does not yet model) contributes its
+    ///   guards inspect bindings niri does not yet model) contributes its
     ///   body's lattice to the result; later arms are SCCP-infeasible
     ///   edges and never participate.
     /// - When an earlier arm is `Unknown` (an unmodelled pattern, an
@@ -1400,7 +1400,7 @@ impl<'a> Interpreter<'a> {
                     | NirLiteralPattern::Char(_),
                     _,
                 ) => PatternMatch::No,
-                // String / Null patterns: tiri's `Value` doesn't carry
+                // String / Null patterns: niri's `Value` doesn't carry
                 // string/null info, so we can't decide. Unknown leaves
                 // the arm in play.
                 (NirLiteralPattern::String(_) | NirLiteralPattern::Null, _) => {
@@ -1743,7 +1743,7 @@ fn bool_to_match(b: bool) -> PatternMatch {
 /// provably dead. Mirrors the resolver's [`is_catch_all_pattern`]
 /// rule: at least one unguarded `Wildcard` / `Binding` arm (or an
 /// `Or` pattern containing one) is sufficient. Variant-set / range-set
-/// coverage proofs are deferred until tiri models those pattern shapes
+/// coverage proofs are deferred until niri models those pattern shapes
 /// structurally; treating them as non-exhaustive here is the safe
 /// answer (it costs an optimization, not correctness).
 fn is_provably_exhaustive(arms: &[NirMatchArm]) -> bool {
@@ -1890,7 +1890,7 @@ fn arm_lattice_for_feasible_join(lat: Lattice) -> Lattice {
 /// - Calls of any flavor are rejected — even pure callees may return
 ///   different values across invocations (e.g. `random.next()` is
 ///   marked pure-by-effect in Wado but is not idempotent in the SCCP
-///   sense), and tiri does not yet inline pure calls.
+///   sense), and niri does not yet inline pure calls.
 fn is_speculatable(expr: &NirExpr) -> bool {
     match &expr.kind {
         NirExprKind::IntLiteral { .. }
@@ -2090,7 +2090,7 @@ fn eval_cast(source: Value, target: PrimitiveType) -> Option<Value> {
 
 /// True for the eight integer primitives the engine models. 128-bit
 /// (`I128`/`U128`) is intentionally excluded — those types lower to
-/// stdlib calls in source, not a `Cast` node tiri can fold.
+/// stdlib calls in source, not a `Cast` node niri can fold.
 fn is_int_prim(p: PrimitiveType) -> bool {
     matches!(
         p,

@@ -1,4 +1,4 @@
-//! Scalar Replacement of Aggregates (SROA) optimization for Wado TIR
+//! Scalar Replacement of Aggregates (SROA) optimization for Wado NIR
 //!
 //! This pass eliminates struct and tuple allocations when the aggregate is only
 //! used for field access. After inlining exposes patterns like:

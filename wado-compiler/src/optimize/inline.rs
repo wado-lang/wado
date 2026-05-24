@@ -1,4 +1,4 @@
-//! Function inlining optimization for Wado TIR
+//! Function inlining optimization for Wado NIR.
 //!
 //! This module provides function inlining for small functions.
 //! It uses labeled block expressions for cleaner value handling.
@@ -24,7 +24,7 @@ use crate::token::Span;
 // - Complex statements like `let x = foo() + bar()` have 3+ expressions
 // - Method calls, binary operations, field accesses all contribute
 
-/// Count expressions in a TIR expression (recursive)
+/// Count expressions in a NIR expression (recursive)
 fn count_expr(expr: &NirExpr) -> usize {
     1 + match &expr.kind {
         NirExprKind::Binary { left, right, .. } => count_expr(left) + count_expr(right),
@@ -98,7 +98,7 @@ fn count_expr(expr: &NirExpr) -> usize {
     }
 }
 
-/// Count expressions in a TIR block (recursive)
+/// Count expressions in a NIR block (recursive)
 fn count_block_exprs(block: &NirBlock) -> usize {
     block
         .stmts

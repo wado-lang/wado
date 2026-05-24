@@ -17,6 +17,18 @@
 //! Only method-call usage is handled; direct indexing is expected to have been
 //! desugared already into `index_value`/`index_assign` trait calls by lowering.
 //!
+//! TODO(optimizer): nested-container decomposition (`Array<Array<T>>`,
+//! `Array<UserStruct { Array<T>, ... }>`). The recursion into nested element
+//! types is a clean extension of `decompose_local`; the harder problem is the
+//! recursive element-immutability proof, which `value_copy_demote.rs` already
+//! solves and could be lifted out for reuse here.
+//!
+//! TODO(optimizer): replace the hardcoded method-shape whitelist
+//! (`ElementWriter` / `IndexReader` / `IndexWriter` / `Constructor`) with a
+//! query against `value_copy_demote`'s element-immutability analysis so any
+//! element-immutable `&self`/`&mut self` method becomes a SROA-safe use,
+//! not just `push` / `index_value` / `index_assign` / `len` / `is_empty`.
+//!
 //! # Array method identification
 //!
 //! Rather than hardcoding method names (`"push"`, `"len"`, `"index_value"`, …),
@@ -1073,7 +1085,7 @@ impl NirRefVisitor for WhitelistChecker<'_> {
 }
 
 /// If the expression is `Local { index }` — or `Unary::{Ref,MutRef}` wrapping
-/// a Local — return the index. Method call receivers in lowered TIR are
+/// a Local — return the index. Method call receivers in lowered NIR are
 /// typically `Unary::MutRef(Local)` for `&mut self` methods and
 /// `Unary::Ref(Local)` for `&self` methods. We treat both as receivers of
 /// the underlying local; when they appear elsewhere (as a function argument,
@@ -1169,7 +1181,7 @@ fn expand_candidate_let(stmt: &NirStmt, out: &mut Vec<NirStmt>, ctx: &RewriteCtx
     }
 }
 
-/// Build a `Array<T_k>::Constructor(cap)` TIR call — e.g. `with_capacity(cap)`.
+/// Build a `Array<T_k>::Constructor(cap)` NIR call — e.g. `with_capacity(cap)`.
 /// The specific method is resolved via `find_sig_key_for_kind(Constructor)`,
 /// so there's no hardcoded name match. `cap` is the (duplicable) capacity
 /// expression recognized from the original initializer, already cloned once

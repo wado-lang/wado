@@ -1,4 +1,4 @@
-//! Store-to-Load Forwarding optimization for Wado TIR
+//! Store-to-Load Forwarding optimization for Wado NIR
 //!
 //! When a literal value is stored to a local variable and then loaded with no
 //! intervening aliasing writes, this pass forwards the stored value directly,
