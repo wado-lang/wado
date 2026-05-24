@@ -517,6 +517,23 @@ fn verify_http_result(result: &HttpTestResult, spec: &HttpServiceSpec, fixture_n
 #[derive(Debug)]
 struct TodoResolved(String);
 
+/// Format a trap-producing error with the full diagnostic chain.
+///
+/// `func.call_async` returns `wasmtime::Error` for traps. Its `Display` (`{e}`)
+/// only shows the top-level "error while executing at wasm backtrace" wrapper
+/// and the backtrace lines, but loses the specific trap kind (e.g.
+/// `CannotBlockSyncTask`, `AsyncDeadlock`) which lives further down the source
+/// chain as a `wasmtime::Trap`. The Debug format prints the whole chain
+/// including the Trap variant; we also fish the `Trap` out explicitly so the
+/// trap kind appears on its own line for quick scanning.
+fn format_wasm_trap(e: &wasmtime::Error) -> String {
+    let trap_kind = e
+        .downcast_ref::<wasmtime::Trap>()
+        .map(|trap| format!(" (trap: {trap:?} — {trap})"))
+        .unwrap_or_default();
+    format!("{e:?}{trap_kind}")
+}
+
 /// Run all test exports from a Wasm component compiled with the `test` world.
 /// Each test function is called in its own Store. All tests must pass.
 fn run_test_world(
@@ -604,8 +621,9 @@ fn run_test_world(
                     if !expect_trap && !is_todo {
                         let stderr_text =
                             String::from_utf8_lossy(&stderr_clone.contents()).to_string();
+                        let detail = format_wasm_trap(&e);
                         anyhow::bail!(
-                            "[{test_id}] test '{test_name}' trapped: {e}. stderr: {stderr_text}"
+                            "[{test_id}] test '{test_name}' trapped: {detail}\n  stderr: {stderr_text}"
                         );
                     }
                     // expected trap (expect_trap or TODO): pending
