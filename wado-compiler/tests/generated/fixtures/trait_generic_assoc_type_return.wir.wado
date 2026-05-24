@@ -464,11 +464,7 @@ fn "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end) {
     }) {
         return struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Err" { discriminant: 1, payload_0: 1 };
     }
-    value_start = (if has_sign -> i32 {
-        start + 1;
-    } else {
-        start;
-    });
+    value_start = select i32(has_sign, start + 1, start);
     return struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok" { discriminant: 0, payload_0: struct.new "tuple//[bool, i32]" { 0: is_negative, 1: value_start } };
 }
 
@@ -546,14 +542,14 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b44: block {
-        l45: loop {
+    b43: block {
+        l44: loop {
             if t <= 0_i64 {
-                break b44;
+                break b43;
             }
             n = n + 1;
             t = t / 10_i64;
-            continue l45;
+            continue l44;
         };
     };
     return n;
@@ -567,15 +563,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b48: block {
-            l49: loop {
+        b47: block {
+            l48: loop {
                 if temp <= 0_i64 {
-                    break b48;
+                    break b47;
                 }
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l49;
+                continue l48;
             };
         };
     }
@@ -683,14 +679,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b60: block {
-        l61: loop {
+    b59: block {
+        l60: loop {
             if i >= n {
-                break b60;
+                break b59;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l61;
+            continue l60;
         };
     };
 }

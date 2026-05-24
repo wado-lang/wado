@@ -192,7 +192,7 @@ Interpreter::new(type_table).reduce(&expr) -> NirExpr
 
 `reduce` is idempotent and monotone: it always returns a (possibly identical) `NirExpr`, leaving literal leaves with their original lexical repr (`0xFF` is not rewritten to `255`). Visitor drivers that already walk every NIR kind via `nir_visitor::opt_walk_expr` use `reduce_local(&mut NirExpr) -> bool` instead, which performs only the single-node rewrite at `expr`. Unit tests can use `reduce_to_value(&NirExpr) -> Option<Value>` to extract a `Value` directly.
 
-Today the engine reduces literal-only Binary / Unary / Cast expressions, the short-circuit identity rules `false || X → X` and `true && X → X` (and their right-hand variants), `let`-bound locals via a per-function `env`, `if` expressions and statements (constant-condition splice and both-arms-equal collapse), and `match` expressions over payload-free patterns (constant-scrutinee chosen-arm splice and all-arms-equal collapse, covering wildcard / integer / bool / char literals, integer and char ranges, or-patterns, and `ConstantValue`). Future work — payload-aware variant matching, bounded loop unrolling, pure function inlining, and a complementary wasm-CTFE backend — is described in [WEP: NIR Interpreter Evolution Plan](./wep-2026-04-27-nir-interpreter.md).
+Today the engine reduces literal-only Binary / Unary / Cast expressions, the short-circuit identity rules `false || X → X` and `true && X → X` (and their right-hand variants), `let`-bound locals via a per-function `env`, `if` expressions and statements (constant-condition splice; bool-arms collapse — `if cond { true } else { false } → cond` and the inverted `→ !cond`; both-arms-equal collapse), and `match` expressions over payload-free patterns (constant-scrutinee chosen-arm splice; the two-arm `match X { Enum::Case => true, _ => false } → X == Enum::Case` collapse that subsumes the `matches` operator's shape for enum scrutinees; all-arms-equal collapse, covering wildcard / integer / bool / char literals, integer and char ranges, or-patterns, and `ConstantValue`). Future work — payload-aware variant matching, bounded loop unrolling, pure function inlining, and a complementary wasm-CTFE backend — is described in [WEP: NIR Interpreter Evolution Plan](./wep-2026-04-27-nir-interpreter.md).
 
 Unit tests: [`wado-compiler/tests/niri.rs`](../wado-compiler/tests/niri.rs).
 
@@ -255,9 +255,11 @@ Rewrites `match` expressions whose scrutinee is a dense integer or enum into a `
 
 ### Select Lowering (`select_lowering.rs`)
 
-Rewrites `if cond { a } else { b }` with two pure branches into `builtin::select(cond, a, b)`, which emits the Wasm `select` instruction. Runs after the fixed-point loop at all levels.
+Rewrites `if cond { a } else { b }` with two leaf-pure branches into `builtin::select(cond, a, b)`, which emits the Wasm `select` instruction. Runs after the fixed-point loop at all levels.
 
-E2E: [select_basic.wado](../wado-compiler/tests/fixtures/select_basic.wado), [select_no_opt.wado](../wado-compiler/tests/fixtures/select_no_opt.wado).
+Leaf-pure shapes: duplicable leaves (`Local`, integer / float / bool / char literals), `Unary { Neg | Not | BitNot }` over a leaf-pure operand, `Binary { non-Div, non-Mod }` over two leaf-pure operands, and `Cast` of a leaf-pure value. Calls, `Deref`, `Ref` / `MutRef`, division, modulo, and aggregate constructors stay branched — they either trap or have side effects that an unconditionally-evaluated arm cannot replicate safely.
+
+E2E: [select_basic.wado](../wado-compiler/tests/fixtures/select_basic.wado), [select_extended_arms.wado](../wado-compiler/tests/fixtures/select_extended_arms.wado), [select_no_opt.wado](../wado-compiler/tests/fixtures/select_no_opt.wado), [select_no_opt_trapping_arms.wado](../wado-compiler/tests/fixtures/select_no_opt_trapping_arms.wado).
 
 ### Multi-Value Return Classification (`multi_value_return.rs`)
 

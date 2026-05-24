@@ -982,11 +982,7 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal"(self, f) {
     let digit_count: i32;
     let offset: i32;
     let self_6: ref "core:prelude/string.wado//String";
-    abs_val = (if self < 0 -> i64 {
-        builtin::i64_extend_i32_s(self) + 4294967296_i64;
-    } else {
-        builtin::i64_extend_i32_s(self);
-    });
+    abs_val = select i64(self < 0, builtin::i64_extend_i32_s(self) + 4294967296_i64, builtin::i64_extend_i32_s(self));
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
@@ -1020,11 +1016,7 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
         "core:prelude/primitive.wado/write_decimal_digits"(repr, offset_7, 922337203685477580_i64, remaining_digits);
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
     } else {
-        abs_val = (if is_negative -> i64 {
-            0_i64 - self;
-        } else {
-            self;
-        });
+        abs_val = select i64(is_negative, 0_i64 - self, self);
         digit_count_10 = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
         offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_10);
         "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_1: block -> ref builtin::array<u8> {
@@ -1064,10 +1056,10 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     }
     digit_count = 0;
     temp = self;
-    b30: block {
-        l31: loop {
+    b28: block {
+        l29: loop {
             if temp == 0_i64 {
-                break b30;
+                break b28;
             }
             digit_count = digit_count + 1;
             if temp >= 0_i64 {
@@ -1082,7 +1074,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
                 }
                 temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
             }
-            continue l31;
+            continue l29;
         };
     };
     offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
@@ -1093,10 +1085,10 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     };
     pos = offset_11 + digit_count;
     temp = self;
-    b35: block {
-        l36: loop {
+    b33: block {
+        l34: loop {
             if temp == 0_i64 {
-                break b35;
+                break b33;
             }
             pos = pos - 1;
             digit = 0;
@@ -1119,7 +1111,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
                 temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
             }
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l36;
+            continue l34;
         };
     };
 }
@@ -1205,14 +1197,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b49: block {
-        l50: loop {
+    b47: block {
+        l48: loop {
             if i >= n {
-                break b49;
+                break b47;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l50;
+            continue l48;
         };
     };
 }
@@ -1308,16 +1300,16 @@ fn "core:prelude/types.wado/AsyncCall<()>::wait"(self) {
             break __inline_cm_waitable_join_0: handle_1;
             unreachable;
         });
-        b70: block {
-            l71: loop {
+        b68: block {
+            l69: loop {
                 let event_mv_code: i32;
                 let event_mv_handle: i32;
                 let event_mv_payload: u32;
                 multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if event_mv_payload == 2 {
-                    break b70;
+                    break b68;
                 }
-                continue l71;
+                continue l69;
             };
         };
         "wasi/subtask-drop"(handle_1);
