@@ -222,6 +222,12 @@ const EPOCH_INTERVAL_MS: u64 = 1000;
 pub fn engine() -> &'static Engine {
     ENGINE.get_or_init(|| {
         let mut config = Config::new();
+        // Use the Pulley interpreter backend instead of Cranelift to skip
+        // native-code compilation in tests. Trades runtime speed for near-zero
+        // load latency. Requires the `pulley` feature on the wasmtime crate.
+        config
+            .target("pulley64")
+            .expect("Failed to set Pulley target");
         config.wasm_component_model(true);
         config.wasm_component_model_gc(true);
         config.wasm_component_model_async(true);
@@ -230,12 +236,11 @@ pub fn engine() -> &'static Engine {
         config.wasm_component_model_error_context(true);
         config.wasm_simd(true);
         config.wasm_wide_arithmetic(true);
-        config.wasm_threads(true);
+        // Pulley does not support wasm threads (per wasmtime stability tiers).
+        config.wasm_threads(false);
         config.wasm_gc(true);
         config.wasm_function_references(true);
         config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
-        // Use minimal optimization for faster compilation in tests
-        config.cranelift_opt_level(wasmtime::OptLevel::None);
         // Enable epoch-based interruption for timeout enforcement
         config.epoch_interruption(true);
         let engine = Engine::new(&config).expect("Failed to create wasmtime Engine");
