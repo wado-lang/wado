@@ -1,0 +1,49 @@
+// Regression: `tir/copy_prop` at -O3 drops the side effect of a `&mut self`
+// method call whose argument is an `Array<T>` literal built via
+// `SequenceLiteralBuilder` (i.e. `m.method([a, b])` after inline /
+// fixed-point iteration).
+//
+// Surface symptom in package-gale: `p.match_set([TK_A, TK_B])?` does not
+// advance `Parser::pos`, so the next `p.expect(...)` sees the token the set
+// element should have consumed (`ParserErrors/SingleTokenDeletionExpectingSet`,
+// `ParserErrors/SingleTokenDeletionBeforeAlt`).
+//
+// Root cause is not investigated here — the fixture pins the minimal shape so
+// the next fix can drive it red→green.
+//
+// Reduction: a struct method that mutates `self.counter` after a membership
+// scan over an `Array<i32>` parameter. The caller passes an inline `[1, 2]`
+// literal and observes `counter` afterwards.
+//
+// Mirrors the failing TIR shape verbatim:
+//   * `&mut self` method with `Array<i32>` value parameter
+//   * `for let x of <param>` loop body
+//   * conditional `self.counter += 1` inside the matched arm
+//   * caller binds the return value but the side effect is what matters
+
+struct Counter {
+    counter: i32,
+}
+
+impl Counter {
+    fn bump_if_member(&mut self, key: i32, included: Array<i32>) -> bool {
+        for let x of included {
+            if x == key {
+                self.counter += 1;
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+export fn run() {
+    let mut c = Counter { counter: 0 };
+    let _matched = c.bump_if_member(2, [1, 2]);
+    assert c.counter == 1, `counter must be 1 after bump_if_member, got {c.counter}`;
+}
+
+__DATA__
+{
+    "stdout": ""
+}
