@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779634032082,
+  "lastUpdate": 1779663887730,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25709,6 +25709,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/09abac9fbd47e04895ff5b6ab3d79233823295e9"
         },
         "date": 1779634031605,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9805,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17192,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 465275,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d4b8cbd0a4556340f0b1970a874c5ff5a400c99e",
+          "message": "Merge pull request #1189 from wado-lang/claude/package-gale-pending-todos-fi4FR\n\nfix(gale): close every stage_a_skip codegen blocker",
+          "timestamp": "2026-05-25T07:58:40+09:00",
+          "tree_id": "834e3a709feb4d322edaeb95f10d52e4f9e06a8f",
+          "url": "https://github.com/wado-lang/wado/commit/d4b8cbd0a4556340f0b1970a874c5ff5a400c99e"
+        },
+        "date": 1779663887374,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
