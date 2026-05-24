@@ -2208,6 +2208,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_html_document(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -2969,7 +2987,7 @@ fn _parse_html_comment(p: &mut Parser) -> Result<HtmlCommentNode, ParseError> {
 fn _parse_script(p: &mut Parser) -> Result<ScriptNode, ParseError> {
     let start = p.peek().span.start;
     let script_open = p.expect(TK_SCRIPT_OPEN)?;
-    let script_body_or_script_short_body = p.advance();
+    let script_body_or_script_short_body = p.match_set([TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY])?;
     return Result::<ScriptNode, ParseError>::Ok(ScriptNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         script_open,
@@ -2980,7 +2998,7 @@ fn _parse_script(p: &mut Parser) -> Result<ScriptNode, ParseError> {
 fn _parse_style(p: &mut Parser) -> Result<StyleNode, ParseError> {
     let start = p.peek().span.start;
     let style_open = p.expect(TK_STYLE_OPEN)?;
-    let style_body_or_style_short_body = p.advance();
+    let style_body_or_style_short_body = p.match_set([TK_STYLE_BODY, TK_STYLE_SHORT_BODY])?;
     return Result::<StyleNode, ParseError>::Ok(StyleNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         style_open,

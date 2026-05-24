@@ -905,6 +905,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_start(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -1006,7 +1024,7 @@ fn _parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
 
 fn _parse_animal(p: &mut Parser) -> Result<AnimalNode, ParseError> {
     let start = p.peek().span.start;
-    let dog_or_cat = p.advance();
+    let dog_or_cat = p.match_set([TK_DOG, TK_CAT])?;
     return Result::<AnimalNode, ParseError>::Ok(AnimalNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         dog_or_cat,
@@ -1015,7 +1033,7 @@ fn _parse_animal(p: &mut Parser) -> Result<AnimalNode, ParseError> {
 
 fn _parse_service(p: &mut Parser) -> Result<ServiceNode, ParseError> {
     let start = p.peek().span.start;
-    let hardware_or_software = p.advance();
+    let hardware_or_software = p.match_set([TK_HARDWARE, TK_SOFTWARE])?;
     return Result::<ServiceNode, ParseError>::Ok(ServiceNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         hardware_or_software,

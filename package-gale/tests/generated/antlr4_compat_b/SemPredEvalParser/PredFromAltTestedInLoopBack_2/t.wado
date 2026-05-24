@@ -820,6 +820,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_file_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -969,7 +987,7 @@ fn _parse_para_content(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let lit_s_or_lit_x_or_nl = p.advance();
+        let lit_s_or_lit_x_or_nl = p.match_set([TK_LIT_S, TK_LIT_X, TK_NL])?;
         lit_s_or_lit_x_or_nl_list.push(lit_s_or_lit_x_or_nl);
     }
     return Result::<ParaContentNode, ParseError>::Ok(ParaContentNode {
@@ -1080,7 +1098,7 @@ fn _parse_para_content__follow_0(p: &mut Parser) -> Result<ParaContentNode, Pars
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let lit_s_or_lit_x_or_nl = p.advance();
+        let lit_s_or_lit_x_or_nl = p.match_set([TK_LIT_S, TK_LIT_X, TK_NL])?;
         lit_s_or_lit_x_or_nl_list.push(lit_s_or_lit_x_or_nl);
     }
     return Result::<ParaContentNode, ParseError>::Ok(ParaContentNode {

@@ -1510,6 +1510,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -2738,7 +2756,7 @@ fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66 = p.advance();
+        let lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66 = p.match_set([TK_LIT_1, TK_LIT_2, TK_LIT_3, TK_LIT_4, TK_LIT_5, TK_LIT_6, TK_LIT_7, TK_LIT_8, TK_LIT_9, TK_LIT_10, TK_LIT_11, TK_LIT_12, TK_LIT_13, TK_LIT_14, TK_LIT_15, TK_LIT_16, TK_LIT_17, TK_LIT_18, TK_LIT_19, TK_LIT_20, TK_LIT_21, TK_LIT_22, TK_LIT_23, TK_LIT_24, TK_LIT_25, TK_LIT_26, TK_LIT_27, TK_LIT_28, TK_LIT_29, TK_LIT_30, TK_LIT_31, TK_LIT_32, TK_LIT_33, TK_LIT_34, TK_LIT_35, TK_LIT_36, TK_LIT_37, TK_LIT_38, TK_LIT_39, TK_LIT_40, TK_LIT_41, TK_LIT_42, TK_LIT_43, TK_LIT_44, TK_LIT_45, TK_LIT_46, TK_LIT_47, TK_LIT_48, TK_LIT_49, TK_LIT_50, TK_LIT_51, TK_LIT_52, TK_LIT_53, TK_LIT_54, TK_LIT_55, TK_LIT_56, TK_LIT_57, TK_LIT_58, TK_LIT_59, TK_LIT_60, TK_LIT_61, TK_LIT_62, TK_LIT_63, TK_LIT_64, TK_LIT_65, TK_LIT_66])?;
         lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66_list.push(lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66);
     }
     return Result::<ANode, ParseError>::Ok(ANode {

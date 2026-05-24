@@ -29477,6 +29477,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_stylesheet(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -33212,7 +33230,7 @@ fn _parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comment_or_space_or_cdo_or_cdc = p.advance();
+            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc])?;
             comment_or_space_or_cdo_or_cdc_list.push(comment_or_space_or_cdo_or_cdc);
         }
         let charset_item = CharsetItemListItem {
@@ -33311,7 +33329,7 @@ fn _parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comment_or_space_or_cdo_or_cdc = p.advance();
+            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc])?;
             comment_or_space_or_cdo_or_cdc_list.push(comment_or_space_or_cdo_or_cdc);
         }
         let imports_item = ImportsItemListItem {
@@ -33410,7 +33428,7 @@ fn _parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comment_or_space_or_cdo_or_cdc = p.advance();
+            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc])?;
             comment_or_space_or_cdo_or_cdc_list.push(comment_or_space_or_cdo_or_cdc);
         }
         let namespace__item = NamespaceItemListItem {
@@ -33509,7 +33527,7 @@ fn _parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comment_or_space_or_cdo_or_cdc = p.advance();
+            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc])?;
             comment_or_space_or_cdo_or_cdc_list.push(comment_or_space_or_cdo_or_cdc);
         }
         let nested_statement_item = NestedStatementItemListItem {
@@ -34291,7 +34309,7 @@ fn _parse_media_query(p: &mut Parser) -> Result<MediaQueryNode, ParseError> {
             opt_scan_pos = pos;
         }
         let mediaonly_or_not: Option<Token> = if opt_scan_pos >= 0 {
-            let mediaonly_or_not = p.advance();
+            let mediaonly_or_not = p.match_set([TK_MediaOnly, TK_Not])?;
             Option::<Token>::Some(mediaonly_or_not)
         } else {
             null
@@ -35039,7 +35057,7 @@ fn _parse_attrib(p: &mut Parser) -> Result<AttribNode, ParseError> {
         opt_scan_pos = pos;
     }
     let item_ws_item_ws: Option<ItemWsItemWsItem> = if opt_scan_pos >= 0 {
-        let prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch = p.advance();
+        let prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch = p.match_set([TK_PrefixMatch, TK_SuffixMatch, TK_SubstringMatch, TK_LIT_EQ, TK_Includes, TK_DashMatch])?;
         let ws = _parse_ws(p)?;
         let mut group_0_inner: Option<AttribGroup0> = null;
         let grp_kind = p.peek_kind();
@@ -36199,7 +36217,7 @@ fn _parse_number(p: &mut Parser) -> Result<NumberNode, ParseError> {
         opt_scan_pos = pos;
     }
     let plus_or_minus: Option<Token> = if opt_scan_pos >= 0 {
-        let plus_or_minus = p.advance();
+        let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
         Option::<Token>::Some(plus_or_minus)
     } else {
         null
@@ -36237,7 +36255,7 @@ fn _parse_percentage(p: &mut Parser) -> Result<PercentageNode, ParseError> {
         opt_scan_pos = pos;
     }
     let plus_or_minus: Option<Token> = if opt_scan_pos >= 0 {
-        let plus_or_minus = p.advance();
+        let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
         Option::<Token>::Some(plus_or_minus)
     } else {
         null
@@ -36275,7 +36293,7 @@ fn _parse_dimension(p: &mut Parser) -> Result<DimensionNode, ParseError> {
         opt_scan_pos = pos;
     }
     let plus_or_minus: Option<Token> = if opt_scan_pos >= 0 {
-        let plus_or_minus = p.advance();
+        let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
         Option::<Token>::Some(plus_or_minus)
     } else {
         null
@@ -36313,7 +36331,7 @@ fn _parse_unknown_dimension(p: &mut Parser) -> Result<UnknownDimensionNode, Pars
         opt_scan_pos = pos;
     }
     let plus_or_minus: Option<Token> = if opt_scan_pos >= 0 {
-        let plus_or_minus = p.advance();
+        let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
         Option::<Token>::Some(plus_or_minus)
     } else {
         null
@@ -37440,7 +37458,7 @@ fn _parse_supports_declaration_condition(p: &mut Parser) -> Result<SupportsDecla
 
 fn _parse_general_enclosed(p: &mut Parser) -> Result<GeneralEnclosedNode, ParseError> {
     let start = p.peek().span.start;
-    let function__or_lparen = p.advance();
+    let function__or_lparen = p.match_set([TK_Function_, TK_LIT_LPAREN])?;
     let mut any__or_unused_list: Array<AnyOrUnusedGroup> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -37605,7 +37623,7 @@ fn _parse_calc_sum(p: &mut Parser) -> Result<CalcSumNode, ParseError> {
         if rep_scan_pos < 0 { break; }
         let space = p.expect(TK_Space)?;
         let ws = _parse_ws(p)?;
-        let plus_or_minus = p.advance();
+        let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
         let ws_2 = _parse_ws__follow_0(p)?;
         let space_2 = p.expect(TK_Space)?;
         let ws_3 = _parse_ws(p)?;
@@ -38066,7 +38084,7 @@ fn _parse_keyframe_block(p: &mut Parser) -> Result<KeyframeBlockNode, ParseError
 
 fn _parse_keyframe_selector(p: &mut Parser) -> Result<KeyframeSelectorNode, ParseError> {
     let start = p.peek().span.start;
-    let from__or_to_or_percentage = p.advance();
+    let from__or_to_or_percentage = p.match_set([TK_From, TK_To, TK_Percentage])?;
     let ws = _parse_ws(p)?;
     let mut comma_ws_item_ws_list: Array<CommaWsItemWsItem> = [];
     loop {
@@ -38114,7 +38132,7 @@ fn _parse_keyframe_selector(p: &mut Parser) -> Result<KeyframeSelectorNode, Pars
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_Comma)?;
         let ws = _parse_ws(p)?;
-        let from__or_to_or_percentage = p.advance();
+        let from__or_to_or_percentage = p.match_set([TK_From, TK_To, TK_Percentage])?;
         let ws_2 = _parse_ws(p)?;
         let comma_ws_item_ws = CommaWsItemWsItem {
             comma,
@@ -38539,7 +38557,7 @@ fn _parse_ws(p: &mut Parser) -> Result<WsNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comment_or_space = p.advance();
+        let comment_or_space = p.match_set([TK_Comment, TK_Space])?;
         comment_or_space_list.push(comment_or_space);
     }
     return Result::<WsNode, ParseError>::Ok(WsNode {
@@ -38603,7 +38621,7 @@ fn _parse_ws__follow_0(p: &mut Parser) -> Result<WsNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comment_or_space = p.advance();
+        let comment_or_space = p.match_set([TK_Comment, TK_Space])?;
         comment_or_space_list.push(comment_or_space);
     }
     return Result::<WsNode, ParseError>::Ok(WsNode {

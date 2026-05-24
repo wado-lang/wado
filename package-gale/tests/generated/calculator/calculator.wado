@@ -1583,6 +1583,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_equation(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -1903,7 +1921,7 @@ fn _parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let plus_or_minus = p.advance();
+        let plus_or_minus = p.match_set([TK_PLUS, TK_MINUS])?;
         let multiplying_expression = _parse_multiplying_expression(p)?;
         let item_multiplying_expression = ItemMultiplyingExpressionItem {
             plus_or_minus,
@@ -1955,7 +1973,7 @@ fn _parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpression
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let times_or_div = p.advance();
+        let times_or_div = p.match_set([TK_TIMES, TK_DIV])?;
         let pow_expression = _parse_pow_expression(p)?;
         let item_pow_expression = ItemPowExpressionItem {
             times_or_div,

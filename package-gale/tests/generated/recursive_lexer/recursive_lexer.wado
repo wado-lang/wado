@@ -873,6 +873,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_file(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -951,7 +969,7 @@ fn _parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let block_or_ident = p.advance();
+        let block_or_ident = p.match_set([TK_BLOCK, TK_IDENT])?;
         block_or_ident_list.push(block_or_ident);
     }
     let eof = p.expect(TK_EOF)?;

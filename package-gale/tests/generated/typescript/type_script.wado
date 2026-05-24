@@ -8135,6 +8135,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_initializer(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -15668,7 +15686,7 @@ fn _parse_type__bt_0(p: &mut Parser) -> Result<TypeNode, ParseError> {
         opt_scan_pos = pos;
     }
     let pipe_or_amp: Option<Token> = if opt_scan_pos >= 0 {
-        let pipe_or_amp = p.advance();
+        let pipe_or_amp = p.match_set([TK_LIT_PIPE, TK_LIT_AMP])?;
         Option::<Token>::Some(pipe_or_amp)
     } else {
         null
@@ -16353,7 +16371,7 @@ fn _parse_type_body(p: &mut Parser) -> Result<TypeBodyNode, ParseError> {
         opt_scan_pos = pos;
     }
     let semicolon_or_comma: Option<Token> = if opt_scan_pos >= 0 {
-        let semicolon_or_comma = p.advance();
+        let semicolon_or_comma = p.match_set([TK_SemiColon, TK_LIT_COMMA])?;
         Option::<Token>::Some(semicolon_or_comma)
     } else {
         null
@@ -16402,7 +16420,7 @@ fn _parse_type_member_list(p: &mut Parser) -> Result<TypeMemberListNode, ParseEr
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let semicolon_or_comma = p.advance();
+        let semicolon_or_comma = p.match_set([TK_SemiColon, TK_LIT_COMMA])?;
         let type_member = _parse_type_member(p)?;
         let item_type_member = ItemTypeMemberItem {
             semicolon_or_comma,
@@ -17293,7 +17311,7 @@ fn _parse_index_signature(p: &mut Parser) -> Result<IndexSignatureNode, ParseErr
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let identifier = _parse_identifier(p)?;
     let colon = p.expect(TK_LIT_COLON)?;
-    let number_or_string = p.advance();
+    let number_or_string = p.match_set([TK_Number, TK_String])?;
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
     let type_annotation = _parse_type_annotation(p)?;
     return Result::<IndexSignatureNode, ParseError>::Ok(IndexSignatureNode {
@@ -20927,7 +20945,7 @@ fn _parse_return_statement(p: &mut Parser) -> Result<ReturnStatementNode, ParseE
 
 fn _parse_yield_statement(p: &mut Parser) -> Result<YieldStatementNode, ParseError> {
     let start = p.peek().span.start;
-    let yield_or_yieldstar = p.advance();
+    let yield_or_yieldstar = p.match_set([TK_Yield, TK_YieldStar])?;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.tokens;
@@ -22808,7 +22826,7 @@ fn _parse_property_assignment_scan_4(tokens: &Array<Token>, pos: i32) -> i32 {
 fn _parse_property_assignment_bt_0(p: &mut Parser) -> Result<PropertyAssignmentNode, ParseError> {
     let start = p.peek().span.start;
     let property_name = _parse_property_name(p)?;
-    let colon_or_eq = p.advance();
+    let colon_or_eq = p.match_set([TK_LIT_COLON, TK_LIT_EQ])?;
     let single_expression = _parse_single_expression(p)?;
     return Result::<PropertyAssignmentNode, ParseError>::Ok(PropertyAssignmentNode::PropertyExpressionAssignment(PropertyAssignmentPropertyExpressionAssignment {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -24385,7 +24403,7 @@ fn _parse_single_expression_lr_21(p: &mut Parser, left: SingleExpressionNode, st
 }
 
 fn _parse_single_expression_lr_22(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
-    let star_or_slash_or_percent = p.advance();
+    let star_or_slash_or_percent = p.match_set([TK_LIT_STAR, TK_LIT_SLASH, TK_LIT_PERCENT])?;
     let single_expression_2 = _parse_single_expression(p, 20)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::MultiplicativeExpression(SingleExpressionMultiplicativeExpression {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -24396,7 +24414,7 @@ fn _parse_single_expression_lr_22(p: &mut Parser, left: SingleExpressionNode, st
 }
 
 fn _parse_single_expression_lr_23(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
-    let plus_or_minus = p.advance();
+    let plus_or_minus = p.match_set([TK_LIT_PLUS, TK_LIT_MINUS])?;
     let single_expression_2 = _parse_single_expression(p, 19)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::AdditiveExpression(SingleExpressionAdditiveExpression {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -24470,7 +24488,7 @@ fn _parse_single_expression_lr_25(p: &mut Parser, left: SingleExpressionNode, st
 }
 
 fn _parse_single_expression_lr_26(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
-    let lt_or_gt_or_lit_lteq_or_lit_gteq = p.advance();
+    let lt_or_gt_or_lit_lteq_or_lit_gteq = p.match_set([TK_LIT_LT, TK_LIT_GT, TK_LIT_LTEQ, TK_LIT_GTEQ])?;
     let single_expression_2 = _parse_single_expression(p, 16)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::RelationalExpression(SingleExpressionRelationalExpression {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -24503,7 +24521,7 @@ fn _parse_single_expression_lr_28(p: &mut Parser, left: SingleExpressionNode, st
 }
 
 fn _parse_single_expression_lr_29(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
-    let lit_eqeq_or_lit_bangeq_or_lit_eqeqeq_or_lit_bangeqeq = p.advance();
+    let lit_eqeq_or_lit_bangeq_or_lit_eqeqeq_or_lit_bangeqeq = p.match_set([TK_LIT_EQEQ, TK_LIT_BANGEQ, TK_LIT_EQEQEQ, TK_LIT_BANGEQEQ])?;
     let single_expression_2 = _parse_single_expression(p, 13)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::EqualityExpression(SingleExpressionEqualityExpression {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -30929,7 +30947,7 @@ fn _parse_single_expression__follow_1_lr_21(p: &mut Parser, left: SingleExpressi
 }
 
 fn _parse_single_expression__follow_1_lr_22(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
-    let star_or_slash_or_percent = p.advance();
+    let star_or_slash_or_percent = p.match_set([TK_LIT_STAR, TK_LIT_SLASH, TK_LIT_PERCENT])?;
     let single_expression_2 = _parse_single_expression__follow_1(p, 20)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::MultiplicativeExpression(SingleExpressionMultiplicativeExpression {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -30940,7 +30958,7 @@ fn _parse_single_expression__follow_1_lr_22(p: &mut Parser, left: SingleExpressi
 }
 
 fn _parse_single_expression__follow_1_lr_23(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
-    let plus_or_minus = p.advance();
+    let plus_or_minus = p.match_set([TK_LIT_PLUS, TK_LIT_MINUS])?;
     let single_expression_2 = _parse_single_expression__follow_1(p, 19)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::AdditiveExpression(SingleExpressionAdditiveExpression {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -31014,7 +31032,7 @@ fn _parse_single_expression__follow_1_lr_25(p: &mut Parser, left: SingleExpressi
 }
 
 fn _parse_single_expression__follow_1_lr_26(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
-    let lt_or_gt_or_lit_lteq_or_lit_gteq = p.advance();
+    let lt_or_gt_or_lit_lteq_or_lit_gteq = p.match_set([TK_LIT_LT, TK_LIT_GT, TK_LIT_LTEQ, TK_LIT_GTEQ])?;
     let single_expression_2 = _parse_single_expression__follow_1(p, 16)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::RelationalExpression(SingleExpressionRelationalExpression {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -31047,7 +31065,7 @@ fn _parse_single_expression__follow_1_lr_28(p: &mut Parser, left: SingleExpressi
 }
 
 fn _parse_single_expression__follow_1_lr_29(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
-    let lit_eqeq_or_lit_bangeq_or_lit_eqeqeq_or_lit_bangeqeq = p.advance();
+    let lit_eqeq_or_lit_bangeq_or_lit_eqeqeq_or_lit_bangeqeq = p.match_set([TK_LIT_EQEQ, TK_LIT_BANGEQ, TK_LIT_EQEQEQ, TK_LIT_BANGEQEQ])?;
     let single_expression_2 = _parse_single_expression__follow_1(p, 13)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::EqualityExpression(SingleExpressionEqualityExpression {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -33450,7 +33468,7 @@ fn scan_yield_statement__follow_16(tokens: &Array<Token>, pos: i32, min_prec: i3
 
 fn _parse_yield_statement__follow_16(p: &mut Parser) -> Result<YieldStatementNode, ParseError> {
     let start = p.peek().span.start;
-    let yield_or_yieldstar = p.advance();
+    let yield_or_yieldstar = p.match_set([TK_Yield, TK_YieldStar])?;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.tokens;

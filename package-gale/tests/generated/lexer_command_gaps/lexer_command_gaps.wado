@@ -993,6 +993,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_text(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -1063,7 +1081,7 @@ fn _parse_text(p: &mut Parser) -> Result<TextNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let word_or_number_or_pragma = p.advance();
+        let word_or_number_or_pragma = p.match_set([TK_WORD, TK_NUMBER, TK_PRAGMA])?;
         word_or_number_or_pragma_list.push(word_or_number_or_pragma);
     }
     let eof = p.expect(TK_EOF)?;
