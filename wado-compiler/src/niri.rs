@@ -1089,13 +1089,23 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Rewrite a `match` expression. Two reductions:
+    /// Rewrite a `match` expression. Three reductions:
     ///
     /// 1. **Const scrutinee**: pick the first arm whose pattern provably
     ///    matches (no guard, definite `Yes`) and replace the `Match`
     ///    with `Block { stmts: [Expr(arm.body)] }`. An earlier `Unknown`
     ///    arm prevents us from proving a definite arm fires first; bail.
-    /// 2. **Non-const speculatable scrutinee, all-arms-equal collapse**:
+    /// 2. **`match X { Pat => true, _ => false }` collapse**: shrinks
+    ///    the two-arm boolean-discriminator shape produced by
+    ///    `x matches { Pat }` to the direct discriminator expression.
+    ///    Today covers `NirPattern::Enum` (replaced with
+    ///    `Binary { Eq, X, EnumConstruct(case) }`) — `NirPattern::Variant`
+    ///    is left intact because synthesising the matching `VariantTest`
+    ///    requires a variant→case-index lookup the interpreter doesn't
+    ///    yet carry. Preserves `X`'s evaluation, so no
+    ///    speculatable-ness gate applies. Fires before `match_to_switch`
+    ///    so the synthesised expression reaches subsequent passes.
+    /// 3. **Non-const speculatable scrutinee, all-arms-equal collapse**:
     ///    when every arm has no guard and reduces to the same
     ///    `Const(v)`, rewrite the whole match to that literal. The
     ///    same `is_speculatable` gate as the `if` rule applies, since
@@ -1150,7 +1160,21 @@ impl<'a> Interpreter<'a> {
             return true;
         }
 
-        // Rule 2: non-const speculatable scrutinee, all-arms-equal.
+        // Rule 2: `match X { Pat => true, _ => false } → <discriminator>`.
+        // Scrutinee is preserved (inside the synthesised Binary / VariantTest),
+        // so no speculatable-ness gate is needed.
+        if let Some(replacement) = try_match_bool_discriminator(arms) {
+            let NirExprKind::Match {
+                expr: scrut_box, ..
+            } = std::mem::replace(&mut expr.kind, NirExprKind::Unit)
+            else {
+                unreachable!();
+            };
+            expr.kind = replacement.into_kind(scrut_box);
+            return true;
+        }
+
+        // Rule 3: non-const speculatable scrutinee, all-arms-equal.
         if !is_speculatable(scrutinee) {
             return false;
         }
@@ -2011,6 +2035,92 @@ fn rewrite_short_circuit(expr: &mut NirExpr) -> bool {
         Pick::Right => *right,
     };
     true
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// `match X { Pat => true, _ => false }` discriminator collapse
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// The replacement shape produced by `try_match_bool_discriminator`. The
+/// scrutinee box is plugged in by the caller once it has taken ownership
+/// of the original `Match` expression.
+///
+/// Only the `EnumEq` shape exists today; `NirPattern::Variant` is left
+/// intact because synthesising the matching `VariantTest` requires a
+/// variant→case-index lookup that the pattern itself doesn't carry
+/// (the WIR builder resolves it via the variant decl's case list,
+/// which the interpreter doesn't carry today). The fpfmt motivator
+/// (`SpecialKind`) is an `enum`, so the Enum-only scope is sufficient
+/// for this PR; expanding to `Variant` is a follow-up.
+struct EnumEqReplacement {
+    enum_type: TypeId,
+    case_index: u32,
+    case_name: String,
+    span: crate::token::Span,
+}
+
+impl EnumEqReplacement {
+    fn into_kind(self, scrut: Box<NirExpr>) -> NirExprKind {
+        let right = Box::new(NirExpr::new(
+            NirExprKind::EnumConstruct {
+                enum_type: self.enum_type,
+                case_index: self.case_index,
+                case_name: self.case_name,
+            },
+            self.enum_type,
+            self.span,
+        ));
+        NirExprKind::Binary {
+            left: scrut,
+            op: NirBinaryOp::Eq,
+            right,
+        }
+    }
+}
+
+/// Recognise the `match X { Enum::Case => true, _ => false }` shape and,
+/// if it matches, return the discriminator replacement that subsumes the
+/// match's boolean meaning.
+///
+/// Accepts:
+/// - Exactly two arms, no guards.
+/// - First arm pattern is `NirPattern::Enum`.
+/// - Second arm pattern is `NirPattern::Wildcard`.
+/// - First arm body is `BoolLiteral(true)`, second arm body is
+///   `BoolLiteral(false)`. The inverted polarity is intentionally not
+///   handled here — the natural source for it is `!(x matches Pat)`,
+///   which already emits the negation outside the (non-inverted)
+///   match.
+fn try_match_bool_discriminator(arms: &[NirMatchArm]) -> Option<EnumEqReplacement> {
+    let [yes_arm, no_arm] = arms else {
+        return None;
+    };
+    if yes_arm.guard.is_some() || no_arm.guard.is_some() {
+        return None;
+    }
+    if !matches!(no_arm.pattern, NirPattern::Wildcard) {
+        return None;
+    }
+    if !matches!(yes_arm.body.kind, NirExprKind::BoolLiteral(true)) {
+        return None;
+    }
+    if !matches!(no_arm.body.kind, NirExprKind::BoolLiteral(false)) {
+        return None;
+    }
+    let NirPattern::Enum {
+        enum_type,
+        case_name,
+        case_index,
+    } = &yes_arm.pattern
+    else {
+        return None;
+    };
+    Some(EnumEqReplacement {
+        enum_type: *enum_type,
+        case_index: *case_index,
+        case_name: case_name.clone(),
+        span: yes_arm.body.span,
+    })
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

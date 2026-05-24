@@ -2507,6 +2507,176 @@ fn reduce_local_rewrites_const_match_to_arm_body_block() {
     assert_eq!(value, 20);
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// `match X { CasePattern => true, _ => false }` collapse (A2)
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn reduce_local_collapses_enum_match_true_false_to_eq() {
+    // `match X { Enum::Case => true, _ => false }` → `X == Enum::Case`.
+    // The enum_type is opaque to niri (passed through to the synthesised
+    // EnumConstruct + Binary::Eq), so the test uses a stand-in TypeId
+    // for the enum.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let enum_ty = TypeTable::I32; // stand-in; not inspected by the rule
+    let mut expr = match_expr(
+        local_expr(0, enum_ty),
+        vec![
+            arm(
+                NirPattern::Enum {
+                    enum_type: enum_ty,
+                    case_name: "Case".to_string(),
+                    case_index: 3,
+                },
+                bool_lit(true),
+            ),
+            arm(NirPattern::Wildcard, bool_lit(false)),
+        ],
+        TypeTable::BOOL,
+    );
+    assert!(interp.reduce_local(&mut expr));
+    let NirExprKind::Binary { left, op, right } = &expr.kind else {
+        panic!("expected Binary, got {:?}", expr.kind);
+    };
+    assert!(matches!(op, NirBinaryOp::Eq));
+    let NirExprKind::Local { index, .. } = left.kind else {
+        panic!("expected Local on left, got {:?}", left.kind);
+    };
+    assert_eq!(index, 0);
+    let NirExprKind::EnumConstruct {
+        case_index,
+        case_name,
+        ..
+    } = &right.kind
+    else {
+        panic!("expected EnumConstruct on right, got {:?}", right.kind);
+    };
+    assert_eq!(*case_index, 3);
+    assert_eq!(case_name, "Case");
+}
+
+#[test]
+fn reduce_local_leaves_variant_match_alone() {
+    // `match X { Some(_) => true, _ => false }` over a `NirPattern::Variant`
+    // is left intact for now — synthesising the matching `VariantTest`
+    // requires a variant→case-index registry the interpreter doesn't
+    // carry. Tracked as a follow-up; the `Enum` arm above is what the
+    // fpfmt motivator (`SpecialKind`) needs.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let scrut_ty = TypeTable::I32;
+    let mut expr = match_expr(
+        local_expr(0, scrut_ty),
+        vec![
+            arm(
+                NirPattern::Variant {
+                    enum_type: scrut_ty,
+                    variant_name: "Some".to_string(),
+                    bindings: vec![NirPattern::Wildcard],
+                    payload_type: TypeTable::I32,
+                },
+                bool_lit(true),
+            ),
+            arm(NirPattern::Wildcard, bool_lit(false)),
+        ],
+        TypeTable::BOOL,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+}
+
+#[test]
+fn reduce_local_leaves_match_with_guard_alone() {
+    // A guarded arm forces the fallthrough to depend on the guard's
+    // runtime value; collapsing to a discriminator test would lose
+    // that gate. Stay structurally intact.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let scrut_ty = TypeTable::I32;
+    let mut expr = match_expr(
+        local_expr(0, scrut_ty),
+        vec![
+            arm_with_guard(
+                NirPattern::Enum {
+                    enum_type: scrut_ty,
+                    case_name: "Case".to_string(),
+                    case_index: 1,
+                },
+                local_expr(2, TypeTable::BOOL),
+                bool_lit(true),
+            ),
+            arm(NirPattern::Wildcard, bool_lit(false)),
+        ],
+        TypeTable::BOOL,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+}
+
+#[test]
+fn reduce_local_leaves_match_with_three_arms_alone() {
+    // The rule targets the specific two-arm `P => true, _ => false`
+    // shape. Three arms (even with bool-literal bodies) fall outside
+    // the rewrite — the second arm pattern is not the catch-all
+    // wildcard.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let scrut_ty = TypeTable::I32;
+    let mut expr = match_expr(
+        local_expr(0, scrut_ty),
+        vec![
+            arm(
+                NirPattern::Enum {
+                    enum_type: scrut_ty,
+                    case_name: "A".to_string(),
+                    case_index: 0,
+                },
+                bool_lit(true),
+            ),
+            arm(
+                NirPattern::Enum {
+                    enum_type: scrut_ty,
+                    case_name: "B".to_string(),
+                    case_index: 1,
+                },
+                bool_lit(true),
+            ),
+            arm(NirPattern::Wildcard, bool_lit(false)),
+        ],
+        TypeTable::BOOL,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+}
+
+#[test]
+fn reduce_local_leaves_match_with_non_bool_body_alone() {
+    // The rule requires both arm bodies to be bool literals. An int
+    // body falls through to the all-arms-equal collapse (which doesn't
+    // match since the bodies are distinct) and the match stays put.
+    let table = TypeTable::new();
+    let mut interp = Interpreter::new(&table);
+    let scrut_ty = TypeTable::I32;
+    let mut expr = match_expr(
+        local_expr(0, scrut_ty),
+        vec![
+            arm(
+                NirPattern::Enum {
+                    enum_type: scrut_ty,
+                    case_name: "Case".to_string(),
+                    case_index: 0,
+                },
+                int_lit(1, TypeTable::I32, "1"),
+            ),
+            arm(NirPattern::Wildcard, int_lit(0, TypeTable::I32, "0")),
+        ],
+        TypeTable::I32,
+    );
+    assert!(!interp.reduce_local(&mut expr));
+    assert!(matches!(expr.kind, NirExprKind::Match { .. }));
+}
+
 #[test]
 fn reduce_local_collapses_equal_arm_match_to_literal() {
     // Non-const speculatable scrutinee with all arms producing the same
