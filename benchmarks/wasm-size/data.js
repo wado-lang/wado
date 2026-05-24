@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779595070452,
+  "lastUpdate": 1779603754186,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25401,6 +25401,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/02fecc775b945f01fa6788a537f283116e571caa"
         },
         "date": 1779595070208,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17246,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 461807,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ea70f9adfd346d3333cfc505a96a4d466da43ff5",
+          "message": "Merge pull request #1173 from wado-lang/claude/e2e-rs-performance-xXtuK\n\nchore(mise): raise `test` threads from 2 to nproc-1",
+          "timestamp": "2026-05-24T15:16:08+09:00",
+          "tree_id": "cd5f4e9dbad58d4af0f4f4026992c03ea457c529",
+          "url": "https://github.com/wado-lang/wado/commit/ea70f9adfd346d3333cfc505a96a4d466da43ff5"
+        },
+        "date": 1779603753726,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
