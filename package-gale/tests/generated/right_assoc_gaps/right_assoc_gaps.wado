@@ -913,7 +913,7 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_INT {
@@ -930,9 +930,9 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     ));
 }
 
-fn parse_expr_lr_0(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr_lr_0(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let caret = p.expect(TK_LIT_CARET)?;
-    let expr_2 = parse_expr(p, 2)?;
+    let expr_2 = _parse_expr(p, 2)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Pow(ExprPow {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -941,9 +941,9 @@ fn parse_expr_lr_0(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
     }));
 }
 
-fn parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let plus = p.expect(TK_LIT_PLUS)?;
-    let expr_2 = parse_expr(p, 2)?;
+    let expr_2 = _parse_expr(p, 2)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Add(ExprAdd {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -952,9 +952,9 @@ fn parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
     }));
 }
 
-fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
+fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = parse_expr_atom(p)?;
+    let mut result = _parse_expr_atom(p)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_LIT_CARET {
@@ -962,7 +962,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
                 if scan_expr_lr_0(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_expr_lr_0(p, result, start)?;
+                result = _parse_expr_lr_0(p, result, start)?;
             } else {
                 break;
             }
@@ -971,7 +971,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
                 if scan_expr_lr_1(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_expr_lr_1(p, result, start)?;
+                result = _parse_expr_lr_1(p, result, start)?;
             } else {
                 break;
             }
@@ -982,10 +982,14 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
     return Result::<ExprNode, ParseError>::Ok(result);
 }
 
-pub fn parse(input: &String) -> Result<ExprNode, ParseError> {
+pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_expr(&mut parser);
+    return _parse_expr(&mut parser, 0);
+}
+
+pub fn parse(input: &String) -> Result<ExprNode, ParseError> {
+    return parse_expr(input);
 }
 
 pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {

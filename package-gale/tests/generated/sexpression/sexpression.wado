@@ -1334,7 +1334,7 @@ fn scan_atom(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return -1;
 }
 
-fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
+fn _parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
     let start = p.peek().span.start;
     let mut item_list: Array<ItemNode> = [];
     loop {
@@ -1348,7 +1348,7 @@ fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let item = parse_item(p)?;
+        let item = _parse_item(p)?;
         item_list.push(item);
     }
     let eof = p.expect(TK_EOF)?;
@@ -1359,12 +1359,12 @@ fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
     });
 }
 
-fn parse_item_bt_2(p: &mut Parser) -> Result<ItemNode, ParseError> {
+fn _parse_item_bt_2(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
-    let item = parse_item(p)?;
+    let item = _parse_item(p)?;
     let dot = p.expect(TK_DOT)?;
-    let item_2 = parse_item(p)?;
+    let item_2 = _parse_item(p)?;
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt2(ItemAlt2 {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1376,7 +1376,7 @@ fn parse_item_bt_2(p: &mut Parser) -> Result<ItemNode, ParseError> {
     }));
 }
 
-fn parse_item_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_item_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
@@ -1391,27 +1391,27 @@ fn parse_item_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_item_bt_1(p: &mut Parser) -> Result<ItemNode, ParseError> {
+fn _parse_item_bt_1(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
-    let list_ = parse_list_(p)?;
+    let list_ = _parse_list_(p)?;
     return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt1(ItemAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         list_,
     }));
 }
 
-fn parse_item_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_item_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_list_(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
+fn _parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
-        let atom = parse_atom(p)?;
+        let atom = _parse_atom(p)?;
         return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt0(ItemAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             atom,
@@ -1421,8 +1421,8 @@ fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
         if p.peek_kind() == TK_LPAREN {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_2 = parse_item_scan_2(_sd_tokens, _sd_pos);
-            let _sd_p_1 = parse_item_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_item_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_item_scan_1(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_2 > _sd_best_p {
@@ -1434,12 +1434,12 @@ fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
                 _sd_best_i = 1;
             }
             if _sd_best_i == 2 {
-                return parse_item_bt_2(p);
+                return _parse_item_bt_2(p);
             }
             if _sd_best_i == 1 {
-                return parse_item_bt_1(p);
+                return _parse_item_bt_1(p);
             }
-            return parse_item_bt_1(p);
+            return _parse_item_bt_1(p);
         }
     }
     return Result::<ItemNode, ParseError>::Err(ParseError::new(
@@ -1449,7 +1449,7 @@ fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     ));
 }
 
-fn parse_list_(p: &mut Parser) -> Result<ListNode, ParseError> {
+fn _parse_list_(p: &mut Parser) -> Result<ListNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
     let mut item_list: Array<ItemNode> = [];
@@ -1464,7 +1464,7 @@ fn parse_list_(p: &mut Parser) -> Result<ListNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let item = parse_item(p)?;
+        let item = _parse_item(p)?;
         item_list.push(item);
     }
     let rparen = p.expect(TK_RPAREN)?;
@@ -1476,7 +1476,7 @@ fn parse_list_(p: &mut Parser) -> Result<ListNode, ParseError> {
     });
 }
 
-fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
+fn _parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_STRING {
@@ -1514,10 +1514,32 @@ fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
     ));
 }
 
-pub fn parse(input: &String) -> Result<SexprNode, ParseError> {
+pub fn parse_sexpr(input: &String) -> Result<SexprNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_sexpr(&mut parser);
+    return _parse_sexpr(&mut parser);
+}
+
+pub fn parse_item(input: &String) -> Result<ItemNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_item(&mut parser);
+}
+
+pub fn parse_list_(input: &String) -> Result<ListNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_list_(&mut parser);
+}
+
+pub fn parse_atom(input: &String) -> Result<AtomNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_atom(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<SexprNode, ParseError> {
+    return parse_sexpr(input);
 }
 
 pub fn walk_sexpr<V: Visitor>(v: &mut V, node: &SexprNode) {

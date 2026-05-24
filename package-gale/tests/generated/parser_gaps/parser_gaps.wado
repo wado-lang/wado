@@ -1137,7 +1137,7 @@ fn scan_any_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
+fn _parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     let start = p.peek().span.start;
     let mut stmt_list: Array<StmtNode> = [];
     loop {
@@ -1151,7 +1151,7 @@ fn parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let stmt = parse_stmt(p)?;
+        let stmt = _parse_stmt(p)?;
         stmt_list.push(stmt);
     }
     let eof = p.expect(TK_EOF)?;
@@ -1162,25 +1162,25 @@ fn parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     });
 }
 
-fn parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
+fn _parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIST {
-        let list_stmt = parse_list_stmt(p)?;
+        let list_stmt = _parse_list_stmt(p)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt0(StmtAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             list_stmt,
         }));
     }
     if _gale_kind_set_1(kind) {
-        let not_stmt = parse_not_stmt(p)?;
+        let not_stmt = _parse_not_stmt(p)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt1(StmtAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             not_stmt,
         }));
     }
     if kind == TK_ANY {
-        let any_stmt = parse_any_stmt(p)?;
+        let any_stmt = _parse_any_stmt(p)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt2(StmtAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             any_stmt,
@@ -1193,7 +1193,7 @@ fn parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
     ));
 }
 
-fn parse_list_stmt(p: &mut Parser) -> Result<ListStmtNode, ParseError> {
+fn _parse_list_stmt(p: &mut Parser) -> Result<ListStmtNode, ParseError> {
     let start = p.peek().span.start;
     let list = p.expect(TK_LIST)?;
     let mut items: Array<Token> = [];
@@ -1239,7 +1239,7 @@ fn parse_list_stmt(p: &mut Parser) -> Result<ListStmtNode, ParseError> {
     });
 }
 
-fn parse_not_stmt(p: &mut Parser) -> Result<NotStmtNode, ParseError> {
+fn _parse_not_stmt(p: &mut Parser) -> Result<NotStmtNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_NOT {
@@ -1271,7 +1271,7 @@ fn parse_not_stmt(p: &mut Parser) -> Result<NotStmtNode, ParseError> {
     ));
 }
 
-fn parse_any_stmt(p: &mut Parser) -> Result<AnyStmtNode, ParseError> {
+fn _parse_any_stmt(p: &mut Parser) -> Result<AnyStmtNode, ParseError> {
     let start = p.peek().span.start;
     let any = p.expect(TK_ANY)?;
     let wildcard = p.match_any()?;
@@ -1284,10 +1284,38 @@ fn parse_any_stmt(p: &mut Parser) -> Result<AnyStmtNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<ProgramNode, ParseError> {
+pub fn parse_program(input: &String) -> Result<ProgramNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_program(&mut parser);
+    return _parse_program(&mut parser);
+}
+
+pub fn parse_stmt(input: &String) -> Result<StmtNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_stmt(&mut parser);
+}
+
+pub fn parse_list_stmt(input: &String) -> Result<ListStmtNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_list_stmt(&mut parser);
+}
+
+pub fn parse_not_stmt(input: &String) -> Result<NotStmtNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_not_stmt(&mut parser);
+}
+
+pub fn parse_any_stmt(input: &String) -> Result<AnyStmtNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_any_stmt(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<ProgramNode, ParseError> {
+    return parse_program(input);
 }
 
 pub fn walk_program<V: Visitor>(v: &mut V, node: &ProgramNode) {

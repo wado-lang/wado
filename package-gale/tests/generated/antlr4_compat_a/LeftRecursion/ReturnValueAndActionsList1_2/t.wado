@@ -1019,9 +1019,9 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
-    let expr = parse_expr(p)?;
+    let expr = _parse_expr(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<SNode, ParseError>::Ok(SNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1030,7 +1030,7 @@ fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     });
 }
 
-fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_ID {
@@ -1047,9 +1047,9 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     ));
 }
 
-fn parse_expr_lr_0(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr_lr_0(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let star = p.expect(TK_LIT_STAR)?;
-    let expr = parse_expr(p, 3)?;
+    let expr = _parse_expr(p, 3)?;
     let a_2 = expr;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Factor(ExprFactor {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1059,7 +1059,7 @@ fn parse_expr_lr_0(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
     }));
 }
 
-fn parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let mut comma_b_list: Array<CommaBItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -1082,7 +1082,7 @@ fn parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_LIT_COMMA)?;
         let mut b: Array<ExprNode> = [];
-        let expr = parse_expr(p)?;
+        let expr = _parse_expr(p)?;
         b.push(expr);
         let comma_b = CommaBItem {
             comma,
@@ -1091,7 +1091,7 @@ fn parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
         comma_b_list.push(comma_b);
     }
     let lit_gtgt = p.expect(TK_LIT_GTGT)?;
-    let expr = parse_expr(p, 2)?;
+    let expr = _parse_expr(p, 2)?;
     let c = expr;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Send(ExprSend {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1102,9 +1102,9 @@ fn parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
     }));
 }
 
-fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
+fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = parse_expr_atom(p)?;
+    let mut result = _parse_expr_atom(p)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_LIT_STAR {
@@ -1112,7 +1112,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
                 if scan_expr_lr_0(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_expr_lr_0(p, result, start)?;
+                result = _parse_expr_lr_0(p, result, start)?;
             } else {
                 break;
             }
@@ -1121,7 +1121,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
                 if scan_expr_lr_1(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_expr_lr_1(p, result, start)?;
+                result = _parse_expr_lr_1(p, result, start)?;
             } else {
                 break;
             }
@@ -1132,10 +1132,20 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
     return Result::<ExprNode, ParseError>::Ok(result);
 }
 
-pub fn parse(input: &String) -> Result<SNode, ParseError> {
+pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_s(&mut parser);
+    return _parse_s(&mut parser);
+}
+
+pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_expr(&mut parser, 0);
+}
+
+pub fn parse(input: &String) -> Result<SNode, ParseError> {
+    return parse_s(input);
 }
 
 pub fn walk_s<V: Visitor>(v: &mut V, node: &SNode) {

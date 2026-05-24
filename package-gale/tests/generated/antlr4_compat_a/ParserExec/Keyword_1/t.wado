@@ -861,7 +861,7 @@ fn scan_state(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return -1;
 }
 
-fn parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
+fn _parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     let start = p.peek().span.start;
     let mut state_list: Array<StateNode> = [];
     loop {
@@ -875,7 +875,7 @@ fn parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let state = parse_state(p)?;
+        let state = _parse_state(p)?;
         state_list.push(state);
     }
     let eof = p.expect(TK_EOF)?;
@@ -886,7 +886,7 @@ fn parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     });
 }
 
-fn parse_state(p: &mut Parser) -> Result<StateNode, ParseError> {
+fn _parse_state(p: &mut Parser) -> Result<StateNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_BREAKSEMI {
@@ -917,10 +917,20 @@ fn parse_state(p: &mut Parser) -> Result<StateNode, ParseError> {
     ));
 }
 
-pub fn parse(input: &String) -> Result<ProgramNode, ParseError> {
+pub fn parse_program(input: &String) -> Result<ProgramNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_program(&mut parser);
+    return _parse_program(&mut parser);
+}
+
+pub fn parse_state(input: &String) -> Result<StateNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_state(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<ProgramNode, ParseError> {
+    return parse_program(input);
 }
 
 pub fn walk_program<V: Visitor>(v: &mut V, node: &ProgramNode) {

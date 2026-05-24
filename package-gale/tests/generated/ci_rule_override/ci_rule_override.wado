@@ -923,7 +923,7 @@ fn scan_line(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_line(p: &mut Parser) -> Result<LineNode, ParseError> {
+fn _parse_line(p: &mut Parser) -> Result<LineNode, ParseError> {
     let start = p.peek().span.start;
     let mut keyword_or_ident_or_exact_list: Array<Token> = [];
     let mut _plus_first = true;
@@ -972,10 +972,14 @@ fn parse_line(p: &mut Parser) -> Result<LineNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<LineNode, ParseError> {
+pub fn parse_line(input: &String) -> Result<LineNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_line(&mut parser);
+    return _parse_line(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<LineNode, ParseError> {
+    return parse_line(input);
 }
 
 pub fn walk_line<V: Visitor>(v: &mut V, node: &LineNode) {

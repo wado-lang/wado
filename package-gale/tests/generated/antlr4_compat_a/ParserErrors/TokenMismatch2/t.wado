@@ -992,12 +992,12 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_stat(p: &mut Parser) -> Result<StatNode, ParseError> {
+fn _parse_stat(p: &mut Parser) -> Result<StatNode, ParseError> {
     let start = p.peek().span.start;
     let lparen_expr_rparen: Option<LparenExprOptRparenItem> = if p.peek_kind() == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let expr: Option<ExprNode> = if p.peek_kind() == TK_ID {
-            let expr = parse_expr(p)?;
+            let expr = _parse_expr(p)?;
             Option::<ExprNode>::Some(expr)
         } else {
             null
@@ -1020,7 +1020,7 @@ fn parse_stat(p: &mut Parser) -> Result<StatNode, ParseError> {
     });
 }
 
-fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let eq = p.expect(TK_LIT_EQ)?;
@@ -1033,10 +1033,20 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<StatNode, ParseError> {
+pub fn parse_stat(input: &String) -> Result<StatNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_stat(&mut parser);
+    return _parse_stat(&mut parser);
+}
+
+pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_expr(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<StatNode, ParseError> {
+    return parse_stat(input);
 }
 
 pub fn walk_stat<V: Visitor>(v: &mut V, node: &StatNode) {

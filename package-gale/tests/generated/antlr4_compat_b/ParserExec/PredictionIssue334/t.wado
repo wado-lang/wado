@@ -916,9 +916,9 @@ fn scan_item(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
+fn _parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
     let start = p.peek().span.start;
-    let item = parse_item(p)?;
+    let item = _parse_item(p)?;
     let mut semicolon_item_list: Array<SemicolonItemItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -940,7 +940,7 @@ fn parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let semicolon = p.expect(TK_SEMICOLON)?;
-        let item = parse_item(p)?;
+        let item = _parse_item(p)?;
         let semicolon_item = SemicolonItemItem {
             semicolon,
             item,
@@ -963,7 +963,7 @@ fn parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
     });
 }
 
-fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
+fn _parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let a = p.expect(TK_A)?;
     let b: Option<Token> = if p.peek_kind() == TK_B {
@@ -979,10 +979,20 @@ fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<FileNode, ParseError> {
+pub fn parse_file_(input: &String) -> Result<FileNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_file_(&mut parser);
+    return _parse_file_(&mut parser);
+}
+
+pub fn parse_item(input: &String) -> Result<ItemNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_item(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<FileNode, ParseError> {
+    return parse_file_(input);
 }
 
 pub fn walk_file_<V: Visitor>(v: &mut V, node: &FileNode) {

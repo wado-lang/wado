@@ -884,7 +884,7 @@ fn scan_subrule(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
+fn _parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
     let start = p.peek().span.start;
     let mut a_list: Array<ANode> = [];
     loop {
@@ -898,7 +898,7 @@ fn parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let a = parse_a(p)?;
+        let a = _parse_a(p)?;
         a_list.push(a);
     }
     let eof = p.expect(TK_EOF)?;
@@ -909,11 +909,11 @@ fn parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
     });
 }
 
-fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_X {
-        let label = parse_subrule(p)?;
+        let label = _parse_subrule(p)?;
         return Result::<ANode, ParseError>::Ok(ANode::One(AOne {
             span: Span::new(start, i32::max(start, p.last_end())),
             label,
@@ -933,7 +933,7 @@ fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     ));
 }
 
-fn parse_subrule(p: &mut Parser) -> Result<SubruleNode, ParseError> {
+fn _parse_subrule(p: &mut Parser) -> Result<SubruleNode, ParseError> {
     let start = p.peek().span.start;
     let lit_x = p.expect(TK_LIT_X)?;
     return Result::<SubruleNode, ParseError>::Ok(SubruleNode {
@@ -942,10 +942,26 @@ fn parse_subrule(p: &mut Parser) -> Result<SubruleNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<StartNode, ParseError> {
+pub fn parse_start(input: &String) -> Result<StartNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_start(&mut parser);
+    return _parse_start(&mut parser);
+}
+
+pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_a(&mut parser);
+}
+
+pub fn parse_subrule(input: &String) -> Result<SubruleNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_subrule(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<StartNode, ParseError> {
+    return parse_start(input);
 }
 
 pub fn walk_start<V: Visitor>(v: &mut V, node: &StartNode) {

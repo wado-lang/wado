@@ -1,6 +1,6 @@
 // Regression: label-on-rule-ref where the same rule appears under two
 // different labels in one alternative used to emit a duplicate
-// `let <rule> = parse_<rule>(p)?;` binding, failing compilation with
+// `let <rule> = _parse_<rule>(p)?;` binding, failing compilation with
 // "cannot redeclare X" once Stage B exercised the generated parser.
 //
 // Smallest grammar exhibiting the bug:
@@ -9,7 +9,7 @@
 // The inner `gen_element` for the labeled element used a fresh
 // name_counts, so the RuleRef binding `e` did not dedup against the
 // outer alt's bindings. Both `a=e` and `b=e` emitted a top-level
-// `let e = parse_e(p)?;` — the second redeclared the first.
+// `let e = _parse_e(p)?;` — the second redeclared the first.
 
 use { generate, GenerateOptions } from "./codegen.wado";
 use { parse_checked } from "./g4/parser.wado";
@@ -32,11 +32,11 @@ WS : (' '|'\\n') -> skip ;
         Err(e) => panic(`parse_checked failed: {e.message}`),
     };
     let out = generate(&mut grammar, &GenerateOptions { highlight: false });
-    // The buggy codegen emitted two `let e = parse_e(p)?;` lines in the
+    // The buggy codegen emitted two `let e = _parse_e(p)?;` lines in the
     // same function body for the alt `a=e ... b=e`. Different functions
     // each having their own copy is fine; the failure mode is the same
     // line repeated before the next `fn ` boundary.
-    let parse_e_decl = "let e = parse_e(p)?;";
+    let parse_e_decl = "let e = _parse_e(p)?;";
     let mut pos = 0;
     loop {
         let rest = out.substr_bytes(pos, out.len());
@@ -61,7 +61,7 @@ WS : (' '|'\\n') -> skip ;
         } else {
             after.len();
         };
-        assert next_decl >= next_fn, `two 'let e = parse_e(p)?;' in same function body — bug repro at offset {abs}`;
+        assert next_decl >= next_fn, `two 'let e = _parse_e(p)?;' in same function body — bug repro at offset {abs}`;
         pos = abs + parse_e_decl.len();
     }
 }

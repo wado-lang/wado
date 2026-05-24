@@ -1047,7 +1047,7 @@ fn scan_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
+fn _parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     let start = p.peek().span.start;
     let mut statement_list: Array<StatementNode> = [];
     let mut _plus_first = true;
@@ -1065,7 +1065,7 @@ fn parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let statement = parse_statement(p)?;
+        let statement = _parse_statement(p)?;
         statement_list.push(statement);
     }
     let dot = p.expect(TK_LIT_DOT)?;
@@ -1076,7 +1076,7 @@ fn parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     });
 }
 
-fn parse_statement(p: &mut Parser) -> Result<StatementNode, ParseError> {
+fn _parse_statement(p: &mut Parser) -> Result<StatementNode, ParseError> {
     let start = p.peek().span.start;
     let lit_open = p.expect(TK_LIT_OPEN)?;
     let mut lit_device_item_list: Array<LitDeviceItemOptItem> = [];
@@ -1189,10 +1189,20 @@ fn parse_statement(p: &mut Parser) -> Result<StatementNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<ProgramNode, ParseError> {
+pub fn parse_program(input: &String) -> Result<ProgramNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_program(&mut parser);
+    return _parse_program(&mut parser);
+}
+
+pub fn parse_statement(input: &String) -> Result<StatementNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_statement(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<ProgramNode, ParseError> {
+    return parse_program(input);
 }
 
 pub fn walk_program<V: Visitor>(v: &mut V, node: &ProgramNode) {

@@ -5764,9 +5764,9 @@ fn scan_qualified_identifier(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
     return pos;
 }
 
-fn parse_grammar_spec(p: &mut Parser) -> Result<GrammarSpecNode, ParseError> {
+fn _parse_grammar_spec(p: &mut Parser) -> Result<GrammarSpecNode, ParseError> {
     let start = p.peek().span.start;
-    let grammar_decl = parse_grammar_decl(p)?;
+    let grammar_decl = _parse_grammar_decl(p)?;
     let mut prequel_construct_list: Array<PrequelConstructNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -5779,10 +5779,10 @@ fn parse_grammar_spec(p: &mut Parser) -> Result<GrammarSpecNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let prequel_construct = parse_prequel_construct(p)?;
+        let prequel_construct = _parse_prequel_construct(p)?;
         prequel_construct_list.push(prequel_construct);
     }
-    let rules = parse_rules(p)?;
+    let rules = _parse_rules(p)?;
     let mut mode_spec_list: Array<ModeSpecNode> = [];
     loop {
         let mut rep_scan_pos_2: i32 = -1;
@@ -5795,7 +5795,7 @@ fn parse_grammar_spec(p: &mut Parser) -> Result<GrammarSpecNode, ParseError> {
             rep_scan_pos_2 = pos;
         }
         if rep_scan_pos_2 < 0 { break; }
-        let mode_spec = parse_mode_spec(p)?;
+        let mode_spec = _parse_mode_spec(p)?;
         mode_spec_list.push(mode_spec);
     }
     let eof = p.expect(TK_EOF)?;
@@ -5809,10 +5809,10 @@ fn parse_grammar_spec(p: &mut Parser) -> Result<GrammarSpecNode, ParseError> {
     });
 }
 
-fn parse_grammar_decl(p: &mut Parser) -> Result<GrammarDeclNode, ParseError> {
+fn _parse_grammar_decl(p: &mut Parser) -> Result<GrammarDeclNode, ParseError> {
     let start = p.peek().span.start;
-    let grammar_type = parse_grammar_type(p)?;
-    let identifier = parse_identifier(p)?;
+    let grammar_type = _parse_grammar_type(p)?;
+    let identifier = _parse_identifier(p)?;
     let semi = p.expect(TK_SEMI)?;
     return Result::<GrammarDeclNode, ParseError>::Ok(GrammarDeclNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -5822,7 +5822,7 @@ fn parse_grammar_decl(p: &mut Parser) -> Result<GrammarDeclNode, ParseError> {
     });
 }
 
-fn parse_grammar_type(p: &mut Parser) -> Result<GrammarTypeNode, ParseError> {
+fn _parse_grammar_type(p: &mut Parser) -> Result<GrammarTypeNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LEXER {
@@ -5857,39 +5857,39 @@ fn parse_grammar_type(p: &mut Parser) -> Result<GrammarTypeNode, ParseError> {
     ));
 }
 
-fn parse_prequel_construct(p: &mut Parser) -> Result<PrequelConstructNode, ParseError> {
+fn _parse_prequel_construct(p: &mut Parser) -> Result<PrequelConstructNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_OPTIONS {
-        let options_spec = parse_options_spec(p)?;
+        let options_spec = _parse_options_spec(p)?;
         return Result::<PrequelConstructNode, ParseError>::Ok(PrequelConstructNode::Alt0(PrequelConstructAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             options_spec,
         }));
     }
     if kind == TK_IMPORT {
-        let delegate_grammars = parse_delegate_grammars(p)?;
+        let delegate_grammars = _parse_delegate_grammars(p)?;
         return Result::<PrequelConstructNode, ParseError>::Ok(PrequelConstructNode::Alt1(PrequelConstructAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             delegate_grammars,
         }));
     }
     if kind == TK_TOKENS {
-        let tokens_spec = parse_tokens_spec(p)?;
+        let tokens_spec = _parse_tokens_spec(p)?;
         return Result::<PrequelConstructNode, ParseError>::Ok(PrequelConstructNode::Alt2(PrequelConstructAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             tokens_spec,
         }));
     }
     if kind == TK_CHANNELS {
-        let channels_spec = parse_channels_spec(p)?;
+        let channels_spec = _parse_channels_spec(p)?;
         return Result::<PrequelConstructNode, ParseError>::Ok(PrequelConstructNode::Alt3(PrequelConstructAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             channels_spec,
         }));
     }
     if kind == TK_AT {
-        let action_ = parse_action_(p)?;
+        let action_ = _parse_action_(p)?;
         return Result::<PrequelConstructNode, ParseError>::Ok(PrequelConstructNode::Alt4(PrequelConstructAlt4 {
             span: Span::new(start, i32::max(start, p.last_end())),
             action_,
@@ -5902,7 +5902,7 @@ fn parse_prequel_construct(p: &mut Parser) -> Result<PrequelConstructNode, Parse
     ));
 }
 
-fn parse_options_spec(p: &mut Parser) -> Result<OptionsSpecNode, ParseError> {
+fn _parse_options_spec(p: &mut Parser) -> Result<OptionsSpecNode, ParseError> {
     let start = p.peek().span.start;
     let options = p.expect(TK_OPTIONS)?;
     let mut option_semi_list: Array<OptionSemiItem> = [];
@@ -5925,7 +5925,7 @@ fn parse_options_spec(p: &mut Parser) -> Result<OptionsSpecNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let option = parse_option(p)?;
+        let option = _parse_option(p)?;
         let semi = p.expect(TK_SEMI)?;
         let option_semi = OptionSemiItem {
             option,
@@ -5942,11 +5942,11 @@ fn parse_options_spec(p: &mut Parser) -> Result<OptionsSpecNode, ParseError> {
     });
 }
 
-fn parse_option(p: &mut Parser) -> Result<OptionNode, ParseError> {
+fn _parse_option(p: &mut Parser) -> Result<OptionNode, ParseError> {
     let start = p.peek().span.start;
-    let identifier = parse_identifier(p)?;
+    let identifier = _parse_identifier(p)?;
     let assign = p.expect(TK_ASSIGN)?;
-    let option_value = parse_option_value(p)?;
+    let option_value = _parse_option_value(p)?;
     return Result::<OptionNode, ParseError>::Ok(OptionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         identifier,
@@ -5955,11 +5955,11 @@ fn parse_option(p: &mut Parser) -> Result<OptionNode, ParseError> {
     });
 }
 
-fn parse_option_value(p: &mut Parser) -> Result<OptionValueNode, ParseError> {
+fn _parse_option_value(p: &mut Parser) -> Result<OptionValueNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
-        let identifier = parse_identifier(p)?;
+        let identifier = _parse_identifier(p)?;
         let mut dot_identifier_list: Array<DotIdentifierItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -5981,7 +5981,7 @@ fn parse_option_value(p: &mut Parser) -> Result<OptionValueNode, ParseError> {
             }
             if rep_scan_pos < 0 { break; }
             let dot = p.expect(TK_DOT)?;
-            let identifier = parse_identifier(p)?;
+            let identifier = _parse_identifier(p)?;
             let dot_identifier = DotIdentifierItem {
                 dot,
                 identifier,
@@ -6002,7 +6002,7 @@ fn parse_option_value(p: &mut Parser) -> Result<OptionValueNode, ParseError> {
         }));
     }
     if kind == TK_ACTION {
-        let action_block = parse_action_block(p)?;
+        let action_block = _parse_action_block(p)?;
         return Result::<OptionValueNode, ParseError>::Ok(OptionValueNode::Alt2(OptionValueAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             action_block,
@@ -6022,10 +6022,10 @@ fn parse_option_value(p: &mut Parser) -> Result<OptionValueNode, ParseError> {
     ));
 }
 
-fn parse_delegate_grammars(p: &mut Parser) -> Result<DelegateGrammarsNode, ParseError> {
+fn _parse_delegate_grammars(p: &mut Parser) -> Result<DelegateGrammarsNode, ParseError> {
     let start = p.peek().span.start;
     let import_ = p.expect(TK_IMPORT)?;
-    let delegate_grammar = parse_delegate_grammar(p)?;
+    let delegate_grammar = _parse_delegate_grammar(p)?;
     let mut comma_delegate_grammar_list: Array<CommaDelegateGrammarItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -6047,7 +6047,7 @@ fn parse_delegate_grammars(p: &mut Parser) -> Result<DelegateGrammarsNode, Parse
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
-        let delegate_grammar = parse_delegate_grammar(p)?;
+        let delegate_grammar = _parse_delegate_grammar(p)?;
         let comma_delegate_grammar = CommaDelegateGrammarItem {
             comma,
             delegate_grammar,
@@ -6064,27 +6064,27 @@ fn parse_delegate_grammars(p: &mut Parser) -> Result<DelegateGrammarsNode, Parse
     });
 }
 
-fn parse_delegate_grammar_bt_1(p: &mut Parser) -> Result<DelegateGrammarNode, ParseError> {
+fn _parse_delegate_grammar_bt_1(p: &mut Parser) -> Result<DelegateGrammarNode, ParseError> {
     let start = p.peek().span.start;
-    let identifier = parse_identifier(p)?;
+    let identifier = _parse_identifier(p)?;
     return Result::<DelegateGrammarNode, ParseError>::Ok(DelegateGrammarNode::Alt1(DelegateGrammarAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         identifier,
     }));
 }
 
-fn parse_delegate_grammar_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_delegate_grammar_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_delegate_grammar_bt_0(p: &mut Parser) -> Result<DelegateGrammarNode, ParseError> {
+fn _parse_delegate_grammar_bt_0(p: &mut Parser) -> Result<DelegateGrammarNode, ParseError> {
     let start = p.peek().span.start;
-    let identifier = parse_identifier(p)?;
+    let identifier = _parse_identifier(p)?;
     let assign = p.expect(TK_ASSIGN)?;
-    let identifier_2 = parse_identifier(p)?;
+    let identifier_2 = _parse_identifier(p)?;
     return Result::<DelegateGrammarNode, ParseError>::Ok(DelegateGrammarNode::Alt0(DelegateGrammarAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         identifier,
@@ -6093,7 +6093,7 @@ fn parse_delegate_grammar_bt_0(p: &mut Parser) -> Result<DelegateGrammarNode, Pa
     }));
 }
 
-fn parse_delegate_grammar_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_delegate_grammar_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -6104,15 +6104,15 @@ fn parse_delegate_grammar_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_delegate_grammar(p: &mut Parser) -> Result<DelegateGrammarNode, ParseError> {
+fn _parse_delegate_grammar(p: &mut Parser) -> Result<DelegateGrammarNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
         if _gale_kind_set_1(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_1 = parse_delegate_grammar_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_0 = parse_delegate_grammar_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_delegate_grammar_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_delegate_grammar_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -6124,12 +6124,12 @@ fn parse_delegate_grammar(p: &mut Parser) -> Result<DelegateGrammarNode, ParseEr
                 _sd_best_i = 0;
             }
             if _sd_best_i == 1 {
-                return parse_delegate_grammar_bt_1(p);
+                return _parse_delegate_grammar_bt_1(p);
             }
             if _sd_best_i == 0 {
-                return parse_delegate_grammar_bt_0(p);
+                return _parse_delegate_grammar_bt_0(p);
             }
-            return parse_delegate_grammar_bt_0(p);
+            return _parse_delegate_grammar_bt_0(p);
         }
     }
     return Result::<DelegateGrammarNode, ParseError>::Err(ParseError::new(
@@ -6139,11 +6139,11 @@ fn parse_delegate_grammar(p: &mut Parser) -> Result<DelegateGrammarNode, ParseEr
     ));
 }
 
-fn parse_tokens_spec(p: &mut Parser) -> Result<TokensSpecNode, ParseError> {
+fn _parse_tokens_spec(p: &mut Parser) -> Result<TokensSpecNode, ParseError> {
     let start = p.peek().span.start;
     let tokens = p.expect(TK_TOKENS)?;
     let id_list: Option<IdListNode> = if _gale_kind_set_1(p.peek_kind()) {
-        let id_list = parse_id_list(p)?;
+        let id_list = _parse_id_list(p)?;
         Option::<IdListNode>::Some(id_list)
     } else {
         null
@@ -6157,11 +6157,11 @@ fn parse_tokens_spec(p: &mut Parser) -> Result<TokensSpecNode, ParseError> {
     });
 }
 
-fn parse_channels_spec(p: &mut Parser) -> Result<ChannelsSpecNode, ParseError> {
+fn _parse_channels_spec(p: &mut Parser) -> Result<ChannelsSpecNode, ParseError> {
     let start = p.peek().span.start;
     let channels = p.expect(TK_CHANNELS)?;
     let id_list: Option<IdListNode> = if _gale_kind_set_1(p.peek_kind()) {
-        let id_list = parse_id_list(p)?;
+        let id_list = _parse_id_list(p)?;
         Option::<IdListNode>::Some(id_list)
     } else {
         null
@@ -6175,9 +6175,9 @@ fn parse_channels_spec(p: &mut Parser) -> Result<ChannelsSpecNode, ParseError> {
     });
 }
 
-fn parse_id_list(p: &mut Parser) -> Result<IdListNode, ParseError> {
+fn _parse_id_list(p: &mut Parser) -> Result<IdListNode, ParseError> {
     let start = p.peek().span.start;
-    let identifier = parse_identifier(p)?;
+    let identifier = _parse_identifier(p)?;
     let mut comma_identifier_list: Array<CommaIdentifierItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -6199,7 +6199,7 @@ fn parse_id_list(p: &mut Parser) -> Result<IdListNode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
-        let identifier = parse_identifier(p)?;
+        let identifier = _parse_identifier(p)?;
         let comma_identifier = CommaIdentifierItem {
             comma,
             identifier,
@@ -6220,7 +6220,7 @@ fn parse_id_list(p: &mut Parser) -> Result<IdListNode, ParseError> {
     });
 }
 
-fn parse_action_(p: &mut Parser) -> Result<ActionNode, ParseError> {
+fn _parse_action_(p: &mut Parser) -> Result<ActionNode, ParseError> {
     let start = p.peek().span.start;
     let at = p.expect(TK_AT)?;
     let mut opt_scan_pos: i32 = -1;
@@ -6234,7 +6234,7 @@ fn parse_action_(p: &mut Parser) -> Result<ActionNode, ParseError> {
         opt_scan_pos = pos;
     }
     let action_scope_name_coloncolon: Option<ActionScopeNameColoncolonItem> = if opt_scan_pos >= 0 {
-        let action_scope_name = parse_action_scope_name(p)?;
+        let action_scope_name = _parse_action_scope_name(p)?;
         let coloncolon = p.expect(TK_COLONCOLON)?;
         let action_scope_name_coloncolon = ActionScopeNameColoncolonItem {
             action_scope_name,
@@ -6244,8 +6244,8 @@ fn parse_action_(p: &mut Parser) -> Result<ActionNode, ParseError> {
     } else {
         null
     };
-    let identifier = parse_identifier(p)?;
-    let action_block = parse_action_block(p)?;
+    let identifier = _parse_identifier(p)?;
+    let action_block = _parse_action_block(p)?;
     return Result::<ActionNode, ParseError>::Ok(ActionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         at,
@@ -6255,11 +6255,11 @@ fn parse_action_(p: &mut Parser) -> Result<ActionNode, ParseError> {
     });
 }
 
-fn parse_action_scope_name(p: &mut Parser) -> Result<ActionScopeNameNode, ParseError> {
+fn _parse_action_scope_name(p: &mut Parser) -> Result<ActionScopeNameNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
-        let identifier = parse_identifier(p)?;
+        let identifier = _parse_identifier(p)?;
         return Result::<ActionScopeNameNode, ParseError>::Ok(ActionScopeNameNode::Alt0(ActionScopeNameAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             identifier,
@@ -6286,7 +6286,7 @@ fn parse_action_scope_name(p: &mut Parser) -> Result<ActionScopeNameNode, ParseE
     ));
 }
 
-fn parse_action_block(p: &mut Parser) -> Result<ActionBlockNode, ParseError> {
+fn _parse_action_block(p: &mut Parser) -> Result<ActionBlockNode, ParseError> {
     let start = p.peek().span.start;
     let action = p.expect(TK_ACTION)?;
     return Result::<ActionBlockNode, ParseError>::Ok(ActionBlockNode {
@@ -6295,7 +6295,7 @@ fn parse_action_block(p: &mut Parser) -> Result<ActionBlockNode, ParseError> {
     });
 }
 
-fn parse_arg_action_block(p: &mut Parser) -> Result<ArgActionBlockNode, ParseError> {
+fn _parse_arg_action_block(p: &mut Parser) -> Result<ArgActionBlockNode, ParseError> {
     let start = p.peek().span.start;
     let begin_argument = p.expect(TK_BEGIN_ARGUMENT)?;
     let mut argument_content_list: Array<Token> = [];
@@ -6312,10 +6312,10 @@ fn parse_arg_action_block(p: &mut Parser) -> Result<ArgActionBlockNode, ParseErr
     });
 }
 
-fn parse_mode_spec(p: &mut Parser) -> Result<ModeSpecNode, ParseError> {
+fn _parse_mode_spec(p: &mut Parser) -> Result<ModeSpecNode, ParseError> {
     let start = p.peek().span.start;
     let mode = p.expect(TK_MODE)?;
-    let identifier = parse_identifier(p)?;
+    let identifier = _parse_identifier(p)?;
     let semi = p.expect(TK_SEMI)?;
     let mut lexer_rule_spec_list: Array<LexerRuleSpecNode> = [];
     loop {
@@ -6329,7 +6329,7 @@ fn parse_mode_spec(p: &mut Parser) -> Result<ModeSpecNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let lexer_rule_spec = parse_lexer_rule_spec(p)?;
+        let lexer_rule_spec = _parse_lexer_rule_spec(p)?;
         lexer_rule_spec_list.push(lexer_rule_spec);
     }
     return Result::<ModeSpecNode, ParseError>::Ok(ModeSpecNode {
@@ -6341,7 +6341,7 @@ fn parse_mode_spec(p: &mut Parser) -> Result<ModeSpecNode, ParseError> {
     });
 }
 
-fn parse_rules(p: &mut Parser) -> Result<RulesNode, ParseError> {
+fn _parse_rules(p: &mut Parser) -> Result<RulesNode, ParseError> {
     let start = p.peek().span.start;
     let mut rule_spec_list: Array<RuleSpecNode> = [];
     loop {
@@ -6355,7 +6355,7 @@ fn parse_rules(p: &mut Parser) -> Result<RulesNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let rule_spec = parse_rule_spec(p)?;
+        let rule_spec = _parse_rule_spec(p)?;
         rule_spec_list.push(rule_spec);
     }
     return Result::<RulesNode, ParseError>::Ok(RulesNode {
@@ -6364,52 +6364,52 @@ fn parse_rules(p: &mut Parser) -> Result<RulesNode, ParseError> {
     });
 }
 
-fn parse_rule_spec_bt_1(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
+fn _parse_rule_spec_bt_1(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
     let start = p.peek().span.start;
-    let lexer_rule_spec = parse_lexer_rule_spec(p)?;
+    let lexer_rule_spec = _parse_lexer_rule_spec(p)?;
     return Result::<RuleSpecNode, ParseError>::Ok(RuleSpecNode::Alt1(RuleSpecAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         lexer_rule_spec,
     }));
 }
 
-fn parse_rule_spec_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_rule_spec_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_rule_spec(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_rule_spec_bt_0(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
+fn _parse_rule_spec_bt_0(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
     let start = p.peek().span.start;
-    let parser_rule_spec = parse_parser_rule_spec(p)?;
+    let parser_rule_spec = _parse_parser_rule_spec(p)?;
     return Result::<RuleSpecNode, ParseError>::Ok(RuleSpecNode::Alt0(RuleSpecAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         parser_rule_spec,
     }));
 }
 
-fn parse_rule_spec_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_rule_spec_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_parser_rule_spec(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_rule_spec(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
+fn _parse_rule_spec(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_4(kind) {
         if p.peek_kind() == TK_FRAGMENT {
             if p.peek_at(1) == TK_TOKEN_REF {
-                return parse_rule_spec_bt_1(p);
+                return _parse_rule_spec_bt_1(p);
             } else if p.peek_at(1) == TK_RULE_REF {
-                return parse_rule_spec_bt_0(p);
+                return _parse_rule_spec_bt_0(p);
             }
         } else if p.peek_kind() == TK_TOKEN_REF {
-            return parse_rule_spec_bt_1(p);
+            return _parse_rule_spec_bt_1(p);
         } else if _gale_kind_set_17(p.peek_kind()) {
-            return parse_rule_spec_bt_0(p);
+            return _parse_rule_spec_bt_0(p);
         }
     }
     return Result::<RuleSpecNode, ParseError>::Err(ParseError::new(
@@ -6419,35 +6419,35 @@ fn parse_rule_spec(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
     ));
 }
 
-fn parse_parser_rule_spec(p: &mut Parser) -> Result<ParserRuleSpecNode, ParseError> {
+fn _parse_parser_rule_spec(p: &mut Parser) -> Result<ParserRuleSpecNode, ParseError> {
     let start = p.peek().span.start;
     let rule_modifiers: Option<RuleModifiersNode> = if _gale_kind_set_5(p.peek_kind()) {
-        let rule_modifiers = parse_rule_modifiers__follow_0(p)?;
+        let rule_modifiers = _parse_rule_modifiers__follow_0(p)?;
         Option::<RuleModifiersNode>::Some(rule_modifiers)
     } else {
         null
     };
     let rule_ref = p.expect(TK_RULE_REF)?;
     let arg_action_block: Option<ArgActionBlockNode> = if p.peek_kind() == TK_BEGIN_ARGUMENT {
-        let arg_action_block = parse_arg_action_block(p)?;
+        let arg_action_block = _parse_arg_action_block(p)?;
         Option::<ArgActionBlockNode>::Some(arg_action_block)
     } else {
         null
     };
     let rule_returns: Option<RuleReturnsNode> = if p.peek_kind() == TK_RETURNS {
-        let rule_returns = parse_rule_returns(p)?;
+        let rule_returns = _parse_rule_returns(p)?;
         Option::<RuleReturnsNode>::Some(rule_returns)
     } else {
         null
     };
     let throws_spec: Option<ThrowsSpecNode> = if p.peek_kind() == TK_THROWS {
-        let throws_spec = parse_throws_spec(p)?;
+        let throws_spec = _parse_throws_spec(p)?;
         Option::<ThrowsSpecNode>::Some(throws_spec)
     } else {
         null
     };
     let locals_spec: Option<LocalsSpecNode> = if p.peek_kind() == TK_LOCALS {
-        let locals_spec = parse_locals_spec(p)?;
+        let locals_spec = _parse_locals_spec(p)?;
         Option::<LocalsSpecNode>::Some(locals_spec)
     } else {
         null
@@ -6464,13 +6464,13 @@ fn parse_parser_rule_spec(p: &mut Parser) -> Result<ParserRuleSpecNode, ParseErr
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let rule_prequel = parse_rule_prequel(p)?;
+        let rule_prequel = _parse_rule_prequel(p)?;
         rule_prequel_list.push(rule_prequel);
     }
     let colon = p.expect(TK_COLON)?;
-    let rule_block = parse_rule_block(p)?;
+    let rule_block = _parse_rule_block(p)?;
     let semi = p.expect(TK_SEMI)?;
-    let exception_group = parse_exception_group(p)?;
+    let exception_group = _parse_exception_group(p)?;
     return Result::<ParserRuleSpecNode, ParseError>::Ok(ParserRuleSpecNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         rule_modifiers,
@@ -6487,7 +6487,7 @@ fn parse_parser_rule_spec(p: &mut Parser) -> Result<ParserRuleSpecNode, ParseErr
     });
 }
 
-fn parse_exception_group(p: &mut Parser) -> Result<ExceptionGroupNode, ParseError> {
+fn _parse_exception_group(p: &mut Parser) -> Result<ExceptionGroupNode, ParseError> {
     let start = p.peek().span.start;
     let mut exception_handler_list: Array<ExceptionHandlerNode> = [];
     loop {
@@ -6501,11 +6501,11 @@ fn parse_exception_group(p: &mut Parser) -> Result<ExceptionGroupNode, ParseErro
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let exception_handler = parse_exception_handler(p)?;
+        let exception_handler = _parse_exception_handler(p)?;
         exception_handler_list.push(exception_handler);
     }
     let finally_clause: Option<FinallyClauseNode> = if p.peek_kind() == TK_FINALLY {
-        let finally_clause = parse_finally_clause(p)?;
+        let finally_clause = _parse_finally_clause(p)?;
         Option::<FinallyClauseNode>::Some(finally_clause)
     } else {
         null
@@ -6517,11 +6517,11 @@ fn parse_exception_group(p: &mut Parser) -> Result<ExceptionGroupNode, ParseErro
     });
 }
 
-fn parse_exception_handler(p: &mut Parser) -> Result<ExceptionHandlerNode, ParseError> {
+fn _parse_exception_handler(p: &mut Parser) -> Result<ExceptionHandlerNode, ParseError> {
     let start = p.peek().span.start;
     let catch = p.expect(TK_CATCH)?;
-    let arg_action_block = parse_arg_action_block(p)?;
-    let action_block = parse_action_block(p)?;
+    let arg_action_block = _parse_arg_action_block(p)?;
+    let action_block = _parse_action_block(p)?;
     return Result::<ExceptionHandlerNode, ParseError>::Ok(ExceptionHandlerNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         catch,
@@ -6530,10 +6530,10 @@ fn parse_exception_handler(p: &mut Parser) -> Result<ExceptionHandlerNode, Parse
     });
 }
 
-fn parse_finally_clause(p: &mut Parser) -> Result<FinallyClauseNode, ParseError> {
+fn _parse_finally_clause(p: &mut Parser) -> Result<FinallyClauseNode, ParseError> {
     let start = p.peek().span.start;
     let finally = p.expect(TK_FINALLY)?;
-    let action_block = parse_action_block(p)?;
+    let action_block = _parse_action_block(p)?;
     return Result::<FinallyClauseNode, ParseError>::Ok(FinallyClauseNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         finally,
@@ -6541,18 +6541,18 @@ fn parse_finally_clause(p: &mut Parser) -> Result<FinallyClauseNode, ParseError>
     });
 }
 
-fn parse_rule_prequel(p: &mut Parser) -> Result<RulePrequelNode, ParseError> {
+fn _parse_rule_prequel(p: &mut Parser) -> Result<RulePrequelNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_OPTIONS {
-        let options_spec = parse_options_spec(p)?;
+        let options_spec = _parse_options_spec(p)?;
         return Result::<RulePrequelNode, ParseError>::Ok(RulePrequelNode::Alt0(RulePrequelAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             options_spec,
         }));
     }
     if kind == TK_AT {
-        let rule_action = parse_rule_action(p)?;
+        let rule_action = _parse_rule_action(p)?;
         return Result::<RulePrequelNode, ParseError>::Ok(RulePrequelNode::Alt1(RulePrequelAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             rule_action,
@@ -6565,10 +6565,10 @@ fn parse_rule_prequel(p: &mut Parser) -> Result<RulePrequelNode, ParseError> {
     ));
 }
 
-fn parse_rule_returns(p: &mut Parser) -> Result<RuleReturnsNode, ParseError> {
+fn _parse_rule_returns(p: &mut Parser) -> Result<RuleReturnsNode, ParseError> {
     let start = p.peek().span.start;
     let returns = p.expect(TK_RETURNS)?;
-    let arg_action_block = parse_arg_action_block(p)?;
+    let arg_action_block = _parse_arg_action_block(p)?;
     return Result::<RuleReturnsNode, ParseError>::Ok(RuleReturnsNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         returns,
@@ -6576,10 +6576,10 @@ fn parse_rule_returns(p: &mut Parser) -> Result<RuleReturnsNode, ParseError> {
     });
 }
 
-fn parse_throws_spec(p: &mut Parser) -> Result<ThrowsSpecNode, ParseError> {
+fn _parse_throws_spec(p: &mut Parser) -> Result<ThrowsSpecNode, ParseError> {
     let start = p.peek().span.start;
     let throws = p.expect(TK_THROWS)?;
-    let qualified_identifier = parse_qualified_identifier(p)?;
+    let qualified_identifier = _parse_qualified_identifier(p)?;
     let mut comma_qualified_identifier_list: Array<CommaQualifiedIdentifierItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -6601,7 +6601,7 @@ fn parse_throws_spec(p: &mut Parser) -> Result<ThrowsSpecNode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
-        let qualified_identifier = parse_qualified_identifier(p)?;
+        let qualified_identifier = _parse_qualified_identifier(p)?;
         let comma_qualified_identifier = CommaQualifiedIdentifierItem {
             comma,
             qualified_identifier,
@@ -6616,10 +6616,10 @@ fn parse_throws_spec(p: &mut Parser) -> Result<ThrowsSpecNode, ParseError> {
     });
 }
 
-fn parse_locals_spec(p: &mut Parser) -> Result<LocalsSpecNode, ParseError> {
+fn _parse_locals_spec(p: &mut Parser) -> Result<LocalsSpecNode, ParseError> {
     let start = p.peek().span.start;
     let locals = p.expect(TK_LOCALS)?;
-    let arg_action_block = parse_arg_action_block(p)?;
+    let arg_action_block = _parse_arg_action_block(p)?;
     return Result::<LocalsSpecNode, ParseError>::Ok(LocalsSpecNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         locals,
@@ -6627,11 +6627,11 @@ fn parse_locals_spec(p: &mut Parser) -> Result<LocalsSpecNode, ParseError> {
     });
 }
 
-fn parse_rule_action(p: &mut Parser) -> Result<RuleActionNode, ParseError> {
+fn _parse_rule_action(p: &mut Parser) -> Result<RuleActionNode, ParseError> {
     let start = p.peek().span.start;
     let at = p.expect(TK_AT)?;
-    let identifier = parse_identifier(p)?;
-    let action_block = parse_action_block(p)?;
+    let identifier = _parse_identifier(p)?;
+    let action_block = _parse_action_block(p)?;
     return Result::<RuleActionNode, ParseError>::Ok(RuleActionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         at,
@@ -6640,7 +6640,7 @@ fn parse_rule_action(p: &mut Parser) -> Result<RuleActionNode, ParseError> {
     });
 }
 
-fn parse_rule_modifiers(p: &mut Parser) -> Result<RuleModifiersNode, ParseError> {
+fn _parse_rule_modifiers(p: &mut Parser) -> Result<RuleModifiersNode, ParseError> {
     let start = p.peek().span.start;
     let mut rule_modifier_list: Array<RuleModifierNode> = [];
     let mut _plus_first = true;
@@ -6658,7 +6658,7 @@ fn parse_rule_modifiers(p: &mut Parser) -> Result<RuleModifiersNode, ParseError>
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let rule_modifier = parse_rule_modifier(p)?;
+        let rule_modifier = _parse_rule_modifier(p)?;
         rule_modifier_list.push(rule_modifier);
     }
     return Result::<RuleModifiersNode, ParseError>::Ok(RuleModifiersNode {
@@ -6667,7 +6667,7 @@ fn parse_rule_modifiers(p: &mut Parser) -> Result<RuleModifiersNode, ParseError>
     });
 }
 
-fn parse_rule_modifier(p: &mut Parser) -> Result<RuleModifierNode, ParseError> {
+fn _parse_rule_modifier(p: &mut Parser) -> Result<RuleModifierNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_PUBLIC {
@@ -6705,18 +6705,18 @@ fn parse_rule_modifier(p: &mut Parser) -> Result<RuleModifierNode, ParseError> {
     ));
 }
 
-fn parse_rule_block(p: &mut Parser) -> Result<RuleBlockNode, ParseError> {
+fn _parse_rule_block(p: &mut Parser) -> Result<RuleBlockNode, ParseError> {
     let start = p.peek().span.start;
-    let rule_alt_list = parse_rule_alt_list(p)?;
+    let rule_alt_list = _parse_rule_alt_list(p)?;
     return Result::<RuleBlockNode, ParseError>::Ok(RuleBlockNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         rule_alt_list,
     });
 }
 
-fn parse_rule_alt_list(p: &mut Parser) -> Result<RuleAltListNode, ParseError> {
+fn _parse_rule_alt_list(p: &mut Parser) -> Result<RuleAltListNode, ParseError> {
     let start = p.peek().span.start;
-    let labeled_alt = parse_labeled_alt(p)?;
+    let labeled_alt = _parse_labeled_alt(p)?;
     let mut or_labeled_alt_list: Array<OrLabeledAltItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -6738,7 +6738,7 @@ fn parse_rule_alt_list(p: &mut Parser) -> Result<RuleAltListNode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let or = p.expect(TK_OR)?;
-        let labeled_alt = parse_labeled_alt(p)?;
+        let labeled_alt = _parse_labeled_alt(p)?;
         let or_labeled_alt = OrLabeledAltItem {
             or,
             labeled_alt,
@@ -6752,12 +6752,12 @@ fn parse_rule_alt_list(p: &mut Parser) -> Result<RuleAltListNode, ParseError> {
     });
 }
 
-fn parse_labeled_alt(p: &mut Parser) -> Result<LabeledAltNode, ParseError> {
+fn _parse_labeled_alt(p: &mut Parser) -> Result<LabeledAltNode, ParseError> {
     let start = p.peek().span.start;
-    let alternative = parse_alternative(p)?;
+    let alternative = _parse_alternative(p)?;
     let pound_identifier: Option<PoundIdentifierItem> = if p.peek_kind() == TK_POUND {
         let pound = p.expect(TK_POUND)?;
-        let identifier = parse_identifier(p)?;
+        let identifier = _parse_identifier(p)?;
         let pound_identifier = PoundIdentifierItem {
             pound,
             identifier,
@@ -6773,7 +6773,7 @@ fn parse_labeled_alt(p: &mut Parser) -> Result<LabeledAltNode, ParseError> {
     });
 }
 
-fn parse_lexer_rule_spec(p: &mut Parser) -> Result<LexerRuleSpecNode, ParseError> {
+fn _parse_lexer_rule_spec(p: &mut Parser) -> Result<LexerRuleSpecNode, ParseError> {
     let start = p.peek().span.start;
     let fragment: Option<Token> = if p.peek_kind() == TK_FRAGMENT {
         let fragment = p.expect(TK_FRAGMENT)?;
@@ -6783,13 +6783,13 @@ fn parse_lexer_rule_spec(p: &mut Parser) -> Result<LexerRuleSpecNode, ParseError
     };
     let token_ref = p.expect(TK_TOKEN_REF)?;
     let options_spec: Option<OptionsSpecNode> = if p.peek_kind() == TK_OPTIONS {
-        let options_spec = parse_options_spec(p)?;
+        let options_spec = _parse_options_spec(p)?;
         Option::<OptionsSpecNode>::Some(options_spec)
     } else {
         null
     };
     let colon = p.expect(TK_COLON)?;
-    let lexer_rule_block = parse_lexer_rule_block(p)?;
+    let lexer_rule_block = _parse_lexer_rule_block(p)?;
     let semi = p.expect(TK_SEMI)?;
     return Result::<LexerRuleSpecNode, ParseError>::Ok(LexerRuleSpecNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -6802,18 +6802,18 @@ fn parse_lexer_rule_spec(p: &mut Parser) -> Result<LexerRuleSpecNode, ParseError
     });
 }
 
-fn parse_lexer_rule_block(p: &mut Parser) -> Result<LexerRuleBlockNode, ParseError> {
+fn _parse_lexer_rule_block(p: &mut Parser) -> Result<LexerRuleBlockNode, ParseError> {
     let start = p.peek().span.start;
-    let lexer_alt_list = parse_lexer_alt_list(p)?;
+    let lexer_alt_list = _parse_lexer_alt_list(p)?;
     return Result::<LexerRuleBlockNode, ParseError>::Ok(LexerRuleBlockNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         lexer_alt_list,
     });
 }
 
-fn parse_lexer_alt_list(p: &mut Parser) -> Result<LexerAltListNode, ParseError> {
+fn _parse_lexer_alt_list(p: &mut Parser) -> Result<LexerAltListNode, ParseError> {
     let start = p.peek().span.start;
-    let lexer_alt = parse_lexer_alt(p)?;
+    let lexer_alt = _parse_lexer_alt(p)?;
     let mut or_lexer_alt_list: Array<OrLexerAltItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -6835,7 +6835,7 @@ fn parse_lexer_alt_list(p: &mut Parser) -> Result<LexerAltListNode, ParseError> 
         }
         if rep_scan_pos < 0 { break; }
         let or = p.expect(TK_OR)?;
-        let lexer_alt = parse_lexer_alt(p)?;
+        let lexer_alt = _parse_lexer_alt(p)?;
         let or_lexer_alt = OrLexerAltItem {
             or,
             lexer_alt,
@@ -6849,13 +6849,13 @@ fn parse_lexer_alt_list(p: &mut Parser) -> Result<LexerAltListNode, ParseError> 
     });
 }
 
-fn parse_lexer_alt(p: &mut Parser) -> Result<LexerAltNode, ParseError> {
+fn _parse_lexer_alt(p: &mut Parser) -> Result<LexerAltNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     scope: {
-        let lexer_elements = parse_lexer_elements(p)?;
+        let lexer_elements = _parse_lexer_elements(p)?;
         let lexer_commands: Option<LexerCommandsNode> = if p.peek_kind() == TK_RARROW {
-            let lexer_commands = parse_lexer_commands(p)?;
+            let lexer_commands = _parse_lexer_commands(p)?;
             Option::<LexerCommandsNode>::Some(lexer_commands)
         } else {
             null
@@ -6878,7 +6878,7 @@ fn parse_lexer_alt(p: &mut Parser) -> Result<LexerAltNode, ParseError> {
     ));
 }
 
-fn parse_lexer_elements(p: &mut Parser) -> Result<LexerElementsNode, ParseError> {
+fn _parse_lexer_elements(p: &mut Parser) -> Result<LexerElementsNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_7(kind) {
@@ -6898,7 +6898,7 @@ fn parse_lexer_elements(p: &mut Parser) -> Result<LexerElementsNode, ParseError>
                 if rep_scan_pos < 0 { break; }
             }
             _plus_first = false;
-            let lexer_element = parse_lexer_element(p)?;
+            let lexer_element = _parse_lexer_element(p)?;
             lexer_element_list.push(lexer_element);
         }
         return Result::<LexerElementsNode, ParseError>::Ok(LexerElementsNode::Alt0(LexerElementsAlt0 {
@@ -6918,13 +6918,13 @@ fn parse_lexer_elements(p: &mut Parser) -> Result<LexerElementsNode, ParseError>
     ));
 }
 
-fn parse_lexer_element(p: &mut Parser) -> Result<LexerElementNode, ParseError> {
+fn _parse_lexer_element(p: &mut Parser) -> Result<LexerElementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_8(kind) {
-        let lexer_atom = parse_lexer_atom(p)?;
+        let lexer_atom = _parse_lexer_atom(p)?;
         let ebnf_suffix: Option<EbnfSuffixNode> = if _gale_kind_set_9(p.peek_kind()) {
-            let ebnf_suffix = parse_ebnf_suffix__follow_1(p)?;
+            let ebnf_suffix = _parse_ebnf_suffix__follow_1(p)?;
             Option::<EbnfSuffixNode>::Some(ebnf_suffix)
         } else {
             null
@@ -6936,9 +6936,9 @@ fn parse_lexer_element(p: &mut Parser) -> Result<LexerElementNode, ParseError> {
         }));
     }
     if kind == TK_LPAREN {
-        let lexer_block = parse_lexer_block(p)?;
+        let lexer_block = _parse_lexer_block(p)?;
         let ebnf_suffix: Option<EbnfSuffixNode> = if _gale_kind_set_9(p.peek_kind()) {
-            let ebnf_suffix = parse_ebnf_suffix__follow_1(p)?;
+            let ebnf_suffix = _parse_ebnf_suffix__follow_1(p)?;
             Option::<EbnfSuffixNode>::Some(ebnf_suffix)
         } else {
             null
@@ -6950,7 +6950,7 @@ fn parse_lexer_element(p: &mut Parser) -> Result<LexerElementNode, ParseError> {
         }));
     }
     if kind == TK_ACTION {
-        let action_block = parse_action_block(p)?;
+        let action_block = _parse_action_block(p)?;
         let question: Option<Token> = if p.peek_kind() == TK_QUESTION {
             let question = p.expect(TK_QUESTION)?;
             Option::<Token>::Some(question)
@@ -6970,10 +6970,10 @@ fn parse_lexer_element(p: &mut Parser) -> Result<LexerElementNode, ParseError> {
     ));
 }
 
-fn parse_lexer_block(p: &mut Parser) -> Result<LexerBlockNode, ParseError> {
+fn _parse_lexer_block(p: &mut Parser) -> Result<LexerBlockNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
-    let lexer_alt_list = parse_lexer_alt_list(p)?;
+    let lexer_alt_list = _parse_lexer_alt_list(p)?;
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<LexerBlockNode, ParseError>::Ok(LexerBlockNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -6983,10 +6983,10 @@ fn parse_lexer_block(p: &mut Parser) -> Result<LexerBlockNode, ParseError> {
     });
 }
 
-fn parse_lexer_commands(p: &mut Parser) -> Result<LexerCommandsNode, ParseError> {
+fn _parse_lexer_commands(p: &mut Parser) -> Result<LexerCommandsNode, ParseError> {
     let start = p.peek().span.start;
     let rarrow = p.expect(TK_RARROW)?;
-    let lexer_command = parse_lexer_command(p)?;
+    let lexer_command = _parse_lexer_command(p)?;
     let mut comma_lexer_command_list: Array<CommaLexerCommandItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -7008,7 +7008,7 @@ fn parse_lexer_commands(p: &mut Parser) -> Result<LexerCommandsNode, ParseError>
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
-        let lexer_command = parse_lexer_command(p)?;
+        let lexer_command = _parse_lexer_command(p)?;
         let comma_lexer_command = CommaLexerCommandItem {
             comma,
             lexer_command,
@@ -7023,27 +7023,27 @@ fn parse_lexer_commands(p: &mut Parser) -> Result<LexerCommandsNode, ParseError>
     });
 }
 
-fn parse_lexer_command_bt_1(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
+fn _parse_lexer_command_bt_1(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
     let start = p.peek().span.start;
-    let lexer_command_name = parse_lexer_command_name(p)?;
+    let lexer_command_name = _parse_lexer_command_name(p)?;
     return Result::<LexerCommandNode, ParseError>::Ok(LexerCommandNode::Alt1(LexerCommandAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         lexer_command_name,
     }));
 }
 
-fn parse_lexer_command_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_lexer_command_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_command_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_lexer_command_bt_0(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
+fn _parse_lexer_command_bt_0(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
     let start = p.peek().span.start;
-    let lexer_command_name = parse_lexer_command_name(p)?;
+    let lexer_command_name = _parse_lexer_command_name(p)?;
     let lparen = p.expect(TK_LPAREN)?;
-    let lexer_command_expr = parse_lexer_command_expr(p)?;
+    let lexer_command_expr = _parse_lexer_command_expr(p)?;
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<LexerCommandNode, ParseError>::Ok(LexerCommandNode::Alt0(LexerCommandAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -7054,7 +7054,7 @@ fn parse_lexer_command_bt_0(p: &mut Parser) -> Result<LexerCommandNode, ParseErr
     }));
 }
 
-fn parse_lexer_command_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_lexer_command_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_command_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -7067,15 +7067,15 @@ fn parse_lexer_command_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_lexer_command(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
+fn _parse_lexer_command(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_18(kind) {
         if _gale_kind_set_18(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_1 = parse_lexer_command_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_0 = parse_lexer_command_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_lexer_command_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_lexer_command_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -7087,12 +7087,12 @@ fn parse_lexer_command(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
                 _sd_best_i = 0;
             }
             if _sd_best_i == 1 {
-                return parse_lexer_command_bt_1(p);
+                return _parse_lexer_command_bt_1(p);
             }
             if _sd_best_i == 0 {
-                return parse_lexer_command_bt_0(p);
+                return _parse_lexer_command_bt_0(p);
             }
-            return parse_lexer_command_bt_0(p);
+            return _parse_lexer_command_bt_0(p);
         }
     }
     return Result::<LexerCommandNode, ParseError>::Err(ParseError::new(
@@ -7102,11 +7102,11 @@ fn parse_lexer_command(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
     ));
 }
 
-fn parse_lexer_command_name(p: &mut Parser) -> Result<LexerCommandNameNode, ParseError> {
+fn _parse_lexer_command_name(p: &mut Parser) -> Result<LexerCommandNameNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
-        let identifier = parse_identifier(p)?;
+        let identifier = _parse_identifier(p)?;
         return Result::<LexerCommandNameNode, ParseError>::Ok(LexerCommandNameNode::Alt0(LexerCommandNameAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             identifier,
@@ -7126,11 +7126,11 @@ fn parse_lexer_command_name(p: &mut Parser) -> Result<LexerCommandNameNode, Pars
     ));
 }
 
-fn parse_lexer_command_expr(p: &mut Parser) -> Result<LexerCommandExprNode, ParseError> {
+fn _parse_lexer_command_expr(p: &mut Parser) -> Result<LexerCommandExprNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
-        let identifier = parse_identifier(p)?;
+        let identifier = _parse_identifier(p)?;
         return Result::<LexerCommandExprNode, ParseError>::Ok(LexerCommandExprNode::Alt0(LexerCommandExprAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             identifier,
@@ -7150,9 +7150,9 @@ fn parse_lexer_command_expr(p: &mut Parser) -> Result<LexerCommandExprNode, Pars
     ));
 }
 
-fn parse_alt_list(p: &mut Parser) -> Result<AltListNode, ParseError> {
+fn _parse_alt_list(p: &mut Parser) -> Result<AltListNode, ParseError> {
     let start = p.peek().span.start;
-    let alternative = parse_alternative(p)?;
+    let alternative = _parse_alternative(p)?;
     let mut or_alternative_list: Array<OrAlternativeItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -7174,7 +7174,7 @@ fn parse_alt_list(p: &mut Parser) -> Result<AltListNode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let or = p.expect(TK_OR)?;
-        let alternative = parse_alternative(p)?;
+        let alternative = _parse_alternative(p)?;
         let or_alternative = OrAlternativeItem {
             or,
             alternative,
@@ -7188,12 +7188,12 @@ fn parse_alt_list(p: &mut Parser) -> Result<AltListNode, ParseError> {
     });
 }
 
-fn parse_alternative(p: &mut Parser) -> Result<AlternativeNode, ParseError> {
+fn _parse_alternative(p: &mut Parser) -> Result<AlternativeNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_10(kind) {
         let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
-            let element_options = parse_element_options(p)?;
+            let element_options = _parse_element_options(p)?;
             Option::<ElementOptionsNode>::Some(element_options)
         } else {
             null
@@ -7214,7 +7214,7 @@ fn parse_alternative(p: &mut Parser) -> Result<AlternativeNode, ParseError> {
                 if rep_scan_pos < 0 { break; }
             }
             _plus_first = false;
-            let element = parse_element(p)?;
+            let element = _parse_element(p)?;
             element_list.push(element);
         }
         return Result::<AlternativeNode, ParseError>::Ok(AlternativeNode::Alt0(AlternativeAlt0 {
@@ -7235,13 +7235,13 @@ fn parse_alternative(p: &mut Parser) -> Result<AlternativeNode, ParseError> {
     ));
 }
 
-fn parse_element_bt_0(p: &mut Parser) -> Result<ElementNode, ParseError> {
+fn _parse_element_bt_0(p: &mut Parser) -> Result<ElementNode, ParseError> {
     let start = p.peek().span.start;
-    let labeled_element = parse_labeled_element(p)?;
+    let labeled_element = _parse_labeled_element(p)?;
     let mut group_0_inner: Option<ElementGroup0> = null;
     let grp_kind = p.peek_kind();
     if _gale_kind_set_9(grp_kind) {
-        let ebnf_suffix = parse_ebnf_suffix(p)?;
+        let ebnf_suffix = _parse_ebnf_suffix(p)?;
         group_0_inner = Option::<ElementGroup0>::Some(ElementGroup0::Alt0(ElementGroup0Alt0 {
             ebnf_suffix,
         }));
@@ -7257,7 +7257,7 @@ fn parse_element_bt_0(p: &mut Parser) -> Result<ElementNode, ParseError> {
     }));
 }
 
-fn parse_element_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_element_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_labeled_element(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -7281,13 +7281,13 @@ fn parse_element_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_element_bt_1(p: &mut Parser) -> Result<ElementNode, ParseError> {
+fn _parse_element_bt_1(p: &mut Parser) -> Result<ElementNode, ParseError> {
     let start = p.peek().span.start;
-    let atom = parse_atom(p)?;
+    let atom = _parse_atom(p)?;
     let mut group_1_inner: Option<ElementGroup1> = null;
     let grp_kind = p.peek_kind();
     if _gale_kind_set_9(grp_kind) {
-        let ebnf_suffix = parse_ebnf_suffix(p)?;
+        let ebnf_suffix = _parse_ebnf_suffix(p)?;
         group_1_inner = Option::<ElementGroup1>::Some(ElementGroup1::Alt0(ElementGroup1Alt0 {
             ebnf_suffix,
         }));
@@ -7303,7 +7303,7 @@ fn parse_element_bt_1(p: &mut Parser) -> Result<ElementNode, ParseError> {
     }));
 }
 
-fn parse_element_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_element_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_atom(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -7327,15 +7327,15 @@ fn parse_element_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_element(p: &mut Parser) -> Result<ElementNode, ParseError> {
+fn _parse_element(p: &mut Parser) -> Result<ElementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_13(kind) {
         if _gale_kind_set_1(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_0 = parse_element_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = parse_element_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_element_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_element_scan_1(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -7347,25 +7347,25 @@ fn parse_element(p: &mut Parser) -> Result<ElementNode, ParseError> {
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return parse_element_bt_0(p);
+                return _parse_element_bt_0(p);
             }
             if _sd_best_i == 1 {
-                return parse_element_bt_1(p);
+                return _parse_element_bt_1(p);
             }
-            return parse_element_bt_1(p);
+            return _parse_element_bt_1(p);
         } else if _gale_kind_set_19(p.peek_kind()) {
-            return parse_element_bt_1(p);
+            return _parse_element_bt_1(p);
         }
     }
     if kind == TK_LPAREN {
-        let ebnf = parse_ebnf(p)?;
+        let ebnf = _parse_ebnf(p)?;
         return Result::<ElementNode, ParseError>::Ok(ElementNode::Alt2(ElementAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             ebnf,
         }));
     }
     if kind == TK_ACTION {
-        let action_block = parse_action_block(p)?;
+        let action_block = _parse_action_block(p)?;
         let question: Option<Token> = if p.peek_kind() == TK_QUESTION {
             let question = p.expect(TK_QUESTION)?;
             Option::<Token>::Some(question)
@@ -7373,7 +7373,7 @@ fn parse_element(p: &mut Parser) -> Result<ElementNode, ParseError> {
             null
         };
         let predicate_options: Option<PredicateOptionsNode> = if p.peek_kind() == TK_LT {
-            let predicate_options = parse_predicate_options(p)?;
+            let predicate_options = _parse_predicate_options(p)?;
             Option::<PredicateOptionsNode>::Some(predicate_options)
         } else {
             null
@@ -7392,10 +7392,10 @@ fn parse_element(p: &mut Parser) -> Result<ElementNode, ParseError> {
     ));
 }
 
-fn parse_predicate_options(p: &mut Parser) -> Result<PredicateOptionsNode, ParseError> {
+fn _parse_predicate_options(p: &mut Parser) -> Result<PredicateOptionsNode, ParseError> {
     let start = p.peek().span.start;
     let lt = p.expect(TK_LT)?;
-    let predicate_option = parse_predicate_option(p)?;
+    let predicate_option = _parse_predicate_option(p)?;
     let mut comma_predicate_option_list: Array<CommaPredicateOptionItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -7417,7 +7417,7 @@ fn parse_predicate_options(p: &mut Parser) -> Result<PredicateOptionsNode, Parse
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
-        let predicate_option = parse_predicate_option(p)?;
+        let predicate_option = _parse_predicate_option(p)?;
         let comma_predicate_option = CommaPredicateOptionItem {
             comma,
             predicate_option,
@@ -7434,30 +7434,30 @@ fn parse_predicate_options(p: &mut Parser) -> Result<PredicateOptionsNode, Parse
     });
 }
 
-fn parse_predicate_option_bt_0(p: &mut Parser) -> Result<PredicateOptionNode, ParseError> {
+fn _parse_predicate_option_bt_0(p: &mut Parser) -> Result<PredicateOptionNode, ParseError> {
     let start = p.peek().span.start;
-    let element_option = parse_element_option(p)?;
+    let element_option = _parse_element_option(p)?;
     return Result::<PredicateOptionNode, ParseError>::Ok(PredicateOptionNode::Alt0(PredicateOptionAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         element_option,
     }));
 }
 
-fn parse_predicate_option_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_predicate_option_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_element_option(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_predicate_option_bt_1(p: &mut Parser) -> Result<PredicateOptionNode, ParseError> {
+fn _parse_predicate_option_bt_1(p: &mut Parser) -> Result<PredicateOptionNode, ParseError> {
     let start = p.peek().span.start;
-    let identifier = parse_identifier(p)?;
+    let identifier = _parse_identifier(p)?;
     let assign = p.expect(TK_ASSIGN)?;
     let mut group_0_inner: Option<PredicateOptionGroup0> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_ACTION {
-        let action_block = parse_action_block(p)?;
+        let action_block = _parse_action_block(p)?;
         group_0_inner = Option::<PredicateOptionGroup0>::Some(PredicateOptionGroup0::Alt0(PredicateOptionGroup0Alt0 {
             action_block,
         }));
@@ -7481,7 +7481,7 @@ fn parse_predicate_option_bt_1(p: &mut Parser) -> Result<PredicateOptionNode, Pa
     }));
 }
 
-fn parse_predicate_option_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_predicate_option_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -7515,15 +7515,15 @@ fn parse_predicate_option_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_predicate_option(p: &mut Parser) -> Result<PredicateOptionNode, ParseError> {
+fn _parse_predicate_option(p: &mut Parser) -> Result<PredicateOptionNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
         if _gale_kind_set_1(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_0 = parse_predicate_option_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = parse_predicate_option_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_predicate_option_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_predicate_option_scan_1(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -7535,12 +7535,12 @@ fn parse_predicate_option(p: &mut Parser) -> Result<PredicateOptionNode, ParseEr
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return parse_predicate_option_bt_0(p);
+                return _parse_predicate_option_bt_0(p);
             }
             if _sd_best_i == 1 {
-                return parse_predicate_option_bt_1(p);
+                return _parse_predicate_option_bt_1(p);
             }
-            return parse_predicate_option_bt_1(p);
+            return _parse_predicate_option_bt_1(p);
         }
     }
     return Result::<PredicateOptionNode, ParseError>::Err(ParseError::new(
@@ -7550,17 +7550,17 @@ fn parse_predicate_option(p: &mut Parser) -> Result<PredicateOptionNode, ParseEr
     ));
 }
 
-fn parse_labeled_element(p: &mut Parser) -> Result<LabeledElementNode, ParseError> {
+fn _parse_labeled_element(p: &mut Parser) -> Result<LabeledElementNode, ParseError> {
     let start = p.peek().span.start;
-    let identifier = parse_identifier(p)?;
+    let identifier = _parse_identifier(p)?;
     let assign_or_plus_assign = p.advance();
     let mut atom_or_block_inner: Option<AtomOrBlockGroup> = null;
     let grp_kind = p.peek_kind();
     if _gale_kind_set_13(grp_kind) {
-        let atom = parse_atom(p)?;
+        let atom = _parse_atom(p)?;
         atom_or_block_inner = Option::<AtomOrBlockGroup>::Some(AtomOrBlockGroup::Atom(atom));
     } else if grp_kind == TK_LPAREN {
-        let block = parse_block(p)?;
+        let block = _parse_block(p)?;
         atom_or_block_inner = Option::<AtomOrBlockGroup>::Some(AtomOrBlockGroup::Block(block));
     }
     let atom_or_block = atom_or_block_inner;
@@ -7572,11 +7572,11 @@ fn parse_labeled_element(p: &mut Parser) -> Result<LabeledElementNode, ParseErro
     });
 }
 
-fn parse_ebnf(p: &mut Parser) -> Result<EbnfNode, ParseError> {
+fn _parse_ebnf(p: &mut Parser) -> Result<EbnfNode, ParseError> {
     let start = p.peek().span.start;
-    let block = parse_block(p)?;
+    let block = _parse_block(p)?;
     let block_suffix: Option<BlockSuffixNode> = if _gale_kind_set_9(p.peek_kind()) {
-        let block_suffix = parse_block_suffix__follow_2(p)?;
+        let block_suffix = _parse_block_suffix__follow_2(p)?;
         Option::<BlockSuffixNode>::Some(block_suffix)
     } else {
         null
@@ -7588,16 +7588,16 @@ fn parse_ebnf(p: &mut Parser) -> Result<EbnfNode, ParseError> {
     });
 }
 
-fn parse_block_suffix(p: &mut Parser) -> Result<BlockSuffixNode, ParseError> {
+fn _parse_block_suffix(p: &mut Parser) -> Result<BlockSuffixNode, ParseError> {
     let start = p.peek().span.start;
-    let ebnf_suffix = parse_ebnf_suffix(p)?;
+    let ebnf_suffix = _parse_ebnf_suffix(p)?;
     return Result::<BlockSuffixNode, ParseError>::Ok(BlockSuffixNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         ebnf_suffix,
     });
 }
 
-fn parse_ebnf_suffix(p: &mut Parser) -> Result<EbnfSuffixNode, ParseError> {
+fn _parse_ebnf_suffix(p: &mut Parser) -> Result<EbnfSuffixNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_QUESTION {
@@ -7649,54 +7649,54 @@ fn parse_ebnf_suffix(p: &mut Parser) -> Result<EbnfSuffixNode, ParseError> {
     ));
 }
 
-fn parse_lexer_atom_bt_0(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
+fn _parse_lexer_atom_bt_0(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
     let start = p.peek().span.start;
-    let character_range = parse_character_range(p)?;
+    let character_range = _parse_character_range(p)?;
     return Result::<LexerAtomNode, ParseError>::Ok(LexerAtomNode::Alt0(LexerAtomAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         character_range,
     }));
 }
 
-fn parse_lexer_atom_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_lexer_atom_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_character_range(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_lexer_atom_bt_1(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
+fn _parse_lexer_atom_bt_1(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
     let start = p.peek().span.start;
-    let terminal_def = parse_terminal_def(p)?;
+    let terminal_def = _parse_terminal_def(p)?;
     return Result::<LexerAtomNode, ParseError>::Ok(LexerAtomNode::Alt1(LexerAtomAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         terminal_def,
     }));
 }
 
-fn parse_lexer_atom_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_lexer_atom_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_terminal_def(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_lexer_atom(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
+fn _parse_lexer_atom(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_15(kind) {
         if p.peek_kind() == TK_STRING_LITERAL {
             if p.peek_at(1) == TK_RANGE {
-                return parse_lexer_atom_bt_0(p);
+                return _parse_lexer_atom_bt_0(p);
             } else if p.peek_at(1) == TK_LT {
-                return parse_lexer_atom_bt_1(p);
+                return _parse_lexer_atom_bt_1(p);
             }
         } else if p.peek_kind() == TK_TOKEN_REF {
-            return parse_lexer_atom_bt_1(p);
+            return _parse_lexer_atom_bt_1(p);
         }
     }
     if kind == TK_NOT {
-        let not_set = parse_not_set(p)?;
+        let not_set = _parse_not_set(p)?;
         return Result::<LexerAtomNode, ParseError>::Ok(LexerAtomNode::Alt2(LexerAtomAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             not_set,
@@ -7710,7 +7710,7 @@ fn parse_lexer_atom(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
         }));
     }
     if kind == TK_DOT {
-        let wildcard = parse_wildcard(p)?;
+        let wildcard = _parse_wildcard(p)?;
         return Result::<LexerAtomNode, ParseError>::Ok(LexerAtomNode::Alt4(LexerAtomAlt4 {
             span: Span::new(start, i32::max(start, p.last_end())),
             wildcard,
@@ -7723,32 +7723,32 @@ fn parse_lexer_atom(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
     ));
 }
 
-fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
+fn _parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_15(kind) {
-        let terminal_def = parse_terminal_def(p)?;
+        let terminal_def = _parse_terminal_def(p)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt0(AtomAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             terminal_def,
         }));
     }
     if kind == TK_RULE_REF {
-        let ruleref = parse_ruleref(p)?;
+        let ruleref = _parse_ruleref(p)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt1(AtomAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             ruleref,
         }));
     }
     if kind == TK_NOT {
-        let not_set = parse_not_set(p)?;
+        let not_set = _parse_not_set(p)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt2(AtomAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             not_set,
         }));
     }
     if kind == TK_DOT {
-        let wildcard = parse_wildcard(p)?;
+        let wildcard = _parse_wildcard(p)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt3(AtomAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             wildcard,
@@ -7761,11 +7761,11 @@ fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
     ));
 }
 
-fn parse_wildcard(p: &mut Parser) -> Result<WildcardNode, ParseError> {
+fn _parse_wildcard(p: &mut Parser) -> Result<WildcardNode, ParseError> {
     let start = p.peek().span.start;
     let dot = p.expect(TK_DOT)?;
     let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
-        let element_options = parse_element_options(p)?;
+        let element_options = _parse_element_options(p)?;
         Option::<ElementOptionsNode>::Some(element_options)
     } else {
         null
@@ -7777,10 +7777,10 @@ fn parse_wildcard(p: &mut Parser) -> Result<WildcardNode, ParseError> {
     });
 }
 
-fn parse_not_set_bt_0(p: &mut Parser) -> Result<NotSetNode, ParseError> {
+fn _parse_not_set_bt_0(p: &mut Parser) -> Result<NotSetNode, ParseError> {
     let start = p.peek().span.start;
     let not = p.expect(TK_NOT)?;
-    let set_element = parse_set_element(p)?;
+    let set_element = _parse_set_element(p)?;
     return Result::<NotSetNode, ParseError>::Ok(NotSetNode::Alt0(NotSetAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         not,
@@ -7788,7 +7788,7 @@ fn parse_not_set_bt_0(p: &mut Parser) -> Result<NotSetNode, ParseError> {
     }));
 }
 
-fn parse_not_set_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_not_set_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_NOT { return -1; }
     pos += 1;
@@ -7797,10 +7797,10 @@ fn parse_not_set_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_not_set_bt_1(p: &mut Parser) -> Result<NotSetNode, ParseError> {
+fn _parse_not_set_bt_1(p: &mut Parser) -> Result<NotSetNode, ParseError> {
     let start = p.peek().span.start;
     let not = p.expect(TK_NOT)?;
-    let block_set = parse_block_set(p)?;
+    let block_set = _parse_block_set(p)?;
     return Result::<NotSetNode, ParseError>::Ok(NotSetNode::Alt1(NotSetAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         not,
@@ -7808,7 +7808,7 @@ fn parse_not_set_bt_1(p: &mut Parser) -> Result<NotSetNode, ParseError> {
     }));
 }
 
-fn parse_not_set_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_not_set_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_NOT { return -1; }
     pos += 1;
@@ -7817,20 +7817,20 @@ fn parse_not_set_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_not_set(p: &mut Parser) -> Result<NotSetNode, ParseError> {
+fn _parse_not_set(p: &mut Parser) -> Result<NotSetNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_NOT {
         let not = p.expect(TK_NOT)?;
         if _gale_kind_set_20(p.peek_kind()) {
-            let set_element = parse_set_element(p)?;
+            let set_element = _parse_set_element(p)?;
             return Result::<NotSetNode, ParseError>::Ok(NotSetNode::Alt0(NotSetAlt0 {
                 span: Span::new(start, i32::max(start, p.last_end())),
                 not,
                 set_element,
             }));
         } else if p.peek_kind() == TK_LPAREN {
-            let block_set = parse_block_set(p)?;
+            let block_set = _parse_block_set(p)?;
             return Result::<NotSetNode, ParseError>::Ok(NotSetNode::Alt1(NotSetAlt1 {
                 span: Span::new(start, i32::max(start, p.last_end())),
                 not,
@@ -7845,10 +7845,10 @@ fn parse_not_set(p: &mut Parser) -> Result<NotSetNode, ParseError> {
     ));
 }
 
-fn parse_block_set(p: &mut Parser) -> Result<BlockSetNode, ParseError> {
+fn _parse_block_set(p: &mut Parser) -> Result<BlockSetNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
-    let set_element = parse_set_element(p)?;
+    let set_element = _parse_set_element(p)?;
     let mut or_set_element_list: Array<OrSetElementItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -7870,7 +7870,7 @@ fn parse_block_set(p: &mut Parser) -> Result<BlockSetNode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let or = p.expect(TK_OR)?;
-        let set_element = parse_set_element(p)?;
+        let set_element = _parse_set_element(p)?;
         let or_set_element = OrSetElementItem {
             or,
             set_element,
@@ -7887,11 +7887,11 @@ fn parse_block_set(p: &mut Parser) -> Result<BlockSetNode, ParseError> {
     });
 }
 
-fn parse_set_element_bt_1(p: &mut Parser) -> Result<SetElementNode, ParseError> {
+fn _parse_set_element_bt_1(p: &mut Parser) -> Result<SetElementNode, ParseError> {
     let start = p.peek().span.start;
     let string_literal = p.expect(TK_STRING_LITERAL)?;
     let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
-        let element_options = parse_element_options(p)?;
+        let element_options = _parse_element_options(p)?;
         Option::<ElementOptionsNode>::Some(element_options)
     } else {
         null
@@ -7903,7 +7903,7 @@ fn parse_set_element_bt_1(p: &mut Parser) -> Result<SetElementNode, ParseError> 
     }));
 }
 
-fn parse_set_element_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_set_element_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
     pos += 1;
@@ -7915,29 +7915,29 @@ fn parse_set_element_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_set_element_bt_2(p: &mut Parser) -> Result<SetElementNode, ParseError> {
+fn _parse_set_element_bt_2(p: &mut Parser) -> Result<SetElementNode, ParseError> {
     let start = p.peek().span.start;
-    let character_range = parse_character_range(p)?;
+    let character_range = _parse_character_range(p)?;
     return Result::<SetElementNode, ParseError>::Ok(SetElementNode::Alt2(SetElementAlt2 {
         span: Span::new(start, i32::max(start, p.last_end())),
         character_range,
     }));
 }
 
-fn parse_set_element_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_set_element_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_character_range(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_set_element(p: &mut Parser) -> Result<SetElementNode, ParseError> {
+fn _parse_set_element(p: &mut Parser) -> Result<SetElementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
         let token_ref = p.expect(TK_TOKEN_REF)?;
         let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
-            let element_options = parse_element_options(p)?;
+            let element_options = _parse_element_options(p)?;
             Option::<ElementOptionsNode>::Some(element_options)
         } else {
             null
@@ -7952,8 +7952,8 @@ fn parse_set_element(p: &mut Parser) -> Result<SetElementNode, ParseError> {
         if p.peek_kind() == TK_STRING_LITERAL {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_1 = parse_set_element_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_2 = parse_set_element_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_set_element_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_set_element_scan_2(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -7965,12 +7965,12 @@ fn parse_set_element(p: &mut Parser) -> Result<SetElementNode, ParseError> {
                 _sd_best_i = 2;
             }
             if _sd_best_i == 1 {
-                return parse_set_element_bt_1(p);
+                return _parse_set_element_bt_1(p);
             }
             if _sd_best_i == 2 {
-                return parse_set_element_bt_2(p);
+                return _parse_set_element_bt_2(p);
             }
-            return parse_set_element_bt_2(p);
+            return _parse_set_element_bt_2(p);
         }
     }
     if kind == TK_LEXER_CHAR_SET {
@@ -7987,12 +7987,12 @@ fn parse_set_element(p: &mut Parser) -> Result<SetElementNode, ParseError> {
     ));
 }
 
-fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
+fn _parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
     let options_spec_rule_action_colon: Option<OptionsSpecOptRuleActionListColonItem> = if p.peek_kind() == TK_OPTIONS && p.peek_at(1) == TK_AT && p.peek_at(2) == TK_COLON {
         let options_spec: Option<OptionsSpecNode> = if p.peek_kind() == TK_OPTIONS {
-            let options_spec = parse_options_spec(p)?;
+            let options_spec = _parse_options_spec(p)?;
             Option::<OptionsSpecNode>::Some(options_spec)
         } else {
             null
@@ -8009,7 +8009,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let rule_action = parse_rule_action(p)?;
+            let rule_action = _parse_rule_action(p)?;
             rule_action_list.push(rule_action);
         }
         let colon = p.expect(TK_COLON)?;
@@ -8033,7 +8033,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let rule_action = parse_rule_action(p)?;
+            let rule_action = _parse_rule_action(p)?;
             rule_action_list.push(rule_action);
         }
         let colon = p.expect(TK_COLON)?;
@@ -8045,7 +8045,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
         Option::<OptionsSpecOptRuleActionListColonItem>::Some(options_spec_rule_action_colon)
     } else if p.peek_kind() == TK_OPTIONS && p.peek_at(1) == TK_COLON {
         let options_spec: Option<OptionsSpecNode> = if p.peek_kind() == TK_OPTIONS {
-            let options_spec = parse_options_spec(p)?;
+            let options_spec = _parse_options_spec(p)?;
             Option::<OptionsSpecNode>::Some(options_spec)
         } else {
             null
@@ -8071,7 +8071,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
     } else {
         null
     };
-    let alt_list = parse_alt_list(p)?;
+    let alt_list = _parse_alt_list(p)?;
     let rparen = p.expect(TK_RPAREN)?;
     return Result::<BlockNode, ParseError>::Ok(BlockNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -8082,17 +8082,17 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
     });
 }
 
-fn parse_ruleref(p: &mut Parser) -> Result<RulerefNode, ParseError> {
+fn _parse_ruleref(p: &mut Parser) -> Result<RulerefNode, ParseError> {
     let start = p.peek().span.start;
     let rule_ref = p.expect(TK_RULE_REF)?;
     let arg_action_block: Option<ArgActionBlockNode> = if p.peek_kind() == TK_BEGIN_ARGUMENT {
-        let arg_action_block = parse_arg_action_block(p)?;
+        let arg_action_block = _parse_arg_action_block(p)?;
         Option::<ArgActionBlockNode>::Some(arg_action_block)
     } else {
         null
     };
     let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
-        let element_options = parse_element_options(p)?;
+        let element_options = _parse_element_options(p)?;
         Option::<ElementOptionsNode>::Some(element_options)
     } else {
         null
@@ -8105,7 +8105,7 @@ fn parse_ruleref(p: &mut Parser) -> Result<RulerefNode, ParseError> {
     });
 }
 
-fn parse_character_range(p: &mut Parser) -> Result<CharacterRangeNode, ParseError> {
+fn _parse_character_range(p: &mut Parser) -> Result<CharacterRangeNode, ParseError> {
     let start = p.peek().span.start;
     let string_literal = p.expect(TK_STRING_LITERAL)?;
     let range = p.expect(TK_RANGE)?;
@@ -8118,13 +8118,13 @@ fn parse_character_range(p: &mut Parser) -> Result<CharacterRangeNode, ParseErro
     });
 }
 
-fn parse_terminal_def(p: &mut Parser) -> Result<TerminalDefNode, ParseError> {
+fn _parse_terminal_def(p: &mut Parser) -> Result<TerminalDefNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
         let token_ref = p.expect(TK_TOKEN_REF)?;
         let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
-            let element_options = parse_element_options(p)?;
+            let element_options = _parse_element_options(p)?;
             Option::<ElementOptionsNode>::Some(element_options)
         } else {
             null
@@ -8138,7 +8138,7 @@ fn parse_terminal_def(p: &mut Parser) -> Result<TerminalDefNode, ParseError> {
     if kind == TK_STRING_LITERAL {
         let string_literal = p.expect(TK_STRING_LITERAL)?;
         let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
-            let element_options = parse_element_options(p)?;
+            let element_options = _parse_element_options(p)?;
             Option::<ElementOptionsNode>::Some(element_options)
         } else {
             null
@@ -8156,10 +8156,10 @@ fn parse_terminal_def(p: &mut Parser) -> Result<TerminalDefNode, ParseError> {
     ));
 }
 
-fn parse_element_options(p: &mut Parser) -> Result<ElementOptionsNode, ParseError> {
+fn _parse_element_options(p: &mut Parser) -> Result<ElementOptionsNode, ParseError> {
     let start = p.peek().span.start;
     let lt = p.expect(TK_LT)?;
-    let element_option = parse_element_option(p)?;
+    let element_option = _parse_element_option(p)?;
     let mut comma_element_option_list: Array<CommaElementOptionItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -8181,7 +8181,7 @@ fn parse_element_options(p: &mut Parser) -> Result<ElementOptionsNode, ParseErro
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
-        let element_option = parse_element_option(p)?;
+        let element_option = _parse_element_option(p)?;
         let comma_element_option = CommaElementOptionItem {
             comma,
             element_option,
@@ -8198,30 +8198,30 @@ fn parse_element_options(p: &mut Parser) -> Result<ElementOptionsNode, ParseErro
     });
 }
 
-fn parse_element_option_bt_0(p: &mut Parser) -> Result<ElementOptionNode, ParseError> {
+fn _parse_element_option_bt_0(p: &mut Parser) -> Result<ElementOptionNode, ParseError> {
     let start = p.peek().span.start;
-    let qualified_identifier = parse_qualified_identifier(p)?;
+    let qualified_identifier = _parse_qualified_identifier(p)?;
     return Result::<ElementOptionNode, ParseError>::Ok(ElementOptionNode::Alt0(ElementOptionAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         qualified_identifier,
     }));
 }
 
-fn parse_element_option_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_element_option_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_qualified_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_element_option_bt_1(p: &mut Parser) -> Result<ElementOptionNode, ParseError> {
+fn _parse_element_option_bt_1(p: &mut Parser) -> Result<ElementOptionNode, ParseError> {
     let start = p.peek().span.start;
-    let identifier = parse_identifier(p)?;
+    let identifier = _parse_identifier(p)?;
     let assign = p.expect(TK_ASSIGN)?;
     let mut group_0_inner: Option<ElementOptionGroup0> = null;
     let grp_kind = p.peek_kind();
     if _gale_kind_set_1(grp_kind) {
-        let qualified_identifier = parse_qualified_identifier(p)?;
+        let qualified_identifier = _parse_qualified_identifier(p)?;
         group_0_inner = Option::<ElementOptionGroup0>::Some(ElementOptionGroup0::Alt0(ElementOptionGroup0Alt0 {
             qualified_identifier,
         }));
@@ -8245,7 +8245,7 @@ fn parse_element_option_bt_1(p: &mut Parser) -> Result<ElementOptionNode, ParseE
     }));
 }
 
-fn parse_element_option_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_element_option_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -8279,15 +8279,15 @@ fn parse_element_option_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_element_option(p: &mut Parser) -> Result<ElementOptionNode, ParseError> {
+fn _parse_element_option(p: &mut Parser) -> Result<ElementOptionNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
         if _gale_kind_set_1(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_0 = parse_element_option_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = parse_element_option_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_element_option_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_element_option_scan_1(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -8299,12 +8299,12 @@ fn parse_element_option(p: &mut Parser) -> Result<ElementOptionNode, ParseError>
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return parse_element_option_bt_0(p);
+                return _parse_element_option_bt_0(p);
             }
             if _sd_best_i == 1 {
-                return parse_element_option_bt_1(p);
+                return _parse_element_option_bt_1(p);
             }
-            return parse_element_option_bt_1(p);
+            return _parse_element_option_bt_1(p);
         }
     }
     return Result::<ElementOptionNode, ParseError>::Err(ParseError::new(
@@ -8314,7 +8314,7 @@ fn parse_element_option(p: &mut Parser) -> Result<ElementOptionNode, ParseError>
     ));
 }
 
-fn parse_identifier(p: &mut Parser) -> Result<IdentifierNode, ParseError> {
+fn _parse_identifier(p: &mut Parser) -> Result<IdentifierNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_RULE_REF {
@@ -8338,9 +8338,9 @@ fn parse_identifier(p: &mut Parser) -> Result<IdentifierNode, ParseError> {
     ));
 }
 
-fn parse_qualified_identifier(p: &mut Parser) -> Result<QualifiedIdentifierNode, ParseError> {
+fn _parse_qualified_identifier(p: &mut Parser) -> Result<QualifiedIdentifierNode, ParseError> {
     let start = p.peek().span.start;
-    let identifier = parse_identifier(p)?;
+    let identifier = _parse_identifier(p)?;
     let mut dot_identifier_list: Array<DotIdentifierItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -8362,7 +8362,7 @@ fn parse_qualified_identifier(p: &mut Parser) -> Result<QualifiedIdentifierNode,
         }
         if rep_scan_pos < 0 { break; }
         let dot = p.expect(TK_DOT)?;
-        let identifier = parse_identifier(p)?;
+        let identifier = _parse_identifier(p)?;
         let dot_identifier = DotIdentifierItem {
             dot,
             identifier,
@@ -8383,7 +8383,7 @@ fn scan_rule_modifiers__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 
     return pos;
 }
 
-fn parse_rule_modifiers__follow_0(p: &mut Parser) -> Result<RuleModifiersNode, ParseError> {
+fn _parse_rule_modifiers__follow_0(p: &mut Parser) -> Result<RuleModifiersNode, ParseError> {
     let start = p.peek().span.start;
     let mut rule_modifier_list: Array<RuleModifierNode> = [];
     let mut _plus_first = true;
@@ -8401,7 +8401,7 @@ fn parse_rule_modifiers__follow_0(p: &mut Parser) -> Result<RuleModifiersNode, P
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let rule_modifier = parse_rule_modifier(p)?;
+        let rule_modifier = _parse_rule_modifier(p)?;
         rule_modifier_list.push(rule_modifier);
     }
     return Result::<RuleModifiersNode, ParseError>::Ok(RuleModifiersNode {
@@ -8446,7 +8446,7 @@ fn scan_ebnf_suffix__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
     return pos;
 }
 
-fn parse_ebnf_suffix__follow_1(p: &mut Parser) -> Result<EbnfSuffixNode, ParseError> {
+fn _parse_ebnf_suffix__follow_1(p: &mut Parser) -> Result<EbnfSuffixNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_QUESTION {
@@ -8490,19 +8490,419 @@ fn scan_block_suffix__follow_2(tokens: &Array<Token>, pos: i32, min_prec: i32 = 
     return pos;
 }
 
-fn parse_block_suffix__follow_2(p: &mut Parser) -> Result<BlockSuffixNode, ParseError> {
+fn _parse_block_suffix__follow_2(p: &mut Parser) -> Result<BlockSuffixNode, ParseError> {
     let start = p.peek().span.start;
-    let ebnf_suffix = parse_ebnf_suffix__follow_1(p)?;
+    let ebnf_suffix = _parse_ebnf_suffix__follow_1(p)?;
     return Result::<BlockSuffixNode, ParseError>::Ok(BlockSuffixNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         ebnf_suffix,
     });
 }
 
-pub fn parse(input: &String) -> Result<GrammarSpecNode, ParseError> {
+pub fn parse_grammar_spec(input: &String) -> Result<GrammarSpecNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_grammar_spec(&mut parser);
+    return _parse_grammar_spec(&mut parser);
+}
+
+pub fn parse_grammar_decl(input: &String) -> Result<GrammarDeclNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_grammar_decl(&mut parser);
+}
+
+pub fn parse_grammar_type(input: &String) -> Result<GrammarTypeNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_grammar_type(&mut parser);
+}
+
+pub fn parse_prequel_construct(input: &String) -> Result<PrequelConstructNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_prequel_construct(&mut parser);
+}
+
+pub fn parse_options_spec(input: &String) -> Result<OptionsSpecNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_options_spec(&mut parser);
+}
+
+pub fn parse_option(input: &String) -> Result<OptionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_option(&mut parser);
+}
+
+pub fn parse_option_value(input: &String) -> Result<OptionValueNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_option_value(&mut parser);
+}
+
+pub fn parse_delegate_grammars(input: &String) -> Result<DelegateGrammarsNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_delegate_grammars(&mut parser);
+}
+
+pub fn parse_delegate_grammar(input: &String) -> Result<DelegateGrammarNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_delegate_grammar(&mut parser);
+}
+
+pub fn parse_tokens_spec(input: &String) -> Result<TokensSpecNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_tokens_spec(&mut parser);
+}
+
+pub fn parse_channels_spec(input: &String) -> Result<ChannelsSpecNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_channels_spec(&mut parser);
+}
+
+pub fn parse_id_list(input: &String) -> Result<IdListNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_id_list(&mut parser);
+}
+
+pub fn parse_action_(input: &String) -> Result<ActionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_action_(&mut parser);
+}
+
+pub fn parse_action_scope_name(input: &String) -> Result<ActionScopeNameNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_action_scope_name(&mut parser);
+}
+
+pub fn parse_action_block(input: &String) -> Result<ActionBlockNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_action_block(&mut parser);
+}
+
+pub fn parse_arg_action_block(input: &String) -> Result<ArgActionBlockNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_arg_action_block(&mut parser);
+}
+
+pub fn parse_mode_spec(input: &String) -> Result<ModeSpecNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_mode_spec(&mut parser);
+}
+
+pub fn parse_rules(input: &String) -> Result<RulesNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_rules(&mut parser);
+}
+
+pub fn parse_rule_spec(input: &String) -> Result<RuleSpecNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_rule_spec(&mut parser);
+}
+
+pub fn parse_parser_rule_spec(input: &String) -> Result<ParserRuleSpecNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_parser_rule_spec(&mut parser);
+}
+
+pub fn parse_exception_group(input: &String) -> Result<ExceptionGroupNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_exception_group(&mut parser);
+}
+
+pub fn parse_exception_handler(input: &String) -> Result<ExceptionHandlerNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_exception_handler(&mut parser);
+}
+
+pub fn parse_finally_clause(input: &String) -> Result<FinallyClauseNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_finally_clause(&mut parser);
+}
+
+pub fn parse_rule_prequel(input: &String) -> Result<RulePrequelNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_rule_prequel(&mut parser);
+}
+
+pub fn parse_rule_returns(input: &String) -> Result<RuleReturnsNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_rule_returns(&mut parser);
+}
+
+pub fn parse_throws_spec(input: &String) -> Result<ThrowsSpecNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_throws_spec(&mut parser);
+}
+
+pub fn parse_locals_spec(input: &String) -> Result<LocalsSpecNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_locals_spec(&mut parser);
+}
+
+pub fn parse_rule_action(input: &String) -> Result<RuleActionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_rule_action(&mut parser);
+}
+
+pub fn parse_rule_modifiers(input: &String) -> Result<RuleModifiersNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_rule_modifiers(&mut parser);
+}
+
+pub fn parse_rule_modifier(input: &String) -> Result<RuleModifierNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_rule_modifier(&mut parser);
+}
+
+pub fn parse_rule_block(input: &String) -> Result<RuleBlockNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_rule_block(&mut parser);
+}
+
+pub fn parse_rule_alt_list(input: &String) -> Result<RuleAltListNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_rule_alt_list(&mut parser);
+}
+
+pub fn parse_labeled_alt(input: &String) -> Result<LabeledAltNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_labeled_alt(&mut parser);
+}
+
+pub fn parse_lexer_rule_spec(input: &String) -> Result<LexerRuleSpecNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_lexer_rule_spec(&mut parser);
+}
+
+pub fn parse_lexer_rule_block(input: &String) -> Result<LexerRuleBlockNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_lexer_rule_block(&mut parser);
+}
+
+pub fn parse_lexer_alt_list(input: &String) -> Result<LexerAltListNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_lexer_alt_list(&mut parser);
+}
+
+pub fn parse_lexer_alt(input: &String) -> Result<LexerAltNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_lexer_alt(&mut parser);
+}
+
+pub fn parse_lexer_elements(input: &String) -> Result<LexerElementsNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_lexer_elements(&mut parser);
+}
+
+pub fn parse_lexer_element(input: &String) -> Result<LexerElementNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_lexer_element(&mut parser);
+}
+
+pub fn parse_lexer_block(input: &String) -> Result<LexerBlockNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_lexer_block(&mut parser);
+}
+
+pub fn parse_lexer_commands(input: &String) -> Result<LexerCommandsNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_lexer_commands(&mut parser);
+}
+
+pub fn parse_lexer_command(input: &String) -> Result<LexerCommandNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_lexer_command(&mut parser);
+}
+
+pub fn parse_lexer_command_name(input: &String) -> Result<LexerCommandNameNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_lexer_command_name(&mut parser);
+}
+
+pub fn parse_lexer_command_expr(input: &String) -> Result<LexerCommandExprNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_lexer_command_expr(&mut parser);
+}
+
+pub fn parse_alt_list(input: &String) -> Result<AltListNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_alt_list(&mut parser);
+}
+
+pub fn parse_alternative(input: &String) -> Result<AlternativeNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_alternative(&mut parser);
+}
+
+pub fn parse_element(input: &String) -> Result<ElementNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_element(&mut parser);
+}
+
+pub fn parse_predicate_options(input: &String) -> Result<PredicateOptionsNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_predicate_options(&mut parser);
+}
+
+pub fn parse_predicate_option(input: &String) -> Result<PredicateOptionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_predicate_option(&mut parser);
+}
+
+pub fn parse_labeled_element(input: &String) -> Result<LabeledElementNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_labeled_element(&mut parser);
+}
+
+pub fn parse_ebnf(input: &String) -> Result<EbnfNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_ebnf(&mut parser);
+}
+
+pub fn parse_block_suffix(input: &String) -> Result<BlockSuffixNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_block_suffix(&mut parser);
+}
+
+pub fn parse_ebnf_suffix(input: &String) -> Result<EbnfSuffixNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_ebnf_suffix(&mut parser);
+}
+
+pub fn parse_lexer_atom(input: &String) -> Result<LexerAtomNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_lexer_atom(&mut parser);
+}
+
+pub fn parse_atom(input: &String) -> Result<AtomNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_atom(&mut parser);
+}
+
+pub fn parse_wildcard(input: &String) -> Result<WildcardNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_wildcard(&mut parser);
+}
+
+pub fn parse_not_set(input: &String) -> Result<NotSetNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_not_set(&mut parser);
+}
+
+pub fn parse_block_set(input: &String) -> Result<BlockSetNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_block_set(&mut parser);
+}
+
+pub fn parse_set_element(input: &String) -> Result<SetElementNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_set_element(&mut parser);
+}
+
+pub fn parse_block(input: &String) -> Result<BlockNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_block(&mut parser);
+}
+
+pub fn parse_ruleref(input: &String) -> Result<RulerefNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_ruleref(&mut parser);
+}
+
+pub fn parse_character_range(input: &String) -> Result<CharacterRangeNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_character_range(&mut parser);
+}
+
+pub fn parse_terminal_def(input: &String) -> Result<TerminalDefNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_terminal_def(&mut parser);
+}
+
+pub fn parse_element_options(input: &String) -> Result<ElementOptionsNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_element_options(&mut parser);
+}
+
+pub fn parse_element_option(input: &String) -> Result<ElementOptionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_element_option(&mut parser);
+}
+
+pub fn parse_identifier(input: &String) -> Result<IdentifierNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_identifier(&mut parser);
+}
+
+pub fn parse_qualified_identifier(input: &String) -> Result<QualifiedIdentifierNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_qualified_identifier(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<GrammarSpecNode, ParseError> {
+    return parse_grammar_spec(input);
 }
 
 pub fn walk_grammarSpec<V: Visitor>(v: &mut V, node: &GrammarSpecNode) {

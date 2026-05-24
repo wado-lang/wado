@@ -820,7 +820,7 @@ fn scan_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return -1;
 }
 
-fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_A {
@@ -851,10 +851,14 @@ fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     ));
 }
 
-pub fn parse(input: &String) -> Result<ANode, ParseError> {
+pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_a(&mut parser);
+    return _parse_a(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<ANode, ParseError> {
+    return parse_a(input);
 }
 
 pub fn walk_a<V: Visitor>(v: &mut V, node: &ANode) {

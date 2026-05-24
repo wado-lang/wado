@@ -1373,9 +1373,9 @@ fn scan_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_json(p: &mut Parser) -> Result<JsonNode, ParseError> {
+fn _parse_json(p: &mut Parser) -> Result<JsonNode, ParseError> {
     let start = p.peek().span.start;
-    let value = parse_value(p)?;
+    let value = _parse_value(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<JsonNode, ParseError>::Ok(JsonNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1384,10 +1384,10 @@ fn parse_json(p: &mut Parser) -> Result<JsonNode, ParseError> {
     });
 }
 
-fn parse_obj_bt_0(p: &mut Parser) -> Result<ObjNode, ParseError> {
+fn _parse_obj_bt_0(p: &mut Parser) -> Result<ObjNode, ParseError> {
     let start = p.peek().span.start;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let pair = parse_pair(p)?;
+    let pair = _parse_pair(p)?;
     let mut comma_pair_list: Array<CommaPairItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -1409,7 +1409,7 @@ fn parse_obj_bt_0(p: &mut Parser) -> Result<ObjNode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_LIT_COMMA)?;
-        let pair = parse_pair(p)?;
+        let pair = _parse_pair(p)?;
         let comma_pair = CommaPairItem {
             comma,
             pair,
@@ -1426,7 +1426,7 @@ fn parse_obj_bt_0(p: &mut Parser) -> Result<ObjNode, ParseError> {
     }));
 }
 
-fn parse_obj_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_obj_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -1452,7 +1452,7 @@ fn parse_obj_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_obj_bt_1(p: &mut Parser) -> Result<ObjNode, ParseError> {
+fn _parse_obj_bt_1(p: &mut Parser) -> Result<ObjNode, ParseError> {
     let start = p.peek().span.start;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let rbrace = p.expect(TK_LIT_RBRACE)?;
@@ -1463,7 +1463,7 @@ fn parse_obj_bt_1(p: &mut Parser) -> Result<ObjNode, ParseError> {
     }));
 }
 
-fn parse_obj_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_obj_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -1472,13 +1472,13 @@ fn parse_obj_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
+fn _parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACE {
         let lbrace = p.expect(TK_LIT_LBRACE)?;
         if p.peek_kind() == TK_STRING {
-            let pair = parse_pair(p)?;
+            let pair = _parse_pair(p)?;
             let mut comma_pair_list: Array<CommaPairItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
@@ -1500,7 +1500,7 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
                 }
                 if rep_scan_pos < 0 { break; }
                 let comma = p.expect(TK_LIT_COMMA)?;
-                let pair = parse_pair(p)?;
+                let pair = _parse_pair(p)?;
                 let comma_pair = CommaPairItem {
                     comma,
                     pair,
@@ -1531,11 +1531,11 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
     ));
 }
 
-fn parse_pair(p: &mut Parser) -> Result<PairNode, ParseError> {
+fn _parse_pair(p: &mut Parser) -> Result<PairNode, ParseError> {
     let start = p.peek().span.start;
     let string = p.expect(TK_STRING)?;
     let colon = p.expect(TK_LIT_COLON)?;
-    let value = parse_value(p)?;
+    let value = _parse_value(p)?;
     return Result::<PairNode, ParseError>::Ok(PairNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         string,
@@ -1544,10 +1544,10 @@ fn parse_pair(p: &mut Parser) -> Result<PairNode, ParseError> {
     });
 }
 
-fn parse_arr_bt_0(p: &mut Parser) -> Result<ArrNode, ParseError> {
+fn _parse_arr_bt_0(p: &mut Parser) -> Result<ArrNode, ParseError> {
     let start = p.peek().span.start;
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
-    let value = parse_value(p)?;
+    let value = _parse_value(p)?;
     let mut comma_value_list: Array<CommaValueItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -1569,7 +1569,7 @@ fn parse_arr_bt_0(p: &mut Parser) -> Result<ArrNode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_LIT_COMMA)?;
-        let value = parse_value(p)?;
+        let value = _parse_value(p)?;
         let comma_value = CommaValueItem {
             comma,
             value,
@@ -1586,7 +1586,7 @@ fn parse_arr_bt_0(p: &mut Parser) -> Result<ArrNode, ParseError> {
     }));
 }
 
-fn parse_arr_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_arr_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
     pos += 1;
@@ -1612,7 +1612,7 @@ fn parse_arr_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_arr_bt_1(p: &mut Parser) -> Result<ArrNode, ParseError> {
+fn _parse_arr_bt_1(p: &mut Parser) -> Result<ArrNode, ParseError> {
     let start = p.peek().span.start;
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
@@ -1623,7 +1623,7 @@ fn parse_arr_bt_1(p: &mut Parser) -> Result<ArrNode, ParseError> {
     }));
 }
 
-fn parse_arr_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_arr_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
     pos += 1;
@@ -1632,13 +1632,13 @@ fn parse_arr_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
+fn _parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACKET {
         let lbracket = p.expect(TK_LIT_LBRACKET)?;
         if _gale_kind_set_0(p.peek_kind()) {
-            let value = parse_value(p)?;
+            let value = _parse_value(p)?;
             let mut comma_value_list: Array<CommaValueItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
@@ -1660,7 +1660,7 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
                 }
                 if rep_scan_pos < 0 { break; }
                 let comma = p.expect(TK_LIT_COMMA)?;
-                let value = parse_value(p)?;
+                let value = _parse_value(p)?;
                 let comma_value = CommaValueItem {
                     comma,
                     value,
@@ -1691,7 +1691,7 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
     ));
 }
 
-fn parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
+fn _parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_STRING {
@@ -1709,14 +1709,14 @@ fn parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
         }));
     }
     if kind == TK_LIT_LBRACE {
-        let obj = parse_obj(p)?;
+        let obj = _parse_obj(p)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt2(ValueAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             obj,
         }));
     }
     if kind == TK_LIT_LBRACKET {
-        let arr = parse_arr(p)?;
+        let arr = _parse_arr(p)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt3(ValueAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             arr,
@@ -1750,10 +1750,38 @@ fn parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
     ));
 }
 
-pub fn parse(input: &String) -> Result<JsonNode, ParseError> {
+pub fn parse_json(input: &String) -> Result<JsonNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_json(&mut parser);
+    return _parse_json(&mut parser);
+}
+
+pub fn parse_obj(input: &String) -> Result<ObjNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_obj(&mut parser);
+}
+
+pub fn parse_pair(input: &String) -> Result<PairNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_pair(&mut parser);
+}
+
+pub fn parse_arr(input: &String) -> Result<ArrNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_arr(&mut parser);
+}
+
+pub fn parse_value(input: &String) -> Result<ValueNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_value(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<JsonNode, ParseError> {
+    return parse_json(input);
 }
 
 pub fn walk_json<V: Visitor>(v: &mut V, node: &JsonNode) {

@@ -21,6 +21,6 @@ use t from "../../grammars/ParserErrors/SingleTokenDeletionExpectingSet.g4"
 // triage: parse-must-error: Gale codegen bug — a set element like `('b'|'c')` is emitted as `p.advance()` without a kind-check dispatch, so any token is silently consumed (Stage C-independent)
 test "stage_a_err: ParserErrors/SingleTokenDeletionExpectingSet" {
     let input = "aab";
-    let result = t::parse(&input);
+    let result = t::parse_a(&input);
     assert result matches { Err(_) }, `expected parse to fail but it succeeded`;
 }

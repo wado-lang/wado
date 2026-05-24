@@ -105,9 +105,11 @@ struct ParsedDescriptor {
     /// parse to `Ok`; those are Stage E territory.
     errors: String,
     /// `[start]` field — the rule the upstream runner enters at. Gale's
-    /// generated parser always exposes the first parser rule via `parse()`,
-    /// so descriptors whose `[start]` differs from the first rule will fail
-    /// Stage B and are routed to `[stage_b_skip]` after triage.
+    /// generated parser exposes both `parse(input)` (an alias for the
+    /// first parser rule) and `parse_<rule>(input)` for every parser
+    /// rule, so the emitted Stage A drivers dispatch via
+    /// `t::parse_<start>(&input)` when this field is non-empty and via
+    /// `t::parse(&input)` otherwise. See `parse_call_for_start`.
     start: String,
 }
 
@@ -629,7 +631,7 @@ fn emit_test_file_for_category(category: &String, entries: &Array<DescriptorEntr
 /// `Skip` callers should not invoke this function at all; `Todo` causes
 /// the test to be `#[TODO]`-marked so a known-failing assertion is
 /// recorded on a separate axis from real failures (matches Stage A).
-fn emit_stage_b_test_file(category: &String, name: &String, input: &String, expected_tree: &String, triage: &Triage) -> String {
+fn emit_stage_b_test_file(category: &String, name: &String, input: &String, start: &String, expected_tree: &String, triage: &Triage) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
@@ -654,7 +656,7 @@ fn emit_stage_b_test_file(category: &String, name: &String, input: &String, expe
     w.begin(&`test "stage_b: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
     w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
-    w.line(&"let root = t::parse(&input).unwrap();");
+    w.line(&`let root = t::{parse_call_for_start(start)}(&input).unwrap();`);
     w.line(&"let actual = t::to_tree(&root).to_string_tree();");
     w.line(&"let norm = normalize_tree(&expected);");
     // Backticks land in the generated source verbatim; the Wado compiler
@@ -674,7 +676,7 @@ fn emit_stage_b_test_file(category: &String, name: &String, input: &String, expe
 /// root rule name (extracted via `extract_root_rule_name`) must differ
 /// from `[start]`. The emitted test navigates from the full tree down
 /// to the first child node of that name via `find_first_child_node`.
-fn emit_stage_sub_b_test_file(category: &String, name: &String, input: &String, expected_tree: &String, sub_rule: &String, triage: &Triage) -> String {
+fn emit_stage_sub_b_test_file(category: &String, name: &String, input: &String, start: &String, expected_tree: &String, sub_rule: &String, triage: &Triage) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
@@ -702,7 +704,7 @@ fn emit_stage_sub_b_test_file(category: &String, name: &String, input: &String, 
     w.begin(&`test "stage_b_sub: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
     w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
-    w.line(&"let root = t::parse(&input).unwrap();");
+    w.line(&`let root = t::{parse_call_for_start(start)}(&input).unwrap();`);
     w.line(&"let tree = t::to_tree(&root);");
     w.line(&`let sub = t::find_first_child_node(&tree, &"{*sub_rule}").unwrap();`);
     w.line(&"let actual = sub.to_string_tree();");
@@ -724,7 +726,7 @@ fn emit_stage_sub_b_test_file(category: &String, name: &String, input: &String, 
 ///
 /// Triage (`[stage_a_todo]` / `[stage_a_skip]`) decorates the emission
 /// the same way Stage B does.
-fn emit_stage_a_parse_test_file(category: &String, name: &String, input: &String, triage: &Triage) -> String {
+fn emit_stage_a_parse_test_file(category: &String, name: &String, input: &String, start: &String, triage: &Triage) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
@@ -750,7 +752,7 @@ fn emit_stage_a_parse_test_file(category: &String, name: &String, input: &String
     }
     w.begin(&`test "stage_a_parse: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
-    w.line(&"let result = t::parse(&input);");
+    w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
     w.line(&"if let Err(err) = &result {");
     w.indent();
     w.line(&"panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);");
@@ -758,6 +760,25 @@ fn emit_stage_a_parse_test_file(category: &String, name: &String, input: &String
     w.line(&"}");
     w.end();
     return w.to_string();
+}
+
+/// Pick the public parser entry to call for a descriptor's `[start]`.
+/// Returns `parse` when no `[start]` is set (the default — Gale's
+/// generated parser enters at the first parser rule), or
+/// `parse_<start>` when `[start]` names a specific rule. The per-rule
+/// entry is emitted by `gen_parse_rule_input_entry` in
+/// `package-gale/src/parser_gen.wado`, so any non-empty `[start]`
+/// resolves to a real public function in the generated module.
+///
+/// Parser-rule identifiers in ANTLR4 grammars start with a lowercase
+/// letter and never contain dashes, so the raw `[start]` value is
+/// already a valid snake-case Wado identifier — no conversion needed.
+fn parse_call_for_start(start: &String) -> String {
+    let trimmed = start.trim();
+    if trimmed.is_empty() {
+        return "parse";
+    }
+    return `parse_{trimmed}`;
 }
 
 /// Categories whose descriptors are emitted as Stage A claim (c)
@@ -845,7 +866,7 @@ fn classify_output_for_tokens(raw: &String) -> Option<TokensTarget> {
 /// Eligibility is decided by the caller (Parser/Lexer type, non-empty
 /// `[input]`, non-empty `[errors]`, single grammar, category in the
 /// whitelist via `stage_a_err_category_eligible`).
-fn emit_stage_a_err_test_file(category: &String, name: &String, input: &String, is_lexer: bool, triage: &Triage) -> String {
+fn emit_stage_a_err_test_file(category: &String, name: &String, input: &String, start: &String, is_lexer: bool, triage: &Triage) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
@@ -886,7 +907,7 @@ fn emit_stage_a_err_test_file(category: &String, name: &String, input: &String, 
         w.end();
         w.line(&"assert has_err, `expected at least one TK_ERROR token in tokenize output`;");
     } else {
-        w.line(&"let result = t::parse(&input);");
+        w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
         w.line(&"assert result matches { Err(_) }, `expected parse to fail but it succeeded`;");
     }
     w.end();
@@ -1271,7 +1292,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 if let Err(_) = remove_file(&stage_a_cat_dir, &tokens_filename) {
                 }
             } else if parse_eligible {
-                let src = emit_stage_a_parse_test_file(category, &base, &parsed.input, &stage_a_triage);
+                let src = emit_stage_a_parse_test_file(category, &base, &parsed.input, &parsed.start, &stage_a_triage);
                 if let Err(_) = write_file_string(&stage_a_cat_dir, &parse_filename, &src) {
                     eprintln(`extract: cannot write stage_a/{*category}/{parse_filename}`);
                 } else {
@@ -1282,7 +1303,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 }
             } else if err_eligible {
                 let is_lexer = parsed.descriptor_type == "Lexer";
-                let src = emit_stage_a_err_test_file(category, &base, &parsed.input, is_lexer, &stage_a_triage);
+                let src = emit_stage_a_err_test_file(category, &base, &parsed.input, &parsed.start, is_lexer, &stage_a_triage);
                 if let Err(_) = write_file_string(&stage_a_cat_dir, &err_filename, &src) {
                     eprintln(`extract: cannot write stage_a/{*category}/{err_filename}`);
                 } else {
@@ -1388,6 +1409,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                     category,
                     &base,
                     &parsed.input,
+                    &parsed.start,
                     &normalised,
                     &sub_rule,
                     &stage_b_triage,
@@ -1401,6 +1423,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                     category,
                     &base,
                     &parsed.input,
+                    &parsed.start,
                     &normalised,
                     &stage_b_triage,
                 );

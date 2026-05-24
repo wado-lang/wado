@@ -1079,9 +1079,9 @@ fn scan_e(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
-    let declarator = parse_declarator(p)?;
+    let declarator = _parse_declarator(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<SNode, ParseError>::Ok(SNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1090,12 +1090,12 @@ fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     });
 }
 
-fn parse_declarator_atom(p: &mut Parser) -> Result<DeclaratorNode, ParseError> {
+fn _parse_declarator_atom(p: &mut Parser) -> Result<DeclaratorNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_STAR {
         let star = p.expect(TK_LIT_STAR)?;
-        let declarator = parse_declarator(p, 1)?;
+        let declarator = _parse_declarator(p, 1)?;
         return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt3(DeclaratorAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             star,
@@ -1104,7 +1104,7 @@ fn parse_declarator_atom(p: &mut Parser) -> Result<DeclaratorNode, ParseError> {
     }
     if kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
-        let declarator = parse_declarator(p)?;
+        let declarator = _parse_declarator(p)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
         return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt4(DeclaratorAlt4 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -1127,9 +1127,9 @@ fn parse_declarator_atom(p: &mut Parser) -> Result<DeclaratorNode, ParseError> {
     ));
 }
 
-fn parse_declarator_lr_0(p: &mut Parser, left: DeclaratorNode, start: i32) -> Result<DeclaratorNode, ParseError> {
+fn _parse_declarator_lr_0(p: &mut Parser, left: DeclaratorNode, start: i32) -> Result<DeclaratorNode, ParseError> {
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
-    let e = parse_e(p)?;
+    let e = _parse_e(p)?;
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
     return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt0(DeclaratorAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1140,7 +1140,7 @@ fn parse_declarator_lr_0(p: &mut Parser, left: DeclaratorNode, start: i32) -> Re
     }));
 }
 
-fn parse_declarator_lr_1(p: &mut Parser, left: DeclaratorNode, start: i32) -> Result<DeclaratorNode, ParseError> {
+fn _parse_declarator_lr_1(p: &mut Parser, left: DeclaratorNode, start: i32) -> Result<DeclaratorNode, ParseError> {
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
     return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt1(DeclaratorAlt1 {
@@ -1151,7 +1151,7 @@ fn parse_declarator_lr_1(p: &mut Parser, left: DeclaratorNode, start: i32) -> Re
     }));
 }
 
-fn parse_declarator_lr_2(p: &mut Parser, left: DeclaratorNode, start: i32) -> Result<DeclaratorNode, ParseError> {
+fn _parse_declarator_lr_2(p: &mut Parser, left: DeclaratorNode, start: i32) -> Result<DeclaratorNode, ParseError> {
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt2(DeclaratorAlt2 {
@@ -1162,9 +1162,9 @@ fn parse_declarator_lr_2(p: &mut Parser, left: DeclaratorNode, start: i32) -> Re
     }));
 }
 
-fn parse_declarator(p: &mut Parser, min_prec: i32 = 0) -> Result<DeclaratorNode, ParseError> {
+fn _parse_declarator(p: &mut Parser, min_prec: i32 = 0) -> Result<DeclaratorNode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = parse_declarator_atom(p)?;
+    let mut result = _parse_declarator_atom(p)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_LIT_LBRACKET {
@@ -1174,7 +1174,7 @@ fn parse_declarator(p: &mut Parser, min_prec: i32 = 0) -> Result<DeclaratorNode,
                         if scan_declarator_lr_0(&p.tokens, p.pos) < 0 {
                             break;
                         }
-                        result = parse_declarator_lr_0(p, result, start)?;
+                        result = _parse_declarator_lr_0(p, result, start)?;
                     } else {
                         break;
                     }
@@ -1183,7 +1183,7 @@ fn parse_declarator(p: &mut Parser, min_prec: i32 = 0) -> Result<DeclaratorNode,
                         if scan_declarator_lr_1(&p.tokens, p.pos) < 0 {
                             break;
                         }
-                        result = parse_declarator_lr_1(p, result, start)?;
+                        result = _parse_declarator_lr_1(p, result, start)?;
                     } else {
                         break;
                     }
@@ -1194,7 +1194,7 @@ fn parse_declarator(p: &mut Parser, min_prec: i32 = 0) -> Result<DeclaratorNode,
                 if scan_declarator_lr_2(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_declarator_lr_2(p, result, start)?;
+                result = _parse_declarator_lr_2(p, result, start)?;
             } else {
                 break;
             }
@@ -1205,7 +1205,7 @@ fn parse_declarator(p: &mut Parser, min_prec: i32 = 0) -> Result<DeclaratorNode,
     return Result::<DeclaratorNode, ParseError>::Ok(result);
 }
 
-fn parse_e(p: &mut Parser) -> Result<ENode, ParseError> {
+fn _parse_e(p: &mut Parser) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let int = p.expect(TK_INT)?;
     return Result::<ENode, ParseError>::Ok(ENode {
@@ -1214,10 +1214,26 @@ fn parse_e(p: &mut Parser) -> Result<ENode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<SNode, ParseError> {
+pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_s(&mut parser);
+    return _parse_s(&mut parser);
+}
+
+pub fn parse_declarator(input: &String) -> Result<DeclaratorNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_declarator(&mut parser, 0);
+}
+
+pub fn parse_e(input: &String) -> Result<ENode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_e(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<SNode, ParseError> {
+    return parse_s(input);
 }
 
 pub fn walk_s<V: Visitor>(v: &mut V, node: &SNode) {

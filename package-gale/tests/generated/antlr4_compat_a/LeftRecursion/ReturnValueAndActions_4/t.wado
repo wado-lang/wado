@@ -979,16 +979,16 @@ fn scan_e(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
-    let e = parse_e(p)?;
+    let e = _parse_e(p)?;
     return Result::<SNode, ParseError>::Ok(SNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         e,
     });
 }
 
-fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
+fn _parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_INT {
@@ -1000,7 +1000,7 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     }
     if kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
-        let x = parse_e(p)?;
+        let x = _parse_e(p)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
         return Result::<ENode, ParseError>::Ok(ENode::Alt3(EAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -1016,9 +1016,9 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     ));
 }
 
-fn parse_e_lr_0(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
+fn _parse_e_lr_0(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
     let star = p.expect(TK_LIT_STAR)?;
-    let e = parse_e(p, 3)?;
+    let e = _parse_e(p, 3)?;
     let b = e;
     return Result::<ENode, ParseError>::Ok(ENode::Alt0(EAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1028,9 +1028,9 @@ fn parse_e_lr_0(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseE
     }));
 }
 
-fn parse_e_lr_1(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
+fn _parse_e_lr_1(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
     let plus = p.expect(TK_LIT_PLUS)?;
-    let e = parse_e(p, 2)?;
+    let e = _parse_e(p, 2)?;
     let b = e;
     return Result::<ENode, ParseError>::Ok(ENode::Alt1(EAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1040,9 +1040,9 @@ fn parse_e_lr_1(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseE
     }));
 }
 
-fn parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
+fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = parse_e_atom(p)?;
+    let mut result = _parse_e_atom(p)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_LIT_STAR {
@@ -1050,7 +1050,7 @@ fn parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
                 if scan_e_lr_0(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_e_lr_0(p, result, start)?;
+                result = _parse_e_lr_0(p, result, start)?;
             } else {
                 break;
             }
@@ -1059,7 +1059,7 @@ fn parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
                 if scan_e_lr_1(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_e_lr_1(p, result, start)?;
+                result = _parse_e_lr_1(p, result, start)?;
             } else {
                 break;
             }
@@ -1070,10 +1070,20 @@ fn parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
     return Result::<ENode, ParseError>::Ok(result);
 }
 
-pub fn parse(input: &String) -> Result<SNode, ParseError> {
+pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_s(&mut parser);
+    return _parse_s(&mut parser);
+}
+
+pub fn parse_e(input: &String) -> Result<ENode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_e(&mut parser, 0);
+}
+
+pub fn parse(input: &String) -> Result<SNode, ParseError> {
+    return parse_s(input);
 }
 
 pub fn walk_s<V: Visitor>(v: &mut V, node: &SNode) {

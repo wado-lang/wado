@@ -182,7 +182,7 @@ fn emit_follow_variant_from_gir(w: &mut CodeWriter, variant_rule: &Rule, ctx: &m
     // the regular function-body emitters; no walker state needs to
     // be swapped here.
     let scan_name = `scan_{rule.snake_name}__follow_{entry.id}`;
-    let parse_name = `parse_{rule.snake_name}__follow_{entry.id}`;
+    let parse_name = `_parse_{rule.snake_name}__follow_{entry.id}`;
     if entry.scan_used {
         gen_scan_function_named(w, rule, variant_rule, ctx, &scan_name, /*allow_lr_split=*/ true);
     }
@@ -1580,7 +1580,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
     // its own focused emit entry; the existing internal helpers
     // carry the body emission but no longer need to re-classify
     // the rule from surface IR.
-    let fn_name = `parse_{rule.snake_name}`;
+    let fn_name = `_parse_{rule.snake_name}`;
     let scan_fn_name = `scan_{rule.snake_name}`;
     match *lowered_rule {
         Simple(_) => gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, &fn_name, /*emit_visibility=*/ true),
@@ -2161,9 +2161,9 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
         Literal(l) => w.line(&`let {l.field} = p.expect({l.kind})?;`),
         RuleCall(r) => {
             let fn_name = if let Some(id) = r.variant_id {
-                `parse_{r.target_snake}__follow_{id}`;
+                `_parse_{r.target_snake}__follow_{id}`;
             } else {
-                `parse_{r.target_snake}`;
+                `_parse_{r.target_snake}`;
             };
             // `RuleCallOp.min_prec_arg` carries the resolved precedence
             // for every self-recursive call that needs one — `lower_lr_alt_suffix`
@@ -2965,7 +2965,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         // alts' trailing self-ref is reached via `gen_op_leaf` on
         // `RuleCallOp.min_prec_arg`, so `gen_element` never threads
         // precedence here either.
-        w.line(&`let {field_name} = parse_{r.snake_name}(p)?;`);
+        w.line(&`let {field_name} = _parse_{r.snake_name}(p)?;`);
         return;
     }
     if let Wildcard(_) = elem {
@@ -3015,7 +3015,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         // Scalar label `name = element`: parse the inner element with the
         // shared `name_counts` so its emitted binding dedups against the
         // outer alt's scope (otherwise `a=e ... b=e` would emit two
-        // top-level `let e = parse_e(p)?;` and the second would fail
+        // top-level `let e = _parse_e(p)?;` and the second would fail
         // compilation with "cannot redeclare e"). Then re-bind under the
         // label name so the struct initializer resolves.
         //
@@ -3835,7 +3835,7 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
         let alt_idx = sorted_group[k];
         let is_last = k == last;
         if let RuleRef(r) = &alts[alt_idx].elements[0] {
-            let fn_name = `parse_{r.snake_name}`;
+            let fn_name = `_parse_{r.snake_name}`;
             let case_name = group_case_name(&alts[alt_idx]);
             let local_var = r.snake_name;
 
@@ -3880,9 +3880,9 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
             let body = &g_op_alts[alt_idx];
             if let RuleCall(rc) = &body.ops[0] {
                 let fn_name = if let Some(id) = rc.variant_id {
-                    `parse_{rc.target_snake}__follow_{id}`;
+                    `_parse_{rc.target_snake}__follow_{id}`;
                 } else {
-                    `parse_{rc.target_snake}`;
+                    `_parse_{rc.target_snake}`;
                 };
                 let local_var = rc.target_snake;
                 w.line(&`let {local_var} = {fn_name}(p)?;`);
@@ -3919,9 +3919,9 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                 let body = &g_op_alts[alt_idx];
                 if let RuleCall(rc) = &body.ops[0] {
                     let fn_name = if let Some(id) = rc.variant_id {
-                        `parse_{rc.target_snake}__follow_{id}`;
+                        `_parse_{rc.target_snake}__follow_{id}`;
                     } else {
-                        `parse_{rc.target_snake}`;
+                        `_parse_{rc.target_snake}`;
                     };
                     let local_var = rc.target_snake;
                     w.line(&`let {local_var} = {fn_name}(p)?;`);
@@ -4002,9 +4002,9 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
             let body = &g_op_alts[alt_idx];
             if let RuleCall(rc) = &body.ops[0] {
                 let fn_name = if let Some(id) = rc.variant_id {
-                    `parse_{rc.target_snake}__follow_{id}`;
+                    `_parse_{rc.target_snake}__follow_{id}`;
                 } else {
-                    `parse_{rc.target_snake}`;
+                    `_parse_{rc.target_snake}`;
                 };
                 let local_var = rc.target_snake;
                 w.line(&`let {local_var} = {fn_name}(p)?;`);
@@ -4424,7 +4424,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                     let prec = lookup_baked_min_prec(suffix_op);
                     w.line(&`let {field_name} = {*fn_name}(p, {prec})?;`);
                 } else {
-                    let elem_fn = `parse_{rr.snake_name}`;
+                    let elem_fn = `_parse_{rr.snake_name}`;
                     let field_name = dedup_name(&rr.field_name, &mut name_counts);
                     w.line(&`let {field_name} = {elem_fn}(p)?;`);
                 }
@@ -5062,30 +5062,65 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
     gen_error_fallback(w, rule, type_name, ctx);
 }
 
-/// Emit the public `parse(input)` entry function that dispatches
-/// into the first rule's parser. Read entirely from
-/// `lowered.parser_rules[0].header` — `RuleHeader` carries the
-/// pre-computed `type_name` and `snake_name` so this fn doesn't
-/// re-run `rule_type_name` or recompute the function name. A
-/// mismatch between lower's header and emit's expectations would
-/// surface here as a wrong fn name reference at the top of the
-/// generated source.
+/// Emit the public `parse(input)` entry function plus per-rule
+/// `parse_<rule>(input)` entries. `parse(input)` is a stable alias
+/// for the first parser rule's entry point — generated parsers
+/// always exposed it and downstream tests depend on it. The
+/// per-rule entries are the start-rule API: callers route an input
+/// directly into rule `R` via `parse_<R>(input)` instead of having
+/// to construct a `Parser` and call the internal `_parse_<R>(p)`
+/// helper. ANTLR4 descriptors with a non-default `[start]` field
+/// dispatch through these per-rule entries.
+///
+/// Read entirely from each rule's `RuleHeader`. The internal helper
+/// is `_parse_<snake>`; LR rules take an extra `min_prec` parameter,
+/// which the public entry pins to `0` (matching `parse`'s historic
+/// behaviour: no precedence threshold at the top of the parse).
 fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
     if lowered.parser_rules.len() == 0 {
         return;
     }
+    for let rule of &lowered.parser_rules {
+        gen_parse_rule_input_entry(w, rule);
+    }
     let header = rule_header(&lowered.parser_rules[0]);
-    let fn_name = `parse_{header.snake_name}`;
     let mut f = FnSpec::new("parse");
+    f.set_pub();
+    f.add_param(&"input", &"&String");
+    f.set_return_type(&`Result<{header.type_name}, ParseError>`);
+    f.emit_begin(w);
+    w.line(&`return parse_{header.snake_name}(input);`);
+    w.end();
+    w.blank();
+}
+
+fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
+    let header = rule_header(rule);
+    let mut f = FnSpec::new(&`parse_{header.snake_name}`);
     f.set_pub();
     f.add_param(&"input", &"&String");
     f.set_return_type(&`Result<{header.type_name}, ParseError>`);
     f.emit_begin(w);
     w.line(&"let tokens = tokenize(input);");
     w.line(&"let mut parser = Parser::new(tokens);");
-    w.line(&`return {fn_name}(&mut parser);`);
+    if rule_takes_min_prec(rule) {
+        w.line(&`return _parse_{header.snake_name}(&mut parser, 0);`);
+    } else {
+        w.line(&`return _parse_{header.snake_name}(&mut parser);`);
+    }
     w.end();
     w.blank();
+}
+
+/// `_parse_<rule>` for a left-recursive rule whose surface body
+/// carries at least one LR-alt takes a trailing `min_prec: i32`
+/// argument (see `lr_util.compute_prefix_self_ref_min_prec`). The
+/// public input-entry must match that signature.
+fn rule_takes_min_prec(rule: &Rule) -> bool {
+    return match *rule {
+        LeftRecursive(_) => true,
+        Simple(_) | MultiAlt(_) => false,
+    };
 }
 
 /// Emit a `_gale_kind_set_<id>(k: i32) -> bool` function for every

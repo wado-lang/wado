@@ -979,12 +979,12 @@ fn scan_ac_class(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
+fn _parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
     let start = p.peek().span.start;
-    let animal = parse_animal(p)?;
+    let animal = _parse_animal(p)?;
     let and_ac_class: Option<AndAcClassItem> = if p.peek_kind() == TK_AND {
         let and = p.expect(TK_AND)?;
-        let ac_class = parse_ac_class(p)?;
+        let ac_class = _parse_ac_class(p)?;
         let and_ac_class = AndAcClassItem {
             and,
             ac_class,
@@ -993,7 +993,7 @@ fn parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
     } else {
         null
     };
-    let service = parse_service(p)?;
+    let service = _parse_service(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<StartNode, ParseError>::Ok(StartNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1004,7 +1004,7 @@ fn parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
     });
 }
 
-fn parse_animal(p: &mut Parser) -> Result<AnimalNode, ParseError> {
+fn _parse_animal(p: &mut Parser) -> Result<AnimalNode, ParseError> {
     let start = p.peek().span.start;
     let dog_or_cat = p.advance();
     return Result::<AnimalNode, ParseError>::Ok(AnimalNode {
@@ -1013,7 +1013,7 @@ fn parse_animal(p: &mut Parser) -> Result<AnimalNode, ParseError> {
     });
 }
 
-fn parse_service(p: &mut Parser) -> Result<ServiceNode, ParseError> {
+fn _parse_service(p: &mut Parser) -> Result<ServiceNode, ParseError> {
     let start = p.peek().span.start;
     let hardware_or_software = p.advance();
     return Result::<ServiceNode, ParseError>::Ok(ServiceNode {
@@ -1022,17 +1022,39 @@ fn parse_service(p: &mut Parser) -> Result<ServiceNode, ParseError> {
     });
 }
 
-fn parse_ac_class(p: &mut Parser) -> Result<AcClassNode, ParseError> {
+fn _parse_ac_class(p: &mut Parser) -> Result<AcClassNode, ParseError> {
     let start = p.peek().span.start;
     return Result::<AcClassNode, ParseError>::Ok(AcClassNode {
         span: Span::new(start, i32::max(start, p.last_end())),
     });
 }
 
-pub fn parse(input: &String) -> Result<StartNode, ParseError> {
+pub fn parse_start(input: &String) -> Result<StartNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_start(&mut parser);
+    return _parse_start(&mut parser);
+}
+
+pub fn parse_animal(input: &String) -> Result<AnimalNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_animal(&mut parser);
+}
+
+pub fn parse_service(input: &String) -> Result<ServiceNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_service(&mut parser);
+}
+
+pub fn parse_ac_class(input: &String) -> Result<AcClassNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_ac_class(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<StartNode, ParseError> {
+    return parse_start(input);
 }
 
 pub fn walk_start<V: Visitor>(v: &mut V, node: &StartNode) {

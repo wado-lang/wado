@@ -1211,20 +1211,20 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
+fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     let start = p.peek().span.start;
-    let stat = parse_stat(p)?;
+    let stat = _parse_stat(p)?;
     return Result::<ProgNode, ParseError>::Ok(ProgNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         stat,
     });
 }
 
-fn parse_stat_bt_1(p: &mut Parser) -> Result<StatNode, ParseError> {
+fn _parse_stat_bt_1(p: &mut Parser) -> Result<StatNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let eq = p.expect(TK_LIT_EQ)?;
-    let expr = parse_expr(p)?;
+    let expr = _parse_expr(p)?;
     let newline = p.expect(TK_NEWLINE)?;
     return Result::<StatNode, ParseError>::Ok(StatNode::assign(Statassign {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1235,7 +1235,7 @@ fn parse_stat_bt_1(p: &mut Parser) -> Result<StatNode, ParseError> {
     }));
 }
 
-fn parse_stat_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_stat_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
@@ -1248,9 +1248,9 @@ fn parse_stat_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_stat_bt_0(p: &mut Parser) -> Result<StatNode, ParseError> {
+fn _parse_stat_bt_0(p: &mut Parser) -> Result<StatNode, ParseError> {
     let start = p.peek().span.start;
-    let expr = parse_expr(p)?;
+    let expr = _parse_expr(p)?;
     let newline = p.expect(TK_NEWLINE)?;
     return Result::<StatNode, ParseError>::Ok(StatNode::printExpr(StatprintExpr {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1259,7 +1259,7 @@ fn parse_stat_bt_0(p: &mut Parser) -> Result<StatNode, ParseError> {
     }));
 }
 
-fn parse_stat_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_stat_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -1268,15 +1268,15 @@ fn parse_stat_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_stat(p: &mut Parser) -> Result<StatNode, ParseError> {
+fn _parse_stat(p: &mut Parser) -> Result<StatNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_3(kind) {
         if p.peek_kind() == TK_ID {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_1 = parse_stat_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_0 = parse_stat_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_stat_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_stat_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -1288,14 +1288,14 @@ fn parse_stat(p: &mut Parser) -> Result<StatNode, ParseError> {
                 _sd_best_i = 0;
             }
             if _sd_best_i == 1 {
-                return parse_stat_bt_1(p);
+                return _parse_stat_bt_1(p);
             }
             if _sd_best_i == 0 {
-                return parse_stat_bt_0(p);
+                return _parse_stat_bt_0(p);
             }
-            return parse_stat_bt_0(p);
+            return _parse_stat_bt_0(p);
         } else if _gale_kind_set_0(p.peek_kind()) {
-            return parse_stat_bt_0(p);
+            return _parse_stat_bt_0(p);
         }
     }
     if kind == TK_NEWLINE {
@@ -1312,7 +1312,7 @@ fn parse_stat(p: &mut Parser) -> Result<StatNode, ParseError> {
     ));
 }
 
-fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_INT {
@@ -1331,7 +1331,7 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }
     if kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
-        let expr = parse_expr(p)?;
+        let expr = _parse_expr(p)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
         return Result::<ExprNode, ParseError>::Ok(ExprNode::parens(Exprparens {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -1347,9 +1347,9 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     ));
 }
 
-fn parse_expr_lr_0(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr_lr_0(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let star_or_slash = p.advance();
-    let expr_2 = parse_expr(p, 3)?;
+    let expr_2 = _parse_expr(p, 3)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::MulDiv(ExprMulDiv {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -1358,9 +1358,9 @@ fn parse_expr_lr_0(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
     }));
 }
 
-fn parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let plus_or_minus = p.advance();
-    let expr_2 = parse_expr(p, 2)?;
+    let expr_2 = _parse_expr(p, 2)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::AddSub(ExprAddSub {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -1369,9 +1369,9 @@ fn parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
     }));
 }
 
-fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
+fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = parse_expr_atom(p)?;
+    let mut result = _parse_expr_atom(p)?;
     loop {
         let suffix_kind = p.peek_kind();
         if _gale_kind_set_1(suffix_kind) {
@@ -1379,7 +1379,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
                 if scan_expr_lr_0(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_expr_lr_0(p, result, start)?;
+                result = _parse_expr_lr_0(p, result, start)?;
             } else {
                 break;
             }
@@ -1388,7 +1388,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
                 if scan_expr_lr_1(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_expr_lr_1(p, result, start)?;
+                result = _parse_expr_lr_1(p, result, start)?;
             } else {
                 break;
             }
@@ -1399,10 +1399,26 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
     return Result::<ExprNode, ParseError>::Ok(result);
 }
 
-pub fn parse(input: &String) -> Result<ProgNode, ParseError> {
+pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_prog(&mut parser);
+    return _parse_prog(&mut parser);
+}
+
+pub fn parse_stat(input: &String) -> Result<StatNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_stat(&mut parser);
+}
+
+pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_expr(&mut parser, 0);
+}
+
+pub fn parse(input: &String) -> Result<ProgNode, ParseError> {
+    return parse_prog(input);
 }
 
 pub fn walk_prog<V: Visitor>(v: &mut V, node: &ProgNode) {

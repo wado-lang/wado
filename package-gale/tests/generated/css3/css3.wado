@@ -33119,9 +33119,9 @@ fn scan_ws(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
+fn _parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
     let start = p.peek().span.start;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let mut charset_item_list: Array<CharsetItemListItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -33173,7 +33173,7 @@ fn parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let charset = parse_charset(p)?;
+        let charset = _parse_charset(p)?;
         let mut comment_or_space_or_cdo_or_cdc_list: Array<Token> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -33272,7 +33272,7 @@ fn parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
             rep_scan_pos_2 = pos;
         }
         if rep_scan_pos_2 < 0 { break; }
-        let imports = parse_imports(p)?;
+        let imports = _parse_imports(p)?;
         let mut comment_or_space_or_cdo_or_cdc_list: Array<Token> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -33371,7 +33371,7 @@ fn parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
             rep_scan_pos_3 = pos;
         }
         if rep_scan_pos_3 < 0 { break; }
-        let namespace_ = parse_namespace_(p)?;
+        let namespace_ = _parse_namespace_(p)?;
         let mut comment_or_space_or_cdo_or_cdc_list: Array<Token> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -33470,7 +33470,7 @@ fn parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
             rep_scan_pos_4 = pos;
         }
         if rep_scan_pos_4 < 0 { break; }
-        let nested_statement = parse_nested_statement(p)?;
+        let nested_statement = _parse_nested_statement(p)?;
         let mut comment_or_space_or_cdo_or_cdc_list: Array<Token> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -33530,14 +33530,14 @@ fn parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
     });
 }
 
-fn parse_charset_bt_0(p: &mut Parser) -> Result<CharsetNode, ParseError> {
+fn _parse_charset_bt_0(p: &mut Parser) -> Result<CharsetNode, ParseError> {
     let start = p.peek().span.start;
     let charset = p.expect(TK_Charset)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let string_ = p.expect(TK_String_)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     let semicolon = p.expect(TK_LIT_SEMI)?;
-    let ws_3 = parse_ws(p)?;
+    let ws_3 = _parse_ws(p)?;
     return Result::<CharsetNode, ParseError>::Ok(CharsetNode::goodCharset(CharsetgoodCharset {
         span: Span::new(start, i32::max(start, p.last_end())),
         charset,
@@ -33549,7 +33549,7 @@ fn parse_charset_bt_0(p: &mut Parser) -> Result<CharsetNode, ParseError> {
     }));
 }
 
-fn parse_charset_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_charset_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Charset { return -1; }
     pos += 1;
@@ -33566,12 +33566,12 @@ fn parse_charset_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_charset_bt_1(p: &mut Parser) -> Result<CharsetNode, ParseError> {
+fn _parse_charset_bt_1(p: &mut Parser) -> Result<CharsetNode, ParseError> {
     let start = p.peek().span.start;
     let charset = p.expect(TK_Charset)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let string_ = p.expect(TK_String_)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     return Result::<CharsetNode, ParseError>::Ok(CharsetNode::badCharset(CharsetbadCharset {
         span: Span::new(start, i32::max(start, p.last_end())),
         charset,
@@ -33581,7 +33581,7 @@ fn parse_charset_bt_1(p: &mut Parser) -> Result<CharsetNode, ParseError> {
     }));
 }
 
-fn parse_charset_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_charset_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Charset { return -1; }
     pos += 1;
@@ -33594,14 +33594,14 @@ fn parse_charset_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_charset(p: &mut Parser) -> Result<CharsetNode, ParseError> {
+fn _parse_charset(p: &mut Parser) -> Result<CharsetNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Charset {
         let _sd_tokens = &p.tokens;
         let _sd_pos = p.pos;
-        let _sd_p_0 = parse_charset_scan_0(_sd_tokens, _sd_pos);
-        let _sd_p_1 = parse_charset_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_0 = _parse_charset_scan_0(_sd_tokens, _sd_pos);
+        let _sd_p_1 = _parse_charset_scan_1(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -33613,12 +33613,12 @@ fn parse_charset(p: &mut Parser) -> Result<CharsetNode, ParseError> {
             _sd_best_i = 1;
         }
         if _sd_best_i == 0 {
-            return parse_charset_bt_0(p);
+            return _parse_charset_bt_0(p);
         }
         if _sd_best_i == 1 {
-            return parse_charset_bt_1(p);
+            return _parse_charset_bt_1(p);
         }
-        return parse_charset_bt_1(p);
+        return _parse_charset_bt_1(p);
     }
     return Result::<CharsetNode, ParseError>::Err(ParseError::new(
         "expected charset",
@@ -33627,10 +33627,10 @@ fn parse_charset(p: &mut Parser) -> Result<CharsetNode, ParseError> {
     ));
 }
 
-fn parse_imports_bt_0(p: &mut Parser) -> Result<ImportsNode, ParseError> {
+fn _parse_imports_bt_0(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
     let import_ = p.expect(TK_Import)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let mut group_0_inner: Option<ImportsGroup0> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
@@ -33639,16 +33639,16 @@ fn parse_imports_bt_0(p: &mut Parser) -> Result<ImportsNode, ParseError> {
             string_,
         }));
     } else if _gale_kind_set_2(grp_kind) {
-        let url = parse_url(p)?;
+        let url = _parse_url(p)?;
         group_0_inner = Option::<ImportsGroup0>::Some(ImportsGroup0::Alt1(ImportsGroup0Alt1 {
             url,
         }));
     }
     let group_0 = group_0_inner;
-    let ws_2 = parse_ws(p)?;
-    let media_query_list = parse_media_query_list(p)?;
+    let ws_2 = _parse_ws(p)?;
+    let media_query_list = _parse_media_query_list(p)?;
     let semicolon = p.expect(TK_LIT_SEMI)?;
-    let ws_3 = parse_ws(p)?;
+    let ws_3 = _parse_ws(p)?;
     return Result::<ImportsNode, ParseError>::Ok(ImportsNode::goodImport0(ImportsgoodImport0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         import_,
@@ -33661,7 +33661,7 @@ fn parse_imports_bt_0(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     }));
 }
 
-fn parse_imports_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_imports_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
     pos += 1;
@@ -33697,10 +33697,10 @@ fn parse_imports_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_imports_bt_1(p: &mut Parser) -> Result<ImportsNode, ParseError> {
+fn _parse_imports_bt_1(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
     let import_ = p.expect(TK_Import)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let mut group_1_inner: Option<ImportsGroup1> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
@@ -33709,15 +33709,15 @@ fn parse_imports_bt_1(p: &mut Parser) -> Result<ImportsNode, ParseError> {
             string_,
         }));
     } else if _gale_kind_set_2(grp_kind) {
-        let url = parse_url(p)?;
+        let url = _parse_url(p)?;
         group_1_inner = Option::<ImportsGroup1>::Some(ImportsGroup1::Alt1(ImportsGroup1Alt1 {
             url,
         }));
     }
     let group_1 = group_1_inner;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     let semicolon = p.expect(TK_LIT_SEMI)?;
-    let ws_3 = parse_ws(p)?;
+    let ws_3 = _parse_ws(p)?;
     return Result::<ImportsNode, ParseError>::Ok(ImportsNode::goodImport1(ImportsgoodImport1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         import_,
@@ -33729,7 +33729,7 @@ fn parse_imports_bt_1(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     }));
 }
 
-fn parse_imports_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_imports_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
     pos += 1;
@@ -33763,10 +33763,10 @@ fn parse_imports_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_imports_bt_2(p: &mut Parser) -> Result<ImportsNode, ParseError> {
+fn _parse_imports_bt_2(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
     let import_ = p.expect(TK_Import)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let mut group_2_inner: Option<ImportsGroup2> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
@@ -33775,14 +33775,14 @@ fn parse_imports_bt_2(p: &mut Parser) -> Result<ImportsNode, ParseError> {
             string_,
         }));
     } else if _gale_kind_set_2(grp_kind) {
-        let url = parse_url(p)?;
+        let url = _parse_url(p)?;
         group_2_inner = Option::<ImportsGroup2>::Some(ImportsGroup2::Alt1(ImportsGroup2Alt1 {
             url,
         }));
     }
     let group_2 = group_2_inner;
-    let ws_2 = parse_ws(p)?;
-    let media_query_list = parse_media_query_list(p)?;
+    let ws_2 = _parse_ws(p)?;
+    let media_query_list = _parse_media_query_list(p)?;
     return Result::<ImportsNode, ParseError>::Ok(ImportsNode::badImport0(ImportsbadImport0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         import_,
@@ -33793,7 +33793,7 @@ fn parse_imports_bt_2(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     }));
 }
 
-fn parse_imports_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_imports_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
     pos += 1;
@@ -33825,10 +33825,10 @@ fn parse_imports_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_imports_bt_3(p: &mut Parser) -> Result<ImportsNode, ParseError> {
+fn _parse_imports_bt_3(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
     let import_ = p.expect(TK_Import)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let mut group_3_inner: Option<ImportsGroup3> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
@@ -33837,13 +33837,13 @@ fn parse_imports_bt_3(p: &mut Parser) -> Result<ImportsNode, ParseError> {
             string_,
         }));
     } else if _gale_kind_set_2(grp_kind) {
-        let url = parse_url(p)?;
+        let url = _parse_url(p)?;
         group_3_inner = Option::<ImportsGroup3>::Some(ImportsGroup3::Alt1(ImportsGroup3Alt1 {
             url,
         }));
     }
     let group_3 = group_3_inner;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     return Result::<ImportsNode, ParseError>::Ok(ImportsNode::badImport1(ImportsbadImport1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         import_,
@@ -33853,7 +33853,7 @@ fn parse_imports_bt_3(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     }));
 }
 
-fn parse_imports_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_imports_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
     pos += 1;
@@ -33883,16 +33883,16 @@ fn parse_imports_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_imports(p: &mut Parser) -> Result<ImportsNode, ParseError> {
+fn _parse_imports(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Import {
         let _sd_tokens = &p.tokens;
         let _sd_pos = p.pos;
-        let _sd_p_0 = parse_imports_scan_0(_sd_tokens, _sd_pos);
-        let _sd_p_1 = parse_imports_scan_1(_sd_tokens, _sd_pos);
-        let _sd_p_2 = parse_imports_scan_2(_sd_tokens, _sd_pos);
-        let _sd_p_3 = parse_imports_scan_3(_sd_tokens, _sd_pos);
+        let _sd_p_0 = _parse_imports_scan_0(_sd_tokens, _sd_pos);
+        let _sd_p_1 = _parse_imports_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_2 = _parse_imports_scan_2(_sd_tokens, _sd_pos);
+        let _sd_p_3 = _parse_imports_scan_3(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -33912,18 +33912,18 @@ fn parse_imports(p: &mut Parser) -> Result<ImportsNode, ParseError> {
             _sd_best_i = 3;
         }
         if _sd_best_i == 0 {
-            return parse_imports_bt_0(p);
+            return _parse_imports_bt_0(p);
         }
         if _sd_best_i == 1 {
-            return parse_imports_bt_1(p);
+            return _parse_imports_bt_1(p);
         }
         if _sd_best_i == 2 {
-            return parse_imports_bt_2(p);
+            return _parse_imports_bt_2(p);
         }
         if _sd_best_i == 3 {
-            return parse_imports_bt_3(p);
+            return _parse_imports_bt_3(p);
         }
-        return parse_imports_bt_3(p);
+        return _parse_imports_bt_3(p);
     }
     return Result::<ImportsNode, ParseError>::Err(ParseError::new(
         "expected imports",
@@ -33932,10 +33932,10 @@ fn parse_imports(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     ));
 }
 
-fn parse_namespace__bt_0(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
+fn _parse_namespace__bt_0(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     let start = p.peek().span.start;
     let namespace = p.expect(TK_Namespace)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.tokens;
@@ -33947,8 +33947,8 @@ fn parse_namespace__bt_0(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
         opt_scan_pos = pos;
     }
     let namespace_prefix_ws: Option<NamespacePrefixWsItem> = if opt_scan_pos >= 0 {
-        let namespace_prefix = parse_namespace_prefix(p)?;
-        let ws = parse_ws(p)?;
+        let namespace_prefix = _parse_namespace_prefix(p)?;
+        let ws = _parse_ws(p)?;
         let namespace_prefix_ws = NamespacePrefixWsItem {
             namespace_prefix,
             ws,
@@ -33965,15 +33965,15 @@ fn parse_namespace__bt_0(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
             string_,
         }));
     } else if _gale_kind_set_2(grp_kind) {
-        let url = parse_url(p)?;
+        let url = _parse_url(p)?;
         group_0_inner = Option::<NamespaceGroup0>::Some(NamespaceGroup0::Alt1(NamespaceGroup0Alt1 {
             url,
         }));
     }
     let group_0 = group_0_inner;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     let semicolon = p.expect(TK_LIT_SEMI)?;
-    let ws_3 = parse_ws(p)?;
+    let ws_3 = _parse_ws(p)?;
     return Result::<NamespaceNode, ParseError>::Ok(NamespaceNode::goodNamespace(NamespacegoodNamespace {
         span: Span::new(start, i32::max(start, p.last_end())),
         namespace,
@@ -33986,7 +33986,7 @@ fn parse_namespace__bt_0(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     }));
 }
 
-fn parse_namespace__scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_namespace__scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Namespace { return -1; }
     pos += 1;
@@ -34034,10 +34034,10 @@ fn parse_namespace__scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_namespace__bt_1(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
+fn _parse_namespace__bt_1(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     let start = p.peek().span.start;
     let namespace = p.expect(TK_Namespace)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.tokens;
@@ -34049,8 +34049,8 @@ fn parse_namespace__bt_1(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
         opt_scan_pos = pos;
     }
     let namespace_prefix_ws: Option<NamespacePrefixWsItem> = if opt_scan_pos >= 0 {
-        let namespace_prefix = parse_namespace_prefix(p)?;
-        let ws = parse_ws(p)?;
+        let namespace_prefix = _parse_namespace_prefix(p)?;
+        let ws = _parse_ws(p)?;
         let namespace_prefix_ws = NamespacePrefixWsItem {
             namespace_prefix,
             ws,
@@ -34067,13 +34067,13 @@ fn parse_namespace__bt_1(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
             string_,
         }));
     } else if _gale_kind_set_2(grp_kind) {
-        let url = parse_url(p)?;
+        let url = _parse_url(p)?;
         group_1_inner = Option::<NamespaceGroup1>::Some(NamespaceGroup1::Alt1(NamespaceGroup1Alt1 {
             url,
         }));
     }
     let group_1 = group_1_inner;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     return Result::<NamespaceNode, ParseError>::Ok(NamespaceNode::badNamespace(NamespacebadNamespace {
         span: Span::new(start, i32::max(start, p.last_end())),
         namespace,
@@ -34084,7 +34084,7 @@ fn parse_namespace__bt_1(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     }));
 }
 
-fn parse_namespace__scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_namespace__scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Namespace { return -1; }
     pos += 1;
@@ -34128,14 +34128,14 @@ fn parse_namespace__scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_namespace_(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
+fn _parse_namespace_(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Namespace {
         let _sd_tokens = &p.tokens;
         let _sd_pos = p.pos;
-        let _sd_p_0 = parse_namespace__scan_0(_sd_tokens, _sd_pos);
-        let _sd_p_1 = parse_namespace__scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_0 = _parse_namespace__scan_0(_sd_tokens, _sd_pos);
+        let _sd_p_1 = _parse_namespace__scan_1(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -34147,12 +34147,12 @@ fn parse_namespace_(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
             _sd_best_i = 1;
         }
         if _sd_best_i == 0 {
-            return parse_namespace__bt_0(p);
+            return _parse_namespace__bt_0(p);
         }
         if _sd_best_i == 1 {
-            return parse_namespace__bt_1(p);
+            return _parse_namespace__bt_1(p);
         }
-        return parse_namespace__bt_1(p);
+        return _parse_namespace__bt_1(p);
     }
     return Result::<NamespaceNode, ParseError>::Err(ParseError::new(
         "expected namespace_",
@@ -34161,22 +34161,22 @@ fn parse_namespace_(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     ));
 }
 
-fn parse_namespace_prefix(p: &mut Parser) -> Result<NamespacePrefixNode, ParseError> {
+fn _parse_namespace_prefix(p: &mut Parser) -> Result<NamespacePrefixNode, ParseError> {
     let start = p.peek().span.start;
-    let ident = parse_ident(p)?;
+    let ident = _parse_ident(p)?;
     return Result::<NamespacePrefixNode, ParseError>::Ok(NamespacePrefixNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         ident,
     });
 }
 
-fn parse_media(p: &mut Parser) -> Result<MediaNode, ParseError> {
+fn _parse_media(p: &mut Parser) -> Result<MediaNode, ParseError> {
     let start = p.peek().span.start;
     let media = p.expect(TK_Media)?;
-    let ws = parse_ws(p)?;
-    let media_query_list = parse_media_query_list(p)?;
-    let group_rule_body = parse_group_rule_body(p)?;
-    let ws_2 = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
+    let media_query_list = _parse_media_query_list(p)?;
+    let group_rule_body = _parse_group_rule_body(p)?;
+    let ws_2 = _parse_ws(p)?;
     return Result::<MediaNode, ParseError>::Ok(MediaNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         media,
@@ -34187,7 +34187,7 @@ fn parse_media(p: &mut Parser) -> Result<MediaNode, ParseError> {
     });
 }
 
-fn parse_media_query_list(p: &mut Parser) -> Result<MediaQueryListNode, ParseError> {
+fn _parse_media_query_list(p: &mut Parser) -> Result<MediaQueryListNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -34215,7 +34215,7 @@ fn parse_media_query_list(p: &mut Parser) -> Result<MediaQueryListNode, ParseErr
         opt_scan_pos = pos;
     }
     let media_query_item: Option<MediaQueryItemListItem> = if opt_scan_pos >= 0 {
-        let media_query = parse_media_query(p)?;
+        let media_query = _parse_media_query(p)?;
         let mut comma_ws_media_query_list: Array<CommaWsMediaQueryItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -34239,8 +34239,8 @@ fn parse_media_query_list(p: &mut Parser) -> Result<MediaQueryListNode, ParseErr
             }
             if rep_scan_pos < 0 { break; }
             let comma = p.expect(TK_Comma)?;
-            let ws = parse_ws(p)?;
-            let media_query = parse_media_query(p)?;
+            let ws = _parse_ws(p)?;
+            let media_query = _parse_media_query(p)?;
             let comma_ws_media_query = CommaWsMediaQueryItem {
                 comma,
                 ws,
@@ -34256,7 +34256,7 @@ fn parse_media_query_list(p: &mut Parser) -> Result<MediaQueryListNode, ParseErr
     } else {
         null
     };
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<MediaQueryListNode, ParseError>::Ok(MediaQueryListNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         media_query_item,
@@ -34264,7 +34264,7 @@ fn parse_media_query_list(p: &mut Parser) -> Result<MediaQueryListNode, ParseErr
     });
 }
 
-fn parse_media_query(p: &mut Parser) -> Result<MediaQueryNode, ParseError> {
+fn _parse_media_query(p: &mut Parser) -> Result<MediaQueryNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_33(kind) {
@@ -34296,9 +34296,9 @@ fn parse_media_query(p: &mut Parser) -> Result<MediaQueryNode, ParseError> {
         } else {
             null
         };
-        let ws = parse_ws(p)?;
-        let media_type = parse_media_type(p)?;
-        let ws_2 = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
+        let media_type = _parse_media_type(p)?;
+        let ws_2 = _parse_ws(p)?;
         let mut and_ws_media_expression_list: Array<AndWsMediaExpressionItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -34322,8 +34322,8 @@ fn parse_media_query(p: &mut Parser) -> Result<MediaQueryNode, ParseError> {
             }
             if rep_scan_pos < 0 { break; }
             let and = p.expect(TK_And)?;
-            let ws = parse_ws(p)?;
-            let media_expression = parse_media_expression(p)?;
+            let ws = _parse_ws(p)?;
+            let media_expression = _parse_media_expression(p)?;
             let and_ws_media_expression = AndWsMediaExpressionItem {
                 and,
                 ws,
@@ -34341,7 +34341,7 @@ fn parse_media_query(p: &mut Parser) -> Result<MediaQueryNode, ParseError> {
         }));
     }
     if kind == TK_LIT_LPAREN {
-        let media_expression = parse_media_expression(p)?;
+        let media_expression = _parse_media_expression(p)?;
         let mut and_ws_media_expression_list: Array<AndWsMediaExpressionItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -34365,8 +34365,8 @@ fn parse_media_query(p: &mut Parser) -> Result<MediaQueryNode, ParseError> {
             }
             if rep_scan_pos < 0 { break; }
             let and = p.expect(TK_And)?;
-            let ws = parse_ws(p)?;
-            let media_expression = parse_media_expression(p)?;
+            let ws = _parse_ws(p)?;
+            let media_expression = _parse_media_expression(p)?;
             let and_ws_media_expression = AndWsMediaExpressionItem {
                 and,
                 ws,
@@ -34387,24 +34387,24 @@ fn parse_media_query(p: &mut Parser) -> Result<MediaQueryNode, ParseError> {
     ));
 }
 
-fn parse_media_type(p: &mut Parser) -> Result<MediaTypeNode, ParseError> {
+fn _parse_media_type(p: &mut Parser) -> Result<MediaTypeNode, ParseError> {
     let start = p.peek().span.start;
-    let ident = parse_ident(p)?;
+    let ident = _parse_ident(p)?;
     return Result::<MediaTypeNode, ParseError>::Ok(MediaTypeNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         ident,
     });
 }
 
-fn parse_media_expression(p: &mut Parser) -> Result<MediaExpressionNode, ParseError> {
+fn _parse_media_expression(p: &mut Parser) -> Result<MediaExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
-    let ws = parse_ws(p)?;
-    let media_feature = parse_media_feature(p)?;
+    let ws = _parse_ws(p)?;
+    let media_feature = _parse_media_feature(p)?;
     let colon_ws_expr: Option<ColonWsExprItem> = if p.peek_kind() == TK_LIT_COLON {
         let colon = p.expect(TK_LIT_COLON)?;
-        let ws = parse_ws(p)?;
-        let expr = parse_expr(p)?;
+        let ws = _parse_ws(p)?;
+        let expr = _parse_expr(p)?;
         let colon_ws_expr = ColonWsExprItem {
             colon,
             ws,
@@ -34415,7 +34415,7 @@ fn parse_media_expression(p: &mut Parser) -> Result<MediaExpressionNode, ParseEr
         null
     };
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     return Result::<MediaExpressionNode, ParseError>::Ok(MediaExpressionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         lparen,
@@ -34427,10 +34427,10 @@ fn parse_media_expression(p: &mut Parser) -> Result<MediaExpressionNode, ParseEr
     });
 }
 
-fn parse_media_feature(p: &mut Parser) -> Result<MediaFeatureNode, ParseError> {
+fn _parse_media_feature(p: &mut Parser) -> Result<MediaFeatureNode, ParseError> {
     let start = p.peek().span.start;
-    let ident = parse_ident(p)?;
-    let ws = parse_ws(p)?;
+    let ident = _parse_ident(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<MediaFeatureNode, ParseError>::Ok(MediaFeatureNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         ident,
@@ -34438,20 +34438,20 @@ fn parse_media_feature(p: &mut Parser) -> Result<MediaFeatureNode, ParseError> {
     });
 }
 
-fn parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
+fn _parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
     let start = p.peek().span.start;
     let page = p.expect(TK_Page)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let pseudo_page: Option<PseudoPageNode> = if p.peek_kind() == TK_LIT_COLON {
-        let pseudo_page = parse_pseudo_page(p)?;
+        let pseudo_page = _parse_pseudo_page(p)?;
         Option::<PseudoPageNode>::Some(pseudo_page)
     } else {
         null
     };
     let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     let declaration: Option<DeclarationNode> = if _gale_kind_set_8(p.peek_kind()) {
-        let declaration = parse_declaration(p)?;
+        let declaration = _parse_declaration(p)?;
         Option::<DeclarationNode>::Some(declaration)
     } else {
         null
@@ -34482,9 +34482,9 @@ fn parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let declaration: Option<DeclarationNode> = if _gale_kind_set_8(p.peek_kind()) {
-            let declaration = parse_declaration(p)?;
+            let declaration = _parse_declaration(p)?;
             Option::<DeclarationNode>::Some(declaration)
         } else {
             null
@@ -34497,7 +34497,7 @@ fn parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
         semicolon_ws_declaration_list.push(semicolon_ws_declaration);
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_3 = parse_ws(p)?;
+    let ws_3 = _parse_ws(p)?;
     return Result::<PageNode, ParseError>::Ok(PageNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         page,
@@ -34512,11 +34512,11 @@ fn parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
     });
 }
 
-fn parse_pseudo_page(p: &mut Parser) -> Result<PseudoPageNode, ParseError> {
+fn _parse_pseudo_page(p: &mut Parser) -> Result<PseudoPageNode, ParseError> {
     let start = p.peek().span.start;
     let colon = p.expect(TK_LIT_COLON)?;
-    let ident = parse_ident(p)?;
-    let ws = parse_ws(p)?;
+    let ident = _parse_ident(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<PseudoPageNode, ParseError>::Ok(PseudoPageNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         colon,
@@ -34525,9 +34525,9 @@ fn parse_pseudo_page(p: &mut Parser) -> Result<PseudoPageNode, ParseError> {
     });
 }
 
-fn parse_selector_group(p: &mut Parser) -> Result<SelectorGroupNode, ParseError> {
+fn _parse_selector_group(p: &mut Parser) -> Result<SelectorGroupNode, ParseError> {
     let start = p.peek().span.start;
-    let selector = parse_selector(p)?;
+    let selector = _parse_selector(p)?;
     let mut comma_ws_selector_list: Array<CommaWsSelectorItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -34551,8 +34551,8 @@ fn parse_selector_group(p: &mut Parser) -> Result<SelectorGroupNode, ParseError>
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_Comma)?;
-        let ws = parse_ws(p)?;
-        let selector = parse_selector(p)?;
+        let ws = _parse_ws(p)?;
+        let selector = _parse_selector(p)?;
         let comma_ws_selector = CommaWsSelectorItem {
             comma,
             ws,
@@ -34567,10 +34567,10 @@ fn parse_selector_group(p: &mut Parser) -> Result<SelectorGroupNode, ParseError>
     });
 }
 
-fn parse_selector(p: &mut Parser) -> Result<SelectorNode, ParseError> {
+fn _parse_selector(p: &mut Parser) -> Result<SelectorNode, ParseError> {
     let start = p.peek().span.start;
-    let simple_selector_sequence = parse_simple_selector_sequence(p)?;
-    let ws = parse_ws(p)?;
+    let simple_selector_sequence = _parse_simple_selector_sequence(p)?;
+    let ws = _parse_ws(p)?;
     let mut combinator_simple_selector_sequence_ws_list: Array<CombinatorSimpleSelectorSequenceWsItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -34593,9 +34593,9 @@ fn parse_selector(p: &mut Parser) -> Result<SelectorNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let combinator = parse_combinator(p)?;
-        let simple_selector_sequence = parse_simple_selector_sequence(p)?;
-        let ws = parse_ws(p)?;
+        let combinator = _parse_combinator(p)?;
+        let simple_selector_sequence = _parse_simple_selector_sequence(p)?;
+        let ws = _parse_ws(p)?;
         let combinator_simple_selector_sequence_ws = CombinatorSimpleSelectorSequenceWsItem {
             combinator,
             simple_selector_sequence,
@@ -34611,12 +34611,12 @@ fn parse_selector(p: &mut Parser) -> Result<SelectorNode, ParseError> {
     });
 }
 
-fn parse_combinator(p: &mut Parser) -> Result<CombinatorNode, ParseError> {
+fn _parse_combinator(p: &mut Parser) -> Result<CombinatorNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Plus {
         let plus = p.expect(TK_Plus)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<CombinatorNode, ParseError>::Ok(CombinatorNode::Alt0(CombinatorAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             plus,
@@ -34625,7 +34625,7 @@ fn parse_combinator(p: &mut Parser) -> Result<CombinatorNode, ParseError> {
     }
     if kind == TK_Greater {
         let greater = p.expect(TK_Greater)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<CombinatorNode, ParseError>::Ok(CombinatorNode::Alt1(CombinatorAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             greater,
@@ -34634,7 +34634,7 @@ fn parse_combinator(p: &mut Parser) -> Result<CombinatorNode, ParseError> {
     }
     if kind == TK_Tilde {
         let tilde = p.expect(TK_Tilde)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<CombinatorNode, ParseError>::Ok(CombinatorNode::Alt2(CombinatorAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             tilde,
@@ -34643,7 +34643,7 @@ fn parse_combinator(p: &mut Parser) -> Result<CombinatorNode, ParseError> {
     }
     if kind == TK_Space {
         let space = p.expect(TK_Space)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<CombinatorNode, ParseError>::Ok(CombinatorNode::Alt3(CombinatorAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             space,
@@ -34657,7 +34657,7 @@ fn parse_combinator(p: &mut Parser) -> Result<CombinatorNode, ParseError> {
     ));
 }
 
-fn parse_simple_selector_sequence(p: &mut Parser) -> Result<SimpleSelectorSequenceNode, ParseError> {
+fn _parse_simple_selector_sequence(p: &mut Parser) -> Result<SimpleSelectorSequenceNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_10(kind) {
@@ -34676,10 +34676,10 @@ fn parse_simple_selector_sequence(p: &mut Parser) -> Result<SimpleSelectorSequen
                 }
             }
             if gd_winner == 0 {
-                let type_selector = parse_type_selector(p)?;
+                let type_selector = _parse_type_selector(p)?;
                 type_selector_or_universal_inner = Option::<TypeSelectorOrUniversalGroup>::Some(TypeSelectorOrUniversalGroup::TypeSelector(type_selector));
             } else {
-                let universal = parse_universal(p)?;
+                let universal = _parse_universal(p)?;
                 type_selector_or_universal_inner = Option::<TypeSelectorOrUniversalGroup>::Some(TypeSelectorOrUniversalGroup::Universal(universal));
             }
         }
@@ -34737,22 +34737,22 @@ fn parse_simple_selector_sequence(p: &mut Parser) -> Result<SimpleSelectorSequen
                     hash,
                 })
             } else if p.peek_kind() == TK_LIT_DOT {
-                let class_name = parse_class_name(p)?;
+                let class_name = _parse_class_name(p)?;
                 SimpleSelectorSequenceGroup0::Alt1(SimpleSelectorSequenceGroup0Alt1 {
                     class_name,
                 })
             } else if p.peek_kind() == TK_LIT_LBRACKET {
-                let attrib = parse_attrib(p)?;
+                let attrib = _parse_attrib(p)?;
                 SimpleSelectorSequenceGroup0::Alt2(SimpleSelectorSequenceGroup0Alt2 {
                     attrib,
                 })
             } else if p.peek_kind() == TK_LIT_COLON {
-                let pseudo = parse_pseudo(p)?;
+                let pseudo = _parse_pseudo(p)?;
                 SimpleSelectorSequenceGroup0::Alt3(SimpleSelectorSequenceGroup0Alt3 {
                     pseudo,
                 })
             } else {
-                let negation = parse_negation(p)?;
+                let negation = _parse_negation(p)?;
                 SimpleSelectorSequenceGroup0::Alt4(SimpleSelectorSequenceGroup0Alt4 {
                     negation,
                 })
@@ -34823,22 +34823,22 @@ fn parse_simple_selector_sequence(p: &mut Parser) -> Result<SimpleSelectorSequen
                     hash,
                 })
             } else if p.peek_kind() == TK_LIT_DOT {
-                let class_name = parse_class_name(p)?;
+                let class_name = _parse_class_name(p)?;
                 SimpleSelectorSequenceGroup1::Alt1(SimpleSelectorSequenceGroup1Alt1 {
                     class_name,
                 })
             } else if p.peek_kind() == TK_LIT_LBRACKET {
-                let attrib = parse_attrib(p)?;
+                let attrib = _parse_attrib(p)?;
                 SimpleSelectorSequenceGroup1::Alt2(SimpleSelectorSequenceGroup1Alt2 {
                     attrib,
                 })
             } else if p.peek_kind() == TK_LIT_COLON {
-                let pseudo = parse_pseudo(p)?;
+                let pseudo = _parse_pseudo(p)?;
                 SimpleSelectorSequenceGroup1::Alt3(SimpleSelectorSequenceGroup1Alt3 {
                     pseudo,
                 })
             } else {
-                let negation = parse_negation(p)?;
+                let negation = _parse_negation(p)?;
                 SimpleSelectorSequenceGroup1::Alt4(SimpleSelectorSequenceGroup1Alt4 {
                     negation,
                 })
@@ -34857,15 +34857,15 @@ fn parse_simple_selector_sequence(p: &mut Parser) -> Result<SimpleSelectorSequen
     ));
 }
 
-fn parse_type_selector(p: &mut Parser) -> Result<TypeSelectorNode, ParseError> {
+fn _parse_type_selector(p: &mut Parser) -> Result<TypeSelectorNode, ParseError> {
     let start = p.peek().span.start;
     let type_namespace_prefix: Option<TypeNamespacePrefixNode> = if _gale_kind_set_12(p.peek_kind()) {
-        let type_namespace_prefix = parse_type_namespace_prefix(p)?;
+        let type_namespace_prefix = _parse_type_namespace_prefix(p)?;
         Option::<TypeNamespacePrefixNode>::Some(type_namespace_prefix)
     } else {
         null
     };
-    let element_name = parse_element_name(p)?;
+    let element_name = _parse_element_name(p)?;
     return Result::<TypeSelectorNode, ParseError>::Ok(TypeSelectorNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         type_namespace_prefix,
@@ -34873,7 +34873,7 @@ fn parse_type_selector(p: &mut Parser) -> Result<TypeSelectorNode, ParseError> {
     });
 }
 
-fn parse_type_namespace_prefix(p: &mut Parser) -> Result<TypeNamespacePrefixNode, ParseError> {
+fn _parse_type_namespace_prefix(p: &mut Parser) -> Result<TypeNamespacePrefixNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -34899,7 +34899,7 @@ fn parse_type_namespace_prefix(p: &mut Parser) -> Result<TypeNamespacePrefixNode
     }
     let group_0: Option<TypeNamespacePrefixGroup0> = if opt_scan_pos >= 0 {
         let group_0: TypeNamespacePrefixGroup0 = if _gale_kind_set_4(p.peek_kind()) {
-            let ident = parse_ident(p)?;
+            let ident = _parse_ident(p)?;
             TypeNamespacePrefixGroup0::Alt0(TypeNamespacePrefixGroup0Alt0 {
                 ident,
             })
@@ -34921,19 +34921,19 @@ fn parse_type_namespace_prefix(p: &mut Parser) -> Result<TypeNamespacePrefixNode
     });
 }
 
-fn parse_element_name(p: &mut Parser) -> Result<ElementNameNode, ParseError> {
+fn _parse_element_name(p: &mut Parser) -> Result<ElementNameNode, ParseError> {
     let start = p.peek().span.start;
-    let ident = parse_ident(p)?;
+    let ident = _parse_ident(p)?;
     return Result::<ElementNameNode, ParseError>::Ok(ElementNameNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         ident,
     });
 }
 
-fn parse_universal(p: &mut Parser) -> Result<UniversalNode, ParseError> {
+fn _parse_universal(p: &mut Parser) -> Result<UniversalNode, ParseError> {
     let start = p.peek().span.start;
     let type_namespace_prefix: Option<TypeNamespacePrefixNode> = if _gale_kind_set_14(p.peek_kind()) {
-        let type_namespace_prefix = parse_type_namespace_prefix(p)?;
+        let type_namespace_prefix = _parse_type_namespace_prefix(p)?;
         Option::<TypeNamespacePrefixNode>::Some(type_namespace_prefix)
     } else {
         null
@@ -34946,10 +34946,10 @@ fn parse_universal(p: &mut Parser) -> Result<UniversalNode, ParseError> {
     });
 }
 
-fn parse_class_name(p: &mut Parser) -> Result<ClassNameNode, ParseError> {
+fn _parse_class_name(p: &mut Parser) -> Result<ClassNameNode, ParseError> {
     let start = p.peek().span.start;
     let dot = p.expect(TK_LIT_DOT)?;
-    let ident = parse_ident(p)?;
+    let ident = _parse_ident(p)?;
     return Result::<ClassNameNode, ParseError>::Ok(ClassNameNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         dot,
@@ -34957,18 +34957,18 @@ fn parse_class_name(p: &mut Parser) -> Result<ClassNameNode, ParseError> {
     });
 }
 
-fn parse_attrib(p: &mut Parser) -> Result<AttribNode, ParseError> {
+fn _parse_attrib(p: &mut Parser) -> Result<AttribNode, ParseError> {
     let start = p.peek().span.start;
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let type_namespace_prefix: Option<TypeNamespacePrefixNode> = if _gale_kind_set_12(p.peek_kind()) {
-        let type_namespace_prefix = parse_type_namespace_prefix(p)?;
+        let type_namespace_prefix = _parse_type_namespace_prefix(p)?;
         Option::<TypeNamespacePrefixNode>::Some(type_namespace_prefix)
     } else {
         null
     };
-    let ident = parse_ident(p)?;
-    let ws_2 = parse_ws(p)?;
+    let ident = _parse_ident(p)?;
+    let ws_2 = _parse_ws(p)?;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.tokens;
@@ -35040,11 +35040,11 @@ fn parse_attrib(p: &mut Parser) -> Result<AttribNode, ParseError> {
     }
     let item_ws_item_ws: Option<ItemWsItemWsItem> = if opt_scan_pos >= 0 {
         let prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch = p.advance();
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let mut group_0_inner: Option<AttribGroup0> = null;
         let grp_kind = p.peek_kind();
         if _gale_kind_set_4(grp_kind) {
-            let ident = parse_ident(p)?;
+            let ident = _parse_ident(p)?;
             group_0_inner = Option::<AttribGroup0>::Some(AttribGroup0::Alt0(AttribGroup0Alt0 {
                 ident,
             }));
@@ -35055,7 +35055,7 @@ fn parse_attrib(p: &mut Parser) -> Result<AttribNode, ParseError> {
             }));
         }
         let group_0 = group_0_inner;
-        let ws_2 = parse_ws(p)?;
+        let ws_2 = _parse_ws(p)?;
         let item_ws_item_ws = ItemWsItemWsItem {
             prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch,
             ws,
@@ -35079,7 +35079,7 @@ fn parse_attrib(p: &mut Parser) -> Result<AttribNode, ParseError> {
     });
 }
 
-fn parse_pseudo(p: &mut Parser) -> Result<PseudoNode, ParseError> {
+fn _parse_pseudo(p: &mut Parser) -> Result<PseudoNode, ParseError> {
     let start = p.peek().span.start;
     let colon = p.expect(TK_LIT_COLON)?;
     let colon_2: Option<Token> = if p.peek_kind() == TK_LIT_COLON {
@@ -35091,10 +35091,10 @@ fn parse_pseudo(p: &mut Parser) -> Result<PseudoNode, ParseError> {
     let mut ident_or_functional_pseudo_inner: Option<IdentOrFunctionalPseudoGroup> = null;
     let grp_kind = p.peek_kind();
     if _gale_kind_set_4(grp_kind) {
-        let ident = parse_ident(p)?;
+        let ident = _parse_ident(p)?;
         ident_or_functional_pseudo_inner = Option::<IdentOrFunctionalPseudoGroup>::Some(IdentOrFunctionalPseudoGroup::Ident(ident));
     } else if grp_kind == TK_Function_ {
-        let functional_pseudo = parse_functional_pseudo(p)?;
+        let functional_pseudo = _parse_functional_pseudo(p)?;
         ident_or_functional_pseudo_inner = Option::<IdentOrFunctionalPseudoGroup>::Some(IdentOrFunctionalPseudoGroup::FunctionalPseudo(functional_pseudo));
     }
     let ident_or_functional_pseudo = ident_or_functional_pseudo_inner;
@@ -35106,11 +35106,11 @@ fn parse_pseudo(p: &mut Parser) -> Result<PseudoNode, ParseError> {
     });
 }
 
-fn parse_functional_pseudo(p: &mut Parser) -> Result<FunctionalPseudoNode, ParseError> {
+fn _parse_functional_pseudo(p: &mut Parser) -> Result<FunctionalPseudoNode, ParseError> {
     let start = p.peek().span.start;
     let function_ = p.expect(TK_Function_)?;
-    let ws = parse_ws(p)?;
-    let expression = parse_expression(p)?;
+    let ws = _parse_ws(p)?;
+    let expression = _parse_expression(p)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<FunctionalPseudoNode, ParseError>::Ok(FunctionalPseudoNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -35121,7 +35121,7 @@ fn parse_functional_pseudo(p: &mut Parser) -> Result<FunctionalPseudoNode, Parse
     });
 }
 
-fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
+fn _parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let mut item_ws_list: Array<ItemWsItem> = [];
     let mut _plus_first = true;
@@ -35227,13 +35227,13 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
                 string_,
             }));
         } else if _gale_kind_set_4(grp_kind) {
-            let ident = parse_ident(p)?;
+            let ident = _parse_ident(p)?;
             group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt6(ExpressionGroup0Alt6 {
                 ident,
             }));
         }
         let group_0 = group_0_inner;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let item_ws = ItemWsItem {
             group_0,
             ws,
@@ -35246,12 +35246,12 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     });
 }
 
-fn parse_negation(p: &mut Parser) -> Result<NegationNode, ParseError> {
+fn _parse_negation(p: &mut Parser) -> Result<NegationNode, ParseError> {
     let start = p.peek().span.start;
     let pseudonot = p.expect(TK_PseudoNot)?;
-    let ws = parse_ws(p)?;
-    let negation_arg = parse_negation_arg(p)?;
-    let ws_2 = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
+    let negation_arg = _parse_negation_arg(p)?;
+    let ws_2 = _parse_ws(p)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<NegationNode, ParseError>::Ok(NegationNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -35263,95 +35263,95 @@ fn parse_negation(p: &mut Parser) -> Result<NegationNode, ParseError> {
     });
 }
 
-fn parse_negation_arg_bt_0(p: &mut Parser) -> Result<NegationArgNode, ParseError> {
+fn _parse_negation_arg_bt_0(p: &mut Parser) -> Result<NegationArgNode, ParseError> {
     let start = p.peek().span.start;
-    let type_selector = parse_type_selector(p)?;
+    let type_selector = _parse_type_selector(p)?;
     return Result::<NegationArgNode, ParseError>::Ok(NegationArgNode::Alt0(NegationArgAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         type_selector,
     }));
 }
 
-fn parse_negation_arg_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_negation_arg_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_type_selector(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_negation_arg_bt_1(p: &mut Parser) -> Result<NegationArgNode, ParseError> {
+fn _parse_negation_arg_bt_1(p: &mut Parser) -> Result<NegationArgNode, ParseError> {
     let start = p.peek().span.start;
-    let universal = parse_universal(p)?;
+    let universal = _parse_universal(p)?;
     return Result::<NegationArgNode, ParseError>::Ok(NegationArgNode::Alt1(NegationArgAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         universal,
     }));
 }
 
-fn parse_negation_arg_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_negation_arg_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_universal(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_negation_arg(p: &mut Parser) -> Result<NegationArgNode, ParseError> {
+fn _parse_negation_arg(p: &mut Parser) -> Result<NegationArgNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_10(kind) {
         if p.peek_kind() == TK_Ident {
             if _gale_kind_set_4(p.peek_at(1)) {
-                return parse_negation_arg_bt_0(p);
+                return _parse_negation_arg_bt_0(p);
             } else if p.peek_at(1) == TK_LIT_STAR {
-                return parse_negation_arg_bt_1(p);
+                return _parse_negation_arg_bt_1(p);
             }
         } else if p.peek_kind() == TK_MediaOnly {
             if _gale_kind_set_4(p.peek_at(1)) {
-                return parse_negation_arg_bt_0(p);
+                return _parse_negation_arg_bt_0(p);
             } else if p.peek_at(1) == TK_LIT_STAR {
-                return parse_negation_arg_bt_1(p);
+                return _parse_negation_arg_bt_1(p);
             }
         } else if p.peek_kind() == TK_Not {
             if _gale_kind_set_4(p.peek_at(1)) {
-                return parse_negation_arg_bt_0(p);
+                return _parse_negation_arg_bt_0(p);
             } else if p.peek_at(1) == TK_LIT_STAR {
-                return parse_negation_arg_bt_1(p);
+                return _parse_negation_arg_bt_1(p);
             }
         } else if p.peek_kind() == TK_And {
             if _gale_kind_set_4(p.peek_at(1)) {
-                return parse_negation_arg_bt_0(p);
+                return _parse_negation_arg_bt_0(p);
             } else if p.peek_at(1) == TK_LIT_STAR {
-                return parse_negation_arg_bt_1(p);
+                return _parse_negation_arg_bt_1(p);
             }
         } else if p.peek_kind() == TK_Or {
             if _gale_kind_set_4(p.peek_at(1)) {
-                return parse_negation_arg_bt_0(p);
+                return _parse_negation_arg_bt_0(p);
             } else if p.peek_at(1) == TK_LIT_STAR {
-                return parse_negation_arg_bt_1(p);
+                return _parse_negation_arg_bt_1(p);
             }
         } else if p.peek_kind() == TK_From {
             if _gale_kind_set_4(p.peek_at(1)) {
-                return parse_negation_arg_bt_0(p);
+                return _parse_negation_arg_bt_0(p);
             } else if p.peek_at(1) == TK_LIT_STAR {
-                return parse_negation_arg_bt_1(p);
+                return _parse_negation_arg_bt_1(p);
             }
         } else if p.peek_kind() == TK_To {
             if _gale_kind_set_4(p.peek_at(1)) {
-                return parse_negation_arg_bt_0(p);
+                return _parse_negation_arg_bt_0(p);
             } else if p.peek_at(1) == TK_LIT_STAR {
-                return parse_negation_arg_bt_1(p);
+                return _parse_negation_arg_bt_1(p);
             }
         } else if p.peek_kind() == TK_LIT_STAR {
             if _gale_kind_set_4(p.peek_at(1)) {
-                return parse_negation_arg_bt_0(p);
+                return _parse_negation_arg_bt_0(p);
             } else if p.peek_at(1) == TK_LIT_STAR {
-                return parse_negation_arg_bt_1(p);
+                return _parse_negation_arg_bt_1(p);
             }
         } else if p.peek_kind() == TK_LIT_PIPE {
             if _gale_kind_set_4(p.peek_at(1)) {
-                return parse_negation_arg_bt_0(p);
+                return _parse_negation_arg_bt_0(p);
             } else if p.peek_at(1) == TK_LIT_STAR {
-                return parse_negation_arg_bt_1(p);
+                return _parse_negation_arg_bt_1(p);
             }
         }
     }
@@ -35363,21 +35363,21 @@ fn parse_negation_arg(p: &mut Parser) -> Result<NegationArgNode, ParseError> {
         }));
     }
     if kind == TK_LIT_DOT {
-        let class_name = parse_class_name(p)?;
+        let class_name = _parse_class_name(p)?;
         return Result::<NegationArgNode, ParseError>::Ok(NegationArgNode::Alt3(NegationArgAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             class_name,
         }));
     }
     if kind == TK_LIT_LBRACKET {
-        let attrib = parse_attrib(p)?;
+        let attrib = _parse_attrib(p)?;
         return Result::<NegationArgNode, ParseError>::Ok(NegationArgNode::Alt4(NegationArgAlt4 {
             span: Span::new(start, i32::max(start, p.last_end())),
             attrib,
         }));
     }
     if kind == TK_LIT_COLON {
-        let pseudo = parse_pseudo(p)?;
+        let pseudo = _parse_pseudo(p)?;
         return Result::<NegationArgNode, ParseError>::Ok(NegationArgNode::Alt5(NegationArgAlt5 {
             span: Span::new(start, i32::max(start, p.last_end())),
             pseudo,
@@ -35390,12 +35390,12 @@ fn parse_negation_arg(p: &mut Parser) -> Result<NegationArgNode, ParseError> {
     ));
 }
 
-fn parse_operator_(p: &mut Parser) -> Result<OperatorNode, ParseError> {
+fn _parse_operator_(p: &mut Parser) -> Result<OperatorNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_SLASH {
         let slash = p.expect(TK_LIT_SLASH)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<OperatorNode, ParseError>::Ok(OperatorNode::goodOperator0(OperatorgoodOperator0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             slash,
@@ -35404,7 +35404,7 @@ fn parse_operator_(p: &mut Parser) -> Result<OperatorNode, ParseError> {
     }
     if kind == TK_Comma {
         let comma = p.expect(TK_Comma)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<OperatorNode, ParseError>::Ok(OperatorNode::goodOperator1(OperatorgoodOperator1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             comma,
@@ -35413,7 +35413,7 @@ fn parse_operator_(p: &mut Parser) -> Result<OperatorNode, ParseError> {
     }
     if kind == TK_Space {
         let space = p.expect(TK_Space)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<OperatorNode, ParseError>::Ok(OperatorNode::goodOperator2(OperatorgoodOperator2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             space,
@@ -35422,7 +35422,7 @@ fn parse_operator_(p: &mut Parser) -> Result<OperatorNode, ParseError> {
     }
     if kind == TK_LIT_EQ {
         let eq = p.expect(TK_LIT_EQ)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<OperatorNode, ParseError>::Ok(OperatorNode::badOperator(OperatorbadOperator {
             span: Span::new(start, i32::max(start, p.last_end())),
             eq,
@@ -35436,12 +35436,12 @@ fn parse_operator_(p: &mut Parser) -> Result<OperatorNode, ParseError> {
     ));
 }
 
-fn parse_property_(p: &mut Parser) -> Result<PropertyNode, ParseError> {
+fn _parse_property_(p: &mut Parser) -> Result<PropertyNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_4(kind) {
-        let ident = parse_ident(p)?;
-        let ws = parse_ws(p)?;
+        let ident = _parse_ident(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<PropertyNode, ParseError>::Ok(PropertyNode::goodProperty0(PropertygoodProperty0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             ident,
@@ -35450,7 +35450,7 @@ fn parse_property_(p: &mut Parser) -> Result<PropertyNode, ParseError> {
     }
     if kind == TK_Variable {
         let variable = p.expect(TK_Variable)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<PropertyNode, ParseError>::Ok(PropertyNode::goodProperty1(PropertygoodProperty1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             variable,
@@ -35459,7 +35459,7 @@ fn parse_property_(p: &mut Parser) -> Result<PropertyNode, ParseError> {
     }
     if kind == TK_LIT_STAR {
         let star = p.expect(TK_LIT_STAR)?;
-        let ident = parse_ident(p)?;
+        let ident = _parse_ident(p)?;
         return Result::<PropertyNode, ParseError>::Ok(PropertyNode::badProperty0(PropertybadProperty0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             star,
@@ -35468,7 +35468,7 @@ fn parse_property_(p: &mut Parser) -> Result<PropertyNode, ParseError> {
     }
     if kind == TK_LIT_U5f {
         let lit_u5f = p.expect(TK_LIT_U5f)?;
-        let ident = parse_ident(p)?;
+        let ident = _parse_ident(p)?;
         return Result::<PropertyNode, ParseError>::Ok(PropertyNode::badProperty1(PropertybadProperty1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             lit_u5f,
@@ -35482,7 +35482,7 @@ fn parse_property_(p: &mut Parser) -> Result<PropertyNode, ParseError> {
     ));
 }
 
-fn parse_ruleset_bt_1(p: &mut Parser) -> Result<RulesetNode, ParseError> {
+fn _parse_ruleset_bt_1(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     let start = p.peek().span.start;
     let mut any__list: Array<AnyNode> = [];
     loop {
@@ -35496,19 +35496,19 @@ fn parse_ruleset_bt_1(p: &mut Parser) -> Result<RulesetNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let any_ = parse_any_(p)?;
+        let any_ = _parse_any_(p)?;
         any__list.push(any_);
     }
     let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let declaration_list: Option<DeclarationListNode> = if _gale_kind_set_19(p.peek_kind()) {
-        let declaration_list = parse_declaration_list(p)?;
+        let declaration_list = _parse_declaration_list(p)?;
         Option::<DeclarationListNode>::Some(declaration_list)
     } else {
         null
     };
     let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     return Result::<RulesetNode, ParseError>::Ok(RulesetNode::unknownRuleset(RulesetunknownRuleset {
         span: Span::new(start, i32::max(start, p.last_end())),
         any__list,
@@ -35520,7 +35520,7 @@ fn parse_ruleset_bt_1(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     }));
 }
 
-fn parse_ruleset_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_ruleset_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _gale_kind_set_20(tokens[pos].kind) {
         let sp = pos;
@@ -35544,19 +35544,19 @@ fn parse_ruleset_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_ruleset_bt_0(p: &mut Parser) -> Result<RulesetNode, ParseError> {
+fn _parse_ruleset_bt_0(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     let start = p.peek().span.start;
-    let selector_group = parse_selector_group(p)?;
+    let selector_group = _parse_selector_group(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let declaration_list: Option<DeclarationListNode> = if _gale_kind_set_19(p.peek_kind()) {
-        let declaration_list = parse_declaration_list(p)?;
+        let declaration_list = _parse_declaration_list(p)?;
         Option::<DeclarationListNode>::Some(declaration_list)
     } else {
         null
     };
     let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     return Result::<RulesetNode, ParseError>::Ok(RulesetNode::knownRuleset(RulesetknownRuleset {
         span: Span::new(start, i32::max(start, p.last_end())),
         selector_group,
@@ -35568,7 +35568,7 @@ fn parse_ruleset_bt_0(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     }));
 }
 
-fn parse_ruleset_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_ruleset_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_selector_group(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -35588,15 +35588,15 @@ fn parse_ruleset_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_ruleset(p: &mut Parser) -> Result<RulesetNode, ParseError> {
+fn _parse_ruleset(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_29(kind) {
         if _gale_kind_set_34(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_1 = parse_ruleset_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_0 = parse_ruleset_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_ruleset_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_ruleset_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -35608,16 +35608,16 @@ fn parse_ruleset(p: &mut Parser) -> Result<RulesetNode, ParseError> {
                 _sd_best_i = 0;
             }
             if _sd_best_i == 1 {
-                return parse_ruleset_bt_1(p);
+                return _parse_ruleset_bt_1(p);
             }
             if _sd_best_i == 0 {
-                return parse_ruleset_bt_0(p);
+                return _parse_ruleset_bt_0(p);
             }
-            return parse_ruleset_bt_0(p);
+            return _parse_ruleset_bt_0(p);
         } else if _gale_kind_set_35(p.peek_kind()) {
-            return parse_ruleset_bt_0(p);
+            return _parse_ruleset_bt_0(p);
         } else if _gale_kind_set_36(p.peek_kind()) {
-            return parse_ruleset_bt_1(p);
+            return _parse_ruleset_bt_1(p);
         }
     }
     return Result::<RulesetNode, ParseError>::Err(ParseError::new(
@@ -35627,7 +35627,7 @@ fn parse_ruleset(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     ));
 }
 
-fn parse_declaration_list(p: &mut Parser) -> Result<DeclarationListNode, ParseError> {
+fn _parse_declaration_list(p: &mut Parser) -> Result<DeclarationListNode, ParseError> {
     let start = p.peek().span.start;
     let mut semicolon_ws_list: Array<SemicolonWsItem> = [];
     loop {
@@ -35650,15 +35650,15 @@ fn parse_declaration_list(p: &mut Parser) -> Result<DeclarationListNode, ParseEr
         }
         if rep_scan_pos < 0 { break; }
         let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let semicolon_ws = SemicolonWsItem {
             semicolon,
             ws,
         };
         semicolon_ws_list.push(semicolon_ws);
     }
-    let declaration = parse_declaration(p)?;
-    let ws = parse_ws(p)?;
+    let declaration = _parse_declaration(p)?;
+    let ws = _parse_ws(p)?;
     let mut semicolon_ws_declaration_list: Array<SemicolonWsDeclarationOptItem> = [];
     loop {
         let mut rep_scan_pos_2: i32 = -1;
@@ -35685,9 +35685,9 @@ fn parse_declaration_list(p: &mut Parser) -> Result<DeclarationListNode, ParseEr
         }
         if rep_scan_pos_2 < 0 { break; }
         let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let declaration: Option<DeclarationNode> = if _gale_kind_set_8(p.peek_kind()) {
-            let declaration = parse_declaration(p)?;
+            let declaration = _parse_declaration(p)?;
             Option::<DeclarationNode>::Some(declaration)
         } else {
             null
@@ -35708,14 +35708,14 @@ fn parse_declaration_list(p: &mut Parser) -> Result<DeclarationListNode, ParseEr
     });
 }
 
-fn parse_declaration_bt_0(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
+fn _parse_declaration_bt_0(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
     let start = p.peek().span.start;
-    let property_ = parse_property_(p)?;
+    let property_ = _parse_property_(p)?;
     let colon = p.expect(TK_LIT_COLON)?;
-    let ws = parse_ws(p)?;
-    let expr = parse_expr(p)?;
+    let ws = _parse_ws(p)?;
+    let expr = _parse_expr(p)?;
     let prio: Option<PrioNode> = if p.peek_kind() == TK_Important {
-        let prio = parse_prio(p)?;
+        let prio = _parse_prio(p)?;
         Option::<PrioNode>::Some(prio)
     } else {
         null
@@ -35730,7 +35730,7 @@ fn parse_declaration_bt_0(p: &mut Parser) -> Result<DeclarationNode, ParseError>
     }));
 }
 
-fn parse_declaration_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_declaration_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_property_(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -35748,12 +35748,12 @@ fn parse_declaration_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_declaration_bt_1(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
+fn _parse_declaration_bt_1(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
     let start = p.peek().span.start;
-    let property_ = parse_property_(p)?;
+    let property_ = _parse_property_(p)?;
     let colon = p.expect(TK_LIT_COLON)?;
-    let ws = parse_ws(p)?;
-    let value = parse_value(p)?;
+    let ws = _parse_ws(p)?;
+    let value = _parse_value(p)?;
     return Result::<DeclarationNode, ParseError>::Ok(DeclarationNode::unknownDeclaration(DeclarationunknownDeclaration {
         span: Span::new(start, i32::max(start, p.last_end())),
         property_,
@@ -35763,7 +35763,7 @@ fn parse_declaration_bt_1(p: &mut Parser) -> Result<DeclarationNode, ParseError>
     }));
 }
 
-fn parse_declaration_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_declaration_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_property_(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -35776,15 +35776,15 @@ fn parse_declaration_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_declaration(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
+fn _parse_declaration(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_8(kind) {
         if _gale_kind_set_8(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_0 = parse_declaration_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = parse_declaration_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_declaration_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_declaration_scan_1(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -35796,12 +35796,12 @@ fn parse_declaration(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return parse_declaration_bt_0(p);
+                return _parse_declaration_bt_0(p);
             }
             if _sd_best_i == 1 {
-                return parse_declaration_bt_1(p);
+                return _parse_declaration_bt_1(p);
             }
-            return parse_declaration_bt_1(p);
+            return _parse_declaration_bt_1(p);
         }
     }
     return Result::<DeclarationNode, ParseError>::Err(ParseError::new(
@@ -35811,10 +35811,10 @@ fn parse_declaration(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
     ));
 }
 
-fn parse_prio(p: &mut Parser) -> Result<PrioNode, ParseError> {
+fn _parse_prio(p: &mut Parser) -> Result<PrioNode, ParseError> {
     let start = p.peek().span.start;
     let important = p.expect(TK_Important)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<PrioNode, ParseError>::Ok(PrioNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         important,
@@ -35822,7 +35822,7 @@ fn parse_prio(p: &mut Parser) -> Result<PrioNode, ParseError> {
     });
 }
 
-fn parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
+fn _parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
     let start = p.peek().span.start;
     let mut group_0_list: Array<ValueGroup0> = [];
     let mut _plus_first = true;
@@ -35866,18 +35866,18 @@ fn parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
         }
         _plus_first = false;
         let group_0: ValueGroup0 = if _gale_kind_set_20(p.peek_kind()) {
-            let any_ = parse_any_(p)?;
+            let any_ = _parse_any_(p)?;
             ValueGroup0::Alt0(ValueGroup0Alt0 {
                 any_,
             })
         } else if p.peek_kind() == TK_LIT_LBRACE {
-            let block = parse_block(p)?;
+            let block = _parse_block(p)?;
             ValueGroup0::Alt1(ValueGroup0Alt1 {
                 block,
             })
         } else {
             let atkeyword = p.expect(TK_AtKeyword)?;
-            let ws = parse_ws(p)?;
+            let ws = _parse_ws(p)?;
             ValueGroup0::Alt2(ValueGroup0Alt2 {
                 atkeyword,
                 ws,
@@ -35891,9 +35891,9 @@ fn parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
     });
 }
 
-fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
-    let term = parse_term(p)?;
+    let term = _parse_term(p)?;
     let mut operator__term_list: Array<OperatorOptTermItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -35918,12 +35918,12 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let operator_: Option<OperatorNode> = if _gale_kind_set_23(p.peek_kind()) {
-            let operator_ = parse_operator_(p)?;
+            let operator_ = _parse_operator_(p)?;
             Option::<OperatorNode>::Some(operator_)
         } else {
             null
         };
-        let term = parse_term(p)?;
+        let term = _parse_term(p)?;
         let operator__term = OperatorOptTermItem {
             operator_,
             term,
@@ -35937,10 +35937,10 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
     });
 }
 
-fn parse_term_bt_0(p: &mut Parser) -> Result<TermNode, ParseError> {
+fn _parse_term_bt_0(p: &mut Parser) -> Result<TermNode, ParseError> {
     let start = p.peek().span.start;
-    let number = parse_number(p)?;
-    let ws = parse_ws(p)?;
+    let number = _parse_number(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm0(TermknownTerm0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         number,
@@ -35948,7 +35948,7 @@ fn parse_term_bt_0(p: &mut Parser) -> Result<TermNode, ParseError> {
     }));
 }
 
-fn parse_term_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_term_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_number(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -35957,10 +35957,10 @@ fn parse_term_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_term_bt_1(p: &mut Parser) -> Result<TermNode, ParseError> {
+fn _parse_term_bt_1(p: &mut Parser) -> Result<TermNode, ParseError> {
     let start = p.peek().span.start;
-    let percentage = parse_percentage(p)?;
-    let ws = parse_ws(p)?;
+    let percentage = _parse_percentage(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm1(TermknownTerm1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         percentage,
@@ -35968,7 +35968,7 @@ fn parse_term_bt_1(p: &mut Parser) -> Result<TermNode, ParseError> {
     }));
 }
 
-fn parse_term_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_term_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_percentage(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -35977,10 +35977,10 @@ fn parse_term_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_term_bt_2(p: &mut Parser) -> Result<TermNode, ParseError> {
+fn _parse_term_bt_2(p: &mut Parser) -> Result<TermNode, ParseError> {
     let start = p.peek().span.start;
-    let dimension = parse_dimension(p)?;
-    let ws = parse_ws(p)?;
+    let dimension = _parse_dimension(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm2(TermknownTerm2 {
         span: Span::new(start, i32::max(start, p.last_end())),
         dimension,
@@ -35988,7 +35988,7 @@ fn parse_term_bt_2(p: &mut Parser) -> Result<TermNode, ParseError> {
     }));
 }
 
-fn parse_term_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_term_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_dimension(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -35997,10 +35997,10 @@ fn parse_term_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_term_bt_11(p: &mut Parser) -> Result<TermNode, ParseError> {
+fn _parse_term_bt_11(p: &mut Parser) -> Result<TermNode, ParseError> {
     let start = p.peek().span.start;
-    let unknown_dimension = parse_unknown_dimension(p)?;
-    let ws = parse_ws(p)?;
+    let unknown_dimension = _parse_unknown_dimension(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<TermNode, ParseError>::Ok(TermNode::unknownTerm(TermunknownTerm {
         span: Span::new(start, i32::max(start, p.last_end())),
         unknown_dimension,
@@ -36008,7 +36008,7 @@ fn parse_term_bt_11(p: &mut Parser) -> Result<TermNode, ParseError> {
     }));
 }
 
-fn parse_term_scan_11(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_term_scan_11(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_unknown_dimension(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36017,43 +36017,43 @@ fn parse_term_scan_11(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_term(p: &mut Parser) -> Result<TermNode, ParseError> {
+fn _parse_term(p: &mut Parser) -> Result<TermNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_38(kind) {
         if p.peek_kind() == TK_Plus {
             if p.peek_at(1) == TK_Number {
-                return parse_term_bt_0(p);
+                return _parse_term_bt_0(p);
             } else if p.peek_at(1) == TK_Percentage {
-                return parse_term_bt_1(p);
+                return _parse_term_bt_1(p);
             } else if p.peek_at(1) == TK_Dimension {
-                return parse_term_bt_2(p);
+                return _parse_term_bt_2(p);
             } else if p.peek_at(1) == TK_UnknownDimension {
-                return parse_term_bt_11(p);
+                return _parse_term_bt_11(p);
             }
         } else if p.peek_kind() == TK_Minus {
             if p.peek_at(1) == TK_Number {
-                return parse_term_bt_0(p);
+                return _parse_term_bt_0(p);
             } else if p.peek_at(1) == TK_Percentage {
-                return parse_term_bt_1(p);
+                return _parse_term_bt_1(p);
             } else if p.peek_at(1) == TK_Dimension {
-                return parse_term_bt_2(p);
+                return _parse_term_bt_2(p);
             } else if p.peek_at(1) == TK_UnknownDimension {
-                return parse_term_bt_11(p);
+                return _parse_term_bt_11(p);
             }
         } else if p.peek_kind() == TK_Number {
-            return parse_term_bt_0(p);
+            return _parse_term_bt_0(p);
         } else if p.peek_kind() == TK_Percentage {
-            return parse_term_bt_1(p);
+            return _parse_term_bt_1(p);
         } else if p.peek_kind() == TK_Dimension {
-            return parse_term_bt_2(p);
+            return _parse_term_bt_2(p);
         } else if p.peek_kind() == TK_UnknownDimension {
-            return parse_term_bt_11(p);
+            return _parse_term_bt_11(p);
         }
     }
     if kind == TK_String_ {
         let string_ = p.expect(TK_String_)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm3(TermknownTerm3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             string_,
@@ -36062,7 +36062,7 @@ fn parse_term(p: &mut Parser) -> Result<TermNode, ParseError> {
     }
     if kind == TK_UnicodeRange {
         let unicoderange = p.expect(TK_UnicodeRange)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm4(TermknownTerm4 {
             span: Span::new(start, i32::max(start, p.last_end())),
             unicoderange,
@@ -36070,8 +36070,8 @@ fn parse_term(p: &mut Parser) -> Result<TermNode, ParseError> {
         }));
     }
     if _gale_kind_set_4(kind) {
-        let ident = parse_ident(p)?;
-        let ws = parse_ws(p)?;
+        let ident = _parse_ident(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm5(TermknownTerm5 {
             span: Span::new(start, i32::max(start, p.last_end())),
             ident,
@@ -36079,15 +36079,15 @@ fn parse_term(p: &mut Parser) -> Result<TermNode, ParseError> {
         }));
     }
     if kind == TK_Var {
-        let var_ = parse_var_(p)?;
+        let var_ = _parse_var_(p)?;
         return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm6(TermknownTerm6 {
             span: Span::new(start, i32::max(start, p.last_end())),
             var_,
         }));
     }
     if _gale_kind_set_2(kind) {
-        let url = parse_url(p)?;
-        let ws = parse_ws(p)?;
+        let url = _parse_url(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm7(TermknownTerm7 {
             span: Span::new(start, i32::max(start, p.last_end())),
             url,
@@ -36095,28 +36095,28 @@ fn parse_term(p: &mut Parser) -> Result<TermNode, ParseError> {
         }));
     }
     if kind == TK_Hash {
-        let hexcolor = parse_hexcolor(p)?;
+        let hexcolor = _parse_hexcolor(p)?;
         return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm8(TermknownTerm8 {
             span: Span::new(start, i32::max(start, p.last_end())),
             hexcolor,
         }));
     }
     if kind == TK_Calc {
-        let calc = parse_calc(p)?;
+        let calc = _parse_calc(p)?;
         return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm9(TermknownTerm9 {
             span: Span::new(start, i32::max(start, p.last_end())),
             calc,
         }));
     }
     if kind == TK_Function_ {
-        let function_ = parse_function_(p)?;
+        let function_ = _parse_function_(p)?;
         return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm10(TermknownTerm10 {
             span: Span::new(start, i32::max(start, p.last_end())),
             function_,
         }));
     }
     if kind == TK_DxImageTransform {
-        let dx_image_transform = parse_dx_image_transform(p)?;
+        let dx_image_transform = _parse_dx_image_transform(p)?;
         return Result::<TermNode, ParseError>::Ok(TermNode::badTerm(TermbadTerm {
             span: Span::new(start, i32::max(start, p.last_end())),
             dx_image_transform,
@@ -36129,13 +36129,13 @@ fn parse_term(p: &mut Parser) -> Result<TermNode, ParseError> {
     ));
 }
 
-fn parse_function_(p: &mut Parser) -> Result<FunctionNode, ParseError> {
+fn _parse_function_(p: &mut Parser) -> Result<FunctionNode, ParseError> {
     let start = p.peek().span.start;
     let function_ = p.expect(TK_Function_)?;
-    let ws = parse_ws(p)?;
-    let expr = parse_expr(p)?;
+    let ws = _parse_ws(p)?;
+    let expr = _parse_expr(p)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     return Result::<FunctionNode, ParseError>::Ok(FunctionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         function_,
@@ -36146,13 +36146,13 @@ fn parse_function_(p: &mut Parser) -> Result<FunctionNode, ParseError> {
     });
 }
 
-fn parse_dx_image_transform(p: &mut Parser) -> Result<DxImageTransformNode, ParseError> {
+fn _parse_dx_image_transform(p: &mut Parser) -> Result<DxImageTransformNode, ParseError> {
     let start = p.peek().span.start;
     let dximagetransform = p.expect(TK_DxImageTransform)?;
-    let ws = parse_ws(p)?;
-    let expr = parse_expr(p)?;
+    let ws = _parse_ws(p)?;
+    let expr = _parse_expr(p)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     return Result::<DxImageTransformNode, ParseError>::Ok(DxImageTransformNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         dximagetransform,
@@ -36163,10 +36163,10 @@ fn parse_dx_image_transform(p: &mut Parser) -> Result<DxImageTransformNode, Pars
     });
 }
 
-fn parse_hexcolor(p: &mut Parser) -> Result<HexcolorNode, ParseError> {
+fn _parse_hexcolor(p: &mut Parser) -> Result<HexcolorNode, ParseError> {
     let start = p.peek().span.start;
     let hash = p.expect(TK_Hash)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<HexcolorNode, ParseError>::Ok(HexcolorNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         hash,
@@ -36174,7 +36174,7 @@ fn parse_hexcolor(p: &mut Parser) -> Result<HexcolorNode, ParseError> {
     });
 }
 
-fn parse_number(p: &mut Parser) -> Result<NumberNode, ParseError> {
+fn _parse_number(p: &mut Parser) -> Result<NumberNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -36212,7 +36212,7 @@ fn parse_number(p: &mut Parser) -> Result<NumberNode, ParseError> {
     });
 }
 
-fn parse_percentage(p: &mut Parser) -> Result<PercentageNode, ParseError> {
+fn _parse_percentage(p: &mut Parser) -> Result<PercentageNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -36250,7 +36250,7 @@ fn parse_percentage(p: &mut Parser) -> Result<PercentageNode, ParseError> {
     });
 }
 
-fn parse_dimension(p: &mut Parser) -> Result<DimensionNode, ParseError> {
+fn _parse_dimension(p: &mut Parser) -> Result<DimensionNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -36288,7 +36288,7 @@ fn parse_dimension(p: &mut Parser) -> Result<DimensionNode, ParseError> {
     });
 }
 
-fn parse_unknown_dimension(p: &mut Parser) -> Result<UnknownDimensionNode, ParseError> {
+fn _parse_unknown_dimension(p: &mut Parser) -> Result<UnknownDimensionNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -36326,10 +36326,10 @@ fn parse_unknown_dimension(p: &mut Parser) -> Result<UnknownDimensionNode, Parse
     });
 }
 
-fn parse_any__bt_1(p: &mut Parser) -> Result<AnyNode, ParseError> {
+fn _parse_any__bt_1(p: &mut Parser) -> Result<AnyNode, ParseError> {
     let start = p.peek().span.start;
-    let number = parse_number(p)?;
-    let ws = parse_ws(p)?;
+    let number = _parse_number(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt1(AnyAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         number,
@@ -36337,7 +36337,7 @@ fn parse_any__bt_1(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }));
 }
 
-fn parse_any__scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_any__scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_number(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36346,10 +36346,10 @@ fn parse_any__scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_any__bt_2(p: &mut Parser) -> Result<AnyNode, ParseError> {
+fn _parse_any__bt_2(p: &mut Parser) -> Result<AnyNode, ParseError> {
     let start = p.peek().span.start;
-    let percentage = parse_percentage(p)?;
-    let ws = parse_ws(p)?;
+    let percentage = _parse_percentage(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt2(AnyAlt2 {
         span: Span::new(start, i32::max(start, p.last_end())),
         percentage,
@@ -36357,7 +36357,7 @@ fn parse_any__bt_2(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }));
 }
 
-fn parse_any__scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_any__scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_percentage(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36366,10 +36366,10 @@ fn parse_any__scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_any__bt_3(p: &mut Parser) -> Result<AnyNode, ParseError> {
+fn _parse_any__bt_3(p: &mut Parser) -> Result<AnyNode, ParseError> {
     let start = p.peek().span.start;
-    let dimension = parse_dimension(p)?;
-    let ws = parse_ws(p)?;
+    let dimension = _parse_dimension(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt3(AnyAlt3 {
         span: Span::new(start, i32::max(start, p.last_end())),
         dimension,
@@ -36377,7 +36377,7 @@ fn parse_any__bt_3(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }));
 }
 
-fn parse_any__scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_any__scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_dimension(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36386,10 +36386,10 @@ fn parse_any__scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_any__bt_4(p: &mut Parser) -> Result<AnyNode, ParseError> {
+fn _parse_any__bt_4(p: &mut Parser) -> Result<AnyNode, ParseError> {
     let start = p.peek().span.start;
-    let unknown_dimension = parse_unknown_dimension(p)?;
-    let ws = parse_ws(p)?;
+    let unknown_dimension = _parse_unknown_dimension(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt4(AnyAlt4 {
         span: Span::new(start, i32::max(start, p.last_end())),
         unknown_dimension,
@@ -36397,7 +36397,7 @@ fn parse_any__bt_4(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }));
 }
 
-fn parse_any__scan_4(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_any__scan_4(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_unknown_dimension(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36406,12 +36406,12 @@ fn parse_any__scan_4(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
+fn _parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_4(kind) {
-        let ident = parse_ident(p)?;
-        let ws = parse_ws(p)?;
+        let ident = _parse_ident(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt0(AnyAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             ident,
@@ -36421,37 +36421,37 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     if _gale_kind_set_38(kind) {
         if p.peek_kind() == TK_Plus {
             if p.peek_at(1) == TK_Number {
-                return parse_any__bt_1(p);
+                return _parse_any__bt_1(p);
             } else if p.peek_at(1) == TK_Percentage {
-                return parse_any__bt_2(p);
+                return _parse_any__bt_2(p);
             } else if p.peek_at(1) == TK_Dimension {
-                return parse_any__bt_3(p);
+                return _parse_any__bt_3(p);
             } else if p.peek_at(1) == TK_UnknownDimension {
-                return parse_any__bt_4(p);
+                return _parse_any__bt_4(p);
             }
         } else if p.peek_kind() == TK_Minus {
             if p.peek_at(1) == TK_Number {
-                return parse_any__bt_1(p);
+                return _parse_any__bt_1(p);
             } else if p.peek_at(1) == TK_Percentage {
-                return parse_any__bt_2(p);
+                return _parse_any__bt_2(p);
             } else if p.peek_at(1) == TK_Dimension {
-                return parse_any__bt_3(p);
+                return _parse_any__bt_3(p);
             } else if p.peek_at(1) == TK_UnknownDimension {
-                return parse_any__bt_4(p);
+                return _parse_any__bt_4(p);
             }
         } else if p.peek_kind() == TK_Number {
-            return parse_any__bt_1(p);
+            return _parse_any__bt_1(p);
         } else if p.peek_kind() == TK_Percentage {
-            return parse_any__bt_2(p);
+            return _parse_any__bt_2(p);
         } else if p.peek_kind() == TK_Dimension {
-            return parse_any__bt_3(p);
+            return _parse_any__bt_3(p);
         } else if p.peek_kind() == TK_UnknownDimension {
-            return parse_any__bt_4(p);
+            return _parse_any__bt_4(p);
         }
     }
     if kind == TK_String_ {
         let string_ = p.expect(TK_String_)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt5(AnyAlt5 {
             span: Span::new(start, i32::max(start, p.last_end())),
             string_,
@@ -36459,8 +36459,8 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
         }));
     }
     if _gale_kind_set_2(kind) {
-        let url = parse_url(p)?;
-        let ws = parse_ws(p)?;
+        let url = _parse_url(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt6(AnyAlt6 {
             span: Span::new(start, i32::max(start, p.last_end())),
             url,
@@ -36469,7 +36469,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }
     if kind == TK_Hash {
         let hash = p.expect(TK_Hash)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt7(AnyAlt7 {
             span: Span::new(start, i32::max(start, p.last_end())),
             hash,
@@ -36478,7 +36478,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }
     if kind == TK_UnicodeRange {
         let unicoderange = p.expect(TK_UnicodeRange)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt8(AnyAlt8 {
             span: Span::new(start, i32::max(start, p.last_end())),
             unicoderange,
@@ -36487,7 +36487,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }
     if kind == TK_Includes {
         let includes = p.expect(TK_Includes)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt9(AnyAlt9 {
             span: Span::new(start, i32::max(start, p.last_end())),
             includes,
@@ -36496,7 +36496,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }
     if kind == TK_DashMatch {
         let dashmatch = p.expect(TK_DashMatch)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt10(AnyAlt10 {
             span: Span::new(start, i32::max(start, p.last_end())),
             dashmatch,
@@ -36505,7 +36505,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }
     if kind == TK_LIT_COLON {
         let colon = p.expect(TK_LIT_COLON)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt11(AnyAlt11 {
             span: Span::new(start, i32::max(start, p.last_end())),
             colon,
@@ -36514,7 +36514,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }
     if kind == TK_Function_ {
         let function_ = p.expect(TK_Function_)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let mut any__or_unused_list: Array<AnyOrUnusedGroup> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -36545,16 +36545,16 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
             }
             if rep_scan_pos < 0 { break; }
             let any__or_unused: AnyOrUnusedGroup = if _gale_kind_set_20(p.peek_kind()) {
-                let any_ = parse_any_(p)?;
+                let any_ = _parse_any_(p)?;
                 AnyOrUnusedGroup::Any(any_)
             } else {
-                let unused = parse_unused(p)?;
+                let unused = _parse_unused(p)?;
                 AnyOrUnusedGroup::Unused(unused)
             };
             any__or_unused_list.push(any__or_unused);
         }
         let rparen = p.expect(TK_LIT_RPAREN)?;
-        let ws_2 = parse_ws(p)?;
+        let ws_2 = _parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt12(AnyAlt12 {
             span: Span::new(start, i32::max(start, p.last_end())),
             function_,
@@ -36566,7 +36566,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }
     if kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let mut any__or_unused_list: Array<AnyOrUnusedGroup> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -36597,16 +36597,16 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
             }
             if rep_scan_pos < 0 { break; }
             let any__or_unused: AnyOrUnusedGroup = if _gale_kind_set_20(p.peek_kind()) {
-                let any_ = parse_any_(p)?;
+                let any_ = _parse_any_(p)?;
                 AnyOrUnusedGroup::Any(any_)
             } else {
-                let unused = parse_unused(p)?;
+                let unused = _parse_unused(p)?;
                 AnyOrUnusedGroup::Unused(unused)
             };
             any__or_unused_list.push(any__or_unused);
         }
         let rparen = p.expect(TK_LIT_RPAREN)?;
-        let ws_2 = parse_ws(p)?;
+        let ws_2 = _parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt13(AnyAlt13 {
             span: Span::new(start, i32::max(start, p.last_end())),
             lparen,
@@ -36618,7 +36618,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }
     if kind == TK_LIT_LBRACKET {
         let lbracket = p.expect(TK_LIT_LBRACKET)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let mut any__or_unused_list: Array<AnyOrUnusedGroup> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -36649,16 +36649,16 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
             }
             if rep_scan_pos < 0 { break; }
             let any__or_unused: AnyOrUnusedGroup = if _gale_kind_set_20(p.peek_kind()) {
-                let any_ = parse_any_(p)?;
+                let any_ = _parse_any_(p)?;
                 AnyOrUnusedGroup::Any(any_)
             } else {
-                let unused = parse_unused(p)?;
+                let unused = _parse_unused(p)?;
                 AnyOrUnusedGroup::Unused(unused)
             };
             any__or_unused_list.push(any__or_unused);
         }
         let rbracket = p.expect(TK_LIT_RBRACKET)?;
-        let ws_2 = parse_ws(p)?;
+        let ws_2 = _parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt14(AnyAlt14 {
             span: Span::new(start, i32::max(start, p.last_end())),
             lbracket,
@@ -36675,10 +36675,10 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     ));
 }
 
-fn parse_at_rule(p: &mut Parser) -> Result<AtRuleNode, ParseError> {
+fn _parse_at_rule(p: &mut Parser) -> Result<AtRuleNode, ParseError> {
     let start = p.peek().span.start;
     let atkeyword = p.expect(TK_AtKeyword)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let mut any__list: Array<AnyNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -36691,19 +36691,19 @@ fn parse_at_rule(p: &mut Parser) -> Result<AtRuleNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let any_ = parse_any_(p)?;
+        let any_ = _parse_any_(p)?;
         any__list.push(any_);
     }
     let mut group_0_inner: Option<AtRuleGroup0> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_LBRACE {
-        let block = parse_block(p)?;
+        let block = _parse_block(p)?;
         group_0_inner = Option::<AtRuleGroup0>::Some(AtRuleGroup0::Alt0(AtRuleGroup0Alt0 {
             block,
         }));
     } else if grp_kind == TK_LIT_SEMI {
         let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         group_0_inner = Option::<AtRuleGroup0>::Some(AtRuleGroup0::Alt1(AtRuleGroup0Alt1 {
             semicolon,
             ws,
@@ -36719,11 +36719,11 @@ fn parse_at_rule(p: &mut Parser) -> Result<AtRuleNode, ParseError> {
     });
 }
 
-fn parse_unused(p: &mut Parser) -> Result<UnusedNode, ParseError> {
+fn _parse_unused(p: &mut Parser) -> Result<UnusedNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACE {
-        let block = parse_block(p)?;
+        let block = _parse_block(p)?;
         return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt0(UnusedAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             block,
@@ -36731,7 +36731,7 @@ fn parse_unused(p: &mut Parser) -> Result<UnusedNode, ParseError> {
     }
     if kind == TK_AtKeyword {
         let atkeyword = p.expect(TK_AtKeyword)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt1(UnusedAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             atkeyword,
@@ -36740,7 +36740,7 @@ fn parse_unused(p: &mut Parser) -> Result<UnusedNode, ParseError> {
     }
     if kind == TK_LIT_SEMI {
         let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt2(UnusedAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             semicolon,
@@ -36749,7 +36749,7 @@ fn parse_unused(p: &mut Parser) -> Result<UnusedNode, ParseError> {
     }
     if kind == TK_Cdo {
         let cdo = p.expect(TK_Cdo)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt3(UnusedAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             cdo,
@@ -36758,7 +36758,7 @@ fn parse_unused(p: &mut Parser) -> Result<UnusedNode, ParseError> {
     }
     if kind == TK_Cdc {
         let cdc = p.expect(TK_Cdc)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt4(UnusedAlt4 {
             span: Span::new(start, i32::max(start, p.last_end())),
             cdc,
@@ -36772,10 +36772,10 @@ fn parse_unused(p: &mut Parser) -> Result<UnusedNode, ParseError> {
     ));
 }
 
-fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
+fn _parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
     let start = p.peek().span.start;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let mut group_0_list: Array<BlockGroup0> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -36887,35 +36887,35 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
             }
             if gd_winner == 0 {
                 let atkeyword = p.expect(TK_AtKeyword)?;
-                let ws = parse_ws(p)?;
+                let ws = _parse_ws(p)?;
                 group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt4(BlockGroup0Alt4 {
                     atkeyword,
                     ws,
                 }));
             } else if gd_winner == 1 {
                 let semicolon = p.expect(TK_LIT_SEMI)?;
-                let ws = parse_ws(p)?;
+                let ws = _parse_ws(p)?;
                 group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt5(BlockGroup0Alt5 {
                     semicolon,
                     ws,
                 }));
             } else if gd_winner == 2 {
-                let declaration_list = parse_declaration_list(p)?;
+                let declaration_list = _parse_declaration_list(p)?;
                 group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt0(BlockGroup0Alt0 {
                     declaration_list,
                 }));
             } else if gd_winner == 3 {
-                let nested_statement = parse_nested_statement(p)?;
+                let nested_statement = _parse_nested_statement(p)?;
                 group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt1(BlockGroup0Alt1 {
                     nested_statement,
                 }));
             } else if gd_winner == 4 {
-                let any_ = parse_any_(p)?;
+                let any_ = _parse_any_(p)?;
                 group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt2(BlockGroup0Alt2 {
                     any_,
                 }));
             } else {
-                let block = parse_block(p)?;
+                let block = _parse_block(p)?;
                 group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt3(BlockGroup0Alt3 {
                     block,
                 }));
@@ -36928,7 +36928,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
         group_0_list.push(group_0);
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     return Result::<BlockNode, ParseError>::Ok(BlockNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         lbrace,
@@ -36939,74 +36939,74 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
     });
 }
 
-fn parse_nested_statement(p: &mut Parser) -> Result<NestedStatementNode, ParseError> {
+fn _parse_nested_statement(p: &mut Parser) -> Result<NestedStatementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_29(kind) {
-        let ruleset = parse_ruleset(p)?;
+        let ruleset = _parse_ruleset(p)?;
         return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt0(NestedStatementAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             ruleset,
         }));
     }
     if kind == TK_Media {
-        let media = parse_media(p)?;
+        let media = _parse_media(p)?;
         return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt1(NestedStatementAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             media,
         }));
     }
     if kind == TK_Page {
-        let page = parse_page(p)?;
+        let page = _parse_page(p)?;
         return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt2(NestedStatementAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             page,
         }));
     }
     if kind == TK_FontFace {
-        let font_face_rule = parse_font_face_rule(p)?;
+        let font_face_rule = _parse_font_face_rule(p)?;
         return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt3(NestedStatementAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             font_face_rule,
         }));
     }
     if kind == TK_Keyframes {
-        let keyframes_rule = parse_keyframes_rule(p)?;
+        let keyframes_rule = _parse_keyframes_rule(p)?;
         return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt4(NestedStatementAlt4 {
             span: Span::new(start, i32::max(start, p.last_end())),
             keyframes_rule,
         }));
     }
     if kind == TK_Supports {
-        let supports_rule = parse_supports_rule(p)?;
+        let supports_rule = _parse_supports_rule(p)?;
         return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt5(NestedStatementAlt5 {
             span: Span::new(start, i32::max(start, p.last_end())),
             supports_rule,
         }));
     }
     if kind == TK_Viewport {
-        let viewport = parse_viewport(p)?;
+        let viewport = _parse_viewport(p)?;
         return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt6(NestedStatementAlt6 {
             span: Span::new(start, i32::max(start, p.last_end())),
             viewport,
         }));
     }
     if kind == TK_CounterStyle {
-        let counter_style = parse_counter_style(p)?;
+        let counter_style = _parse_counter_style(p)?;
         return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt7(NestedStatementAlt7 {
             span: Span::new(start, i32::max(start, p.last_end())),
             counter_style,
         }));
     }
     if kind == TK_FontFeatureValues {
-        let font_feature_values_rule = parse_font_feature_values_rule(p)?;
+        let font_feature_values_rule = _parse_font_feature_values_rule(p)?;
         return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt8(NestedStatementAlt8 {
             span: Span::new(start, i32::max(start, p.last_end())),
             font_feature_values_rule,
         }));
     }
     if kind == TK_AtKeyword {
-        let at_rule = parse_at_rule(p)?;
+        let at_rule = _parse_at_rule(p)?;
         return Result::<NestedStatementNode, ParseError>::Ok(NestedStatementNode::Alt9(NestedStatementAlt9 {
             span: Span::new(start, i32::max(start, p.last_end())),
             at_rule,
@@ -37019,10 +37019,10 @@ fn parse_nested_statement(p: &mut Parser) -> Result<NestedStatementNode, ParseEr
     ));
 }
 
-fn parse_group_rule_body(p: &mut Parser) -> Result<GroupRuleBodyNode, ParseError> {
+fn _parse_group_rule_body(p: &mut Parser) -> Result<GroupRuleBodyNode, ParseError> {
     let start = p.peek().span.start;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let mut nested_statement_list: Array<NestedStatementNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -37035,11 +37035,11 @@ fn parse_group_rule_body(p: &mut Parser) -> Result<GroupRuleBodyNode, ParseError
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let nested_statement = parse_nested_statement(p)?;
+        let nested_statement = _parse_nested_statement(p)?;
         nested_statement_list.push(nested_statement);
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     return Result::<GroupRuleBodyNode, ParseError>::Ok(GroupRuleBodyNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         lbrace,
@@ -37050,13 +37050,13 @@ fn parse_group_rule_body(p: &mut Parser) -> Result<GroupRuleBodyNode, ParseError
     });
 }
 
-fn parse_supports_rule(p: &mut Parser) -> Result<SupportsRuleNode, ParseError> {
+fn _parse_supports_rule(p: &mut Parser) -> Result<SupportsRuleNode, ParseError> {
     let start = p.peek().span.start;
     let supports = p.expect(TK_Supports)?;
-    let ws = parse_ws(p)?;
-    let supports_condition = parse_supports_condition(p)?;
-    let ws_2 = parse_ws(p)?;
-    let group_rule_body = parse_group_rule_body(p)?;
+    let ws = _parse_ws(p)?;
+    let supports_condition = _parse_supports_condition(p)?;
+    let ws_2 = _parse_ws(p)?;
+    let group_rule_body = _parse_group_rule_body(p)?;
     return Result::<SupportsRuleNode, ParseError>::Ok(SupportsRuleNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         supports,
@@ -37067,59 +37067,59 @@ fn parse_supports_rule(p: &mut Parser) -> Result<SupportsRuleNode, ParseError> {
     });
 }
 
-fn parse_supports_condition_bt_1(p: &mut Parser) -> Result<SupportsConditionNode, ParseError> {
+fn _parse_supports_condition_bt_1(p: &mut Parser) -> Result<SupportsConditionNode, ParseError> {
     let start = p.peek().span.start;
-    let supports_conjunction = parse_supports_conjunction(p)?;
+    let supports_conjunction = _parse_supports_conjunction(p)?;
     return Result::<SupportsConditionNode, ParseError>::Ok(SupportsConditionNode::Alt1(SupportsConditionAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         supports_conjunction,
     }));
 }
 
-fn parse_supports_condition_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_supports_condition_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_supports_conjunction(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_supports_condition_bt_2(p: &mut Parser) -> Result<SupportsConditionNode, ParseError> {
+fn _parse_supports_condition_bt_2(p: &mut Parser) -> Result<SupportsConditionNode, ParseError> {
     let start = p.peek().span.start;
-    let supports_disjunction = parse_supports_disjunction(p)?;
+    let supports_disjunction = _parse_supports_disjunction(p)?;
     return Result::<SupportsConditionNode, ParseError>::Ok(SupportsConditionNode::Alt2(SupportsConditionAlt2 {
         span: Span::new(start, i32::max(start, p.last_end())),
         supports_disjunction,
     }));
 }
 
-fn parse_supports_condition_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_supports_condition_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_supports_disjunction(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_supports_condition_bt_3(p: &mut Parser) -> Result<SupportsConditionNode, ParseError> {
+fn _parse_supports_condition_bt_3(p: &mut Parser) -> Result<SupportsConditionNode, ParseError> {
     let start = p.peek().span.start;
-    let supports_condition_in_parens = parse_supports_condition_in_parens(p)?;
+    let supports_condition_in_parens = _parse_supports_condition_in_parens(p)?;
     return Result::<SupportsConditionNode, ParseError>::Ok(SupportsConditionNode::Alt3(SupportsConditionAlt3 {
         span: Span::new(start, i32::max(start, p.last_end())),
         supports_condition_in_parens,
     }));
 }
 
-fn parse_supports_condition_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_supports_condition_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_supports_condition_in_parens(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_supports_condition(p: &mut Parser) -> Result<SupportsConditionNode, ParseError> {
+fn _parse_supports_condition(p: &mut Parser) -> Result<SupportsConditionNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Not {
-        let supports_negation = parse_supports_negation(p)?;
+        let supports_negation = _parse_supports_negation(p)?;
         return Result::<SupportsConditionNode, ParseError>::Ok(SupportsConditionNode::Alt0(SupportsConditionAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             supports_negation,
@@ -37129,9 +37129,9 @@ fn parse_supports_condition(p: &mut Parser) -> Result<SupportsConditionNode, Par
         if _gale_kind_set_37(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_1 = parse_supports_condition_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_2 = parse_supports_condition_scan_2(_sd_tokens, _sd_pos);
-            let _sd_p_3 = parse_supports_condition_scan_3(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_supports_condition_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_supports_condition_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_3 = _parse_supports_condition_scan_3(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -37147,15 +37147,15 @@ fn parse_supports_condition(p: &mut Parser) -> Result<SupportsConditionNode, Par
                 _sd_best_i = 3;
             }
             if _sd_best_i == 1 {
-                return parse_supports_condition_bt_1(p);
+                return _parse_supports_condition_bt_1(p);
             }
             if _sd_best_i == 2 {
-                return parse_supports_condition_bt_2(p);
+                return _parse_supports_condition_bt_2(p);
             }
             if _sd_best_i == 3 {
-                return parse_supports_condition_bt_3(p);
+                return _parse_supports_condition_bt_3(p);
             }
-            return parse_supports_condition_bt_3(p);
+            return _parse_supports_condition_bt_3(p);
         }
     }
     return Result::<SupportsConditionNode, ParseError>::Err(ParseError::new(
@@ -37165,12 +37165,12 @@ fn parse_supports_condition(p: &mut Parser) -> Result<SupportsConditionNode, Par
     ));
 }
 
-fn parse_supports_condition_in_parens_bt_0(p: &mut Parser) -> Result<SupportsConditionInParensNode, ParseError> {
+fn _parse_supports_condition_in_parens_bt_0(p: &mut Parser) -> Result<SupportsConditionInParensNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
-    let ws = parse_ws(p)?;
-    let supports_condition = parse_supports_condition(p)?;
-    let ws_2 = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
+    let supports_condition = _parse_supports_condition(p)?;
+    let ws_2 = _parse_ws(p)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<SupportsConditionInParensNode, ParseError>::Ok(SupportsConditionInParensNode::Alt0(SupportsConditionInParensAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -37182,7 +37182,7 @@ fn parse_supports_condition_in_parens_bt_0(p: &mut Parser) -> Result<SupportsCon
     }));
 }
 
-fn parse_supports_condition_in_parens_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_supports_condition_in_parens_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -37197,48 +37197,48 @@ fn parse_supports_condition_in_parens_scan_0(tokens: &Array<Token>, pos: i32) ->
     return pos;
 }
 
-fn parse_supports_condition_in_parens_bt_1(p: &mut Parser) -> Result<SupportsConditionInParensNode, ParseError> {
+fn _parse_supports_condition_in_parens_bt_1(p: &mut Parser) -> Result<SupportsConditionInParensNode, ParseError> {
     let start = p.peek().span.start;
-    let supports_declaration_condition = parse_supports_declaration_condition(p)?;
+    let supports_declaration_condition = _parse_supports_declaration_condition(p)?;
     return Result::<SupportsConditionInParensNode, ParseError>::Ok(SupportsConditionInParensNode::Alt1(SupportsConditionInParensAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         supports_declaration_condition,
     }));
 }
 
-fn parse_supports_condition_in_parens_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_supports_condition_in_parens_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_supports_declaration_condition(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_supports_condition_in_parens_bt_2(p: &mut Parser) -> Result<SupportsConditionInParensNode, ParseError> {
+fn _parse_supports_condition_in_parens_bt_2(p: &mut Parser) -> Result<SupportsConditionInParensNode, ParseError> {
     let start = p.peek().span.start;
-    let general_enclosed = parse_general_enclosed(p)?;
+    let general_enclosed = _parse_general_enclosed(p)?;
     return Result::<SupportsConditionInParensNode, ParseError>::Ok(SupportsConditionInParensNode::Alt2(SupportsConditionInParensAlt2 {
         span: Span::new(start, i32::max(start, p.last_end())),
         general_enclosed,
     }));
 }
 
-fn parse_supports_condition_in_parens_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_supports_condition_in_parens_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_general_enclosed(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn parse_supports_condition_in_parens(p: &mut Parser) -> Result<SupportsConditionInParensNode, ParseError> {
+fn _parse_supports_condition_in_parens(p: &mut Parser) -> Result<SupportsConditionInParensNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_37(kind) {
         if p.peek_kind() == TK_LIT_LPAREN {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_0 = parse_supports_condition_in_parens_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = parse_supports_condition_in_parens_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_2 = parse_supports_condition_in_parens_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_supports_condition_in_parens_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_supports_condition_in_parens_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_supports_condition_in_parens_scan_2(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -37254,17 +37254,17 @@ fn parse_supports_condition_in_parens(p: &mut Parser) -> Result<SupportsConditio
                 _sd_best_i = 2;
             }
             if _sd_best_i == 0 {
-                return parse_supports_condition_in_parens_bt_0(p);
+                return _parse_supports_condition_in_parens_bt_0(p);
             }
             if _sd_best_i == 1 {
-                return parse_supports_condition_in_parens_bt_1(p);
+                return _parse_supports_condition_in_parens_bt_1(p);
             }
             if _sd_best_i == 2 {
-                return parse_supports_condition_in_parens_bt_2(p);
+                return _parse_supports_condition_in_parens_bt_2(p);
             }
-            return parse_supports_condition_in_parens_bt_2(p);
+            return _parse_supports_condition_in_parens_bt_2(p);
         } else if p.peek_kind() == TK_Function_ {
-            return parse_supports_condition_in_parens_bt_2(p);
+            return _parse_supports_condition_in_parens_bt_2(p);
         }
     }
     return Result::<SupportsConditionInParensNode, ParseError>::Err(ParseError::new(
@@ -37274,13 +37274,13 @@ fn parse_supports_condition_in_parens(p: &mut Parser) -> Result<SupportsConditio
     ));
 }
 
-fn parse_supports_negation(p: &mut Parser) -> Result<SupportsNegationNode, ParseError> {
+fn _parse_supports_negation(p: &mut Parser) -> Result<SupportsNegationNode, ParseError> {
     let start = p.peek().span.start;
     let not = p.expect(TK_Not)?;
-    let ws = parse_ws__follow_0(p)?;
+    let ws = _parse_ws__follow_0(p)?;
     let space = p.expect(TK_Space)?;
-    let ws_2 = parse_ws(p)?;
-    let supports_condition_in_parens = parse_supports_condition_in_parens(p)?;
+    let ws_2 = _parse_ws(p)?;
+    let supports_condition_in_parens = _parse_supports_condition_in_parens(p)?;
     return Result::<SupportsNegationNode, ParseError>::Ok(SupportsNegationNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         not,
@@ -37291,9 +37291,9 @@ fn parse_supports_negation(p: &mut Parser) -> Result<SupportsNegationNode, Parse
     });
 }
 
-fn parse_supports_conjunction(p: &mut Parser) -> Result<SupportsConjunctionNode, ParseError> {
+fn _parse_supports_conjunction(p: &mut Parser) -> Result<SupportsConjunctionNode, ParseError> {
     let start = p.peek().span.start;
-    let supports_condition_in_parens = parse_supports_condition_in_parens(p)?;
+    let supports_condition_in_parens = _parse_supports_condition_in_parens(p)?;
     let mut ws_space_ws_and_ws_space_ws_supports_condition_in_parens_list: Array<WsSpaceWsAndWsSpaceWsSupportsConditionInParensItem> = [];
     let mut _plus_first = true;
     loop {
@@ -37330,14 +37330,14 @@ fn parse_supports_conjunction(p: &mut Parser) -> Result<SupportsConjunctionNode,
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let ws = parse_ws__follow_0(p)?;
+        let ws = _parse_ws__follow_0(p)?;
         let space = p.expect(TK_Space)?;
-        let ws_2 = parse_ws(p)?;
+        let ws_2 = _parse_ws(p)?;
         let and = p.expect(TK_And)?;
-        let ws_3 = parse_ws__follow_0(p)?;
+        let ws_3 = _parse_ws__follow_0(p)?;
         let space_2 = p.expect(TK_Space)?;
-        let ws_4 = parse_ws(p)?;
-        let supports_condition_in_parens = parse_supports_condition_in_parens(p)?;
+        let ws_4 = _parse_ws(p)?;
+        let supports_condition_in_parens = _parse_supports_condition_in_parens(p)?;
         let ws_space_ws_and_ws_space_ws_supports_condition_in_parens = WsSpaceWsAndWsSpaceWsSupportsConditionInParensItem {
             ws,
             space,
@@ -37357,9 +37357,9 @@ fn parse_supports_conjunction(p: &mut Parser) -> Result<SupportsConjunctionNode,
     });
 }
 
-fn parse_supports_disjunction(p: &mut Parser) -> Result<SupportsDisjunctionNode, ParseError> {
+fn _parse_supports_disjunction(p: &mut Parser) -> Result<SupportsDisjunctionNode, ParseError> {
     let start = p.peek().span.start;
-    let supports_condition_in_parens = parse_supports_condition_in_parens(p)?;
+    let supports_condition_in_parens = _parse_supports_condition_in_parens(p)?;
     let mut ws_space_ws_or_ws_space_ws_supports_condition_in_parens_list: Array<WsSpaceWsOrWsSpaceWsSupportsConditionInParensItem> = [];
     let mut _plus_first = true;
     loop {
@@ -37396,14 +37396,14 @@ fn parse_supports_disjunction(p: &mut Parser) -> Result<SupportsDisjunctionNode,
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let ws = parse_ws__follow_0(p)?;
+        let ws = _parse_ws__follow_0(p)?;
         let space = p.expect(TK_Space)?;
-        let ws_2 = parse_ws(p)?;
+        let ws_2 = _parse_ws(p)?;
         let or = p.expect(TK_Or)?;
-        let ws_3 = parse_ws__follow_0(p)?;
+        let ws_3 = _parse_ws__follow_0(p)?;
         let space_2 = p.expect(TK_Space)?;
-        let ws_4 = parse_ws(p)?;
-        let supports_condition_in_parens = parse_supports_condition_in_parens(p)?;
+        let ws_4 = _parse_ws(p)?;
+        let supports_condition_in_parens = _parse_supports_condition_in_parens(p)?;
         let ws_space_ws_or_ws_space_ws_supports_condition_in_parens = WsSpaceWsOrWsSpaceWsSupportsConditionInParensItem {
             ws,
             space,
@@ -37423,11 +37423,11 @@ fn parse_supports_disjunction(p: &mut Parser) -> Result<SupportsDisjunctionNode,
     });
 }
 
-fn parse_supports_declaration_condition(p: &mut Parser) -> Result<SupportsDeclarationConditionNode, ParseError> {
+fn _parse_supports_declaration_condition(p: &mut Parser) -> Result<SupportsDeclarationConditionNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
-    let ws = parse_ws(p)?;
-    let declaration = parse_declaration(p)?;
+    let ws = _parse_ws(p)?;
+    let declaration = _parse_declaration(p)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<SupportsDeclarationConditionNode, ParseError>::Ok(SupportsDeclarationConditionNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -37438,7 +37438,7 @@ fn parse_supports_declaration_condition(p: &mut Parser) -> Result<SupportsDeclar
     });
 }
 
-fn parse_general_enclosed(p: &mut Parser) -> Result<GeneralEnclosedNode, ParseError> {
+fn _parse_general_enclosed(p: &mut Parser) -> Result<GeneralEnclosedNode, ParseError> {
     let start = p.peek().span.start;
     let function__or_lparen = p.advance();
     let mut any__or_unused_list: Array<AnyOrUnusedGroup> = [];
@@ -37471,10 +37471,10 @@ fn parse_general_enclosed(p: &mut Parser) -> Result<GeneralEnclosedNode, ParseEr
         }
         if rep_scan_pos < 0 { break; }
         let any__or_unused: AnyOrUnusedGroup = if _gale_kind_set_20(p.peek_kind()) {
-            let any_ = parse_any_(p)?;
+            let any_ = _parse_any_(p)?;
             AnyOrUnusedGroup::Any(any_)
         } else {
-            let unused = parse_unused(p)?;
+            let unused = _parse_unused(p)?;
             AnyOrUnusedGroup::Unused(unused)
         };
         any__or_unused_list.push(any__or_unused);
@@ -37488,14 +37488,14 @@ fn parse_general_enclosed(p: &mut Parser) -> Result<GeneralEnclosedNode, ParseEr
     });
 }
 
-fn parse_url(p: &mut Parser) -> Result<UrlNode, ParseError> {
+fn _parse_url(p: &mut Parser) -> Result<UrlNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Url_ {
         let url_ = p.expect(TK_Url_)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let string_ = p.expect(TK_String_)?;
-        let ws_2 = parse_ws(p)?;
+        let ws_2 = _parse_ws(p)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
         return Result::<UrlNode, ParseError>::Ok(UrlNode::Alt0(UrlAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -37520,14 +37520,14 @@ fn parse_url(p: &mut Parser) -> Result<UrlNode, ParseError> {
     ));
 }
 
-fn parse_var_(p: &mut Parser) -> Result<VarNode, ParseError> {
+fn _parse_var_(p: &mut Parser) -> Result<VarNode, ParseError> {
     let start = p.peek().span.start;
     let var = p.expect(TK_Var)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let variable = p.expect(TK_Variable)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    let ws_3 = parse_ws(p)?;
+    let ws_3 = _parse_ws(p)?;
     return Result::<VarNode, ParseError>::Ok(VarNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         var,
@@ -37539,13 +37539,13 @@ fn parse_var_(p: &mut Parser) -> Result<VarNode, ParseError> {
     });
 }
 
-fn parse_calc(p: &mut Parser) -> Result<CalcNode, ParseError> {
+fn _parse_calc(p: &mut Parser) -> Result<CalcNode, ParseError> {
     let start = p.peek().span.start;
     let calc = p.expect(TK_Calc)?;
-    let ws = parse_ws(p)?;
-    let calc_sum = parse_calc_sum(p)?;
+    let ws = _parse_ws(p)?;
+    let calc_sum = _parse_calc_sum(p)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     return Result::<CalcNode, ParseError>::Ok(CalcNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         calc,
@@ -37556,9 +37556,9 @@ fn parse_calc(p: &mut Parser) -> Result<CalcNode, ParseError> {
     });
 }
 
-fn parse_calc_sum(p: &mut Parser) -> Result<CalcSumNode, ParseError> {
+fn _parse_calc_sum(p: &mut Parser) -> Result<CalcSumNode, ParseError> {
     let start = p.peek().span.start;
-    let calc_product = parse_calc_product(p)?;
+    let calc_product = _parse_calc_product(p)?;
     let mut space_ws_item_ws_space_ws_calc_product_list: Array<SpaceWsItemWsSpaceWsCalcProductItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -37604,12 +37604,12 @@ fn parse_calc_sum(p: &mut Parser) -> Result<CalcSumNode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let space = p.expect(TK_Space)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let plus_or_minus = p.advance();
-        let ws_2 = parse_ws__follow_0(p)?;
+        let ws_2 = _parse_ws__follow_0(p)?;
         let space_2 = p.expect(TK_Space)?;
-        let ws_3 = parse_ws(p)?;
-        let calc_product = parse_calc_product(p)?;
+        let ws_3 = _parse_ws(p)?;
+        let calc_product = _parse_calc_product(p)?;
         let space_ws_item_ws_space_ws_calc_product = SpaceWsItemWsSpaceWsCalcProductItem {
             space,
             ws,
@@ -37628,9 +37628,9 @@ fn parse_calc_sum(p: &mut Parser) -> Result<CalcSumNode, ParseError> {
     });
 }
 
-fn parse_calc_product(p: &mut Parser) -> Result<CalcProductNode, ParseError> {
+fn _parse_calc_product(p: &mut Parser) -> Result<CalcProductNode, ParseError> {
     let start = p.peek().span.start;
-    let calc_value = parse_calc_value(p)?;
+    let calc_value = _parse_calc_value(p)?;
     let mut group_0_list: Array<CalcProductGroup0> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -37672,8 +37672,8 @@ fn parse_calc_product(p: &mut Parser) -> Result<CalcProductNode, ParseError> {
         if rep_scan_pos < 0 { break; }
         let group_0: CalcProductGroup0 = if p.peek_kind() == TK_LIT_STAR {
             let star = p.expect(TK_LIT_STAR)?;
-            let ws = parse_ws(p)?;
-            let calc_value = parse_calc_value(p)?;
+            let ws = _parse_ws(p)?;
+            let calc_value = _parse_calc_value(p)?;
             CalcProductGroup0::Alt0(CalcProductGroup0Alt0 {
                 star,
                 ws,
@@ -37681,9 +37681,9 @@ fn parse_calc_product(p: &mut Parser) -> Result<CalcProductNode, ParseError> {
             })
         } else {
             let slash = p.expect(TK_LIT_SLASH)?;
-            let ws = parse_ws(p)?;
-            let number = parse_number(p)?;
-            let ws_2 = parse_ws(p)?;
+            let ws = _parse_ws(p)?;
+            let number = _parse_number(p)?;
+            let ws_2 = _parse_ws(p)?;
             CalcProductGroup0::Alt1(CalcProductGroup0Alt1 {
                 slash,
                 ws,
@@ -37700,10 +37700,10 @@ fn parse_calc_product(p: &mut Parser) -> Result<CalcProductNode, ParseError> {
     });
 }
 
-fn parse_calc_value_bt_0(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
+fn _parse_calc_value_bt_0(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     let start = p.peek().span.start;
-    let number = parse_number(p)?;
-    let ws = parse_ws(p)?;
+    let number = _parse_number(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<CalcValueNode, ParseError>::Ok(CalcValueNode::Alt0(CalcValueAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         number,
@@ -37711,7 +37711,7 @@ fn parse_calc_value_bt_0(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     }));
 }
 
-fn parse_calc_value_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_calc_value_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_number(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -37720,10 +37720,10 @@ fn parse_calc_value_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_calc_value_bt_1(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
+fn _parse_calc_value_bt_1(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     let start = p.peek().span.start;
-    let dimension = parse_dimension(p)?;
-    let ws = parse_ws(p)?;
+    let dimension = _parse_dimension(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<CalcValueNode, ParseError>::Ok(CalcValueNode::Alt1(CalcValueAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         dimension,
@@ -37731,7 +37731,7 @@ fn parse_calc_value_bt_1(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     }));
 }
 
-fn parse_calc_value_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_calc_value_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_dimension(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -37740,10 +37740,10 @@ fn parse_calc_value_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_calc_value_bt_2(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
+fn _parse_calc_value_bt_2(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     let start = p.peek().span.start;
-    let unknown_dimension = parse_unknown_dimension(p)?;
-    let ws = parse_ws(p)?;
+    let unknown_dimension = _parse_unknown_dimension(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<CalcValueNode, ParseError>::Ok(CalcValueNode::Alt2(CalcValueAlt2 {
         span: Span::new(start, i32::max(start, p.last_end())),
         unknown_dimension,
@@ -37751,7 +37751,7 @@ fn parse_calc_value_bt_2(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     }));
 }
 
-fn parse_calc_value_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_calc_value_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_unknown_dimension(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -37760,10 +37760,10 @@ fn parse_calc_value_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_calc_value_bt_3(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
+fn _parse_calc_value_bt_3(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     let start = p.peek().span.start;
-    let percentage = parse_percentage(p)?;
-    let ws = parse_ws(p)?;
+    let percentage = _parse_percentage(p)?;
+    let ws = _parse_ws(p)?;
     return Result::<CalcValueNode, ParseError>::Ok(CalcValueNode::Alt3(CalcValueAlt3 {
         span: Span::new(start, i32::max(start, p.last_end())),
         percentage,
@@ -37771,7 +37771,7 @@ fn parse_calc_value_bt_3(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     }));
 }
 
-fn parse_calc_value_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_calc_value_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_percentage(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -37780,46 +37780,46 @@ fn parse_calc_value_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_calc_value(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
+fn _parse_calc_value(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_38(kind) {
         if p.peek_kind() == TK_Plus {
             if p.peek_at(1) == TK_Number {
-                return parse_calc_value_bt_0(p);
+                return _parse_calc_value_bt_0(p);
             } else if p.peek_at(1) == TK_Dimension {
-                return parse_calc_value_bt_1(p);
+                return _parse_calc_value_bt_1(p);
             } else if p.peek_at(1) == TK_UnknownDimension {
-                return parse_calc_value_bt_2(p);
+                return _parse_calc_value_bt_2(p);
             } else if p.peek_at(1) == TK_Percentage {
-                return parse_calc_value_bt_3(p);
+                return _parse_calc_value_bt_3(p);
             }
         } else if p.peek_kind() == TK_Minus {
             if p.peek_at(1) == TK_Number {
-                return parse_calc_value_bt_0(p);
+                return _parse_calc_value_bt_0(p);
             } else if p.peek_at(1) == TK_Dimension {
-                return parse_calc_value_bt_1(p);
+                return _parse_calc_value_bt_1(p);
             } else if p.peek_at(1) == TK_UnknownDimension {
-                return parse_calc_value_bt_2(p);
+                return _parse_calc_value_bt_2(p);
             } else if p.peek_at(1) == TK_Percentage {
-                return parse_calc_value_bt_3(p);
+                return _parse_calc_value_bt_3(p);
             }
         } else if p.peek_kind() == TK_Number {
-            return parse_calc_value_bt_0(p);
+            return _parse_calc_value_bt_0(p);
         } else if p.peek_kind() == TK_Dimension {
-            return parse_calc_value_bt_1(p);
+            return _parse_calc_value_bt_1(p);
         } else if p.peek_kind() == TK_UnknownDimension {
-            return parse_calc_value_bt_2(p);
+            return _parse_calc_value_bt_2(p);
         } else if p.peek_kind() == TK_Percentage {
-            return parse_calc_value_bt_3(p);
+            return _parse_calc_value_bt_3(p);
         }
     }
     if kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
-        let ws = parse_ws(p)?;
-        let calc_sum = parse_calc_sum(p)?;
+        let ws = _parse_ws(p)?;
+        let calc_sum = _parse_calc_sum(p)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
-        let ws_2 = parse_ws(p)?;
+        let ws_2 = _parse_ws(p)?;
         return Result::<CalcValueNode, ParseError>::Ok(CalcValueNode::Alt4(CalcValueAlt4 {
             span: Span::new(start, i32::max(start, p.last_end())),
             lparen,
@@ -37836,14 +37836,14 @@ fn parse_calc_value(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     ));
 }
 
-fn parse_font_face_rule(p: &mut Parser) -> Result<FontFaceRuleNode, ParseError> {
+fn _parse_font_face_rule(p: &mut Parser) -> Result<FontFaceRuleNode, ParseError> {
     let start = p.peek().span.start;
     let fontface = p.expect(TK_FontFace)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     let font_face_declaration: Option<FontFaceDeclarationNode> = if _gale_kind_set_8(p.peek_kind()) {
-        let font_face_declaration = parse_font_face_declaration(p)?;
+        let font_face_declaration = _parse_font_face_declaration(p)?;
         Option::<FontFaceDeclarationNode>::Some(font_face_declaration)
     } else {
         null
@@ -37874,9 +37874,9 @@ fn parse_font_face_rule(p: &mut Parser) -> Result<FontFaceRuleNode, ParseError> 
         }
         if rep_scan_pos < 0 { break; }
         let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let font_face_declaration: Option<FontFaceDeclarationNode> = if _gale_kind_set_8(p.peek_kind()) {
-            let font_face_declaration = parse_font_face_declaration(p)?;
+            let font_face_declaration = _parse_font_face_declaration(p)?;
             Option::<FontFaceDeclarationNode>::Some(font_face_declaration)
         } else {
             null
@@ -37889,7 +37889,7 @@ fn parse_font_face_rule(p: &mut Parser) -> Result<FontFaceRuleNode, ParseError> 
         semicolon_ws_font_face_declaration_list.push(semicolon_ws_font_face_declaration);
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_3 = parse_ws(p)?;
+    let ws_3 = _parse_ws(p)?;
     return Result::<FontFaceRuleNode, ParseError>::Ok(FontFaceRuleNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         fontface,
@@ -37903,12 +37903,12 @@ fn parse_font_face_rule(p: &mut Parser) -> Result<FontFaceRuleNode, ParseError> 
     });
 }
 
-fn parse_font_face_declaration_bt_0(p: &mut Parser) -> Result<FontFaceDeclarationNode, ParseError> {
+fn _parse_font_face_declaration_bt_0(p: &mut Parser) -> Result<FontFaceDeclarationNode, ParseError> {
     let start = p.peek().span.start;
-    let property_ = parse_property_(p)?;
+    let property_ = _parse_property_(p)?;
     let colon = p.expect(TK_LIT_COLON)?;
-    let ws = parse_ws(p)?;
-    let expr = parse_expr(p)?;
+    let ws = _parse_ws(p)?;
+    let expr = _parse_expr(p)?;
     return Result::<FontFaceDeclarationNode, ParseError>::Ok(FontFaceDeclarationNode::knownFontFaceDeclaration(FontFaceDeclarationknownFontFaceDeclaration {
         span: Span::new(start, i32::max(start, p.last_end())),
         property_,
@@ -37918,7 +37918,7 @@ fn parse_font_face_declaration_bt_0(p: &mut Parser) -> Result<FontFaceDeclaratio
     }));
 }
 
-fn parse_font_face_declaration_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_font_face_declaration_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_property_(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -37931,12 +37931,12 @@ fn parse_font_face_declaration_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_font_face_declaration_bt_1(p: &mut Parser) -> Result<FontFaceDeclarationNode, ParseError> {
+fn _parse_font_face_declaration_bt_1(p: &mut Parser) -> Result<FontFaceDeclarationNode, ParseError> {
     let start = p.peek().span.start;
-    let property_ = parse_property_(p)?;
+    let property_ = _parse_property_(p)?;
     let colon = p.expect(TK_LIT_COLON)?;
-    let ws = parse_ws(p)?;
-    let value = parse_value(p)?;
+    let ws = _parse_ws(p)?;
+    let value = _parse_value(p)?;
     return Result::<FontFaceDeclarationNode, ParseError>::Ok(FontFaceDeclarationNode::unknownFontFaceDeclaration(FontFaceDeclarationunknownFontFaceDeclaration {
         span: Span::new(start, i32::max(start, p.last_end())),
         property_,
@@ -37946,7 +37946,7 @@ fn parse_font_face_declaration_bt_1(p: &mut Parser) -> Result<FontFaceDeclaratio
     }));
 }
 
-fn parse_font_face_declaration_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_font_face_declaration_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_property_(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -37959,15 +37959,15 @@ fn parse_font_face_declaration_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_font_face_declaration(p: &mut Parser) -> Result<FontFaceDeclarationNode, ParseError> {
+fn _parse_font_face_declaration(p: &mut Parser) -> Result<FontFaceDeclarationNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_8(kind) {
         if _gale_kind_set_8(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_0 = parse_font_face_declaration_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = parse_font_face_declaration_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_font_face_declaration_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_font_face_declaration_scan_1(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -37979,12 +37979,12 @@ fn parse_font_face_declaration(p: &mut Parser) -> Result<FontFaceDeclarationNode
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return parse_font_face_declaration_bt_0(p);
+                return _parse_font_face_declaration_bt_0(p);
             }
             if _sd_best_i == 1 {
-                return parse_font_face_declaration_bt_1(p);
+                return _parse_font_face_declaration_bt_1(p);
             }
-            return parse_font_face_declaration_bt_1(p);
+            return _parse_font_face_declaration_bt_1(p);
         }
     }
     return Result::<FontFaceDeclarationNode, ParseError>::Err(ParseError::new(
@@ -37994,16 +37994,16 @@ fn parse_font_face_declaration(p: &mut Parser) -> Result<FontFaceDeclarationNode
     ));
 }
 
-fn parse_keyframes_rule(p: &mut Parser) -> Result<KeyframesRuleNode, ParseError> {
+fn _parse_keyframes_rule(p: &mut Parser) -> Result<KeyframesRuleNode, ParseError> {
     let start = p.peek().span.start;
     let keyframes = p.expect(TK_Keyframes)?;
-    let ws = parse_ws__follow_0(p)?;
+    let ws = _parse_ws__follow_0(p)?;
     let space = p.expect(TK_Space)?;
-    let ws_2 = parse_ws(p)?;
-    let ident = parse_ident(p)?;
-    let ws_3 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
+    let ident = _parse_ident(p)?;
+    let ws_3 = _parse_ws(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_4 = parse_ws(p)?;
+    let ws_4 = _parse_ws(p)?;
     let mut keyframe_block_list: Array<KeyframeBlockNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -38016,11 +38016,11 @@ fn parse_keyframes_rule(p: &mut Parser) -> Result<KeyframesRuleNode, ParseError>
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let keyframe_block = parse_keyframe_block(p)?;
+        let keyframe_block = _parse_keyframe_block(p)?;
         keyframe_block_list.push(keyframe_block);
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_5 = parse_ws(p)?;
+    let ws_5 = _parse_ws(p)?;
     return Result::<KeyframesRuleNode, ParseError>::Ok(KeyframesRuleNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         keyframes,
@@ -38037,19 +38037,19 @@ fn parse_keyframes_rule(p: &mut Parser) -> Result<KeyframesRuleNode, ParseError>
     });
 }
 
-fn parse_keyframe_block(p: &mut Parser) -> Result<KeyframeBlockNode, ParseError> {
+fn _parse_keyframe_block(p: &mut Parser) -> Result<KeyframeBlockNode, ParseError> {
     let start = p.peek().span.start;
-    let keyframe_selector = parse_keyframe_selector(p)?;
+    let keyframe_selector = _parse_keyframe_selector(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let declaration_list: Option<DeclarationListNode> = if _gale_kind_set_19(p.peek_kind()) {
-        let declaration_list = parse_declaration_list(p)?;
+        let declaration_list = _parse_declaration_list(p)?;
         Option::<DeclarationListNode>::Some(declaration_list)
     } else {
         null
     };
     let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     let keyframe_selector_lbrace_ws_declaration_list_rbrace_ws = KeyframeSelectorLbraceWsDeclarationListOptRbraceWsItem {
         keyframe_selector,
         lbrace,
@@ -38064,10 +38064,10 @@ fn parse_keyframe_block(p: &mut Parser) -> Result<KeyframeBlockNode, ParseError>
     });
 }
 
-fn parse_keyframe_selector(p: &mut Parser) -> Result<KeyframeSelectorNode, ParseError> {
+fn _parse_keyframe_selector(p: &mut Parser) -> Result<KeyframeSelectorNode, ParseError> {
     let start = p.peek().span.start;
     let from__or_to_or_percentage = p.advance();
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let mut comma_ws_item_ws_list: Array<CommaWsItemWsItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -38113,9 +38113,9 @@ fn parse_keyframe_selector(p: &mut Parser) -> Result<KeyframeSelectorNode, Parse
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_Comma)?;
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let from__or_to_or_percentage = p.advance();
-        let ws_2 = parse_ws(p)?;
+        let ws_2 = _parse_ws(p)?;
         let comma_ws_item_ws = CommaWsItemWsItem {
             comma,
             ws,
@@ -38132,20 +38132,20 @@ fn parse_keyframe_selector(p: &mut Parser) -> Result<KeyframeSelectorNode, Parse
     });
 }
 
-fn parse_viewport(p: &mut Parser) -> Result<ViewportNode, ParseError> {
+fn _parse_viewport(p: &mut Parser) -> Result<ViewportNode, ParseError> {
     let start = p.peek().span.start;
     let viewport = p.expect(TK_Viewport)?;
-    let ws = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     let declaration_list: Option<DeclarationListNode> = if _gale_kind_set_19(p.peek_kind()) {
-        let declaration_list = parse_declaration_list(p)?;
+        let declaration_list = _parse_declaration_list(p)?;
         Option::<DeclarationListNode>::Some(declaration_list)
     } else {
         null
     };
     let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_3 = parse_ws(p)?;
+    let ws_3 = _parse_ws(p)?;
     return Result::<ViewportNode, ParseError>::Ok(ViewportNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         viewport,
@@ -38158,22 +38158,22 @@ fn parse_viewport(p: &mut Parser) -> Result<ViewportNode, ParseError> {
     });
 }
 
-fn parse_counter_style(p: &mut Parser) -> Result<CounterStyleNode, ParseError> {
+fn _parse_counter_style(p: &mut Parser) -> Result<CounterStyleNode, ParseError> {
     let start = p.peek().span.start;
     let counterstyle = p.expect(TK_CounterStyle)?;
-    let ws = parse_ws(p)?;
-    let ident = parse_ident(p)?;
-    let ws_2 = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
+    let ident = _parse_ident(p)?;
+    let ws_2 = _parse_ws(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_3 = parse_ws(p)?;
+    let ws_3 = _parse_ws(p)?;
     let declaration_list: Option<DeclarationListNode> = if _gale_kind_set_19(p.peek_kind()) {
-        let declaration_list = parse_declaration_list(p)?;
+        let declaration_list = _parse_declaration_list(p)?;
         Option::<DeclarationListNode>::Some(declaration_list)
     } else {
         null
     };
     let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_4 = parse_ws(p)?;
+    let ws_4 = _parse_ws(p)?;
     return Result::<CounterStyleNode, ParseError>::Ok(CounterStyleNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         counterstyle,
@@ -38188,14 +38188,14 @@ fn parse_counter_style(p: &mut Parser) -> Result<CounterStyleNode, ParseError> {
     });
 }
 
-fn parse_font_feature_values_rule(p: &mut Parser) -> Result<FontFeatureValuesRuleNode, ParseError> {
+fn _parse_font_feature_values_rule(p: &mut Parser) -> Result<FontFeatureValuesRuleNode, ParseError> {
     let start = p.peek().span.start;
     let fontfeaturevalues = p.expect(TK_FontFeatureValues)?;
-    let ws = parse_ws(p)?;
-    let font_family_name_list = parse_font_family_name_list(p)?;
-    let ws_2 = parse_ws(p)?;
+    let ws = _parse_ws(p)?;
+    let font_family_name_list = _parse_font_family_name_list(p)?;
+    let ws_2 = _parse_ws(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_3 = parse_ws(p)?;
+    let ws_3 = _parse_ws(p)?;
     let mut feature_value_block_list: Array<FeatureValueBlockNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -38208,11 +38208,11 @@ fn parse_font_feature_values_rule(p: &mut Parser) -> Result<FontFeatureValuesRul
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let feature_value_block = parse_feature_value_block(p)?;
+        let feature_value_block = _parse_feature_value_block(p)?;
         feature_value_block_list.push(feature_value_block);
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_4 = parse_ws(p)?;
+    let ws_4 = _parse_ws(p)?;
     return Result::<FontFeatureValuesRuleNode, ParseError>::Ok(FontFeatureValuesRuleNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         fontfeaturevalues,
@@ -38227,9 +38227,9 @@ fn parse_font_feature_values_rule(p: &mut Parser) -> Result<FontFeatureValuesRul
     });
 }
 
-fn parse_font_family_name_list(p: &mut Parser) -> Result<FontFamilyNameListNode, ParseError> {
+fn _parse_font_family_name_list(p: &mut Parser) -> Result<FontFamilyNameListNode, ParseError> {
     let start = p.peek().span.start;
-    let font_family_name = parse_font_family_name(p)?;
+    let font_family_name = _parse_font_family_name(p)?;
     let mut ws_comma_ws_font_family_name_list: Array<WsCommaWsFontFamilyNameItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -38254,10 +38254,10 @@ fn parse_font_family_name_list(p: &mut Parser) -> Result<FontFamilyNameListNode,
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let comma = p.expect(TK_Comma)?;
-        let ws_2 = parse_ws(p)?;
-        let font_family_name = parse_font_family_name(p)?;
+        let ws_2 = _parse_ws(p)?;
+        let font_family_name = _parse_font_family_name(p)?;
         let ws_comma_ws_font_family_name = WsCommaWsFontFamilyNameItem {
             ws,
             comma,
@@ -38273,7 +38273,7 @@ fn parse_font_family_name_list(p: &mut Parser) -> Result<FontFamilyNameListNode,
     });
 }
 
-fn parse_font_family_name(p: &mut Parser) -> Result<FontFamilyNameNode, ParseError> {
+fn _parse_font_family_name(p: &mut Parser) -> Result<FontFamilyNameNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_String_ {
@@ -38284,7 +38284,7 @@ fn parse_font_family_name(p: &mut Parser) -> Result<FontFamilyNameNode, ParseErr
         }));
     }
     if _gale_kind_set_4(kind) {
-        let ident = parse_ident(p)?;
+        let ident = _parse_ident(p)?;
         let mut ws_ident_list: Array<WsIdentItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -38305,8 +38305,8 @@ fn parse_font_family_name(p: &mut Parser) -> Result<FontFamilyNameNode, ParseErr
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let ws = parse_ws(p)?;
-            let ident = parse_ident(p)?;
+            let ws = _parse_ws(p)?;
+            let ident = _parse_ident(p)?;
             let ws_ident = WsIdentItem {
                 ws,
                 ident,
@@ -38326,14 +38326,14 @@ fn parse_font_family_name(p: &mut Parser) -> Result<FontFamilyNameNode, ParseErr
     ));
 }
 
-fn parse_feature_value_block(p: &mut Parser) -> Result<FeatureValueBlockNode, ParseError> {
+fn _parse_feature_value_block(p: &mut Parser) -> Result<FeatureValueBlockNode, ParseError> {
     let start = p.peek().span.start;
-    let feature_type = parse_feature_type(p)?;
-    let ws = parse_ws(p)?;
+    let feature_type = _parse_feature_type(p)?;
+    let ws = _parse_ws(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_2 = parse_ws(p)?;
+    let ws_2 = _parse_ws(p)?;
     let feature_value_definition: Option<FeatureValueDefinitionNode> = if _gale_kind_set_4(p.peek_kind()) {
-        let feature_value_definition = parse_feature_value_definition(p)?;
+        let feature_value_definition = _parse_feature_value_definition(p)?;
         Option::<FeatureValueDefinitionNode>::Some(feature_value_definition)
     } else {
         null
@@ -38365,11 +38365,11 @@ fn parse_feature_value_block(p: &mut Parser) -> Result<FeatureValueBlockNode, Pa
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let ws = parse_ws(p)?;
+        let ws = _parse_ws(p)?;
         let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws_2 = parse_ws(p)?;
+        let ws_2 = _parse_ws(p)?;
         let feature_value_definition: Option<FeatureValueDefinitionNode> = if _gale_kind_set_4(p.peek_kind()) {
-            let feature_value_definition = parse_feature_value_definition(p)?;
+            let feature_value_definition = _parse_feature_value_definition(p)?;
             Option::<FeatureValueDefinitionNode>::Some(feature_value_definition)
         } else {
             null
@@ -38383,7 +38383,7 @@ fn parse_feature_value_block(p: &mut Parser) -> Result<FeatureValueBlockNode, Pa
         ws_semicolon_ws_feature_value_definition_list.push(ws_semicolon_ws_feature_value_definition);
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_3 = parse_ws(p)?;
+    let ws_3 = _parse_ws(p)?;
     return Result::<FeatureValueBlockNode, ParseError>::Ok(FeatureValueBlockNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         feature_type,
@@ -38397,7 +38397,7 @@ fn parse_feature_value_block(p: &mut Parser) -> Result<FeatureValueBlockNode, Pa
     });
 }
 
-fn parse_feature_type(p: &mut Parser) -> Result<FeatureTypeNode, ParseError> {
+fn _parse_feature_type(p: &mut Parser) -> Result<FeatureTypeNode, ParseError> {
     let start = p.peek().span.start;
     let atkeyword = p.expect(TK_AtKeyword)?;
     return Result::<FeatureTypeNode, ParseError>::Ok(FeatureTypeNode {
@@ -38406,13 +38406,13 @@ fn parse_feature_type(p: &mut Parser) -> Result<FeatureTypeNode, ParseError> {
     });
 }
 
-fn parse_feature_value_definition(p: &mut Parser) -> Result<FeatureValueDefinitionNode, ParseError> {
+fn _parse_feature_value_definition(p: &mut Parser) -> Result<FeatureValueDefinitionNode, ParseError> {
     let start = p.peek().span.start;
-    let ident = parse_ident(p)?;
-    let ws = parse_ws(p)?;
+    let ident = _parse_ident(p)?;
+    let ws = _parse_ws(p)?;
     let colon = p.expect(TK_LIT_COLON)?;
-    let ws_2 = parse_ws(p)?;
-    let number = parse_number(p)?;
+    let ws_2 = _parse_ws(p)?;
+    let number = _parse_number(p)?;
     let mut ws_number_list: Array<WsNumberItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -38433,8 +38433,8 @@ fn parse_feature_value_definition(p: &mut Parser) -> Result<FeatureValueDefiniti
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let ws = parse_ws(p)?;
-        let number = parse_number(p)?;
+        let ws = _parse_ws(p)?;
+        let number = _parse_number(p)?;
         let ws_number = WsNumberItem {
             ws,
             number,
@@ -38452,7 +38452,7 @@ fn parse_feature_value_definition(p: &mut Parser) -> Result<FeatureValueDefiniti
     });
 }
 
-fn parse_ident(p: &mut Parser) -> Result<IdentNode, ParseError> {
+fn _parse_ident(p: &mut Parser) -> Result<IdentNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Ident {
@@ -38511,7 +38511,7 @@ fn parse_ident(p: &mut Parser) -> Result<IdentNode, ParseError> {
     ));
 }
 
-fn parse_ws(p: &mut Parser) -> Result<WsNode, ParseError> {
+fn _parse_ws(p: &mut Parser) -> Result<WsNode, ParseError> {
     let start = p.peek().span.start;
     let mut comment_or_space_list: Array<Token> = [];
     loop {
@@ -38574,7 +38574,7 @@ fn scan_ws__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn parse_ws__follow_0(p: &mut Parser) -> Result<WsNode, ParseError> {
+fn _parse_ws__follow_0(p: &mut Parser) -> Result<WsNode, ParseError> {
     let start = p.peek().span.start;
     let mut comment_or_space_list: Array<Token> = [];
     loop {
@@ -38612,10 +38612,482 @@ fn parse_ws__follow_0(p: &mut Parser) -> Result<WsNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<StylesheetNode, ParseError> {
+pub fn parse_stylesheet(input: &String) -> Result<StylesheetNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_stylesheet(&mut parser);
+    return _parse_stylesheet(&mut parser);
+}
+
+pub fn parse_charset(input: &String) -> Result<CharsetNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_charset(&mut parser);
+}
+
+pub fn parse_imports(input: &String) -> Result<ImportsNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_imports(&mut parser);
+}
+
+pub fn parse_namespace_(input: &String) -> Result<NamespaceNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_namespace_(&mut parser);
+}
+
+pub fn parse_namespace_prefix(input: &String) -> Result<NamespacePrefixNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_namespace_prefix(&mut parser);
+}
+
+pub fn parse_media(input: &String) -> Result<MediaNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_media(&mut parser);
+}
+
+pub fn parse_media_query_list(input: &String) -> Result<MediaQueryListNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_media_query_list(&mut parser);
+}
+
+pub fn parse_media_query(input: &String) -> Result<MediaQueryNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_media_query(&mut parser);
+}
+
+pub fn parse_media_type(input: &String) -> Result<MediaTypeNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_media_type(&mut parser);
+}
+
+pub fn parse_media_expression(input: &String) -> Result<MediaExpressionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_media_expression(&mut parser);
+}
+
+pub fn parse_media_feature(input: &String) -> Result<MediaFeatureNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_media_feature(&mut parser);
+}
+
+pub fn parse_page(input: &String) -> Result<PageNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_page(&mut parser);
+}
+
+pub fn parse_pseudo_page(input: &String) -> Result<PseudoPageNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_pseudo_page(&mut parser);
+}
+
+pub fn parse_selector_group(input: &String) -> Result<SelectorGroupNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_selector_group(&mut parser);
+}
+
+pub fn parse_selector(input: &String) -> Result<SelectorNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_selector(&mut parser);
+}
+
+pub fn parse_combinator(input: &String) -> Result<CombinatorNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_combinator(&mut parser);
+}
+
+pub fn parse_simple_selector_sequence(input: &String) -> Result<SimpleSelectorSequenceNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_simple_selector_sequence(&mut parser);
+}
+
+pub fn parse_type_selector(input: &String) -> Result<TypeSelectorNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_type_selector(&mut parser);
+}
+
+pub fn parse_type_namespace_prefix(input: &String) -> Result<TypeNamespacePrefixNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_type_namespace_prefix(&mut parser);
+}
+
+pub fn parse_element_name(input: &String) -> Result<ElementNameNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_element_name(&mut parser);
+}
+
+pub fn parse_universal(input: &String) -> Result<UniversalNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_universal(&mut parser);
+}
+
+pub fn parse_class_name(input: &String) -> Result<ClassNameNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_class_name(&mut parser);
+}
+
+pub fn parse_attrib(input: &String) -> Result<AttribNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_attrib(&mut parser);
+}
+
+pub fn parse_pseudo(input: &String) -> Result<PseudoNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_pseudo(&mut parser);
+}
+
+pub fn parse_functional_pseudo(input: &String) -> Result<FunctionalPseudoNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_functional_pseudo(&mut parser);
+}
+
+pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_expression(&mut parser);
+}
+
+pub fn parse_negation(input: &String) -> Result<NegationNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_negation(&mut parser);
+}
+
+pub fn parse_negation_arg(input: &String) -> Result<NegationArgNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_negation_arg(&mut parser);
+}
+
+pub fn parse_operator_(input: &String) -> Result<OperatorNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_operator_(&mut parser);
+}
+
+pub fn parse_property_(input: &String) -> Result<PropertyNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_property_(&mut parser);
+}
+
+pub fn parse_ruleset(input: &String) -> Result<RulesetNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_ruleset(&mut parser);
+}
+
+pub fn parse_declaration_list(input: &String) -> Result<DeclarationListNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_declaration_list(&mut parser);
+}
+
+pub fn parse_declaration(input: &String) -> Result<DeclarationNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_declaration(&mut parser);
+}
+
+pub fn parse_prio(input: &String) -> Result<PrioNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_prio(&mut parser);
+}
+
+pub fn parse_value(input: &String) -> Result<ValueNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_value(&mut parser);
+}
+
+pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_expr(&mut parser);
+}
+
+pub fn parse_term(input: &String) -> Result<TermNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_term(&mut parser);
+}
+
+pub fn parse_function_(input: &String) -> Result<FunctionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_function_(&mut parser);
+}
+
+pub fn parse_dx_image_transform(input: &String) -> Result<DxImageTransformNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_dx_image_transform(&mut parser);
+}
+
+pub fn parse_hexcolor(input: &String) -> Result<HexcolorNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_hexcolor(&mut parser);
+}
+
+pub fn parse_number(input: &String) -> Result<NumberNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_number(&mut parser);
+}
+
+pub fn parse_percentage(input: &String) -> Result<PercentageNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_percentage(&mut parser);
+}
+
+pub fn parse_dimension(input: &String) -> Result<DimensionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_dimension(&mut parser);
+}
+
+pub fn parse_unknown_dimension(input: &String) -> Result<UnknownDimensionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_unknown_dimension(&mut parser);
+}
+
+pub fn parse_any_(input: &String) -> Result<AnyNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_any_(&mut parser);
+}
+
+pub fn parse_at_rule(input: &String) -> Result<AtRuleNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_at_rule(&mut parser);
+}
+
+pub fn parse_unused(input: &String) -> Result<UnusedNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_unused(&mut parser);
+}
+
+pub fn parse_block(input: &String) -> Result<BlockNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_block(&mut parser);
+}
+
+pub fn parse_nested_statement(input: &String) -> Result<NestedStatementNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_nested_statement(&mut parser);
+}
+
+pub fn parse_group_rule_body(input: &String) -> Result<GroupRuleBodyNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_group_rule_body(&mut parser);
+}
+
+pub fn parse_supports_rule(input: &String) -> Result<SupportsRuleNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_supports_rule(&mut parser);
+}
+
+pub fn parse_supports_condition(input: &String) -> Result<SupportsConditionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_supports_condition(&mut parser);
+}
+
+pub fn parse_supports_condition_in_parens(input: &String) -> Result<SupportsConditionInParensNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_supports_condition_in_parens(&mut parser);
+}
+
+pub fn parse_supports_negation(input: &String) -> Result<SupportsNegationNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_supports_negation(&mut parser);
+}
+
+pub fn parse_supports_conjunction(input: &String) -> Result<SupportsConjunctionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_supports_conjunction(&mut parser);
+}
+
+pub fn parse_supports_disjunction(input: &String) -> Result<SupportsDisjunctionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_supports_disjunction(&mut parser);
+}
+
+pub fn parse_supports_declaration_condition(input: &String) -> Result<SupportsDeclarationConditionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_supports_declaration_condition(&mut parser);
+}
+
+pub fn parse_general_enclosed(input: &String) -> Result<GeneralEnclosedNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_general_enclosed(&mut parser);
+}
+
+pub fn parse_url(input: &String) -> Result<UrlNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_url(&mut parser);
+}
+
+pub fn parse_var_(input: &String) -> Result<VarNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_var_(&mut parser);
+}
+
+pub fn parse_calc(input: &String) -> Result<CalcNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_calc(&mut parser);
+}
+
+pub fn parse_calc_sum(input: &String) -> Result<CalcSumNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_calc_sum(&mut parser);
+}
+
+pub fn parse_calc_product(input: &String) -> Result<CalcProductNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_calc_product(&mut parser);
+}
+
+pub fn parse_calc_value(input: &String) -> Result<CalcValueNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_calc_value(&mut parser);
+}
+
+pub fn parse_font_face_rule(input: &String) -> Result<FontFaceRuleNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_font_face_rule(&mut parser);
+}
+
+pub fn parse_font_face_declaration(input: &String) -> Result<FontFaceDeclarationNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_font_face_declaration(&mut parser);
+}
+
+pub fn parse_keyframes_rule(input: &String) -> Result<KeyframesRuleNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_keyframes_rule(&mut parser);
+}
+
+pub fn parse_keyframe_block(input: &String) -> Result<KeyframeBlockNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_keyframe_block(&mut parser);
+}
+
+pub fn parse_keyframe_selector(input: &String) -> Result<KeyframeSelectorNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_keyframe_selector(&mut parser);
+}
+
+pub fn parse_viewport(input: &String) -> Result<ViewportNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_viewport(&mut parser);
+}
+
+pub fn parse_counter_style(input: &String) -> Result<CounterStyleNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_counter_style(&mut parser);
+}
+
+pub fn parse_font_feature_values_rule(input: &String) -> Result<FontFeatureValuesRuleNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_font_feature_values_rule(&mut parser);
+}
+
+pub fn parse_font_family_name_list(input: &String) -> Result<FontFamilyNameListNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_font_family_name_list(&mut parser);
+}
+
+pub fn parse_font_family_name(input: &String) -> Result<FontFamilyNameNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_font_family_name(&mut parser);
+}
+
+pub fn parse_feature_value_block(input: &String) -> Result<FeatureValueBlockNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_feature_value_block(&mut parser);
+}
+
+pub fn parse_feature_type(input: &String) -> Result<FeatureTypeNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_feature_type(&mut parser);
+}
+
+pub fn parse_feature_value_definition(input: &String) -> Result<FeatureValueDefinitionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_feature_value_definition(&mut parser);
+}
+
+pub fn parse_ident(input: &String) -> Result<IdentNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_ident(&mut parser);
+}
+
+pub fn parse_ws(input: &String) -> Result<WsNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_ws(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<StylesheetNode, ParseError> {
+    return parse_stylesheet(input);
 }
 
 pub fn walk_stylesheet<V: Visitor>(v: &mut V, node: &StylesheetNode) {

@@ -901,11 +901,11 @@ fn scan_ifstat(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_stat(p: &mut Parser) -> Result<StatNode, ParseError> {
+fn _parse_stat(p: &mut Parser) -> Result<StatNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_IF {
-        let ifstat = parse_ifstat(p)?;
+        let ifstat = _parse_ifstat(p)?;
         return Result::<StatNode, ParseError>::Ok(StatNode::Alt0(StatAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             ifstat,
@@ -925,13 +925,13 @@ fn parse_stat(p: &mut Parser) -> Result<StatNode, ParseError> {
     ));
 }
 
-fn parse_ifstat(p: &mut Parser) -> Result<IfstatNode, ParseError> {
+fn _parse_ifstat(p: &mut Parser) -> Result<IfstatNode, ParseError> {
     let start = p.peek().span.start;
     let lit_if = p.expect(TK_LIT_IF)?;
-    let stat = parse_stat(p)?;
+    let stat = _parse_stat(p)?;
     let lit_else_stat: Option<LitElseStatItem> = if p.peek_kind() == TK_LIT_ELSE {
         let lit_else = p.expect(TK_LIT_ELSE)?;
-        let stat = parse_stat(p)?;
+        let stat = _parse_stat(p)?;
         let lit_else_stat = LitElseStatItem {
             lit_else,
             stat,
@@ -948,10 +948,20 @@ fn parse_ifstat(p: &mut Parser) -> Result<IfstatNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<StatNode, ParseError> {
+pub fn parse_stat(input: &String) -> Result<StatNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_stat(&mut parser);
+    return _parse_stat(&mut parser);
+}
+
+pub fn parse_ifstat(input: &String) -> Result<IfstatNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_ifstat(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<StatNode, ParseError> {
+    return parse_stat(input);
 }
 
 pub fn walk_stat<V: Visitor>(v: &mut V, node: &StatNode) {

@@ -918,10 +918,10 @@ fn scan_c(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
+fn _parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
     let start = p.peek().span.start;
-    let a = parse_a__follow_0(p)?;
-    let c = parse_c(p)?;
+    let a = _parse_a__follow_0(p)?;
+    let c = _parse_c(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<RNode, ParseError>::Ok(RNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -931,7 +931,7 @@ fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
     });
 }
 
-fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let n = p.expect(TK_N)?;
     let mut x_y_list: Array<XYItem> = [];
@@ -973,7 +973,7 @@ fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     });
 }
 
-fn parse_c(p: &mut Parser) -> Result<CNode, ParseError> {
+fn _parse_c(p: &mut Parser) -> Result<CNode, ParseError> {
     let start = p.peek().span.start;
     let x = p.expect(TK_X)?;
     let y = p.expect(TK_Y)?;
@@ -1018,7 +1018,7 @@ fn scan_a__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_a__follow_0(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a__follow_0(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let n = p.expect(TK_N)?;
     let mut x_y_list: Array<XYItem> = [];
@@ -1061,10 +1061,26 @@ fn parse_a__follow_0(p: &mut Parser) -> Result<ANode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<RNode, ParseError> {
+pub fn parse_r(input: &String) -> Result<RNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_r(&mut parser);
+    return _parse_r(&mut parser);
+}
+
+pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_a(&mut parser);
+}
+
+pub fn parse_c(input: &String) -> Result<CNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_c(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<RNode, ParseError> {
+    return parse_r(input);
 }
 
 pub fn walk_r<V: Visitor>(v: &mut V, node: &RNode) {

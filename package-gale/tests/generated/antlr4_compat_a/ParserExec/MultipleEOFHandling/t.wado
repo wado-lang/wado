@@ -835,7 +835,7 @@ fn scan_prog(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
+fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     let start = p.peek().span.start;
     let mut group_0_inner: Option<ProgGroup0> = null;
     let grp_kind = p.peek_kind();
@@ -878,10 +878,14 @@ fn parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<ProgNode, ParseError> {
+pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_prog(&mut parser);
+    return _parse_prog(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<ProgNode, ParseError> {
+    return parse_prog(input);
 }
 
 pub fn walk_prog<V: Visitor>(v: &mut V, node: &ProgNode) {

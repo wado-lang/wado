@@ -1013,7 +1013,7 @@ fn scan_typespec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
+fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     let start = p.peek().span.start;
     let mut entry_list: Array<EntryNode> = [];
     let mut _plus_first = true;
@@ -1031,7 +1031,7 @@ fn parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let entry = parse_entry(p)?;
+        let entry = _parse_entry(p)?;
         entry_list.push(entry);
     }
     let eof = p.expect(TK_EOF)?;
@@ -1042,12 +1042,12 @@ fn parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     });
 }
 
-fn parse_entry(p: &mut Parser) -> Result<EntryNode, ParseError> {
+fn _parse_entry(p: &mut Parser) -> Result<EntryNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
-        let typespec = parse_typespec(p)?;
+        let typespec = _parse_typespec(p)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
         return Result::<EntryNode, ParseError>::Ok(EntryNode::Alt0(EntryAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -1058,7 +1058,7 @@ fn parse_entry(p: &mut Parser) -> Result<EntryNode, ParseError> {
     }
     if kind == TK_LIT_NEW {
         let lit_new = p.expect(TK_LIT_NEW)?;
-        let typespec = parse_typespec(p)?;
+        let typespec = _parse_typespec(p)?;
         let lbracket = p.expect(TK_LIT_LBRACKET)?;
         let int = p.expect(TK_INT)?;
         let rbracket = p.expect(TK_LIT_RBRACKET)?;
@@ -1078,7 +1078,7 @@ fn parse_entry(p: &mut Parser) -> Result<EntryNode, ParseError> {
     ));
 }
 
-fn parse_typespec_bt_1(p: &mut Parser) -> Result<TypespecNode, ParseError> {
+fn _parse_typespec_bt_1(p: &mut Parser) -> Result<TypespecNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
@@ -1091,7 +1091,7 @@ fn parse_typespec_bt_1(p: &mut Parser) -> Result<TypespecNode, ParseError> {
     }));
 }
 
-fn parse_typespec_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_typespec_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
@@ -1102,7 +1102,7 @@ fn parse_typespec_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_typespec_bt_0(p: &mut Parser) -> Result<TypespecNode, ParseError> {
+fn _parse_typespec_bt_0(p: &mut Parser) -> Result<TypespecNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     return Result::<TypespecNode, ParseError>::Ok(TypespecNode::Alt0(TypespecAlt0 {
@@ -1111,21 +1111,21 @@ fn parse_typespec_bt_0(p: &mut Parser) -> Result<TypespecNode, ParseError> {
     }));
 }
 
-fn parse_typespec_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_typespec_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn parse_typespec(p: &mut Parser) -> Result<TypespecNode, ParseError> {
+fn _parse_typespec(p: &mut Parser) -> Result<TypespecNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_ID {
         let _sd_tokens = &p.tokens;
         let _sd_pos = p.pos;
-        let _sd_p_1 = parse_typespec_scan_1(_sd_tokens, _sd_pos);
-        let _sd_p_0 = parse_typespec_scan_0(_sd_tokens, _sd_pos);
+        let _sd_p_1 = _parse_typespec_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_0 = _parse_typespec_scan_0(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_1 > _sd_best_p {
@@ -1137,12 +1137,12 @@ fn parse_typespec(p: &mut Parser) -> Result<TypespecNode, ParseError> {
             _sd_best_i = 0;
         }
         if _sd_best_i == 1 {
-            return parse_typespec_bt_1(p);
+            return _parse_typespec_bt_1(p);
         }
         if _sd_best_i == 0 {
-            return parse_typespec_bt_0(p);
+            return _parse_typespec_bt_0(p);
         }
-        return parse_typespec_bt_0(p);
+        return _parse_typespec_bt_0(p);
     }
     return Result::<TypespecNode, ParseError>::Err(ParseError::new(
         "expected typespec",
@@ -1151,10 +1151,26 @@ fn parse_typespec(p: &mut Parser) -> Result<TypespecNode, ParseError> {
     ));
 }
 
-pub fn parse(input: &String) -> Result<ProgNode, ParseError> {
+pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_prog(&mut parser);
+    return _parse_prog(&mut parser);
+}
+
+pub fn parse_entry(input: &String) -> Result<EntryNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_entry(&mut parser);
+}
+
+pub fn parse_typespec(input: &String) -> Result<TypespecNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_typespec(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<ProgNode, ParseError> {
+    return parse_prog(input);
 }
 
 pub fn walk_prog<V: Visitor>(v: &mut V, node: &ProgNode) {

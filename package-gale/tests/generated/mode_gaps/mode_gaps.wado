@@ -937,7 +937,7 @@ fn scan_text(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_text(p: &mut Parser) -> Result<TextNode, ParseError> {
+fn _parse_text(p: &mut Parser) -> Result<TextNode, ParseError> {
     let start = p.peek().span.start;
     let mut plain_or_string_list: Array<Token> = [];
     loop {
@@ -976,10 +976,14 @@ fn parse_text(p: &mut Parser) -> Result<TextNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<TextNode, ParseError> {
+pub fn parse_text(input: &String) -> Result<TextNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_text(&mut parser);
+    return _parse_text(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<TextNode, ParseError> {
+    return parse_text(input);
 }
 
 pub fn walk_text<V: Visitor>(v: &mut V, node: &TextNode) {

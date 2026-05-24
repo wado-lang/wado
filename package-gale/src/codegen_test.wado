@@ -752,7 +752,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"parse_expr(p, 2)"), "left-assoc '**' alt should recurse with own_prec+1 (=2)";
+    assert str_contains(&output, &"_parse_expr(p, 2)"), "left-assoc '**' alt should recurse with own_prec+1 (=2)";
 }
 
 test "generate right-associative LR alt passes own_prec on right operand" {
@@ -765,7 +765,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"parse_expr(p, 1)"), "right-assoc '**' alt should recurse with own_prec (=1)";
+    assert str_contains(&output, &"_parse_expr(p, 1)"), "right-assoc '**' alt should recurse with own_prec (=1)";
     // And the scan-side mirror must be kept in sync.
     assert str_contains(&output, &"scan_expr(tokens, pos, 1)"), "scan-side must mirror the right-assoc precedence";
 }
@@ -814,7 +814,7 @@ WS : [ \\t\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    let helper = extract_fn_body(&output, &"fn parse_expr_lr_");
+    let helper = extract_fn_body(&output, &"fn _parse_expr_lr_");
     assert str_contains(&helper, &"b: [left] as Array<ExprNode>,"), `LR helper must wrap a list-label \`left\` in an Array<T>-typed array literal:\n{helper}`;
 }
 
@@ -831,8 +831,8 @@ letterA : 'a' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    let parse_body = extract_fn_body(&output, &"fn parse_statement(");
-    assert str_contains(&parse_body, &"scan_statement_lr_1(") || str_contains(&parse_body, &"scan_statement_lr_1 ("), `parse_statement must consult scan_statement_lr_1 before parsing the LR suffix:\n{parse_body}`;
+    let parse_body = extract_fn_body(&output, &"fn _parse_statement(");
+    assert str_contains(&parse_body, &"scan_statement_lr_1(") || str_contains(&parse_body, &"scan_statement_lr_1 ("), `_parse_statement must consult scan_statement_lr_1 before parsing the LR suffix:\n{parse_body}`;
 }
 
 fn extract_fn_body(output: &String, header: &String) -> String {

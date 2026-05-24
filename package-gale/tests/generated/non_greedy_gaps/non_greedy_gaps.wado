@@ -1007,7 +1007,7 @@ fn scan_constant(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
+fn _parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
     let start = p.peek().span.start;
     let mut wildcard_list: Array<Token> = [];
     while !_gale_kind_set_0(p.peek_kind()) {
@@ -1036,7 +1036,7 @@ fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let constant = parse_constant(p)?;
+        let constant = _parse_constant(p)?;
         let mut wildcard_list: Array<Token> = [];
         while !_gale_kind_set_0(p.peek_kind()) {
             let wildcard = p.match_any()?;
@@ -1057,7 +1057,7 @@ fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
     });
 }
 
-fn parse_constant(p: &mut Parser) -> Result<ConstantNode, ParseError> {
+fn _parse_constant(p: &mut Parser) -> Result<ConstantNode, ParseError> {
     let start = p.peek().span.start;
     let lit_public = p.expect(TK_LIT_PUBLIC)?;
     let lit_static = p.expect(TK_LIT_STATIC)?;
@@ -1074,10 +1074,20 @@ fn parse_constant(p: &mut Parser) -> Result<ConstantNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<FileNode, ParseError> {
+pub fn parse_file(input: &String) -> Result<FileNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_file(&mut parser);
+    return _parse_file(&mut parser);
+}
+
+pub fn parse_constant(input: &String) -> Result<ConstantNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_constant(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<FileNode, ParseError> {
+    return parse_file(input);
 }
 
 pub fn walk_file<V: Visitor>(v: &mut V, node: &FileNode) {

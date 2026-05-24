@@ -945,7 +945,7 @@ fn scan_assign(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let mut group_0_list: Array<AGroup0> = [];
     let mut _plus_first = true;
@@ -992,7 +992,7 @@ fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
                 }
             }
             if gd_winner == 0 {
-                let assign = parse_assign(p)?;
+                let assign = _parse_assign(p)?;
                 group_0_opt = Option::<AGroup0>::Some(AGroup0::Alt0(AGroup0Alt0 {
                     assign,
                 }));
@@ -1017,7 +1017,7 @@ fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     });
 }
 
-fn parse_assign(p: &mut Parser) -> Result<AssignNode, ParseError> {
+fn _parse_assign(p: &mut Parser) -> Result<AssignNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let eq = p.expect(TK_LIT_EQ)?;
@@ -1032,10 +1032,20 @@ fn parse_assign(p: &mut Parser) -> Result<AssignNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<ANode, ParseError> {
+pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_a(&mut parser);
+    return _parse_a(&mut parser);
+}
+
+pub fn parse_assign(input: &String) -> Result<AssignNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_assign(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<ANode, ParseError> {
+    return parse_a(input);
 }
 
 pub fn walk_a<V: Visitor>(v: &mut V, node: &ANode) {

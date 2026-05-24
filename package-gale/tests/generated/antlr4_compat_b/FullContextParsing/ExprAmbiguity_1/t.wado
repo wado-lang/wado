@@ -903,16 +903,16 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
-    let expr = parse_expr(p)?;
+    let expr = _parse_expr(p)?;
     return Result::<SNode, ParseError>::Ok(SNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr,
     });
 }
 
-fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let mut group_0_list: Array<ExprGroup0> = [];
@@ -950,14 +950,14 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
         if rep_scan_pos < 0 { break; }
         let group_0: ExprGroup0 = if p.peek_kind() == TK_LIT_STAR {
             let star = p.expect(TK_LIT_STAR)?;
-            let expr = parse_expr(p)?;
+            let expr = _parse_expr(p)?;
             ExprGroup0::Alt0(ExprGroup0Alt0 {
                 star,
                 expr,
             })
         } else {
             let plus = p.expect(TK_LIT_PLUS)?;
-            let expr = parse_expr(p)?;
+            let expr = _parse_expr(p)?;
             ExprGroup0::Alt1(ExprGroup0Alt1 {
                 plus,
                 expr,
@@ -972,10 +972,20 @@ fn parse_expr(p: &mut Parser) -> Result<ExprNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<SNode, ParseError> {
+pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_s(&mut parser);
+    return _parse_s(&mut parser);
+}
+
+pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_expr(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<SNode, ParseError> {
+    return parse_s(input);
 }
 
 pub fn walk_s<V: Visitor>(v: &mut V, node: &SNode) {

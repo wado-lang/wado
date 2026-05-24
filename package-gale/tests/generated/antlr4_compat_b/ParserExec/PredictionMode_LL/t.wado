@@ -893,7 +893,7 @@ fn scan_b(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
+fn _parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
     let start = p.peek().span.start;
     let mut group_0_inner: Option<RGroup0> = null;
     let grp_kind = p.peek_kind();
@@ -912,14 +912,14 @@ fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
             }
         }
         if gd_winner == 0 {
-            let a = parse_a__follow_0(p)?;
-            let b = parse_b(p)?;
+            let a = _parse_a__follow_0(p)?;
+            let b = _parse_b(p)?;
             group_0_inner = Option::<RGroup0>::Some(RGroup0::Alt0(RGroup0Alt0 {
                 a,
                 b,
             }));
         } else {
-            let a = parse_a(p)?;
+            let a = _parse_a(p)?;
             group_0_inner = Option::<RGroup0>::Some(RGroup0::Alt1(RGroup0Alt1 {
                 a,
             }));
@@ -934,7 +934,7 @@ fn parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
     });
 }
 
-fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let x = p.expect(TK_X)?;
     let y: Option<Token> = if p.peek_kind() == TK_Y {
@@ -950,7 +950,7 @@ fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     });
 }
 
-fn parse_b(p: &mut Parser) -> Result<BNode, ParseError> {
+fn _parse_b(p: &mut Parser) -> Result<BNode, ParseError> {
     let start = p.peek().span.start;
     let y = p.expect(TK_Y)?;
     return Result::<BNode, ParseError>::Ok(BNode {
@@ -966,7 +966,7 @@ fn scan_a__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_a__follow_0(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a__follow_0(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let x = p.expect(TK_X)?;
     let y: Option<Token> = null;
@@ -977,10 +977,26 @@ fn parse_a__follow_0(p: &mut Parser) -> Result<ANode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<RNode, ParseError> {
+pub fn parse_r(input: &String) -> Result<RNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_r(&mut parser);
+    return _parse_r(&mut parser);
+}
+
+pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_a(&mut parser);
+}
+
+pub fn parse_b(input: &String) -> Result<BNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_b(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<RNode, ParseError> {
+    return parse_r(input);
 }
 
 pub fn walk_r<V: Visitor>(v: &mut V, node: &RNode) {

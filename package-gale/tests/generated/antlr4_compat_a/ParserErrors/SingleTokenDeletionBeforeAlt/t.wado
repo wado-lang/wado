@@ -830,7 +830,7 @@ fn scan_q(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let lit_b_or_lit_c = p.advance();
     return Result::<ANode, ParseError>::Ok(ANode {
@@ -839,7 +839,7 @@ fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     });
 }
 
-fn parse_q(p: &mut Parser) -> Result<QNode, ParseError> {
+fn _parse_q(p: &mut Parser) -> Result<QNode, ParseError> {
     let start = p.peek().span.start;
     let lit_a = p.expect(TK_LIT_A)?;
     return Result::<QNode, ParseError>::Ok(QNode {
@@ -848,10 +848,20 @@ fn parse_q(p: &mut Parser) -> Result<QNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<ANode, ParseError> {
+pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_a(&mut parser);
+    return _parse_a(&mut parser);
+}
+
+pub fn parse_q(input: &String) -> Result<QNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_q(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<ANode, ParseError> {
+    return parse_a(input);
 }
 
 pub fn walk_a<V: Visitor>(v: &mut V, node: &ANode) {
