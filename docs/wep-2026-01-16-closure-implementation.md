@@ -87,6 +87,8 @@ fn run(mut f: fn mut(i32)) { f(1); f(2); }
 
 Calling a `fn mut` closure through a non-`mut` binding is a compile error. This mirrors Rust's `FnMut` rule and corresponds to the `&mut self` calling convention.
 
+The check applies to the _root_ of the callee place, not just the immediate identifier. `(h.f)()`, `(a.b.c.f)()`, `arr[i]()`, and `(arr[i].f)()` all require the underlying binding (`h`, `a`, `arr`) to be `mut`. A binding whose type is `&mut T` is treated as a mutable place, so `(self.f)()` inside a `&mut self` method is accepted. A temporary root — a call result such as `(make_counter().f)()` — has no binding and is always accepted.
+
 `fn` closures do not require `mut`:
 
 ```wado

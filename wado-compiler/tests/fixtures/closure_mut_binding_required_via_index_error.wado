@@ -1,0 +1,17 @@
+// Calling a `fn mut` closure stored in an array element through a
+// non-`mut` binding must be a compile error. The root of the place
+// (the array binding) must be `mut`. See issue #1098.
+
+test "fn mut via index requires mut root binding" {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    let arr = [inc];
+    // `arr` is bound with `let`. The element type is `fn mut() -> ()`,
+    // so calling it through the immutable root must be rejected.
+    arr[0]();
+}
+
+__DATA__
+{"test": {}, "compile_error": "mut"}

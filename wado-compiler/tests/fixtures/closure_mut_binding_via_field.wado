@@ -1,0 +1,39 @@
+// Companion to closure_mut_binding_required_via_field_error.wado:
+// when the root binding *is* `mut`, calling a `fn mut` closure through
+// a field path is accepted. See issue #1098.
+
+struct Counter {
+    f: fn mut() -> (),
+}
+
+struct Inner {
+    f: fn mut() -> (),
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+test "field access: let mut allows fn mut call" {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    let mut h = Counter { f: inc };
+    (h.f)();
+    (h.f)();
+    assert count == 2;
+}
+
+test "nested field access: let mut on the root allows fn mut call" {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    let mut o = Outer { inner: Inner { f: inc } };
+    (o.inner.f)();
+    assert count == 1;
+}
+
+__DATA__
+{"test": {}}
