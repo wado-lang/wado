@@ -61,7 +61,6 @@ Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Rou
 
 ### Parser codegen
 
-- **Set element `('b' | 'c')` skips the kind-check dispatch.** `a : 'a' ('b'|'c') ;` is currently emitted as `let lit_b_or_lit_c = p.advance();` with no `peek_kind` guard, so any token silently consumes. Stage A regression: `ParserErrors/SingleTokenDeletionExpectingSet` returns `Ok` for `aab` instead of `Err`. Write a `tests/grammars/parser_set_group_dispatch.g4` fixture before the fix.
 - **LR rule with `returns` + list-label combination.** `LeftRecursion/ReturnValueAndActionsList1_{2,4}`: parse stops at the first comma in the input list. Investigate the LR-alt-rewrite path's interaction with list-label storage.
 - **LR operator-precedence chain.** `Performance/DropLoopEntryBranchInLRRule_4`: Gale picks the wrong precedence chain for an or-then-and expression.
 

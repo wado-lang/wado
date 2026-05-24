@@ -835,6 +835,61 @@ letterA : 'a' ;
     assert str_contains(&parse_body, &"scan_statement_lr_1(") || str_contains(&parse_body, &"scan_statement_lr_1 ("), `_parse_statement must consult scan_statement_lr_1 before parsing the LR suffix:\n{parse_body}`;
 }
 
+test "generate emits pub fn parse_<rule>(input) per parser rule" {
+    // Per-rule input entries are the start-rule API: callers route an
+    // input directly into rule R via `parse_R(input)` instead of having
+    // to construct a Parser and call `_parse_R(p)`. Generated parsers
+    // also keep `pub fn parse(input)` as a thin alias for the first
+    // rule's entry — downstream callers (driver tests, descriptors with
+    // no `[start]`) depend on it.
+    let input = "grammar Test;
+a : 'x' ;
+b : 'y' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, &"pub fn parse_a(input: &String)"), `parse_a public entry missing from output:\n{output}`;
+    assert str_contains(&output, &"pub fn parse_b(input: &String)"), `parse_b public entry missing from output:\n{output}`;
+    assert str_contains(&output, &"return _parse_a(&mut parser);"), `parse_a body must delegate to _parse_a:\n{output}`;
+    assert str_contains(&output, &"return _parse_b(&mut parser);"), `parse_b body must delegate to _parse_b:\n{output}`;
+    assert str_contains(&output, &"return parse_a(input);"), "parse(input) alias must call the first rule's input entry";
+}
+
+test "generate emits pub fn parse_<rule>(input) for LR rule with min_prec=0" {
+    // LR rules' internal helper takes a `min_prec: i32` parameter
+    // (see `lr_util.compute_prefix_self_ref_min_prec`); the public
+    // input entry must pin it to 0 so the top-level call admits every
+    // LR alt, matching the historic `parse(input)` behaviour.
+    let input = "grammar Test;
+expr : expr '+' expr | NUMBER ;
+NUMBER : [0-9]+ ;
+WS : [ \\t\\n]+ -> skip ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, &"pub fn parse_expr(input: &String)"), `parse_expr public entry missing from output:\n{output}`;
+    assert str_contains(&output, &"return _parse_expr(&mut parser, 0);"), `LR rule input entry must pin min_prec to 0:\n{output}`;
+}
+
+test "token-only group `(K_A | K_B)` gates p.advance() on a kind-check" {
+    // Regression: a token-only group used to emit as a bare
+    // `let lit_x_or_lit_y = p.advance();` with no `peek_kind` guard,
+    // so any token at that position was silently consumed. Surfaced
+    // by `ParserErrors/SingleTokenDeletionExpectingSet` and
+    // `ParserErrors/SingleTokenDeletionBeforeAlt`. After the fix the
+    // emit routes through `p.match_set([...])?` which fails when the
+    // current token is outside the set. Regression fixture:
+    // `tests/grammars/parser_set_group_dispatch.g4`.
+    let input = "grammar Test;
+a : 'a' ('b' | 'c') 'd' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    let body = extract_fn_body(&output, &"fn _parse_a(");
+    assert str_contains(&body, &"p.match_set(["), `_parse_a body must gate the token-only group through p.match_set([...]):\n{body}`;
+    assert !str_contains(&body, &"let lit_b_or_lit_c = p.advance();"), `_parse_a body must not emit a kind-check-less p.advance() for the token-only group:\n{body}`;
+}
+
 fn extract_fn_body(output: &String, header: &String) -> String {
     let start = find_substr(output, header);
     if start < 0 {

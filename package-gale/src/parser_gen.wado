@@ -350,6 +350,38 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.dedent();
     w.line(&"));");
     w.end();
+    w.blank();
+
+    // `p.match_set([TK_A, TK_B, ...])` — consumes one token whose kind is
+    // in the included set (for parser-side token-only groups like
+    // `('b' | 'c')`). Fails when the current token is outside the set
+    // (including EOF when EOF is not listed). EOF inside the set matches
+    // without advancing, mirroring `expect`'s `matchedEOF` behaviour so
+    // that a token-only group spelled `(X | EOF)` does not run the cursor
+    // past the sentinel.
+    let mut f11 = FnSpec::new("match_set");
+    f11.set_receiver(&"&mut self");
+    f11.add_param(&"included", &"Array<i32>");
+    f11.set_return_type(&"Result<Token, ParseError>");
+    f11.emit_begin(w);
+    w.line(&"let k = self.tokens[self.pos].kind;");
+    w.begin(&"for let x of included");
+    w.begin(&"if x == k");
+    w.begin(&"if k == TK_EOF");
+    w.line(&"return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);");
+    w.end();
+    w.line(&"return Result::<Token, ParseError>::Ok(self.advance());");
+    w.end();
+    w.end();
+    w.line(&"let tok = &self.tokens[self.pos];");
+    w.line(&"return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.indent();
+    w.line(&"`unexpected token \"{tok.text}\"`,");
+    w.line(&"tok.span,");
+    w.line(&"[\"token set\"],");
+    w.dedent();
+    w.line(&"));");
+    w.end();
 
     w.end();  // impl
     w.blank();
@@ -2800,12 +2832,36 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
 }
 
 /// Token-only group emit (`(K_A | K_B | …)`): `lower` matched the
-/// shape and assigned the outer field name in
-/// `TokenOnlyShape.field`. `alts` is unused here aside from the
-/// surface-side `dedup_name` side-effect.
+/// shape and assigned the outer field name in `TokenOnlyShape.field`.
+/// `alts` carries the token kinds of the alternatives — the emit gates
+/// `p.advance()` on a `match_set` check so a token outside the group
+/// fails cleanly instead of being silently consumed. ANTLR4 reports a
+/// `NoViableAltException` at the same site.
 fn gen_consume_token_group_op(w: &mut CodeWriter, to: &TokenOnlyShape, alts: &Array<Alternative>, name_counts: &mut Array<[String, i32]>) {
     let _ = dedup_name(&token_group_field_name(alts), name_counts);
-    w.line(&`let {to.field} = p.advance();`);
+    let kinds = collect_token_only_kinds(alts);
+    w.line(&`let {to.field} = p.match_set([{kinds}])?;`);
+}
+
+/// Render the comma-separated list of token-kind constants for a
+/// token-only group's alternatives. Each alt has exactly one element
+/// (a `TokenRef` or `Literal`), guaranteed by `is_token_only_group`.
+fn collect_token_only_kinds(alts: &Array<Alternative>) -> String {
+    let mut out = String::with_capacity(32);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if i > 0 {
+            out.push_str(&", ");
+        }
+        let elem = &alts[i].elements[0];
+        if let TokenRef(t) = elem {
+            out.push_str(&`TK_{t.name}`);
+        } else if let Literal(l) = elem {
+            out.push_str(&literal_const_name(&l.text));
+        } else {
+            panic("collect_token_only_kinds: token-only group alt is not TokenRef or Literal");
+        }
+    }
+    return out;
 }
 
 /// Single-alt group emit `(e1 e2 …)`: parses each inner element and
@@ -4035,7 +4091,8 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
 
 fn gen_consume_token_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let var_name = dedup_name(&token_group_field_name(alts), name_counts);
-    w.line(&`let {var_name} = p.advance();`);
+    let kinds = collect_token_only_kinds(alts);
+    w.line(&`let {var_name} = p.match_set([{kinds}])?;`);
 }
 
 /// Generate a general group store with Option wrapper (standalone Group in an alternative).

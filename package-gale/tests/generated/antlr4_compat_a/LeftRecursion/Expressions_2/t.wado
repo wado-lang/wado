@@ -955,6 +955,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_s(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -1181,7 +1199,7 @@ fn _parse_e_lr_3(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, Parse
 }
 
 fn _parse_e_lr_4(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
-    let plus_or_minus = p.advance();
+    let plus_or_minus = p.match_set([TK_LIT_PLUS, TK_LIT_MINUS])?;
     let e_2 = _parse_e(p, 2)?;
     return Result::<ENode, ParseError>::Ok(ENode::Alt4(EAlt4 {
         span: Span::new(start, i32::max(start, p.last_end())),

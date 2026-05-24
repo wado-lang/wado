@@ -17,8 +17,6 @@ use t from "../../grammars/ParserErrors/SingleTokenDeletionBeforeAlt.g4"
         },
     };
 
-#[TODO]
-// triage: parse-must-error: same set-element codegen bug as `SingleTokenDeletionExpectingSet` — rule `a : ('b'|'c')` consumes the leading 'a' without a kind-check dispatch, so `parse_a(ac)` returns Ok where ANTLR4 reports an error (Stage C-independent)
 test "stage_a_err: ParserErrors/SingleTokenDeletionBeforeAlt" {
     let input = "ac";
     let result = t::parse_a(&input);

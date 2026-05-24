@@ -1,5 +1,5 @@
-#![generated(by = "local:src/generator.wado", sources = ["../../grammars/LeftRecursion/Declarations_10.g4"])]
-#![generated(by = "gale", sources = ["T.g4"])]
+#![generated(by = "local:src/generator.wado", sources = ["grammars/parser_set_group_dispatch.g4"])]
+#![generated(by = "gale", sources = ["ParserSetGroupDispatch.g4"])]
 
 /// Span represents a byte range in source text.
 pub struct Span {
@@ -600,83 +600,26 @@ fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
 }
 
 pub enum TokenKind {
-    ID,
-    INT,
     WS,
     Eof,
     Error,
 }
 
-pub struct SNode {
+pub struct ProgNode {
     pub span: Span,
-    pub declarator: DeclaratorNode,
+    pub lit_a: Token,
+    pub lit_b_or_lit_c: Token,
+    pub lit_d: Token,
     pub eof: Token,
 }
 
-pub variant DeclaratorNode {
-    Alt0(DeclaratorAlt0),
-    Alt1(DeclaratorAlt1),
-    Alt2(DeclaratorAlt2),
-    Alt3(DeclaratorAlt3),
-    Alt4(DeclaratorAlt4),
-    Alt5(DeclaratorAlt5),
-}
-
-pub struct DeclaratorAlt0 {
-    pub span: Span,
-    pub declarator: DeclaratorNode,
-    pub lbracket: Token,
-    pub e: ENode,
-    pub rbracket: Token,
-}
-
-pub struct DeclaratorAlt1 {
-    pub span: Span,
-    pub declarator: DeclaratorNode,
-    pub lbracket: Token,
-    pub rbracket: Token,
-}
-
-pub struct DeclaratorAlt2 {
-    pub span: Span,
-    pub declarator: DeclaratorNode,
-    pub lparen: Token,
-    pub rparen: Token,
-}
-
-pub struct DeclaratorAlt3 {
-    pub span: Span,
-    pub star: Token,
-    pub declarator: DeclaratorNode,
-}
-
-pub struct DeclaratorAlt4 {
-    pub span: Span,
-    pub lparen: Token,
-    pub declarator: DeclaratorNode,
-    pub rparen: Token,
-}
-
-pub struct DeclaratorAlt5 {
-    pub span: Span,
-    pub id: Token,
-}
-
-pub struct ENode {
-    pub span: Span,
-    pub int: Token,
-}
-
-global TK_ID: i32 = 0;
-global TK_INT: i32 = 1;
-global TK_WS: i32 = 2;
-global TK_EOF: i32 = 3;
-global TK_ERROR: i32 = 4;
-global TK_LIT_LBRACKET: i32 = 5;
-global TK_LIT_RBRACKET: i32 = 6;
-global TK_LIT_LPAREN: i32 = 7;
-global TK_LIT_RPAREN: i32 = 8;
-global TK_LIT_STAR: i32 = 9;
+global TK_WS: i32 = 0;
+global TK_EOF: i32 = 1;
+global TK_ERROR: i32 = 2;
+global TK_LIT_A: i32 = 3;
+global TK_LIT_B: i32 = 4;
+global TK_LIT_C: i32 = 5;
+global TK_LIT_D: i32 = 6;
 
 struct Lexer {
     chars: Array<char>,
@@ -697,89 +640,34 @@ impl Lexer {
     }
 }
 
-fn try_id(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || !('a' <= chars[pos] <= 'z') { return -1; }
-    pos += 1;
-    loop {
-        let rep_saved_0 = pos;
-        rep_0: {
-            if pos >= chars.len() || !('a' <= chars[pos] <= 'z') { break rep_0; }
-            pos += 1;
-            continue;
-        }
-        pos = rep_saved_0;
-        break;
-    }
-    return pos;
-}
-
-fn try_int(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || !('0' <= chars[pos] <= '9') { return -1; }
-    pos += 1;
-    loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() || !('0' <= chars[pos] <= '9') { break rep_1; }
-            pos += 1;
-            continue;
-        }
-        pos = rep_saved_1;
-        break;
-    }
-    return pos;
-}
-
 fn try_ws(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_2 = pos;
-    let mut alts_ok_2 = false;
-    alts_2_0: {
-        pos = alts_saved_2;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_2_0; }
-        pos += 1;
-        alts_ok_2 = true;
-    }
-    if !alts_ok_2 {
-        alts_2_1: {
-            pos = alts_saved_2;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_2_1; }
-            pos += 1;
-            alts_ok_2 = true;
-        }
-    }
-    if !alts_ok_2 { return -1; }
+    if pos >= chars.len() || chars[pos] != ' ' { return -1; }
+    pos += 1;
     return pos;
 }
 
-fn try_lit_lbracket(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_a(chars: &Array<char>, start: i32) -> i32 {
     let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '[' { return -1; }
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'a' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_rbracket(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_b(chars: &Array<char>, start: i32) -> i32 {
     let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != ']' { return -1; }
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'b' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_lparen(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_c(chars: &Array<char>, start: i32) -> i32 {
     let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '(' { return -1; }
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'c' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_rparen(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_d(chars: &Array<char>, start: i32) -> i32 {
     let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != ')' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_star(chars: &Array<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '*' { return -1; }
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'd' { return -1; }
     return pos + 1;
 }
 
@@ -793,30 +681,17 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == '\n' || first_char == ' ' {
+        if first_char == ' ' {
             end = try_ws(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == '(' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LPAREN; }
-        } else if first_char == ')' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RPAREN; }
-        } else if first_char == '*' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_STAR; }
-        } else if first_char == '[' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LBRACKET; }
-        } else if first_char == ']' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RBRACKET; }
-        } else if 'a' <= first_char <= 'z' {
-            end = try_id(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if '0' <= first_char <= '9' {
-            end = try_int(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
-        } else {
-            end = try_id(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-            end = try_int(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
+        } else if first_char == 'a' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_A; }
+        } else if first_char == 'b' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_B; }
+        } else if first_char == 'c' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_C; }
+        } else if first_char == 'd' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_D; }
         }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
@@ -842,16 +717,13 @@ pub fn tokenize(input: &String) -> Array<Token> {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_ID => "ID",
-        TK_INT => "INT",
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_LBRACKET => "TK_LIT_LBRACKET",
-        TK_LIT_RBRACKET => "TK_LIT_RBRACKET",
-        TK_LIT_LPAREN => "TK_LIT_LPAREN",
-        TK_LIT_RPAREN => "TK_LIT_RPAREN",
-        TK_LIT_STAR => "TK_LIT_STAR",
+        TK_LIT_A => "TK_LIT_A",
+        TK_LIT_B => "TK_LIT_B",
+        TK_LIT_C => "TK_LIT_C",
+        TK_LIT_D => "TK_LIT_D",
         _ => "Unknown",
     };
 }
@@ -969,352 +841,70 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_prog(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_declarator(tokens, pos, 0);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_A { return -1; }
+    pos += 1;
+    let gp_0 = pos;
+    sg_0: {
+        pos = gp_0;
+        sg_0_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_B { break sg_0_0; }
+            pos += 1;
+            break sg_0;
+        }
+        pos = gp_0;
+        sg_0_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_C { break sg_0_1; }
+            pos += 1;
+            break sg_0;
+        }
+        return -1;
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_D { return -1; }
+    pos += 1;
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_declarator_atom(tokens: &Array<Token>, pos: i32) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_STAR {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { break try_0; }
-                pos += 1;
-                pos = scan_declarator(tokens, pos, 0);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_LIT_LPAREN {
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_1; }
-                pos += 1;
-                pos = scan_declarator(tokens, pos, 0);
-                if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_ID {
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_2; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
-        }
-    }
-    return pos;
-}
-
-fn scan_declarator_lr_0(tokens: &Array<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
-    pos += 1;
-    pos = scan_e(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_declarator_lr_1(tokens: &Array<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_declarator_lr_2(tokens: &Array<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_declarator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_declarator_atom(tokens, pos);
-    if pos < 0 { return -1; }
-    loop {
-        let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-        if suffix_kind == TK_LIT_LBRACKET {
-            if suffix_kind == TK_LIT_LBRACKET {
-                let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1].kind } else { TK_EOF };
-                if second_kind == TK_INT {
-                    if 3 >= min_prec {
-                        let lr_saved_pos = pos;
-                        pos = scan_declarator_lr_0(tokens, pos);
-                        if pos < 0 { pos = lr_saved_pos; break; }
-                    } else {
-                        break;
-                    }
-                } else {
-                    if 2 >= min_prec {
-                        let lr_saved_pos = pos;
-                        pos = scan_declarator_lr_1(tokens, pos);
-                        if pos < 0 { pos = lr_saved_pos; break; }
-                    } else {
-                        break;
-                    }
-                }
-            }
-        } else if suffix_kind == TK_LIT_LPAREN {
-            if 1 >= min_prec {
-                let lr_saved_pos = pos;
-                pos = scan_declarator_lr_2(tokens, pos);
-                if pos < 0 { pos = lr_saved_pos; break; }
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-    return pos;
-}
-
-fn scan_e(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_INT { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     let start = p.peek().span.start;
-    let declarator = _parse_declarator(p)?;
+    let lit_a = p.expect(TK_LIT_A)?;
+    let lit_b_or_lit_c = p.match_set([TK_LIT_B, TK_LIT_C])?;
+    let lit_d = p.expect(TK_LIT_D)?;
     let eof = p.expect(TK_EOF)?;
-    return Result::<SNode, ParseError>::Ok(SNode {
+    return Result::<ProgNode, ParseError>::Ok(ProgNode {
         span: Span::new(start, i32::max(start, p.last_end())),
-        declarator,
+        lit_a,
+        lit_b_or_lit_c,
+        lit_d,
         eof,
     });
 }
 
-fn _parse_declarator_atom(p: &mut Parser) -> Result<DeclaratorNode, ParseError> {
-    let start = p.peek().span.start;
-    let kind = p.peek_kind();
-    if kind == TK_LIT_STAR {
-        let star = p.expect(TK_LIT_STAR)?;
-        let declarator = _parse_declarator(p, 1)?;
-        return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt3(DeclaratorAlt3 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            star,
-            declarator,
-        }));
-    }
-    if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN)?;
-        let declarator = _parse_declarator(p)?;
-        let rparen = p.expect(TK_LIT_RPAREN)?;
-        return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt4(DeclaratorAlt4 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            lparen,
-            declarator,
-            rparen,
-        }));
-    }
-    if kind == TK_ID {
-        let id = p.expect(TK_ID)?;
-        return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt5(DeclaratorAlt5 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            id,
-        }));
-    }
-    return Result::<DeclaratorNode, ParseError>::Err(ParseError::new(
-        "expected declarator",
-        p.peek().span,
-        ["TK_LIT_STAR", "TK_LIT_LPAREN", "TK_ID"],
-    ));
-}
-
-fn _parse_declarator_lr_0(p: &mut Parser, left: DeclaratorNode, start: i32) -> Result<DeclaratorNode, ParseError> {
-    let lbracket = p.expect(TK_LIT_LBRACKET)?;
-    let e = _parse_e(p)?;
-    let rbracket = p.expect(TK_LIT_RBRACKET)?;
-    return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt0(DeclaratorAlt0 {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        declarator: left,
-        lbracket,
-        e,
-        rbracket,
-    }));
-}
-
-fn _parse_declarator_lr_1(p: &mut Parser, left: DeclaratorNode, start: i32) -> Result<DeclaratorNode, ParseError> {
-    let lbracket = p.expect(TK_LIT_LBRACKET)?;
-    let rbracket = p.expect(TK_LIT_RBRACKET)?;
-    return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt1(DeclaratorAlt1 {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        declarator: left,
-        lbracket,
-        rbracket,
-    }));
-}
-
-fn _parse_declarator_lr_2(p: &mut Parser, left: DeclaratorNode, start: i32) -> Result<DeclaratorNode, ParseError> {
-    let lparen = p.expect(TK_LIT_LPAREN)?;
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt2(DeclaratorAlt2 {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        declarator: left,
-        lparen,
-        rparen,
-    }));
-}
-
-fn _parse_declarator(p: &mut Parser, min_prec: i32 = 0) -> Result<DeclaratorNode, ParseError> {
-    let start = p.peek().span.start;
-    let mut result = _parse_declarator_atom(p)?;
-    loop {
-        let suffix_kind = p.peek_kind();
-        if suffix_kind == TK_LIT_LBRACKET {
-            if suffix_kind == TK_LIT_LBRACKET {
-                if p.peek_at(1) == TK_INT {
-                    if 3 >= min_prec {
-                        if scan_declarator_lr_0(&p.tokens, p.pos) < 0 {
-                            break;
-                        }
-                        result = _parse_declarator_lr_0(p, result, start)?;
-                    } else {
-                        break;
-                    }
-                } else {
-                    if 2 >= min_prec {
-                        if scan_declarator_lr_1(&p.tokens, p.pos) < 0 {
-                            break;
-                        }
-                        result = _parse_declarator_lr_1(p, result, start)?;
-                    } else {
-                        break;
-                    }
-                }
-            }
-        } else if suffix_kind == TK_LIT_LPAREN {
-            if 1 >= min_prec {
-                if scan_declarator_lr_2(&p.tokens, p.pos) < 0 {
-                    break;
-                }
-                result = _parse_declarator_lr_2(p, result, start)?;
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-    return Result::<DeclaratorNode, ParseError>::Ok(result);
-}
-
-fn _parse_e(p: &mut Parser) -> Result<ENode, ParseError> {
-    let start = p.peek().span.start;
-    let int = p.expect(TK_INT)?;
-    return Result::<ENode, ParseError>::Ok(ENode {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        int,
-    });
-}
-
-pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
+pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return _parse_s(&mut parser);
+    return _parse_prog(&mut parser);
 }
 
-pub fn parse_declarator(input: &String) -> Result<DeclaratorNode, ParseError> {
-    let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
-    return _parse_declarator(&mut parser, 0);
+pub fn parse(input: &String) -> Result<ProgNode, ParseError> {
+    return parse_prog(input);
 }
 
-pub fn parse_e(input: &String) -> Result<ENode, ParseError> {
-    let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
-    return _parse_e(&mut parser);
-}
-
-pub fn parse(input: &String) -> Result<SNode, ParseError> {
-    return parse_s(input);
-}
-
-pub fn walk_s<V: Visitor>(v: &mut V, node: &SNode) {
-    v.enter_rule(0, &"s", &node.span);
-    walk_declarator(v, &node.declarator);
+pub fn walk_prog<V: Visitor>(v: &mut V, node: &ProgNode) {
+    v.enter_rule(0, &"prog", &node.span);
+    v.visit_token(&node.lit_a);
+    v.visit_token(&node.lit_b_or_lit_c);
+    v.visit_token(&node.lit_d);
     v.visit_token(&node.eof);
-    v.exit_rule(0, &"s", &node.span);
+    v.exit_rule(0, &"prog", &node.span);
 }
 
-pub fn walk_declarator<V: Visitor>(v: &mut V, node: &DeclaratorNode) {
-    match node {
-        Alt0(n) => {
-            v.enter_rule(1, &"declarator", &n.span);
-            walk_declarator(v, &n.declarator);
-            v.visit_token(&n.lbracket);
-            walk_e(v, &n.e);
-            v.visit_token(&n.rbracket);
-            v.exit_rule(1, &"declarator", &n.span);
-        }
-        Alt1(n) => {
-            v.enter_rule(1, &"declarator", &n.span);
-            walk_declarator(v, &n.declarator);
-            v.visit_token(&n.lbracket);
-            v.visit_token(&n.rbracket);
-            v.exit_rule(1, &"declarator", &n.span);
-        }
-        Alt2(n) => {
-            v.enter_rule(1, &"declarator", &n.span);
-            walk_declarator(v, &n.declarator);
-            v.visit_token(&n.lparen);
-            v.visit_token(&n.rparen);
-            v.exit_rule(1, &"declarator", &n.span);
-        }
-        Alt3(n) => {
-            v.enter_rule(1, &"declarator", &n.span);
-            v.visit_token(&n.star);
-            walk_declarator(v, &n.declarator);
-            v.exit_rule(1, &"declarator", &n.span);
-        }
-        Alt4(n) => {
-            v.enter_rule(1, &"declarator", &n.span);
-            v.visit_token(&n.lparen);
-            walk_declarator(v, &n.declarator);
-            v.visit_token(&n.rparen);
-            v.exit_rule(1, &"declarator", &n.span);
-        }
-        Alt5(n) => {
-            v.enter_rule(1, &"declarator", &n.span);
-            v.visit_token(&n.id);
-            v.exit_rule(1, &"declarator", &n.span);
-        }
-    }
-}
-
-pub fn walk_e<V: Visitor>(v: &mut V, node: &ENode) {
-    v.enter_rule(2, &"e", &node.span);
-    v.visit_token(&node.int);
-    v.exit_rule(2, &"e", &node.span);
-}
-
-pub fn to_tree(node: &SNode) -> CstNode {
+pub fn to_tree(node: &ProgNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
-    walk_s(&mut recorder, node);
+    walk_prog(&mut recorder, node);
     return recorder.build();
 }
 
