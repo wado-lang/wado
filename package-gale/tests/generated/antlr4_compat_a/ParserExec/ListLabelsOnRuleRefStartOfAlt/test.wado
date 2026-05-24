@@ -909,6 +909,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
@@ -1029,13 +1047,13 @@ fn scan_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
+fn _parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_NOT {
         let op = p.expect(TK_NOT)?;
         let mut args: Array<ExpressionNode> = [];
-        let expression = parse_expression(p, 3)?;
+        let expression = _parse_expression(p, 3)?;
         args.push(expression);
         return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode::Alt0(ExpressionAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -1057,7 +1075,7 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     ));
 }
 
-fn parse_expression_lr_1(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
+fn _parse_expression_lr_1(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let mut op_args_list: Array<OpArgsItem> = [];
     let mut _plus_first = true;
     loop {
@@ -1084,7 +1102,7 @@ fn parse_expression_lr_1(p: &mut Parser, left: ExpressionNode, start: i32) -> Re
         _plus_first = false;
         let op = p.expect(TK_AND)?;
         let mut args: Array<ExpressionNode> = [];
-        let expression = parse_expression(p)?;
+        let expression = _parse_expression(p)?;
         args.push(expression);
         let op_args = OpArgsItem {
             op,
@@ -1099,7 +1117,7 @@ fn parse_expression_lr_1(p: &mut Parser, left: ExpressionNode, start: i32) -> Re
     }));
 }
 
-fn parse_expression_lr_2(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
+fn _parse_expression_lr_2(p: &mut Parser, left: ExpressionNode, start: i32) -> Result<ExpressionNode, ParseError> {
     let mut op_args_list: Array<OpArgsItem> = [];
     let mut _plus_first = true;
     loop {
@@ -1126,7 +1144,7 @@ fn parse_expression_lr_2(p: &mut Parser, left: ExpressionNode, start: i32) -> Re
         _plus_first = false;
         let op = p.expect(TK_OR)?;
         let mut args: Array<ExpressionNode> = [];
-        let expression = parse_expression(p)?;
+        let expression = _parse_expression(p)?;
         args.push(expression);
         let op_args = OpArgsItem {
             op,
@@ -1141,9 +1159,9 @@ fn parse_expression_lr_2(p: &mut Parser, left: ExpressionNode, start: i32) -> Re
     }));
 }
 
-fn parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode, ParseError> {
+fn _parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = parse_expression_atom(p)?;
+    let mut result = _parse_expression_atom(p)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_AND {
@@ -1151,7 +1169,7 @@ fn parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode,
                 if scan_expression_lr_1(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_expression_lr_1(p, result, start)?;
+                result = _parse_expression_lr_1(p, result, start)?;
             } else {
                 break;
             }
@@ -1160,7 +1178,7 @@ fn parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode,
                 if scan_expression_lr_2(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_expression_lr_2(p, result, start)?;
+                result = _parse_expression_lr_2(p, result, start)?;
             } else {
                 break;
             }
@@ -1171,10 +1189,14 @@ fn parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<ExpressionNode,
     return Result::<ExpressionNode, ParseError>::Ok(result);
 }
 
-pub fn parse(input: &String) -> Result<ExpressionNode, ParseError> {
+pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_expression(&mut parser);
+    return _parse_expression(&mut parser, 0);
+}
+
+pub fn parse(input: &String) -> Result<ExpressionNode, ParseError> {
+    return parse_expression(input);
 }
 
 pub fn walk_expression<V: Visitor>(v: &mut V, node: &ExpressionNode) {

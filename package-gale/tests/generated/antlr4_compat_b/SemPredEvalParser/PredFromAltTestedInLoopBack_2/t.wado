@@ -820,6 +820,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_file_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -905,10 +923,10 @@ fn scan_s(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
+fn _parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
     let start = p.peek().span.start;
-    let para = parse_para(p)?;
-    let para_2 = parse_para(p)?;
+    let para = _parse_para(p)?;
+    let para_2 = _parse_para(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<FileNode, ParseError>::Ok(FileNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -918,9 +936,9 @@ fn parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
     });
 }
 
-fn parse_para(p: &mut Parser) -> Result<ParaNode, ParseError> {
+fn _parse_para(p: &mut Parser) -> Result<ParaNode, ParseError> {
     let start = p.peek().span.start;
-    let para_content = parse_para_content__follow_0(p)?;
+    let para_content = _parse_para_content__follow_0(p)?;
     let nl = p.expect(TK_NL)?;
     let nl_2 = p.expect(TK_NL)?;
     return Result::<ParaNode, ParseError>::Ok(ParaNode {
@@ -931,7 +949,7 @@ fn parse_para(p: &mut Parser) -> Result<ParaNode, ParseError> {
     });
 }
 
-fn parse_para_content(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
+fn _parse_para_content(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
     let start = p.peek().span.start;
     let mut lit_s_or_lit_x_or_nl_list: Array<Token> = [];
     let mut _plus_first = true;
@@ -969,7 +987,7 @@ fn parse_para_content(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let lit_s_or_lit_x_or_nl = p.advance();
+        let lit_s_or_lit_x_or_nl = p.match_set([TK_LIT_S, TK_LIT_X, TK_NL])?;
         lit_s_or_lit_x_or_nl_list.push(lit_s_or_lit_x_or_nl);
     }
     return Result::<ParaContentNode, ParseError>::Ok(ParaContentNode {
@@ -978,7 +996,7 @@ fn parse_para_content(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
     });
 }
 
-fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
     let lit_s = p.expect(TK_LIT_S)?;
     return Result::<SNode, ParseError>::Ok(SNode {
@@ -1041,7 +1059,7 @@ fn scan_para_content__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 
     return pos;
 }
 
-fn parse_para_content__follow_0(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
+fn _parse_para_content__follow_0(p: &mut Parser) -> Result<ParaContentNode, ParseError> {
     let start = p.peek().span.start;
     let mut lit_s_or_lit_x_or_nl_list: Array<Token> = [];
     let mut _plus_first = true;
@@ -1080,7 +1098,7 @@ fn parse_para_content__follow_0(p: &mut Parser) -> Result<ParaContentNode, Parse
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let lit_s_or_lit_x_or_nl = p.advance();
+        let lit_s_or_lit_x_or_nl = p.match_set([TK_LIT_S, TK_LIT_X, TK_NL])?;
         lit_s_or_lit_x_or_nl_list.push(lit_s_or_lit_x_or_nl);
     }
     return Result::<ParaContentNode, ParseError>::Ok(ParaContentNode {
@@ -1089,10 +1107,32 @@ fn parse_para_content__follow_0(p: &mut Parser) -> Result<ParaContentNode, Parse
     });
 }
 
-pub fn parse(input: &String) -> Result<FileNode, ParseError> {
+pub fn parse_file_(input: &String) -> Result<FileNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_file_(&mut parser);
+    return _parse_file_(&mut parser);
+}
+
+pub fn parse_para(input: &String) -> Result<ParaNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_para(&mut parser);
+}
+
+pub fn parse_para_content(input: &String) -> Result<ParaContentNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_para_content(&mut parser);
+}
+
+pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_s(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<FileNode, ParseError> {
+    return parse_file_(input);
 }
 
 pub fn walk_file_<V: Visitor>(v: &mut V, node: &FileNode) {

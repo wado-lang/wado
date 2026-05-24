@@ -875,6 +875,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_if_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -972,10 +990,10 @@ fn scan_else_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn parse_if_statement(p: &mut Parser) -> Result<IfStatementNode, ParseError> {
+fn _parse_if_statement(p: &mut Parser) -> Result<IfStatementNode, ParseError> {
     let start = p.peek().span.start;
     let lit_if = p.expect(TK_LIT_IF)?;
-    let expression = parse_expression(p)?;
+    let expression = _parse_expression(p)?;
     let mut group_0_inner: Option<IfStatementGroup0> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_THEN {
@@ -992,7 +1010,7 @@ fn parse_if_statement(p: &mut Parser) -> Result<IfStatementNode, ParseError> {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let executable_statement = parse_executable_statement(p)?;
+            let executable_statement = _parse_executable_statement(p)?;
             executable_statement_list.push(executable_statement);
         }
         let mut else_if_statement_list: Array<ElseIfStatementNode> = [];
@@ -1007,11 +1025,11 @@ fn parse_if_statement(p: &mut Parser) -> Result<IfStatementNode, ParseError> {
                 rep_scan_pos_2 = pos;
             }
             if rep_scan_pos_2 < 0 { break; }
-            let else_if_statement = parse_else_if_statement__follow_0(p)?;
+            let else_if_statement = _parse_else_if_statement__follow_0(p)?;
             else_if_statement_list.push(else_if_statement);
         }
         let else_statement: Option<ElseStatementNode> = if p.peek_kind() == TK_LIT_A {
-            let else_statement = parse_else_statement(p)?;
+            let else_statement = _parse_else_statement(p)?;
             Option::<ElseStatementNode>::Some(else_statement)
         } else {
             null
@@ -1030,7 +1048,7 @@ fn parse_if_statement(p: &mut Parser) -> Result<IfStatementNode, ParseError> {
             lit_then_executable_statement_else_if_statement_else_statement_lit_end_lit_if,
         }));
     } else if grp_kind == TK_LIT_A {
-        let executable_statement = parse_executable_statement(p)?;
+        let executable_statement = _parse_executable_statement(p)?;
         group_0_inner = Option::<IfStatementGroup0>::Some(IfStatementGroup0::Alt1(IfStatementGroup0Alt1 {
             executable_statement,
         }));
@@ -1044,11 +1062,11 @@ fn parse_if_statement(p: &mut Parser) -> Result<IfStatementNode, ParseError> {
     });
 }
 
-fn parse_else_if_statement(p: &mut Parser) -> Result<ElseIfStatementNode, ParseError> {
+fn _parse_else_if_statement(p: &mut Parser) -> Result<ElseIfStatementNode, ParseError> {
     let start = p.peek().span.start;
     let lit_else = p.expect(TK_LIT_ELSE)?;
     let lit_if = p.expect(TK_LIT_IF)?;
-    let expression = parse_expression(p)?;
+    let expression = _parse_expression(p)?;
     let lit_then = p.expect(TK_LIT_THEN)?;
     let mut executable_statement_list: Array<ExecutableStatementNode> = [];
     loop {
@@ -1062,7 +1080,7 @@ fn parse_else_if_statement(p: &mut Parser) -> Result<ElseIfStatementNode, ParseE
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let executable_statement = parse_executable_statement(p)?;
+        let executable_statement = _parse_executable_statement(p)?;
         executable_statement_list.push(executable_statement);
     }
     return Result::<ElseIfStatementNode, ParseError>::Ok(ElseIfStatementNode {
@@ -1075,7 +1093,7 @@ fn parse_else_if_statement(p: &mut Parser) -> Result<ElseIfStatementNode, ParseE
     });
 }
 
-fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
+fn _parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let lit_a = p.expect(TK_LIT_A)?;
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode {
@@ -1084,7 +1102,7 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     });
 }
 
-fn parse_executable_statement(p: &mut Parser) -> Result<ExecutableStatementNode, ParseError> {
+fn _parse_executable_statement(p: &mut Parser) -> Result<ExecutableStatementNode, ParseError> {
     let start = p.peek().span.start;
     let lit_a = p.expect(TK_LIT_A)?;
     return Result::<ExecutableStatementNode, ParseError>::Ok(ExecutableStatementNode {
@@ -1093,7 +1111,7 @@ fn parse_executable_statement(p: &mut Parser) -> Result<ExecutableStatementNode,
     });
 }
 
-fn parse_else_statement(p: &mut Parser) -> Result<ElseStatementNode, ParseError> {
+fn _parse_else_statement(p: &mut Parser) -> Result<ElseStatementNode, ParseError> {
     let start = p.peek().span.start;
     let lit_a = p.expect(TK_LIT_A)?;
     return Result::<ElseStatementNode, ParseError>::Ok(ElseStatementNode {
@@ -1115,11 +1133,11 @@ fn scan_else_if_statement__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i
     return pos;
 }
 
-fn parse_else_if_statement__follow_0(p: &mut Parser) -> Result<ElseIfStatementNode, ParseError> {
+fn _parse_else_if_statement__follow_0(p: &mut Parser) -> Result<ElseIfStatementNode, ParseError> {
     let start = p.peek().span.start;
     let lit_else = p.expect(TK_LIT_ELSE)?;
     let lit_if = p.expect(TK_LIT_IF)?;
-    let expression = parse_expression(p)?;
+    let expression = _parse_expression(p)?;
     let lit_then = p.expect(TK_LIT_THEN)?;
     let mut executable_statement_list: Array<ExecutableStatementNode> = [];
     return Result::<ElseIfStatementNode, ParseError>::Ok(ElseIfStatementNode {
@@ -1132,10 +1150,38 @@ fn parse_else_if_statement__follow_0(p: &mut Parser) -> Result<ElseIfStatementNo
     });
 }
 
-pub fn parse(input: &String) -> Result<IfStatementNode, ParseError> {
+pub fn parse_if_statement(input: &String) -> Result<IfStatementNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_if_statement(&mut parser);
+    return _parse_if_statement(&mut parser);
+}
+
+pub fn parse_else_if_statement(input: &String) -> Result<ElseIfStatementNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_else_if_statement(&mut parser);
+}
+
+pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_expression(&mut parser);
+}
+
+pub fn parse_executable_statement(input: &String) -> Result<ExecutableStatementNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_executable_statement(&mut parser);
+}
+
+pub fn parse_else_statement(input: &String) -> Result<ElseStatementNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_else_statement(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<IfStatementNode, ParseError> {
+    return parse_if_statement(input);
 }
 
 pub fn walk_ifStatement<V: Visitor>(v: &mut V, node: &IfStatementNode) {

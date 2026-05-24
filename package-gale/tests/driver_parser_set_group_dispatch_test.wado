@@ -1,0 +1,31 @@
+use g from "./grammars/parser_set_group_dispatch.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/parser_set_group_dispatch",
+        },
+    };
+
+test "set group accepts 'a b d'" {
+    let result = g::parse(&"a b d");
+    assert result matches { Ok(_) }, `expected Ok, got {result:?}`;
+}
+
+test "set group accepts 'a c d'" {
+    let result = g::parse(&"a c d");
+    assert result matches { Ok(_) }, `expected Ok, got {result:?}`;
+}
+
+test "set group rejects 'a x d' — token-only group must kind-check before consuming" {
+    // The bug: this used to return Ok because `('b'|'c')` emitted as
+    // `p.advance()` consumed `'x'` silently. After the fix the kind-check
+    // gate rejects it before the inner `'d'` would have a chance to fail.
+    let result = g::parse(&"a x d");
+    assert result matches { Err(_) }, `expected Err, got {result:?}`;
+}
+
+test "set group rejects EOF in place of the set" {
+    let result = g::parse(&"a");
+    assert result matches { Err(_) }, `expected Err, got {result:?}`;
+}

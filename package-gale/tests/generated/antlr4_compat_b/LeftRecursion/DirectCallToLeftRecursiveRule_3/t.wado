@@ -830,6 +830,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_a_atom(tokens: &Array<Token>, pos: i32) -> i32 {
@@ -866,7 +884,7 @@ fn scan_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_a_atom(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a_atom(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_ID {
@@ -883,7 +901,7 @@ fn parse_a_atom(p: &mut Parser) -> Result<ANode, ParseError> {
     ));
 }
 
-fn parse_a_lr_0(p: &mut Parser, left: ANode, start: i32) -> Result<ANode, ParseError> {
+fn _parse_a_lr_0(p: &mut Parser, left: ANode, start: i32) -> Result<ANode, ParseError> {
     let id = p.expect(TK_ID)?;
     return Result::<ANode, ParseError>::Ok(ANode::Alt0(AAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -892,9 +910,9 @@ fn parse_a_lr_0(p: &mut Parser, left: ANode, start: i32) -> Result<ANode, ParseE
     }));
 }
 
-fn parse_a(p: &mut Parser, min_prec: i32 = 0) -> Result<ANode, ParseError> {
+fn _parse_a(p: &mut Parser, min_prec: i32 = 0) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = parse_a_atom(p)?;
+    let mut result = _parse_a_atom(p)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_ID {
@@ -902,7 +920,7 @@ fn parse_a(p: &mut Parser, min_prec: i32 = 0) -> Result<ANode, ParseError> {
                 if scan_a_lr_0(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_a_lr_0(p, result, start)?;
+                result = _parse_a_lr_0(p, result, start)?;
             } else {
                 break;
             }
@@ -913,10 +931,14 @@ fn parse_a(p: &mut Parser, min_prec: i32 = 0) -> Result<ANode, ParseError> {
     return Result::<ANode, ParseError>::Ok(result);
 }
 
-pub fn parse(input: &String) -> Result<ANode, ParseError> {
+pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_a(&mut parser);
+    return _parse_a(&mut parser, 0);
+}
+
+pub fn parse(input: &String) -> Result<ANode, ParseError> {
+    return parse_a(input);
 }
 
 pub fn walk_a<V: Visitor>(v: &mut V, node: &ANode) {

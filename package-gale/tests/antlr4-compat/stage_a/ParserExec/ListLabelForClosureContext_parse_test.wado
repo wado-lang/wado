@@ -16,11 +16,9 @@ use t from "../../grammars/ParserExec/ListLabelForClosureContext.g4"
         },
     };
 
-#[TODO]
-// triage: parse-accepts-input: descriptor [start] is `expression` but Gale's `parse()` enters the first parser rule (`ifStatement`). Same gap as `ParserErrors/SingleTokenDeletionBeforeAlt`: `parse()` needs a start-rule parameter.
 test "stage_a_parse: ParserExec/ListLabelForClosureContext" {
     let input = "a";
-    let result = t::parse(&input);
+    let result = t::parse_expression(&input);
     if let Err(err) = &result {
         panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);
     }

@@ -904,6 +904,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_start(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -972,7 +990,7 @@ fn scan_if_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
+fn _parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
     let start = p.peek().span.start;
     let mut statement_list: Array<StatementNode> = [];
     let mut _plus_first = true;
@@ -990,7 +1008,7 @@ fn parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let statement = parse_statement(p)?;
+        let statement = _parse_statement(p)?;
         statement_list.push(statement);
     }
     return Result::<StartNode, ParseError>::Ok(StartNode {
@@ -999,7 +1017,7 @@ fn parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
     });
 }
 
-fn parse_statement(p: &mut Parser) -> Result<StatementNode, ParseError> {
+fn _parse_statement(p: &mut Parser) -> Result<StatementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_X {
@@ -1010,7 +1028,7 @@ fn parse_statement(p: &mut Parser) -> Result<StatementNode, ParseError> {
         }));
     }
     if kind == TK_LIT_IF {
-        let if_statement = parse_if_statement(p)?;
+        let if_statement = _parse_if_statement(p)?;
         return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt1(StatementAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             if_statement,
@@ -1023,14 +1041,14 @@ fn parse_statement(p: &mut Parser) -> Result<StatementNode, ParseError> {
     ));
 }
 
-fn parse_if_statement(p: &mut Parser) -> Result<IfStatementNode, ParseError> {
+fn _parse_if_statement(p: &mut Parser) -> Result<IfStatementNode, ParseError> {
     let start = p.peek().span.start;
     let lit_if = p.expect(TK_LIT_IF)?;
     let lit_y = p.expect(TK_LIT_Y)?;
-    let statement = parse_statement(p)?;
+    let statement = _parse_statement(p)?;
     let lit_else_statement: Option<LitElseStatementItem> = if p.peek_kind() == TK_LIT_ELSE {
         let lit_else = p.expect(TK_LIT_ELSE)?;
-        let statement = parse_statement(p)?;
+        let statement = _parse_statement(p)?;
         let lit_else_statement = LitElseStatementItem {
             lit_else,
             statement,
@@ -1048,10 +1066,26 @@ fn parse_if_statement(p: &mut Parser) -> Result<IfStatementNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<StartNode, ParseError> {
+pub fn parse_start(input: &String) -> Result<StartNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_start(&mut parser);
+    return _parse_start(&mut parser);
+}
+
+pub fn parse_statement(input: &String) -> Result<StatementNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_statement(&mut parser);
+}
+
+pub fn parse_if_statement(input: &String) -> Result<IfStatementNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_if_statement(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<StartNode, ParseError> {
+    return parse_start(input);
 }
 
 pub fn walk_start<V: Visitor>(v: &mut V, node: &StartNode) {

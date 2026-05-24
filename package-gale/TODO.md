@@ -54,7 +54,6 @@ All 17 `CompositeLexers` / `CompositeParsers` upstream descriptors auto-skip tod
 
 - **Composite (slave-grammar) descriptors.** 17 descriptors short-circuit on `parsed.slave_grammars.len() > 0`. Kiln's `use t from "<C>/<Name>.g4" with { ... }` directive needs to resolve `import S;` against sibling `<Name>.slaveN.g4` files. Once that lands the short-circuit comes out.
 - **Captured action output (Stage C deliverable).** Parser descriptors whose `[output]` is purely action-print stdout (e.g. `<writeln("S.a")>`) get claim (b) but no `[output]` comparison. Needs Stage C action-body translation in `codegen.wado` plus a parser-side `accumulated_output: String` API.
-- **`parse_<rule>` per-rule entries.** Several descriptors specify `[start]` as a non-first parser rule (`ParserExec/OpenDeviceStatement_*`, `ParserErrors/SingleTokenDeletionBeforeAlt`). Gale's `parse()` always enters at the first parser rule. Add a `parse_<rule>(input)` (or `parse_with_start(rule, input)`) and dispatch from the test file when `[start]` differs.
 
 ## Gale bugs surfaced by Stage A drivers
 
@@ -62,7 +61,6 @@ Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Rou
 
 ### Parser codegen
 
-- **Set element `('b' | 'c')` skips the kind-check dispatch.** `a : 'a' ('b'|'c') ;` is currently emitted as `let lit_b_or_lit_c = p.advance();` with no `peek_kind` guard, so any token silently consumes. Stage A regression: `ParserErrors/SingleTokenDeletionExpectingSet` returns `Ok` for `aab` instead of `Err`. Write a `tests/grammars/parser_set_group_dispatch.g4` fixture before the fix.
 - **LR rule with `returns` + list-label combination.** `LeftRecursion/ReturnValueAndActionsList1_{2,4}`: parse stops at the first comma in the input list. Investigate the LR-alt-rewrite path's interaction with list-label storage.
 - **LR operator-precedence chain.** `Performance/DropLoopEntryBranchInLRRule_4`: Gale picks the wrong precedence chain for an or-then-and expression.
 
@@ -85,7 +83,6 @@ These reject grammars wholesale — Gale codegen produces invalid Wado, so the d
 
 ### Runtime gaps (test compiles, fails at runtime)
 
-- **`parse()` ignores `[start]` rule** — `ParserExec/OpenDeviceStatement_{1,2}`, `ParserExec/ListLabelForClosureContext`, `ParserErrors/SingleTokenDeletionBeforeAlt`. Fix: add a `parse_<rule>(input)` per-rule entry point (or a `parse_with_start(rule, input)`), and dispatch into the rule named by `[start]` from the test file.
 - **Non-default-channel tokens don't appear in `to_lexer_string`** — `LexerExec/ReservedWordsEscaping`. Fix: either land non-default-channel tokens in the main stream (with a channel attribute) and have the parser filter, or extend `to_lexer_string` to walk `Token.leading_trivia` in source order.
 
 ## Stage C — action / predicate execution

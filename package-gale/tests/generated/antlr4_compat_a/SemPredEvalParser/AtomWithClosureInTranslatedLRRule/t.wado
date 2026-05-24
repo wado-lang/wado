@@ -820,6 +820,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_start(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -876,9 +894,9 @@ fn scan_e(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
+fn _parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
     let start = p.peek().span.start;
-    let e = parse_e(p)?;
+    let e = _parse_e(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<StartNode, ParseError>::Ok(StartNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -887,7 +905,7 @@ fn parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
     });
 }
 
-fn parse_e(p: &mut Parser) -> Result<ENode, ParseError> {
+fn _parse_e(p: &mut Parser) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let mut group_0_inner: Option<EGroup0> = null;
     let grp_kind = p.peek_kind();
@@ -942,7 +960,7 @@ fn parse_e(p: &mut Parser) -> Result<ENode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let plus = p.expect(TK_LIT_PLUS)?;
-        let e = parse_e(p)?;
+        let e = _parse_e(p)?;
         let plus_e = PlusEItem {
             plus,
             e,
@@ -956,10 +974,20 @@ fn parse_e(p: &mut Parser) -> Result<ENode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<StartNode, ParseError> {
+pub fn parse_start(input: &String) -> Result<StartNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_start(&mut parser);
+    return _parse_start(&mut parser);
+}
+
+pub fn parse_e(input: &String) -> Result<ENode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_e(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<StartNode, ParseError> {
+    return parse_start(input);
 }
 
 pub fn walk_start<V: Visitor>(v: &mut V, node: &StartNode) {
