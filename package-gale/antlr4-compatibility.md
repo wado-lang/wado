@@ -51,7 +51,14 @@ that should be fixed before Stage C lands.
 >   descriptor's `[output]` verbatim.
 
 Stage A is the hard contract. Any breakage here is a Gale bug, not a
-feature gap.
+feature gap. Gale makes no design decisions that drop compatibility
+checks — every runtime divergence from ANTLR4 is a gap to close, not a
+"by design" choice to enshrine. Where a particular check needs
+infrastructure that doesn't exist yet (Stage C action-body
+translation, Kiln multi-grammar plumbing, error recovery), the test
+is still emitted (`#[TODO]`-marked) so the gap stays visible in CI;
+the extractor's summary line reports how many tests are pending each
+piece of missing infrastructure.
 
 Three test sources cover Stage A:
 
@@ -78,7 +85,12 @@ Three test sources cover Stage A:
    - `_tokens_test.wado` — claim (d): assert `t::to_lexer_string(...)`
      matches the descriptor's `[output]`. Eligibility: `[type]` is
      `Lexer`, non-empty `[input]` and `[output]`, empty `[errors]`,
-     output passes `normalize_output_for_tokens`.
+     output contains at least one `[@…]` token-dump row. When the
+     `[output]` also carries action-print prefix lines (`<writeln(...)>`
+     echoes from `{ ... }` action bodies), the test is still emitted
+     and auto-`#[TODO]`-marked with a "Stage C action-body translation
+     pending" rationale — the actual `to_lexer_string` dump will lack
+     the prefix until Stage C lands, but the gap stays visible.
 
    The three variants are **mutually exclusive** on `[type]` +
    `[errors]`, so at most one variant per descriptor is emitted. A
@@ -236,15 +248,15 @@ triage state) live under `package-gale/tests/antlr4-compat/`:
 "<Category>/<Name>" = "one-line reason Stage B emission must be skipped"
 ```
 
-| State            | Effect                                                                                  | When to use                                                                                                                                 |
-| ---------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| (default)        | Test runs, must pass                                                                    | Descriptor is a clean ANTLR4 grammar Gale should accept                                                                                     |
-| `[todo]`         | Per-category claim-(a) test marked `#[TODO]` so failure is expected and recorded        | Descriptor exposes a real Gale gap (parser, lexer, or IR feature). Add a corresponding entry to `TODO.md`                                   |
-| `[skip]`         | Per-category claim-(a) test not emitted at all                                          | Descriptor relies on the upstream test runner's StringTemplate substitution / target-language template, so it is not a self-contained `.g4` |
-| `[stage_a_todo]` | Per-descriptor claim-(b/c/d) variant test emitted with `#[TODO]` so failure is expected | Generated parser/lexer behaviour diverges (LL prediction gap, codegen bug, lexer behavior gap, or Stage-C-blocked semantic predicate)       |
-| `[stage_a_skip]` | Per-descriptor claim-(b/c/d) variant test not emitted                                   | Gale codegen produces invalid Wado, or `[start]` differs from `parse()`'s entry by design                                                   |
-| `[stage_b_todo]` | Stage B test emitted with `#[TODO]` so divergence is expected                           | Tree-shape comparison fails at runtime (Gale codegen, LR rewriting, or Stage-C-blocked action handling)                                     |
-| `[stage_b_skip]` | Stage B test not emitted                                                                | Gale codegen produces invalid Wado for the descriptor's grammar; a `#[TODO]` marker would have nothing to attach to                         |
+| State            | Effect                                                                                  | When to use                                                                                                                                                                                                                                                                                            |
+| ---------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| (default)        | Test runs, must pass                                                                    | Descriptor is a clean ANTLR4 grammar Gale should accept                                                                                                                                                                                                                                                |
+| `[todo]`         | Per-category claim-(a) test marked `#[TODO]` so failure is expected and recorded        | Descriptor exposes a real Gale gap (parser, lexer, or IR feature). Add a corresponding entry to `TODO.md`                                                                                                                                                                                              |
+| `[skip]`         | Per-category claim-(a) test not emitted at all                                          | Descriptor relies on the upstream test runner's StringTemplate substitution / target-language template, so it is not a self-contained `.g4`                                                                                                                                                            |
+| `[stage_a_todo]` | Per-descriptor claim-(b/c/d) variant test emitted with `#[TODO]` so failure is expected | Generated parser/lexer behaviour diverges (LL prediction gap, codegen bug, lexer behavior gap, start-rule API gap, channel-routing gap, or Stage-C-blocked action / semantic predicate)                                                                                                                |
+| `[stage_a_skip]` | Per-descriptor claim-(b/c/d) variant test not emitted                                   | Gale codegen produces invalid Wado for the descriptor's grammar, so the test cannot even compile. Reserved for compile-blocking codegen bugs only — any *runtime* gap (start-rule mismatch, channel routing, missing API surface, etc.) goes to `[stage_a_todo]` so the failing test stays visible in CI. |
+| `[stage_b_todo]` | Stage B test emitted with `#[TODO]` so divergence is expected                           | Tree-shape comparison fails at runtime (Gale codegen, LR rewriting, or Stage-C-blocked action handling)                                                                                                                                                                                                |
+| `[stage_b_skip]` | Stage B test not emitted                                                                | Gale codegen produces invalid Wado for the descriptor's grammar; a `#[TODO]` marker would have nothing to attach to                                                                                                                                                                                    |
 
 The reason text is written verbatim into the generated test as a
 comment. Keep it free of backslashes and double quotes — the script's

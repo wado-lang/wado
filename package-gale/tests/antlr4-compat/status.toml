@@ -21,10 +21,14 @@
 #            entry keyed by `Category/Name` unambiguously targets the
 #            right test. Drop once the gap is closed.
 #   [stage_a_skip] — Stage A claims (b/c/d): emission of the
-#            per-descriptor driver is skipped entirely. Use when the
-#            grammar cannot be compiled by Gale or running through it
-#            would be meaningless (e.g. `[start]` rule differs from
-#            Gale's `parse()` entry by design).
+#            per-descriptor driver is skipped entirely. Reserved for
+#            COMPILE-blocking codegen bugs (e.g. Gale produces invalid
+#            Wado for the grammar, so no test file would even build).
+#            Any RUNTIME gap — start-rule mismatch, channel routing,
+#            missing API surface — belongs under `[stage_a_todo]` so the
+#            failing test stays visible in CI. We do NOT make
+#            compatibility judgements; every runtime divergence from
+#            ANTLR4 is a gap to close, not a design choice to enshrine.
 #
 #   [stage_b_todo] — Stage B: tree-shape comparison fails at runtime
 #            (full-tree or sub-tree variant); the test is emitted with
@@ -70,29 +74,29 @@
 "LexerExec/RecursiveLexerRuleRefWithWildcardPlus_1" = "tokens-equivalence: Gale lexer mistokenizes nested `/* /*...*/ */` comments — recursive lexer rule with `.+?` wildcard plus does not nest correctly (Stage C-independent)"
 "LexerExec/RecursiveLexerRuleRefWithWildcardStar_1" = "tokens-equivalence: Gale lexer mistokenizes nested `/* /*...*/ */` comments — recursive lexer rule with `.*?` wildcard star does not nest correctly (Stage C-independent)"
 "LexerExec/ZeroLengthToken" = "tokens-equivalence: Gale lexer does not merge the `-> more, pushMode(...)` and `-> more, mode(...)` chain into a single token across mode transitions (Stage C-independent)"
+"ParserErrors/SingleTokenDeletionBeforeAlt" = "parse-must-error: descriptor [start] is `a` but Gale's `parse()` always enters the first parser rule (`q`). q matches the leading `a` and stops without verifying EOF, so parse returns Ok where ANTLR4 reports an error. Gap: `parse()` needs a start-rule parameter (or `parse_<rule>` per-rule entry points) so descriptors can dispatch into the rule they intend."
+"ParserExec/ListLabelForClosureContext" = "parse-accepts-input: descriptor [start] is `expression` but Gale's `parse()` enters the first parser rule (`ifStatement`). Same gap as `ParserErrors/SingleTokenDeletionBeforeAlt`: `parse()` needs a start-rule parameter."
+"ParserExec/OpenDeviceStatement_Case1" = "parse-accepts-input: descriptor [start] is `statement` but Gale's `parse()` enters the first parser rule (`program : statement+ '.'`). Same start-rule API gap."
+"ParserExec/OpenDeviceStatement_Case2" = "parse-accepts-input: descriptor [start] is `statement` but Gale's `parse()` enters the first parser rule (`program : statement+ '.'`). Same start-rule API gap."
+"LexerExec/ReservedWordsEscaping" = "tokens-equivalence: expected output includes a `channel=N` token but Gale's lexer codegen routes non-default-channel tokens to `Token.leading_trivia` rather than the main stream, so `to_lexer_string` does not emit them. Gap: either land non-default-channel tokens in the main stream with a channel attribute (have the parser filter), or extend `to_lexer_string` to walk trivia in source order."
 
 [stage_a_skip]
-"LeftRecursion/WhitespaceInfluence_1" = "Gale codegen produces invalid Wado for the all-binary-op LR `expression` rule (operator alt rewrite bug)"
-"LeftRecursion/WhitespaceInfluence_2" = "Gale codegen produces invalid Wado for the all-binary-op LR `expression` rule (operator alt rewrite bug)"
-"ParserExec/IfIfElseNonGreedyBinding1" = "Gale codegen fails on the non-greedy optional `??` operator in a parser rule"
-"ParserExec/Labels" = "Gale codegen fails on parser-rule list-label `b2+=b*` / `b3+=';'` shape"
-"ParserExec/ListLabelForClosureContext" = "descriptor [start] is `expression` but Gale's `parse()` enters at the first parser rule (`ifStatement`)"
-"ParserExec/ListLabelsOnSet" = "Gale codegen fails on `val+=(INT | FLOAT)*` set list-label shape"
-"ParserExec/OpenDeviceStatement_Case1" = "descriptor [start] is `statement` but Gale's `parse()` enters at the first parser rule (`program : statement+ '.'`)"
-"ParserExec/OpenDeviceStatement_Case2" = "descriptor [start] is `statement` but Gale's `parse()` enters at the first parser rule (`program : statement+ '.'`)"
-"ParserExec/ReservedWordsEscaping" = "grammar uses `continue` / `break` / `else` / `if` / `class` / `int` as rule names — Gale codegen emits invalid Wado identifiers"
-"Performance/ExpressionGrammar_1" = "Gale codegen produces invalid Wado for the all-binary-op LR `expr` rule (operator alt rewrite bug)"
-"Performance/ExpressionGrammar_2" = "Gale codegen produces invalid Wado for the all-binary-op LR `expr` rule (operator alt rewrite bug)"
-"ParserErrors/SingleTokenDeletionBeforeAlt" = "parse-must-error: descriptor [start] is `a` but Gale enters first parser rule `q`; q matches the leading `a` token then stops without verifying EOF, so parse returns Ok (start-rule mismatch by design)"
-"LexerExec/ReservedWordsEscaping" = "tokens-equivalence: expected output includes a `channel=N` token which Gale routes to trivia (non-default-channel tokens are not part of the main stream by design)"
-"LexerExec/TokenType0xFFFF" = "tokens-equivalence: Gale codegen generates an `unknown identifier TK_65535` reference — high-numbered explicit token id rule needs codegen support"
+"LeftRecursion/WhitespaceInfluence_1" = "Gale codegen produces invalid Wado for the all-binary-op LR `expression` rule (operator alt rewrite bug) — test cannot even compile"
+"LeftRecursion/WhitespaceInfluence_2" = "Gale codegen produces invalid Wado for the all-binary-op LR `expression` rule (operator alt rewrite bug) — test cannot even compile"
+"ParserExec/IfIfElseNonGreedyBinding1" = "Gale codegen fails on the non-greedy optional `??` operator in a parser rule — test cannot even compile"
+"ParserExec/Labels" = "Gale codegen fails on parser-rule list-label `b2+=b*` / `b3+=';'` shape — test cannot even compile"
+"ParserExec/ListLabelsOnSet" = "Gale codegen fails on `val+=(INT | FLOAT)*` set list-label shape — test cannot even compile"
+"ParserExec/ReservedWordsEscaping" = "grammar uses `continue` / `break` / `else` / `if` / `class` / `int` as rule names — Gale codegen emits invalid Wado identifiers, test cannot even compile"
+"Performance/ExpressionGrammar_1" = "Gale codegen produces invalid Wado for the all-binary-op LR `expr` rule (operator alt rewrite bug) — test cannot even compile"
+"Performance/ExpressionGrammar_2" = "Gale codegen produces invalid Wado for the all-binary-op LR `expr` rule (operator alt rewrite bug) — test cannot even compile"
+"LexerExec/TokenType0xFFFF" = "Gale codegen generates an `unknown identifier TK_65535` reference — high-numbered explicit token id rule needs codegen support, test cannot even compile"
 
 [stage_b_todo]
 "LeftRecursion/SemPredFailOption" = "Stage B parse-tree shape diverges because action bodies are skipped (the predicate guard is dropped) — Stage C territory"
 "SemPredEvalParser/PredFromAltTestedInLoopBack_1" = "Stage B test parse fails with Result::Err — semantic predicate enforcement is Stage C"
 "SemPredEvalParser/PredFromAltTestedInLoopBack_2" = "Stage B test parse fails with Result::Err — semantic predicate enforcement is Stage C"
-"ParseTrees/ExtraToken" = "sub-tree: expected [output] is ANTLR4's error-recovered sub-tree; Gale has no error recovery so parse returns Err and the sub-tree navigation never runs (Stage C-independent: matches Gale's no-recovery design)"
-"ParseTrees/NoViableAlt" = "sub-tree: expected [output] is ANTLR4's error-recovered sub-tree; Gale has no error recovery so parse returns Err and the sub-tree navigation never runs (Stage C-independent)"
-"ParseTrees/Sync" = "sub-tree: expected [output] is ANTLR4's error-recovered sub-tree; Gale has no error recovery so parse returns Err and the sub-tree navigation never runs (Stage C-independent)"
+"ParseTrees/ExtraToken" = "sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (single-token deletion / insertion). Gale does not yet implement error recovery, so `parse()` returns `Err` on the bad token and the sub-tree navigation never runs. Gap: implement ANTLR4-style error recovery in the generated parser. (Stage C-independent)"
+"ParseTrees/NoViableAlt" = "sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (NoViableAlternativeException fallback). Same error-recovery gap as `ParseTrees/ExtraToken`."
+"ParseTrees/Sync" = "sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (synchronisation set fallback). Same error-recovery gap as `ParseTrees/ExtraToken`."
 
 [stage_b_skip]

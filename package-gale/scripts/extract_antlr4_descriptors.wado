@@ -780,34 +780,42 @@ fn stage_a_err_category_eligible(category: &String) -> bool {
 ///
 /// one line per token. Some descriptors prefix the dump with action-print
 /// output (`<writeln("foo")>` echoes inside `{ ... }` action bodies);
-/// those interleaved-print lines cannot be reproduced without Stage C, so
-/// we reject anything where the first non-empty line is not a `[@…` row.
+/// the prefix is reproducible only by Stage C action-body translation.
 ///
-/// Returns `Some(stripped)` when the output is a usable token dump (with
-/// any leading/trailing whitespace trimmed), `None` otherwise.
-fn normalize_output_for_tokens(raw: &String) -> Option<String> {
-    let mut first_seen = false;
+/// Returns:
+///   * `Clean(normalised)` — every non-empty line is a `[@…]` row. Eligible
+///     for a passing claim (d) test today.
+///   * `StageCBlocked(normalised)` — at least one non-`[@…]` prefix line is
+///     present. The test is still emitted (so the gap is visible in CI)
+///     and `#[TODO]`-marked with a Stage C rationale until action-body
+///     translation lands and the actual tokens dump gains the prefix.
+///   * `None` — the output cannot be reduced to a tokens dump at all
+///     (empty, or no `[@…]` line ever appears). Auto-skip.
+variant TokensTarget {
+    Clean(String),
+    StageCBlocked(String),
+}
+
+fn classify_output_for_tokens(raw: &String) -> Option<TokensTarget> {
+    let mut seen_token_line = false;
+    let mut has_action_prefix = false;
     for let line of raw.lines() {
         let t = line.trim();
         if t.is_empty() {
             continue;
         }
-        if !first_seen {
-            first_seen = true;
-            if !t.starts_with("[@") {
-                return null;
-            }
+        if t.starts_with("[@") {
+            seen_token_line = true;
         } else {
-            if !t.starts_with("[@") {
-                return null;
-            }
+            has_action_prefix = true;
         }
     }
-    if !first_seen {
+    if !seen_token_line {
+        // No `[@…]` line at all — not a tokens dump even with Stage C.
         return null;
     }
     // Re-emit with a trailing newline per line — matches what
-    // `to_lexer_string` produces — and trim outer whitespace.
+    // `to_lexer_string` (claim (d)) produces — and trim outer whitespace.
     let mut out = String::with_capacity(raw.len());
     for let line of raw.lines() {
         let t = line.trim();
@@ -817,7 +825,10 @@ fn normalize_output_for_tokens(raw: &String) -> Option<String> {
         out.push_str(&t);
         out.push('\n');
     }
-    return Option::<String>::Some(out);
+    if has_action_prefix {
+        return Option::<TokensTarget>::Some(TokensTarget::StageCBlocked(out));
+    }
+    return Option::<TokensTarget>::Some(TokensTarget::Clean(out));
 }
 
 /// Emit one Stage A claim (c) driver test file (parse-must-error) for
@@ -1054,9 +1065,16 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     let mut stage_a_parse_emitted = 0;
     let mut stage_a_err_emitted = 0;
     let mut stage_a_tokens_emitted = 0;
+    let mut stage_a_tokens_stage_c_blocked = 0;
     let mut stage_a_todo = 0;
     let mut stage_a_skip = 0;
     let mut stage_a_auto_skip = 0;
+    // Bookkeeping for what's deferred: not "by design" auto-skips but
+    // gaps that require infrastructure that doesn't exist yet. Track
+    // them explicitly so the extractor summary line reads "N tests
+    // pending Kiln multi-grammar plumbing" instead of disappearing into
+    // the generic auto-skip bucket.
+    let mut deferred_composite = 0;
     let mut stage_b_emitted = 0;
     let mut stage_b_todo = 0;
     let mut stage_b_skip = 0;
@@ -1207,7 +1225,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 && !parsed.output.is_empty()
                 && parsed.errors.is_empty()
                 && parsed.slave_grammars.len() == 0;
-            let tokens_output = if tokens_basic { normalize_output_for_tokens(&parsed.output) } else { null };
+            let tokens_target = if tokens_basic { classify_output_for_tokens(&parsed.output) } else { null };
 
             let parse_filename = `{base}_parse_test.wado`;
             let err_filename = `{base}_err_test.wado`;
@@ -1224,15 +1242,24 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 if let Err(_) = remove_file(&stage_a_cat_dir, &err_filename) {
                 }
             }
-            if tokens_output matches { None } {
+            if tokens_target matches { None } {
                 if let Err(_) = remove_file(&stage_a_cat_dir, &tokens_filename) {
                 }
             }
 
             let stage_a_triage = stage_a_triage_map.lookup(&key);
-            let any_eligible = parse_eligible || err_eligible || tokens_output matches { Some(_) };
+            let any_eligible = parse_eligible || err_eligible || tokens_target matches { Some(_) };
             if !any_eligible {
                 stage_a_auto_skip += 1;
+                // Composite descriptors (slave grammars) cannot reach Kiln's
+                // single-grammar `use ... from "..."` directive today — track
+                // them separately so they don't disappear into the generic
+                // auto-skip bucket. They will become eligible once the `use`
+                // directive learns to resolve `import S;` against sibling
+                // `<Name>.slaveN.g4` files.
+                if parsed.slave_grammars.len() > 0 {
+                    deferred_composite += 1;
+                }
             } else if let Skip(reason) = &stage_a_triage {
                 println(`  skipA: {key} — {*reason}`);
                 stage_a_skip += 1;
@@ -1266,15 +1293,37 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                     }
                     stage_a_err_emitted += 1;
                 }
-            } else if let Some(normalised_t) = tokens_output {
-                let src = emit_stage_a_tokens_test_file(category, &base, &parsed.input, &normalised_t, &stage_a_triage);
+            } else if let Some(target) = tokens_target {
+                // Resolve the final triage. When the descriptor's [output]
+                // carries an action-print prefix (StageCBlocked), the
+                // generated lexer's `to_lexer_string` actual output cannot
+                // match until Stage C lands — auto-mark `#[TODO]` so the
+                // gap is recorded as expected-to-fail rather than hidden
+                // behind an auto-skip. An explicit status.toml entry still
+                // wins (Todo / Skip override).
+                let effective_triage = match &target {
+                    TokensTarget::Clean(_) => stage_a_triage,
+                    TokensTarget::StageCBlocked(_) => match stage_a_triage {
+                        Triage::Pass => Triage::Todo(
+                            "Stage C: descriptor [output] is prefixed by action-print text (<writeln(...)> echoes inside { ... } action bodies); claim (d) actual will lack the prefix until Stage C action-body translation lands"),
+                        explicit => explicit,
+                    },
+                };
+                let normalised_t = match &target {
+                    TokensTarget::Clean(s) => s,
+                    TokensTarget::StageCBlocked(s) => s,
+                };
+                let src = emit_stage_a_tokens_test_file(category, &base, &parsed.input, normalised_t, &effective_triage);
                 if let Err(_) = write_file_string(&stage_a_cat_dir, &tokens_filename, &src) {
                     eprintln(`extract: cannot write stage_a/{*category}/{tokens_filename}`);
                 } else {
-                    if let Todo(_) = &stage_a_triage {
+                    if let Todo(_) = &effective_triage {
                         stage_a_todo += 1;
                     }
                     stage_a_tokens_emitted += 1;
+                    if let TokensTarget::StageCBlocked(_) = &target {
+                        stage_a_tokens_stage_c_blocked += 1;
+                    }
                 }
             }
 
@@ -1408,13 +1457,16 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     println(`extract:           {stage_a_parse_emitted} parse-accepts-input (_parse_test.wado)`);
     println(`extract:           {stage_a_err_emitted} parse-must-error    (_err_test.wado)`);
     println(`extract:           {stage_a_tokens_emitted} tokens-equivalence  (_tokens_test.wado)`);
-    println(`extract:           {stage_a_todo} marked #[TODO]`);
+    println(`extract:             of which {stage_a_tokens_stage_c_blocked} auto-#[TODO] (Stage C: action-print prefix)`);
+    println(`extract:           {stage_a_todo} marked #[TODO] total (status.toml + auto)`);
     println(`extract:           {stage_a_skip} explicit skip`);
     println(`extract:           {stage_a_auto_skip} auto-skip (no eligible variant)`);
     println(`extract: stage B — tree-shape equivalence: emitted {stage_b_emitted} per-descriptor driver(s)`);
     println(`extract:           {stage_b_todo} marked #[TODO]`);
     println(`extract:           {stage_b_skip} explicit skip`);
     println(`extract:           {stage_b_auto_skip} auto-skip (output is not a parse tree)`);
+    println(`extract: deferred — gaps blocked on infra (NOT compat judgements):`);
+    println(`extract:           {deferred_composite} composite descriptors — need Kiln multi-grammar \`use\` support to resolve \`import S;\` against sibling \`<Name>.slaveN.g4\``);
 }
 
 // ===== Stage B: descriptor [output] normaliser =====
@@ -1804,34 +1856,50 @@ test "extract_root_rule_name: rejects malformed prefixes" {
     assert extract_root_rule_name(&"(123 abc)") matches { None };  // starts with digit
 }
 
-test "normalize_tokens: clean token dump passes through trimmed" {
+test "classify_tokens: clean token dump returns Clean(normalised)" {
     let input = "[@0,0:2='end',<1>,1:0]\n[@1,3:3=' ',<3>,1:3]\n";
-    let result = normalize_output_for_tokens(&input);
-    assert result matches { Some(_) };
-    if let Some(s) = result {
+    let result = classify_output_for_tokens(&input);
+    assert result matches { Some(TokensTarget::Clean(_)) };
+    if let Some(TokensTarget::Clean(s)) = result {
         assert s == input, `unexpected: '{s}'`;
     }
 }
 
-test "normalize_tokens: action-print prefix rejects the descriptor" {
+test "classify_tokens: action-print prefix returns StageCBlocked(normalised)" {
     // LexerExec descriptors with `{<writeln(...)>}` actions emit action
-    // output BEFORE the token dump. The tokens-equivalence variant can't
-    // reproduce action prints without Stage C; reject so the descriptor
-    // falls into auto-skip.
+    // output BEFORE the token dump. The tokens-equivalence assertion is
+    // still well-defined — the actual will lack the prefix until Stage C
+    // executes action bodies and accumulates the printed text — so the
+    // test IS emitted (with `#[TODO]`) rather than auto-skipped. Hiding
+    // it would be a compat-judgement we are not making.
     let raw = "stuff0:\nstuff1: a\n[@0,0:0='a',<1>,1:0]\n";
-    assert normalize_output_for_tokens(&raw) matches { None };
+    let result = classify_output_for_tokens(&raw);
+    assert result matches { Some(TokensTarget::StageCBlocked(_)) };
+    if let Some(TokensTarget::StageCBlocked(s)) = result {
+        assert s == "stuff0:\nstuff1: a\n[@0,0:0='a',<1>,1:0]\n", `unexpected: '{s}'`;
+    }
 }
 
-test "normalize_tokens: empty output is not tokens-testable" {
-    assert normalize_output_for_tokens(&"") matches { None };
-    assert normalize_output_for_tokens(&"\n\n") matches { None };
+test "classify_tokens: empty output is not tokens-testable at all" {
+    // Genuinely no `[@…]` line anywhere — not even a Stage C target.
+    assert classify_output_for_tokens(&"") matches { None };
+    assert classify_output_for_tokens(&"\n\n") matches { None };
 }
 
-test "normalize_tokens: triple-quoted leading garbage rejects the descriptor" {
-    // Some descriptors land here through the post_process path which
-    // trims `"""` but leaves residual leading text. Anything other than
-    // `[@…` first must be rejected.
-    assert normalize_output_for_tokens(&"abc\n[@0,0:0='a',<1>,1:0]\n") matches { None };
+test "classify_tokens: output with no token-dump line at all is None" {
+    // Pure action-print output without any `[@…]` row: even Stage C cannot
+    // make this comparable through `to_lexer_string`, because the dump
+    // payload is missing. These belong to a future action-capture claim,
+    // not claim (d).
+    assert classify_output_for_tokens(&"hello\nworld\n") matches { None };
+}
+
+test "classify_tokens: leading garbage before token dump is Stage C blocked" {
+    // Previously rejected. We now treat any non-`[@…]` prefix line as an
+    // action-print artefact and mark the descriptor as Stage C blocked.
+    let raw = "abc\n[@0,0:0='a',<1>,1:0]\n";
+    let result = classify_output_for_tokens(&raw);
+    assert result matches { Some(TokensTarget::StageCBlocked(_)) };
 }
 
 test "stage_a_err_category_eligible: only ParserErrors and LexerErrors" {

@@ -18,7 +18,7 @@ use t from "../../grammars/ParseTrees/ExtraToken.g4"
 use { normalize_tree } from "../../grammars/ParseTrees/ExtraToken.g4";
 
 #[TODO]
-// triage: sub-tree: expected [output] is ANTLR4's error-recovered sub-tree; Gale has no error recovery so parse returns Err and the sub-tree navigation never runs (Stage C-independent: matches Gale's no-recovery design)
+// triage: sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (single-token deletion / insertion). Gale does not yet implement error recovery, so `parse()` returns `Err` on the bad token and the sub-tree navigation never runs. Gap: implement ANTLR4-style error recovery in the generated parser. (Stage C-independent)
 test "stage_b_sub: ParseTrees/ExtraToken" {
     let input = "xzy";
     let expected = "(a x z y)";
