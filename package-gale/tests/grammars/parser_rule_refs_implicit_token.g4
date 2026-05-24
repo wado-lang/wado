@@ -1,25 +1,24 @@
-// Min repro: parser rule references an uppercase identifier (`K_IN`)
-// that is never defined as a lexer rule. ANTLR4 treats such a name as
-// an implicit token to be synthesized (see vendor/antlr4 docs); Gale's
-// post-merge `check_references` rejects the grammar outright.
+// Regression min repro: parser rule references an uppercase identifier
+// (`K_IN`) that has no defining lexer rule. ANTLR4 silently treats
+// such a name as an implicit token type (see
+// vendor/antlr4/doc/lexer-rules.md); pre-fix, Gale's post-merge
+// `check_references` rejected the grammar with
+// `reference to undefined token "K_IN" in "expr"`.
 //
-// Today: `wado run package-gale -- gen ...` exits before codegen with
-//   gale: reference to undefined token "K_IN" in "expr"
+// Post-fix (`ir.wado::synthesize_implicit_tokens`, wired into the
+// CLI / kiln / parse_checked paths before `check_references`), Gale
+// pushes a `LexerRule::virtual_token` for every such reference; the
+// lexer cannot produce the token on its own but downstream codegen
+// gets a `TK_<name>` global it can reference. This file pins that
+// behaviour: any future regression would surface here first.
 //
-// Covers stage_a_skip entries (status.toml reason "all-binary-op LR
-// rewrite bug" is wrong; both grammars compile cleanly once the
-// implicit-token references are turned into explicit lexer rules —
-// verified by stripping K_* refs from
-// LeftRecursion/WhitespaceInfluence_1.g4 and re-running Gale):
-//   - LeftRecursion/WhitespaceInfluence_1
-//   - LeftRecursion/WhitespaceInfluence_2
-//
-// Fix direction (in priority order):
-//   1. ANTLR4-compatible: synthesize an implicit lexer rule for any
-//      uppercase name referenced from a parser rule but never defined.
-//      Matches `vendor/antlr4/doc/lexer-rules.md` semantics.
-//   2. Stricter alternative: keep rejecting, but only after surfacing
-//      the same diagnostic ANTLR4 itself prints for this shape.
+// Originally surfaced via ANTLR4 runtime-testsuite descriptors
+// LeftRecursion/WhitespaceInfluence_{1,2}, which reference
+// `K_IN / K_AND / K_OR / K_TRUE / K_FALSE / K_NULL` from a parser
+// rule without defining them. Their old `[stage_a_skip]` reason
+// blamed an "all-binary-op LR rewrite bug" — the rewrite path is
+// in fact clean, the unresolved-token rejection was the only
+// blocker.
 
 grammar ParserRefImplicitToken;
 

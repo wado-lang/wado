@@ -32,6 +32,7 @@ use {
     DEFAULT_CHANNEL,
     HIDDEN_CHANNEL,
     check_references,
+    synthesize_implicit_tokens,
 } from "../ir.wado";
 use { G4Token, make_token } from "./token.wado";
 use { tokenize } from "./lexer.wado";
@@ -1736,7 +1737,14 @@ pub fn parse(input: String) -> Result<Grammar, ParseError> {
 /// rely on a sibling translation unit should still go through `parse`
 /// and call `check_references` after `merge_grammars`.
 pub fn parse_checked(input: String) -> Result<Grammar, ParseError> {
-    let grammar = parse(input)?;
+    let mut grammar = parse(input)?;
+    // ANTLR4-compatible implicit-token synthesis: an uppercase identifier
+    // referenced from a parser rule but defined nowhere is treated as a
+    // virtual token type (vendor/antlr4/doc/lexer-rules.md). Must run
+    // before `check_references` so the synthesized rules satisfy the
+    // unresolved-token check. No-op for `parser grammar` / `lexer grammar`
+    // halves — those still need a sibling merge before synthesis is safe.
+    synthesize_implicit_tokens(&mut grammar);
     check_references(&grammar)?;
     return Result::<Grammar, ParseError>::Ok(grammar);
 }

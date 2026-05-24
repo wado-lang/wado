@@ -15,9 +15,11 @@
 //     deduplicated name (`tag_2`) and its loop body must not collide
 //     with the alt-scope `<temp>` emitted by the first element.
 //
-// Reproduces the Gale codegen shape that fails inside
-// `ParserExec/ReservedWordsEscaping.g4` (`if += IF  if += IF*`), minus
-// the Wado-keyword rule rename that grammar adds on top.
+// Strips down the Gale codegen shape that ANTLR4 runtime-testsuite
+// descriptor `ParserExec/ReservedWordsEscaping.g4` exercises
+// (`if += IF  if += IF*`), minus the Wado-keyword rule rename that
+// grammar adds on top. Both halves of the list-label fix are
+// required to keep this file compiling.
 
 grammar label_list_collision;
 

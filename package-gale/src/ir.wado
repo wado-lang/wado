@@ -131,18 +131,6 @@ pub struct Grammar {
     pub source_files: Array<String>,
 }
 
-/// Resolve every reference in `grammar.pending_refs` against
-/// `grammar.parser_rules` / `grammar.lexer_rules`. Returns `Err` on the
-/// first unresolved reference. Mirrors ANTLR4's
-/// `SymbolChecks.checkForUnresolvedRuleRefs`.
-///
-/// The grammar's `kind` gates what can be checked:
-///   - `Combined`: every pending ref is resolvable locally. This is the
-///     post-merge case and the combined-grammar case.
-///   - `Lexer`: only lexer-to-lexer refs exist (no parser bodies in a
-///     `lexer grammar`); token refs and parser refs are vacuously absent.
-///   - `Parser`: parser-rule refs are checked locally; token refs are
-///     skipped because the sibling lexer grammar hasn't been merged yet.
 /// Synthesize a virtual lexer rule for every uppercase token name a parser
 /// rule references but no lexer rule defines. Mirrors ANTLR4, which treats
 /// an unresolved uppercase identifier in a parser rule as an implicit
@@ -188,6 +176,18 @@ pub fn synthesize_implicit_tokens(grammar: &mut Grammar) {
     }
 }
 
+/// Resolve every reference in `grammar.pending_refs` against
+/// `grammar.parser_rules` / `grammar.lexer_rules`. Returns `Err` on the
+/// first unresolved reference. Mirrors ANTLR4's
+/// `SymbolChecks.checkForUnresolvedRuleRefs`.
+///
+/// The grammar's `kind` gates what can be checked:
+///   - `Combined`: every pending ref is resolvable locally. This is the
+///     post-merge case and the combined-grammar case.
+///   - `Lexer`: only lexer-to-lexer refs exist (no parser bodies in a
+///     `lexer grammar`); token refs and parser refs are vacuously absent.
+///   - `Parser`: parser-rule refs are checked locally; token refs are
+///     skipped because the sibling lexer grammar hasn't been merged yet.
 pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
     for let r of &grammar.pending_refs {
         match &r.kind {
