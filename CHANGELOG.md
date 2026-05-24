@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.0.6](https://github.com/wado-lang/wado/compare/v0.0.5...v0.0.6) - 2026-05-24
+
+- refactor(cli): rebuild `wado test` as a 3-stage pipeline; add `--no-run` by @gfx in https://github.com/wado-lang/wado/pull/1162
+- ci(release): drop version from artifact basenames by @gfx in https://github.com/wado-lang/wado/pull/1167
+
 ## [v0.0.5](https://github.com/wado-lang/wado/compare/v0.0.4...v0.0.5) - 2026-05-23
 
 - Fix SROA regression on pattern-destructured bindings (#1158 follow-up) by @gfx in https://github.com/wado-lang/wado/pull/1159
