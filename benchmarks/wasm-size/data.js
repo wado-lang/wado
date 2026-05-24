@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779585898981,
+  "lastUpdate": 1779592345861,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25313,6 +25313,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/964fb0b313d409b51562779dc5d4bae50176006c"
         },
         "date": 1779585898531,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17246,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 462125,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "341602e98ffd68535b4ab085539fea47f14789fa",
+          "message": "Merge pull request #1171 from wado-lang/chore/align-wasm-tools-with-wasmtime\n\nchore: align wasm-tools crates with wasmtime's generation",
+          "timestamp": "2026-05-24T12:04:20+09:00",
+          "tree_id": "bfb70dce574bb74c638a03684ef7f8ac2b861311",
+          "url": "https://github.com/wado-lang/wado/commit/341602e98ffd68535b4ab085539fea47f14789fa"
+        },
+        "date": 1779592345444,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
