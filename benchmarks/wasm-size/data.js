@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779629669868,
+  "lastUpdate": 1779634032082,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25665,6 +25665,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/da6aefd4951efcfd3b55387ad0adf665ff8c6a8f"
         },
         "date": 1779629669489,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9805,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17192,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 465275,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "09abac9fbd47e04895ff5b6ab3d79233823295e9",
+          "message": "Merge pull request #1185 from wado-lang/claude/closure-mut-bug-DpeS1\n\nfix(resolver): enforce fn mut root-mutability for non-identifier callees",
+          "timestamp": "2026-05-24T23:40:45+09:00",
+          "tree_id": "2104f540cccbd45b632be52154384e4bb5ee4ac6",
+          "url": "https://github.com/wado-lang/wado/commit/09abac9fbd47e04895ff5b6ab3d79233823295e9"
+        },
+        "date": 1779634031605,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
