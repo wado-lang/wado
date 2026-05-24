@@ -1710,11 +1710,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                     }
                 }
                 v = "core:prelude/fpfmt.wado/parse"(d, exp - frac);
-                v_signed = (if neg -> f64 {
-                    builtin::f64_neg(v);
-                } else {
-                    v;
-                });
+                v_signed = select f64(neg, builtin::f64_neg(v), v);
                 if v_signed != builtin::f64_floor(v_signed) {
                     self.pos = __hfs_pos_54;
                     return struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_18: block -> ref "core:serde//DeserializeError" {
@@ -1755,14 +1751,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b198: block {
-        l199: loop {
+    b197: block {
+        l198: loop {
             if i >= n {
-                break b198;
+                break b197;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l199;
+            continue l198;
         };
     };
 }
@@ -1893,8 +1889,8 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         unreachable;
     };
     _licm_buf_33 = f.buf;
-    b222: block {
-        l223: loop {
+    b221: block {
+        l222: loop {
             let __sroa___match_4_discriminant: i32;
             let __sroa___match_4_payload_0: char;
             multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
@@ -1918,9 +1914,9 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                     "core:prelude/string.wado/String::push"(_licm_buf_33, __sroa___match_4_payload_0);
                 }
             } else {
-                break b222;
+                break b221;
             }
-            continue l223;
+            continue l222;
         };
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);

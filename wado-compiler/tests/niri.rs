@@ -1283,7 +1283,10 @@ fn reduce_local_rewrites_if_true_false_to_cond() {
     );
     assert!(interp.reduce_local(&mut expr));
     let NirExprKind::Local { index, .. } = expr.kind else {
-        panic!("expected Local (the original condition), got {:?}", expr.kind);
+        panic!(
+            "expected Local (the original condition), got {:?}",
+            expr.kind
+        );
     };
     assert_eq!(index, 0);
     assert_eq!(expr.type_id, TypeTable::BOOL);

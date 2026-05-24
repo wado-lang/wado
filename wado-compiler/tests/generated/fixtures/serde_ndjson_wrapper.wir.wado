@@ -305,10 +305,8 @@ fn "core:prelude/primitive.wado/write_base_digits"(arr, offset, abs_val, digit_c
                 digit = builtin::i32_wrap_i64(temp % base64);
                 ch = (if digit < 10 -> i32 {
                     48 + digit;
-                } else if upper -> i32 {
-                    (65 + digit) - 10;
                 } else {
-                    (97 + digit) - 10;
+                    select i32(upper, (65 + digit) - 10, (97 + digit) - 10);
                 });
                 builtin::array_set_u8(arr, pos, ch & 255);
                 temp = temp / base64;
@@ -328,14 +326,14 @@ fn "core:prelude/primitive.wado/count_digits_base"(val, base) {
     base64 = builtin::i64_extend_i32_s(base);
     n = 0;
     t = val;
-    b15: block {
-        l16: loop {
+    b14: block {
+        l15: loop {
             if t <= 0_i64 {
-                break b15;
+                break b14;
             }
             n = n + 1;
             t = t / base64;
-            continue l16;
+            continue l15;
         };
     };
     return n;
@@ -347,8 +345,8 @@ fn "core:json/write_escaped_string"(buf, s) {
     let __local_6: ref "core:prelude/format.wado//Formatter";
     "core:prelude/string.wado/String::push"(buf, 34);
     __iter_2 = struct.new "core:prelude/string.wado//StrCharIter" { repr: s.repr, used: s.used, byte_index: 0 };
-    b18: block {
-        l19: loop {
+    b17: block {
+        l18: loop {
             let __sroa___match_7_discriminant: i32;
             let __sroa___match_7_payload_0: char;
             multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
@@ -379,9 +377,9 @@ fn "core:json/write_escaped_string"(buf, s) {
                     }
                 }
             } else {
-                break b18;
+                break b17;
             }
-            continue l19;
+            continue l18;
         };
     };
     "core:prelude/string.wado/String::push"(buf, 34);
@@ -432,11 +430,7 @@ fn "core:prelude/primitive.wado/i32^LowerHex::fmt"(self, f) {
     let is_neg: bool;
     let abs_val: i64;
     is_neg = self < 0;
-    abs_val = (if is_neg -> i64 {
-        0_i64 - builtin::i64_extend_i32_s(self);
-    } else {
-        builtin::i64_extend_i32_s(self);
-    });
+    abs_val = select i64(is_neg, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
     "core:prelude/primitive.wado/i64::fmt_base"(abs_val, is_neg, f, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
 }
 
@@ -593,14 +587,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b43: block {
-        l44: loop {
+    b41: block {
+        l42: loop {
             if i >= n {
-                break b43;
+                break b41;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l44;
+            continue l42;
         };
     };
 }

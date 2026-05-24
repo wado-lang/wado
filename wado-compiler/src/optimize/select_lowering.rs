@@ -80,10 +80,8 @@ fn is_select_eligible_expr(expr: &NirExpr) -> bool {
         | NirExprKind::CharLiteral(_)
         | NirExprKind::Local { .. } => true,
         NirExprKind::Unary { op, expr: inner } => {
-            matches!(
-                op,
-                NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot
-            ) && is_select_eligible_expr(inner)
+            matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
+                && is_select_eligible_expr(inner)
         }
         NirExprKind::Binary { op, left, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
