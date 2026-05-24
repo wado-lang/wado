@@ -1,5 +1,9 @@
 [workspace]
 members = ["wado-compiler", "wado-cli", "wado-from-idl", "wado-bundled-libm", "wado-manifest", "wado-dev-tools", "wado-lsp"]
+# vendor/ holds reference submodules; vendor/wasmtime is our wasmtime fork that we
+# depend on via path. Exclude it so cargo does not treat its crates as members of
+# this workspace (it has its own workspace root).
+exclude = ["vendor"]
 resolver = "3" # v3 resolver
 
 [workspace.package]
@@ -18,20 +22,26 @@ libm = { version = "0.2" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
-# Keep the wasm-tools family aligned with the generation wasmtime depends on
-# (wasmtime 44 -> 0.246) so cargo can dedupe instead of carrying parallel 0.x
-# trees. `wat` must use the tilde pin: a bare "1" floats up to 1.249 and drags
-# wast/wasm-encoder 0.249 back in through both wado and wasmtime's wasm-compose.
-wat = { version = "~1.246" }
-wasm-encoder = { version = "0.246" }
-wasmparser = { version = "0.246" }
-wasmprinter = { version = "0.246" }
+# Keep the wasm-tools family (wasmparser/wasm-encoder/wasmprinter/wit-parser/
+# wat) pinned to the same generation wasmtime depends on, so cargo dedupes
+# instead of carrying parallel 0.x trees. `wat` needs the tilde pin so a bare
+# "1" cannot float up to a newer generation and drag a parallel wast/wasm-encoder
+# tree back in through both wado and wasmtime's wasm-compose. `mise run
+# check-deps` enforces this; re-align when bumping wasmtime (see AGENTS.md).
+wat = { version = "~1.248" }
+wasm-encoder = { version = "0.248" }
+wasmparser = { version = "0.248" }
+wasmprinter = { version = "0.248" }
 walrus = { version = "0.26" }
-wit-parser = { version = "0.246" }
-wasmtime = { version = "44", features = ["async", "component-model", "component-model-async"] }
-wasmtime-wasi = { version = "44", features = ["p3"] }
-wasmtime-wasi-http = { version = "44", features = ["p3"] }
-wasmtime-wasi-tls = { version = "44", default-features = false, features = ["p3", "rustls"] }
+wit-parser = { version = "0.248" }
+# wasmtime is vendored from our fork (wado-lang/wasmtime, branch gfx/wasmtime-45)
+# via vendor/wasmtime so we can carry a Cranelift fix for the safepoint-spiller
+# regression (bytecodealliance/wasmtime#13461). Not published to crates.io, so
+# path dependencies on the submodule are fine.
+wasmtime = { path = "vendor/wasmtime/crates/wasmtime", features = ["async", "component-model", "component-model-async"] }
+wasmtime-wasi = { path = "vendor/wasmtime/crates/wasi", features = ["p3"] }
+wasmtime-wasi-http = { path = "vendor/wasmtime/crates/wasi-http", features = ["p3"] }
+wasmtime-wasi-tls = { path = "vendor/wasmtime/crates/wasi-tls", default-features = false, features = ["p3", "rustls"] }
 bytes = { version = "1" }
 futures = { version = "0.3" }
 http = { version = "1" }

@@ -225,7 +225,7 @@ pub fn engine() -> &'static Engine {
         config.wasm_component_model(true);
         config.wasm_component_model_gc(true);
         config.wasm_component_model_async(true);
-        config.wasm_component_model_async_builtins(true);
+        config.wasm_component_model_more_async_builtins(true);
         config.wasm_component_model_async_stackful(true);
         config.wasm_component_model_error_context(true);
         config.wasm_simd(true);
