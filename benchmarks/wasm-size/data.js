@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779616005650,
+  "lastUpdate": 1779623549082,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25597,6 +25597,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 461807,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5b24c9aa394cf5676eaa0a3be481f270c1f28d20",
+          "message": "Merge pull request #1182 from wado-lang/claude/desugar-resolve-migration-oQPMm\n\nrefactor: dismantle desugar phase, move all rewrites into resolver",
+          "timestamp": "2026-05-24T20:46:13+09:00",
+          "tree_id": "92f82def9205036052374d30b74713ffb444eb41",
+          "url": "https://github.com/wado-lang/wado/commit/5b24c9aa394cf5676eaa0a3be481f270c1f28d20"
+        },
+        "date": 1779623548592,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9805,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17192,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 461792,
             "unit": "bytes"
           }
         ]
