@@ -1,0 +1,152 @@
+// Optimizer miscompile pattern extracted from package-gale's
+// `visitor_gen.wado/gen_walk_fn`. Issue #1187.
+//
+// At -O3 with `--optimize-inline-threshold 33` (one above the default 32),
+// `CodeWriter::to_string` asserts `unbalanced indentation (level=-3)`
+// while generating the `walk_e` function for a 3-alternative parser rule.
+//
+// Diagnosis:
+// * `WADO_SKIP_PASS=nir/inline` or `nir/copy_prop` makes the bug go
+//   away; every other pass is irrelevant. So this is a copy_prop bug
+//   on inliner output, not an inliner bug per se.
+// * The trigger threshold (28 statements in this fixture, 33 in
+//   real package-gale) is the size at which `i32::fmt_decimal`
+//   becomes inlinable. Once `fmt_decimal` is inlined into the
+//   `walk_fn` emit body, copy_prop drops the `self.indent_level -= 1`
+//   write from the first inlined `Writer::end()` and the scalar
+//   drifts negative by exactly `alternatives` for each subsequent
+//   `gen_walk_fn` call.
+// * `i32::fmt_decimal` is a stdlib function we cannot shrink in a
+//   fixture, so this case fires at -O3 default and needs
+//   `--optimize-inline-threshold 28` to fire at -O2. The fixture is
+//   covered by the WADO_FULL_TEST / CI -O3 run.
+//
+// Shape of the miscompiled caller:
+//
+//   fn gen_walk_fn(w, rule_name, n_alts, n_fields) {
+//       w.begin(&`pub fn walk_{rule_name}…`);    // fn block
+//       let case_names = build_case_names(n_alts);
+//       w.begin(&"match node");                  // match block
+//       for let mut i = 0; i < n_alts; i += 1 {
+//           w.begin(&`{case_names[i]}(n) =>`);   // case block
+//           w.line(&`v.enter_rule({i}, …);`);    // ← uses {i:_}
+//           let fields = build_walk_fields(n_fields);
+//           for let f of &fields {
+//               gen_walk_field(w, f, &"n");      // line() with {field.name}
+//           }
+//           w.line(&`v.exit_rule({i}, …);`);
+//           w.end();                             // case end
+//       }
+//       w.end();                                 // match end
+//       w.end();                                 // fn end
+//   }
+
+pub struct Writer {
+    buf: String,
+    indent_level: i32,
+    fresh_line: bool,
+}
+
+impl Writer {
+    pub fn new() -> Writer {
+        return Writer { buf: String::with_capacity(64), indent_level: 0, fresh_line: true };
+    }
+
+    #[inline(always)]
+    fn write_indent(&mut self) {
+        for let mut i = 0; i < self.indent_level; i += 1 {
+            self.buf.push_str(&"    ");
+        }
+    }
+
+    #[inline(always)]
+    pub fn line(&mut self, text: &String) {
+        self.write_indent();
+        self.buf.push_str(text);
+        self.buf.push('\n');
+        self.fresh_line = true;
+    }
+
+    #[inline(always)]
+    pub fn begin(&mut self, opener: &String) {
+        self.write_indent();
+        self.buf.push_str(opener);
+        self.buf.push_str(&" {\n");
+        self.fresh_line = true;
+        self.indent_level += 1;
+    }
+
+    #[inline(always)]
+    pub fn end(&mut self) {
+        self.indent_level -= 1;
+        self.write_indent();
+        self.buf.push_str(&"}\n");
+        self.fresh_line = true;
+    }
+}
+
+variant WalkAction {
+    VisitToken,
+    WalkRule(String),
+}
+
+struct WalkField {
+    name: String,
+    action: WalkAction,
+}
+
+fn gen_walk_field(w: &mut Writer, field: &WalkField, var: &String) {
+    match &field.action {
+        VisitToken => w.line(&`v.visit_token(&{*var}.{field.name});`),
+        WalkRule(rn) => w.line(&`walk_{*rn}(v, &{*var}.{field.name});`),
+    };
+}
+
+fn build_walk_fields(n: i32) -> Array<WalkField> {
+    let mut fields: Array<WalkField> = [];
+    for let mut i = 0; i < n; i += 1 {
+        if i % 2 == 0 {
+            fields.push(WalkField { name: `f{i}`, action: WalkAction::VisitToken });
+        } else {
+            fields.push(WalkField { name: `f{i}`, action: WalkAction::WalkRule(`r{i}`) });
+        }
+    }
+    return fields;
+}
+
+fn build_case_names(n: i32) -> Array<String> {
+    let mut names: Array<String> = [];
+    for let mut i = 0; i < n; i += 1 {
+        names.push(`Alt{i}`);
+    }
+    return names;
+}
+
+fn gen_walk_fn(w: &mut Writer, rule_name: &String, n_alts: i32, n_fields: i32) {
+    w.begin(&`pub fn walk_{*rule_name}<V: Visitor>(v: &mut V, node: &Node)`);
+    let case_names = build_case_names(n_alts);
+    w.begin(&"match node");
+    for let mut i = 0; i < n_alts; i += 1 {
+        w.begin(&`{case_names[i]}(n) =>`);
+        w.line(&`v.enter_rule({i}, &"{*rule_name}", &n.span);`);
+        let fields = build_walk_fields(n_fields);
+        for let f of &fields {
+            gen_walk_field(w, f, &"n");
+        }
+        w.line(&`v.exit_rule({i}, &"{*rule_name}", &n.span);`);
+        w.end();
+    }
+    w.end();
+    w.end();
+}
+
+export fn run() {
+    let mut w = Writer::new();
+    gen_walk_fn(&mut w, &"e", 3, 2);
+    assert w.indent_level == 0, `expected level=0 after gen_walk_fn(3, 2), got {w.indent_level}`;
+    gen_walk_fn(&mut w, &"stmt", 4, 3);
+    assert w.indent_level == 0, `expected level=0 after gen_walk_fn(4, 3), got {w.indent_level}`;
+}
+
+__DATA__
+{"stdout": ""}
