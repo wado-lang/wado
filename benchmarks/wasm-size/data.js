@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779592345861,
+  "lastUpdate": 1779595070452,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25377,6 +25377,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 462125,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "02fecc775b945f01fa6788a537f283116e571caa",
+          "message": "Merge pull request #1165 from wado-lang/claude/desugar-phase-refactor-0Vznc\n\nrefactor(desugar): dismantle assert / matches / comparison-chain via AstFolder",
+          "timestamp": "2026-05-24T12:51:41+09:00",
+          "tree_id": "bfed07aec08142eae28f80f1d894fb22cce710eb",
+          "url": "https://github.com/wado-lang/wado/commit/02fecc775b945f01fa6788a537f283116e571caa"
+        },
+        "date": 1779595070208,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17246,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 461807,
             "unit": "bytes"
           }
         ]
