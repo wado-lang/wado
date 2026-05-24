@@ -1,0 +1,47 @@
+// Verify that `select_lowering` rejects arms that could trap when
+// evaluated unconditionally. A divide-by-zero guard is the canonical
+// motivating case: if the rewriter lifted `num / denom` into a
+// `select` arm, the guard would no longer protect against the trap.
+//
+// `Mod` is rejected for the same reason as `Div`. The runtime must
+// still execute the original `if-else` shape so the guarded branch
+// is only entered when the precondition holds.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn opaque_i(x: i32) -> i32 {
+    return x;
+}
+
+export fn run() with Stdout {
+    let denom = opaque_i(0);
+    let num = opaque_i(100);
+
+    // Division guard: must NOT become a `select` — that would trap
+    // when denom == 0.
+    let q = if denom != 0 {
+        num / denom;
+    } else {
+        0;
+    };
+
+    // Modulo guard: same trap concern.
+    let r = if denom != 0 {
+        num % denom;
+    } else {
+        0;
+    };
+
+    assert q == 0;
+    assert r == 0;
+    println(`{q} {r}`);
+}
+
+__DATA__
+{
+    "stdout": "0 0\n",
+    "wir_not_expect:O2": [
+        "select i32(denom != 0, "
+    ]
+}

@@ -255,9 +255,11 @@ Rewrites `match` expressions whose scrutinee is a dense integer or enum into a `
 
 ### Select Lowering (`select_lowering.rs`)
 
-Rewrites `if cond { a } else { b }` with two pure branches into `builtin::select(cond, a, b)`, which emits the Wasm `select` instruction. Runs after the fixed-point loop at all levels.
+Rewrites `if cond { a } else { b }` with two leaf-pure branches into `builtin::select(cond, a, b)`, which emits the Wasm `select` instruction. Runs after the fixed-point loop at all levels.
 
-E2E: [select_basic.wado](../wado-compiler/tests/fixtures/select_basic.wado), [select_no_opt.wado](../wado-compiler/tests/fixtures/select_no_opt.wado).
+Leaf-pure shapes: duplicable leaves (`Local`, integer / float / bool / char literals), `Unary { Neg | Not | BitNot }` over a leaf-pure operand, `Binary { non-Div, non-Mod }` over two leaf-pure operands, and `Cast` of a leaf-pure value. Calls, `Deref`, `Ref` / `MutRef`, division, modulo, and aggregate constructors stay branched — they either trap or have side effects that an unconditionally-evaluated arm cannot replicate safely.
+
+E2E: [select_basic.wado](../wado-compiler/tests/fixtures/select_basic.wado), [select_extended_arms.wado](../wado-compiler/tests/fixtures/select_extended_arms.wado), [select_no_opt.wado](../wado-compiler/tests/fixtures/select_no_opt.wado), [select_no_opt_trapping_arms.wado](../wado-compiler/tests/fixtures/select_no_opt_trapping_arms.wado).
 
 ### Multi-Value Return Classification (`multi_value_return.rs`)
 

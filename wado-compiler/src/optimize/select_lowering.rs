@@ -7,7 +7,8 @@
 
 use crate::module_source::ModuleSource;
 use crate::nir::{
-    CallArg, FunctionRef, MonomorphInfo, NirBlock, NirExpr, NirExprKind, NirStmtKind,
+    CallArg, FunctionRef, MonomorphInfo, NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirStmtKind,
+    NirUnaryOp,
 };
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
@@ -48,15 +49,50 @@ impl NirOptVisitor for SelectLoweringVisitor {
     }
 }
 
+/// True when `expr` is eligible to appear as a `builtin::select` arm.
+///
+/// `select` evaluates both arms unconditionally, so each arm must be:
+///
+/// - **Side-effect free** — no `Call` / `Assign` / mutation that an
+///   omitted branch evaluation would have skipped.
+/// - **Non-trapping** — no `Div` / `Mod` (integer divide-by-zero
+///   traps), no `Deref` (null-deref traps). Floating-point arithmetic
+///   never traps in Wasm, so float `Div` is *not* in this list — but
+///   the integer-shape rule excludes it uniformly because we don't
+///   peek at operand types.
+/// - **Cheap to compute redundantly** — the speculation cost on the
+///   not-taken branch should be small. Restrict the shape to
+///   duplicable leaves (`Local`, literals) plus a single layer of
+///   pure leaf operators (`Unary` over a leaf-pure operand, `Binary`
+///   over two leaf-pure operands, `Cast` of a leaf-pure value). The
+///   recursion bottoms out at leaves; nested operator trees over
+///   leaf-pure subexpressions are allowed but in practice rarely
+///   reach beyond depth 2-3 from source.
+///
+/// The Wado runtime never traps on `Ref` / `MutRef` (taking a local's
+/// address is harmless), but reference-taking inside a `select` arm
+/// is a code-smell shape that we keep out of scope.
 fn is_select_eligible_expr(expr: &NirExpr) -> bool {
-    matches!(
-        &expr.kind,
-        NirExprKind::Local { .. }
-            | NirExprKind::IntLiteral { .. }
-            | NirExprKind::FloatLiteral { .. }
-            | NirExprKind::BoolLiteral(_)
-            | NirExprKind::CharLiteral(_)
-    )
+    match &expr.kind {
+        NirExprKind::IntLiteral { .. }
+        | NirExprKind::FloatLiteral { .. }
+        | NirExprKind::BoolLiteral(_)
+        | NirExprKind::CharLiteral(_)
+        | NirExprKind::Local { .. } => true,
+        NirExprKind::Unary { op, expr: inner } => {
+            matches!(
+                op,
+                NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot
+            ) && is_select_eligible_expr(inner)
+        }
+        NirExprKind::Binary { op, left, right } => {
+            !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
+                && is_select_eligible_expr(left)
+                && is_select_eligible_expr(right)
+        }
+        NirExprKind::Cast { expr: inner, .. } => is_select_eligible_expr(inner),
+        _ => false,
+    }
 }
 
 fn try_select_value(block: &NirBlock) -> Option<&NirExpr> {
