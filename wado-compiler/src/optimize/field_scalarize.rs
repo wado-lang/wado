@@ -2073,7 +2073,7 @@ fn walk_stmt(
             label: _,
             block: inner,
         } => {
-            walk_block(inner, states, ctx);
+            walk_labeled_block(inner, states, ctx);
             out.push(stmt);
         }
         NirStmtKind::Return { value } => {
@@ -2652,7 +2652,7 @@ fn walk_other_expr_kinds(
             }
         }
         NirExprKind::LabeledBlock { block, .. } => {
-            walk_inline_block(block, states, result_used, ctx);
+            walk_labeled_block(block, states, ctx);
         }
         NirExprKind::GlobalVarSet { value, .. } => {
             walk_expr(value, states, true, out, ctx);
@@ -2717,6 +2717,30 @@ fn walk_inline_block(
     ctx: &mut WalkCtx,
 ) {
     walk_block(block, states, ctx);
+}
+
+/// Walk a labeled block (stmt- or expr-position), accounting for
+/// labeled-break early-exits that bypass any sync the walker emits
+/// inside the block.
+///
+/// The walker doesn't track per-`break <label>` exit states (see the
+/// `Break` arm in `walk_stmt`: emitting a sync there caused unacceptable
+/// over-syncing in label-heavy hot loops). As a result, a sync the
+/// walker emits inside the block — e.g. `walk_nested_loop`'s pre-recurse
+/// write_back, or a pre-call write_back / re-read — may be skipped at
+/// runtime when a labeled break exits before reaching it.
+///
+/// Conservatively JOIN the entry state with the fall-through exit state
+/// at the block boundary. The entry state over-approximates the
+/// per-candidate state at every point inside the block that precedes a
+/// walker-emitted sync; joining with it makes the post-block walker
+/// state match every runtime path (issue #1187).
+fn walk_labeled_block(block: &mut NirBlock, states: &mut ScalarStates, ctx: &mut WalkCtx) {
+    let entry_states = states.clone();
+    walk_block(block, states, ctx);
+    for i in 0..states.len() {
+        states[i] = pick_join_target_for_candidate(&[entry_states[i], states[i]]);
+    }
 }
 
 /// Walk an If used in expression position (then/else are `NirBlocks`).
