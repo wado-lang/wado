@@ -3137,6 +3137,23 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
         }
     }
     if rep.non_greedy {
+        // Non-greedy `??` shares the parse-tree shape of greedy `?`
+        // (0 or 1 occurrence wrapped in `Option<T>`); the two differ
+        // only at the prediction layer, where `??` prefers
+        // not-matching when the lookahead is ambiguous between
+        // matching and yielding to the surrounding rule. Routing
+        // through `gen_op_repeat_non_greedy` (designed for `*?` /
+        // `+?`) emitted an `Array<T>` field plus a `while` loop,
+        // which fails to type-check the surrounding CST struct
+        // (`expected Option<T>, found Array<T>`). Dispatch the
+        // Optional case through the greedy Optional emitter so the
+        // emit shape matches the lower-side `FieldKind::Option`
+        // decl; the prediction-layer prefer-skip semantics required
+        // for ANTLR4 parity stay tracked in package-gale/TODO.md.
+        if let Optional = rep.kind {
+            gen_op_repeat_optional_greedy(w, rep, rep_op, ctx, name_counts, follow);
+            return;
+        }
         gen_op_repeat_non_greedy(w, rep, rep_op, ctx, name_counts, follow);
         return;
     }

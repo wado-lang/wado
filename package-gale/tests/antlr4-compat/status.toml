@@ -70,11 +70,11 @@
 "LexerExec/RecursiveLexerRuleRefWithWildcardStar_1" = "tokens-equivalence: Gale lexer mistokenizes nested `/* /*...*/ */` comments — recursive lexer rule with `.*?` wildcard star does not nest correctly (Stage C-independent)"
 "LexerExec/ZeroLengthToken" = "tokens-equivalence: Gale lexer does not merge the `-> more, pushMode(...)` and `-> more, mode(...)` chain into a single token across mode transitions (Stage C-independent)"
 "LexerExec/ReservedWordsEscaping" = "tokens-equivalence: expected output includes a `channel=N` token but Gale's lexer codegen routes non-default-channel tokens to `Token.leading_trivia` rather than the main stream, so `to_lexer_string` does not emit them. Gap: either land non-default-channel tokens in the main stream with a channel attribute (have the parser filter), or extend `to_lexer_string` to walk trivia in source order."
+"ParserExec/IfIfElseNonGreedyBinding1" = "parse-accepts-input: emit shape for `(elem)??` now matches the Option<T> CST decl (so the test compiles), but the parser still applies greedy `(elem)?` prediction. ANTLR4's `??` prefers not-matching when the lookahead is ambiguous; the descriptor's expected parse tree binds the `else` to the outer if. Implementing prefer-skip prediction requires either a follow-set guard on the Optional dispatch or a runtime ATN simulator (TODO.md)."
 
 [stage_a_skip]
 "LeftRecursion/WhitespaceInfluence_1" = "parser rule references implicit (lexer-undefined) tokens K_IN / K_AND / K_OR / K_TRUE / K_FALSE / K_NULL — Gale check_references rejects before codegen (ANTLR4 synthesizes implicit lexer rules for this shape). Min repro: tests/grammars/parser_rule_refs_implicit_token.g4"
 "LeftRecursion/WhitespaceInfluence_2" = "parser rule references implicit (lexer-undefined) tokens K_IN / K_AND / K_OR / K_TRUE / K_FALSE / K_NULL — Gale check_references rejects before codegen (ANTLR4 synthesizes implicit lexer rules for this shape). Min repro: tests/grammars/parser_rule_refs_implicit_token.g4"
-"ParserExec/IfIfElseNonGreedyBinding1" = "non-greedy optional ??  routed through the *-style codegen path; emits Array-of-struct field plus shadowed per-iteration temp. wado compile rejects with `no method push found on LitElseStatementItem` plus `type mismatch: expected Option<…>, found Array<…>`"
 "ParserExec/ListLabelsOnSet" = "set list-label `val+=(INT | FLOAT)*` panics inside Gale's parser_gen: gen_op_storable_group_inner → `surface element is not Group`; no Wado is emitted"
 
 [stage_b_todo]

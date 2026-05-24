@@ -1185,6 +1185,31 @@ WS : [ \\t\\n\\r]+ -> skip ;
     assert str_contains(&output, &"first_char == 'B'"), `tokenize dispatch must include 'B':\n{output}`;
 }
 
+test "non-greedy optional (??) emits an Option<T> field, not Array<T>" {
+    // Non-greedy `(elem)??` and greedy `(elem)?` produce the same parse
+    // tree shape (0 or 1 occurrence wrapped in `Option<T>`); only the
+    // prediction layer differs. Previously the `??` Repeat was routed
+    // through `gen_op_repeat_non_greedy_storable` and emitted
+    // `let mut <field>: Array<T> = []` plus a `while` loop, which
+    // failed to type-check the surrounding CST struct's `Option<T>`
+    // decl. Covers ANTLR4 runtime-testsuite
+    // ParserExec/IfIfElseNonGreedyBinding1; the prefer-skip
+    // prediction-layer semantics needed for full parity stay tracked
+    // in package-gale/TODO.md.
+    let input = "grammar T;
+start : statement+ EOF ;
+statement : 'x' | ifStmt ;
+ifStmt : 'if' 'y' statement ('else' statement)?? ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, &"lit_else_statement: Option<"), `?? must emit an Option<T> field:\n{output}`;
+    assert !str_contains(&output, &"lit_else_statement: Array<"), `?? must NOT emit an Array<T> field:\n{output}`;
+    let body = extract_fn_body(&output, &"fn _parse_if_stmt(");
+    assert str_contains(&body, &"if p.peek_kind() == TK_LIT_ELSE"), `?? emit must use a single if-check, not a while loop:\n{body}`;
+    assert !str_contains(&body, &"while p.peek_kind() == TK_LIT_ELSE"), `?? emit must not use a while loop:\n{body}`;
+}
+
 test "single-char literal with an ID carrier stays a keyword (no try_ matcher)" {
     // `A : 'A'` is a keyword candidate, and `ID : [a-zA-Z]+` covers 'A' as a
     // first character. The classify_keyword path is therefore reachable, so

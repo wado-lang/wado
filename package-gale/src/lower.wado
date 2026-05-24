@@ -2767,7 +2767,25 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     }
 
     let strategy = if rep.non_greedy {
-        compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
+        // Non-greedy `??` shares the parse-tree shape of greedy `?`
+        // (an `Option<T>` field with a single conditional fill) —
+        // the prediction-layer "prefer not matching" semantics ride
+        // on top of the same emit shape. Routing `??` through
+        // `compute_non_greedy_strategy` (designed for `*?` / `+?`)
+        // yielded a `NonGreedy(_)` payload that the greedy-Optional
+        // emit dispatcher explicitly panics on, and routing through
+        // the non-greedy emit produced an `Array<T>` field with a
+        // `while` loop — a type-mismatch against the surrounding
+        // CST's `Option<T>` decl. Reuse the greedy-`?` strategy
+        // pipeline for `??` so the emit shape matches; the
+        // prefer-skip prediction semantics required for full ANTLR4
+        // parity stay tracked in package-gale/TODO.md.
+        if let Optional = rep.kind {
+            let mask_decision = choose_greedy_repeat_strategy(&inner_first, variant_mask);
+            pick_greedy_strategy(mask_decision, opt_specialised);
+        } else {
+            compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
+        }
     } else {
         // Mask-driven `Suppressed` always wins — if every iteration's
         // first token is in the variant mask, the loop never enters
