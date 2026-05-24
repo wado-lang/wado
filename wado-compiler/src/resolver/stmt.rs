@@ -2639,35 +2639,60 @@ impl<H: CompilerHost> Resolver<'_, H> {
         );
         let option_type = next_call.type_id;
 
-        // Build the `Option::Some(<user binding>)` pattern and resolve the
-        // body inside a fresh scope so the binding lives only for the
-        // iteration. The synthetic `Pattern::Variant` is a transient
-        // wrapper around the user's `for_of.binding`; the inner pattern
-        // (the part the user actually typed) keeps its real `AstId`, so
-        // `record_local_symbol` still wires LSP hover on the loop
-        // variable through to the user's identifier. Building it as an
-        // AST `Pattern` (not as a `LetStmt` / `IfStmt`) is allowed by
-        // the acceptance criteria — only the four statement / call
-        // shapes called out in the issue are forbidden.
+        // Build the `Option::Some(<user binding>)` arm pattern directly as
+        // TIR. Resolving the user's `for_of.binding` against the Item type
+        // delegates name binding / destructuring to `resolve_if_pattern_inner`,
+        // which preserves the binding's real `AstId` (LSP hover on the loop
+        // variable still works). The wrapping `TirPattern::Variant` is
+        // built by hand so the lowering never synthesises an AST node — the
+        // `Some` token has no source position, so giving it one would be
+        // misleading.
         let some_case_name = self
             .type_table
             .borrow()
             .compiler_items()
             .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
             .to_string();
-        let some_pattern_ast = Pattern::Variant {
-            variant_name: some_case_name,
-            variant_qualifier: None,
-            name_id: None,
-            name_span: span,
-            bindings: vec![for_of.binding.clone()],
-            span,
+        // `.next()` returns `Option<Item>`. Extract the `Some` payload type
+        // for the binding scrutinee. Bind out of the borrow first so the
+        // `get_variant_case_payload_type` call below can re-borrow `&mut self`.
+        let option_shape: Option<(String, Vec<TypeId>)> =
+            match self.type_table.borrow().get(option_type).clone() {
+                ResolvedType::GenericInstance {
+                    name, type_args, ..
+                } if self.contains_variant(&name) => Some((name, type_args)),
+                ResolvedType::Variant { name, .. } if self.contains_variant(&name) => {
+                    Some((name, vec![]))
+                }
+                _ => None,
+            };
+        let item_type = match option_shape {
+            Some((name, type_args)) => {
+                self.get_variant_case_payload_type(&name, &some_case_name, &type_args, span)
+            }
+            // `.next()` returned an unexpected non-Option type. The iterator-
+            // trait check above (or method dispatch downstream) has already
+            // diagnosed it; degrade to `UNKNOWN` to keep resolution going.
+            None => TypeTable::UNKNOWN,
         };
 
         ctx.enter_scope();
-        let some_pattern = self.resolve_if_pattern(&some_pattern_ast, option_type, ctx, span);
+        let binding_pattern = self.resolve_if_pattern_inner(
+            &for_of.binding,
+            item_type,
+            ctx,
+            span,
+            RefBinding::None,
+        );
         let body_block = self.resolve_block(&for_of.body, ctx, None);
         ctx.exit_scope();
+
+        let some_pattern = TirPattern::Variant {
+            enum_type: option_type,
+            variant_name: some_case_name,
+            bindings: vec![binding_pattern],
+            payload_type: item_type,
+        };
 
         let body_type = Self::block_result_type(&body_block);
         let some_body = TirExpr::new(TirExprKind::Block(body_block), body_type, span);
