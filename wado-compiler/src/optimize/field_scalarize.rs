@@ -2727,7 +2727,7 @@ fn walk_inline_block(
 /// `Break` arm in `walk_stmt`: emitting a sync there caused unacceptable
 /// over-syncing in label-heavy hot loops). As a result, a sync the
 /// walker emits inside the block — e.g. `walk_nested_loop`'s pre-recurse
-/// write_back, or a pre-call write_back / re-read — may be skipped at
+/// `write_back`, or a pre-call `write_back` / re-read — may be skipped at
 /// runtime when a labeled break exits before reaching it.
 ///
 /// Conservatively JOIN the entry state with the fall-through exit state
