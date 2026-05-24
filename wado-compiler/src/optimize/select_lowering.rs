@@ -1,4 +1,4 @@
-//! Select lowering optimization for Wado TIR
+//! Select lowering optimization for Wado NIR
 //!
 //! Post-optimization rewrite that converts simple `if cond { a } else { b }` expressions
 //! to `builtin::select(cond, a, b)`, which emits the branchless Wasm `select` instruction.

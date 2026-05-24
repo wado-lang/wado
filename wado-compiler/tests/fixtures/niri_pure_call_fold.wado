@@ -1,0 +1,26 @@
+// Verify niri's Stage 3 pure-call inlining: a recursive function
+// invoked at its base-case argument folds to a literal at compile
+// time. The inliner refuses recursive functions outright, so the
+// fact that `count_to_zero(0)` becomes a constant in the WIR is
+// attributable to niri Stage 3 (the const-cond `if` collapses,
+// the else-arm's recursive call is never reached).
+//
+// Bodies are deliberately tail-only and pure so they fit Stage 3's
+// recognized shape (single Return / Expr stmt, effects empty).
+
+use { println, Stdout } from "core:cli";
+
+fn count_to_zero(n: i32) -> i32 {
+    return if n == 0 { 9941 } else { count_to_zero(n - 1) };
+}
+
+export fn run() with Stdout {
+    println(`{count_to_zero(0)}`);
+}
+
+__DATA__
+{
+    "stdout": "9941\n",
+    "wir_expect:O2": ["9941"],
+    "wir_not_expect:O2": ["count_to_zero"]
+}

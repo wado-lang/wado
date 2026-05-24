@@ -1,0 +1,38 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source descriptor: SemPredEvalLexer/DisableRule (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (d): t::tokenize(&input) renders to the same ANTLR4-format
+// dump as the descriptor's [output] block.
+
+use t from "../../grammars/SemPredEvalLexer/DisableRule.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/antlr4_compat_a/SemPredEvalLexer/DisableRule",
+        },
+    };
+use { TK_EOF } from "../../grammars/SemPredEvalLexer/DisableRule.g4";
+
+#[TODO]
+// triage: Stage C: descriptor [output] is prefixed by action-print text (<writeln(...)> echoes inside { ... } action bodies); claim (d) actual lacks the prefix.
+test "stage_a_tokens: SemPredEvalLexer/DisableRule" {
+    let input = "enum abc";
+    let expected = "[@0,0:3='enum',<2>,1:0]
+[@1,5:7='abc',<3>,1:5]
+[@2,8:7='<EOF>',<-1>,1:8]
+s0-' '->:s5=>4
+s0-'a'->:s6=>3
+s0-'e'->:s1=>3
+:s1=>3-'n'->:s2=>3
+:s2=>3-'u'->:s3=>3
+:s6=>3-'b'->:s6=>3
+:s6=>3-'c'->:s6=>3
+";
+    let tokens = t::tokenize(&input);
+    let actual = t::to_lexer_string(&tokens, &input, TK_EOF);
+    assert actual == expected, `actual:\n{actual}\nexpected:\n{expected}`;
+}

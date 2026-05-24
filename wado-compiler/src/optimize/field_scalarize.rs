@@ -1,4 +1,4 @@
-//! Hot Field Scalarization for Wado TIR
+//! Hot Field Scalarization for Wado NIR
 //!
 //! Promotes a hot struct field `obj.field` (read+written inside a loop)
 //! to a mutable local `__hfs_field_N`, hoisted out of the loop. Reads
@@ -61,6 +61,14 @@
 //! actually touches. An immutable-ref parameter elides the post-call
 //! `re_read` since the callee cannot mutate through it. Unresolved
 //! callees fall back to "all fields" conservatively.
+//!
+//! TODO(optimizer): the "unresolved callee → all fields" fallback (used
+//! by indirect / cm-raw / closure-functor invocations and by callees
+//! outside the local function set) writes back every scalarized field
+//! on every such call. Propagating an "opaque-callee transparent on
+//! fields this function never writes" summary up the call graph would
+//! eliminate the sync cliff for thin wrapper functions that only forward
+//! the receiver.
 //!
 //! ## Generated locals
 //!
@@ -1473,7 +1481,7 @@ fn count_field_accesses_in_expr(
             field_name,
         } => {
             // Match both `local.field` and `(&mut local).field` patterns.
-            // The latter occurs for `&mut local.field` which TIR represents as
+            // The latter occurs for `&mut local.field` which NIR represents as
             // FieldAccess { expr: Unary { MutRef, Local { ... } }, field }.
             let local_info = match &inner.kind {
                 NirExprKind::Local { index, name } => Some((*index, name.clone(), inner.type_id)),
@@ -2197,7 +2205,7 @@ fn walk_branching_block_if(
 ///    re-read at the read (state=Both), but iter 2's runtime state
 ///    after iter 1's call is `FieldOnly` — scalar is stale.
 ///
-/// 2. **Post-loop conservatism.** The TIR `Loop` only exits via
+/// 2. **Post-loop conservatism.** The NIR `Loop` only exits via
 ///    `break`/`return`, so the post-loop state at runtime is the
 ///    state at the break-point. The walker doesn't track break-paths
 ///    precisely; the OLD `pick_join_target_for_candidate(entry,

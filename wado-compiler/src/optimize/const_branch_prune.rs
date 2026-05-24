@@ -1,4 +1,4 @@
-//! Constant branch pruning for Wado TIR
+//! Constant branch pruning for Wado NIR
 //!
 //! Simplifies trivial blocks left over after other passes:
 //! - `{ expr; }` → `expr`
@@ -7,11 +7,11 @@
 //! - Empty blocks → `()`
 //!
 //! Constant-condition `if` folding (`if true { A } else { B }` → `A`,
-//! both at the expression and statement level) is handled by `tiri` via
+//! both at the expression and statement level) is handled by `niri` via
 //! the `const_folding` pass — see `docs/wep-2026-04-27-tir-interpreter.md`
 //! Stage 2. This pass intentionally does *not* duplicate that logic; if
 //! you find yourself adding an `if`-condition rewrite here, push it into
-//! `tiri` instead so the lattice-driven engine stays the single source
+//! `niri` instead so the lattice-driven engine stays the single source
 //! of truth.
 
 use crate::hashmap::IndexMap;
@@ -53,7 +53,7 @@ impl NirOptVisitor for BranchPruner {
 
 /// Simplify trivial blocks at the expression level.
 ///
-/// Constant-condition `if` folding lives in `tiri` (Stage 2 of the TIR
+/// Constant-condition `if` folding lives in `niri` (Stage 2 of the NIR
 /// interpreter); this function deliberately does not handle that case.
 fn prune_expr(expr: &mut NirExpr) -> bool {
     let mut changed = false;
@@ -118,7 +118,7 @@ fn prune_expr(expr: &mut NirExpr) -> bool {
 /// - Trivial Unit / Block / unused-LabeledBlock expression stmts → flatten
 ///
 /// Constant-condition `if` statement folding (`if true { … }` →
-/// inline branch) lives in `tiri::Interpreter::reduce_local_block`
+/// inline branch) lives in `niri::Interpreter::reduce_local_block`
 /// and runs as part of the `const_folding` pass.
 fn eliminate_dead_stmts(block: &mut NirBlock) -> bool {
     let dominated = |s: &NirStmt| {

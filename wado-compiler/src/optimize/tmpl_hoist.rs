@@ -1023,10 +1023,10 @@ fn references_local(expr: &NirExpr, local_index: u32) -> bool {
 }
 
 /// Check if a `buf` field expression references the given local (the hoisted String buffer).
-/// Handles both `&mut local` (TIR form) and `ref.as_non_null(local)` patterns.
+/// Handles both `&mut local` (NIR form) and `ref.as_non_null(local)` patterns.
 fn buf_field_references_local(expr: &NirExpr, local_index: u32) -> bool {
     match &expr.kind {
-        // &mut __tmpl_buf (TIR level)
+        // &mut __tmpl_buf (NIR level)
         NirExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
