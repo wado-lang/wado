@@ -14,6 +14,26 @@ use super::Resolver;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::util;
 
+/// The right-hand side of an assignment passed to
+/// [`Resolver::assign_to_target`]. Either an AST expression (the
+/// regular [`Resolver::resolve_assign`] path) or an already-resolved
+/// TIR value (the [`Resolver::resolve_compound_assign`] path, where the
+/// RHS is `target op rhs` computed via
+/// [`Resolver::build_binary_op_tir`]).
+pub(super) enum AssignValue<'a> {
+    Ast(&'a ast::Expr),
+    Resolved(TirExpr),
+}
+
+impl AssignValue<'_> {
+    fn span(&self) -> Span {
+        match self {
+            Self::Ast(expr) => expr.span(),
+            Self::Resolved(tir) => tir.span,
+        }
+    }
+}
+
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_binary(
         &mut self,
@@ -21,53 +41,90 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
-        // Bidirectional coercion: if one operand is a numeric literal and the other is not,
-        // resolve the non-literal first and use its type to coerce the literal.
-        //
-        // For primitive numeric types: coerce the literal to the other operand's type.
-        // For struct types (e.g., i128/u128): look up the operator trait to determine
-        // the expected type for each operand from the method signature. This naturally
-        // handles operators with asymmetric parameter types (e.g., Shl::shl(&self, rhs: u32))
-        // without special-casing specific operators.
-        let left_is_numeric_literal = self.is_numeric_literal(&binary.left);
-        let right_is_numeric_literal = self.is_numeric_literal(&binary.right);
+        let (left, right) = self.resolve_binary_operands_with_coercion(
+            &binary.left,
+            binary.op,
+            &binary.right,
+            ctx,
+            expected_type,
+        );
+        self.build_binary_op_tir(left, binary.op, right, binary.span)
+    }
 
-        let (left, right) = if left_is_numeric_literal && !right_is_numeric_literal {
+    /// Resolve both operands of a binary op, applying the standard
+    /// bidirectional numeric-literal coercion. Shared between
+    /// [`Self::resolve_binary`] and resolver-internal callers like
+    /// [`Self::desugar_comparison_chain`].
+    ///
+    /// For primitive numeric types: coerce the literal to the other operand's type.
+    /// For struct types (e.g. `i128`/`u128`): look up the operator trait to determine
+    /// the expected type for each operand from the method signature. This naturally
+    /// handles operators with asymmetric parameter types (e.g. `Shl::shl(&self, rhs: u32)`)
+    /// without special-casing specific operators.
+    pub(super) fn resolve_binary_operands_with_coercion(
+        &mut self,
+        left_ast: &ast::Expr,
+        op: BinaryOp,
+        right_ast: &ast::Expr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> (TirExpr, TirExpr) {
+        let left_is_numeric_literal = self.is_numeric_literal(left_ast);
+        let right_is_numeric_literal = self.is_numeric_literal(right_ast);
+
+        if left_is_numeric_literal && !right_is_numeric_literal {
             // Resolve right first, then coerce left
-            let right = self.resolve_expr(&binary.right, ctx, expected_type);
+            let right = self.resolve_expr(right_ast, ctx, expected_type);
             let coerce_type = if self.type_table.borrow().is_numeric(right.type_id) {
                 // Primitive type: coerce literal to the same type
                 Some(right.type_id)
             } else {
                 // Struct type: look up operator trait and use self type for lhs literal
-                self.find_operator_self_type(right.type_id, &binary.op)
+                self.find_operator_self_type(right.type_id, &op)
             };
-            let left = self.resolve_expr(&binary.left, ctx, coerce_type);
+            let left = self.resolve_expr(left_ast, ctx, coerce_type);
             (left, right)
         } else if right_is_numeric_literal && !left_is_numeric_literal {
             // Resolve left first, then coerce right
-            let left = self.resolve_expr(&binary.left, ctx, expected_type);
+            let left = self.resolve_expr(left_ast, ctx, expected_type);
             let coerce_type = if self.type_table.borrow().is_numeric(left.type_id) {
                 // Primitive type: coerce literal to the same type
                 Some(left.type_id)
             } else {
                 // Struct type: look up operator trait and use rhs parameter type
-                self.find_operator_rhs_type(left.type_id, &binary.op)
+                self.find_operator_rhs_type(left.type_id, &op)
             };
-            let right = self.resolve_expr(&binary.right, ctx, coerce_type);
+            let right = self.resolve_expr(right_ast, ctx, coerce_type);
             (left, right)
         } else if left_is_numeric_literal && right_is_numeric_literal {
             // Both literals - use expected type from context (e.g., assignment target)
-            let left = self.resolve_expr(&binary.left, ctx, expected_type);
-            let right = self.resolve_expr(&binary.right, ctx, expected_type);
+            let left = self.resolve_expr(left_ast, ctx, expected_type);
+            let right = self.resolve_expr(right_ast, ctx, expected_type);
             (left, right)
         } else {
             // Both non-literals - propagate expected type for coercion
-            let left = self.resolve_expr(&binary.left, ctx, expected_type);
-            let right = self.resolve_expr(&binary.right, ctx, expected_type);
+            let left = self.resolve_expr(left_ast, ctx, expected_type);
+            let right = self.resolve_expr(right_ast, ctx, expected_type);
             (left, right)
-        };
+        }
+    }
 
+    /// Build a binary-op `TirExpr` given pre-resolved operands.
+    ///
+    /// Shared between [`Self::resolve_binary`] (the user-AST entry point)
+    /// and resolver-internal callers like
+    /// [`Self::desugar_comparison_chain`] / [`Self::resolve_compound_assign`]
+    /// that have already resolved both sides into TIR. Handles ref-equality,
+    /// trait dispatch for non-primitive comparison / arithmetic / shift,
+    /// flags-arith rejection, float-`%` rejection, and the trailing
+    /// requires-trait diagnostic.
+    pub(super) fn build_binary_op_tir(
+        &mut self,
+        left: TirExpr,
+        op: BinaryOp,
+        right: TirExpr,
+        span: Span,
+    ) -> TirExpr {
         // Check if this is a comparison operation on a non-primitive type
         // Non-primitives use Eq/Ord traits instead of direct Wasm instructions
         let left_type = self.type_table.borrow().get(left.type_id).clone();
@@ -81,7 +138,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 (ResolvedType::Ref(_), ResolvedType::Ref(_))
                     | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
             );
-            if both_refs && matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq) {
+            if both_refs && matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
                 // Type check: reference types must match
                 if left.type_id != right.type_id
                     && left.type_id != TypeTable::ERROR
@@ -94,11 +151,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: left_name,
                             found: right_name,
-                            span: binary.span,
+                            span,
                         });
                     }
                 }
-                let op = if binary.op == BinaryOp::Eq {
+                let op = if op == BinaryOp::Eq {
                     TirBinaryOp::RefEq
                 } else {
                     TirBinaryOp::RefNotEq
@@ -110,12 +167,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         right: Box::new(right),
                     },
                     TypeTable::BOOL,
-                    binary.span,
+                    span,
                 );
             } else if both_refs {
                 // All operators other than == and != are invalid on reference types
                 let type_name = self.type_table.borrow().type_name(left.type_id);
-                let op_str = match binary.op {
+                let op_str = match op {
                     BinaryOp::Lt => "<",
                     BinaryOp::LtEq => "<=",
                     BinaryOp::Gt => ">",
@@ -136,16 +193,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 };
                 let _ = self.logger.error(TypeError::InvalidPattern {
                     message: format!("operator `{op_str}` cannot be applied to type `{type_name}`"),
-                    span: binary.span,
+                    span,
                 });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
             }
             // If left is a reference but right is not (e.g., &i32 == i32),
             // fall through to the normal type mismatch error below.
         }
 
         let is_comparison = matches!(
-            binary.op,
+            op,
             BinaryOp::Eq
                 | BinaryOp::NotEq
                 | BinaryOp::Lt
@@ -183,7 +240,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 };
 
                 // Handle Eq trait (== and !=)
-                if matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq) {
+                if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
                     let eq_trait_name = self
                         .type_table
                         .borrow()
@@ -198,33 +255,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         false,
                     ) else {
                         let type_name = self.type_table.borrow().type_name(left.type_id);
-                        let op_str = if binary.op == BinaryOp::Eq {
-                            "=="
-                        } else {
-                            "!="
-                        };
+                        let op_str = if op == BinaryOp::Eq { "==" } else { "!=" };
                         let _ = self.logger.error(TypeError::InvalidPattern {
                             message: format!(
                                 "operator `{op_str}` cannot be applied to type `{type_name}` (does not implement Eq trait)"
                             ),
-                            span: binary.span,
+                            span,
                         });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
                     };
                     let call = self.build_trait_op_method_call_on_resolved(
                         left,
                         vec![right],
                         &resolved,
-                        binary.span,
+                        span,
                     );
-                    if binary.op == BinaryOp::NotEq && call.type_id == TypeTable::BOOL {
+                    if op == BinaryOp::NotEq && call.type_id == TypeTable::BOOL {
                         return TirExpr::new(
                             TirExprKind::Unary {
                                 op: TirUnaryOp::Not,
                                 expr: Box::new(call),
                             },
                             TypeTable::BOOL,
-                            binary.span,
+                            span,
                         );
                     }
                     return call;
@@ -232,7 +285,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 // Handle Ord trait (<, >, <=, >=)
                 if matches!(
-                    binary.op,
+                    op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) {
                     let ord_trait_name = self
@@ -249,7 +302,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         false,
                     ) else {
                         let type_name = self.type_table.borrow().type_name(left.type_id);
-                        let op_str = match binary.op {
+                        let op_str = match op {
                             BinaryOp::Lt => "<",
                             BinaryOp::Gt => ">",
                             BinaryOp::LtEq => "<=",
@@ -260,20 +313,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             message: format!(
                                 "operator `{op_str}` cannot be applied to type `{type_name}` (does not implement Ord trait)"
                             ),
-                            span: binary.span,
+                            span,
                         });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
                     };
                     let cmp_call = self.build_trait_op_method_call_on_resolved(
                         left,
                         vec![right],
                         &resolved,
-                        binary.span,
+                        span,
                     );
                     if cmp_call.type_id == TypeTable::ERROR {
                         return cmp_call;
                     }
-                    return self.ord_bool_from_cmp(cmp_call, binary.op, binary.span);
+                    return self.ord_bool_from_cmp(cmp_call, op, span);
                 }
             }
 
@@ -290,7 +343,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 && let Some(bounds) = self.trait_ctx.type_param_bounds.get(&name).cloned()
             {
                 let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
-                if matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq)
+                if matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
                     && let Some((_trait_name, info)) =
                         self.find_method_in_trait_bounds(&bound_names, "eq", left.type_id)
                 {
@@ -313,22 +366,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         left,
                         vec![right],
                         &resolved,
-                        binary.span,
+                        span,
                     );
-                    if binary.op == BinaryOp::NotEq && call.type_id == TypeTable::BOOL {
+                    if op == BinaryOp::NotEq && call.type_id == TypeTable::BOOL {
                         return TirExpr::new(
                             TirExprKind::Unary {
                                 op: TirUnaryOp::Not,
                                 expr: Box::new(call),
                             },
                             TypeTable::BOOL,
-                            binary.span,
+                            span,
                         );
                     }
                     return call;
                 }
                 if matches!(
-                    binary.op,
+                    op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) && let Some((_trait_name, info)) =
                     self.find_method_in_trait_bounds(&bound_names, "cmp", left.type_id)
@@ -352,12 +405,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         left,
                         vec![right],
                         &resolved,
-                        binary.span,
+                        span,
                     );
                     if cmp_call.type_id == TypeTable::ERROR {
                         return cmp_call;
                     }
-                    return self.ord_bool_from_cmp(cmp_call, binary.op, binary.span);
+                    return self.ord_bool_from_cmp(cmp_call, op, span);
                 }
             }
         }
@@ -365,7 +418,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Check if this is an arithmetic or bitwise operation on a non-primitive type
         // Non-primitives use Add/Sub/Mul/Div/Rem/BitAnd/BitOr/BitXor traits
         let is_arithmetic_or_bitwise = matches!(
-            binary.op,
+            op,
             BinaryOp::Add
                 | BinaryOp::Sub
                 | BinaryOp::Mul
@@ -389,7 +442,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             if let Some(struct_name) = struct_name {
                 // Determine which trait and method to use based on operator
-                let (trait_name, method_name) = match binary.op {
+                let (trait_name, method_name) = match op {
                     BinaryOp::Add => ("Add", "add"),
                     BinaryOp::Sub => ("Sub", "sub"),
                     BinaryOp::Mul => ("Mul", "mul"),
@@ -432,7 +485,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         left,
                         vec![right],
                         &resolved,
-                        binary.span,
+                        span,
                     );
                 }
             }
@@ -443,7 +496,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             {
                 let operand_type_id = left.type_id;
                 let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
-                let (trait_name, method_name) = match binary.op {
+                let (trait_name, method_name) = match op {
                     BinaryOp::Add => ("Add", "add"),
                     BinaryOp::Sub => ("Sub", "sub"),
                     BinaryOp::Mul => ("Mul", "mul"),
@@ -474,7 +527,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         left,
                         vec![right],
                         &resolved,
-                        binary.span,
+                        span,
                     );
                 }
             }
@@ -482,7 +535,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Check if this is a shift operation on a non-primitive type
         // Non-primitives use Shl/Shr traits (with rhs: u32, not &Self)
-        let is_shift = matches!(binary.op, BinaryOp::Shl | BinaryOp::Shr);
+        let is_shift = matches!(op, BinaryOp::Shl | BinaryOp::Shr);
 
         if is_shift {
             // Get struct name for trait lookup
@@ -497,7 +550,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             if let Some(struct_name) = struct_name {
                 // Determine which trait and method to use based on operator
-                let (trait_name, method_name) = match binary.op {
+                let (trait_name, method_name) = match op {
                     BinaryOp::Shl => ("Shl", "shl"),
                     BinaryOp::Shr => ("Shr", "shr"),
                     _ => unreachable!(),
@@ -537,7 +590,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         left,
                         vec![right],
                         &resolved,
-                        binary.span,
+                        span,
                     );
                 }
             }
@@ -547,11 +600,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         {
             let left_resolved = self.type_table.borrow().get(left.type_id).clone();
             let is_flags_arith = matches!(
-                binary.op,
+                op,
                 BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod
             ) && matches!(left_resolved, ResolvedType::Flags { .. });
             if is_flags_arith {
-                let op_char = match binary.op {
+                let op_char = match op {
                     BinaryOp::Add => "+",
                     BinaryOp::Sub => "-",
                     BinaryOp::Mul => "*",
@@ -563,9 +616,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     message: format!(
                         "arithmetic operator `{op_char}` is not allowed on flags types; use bitwise operators (`|`, `&`, `^`) instead"
                     ),
-                    span: binary.span,
+                    span,
                 });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
             }
         }
 
@@ -573,7 +626,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Users should use f64::fmod() or f32::fmod() instead.
         {
             let left_resolved = self.type_table.borrow().get(left.type_id).clone();
-            if matches!(binary.op, BinaryOp::Mod)
+            if matches!(op, BinaryOp::Mod)
                 && matches!(
                     left_resolved,
                     ResolvedType::Primitive(PrimitiveType::F32 | PrimitiveType::F64)
@@ -587,9 +640,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     message: format!(
                         "operator `%` is not supported on `{type_name}`; use `{type_name}::fmod(a, b)` instead"
                     ),
-                    span: binary.span,
+                    span,
                 });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
             }
         }
 
@@ -623,13 +676,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 _ => false,
             };
             if requires_trait
-                && !matches!(binary.op, BinaryOp::And | BinaryOp::Or)
+                && !matches!(op, BinaryOp::And | BinaryOp::Or)
                 && left.type_id != TypeTable::ERROR
                 && right.type_id != TypeTable::ERROR
             {
                 let type_table = self.type_table.borrow();
                 let type_name = type_table.type_name(left.type_id);
-                let op_char = match binary.op {
+                let op_char = match op {
                     BinaryOp::Add => "+",
                     BinaryOp::Sub => "-",
                     BinaryOp::Mul => "*",
@@ -655,7 +708,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         items.trait_name(CompilerItem::Ord).to_string(),
                     )
                 };
-                let trait_name: String = match binary.op {
+                let trait_name: String = match op {
                     BinaryOp::Add => "Add".to_string(),
                     BinaryOp::Sub => "Sub".to_string(),
                     BinaryOp::Mul => "Mul".to_string(),
@@ -675,13 +728,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     message: format!(
                         "operator `{op_char}` cannot be applied to type `{type_name}`: type does not implement `{trait_name}`"
                     ),
-                    span: binary.span,
+                    span,
                 });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
             }
         }
 
-        let op = util::convert_binary_op(binary.op);
+        let tir_op = util::convert_binary_op(op);
 
         // Type check: both operands of a binary operation must have the same type.
         // This applies to primitives, newtypes, and all non-overloaded binary ops.
@@ -689,7 +742,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Logical operators (&&, ||) are excluded since both sides are always bool.
         // We compare resolved types (not just TypeIds) because generic instantiation
         // can create distinct TypeIds for the same logical type.
-        if !matches!(binary.op, BinaryOp::And | BinaryOp::Or)
+        if !matches!(op, BinaryOp::And | BinaryOp::Or)
             && left.type_id != right.type_id
             && left.type_id != TypeTable::ERROR
             && right.type_id != TypeTable::ERROR
@@ -703,13 +756,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: left_name,
                     found: right_name,
-                    span: binary.span,
+                    span,
                 });
             }
         }
 
         // Determine result type based on operator
-        let type_id = match binary.op {
+        let type_id = match op {
             BinaryOp::Eq
             | BinaryOp::NotEq
             | BinaryOp::Lt
@@ -724,11 +777,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         TirExpr::new(
             TirExprKind::Binary {
                 left: Box::new(left),
-                op,
+                op: tir_op,
                 right: Box::new(right),
             },
             type_id,
-            binary.span,
+            span,
         )
     }
 
@@ -950,14 +1003,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
     }
 
-    /// Resolve an assignment expression
+    /// Resolve an assignment expression.
     pub(super) fn resolve_assign(
         &mut self,
         assign: &ast::AssignExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
+        self.assign_to_target(
+            &assign.target,
+            AssignValue::Ast(&assign.value),
+            assign.span,
+            ctx,
+        )
+    }
+
+    /// Build an assignment TIR for `target = value`, where the value may
+    /// be a user-AST expression or an already-resolved [`TirExpr`].
+    ///
+    /// This is the shared core of [`Self::resolve_assign`] and
+    /// [`Self::resolve_compound_assign`]: both go through the same target
+    /// dispatch (`IndexAssign` trait on custom types, `GlobalVarSet` on
+    /// globals, plain `Assign` otherwise), differing only in where the
+    /// right-hand value comes from.
+    pub(super) fn assign_to_target(
+        &mut self,
+        target_ast: &ast::Expr,
+        value: AssignValue<'_>,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
         // Check for index assignment on custom types: arr[i] = value -> arr.index_assign(i, value)
-        if let ast::Expr::Index(index_expr) = &assign.target {
+        if let ast::Expr::Index(index_expr) = target_ast {
             // Resolve the indexed expression to get its type
             let indexed_expr = self.resolve_expr(&index_expr.expr, ctx, None);
 
@@ -1006,17 +1082,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         });
                     if let Some(trait_info) = assign_info {
                         // Generate: expr.index_assign(index, value)
-                        let value =
-                            self.resolve_expr(&assign.value, ctx, Some(trait_info.input_type));
+                        let value_span = value.span();
+                        let value_tir = match value {
+                            AssignValue::Ast(expr) => {
+                                self.resolve_expr(expr, ctx, Some(trait_info.input_type))
+                            }
+                            AssignValue::Resolved(tir) => tir,
+                        };
 
                         // Check: reject &T/&mut T assigned where non-ref expected
-                        self.typecheck(value.type_id, trait_info.input_type, assign.value.span());
+                        self.typecheck(value_tir.type_id, trait_info.input_type, value_span);
 
                         let receiver = self.adjust_receiver_for_self_kind(
                             indexed_expr,
                             trait_info.self_kind,
                             false,
-                            assign.span,
+                            span,
                         );
 
                         // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
@@ -1041,24 +1122,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             vec![],
                             vec![
                                 CallArg::new(index_resolved, false),
-                                CallArg::new(value, false),
+                                CallArg::new(value_tir, false),
                             ],
                             TypeTable::UNIT,
-                            assign.span,
+                            span,
                         );
                     }
                 }
             }
         }
 
-        // Standard assignment handling
-        let target = self.resolve_expr(&assign.target, ctx, None);
-        // Use target's type as expected type for value resolution
-        // This enables coercion of empty array literals [] to the field's Array<T> type
-        let value = self.resolve_expr(&assign.value, ctx, Some(target.type_id));
+        // Standard assignment handling. Fall through here happens when the
+        // target isn't `Expr::Index`, or when the IndexAssign trait lookup
+        // returned None — `value` was not consumed on either of those paths.
+        let target = self.resolve_expr(target_ast, ctx, None);
+        let value_span = value.span();
+        let value_tir = match value {
+            AssignValue::Ast(expr) => self.resolve_expr(expr, ctx, Some(target.type_id)),
+            AssignValue::Resolved(tir) => tir,
+        };
 
         // Reject &T assigned where non-ref T expected
-        self.typecheck(value.type_id, target.type_id, assign.value.span());
+        self.typecheck(value_tir.type_id, target.type_id, value_span);
 
         // Handle assignment to global variables
         if let TirExprKind::GlobalVarGet {
@@ -1084,19 +1169,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if !is_mut {
                     let _ = self.logger.error(TypeError::CannotAssign {
                         message: format!("cannot assign to immutable global variable '{name}'"),
-                        span: assign.target.span(),
+                        span: target_ast.span(),
                     });
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, assign.span);
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
                 }
                 // Generate GlobalVarSet instead of Assign
                 return TirExpr::new(
                     TirExprKind::GlobalVarSet {
                         module_source: module_source.clone(),
                         name: name.clone(),
-                        value: Box::new(value),
+                        value: Box::new(value_tir),
                     },
                     TypeTable::UNIT,
-                    assign.span,
+                    span,
                 );
             }
         }
@@ -1116,7 +1201,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if matches!(inner_type, ResolvedType::Ref(_)) {
                     let _ = self.logger.error(TypeError::CannotAssign {
                         message: "cannot assign through immutable reference".to_string(),
-                        span: assign.target.span(),
+                        span: target_ast.span(),
                     });
                     false
                 } else {
@@ -1130,173 +1215,182 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Report error for invalid assignment target
             let _ = self.logger.error(TypeError::CannotAssign {
                 message: "expression is not assignable".to_string(),
-                span: assign.target.span(),
+                span: target_ast.span(),
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, assign.span);
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
         }
 
         TirExpr::new(
             TirExprKind::Assign {
                 target: Box::new(target),
-                value: Box::new(value),
+                value: Box::new(value_tir),
             },
             TypeTable::UNIT,
-            assign.span,
+            span,
         )
     }
 
-    /// Resolve a compound assignment (already desugared, but handle anyway)
+    /// Resolve `target op= value` as the equivalent `target = target op value`,
+    /// fully TIR-direct.
+    ///
+    /// The READ side comes from `resolve_expr(&compound.target, …)`, which
+    /// naturally dispatches the `Index` trait for indexed reads on custom
+    /// types. The WRITE side reuses [`Self::assign_to_target`], which
+    /// handles `GlobalVarSet`, the `IndexAssign` trait, and plain `Assign`
+    /// — feeding it the already-resolved combined value via
+    /// [`AssignValue::Resolved`] so no synthesised AST is involved.
+    ///
+    /// Note: `target` is evaluated twice. For pure l-values (locals,
+    /// globals, fields of locals) that is fine; for impure l-values like
+    /// `arr[bump()] += 1` the inner sub-expressions run twice, matching
+    /// the historical desugar-phase behaviour. Binding impure
+    /// sub-expressions to temporaries first is a separate concern.
     pub(super) fn resolve_compound_assign(
         &mut self,
         compound: &ast::CompoundAssignExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // This should have been desugared, but handle it anyway
-        let target = self.resolve_expr(&compound.target, ctx, None);
-        let value = self.resolve_expr(&compound.value, ctx, Some(target.type_id));
-
         let op = match compound.op {
-            ast::CompoundAssignOp::Add => TirBinaryOp::Add,
-            ast::CompoundAssignOp::Sub => TirBinaryOp::Sub,
-            ast::CompoundAssignOp::Mul => TirBinaryOp::Mul,
-            ast::CompoundAssignOp::Div => TirBinaryOp::Div,
-            ast::CompoundAssignOp::Mod => TirBinaryOp::Mod,
-            ast::CompoundAssignOp::BitAnd => TirBinaryOp::BitAnd,
-            ast::CompoundAssignOp::BitOr => TirBinaryOp::BitOr,
-            ast::CompoundAssignOp::BitXor => TirBinaryOp::BitXor,
-            ast::CompoundAssignOp::Shl => TirBinaryOp::Shl,
-            ast::CompoundAssignOp::Shr => TirBinaryOp::Shr,
+            ast::CompoundAssignOp::Add => BinaryOp::Add,
+            ast::CompoundAssignOp::Sub => BinaryOp::Sub,
+            ast::CompoundAssignOp::Mul => BinaryOp::Mul,
+            ast::CompoundAssignOp::Div => BinaryOp::Div,
+            ast::CompoundAssignOp::Mod => BinaryOp::Mod,
+            ast::CompoundAssignOp::BitAnd => BinaryOp::BitAnd,
+            ast::CompoundAssignOp::BitOr => BinaryOp::BitOr,
+            ast::CompoundAssignOp::BitXor => BinaryOp::BitXor,
+            ast::CompoundAssignOp::Shl => BinaryOp::Shl,
+            ast::CompoundAssignOp::Shr => BinaryOp::Shr,
         };
-
-        // target = target op value
-        let binary = TirExpr::new(
-            TirExprKind::Binary {
-                left: Box::new(target.clone()),
-                op,
-                right: Box::new(value),
-            },
-            target.type_id,
+        let read = self.resolve_expr(&compound.target, ctx, None);
+        let rhs = self.resolve_expr(&compound.value, ctx, Some(read.type_id));
+        let combined = self.build_binary_op_tir(read, op, rhs, compound.span);
+        self.assign_to_target(
+            &compound.target,
+            AssignValue::Resolved(combined),
             compound.span,
-        );
-
-        TirExpr::new(
-            TirExprKind::Assign {
-                target: Box::new(target),
-                value: Box::new(binary),
-            },
-            TypeTable::UNIT,
-            compound.span,
+            ctx,
         )
     }
 
-    /// Desugar `a OP1 b OP2 c [OP3 d …]` to the equivalent
-    /// `(a OP1 b) && (b OP2 c) [&& (c OP3 d) …]`. Middle terms appear
-    /// in two comparisons each, so they are bound to a `__mK` local
-    /// inside a synthetic block — `foo() < bar() < baz()` calls
-    /// `bar()` exactly once.
+    /// Build a `TirExpr` for `a OP1 b OP2 c [OP3 d …]` as the equivalent
+    /// `(a OP1 b) && (b OP2 c) [&& (c OP3 d) …]`, TIR-direct.
+    ///
+    /// Middle terms appear in two comparisons each, so they are bound to a
+    /// `__mK` local inside a synthesised `TirExpr::Block` — `foo() < bar() <
+    /// baz()` calls `bar()` exactly once.
     pub(super) fn desugar_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let expanded = self.desugar_comparison_chain_ast(chain, ctx);
-        self.resolve_expr(&expanded, ctx, None)
+        use crate::tir::{TirBlock, TirStmt, TirStmtKind};
+
+        if chain.comparisons.is_empty() {
+            return self.resolve_expr(&chain.first, ctx, None);
+        }
+
+        // Single comparison: no middle term to bind, just one Binary.
+        if chain.comparisons.len() == 1 {
+            let cmp = &chain.comparisons[0];
+            let (left_tir, right_tir) = self.resolve_binary_operands_with_coercion(
+                &chain.first,
+                cmp.op,
+                &cmp.right,
+                ctx,
+                None,
+            );
+            return self.build_binary_op_tir(left_tir, cmp.op, right_tir, cmp.op_span);
+        }
+
+        // Multi-comparison: enter a fresh scope for the `__mK` bindings so
+        // they don't leak into the surrounding function's local namespace.
+        ctx.enter_scope();
+        let mut stmts: Vec<TirStmt> = Vec::new();
+
+        // First comparison: resolve `chain.first` and `cmp[0].right` with
+        // the same bidirectional coercion `resolve_binary` would apply.
+        let cmp0 = &chain.comparisons[0];
+        let (first_tir, right0_tir) = self.resolve_binary_operands_with_coercion(
+            &chain.first,
+            cmp0.op,
+            &cmp0.right,
+            ctx,
+            None,
+        );
+
+        // Bind `right0` to `__m0` — it is reused by the next comparison.
+        let m0_ref = self.bind_chain_middle(0, right0_tir, chain.span, &mut stmts, ctx);
+        let mut acc_tir =
+            self.build_binary_op_tir(first_tir, cmp0.op, m0_ref.clone(), cmp0.op_span);
+        let mut prev_tir = m0_ref;
+
+        let last_idx = chain.comparisons.len() - 1;
+        for idx in 1..chain.comparisons.len() {
+            let cmp = &chain.comparisons[idx];
+            // Coerce a literal `right` against `prev_tir`'s type; non-literals
+            // resolve normally (`resolve_expr` ignores `expected_type` when it
+            // can't help).
+            let raw_right = self.resolve_expr(&cmp.right, ctx, Some(prev_tir.type_id));
+            let right_tir = if idx == last_idx {
+                // Tail operand: only one use, no binding needed.
+                raw_right
+            } else {
+                self.bind_chain_middle(idx, raw_right, chain.span, &mut stmts, ctx)
+            };
+            let next_prev = right_tir.clone();
+            let cmp_tir = self.build_binary_op_tir(prev_tir, cmp.op, right_tir, cmp.op_span);
+            acc_tir = self.build_binary_op_tir(acc_tir, BinaryOp::And, cmp_tir, chain.span);
+            prev_tir = next_prev;
+        }
+
+        ctx.exit_scope();
+
+        // Wrap the bindings + final && chain in a TIR Block whose value is
+        // the boolean result.
+        stmts.push(TirStmt::new(TirStmtKind::Expr(acc_tir), chain.span));
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, chain.span)),
+            TypeTable::BOOL,
+            chain.span,
+        )
     }
 
-    /// Build the AST that [`Self::desugar_comparison_chain`] resolves.
-    /// Split out so the tests can exercise the structural rewrite
-    /// without going through the full resolver.
-    fn desugar_comparison_chain_ast(
-        &self,
-        chain: &ast::ComparisonChainExpr,
+    /// Helper: bind a comparison-chain middle term to a `__mK` local and
+    /// return a `TirExpr::Local` handle that callers can splice into the
+    /// surrounding comparisons.
+    fn bind_chain_middle(
+        &mut self,
+        idx: usize,
+        value: TirExpr,
+        span: Span,
+        stmts: &mut Vec<crate::tir::TirStmt>,
         ctx: &mut FunctionContext,
-    ) -> ast::Expr {
-        if chain.comparisons.is_empty() {
-            return chain.first.clone();
-        }
-        if chain.comparisons.len() == 1 {
-            // Single comparison — no middle term, nothing to bind.
-            let cmp = &chain.comparisons[0];
-            return ast::Expr::Binary(Box::new(ast::BinaryExpr {
-                id: chain.id,
-                left: chain.first.clone(),
-                op: cmp.op,
-                right: cmp.right.clone(),
-                span: chain.span,
-            }));
-        }
-
-        // Multi-comparison chain. Each non-last `cmp.right` is bound to a
-        // `__mK` local so it evaluates once and is shared by the two
-        // comparisons that reference it.
-        let mut stmts: Vec<ast::Stmt> = Vec::new();
-        let mut prev = chain.first.clone();
-        let mut and_chain: Option<ast::Expr> = None;
-        let last = chain.comparisons.len() - 1;
-
-        for (idx, cmp) in chain.comparisons.iter().enumerate() {
-            let (right_for_comp, next_prev) = if idx == last {
-                // Tail operand only used once.
-                (cmp.right.clone(), cmp.right.clone())
-            } else {
-                let synth_id = self.alloc_synth_ast_id(ctx);
-                let name = format!("__m{idx}");
-                stmts.push(ast::Stmt::Let(ast::LetStmt {
-                    id: synth_id,
-                    pattern: ast::Pattern::Ident {
-                        id: synth_id,
-                        name: name.clone(),
-                        span: chain.span,
-                    },
-                    name_span: chain.span,
-                    is_mut: false,
-                    is_reactive: false,
-                    ty: None,
-                    value: Some(cmp.right.clone()),
-                    span: chain.span,
-                }));
-                let ident = ast::Expr::Ident(ast::IdentExpr {
-                    id: synth_id,
-                    name,
-                    segments: Vec::new(),
-                    type_args: Vec::new(),
-                    span: chain.span,
-                });
-                (ident.clone(), ident)
-            };
-
-            let cmp_expr = ast::Expr::Binary(Box::new(ast::BinaryExpr {
-                id: chain.id,
-                left: prev,
-                op: cmp.op,
-                right: right_for_comp,
-                span: cmp.op_span,
-            }));
-            and_chain = Some(match and_chain {
-                None => cmp_expr,
-                Some(acc) => ast::Expr::Binary(Box::new(ast::BinaryExpr {
-                    id: chain.id,
-                    left: acc,
-                    op: ast::BinaryOp::And,
-                    right: cmp_expr,
-                    span: chain.span,
-                })),
-            });
-            prev = next_prev;
-        }
-
-        let result = and_chain.expect("non-empty: short-circuited above for 0/1 comparisons");
-        let block_id = self.alloc_synth_ast_id(ctx);
-        stmts.push(ast::Stmt::Expr(ast::ExprStmt {
-            id: block_id,
-            expr: result,
-            span: chain.span,
-        }));
-        ast::Expr::Block(Box::new(ast::Block {
-            id: block_id,
-            stmts,
-            span: chain.span,
-        }))
+    ) -> TirExpr {
+        use crate::tir::{TirStmt, TirStmtKind};
+        let type_id = value.type_id;
+        let name = format!("__m{idx}");
+        let local_index = ctx.add_local(name.clone(), type_id, false, None);
+        stmts.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: name.clone(),
+                local_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id,
+                value,
+                skip_value_copy: false,
+            },
+            span,
+        ));
+        TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name,
+            },
+            type_id,
+            span,
+        )
     }
 
     /// Single TIR-level builder for every operator that dispatches to a

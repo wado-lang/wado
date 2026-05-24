@@ -6,7 +6,7 @@
 //! diagnostics) without paying for monomorphize / lower / codegen.
 //!
 //! The pipeline used here is the same one that `compile_with_options` runs in
-//! its early phases: lex → parse → bind → desugar → load → analyze → resolve.
+//! its early phases: lex → parse → bind → load → analyze → resolve.
 //! Everything downstream of resolve is only needed to emit Wasm bytes, so LSP
 //! skips it.
 

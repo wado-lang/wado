@@ -1,0 +1,15 @@
+// Test that a non-bool guard in `matches` is rejected with a clear
+// type-mismatch error. Pre-fix, the resolver's TIR-direct `matches`
+// lowering hardcoded the Match's result type to `bool` and propagated
+// the bool expectation only as a coercion hint, so a non-bool guard
+// silently produced a `bool`-typed Match whose arm body was a different
+// type — codegen tolerated the lie, masking the bug.
+
+export fn run() {
+    let opt: Option<i32> = Option::<i32>::Some(5);
+    // ERROR: guard `v + 1` returns i32, not bool.
+    let _ = opt matches { Option::Some(v) && v + 1 };
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'bool', found 'i32'"}

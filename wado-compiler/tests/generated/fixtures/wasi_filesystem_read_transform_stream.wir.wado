@@ -234,28 +234,26 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/to_u
         break __seq_lit: __b;
         unreachable;
     };
-    __for_0: block {
-        i = 0;
-        _licm_used_11 = data.used;
-        _licm_repr_12 = data.repr;
-        block {
-            l1: loop {
-                if i >= _licm_used_11 {
-                    break __for_0;
-                }
-                b = builtin::array_get<u8>(_licm_repr_12, i);
-                if (if b >=u 97 -> i32 {
-                    b <=u 122;
-                } else {
-                    0;
-                }) {
-                    "core:prelude/array.wado/Array<u8>::push"(result, (b - 32) & 255);
-                } else {
-                    "core:prelude/array.wado/Array<u8>::push"(result, b);
-                }
-                i = i + 1;
-                continue l1;
-            };
+    i = 0;
+    _licm_used_11 = data.used;
+    _licm_repr_12 = data.repr;
+    b0: block {
+        l1: loop {
+            if i >= _licm_used_11 {
+                break b0;
+            }
+            b = builtin::array_get<u8>(_licm_repr_12, i);
+            if (if b >=u 97 -> i32 {
+                b <=u 122;
+            } else {
+                0;
+            }) {
+                "core:prelude/array.wado/Array<u8>::push"(result, (b - 32) & 255);
+            } else {
+                "core:prelude/array.wado/Array<u8>::push"(result, b);
+            }
+            i = i + 1;
+            continue l1;
         };
     };
     return result;
@@ -512,17 +510,15 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     let arr: ref builtin::array<u8>;
     let i: i32;
     arr = builtin::array_new<u8>(len);
-    __for_0: block {
-        i = 0;
-        block {
-            l54: loop {
-                if i >= len {
-                    break __for_0;
-                }
-                builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
-                i = i + 1;
-                continue l54;
-            };
+    i = 0;
+    b53: block {
+        l54: loop {
+            if i >= len {
+                break b53;
+            }
+            builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
+            i = i + 1;
+            continue l54;
         };
     };
     return arr;
@@ -530,17 +526,15 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l57: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l57;
-            };
+    i = 0;
+    b56: block {
+        l57: loop {
+            if i >= len {
+                break b56;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l57;
         };
     };
 }

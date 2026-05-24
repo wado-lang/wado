@@ -197,17 +197,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l2: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l2;
-            };
+    i = 0;
+    b1: block {
+        l2: loop {
+            if i >= len {
+                break b1;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l2;
         };
     };
 }
@@ -315,18 +313,16 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
-    __for_0: block {
-        i = 0;
-        _licm_buf_4 = self.buf;
-        block {
-            l13: loop {
-                if i >= n {
-                    break __for_0;
-                }
-                "core:prelude/string.wado/String::push"(_licm_buf_4, c);
-                i = i + 1;
-                continue l13;
-            };
+    i = 0;
+    _licm_buf_4 = self.buf;
+    b12: block {
+        l13: loop {
+            if i >= n {
+                break b12;
+            }
+            "core:prelude/string.wado/String::push"(_licm_buf_4, c);
+            i = i + 1;
+            continue l13;
         };
     };
 }
@@ -377,23 +373,21 @@ fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::join"(self, 
         unreachable;
     };
     f_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: buf_2 };
-    __for_8: block {
-        i = 0;
-        _licm_used_12 = self.used;
-        _licm_repr_13 = self.repr;
-        block {
-            l20: loop {
-                if i >= _licm_used_12 {
-                    break __for_8;
-                }
-                if i > 0 {
-                    "core:prelude/string.wado/String::push_str"(f_3.buf, separator);
-                }
-                item = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_13, i);
-                "core:prelude/format.wado/Formatter::pad"(f_3, item);
-                i = i + 1;
-                continue l20;
-            };
+    i = 0;
+    _licm_used_12 = self.used;
+    _licm_repr_13 = self.repr;
+    b19: block {
+        l20: loop {
+            if i >= _licm_used_12 {
+                break b19;
+            }
+            if i > 0 {
+                "core:prelude/string.wado/String::push_str"(f_3.buf, separator);
+            }
+            item = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_13, i);
+            "core:prelude/format.wado/Formatter::pad"(f_3, item);
+            i = i + 1;
+            continue l20;
         };
     };
     return buf_2;

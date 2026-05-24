@@ -289,17 +289,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l8: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l8;
-            };
+    i = 0;
+    b7: block {
+        l8: loop {
+            if i >= len {
+                break b7;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l8;
         };
     };
 }
@@ -347,17 +345,15 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         return 1;
     }
     n = 0;
-    __for_1: block {
-        t = val;
-        block {
-            l13: loop {
-                if t <= 0_i64 {
-                    break __for_1;
-                }
-                n = n + 1;
-                t = t / 10_i64;
-                continue l13;
-            };
+    t = val;
+    b12: block {
+        l13: loop {
+            if t <= 0_i64 {
+                break b12;
+            }
+            n = n + 1;
+            t = t / 10_i64;
+            continue l13;
         };
     };
     return n;
@@ -370,18 +366,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
     } else {
-        __for_2: block {
-            temp = abs_val;
-            block {
-                l17: loop {
-                    if temp <= 0_i64 {
-                        break __for_2;
-                    }
-                    pos = pos - 1;
-                    builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
-                    temp = temp / 10_i64;
-                    continue l17;
-                };
+        temp = abs_val;
+        b16: block {
+            l17: loop {
+                if temp <= 0_i64 {
+                    break b16;
+                }
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                temp = temp / 10_i64;
+                continue l17;
             };
         };
     }
@@ -461,19 +455,17 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l25: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
-                    return 0;
-                }
-                i = i + 1;
-                continue l25;
-            };
+    i = 0;
+    b24: block {
+        l25: loop {
+            if i >= len {
+                break b24;
+            }
+            if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
+                return 0;
+            }
+            i = i + 1;
+            continue l25;
         };
     };
     return 1;
@@ -507,18 +499,16 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
-    __for_0: block {
-        i = 0;
-        _licm_buf_4 = self.buf;
-        block {
-            l33: loop {
-                if i >= n {
-                    break __for_0;
-                }
-                "core:prelude/string.wado/String::push"(_licm_buf_4, c);
-                i = i + 1;
-                continue l33;
-            };
+    i = 0;
+    _licm_buf_4 = self.buf;
+    b32: block {
+        l33: loop {
+            if i >= n {
+                break b32;
+            }
+            "core:prelude/string.wado/String::push"(_licm_buf_4, c);
+            i = i + 1;
+            continue l33;
         };
     };
 }
@@ -652,30 +642,28 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
     let _licm_used_10: i32;
     let _licm_repr_11: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
     let _licm_used_16: i32;
-    __for_2: block {
-        i = 0;
-        _licm_used_10 = self.used;
-        _licm_repr_11 = self.repr;
-        _licm_used_16 = key.used;
-        block {
-            l58: loop {
-                if i >= _licm_used_10 {
-                    break __for_2;
+    i = 0;
+    _licm_used_10 = self.used;
+    _licm_repr_11 = self.repr;
+    _licm_used_16 = key.used;
+    b57: block {
+        l58: loop {
+            if i >= _licm_used_10 {
+                break b57;
+            }
+            if __inline_String_Eq__eq_2: block -> bool {
+                self_6 = builtin::array_get<ref "tuple//[String, String]">(_licm_repr_11, i).0;
+                len_a = self_6.used;
+                if len_a != _licm_used_16 {
+                    break __inline_String_Eq__eq_2: 0;
                 }
-                if __inline_String_Eq__eq_2: block -> bool {
-                    self_6 = builtin::array_get<ref "tuple//[String, String]">(_licm_repr_11, i).0;
-                    len_a = self_6.used;
-                    if len_a != _licm_used_16 {
-                        break __inline_String_Eq__eq_2: 0;
-                    }
-                    break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_6.repr, key.repr, len_a);
-                    unreachable;
-                } {
-                    return 1;
-                }
-                i = i + 1;
-                continue l58;
-            };
+                break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_6.repr, key.repr, len_a);
+                unreachable;
+            } {
+                return 1;
+            }
+            i = i + 1;
+            continue l58;
         };
     };
     return 0;
@@ -688,30 +676,28 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
     let _licm_used_12: i32;
     let _licm_repr_13: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
     let _licm_used_18: i32;
-    __for_1: block {
-        i = 0;
-        _licm_used_12 = self.used;
-        _licm_repr_13 = self.repr;
-        _licm_used_18 = key.used;
-        block {
-            l63: loop {
-                if i >= _licm_used_12 {
-                    break __for_1;
+    i = 0;
+    _licm_used_12 = self.used;
+    _licm_repr_13 = self.repr;
+    _licm_used_18 = key.used;
+    b62: block {
+        l63: loop {
+            if i >= _licm_used_12 {
+                break b62;
+            }
+            if __inline_String_Eq__eq_2: block -> bool {
+                self_6 = builtin::array_get<ref "tuple//[String, String]">(_licm_repr_13, i).0;
+                len_a = self_6.used;
+                if len_a != _licm_used_18 {
+                    break __inline_String_Eq__eq_2: 0;
                 }
-                if __inline_String_Eq__eq_2: block -> bool {
-                    self_6 = builtin::array_get<ref "tuple//[String, String]">(_licm_repr_13, i).0;
-                    len_a = self_6.used;
-                    if len_a != _licm_used_18 {
-                        break __inline_String_Eq__eq_2: 0;
-                    }
-                    break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_6.repr, key.repr, len_a);
-                    unreachable;
-                } {
-                    return builtin::array_get<ref "tuple//[String, String]">(_licm_repr_13, i).1;
-                }
-                i = i + 1;
-                continue l63;
-            };
+                break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_6.repr, key.repr, len_a);
+                unreachable;
+            } {
+                return builtin::array_get<ref "tuple//[String, String]">(_licm_repr_13, i).1;
+            }
+            i = i + 1;
+            continue l63;
         };
     };
     return ref.null none;
@@ -725,32 +711,30 @@ fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<core:prelude/string.wad
     let _licm_used_14: i32;
     let _licm_repr_15: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
     let _licm_used_20: i32;
-    __for_0: block {
-        i = 0;
-        _licm_used_14 = self.used;
-        _licm_repr_15 = self.repr;
-        _licm_used_20 = key.used;
-        block {
-            l68: loop {
-                if i >= _licm_used_14 {
-                    break __for_0;
+    i = 0;
+    _licm_used_14 = self.used;
+    _licm_repr_15 = self.repr;
+    _licm_used_20 = key.used;
+    b67: block {
+        l68: loop {
+            if i >= _licm_used_14 {
+                break b67;
+            }
+            if __inline_String_Eq__eq_2: block -> bool {
+                self_7 = builtin::array_get<ref "tuple//[String, String]">(_licm_repr_15, i).0;
+                len_a = self_7.used;
+                if len_a != _licm_used_20 {
+                    break __inline_String_Eq__eq_2: 0;
                 }
-                if __inline_String_Eq__eq_2: block -> bool {
-                    self_7 = builtin::array_get<ref "tuple//[String, String]">(_licm_repr_15, i).0;
-                    len_a = self_7.used;
-                    if len_a != _licm_used_20 {
-                        break __inline_String_Eq__eq_2: 0;
-                    }
-                    break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_7.repr, key.repr, len_a);
-                    unreachable;
-                } {
-                    value_12 = struct.new "tuple//[String, String]" { 0: key, 1: value };
-                    builtin::array_set<ref "tuple//[String, String]">(_licm_repr_15, i, value_12);
-                    return;
-                }
-                i = i + 1;
-                continue l68;
-            };
+                break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_7.repr, key.repr, len_a);
+                unreachable;
+            } {
+                value_12 = struct.new "tuple//[String, String]" { 0: key, 1: value };
+                builtin::array_set<ref "tuple//[String, String]">(_licm_repr_15, i, value_12);
+                return;
+            }
+            i = i + 1;
+            continue l68;
         };
     };
     "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push"(self, struct.new "tuple//[String, String]" { 0: key, 1: value });

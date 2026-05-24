@@ -13,7 +13,6 @@ use rustc_hash::FxBuildHasher;
 use crate::ast::{Item, Module};
 use crate::bind;
 use crate::compiler_host::{CompilerHost, SourceError};
-use crate::desugar::desugar_module;
 use crate::lexer::Lexer;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner, WasmAssetKind};
@@ -249,11 +248,13 @@ pub struct WasmAsset {
 
 /// Result of loading all modules
 pub struct LoadResult {
-    /// All loaded modules (module source -> desugared AST)
+    /// All loaded modules (module source -> parsed + bound AST)
     pub modules: IndexMap<ModuleSource, Module>,
     /// The entry module source
     pub entry_module_source: ModuleSource,
-    /// Original (non-desugared) entry module AST, for tooling
+    /// Entry module AST. Always identical to the `modules` entry for
+    /// [`Self::entry_module_source`]; kept as a separate field for
+    /// tooling that takes the entry AST by value.
     pub entry_ast: Module,
     /// Modules that were implicitly loaded (not from user imports)
     pub implicit_modules: IndexSet<ModuleSource>,
@@ -426,7 +427,7 @@ fn wasm_core_val_type_name(ty: WasmCoreValType) -> &'static str {
 /// builtin/import lowering machinery picks the call up.
 ///
 /// The synthesized module is fed back through the regular
-/// parse/bind/desugar pipeline. Doing it as text (rather than building
+/// parse/bind pipeline. Doing it as text (rather than building
 /// an `ast::Module` programmatically) keeps `AstId` allocation,
 /// span/source-map invariants, and the LSP "AST is the source of
 /// truth" rule honoured without special cases — see
@@ -704,7 +705,7 @@ fn format_stdlib_error(
     out
 }
 
-fn parse_bind_desugar_stdlib(label: &str, source: &str) -> Module {
+fn parse_bind_stdlib(label: &str, source: &str) -> Module {
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize().unwrap_or_else(|e| {
         panic!(
@@ -760,7 +761,7 @@ fn parse_bind_desugar_stdlib(label: &str, source: &str) -> Module {
             panic!("{msg}");
         });
     }
-    desugar_module(&ast)
+    ast
 }
 
 /// Resolve a `#![stdlib("…")]` declaration on `module` to a canonical
@@ -821,9 +822,9 @@ mod tests {
     }
 }
 
-/// Cached desugared AST modules for all stdlib modules (core + WASI).
+/// Cached AST modules for all stdlib modules (core + WASI).
 ///
-/// Each module is parsed, bound, and desugared exactly once per process.
+/// Each module is parsed and bound exactly once per process.
 ///
 /// Keyed by the canonical display form (`"core:foo"`, `"wasi:bar/baz.wado"`)
 /// rather than by `ModuleSource` value. The cache is process-global, but
@@ -846,7 +847,7 @@ fn cached_stdlib() -> &'static IndexMap<String, Module> {
         {
             cache.insert(
                 import_path.to_string(),
-                parse_bind_desugar_stdlib(import_path, source),
+                parse_bind_stdlib(import_path, source),
             );
         }
 
@@ -951,7 +952,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         entry_source: &str,
         entry_filename: Option<&str>,
     ) -> Result<LoadResult, LoadError> {
-        // Parse, bind, and desugar entry module
+        // Parse and bind entry module
         // Use "<stdin>" as synthetic filename when no filename is provided (e.g., REPL, embedded code)
         let resolved_filename = entry_filename.unwrap_or("<stdin>");
         let tentative_entry_source = self.interner.entry_point(resolved_filename);
@@ -974,7 +975,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let entry_name = entry_module_source.to_string();
         self.logger.span_start(&format!("load {entry_name}"));
 
-        // Collect imports from entry module (before bind/desugar)
+        // Collect imports from entry module (before bind)
         let mut pending: VecDeque<(ModuleSource, ModuleSource)> = VecDeque::new();
         let mut wasm_imports: Vec<(ModuleSource, WasmAssetKind, crate::ast::UseDecl)> = Vec::new();
         self.collect_imports(
@@ -984,17 +985,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             &mut wasm_imports,
         )?;
 
-        // Bind and desugar, then store (keep original AST for tooling)
         {
             let _span = self.logger.span(&format!("bind {entry_name}"));
             self.bind_module(&entry_ast, &entry_module_source)?;
         }
-        let desugared_entry = {
-            let _span = self.logger.span(&format!("desugar {entry_name}"));
-            desugar_module(&entry_ast)
-        };
         self.loaded
-            .insert(entry_module_source.clone(), desugared_entry);
+            .insert(entry_module_source.clone(), entry_ast.clone());
         let entry_ast_original = entry_ast;
 
         self.logger.span_end(&format!("load {entry_name}"));
@@ -1016,7 +1012,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
             let mod_name = module_source.to_string();
 
-            // Use cached desugared module for core stdlib
+            // Use cached parsed module for core stdlib
             if let Some(cached) = stdlib_cache_key(&module_source).and_then(|k| core_cache.get(&k))
             {
                 let span_name = format!("load {mod_name} (cached)");
@@ -1039,19 +1035,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 self.parse_source(&source, &module_source)?
             };
 
-            // Collect its imports (before bind/desugar)
+            // Collect its imports (before bind)
             self.collect_imports(&ast, &module_source, &mut pending, &mut wasm_imports)?;
 
-            // Bind, desugar, and store
             {
                 let _span = self.logger.span(&format!("bind {mod_name}"));
                 self.bind_module(&ast, &module_source)?;
             }
-            let desugared = {
-                let _span = self.logger.span(&format!("desugar {mod_name}"));
-                desugar_module(&ast)
-            };
-            self.loaded.insert(module_source.clone(), desugared);
+            self.loaded.insert(module_source.clone(), ast);
             self.loading.swap_remove(&module_source);
 
             self.logger.span_end(&format!("load {mod_name}"));
@@ -1168,7 +1159,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let function_exports = parse_wasm_module_exports(&source, &core_wasm_bytes)?;
 
         // Synthesize a Wado AST module from the asset's exports and run
-        // it through the regular parse/bind/desugar pipeline so that
+        // it through the regular parse/bind pipeline so that
         // named imports (`use { libm_sin } from "./libm.wat" ...`)
         // resolve through the same path as imports of any other Wado
         // module. The synthesized declarations carry
@@ -1185,9 +1176,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.bind_module(&ast, &source).inspect_err(|_e| {
             self.logger.span_end(&span);
         })?;
-        let desugared = desugar_module(&ast);
         self.logger.span_end(&span);
-        self.loaded.insert(source.clone(), desugared);
+        self.loaded.insert(source.clone(), ast);
 
         self.loaded_wasm_namespaces.insert(namespace.clone());
         self.wasm_assets.insert(

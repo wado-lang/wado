@@ -153,7 +153,6 @@ wado dump file.wado                  # show final WIR (default)
 wado dump --nir file.wado            # show final NIR (after optimization)
 wado dump --nir -O0 file.wado        # show NIR without optimization
 wado dump --ast file.wado            # show parsed AST
-wado dump --desugared file.wado      # show desugared AST
 wado dump --modules file.wado        # show loaded modules
 wado dump --symbols file.wado        # show symbol table
 wado dump --types file.wado          # show type table

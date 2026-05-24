@@ -1,7 +1,7 @@
 //! Integration tests for `Engine::diagnostics`.
 //!
 //! `Engine::diagnostics` runs only the `annotate` pipeline (parse → bind →
-//! desugar → load → analyze → resolve), deliberately stopping before
+//! load → analyze → resolve), deliberately stopping before
 //! codegen. These tests pin two contracts:
 //!
 //! - Bundled stdlib files carry `#![no_prelude]`, so opening them in an

@@ -180,63 +180,55 @@ fn "wado-compiler/tests/fixtures/match_variant_import_module.wado/apply_padding"
     result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(width), used: 0 };
     return let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_variant_import_module.wado//Align", __match_scrut_0 = spec.align, (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         "core:prelude/string.wado/String::push_str"(result, s);
-        __for_0: block {
-            i_6 = 0;
-            block {
-                l4: loop {
-                    if i_6 >= pad_len {
-                        break __for_0;
-                    }
-                    "core:prelude/string.wado/String::push"(result, fill);
-                    i_6 = i_6 + 1;
-                    continue l4;
-                };
+        i_6 = 0;
+        b3: block {
+            l4: loop {
+                if i_6 >= pad_len {
+                    break b3;
+                }
+                "core:prelude/string.wado/String::push"(result, fill);
+                i_6 = i_6 + 1;
+                continue l4;
             };
         };
         result;
     } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
         left_pad = pad_len / 2;
         right_pad = pad_len - left_pad;
-        __for_0: block {
-            i_9 = 0;
-            block {
-                l8: loop {
-                    if i_9 >= left_pad {
-                        break __for_0;
-                    }
-                    "core:prelude/string.wado/String::push"(result, fill);
-                    i_9 = i_9 + 1;
-                    continue l8;
-                };
+        i_9 = 0;
+        b7: block {
+            l8: loop {
+                if i_9 >= left_pad {
+                    break b7;
+                }
+                "core:prelude/string.wado/String::push"(result, fill);
+                i_9 = i_9 + 1;
+                continue l8;
             };
         };
         "core:prelude/string.wado/String::push_str"(result, s);
-        __for_1: block {
-            i_10 = 0;
-            block {
-                l11: loop {
-                    if i_10 >= right_pad {
-                        break __for_1;
-                    }
-                    "core:prelude/string.wado/String::push"(result, fill);
-                    i_10 = i_10 + 1;
-                    continue l11;
-                };
+        i_10 = 0;
+        b10: block {
+            l11: loop {
+                if i_10 >= right_pad {
+                    break b10;
+                }
+                "core:prelude/string.wado/String::push"(result, fill);
+                i_10 = i_10 + 1;
+                continue l11;
             };
         };
         result;
     } else {
-        __for_0: block {
-            i_11 = 0;
-            block {
-                l14: loop {
-                    if i_11 >= pad_len {
-                        break __for_0;
-                    }
-                    "core:prelude/string.wado/String::push"(result, fill);
-                    i_11 = i_11 + 1;
-                    continue l14;
-                };
+        i_11 = 0;
+        b13: block {
+            l14: loop {
+                if i_11 >= pad_len {
+                    break b13;
+                }
+                "core:prelude/string.wado/String::push"(result, fill);
+                i_11 = i_11 + 1;
+                continue l14;
             };
         };
         "core:prelude/string.wado/String::push_str"(result, s);
@@ -314,17 +306,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l20: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l20;
-            };
+    i = 0;
+    b19: block {
+        l20: loop {
+            if i >= len {
+                break b19;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l20;
         };
     };
 }
@@ -1495,20 +1485,18 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
                 continue l160;
             };
         };
-        __for_1: block {
-            j_9 = 0;
-            _licm_buf_30 = self.buf;
-            _licm_repr_34 = _licm_buf_30.repr;
-            block {
-                l163: loop {
-                    if j_9 >= left_pad {
-                        break __for_1;
-                    }
-                    index_19 = start_pos + j_9;
-                    builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
-                    j_9 = j_9 + 1;
-                    continue l163;
-                };
+        j_9 = 0;
+        _licm_buf_30 = self.buf;
+        _licm_repr_34 = _licm_buf_30.repr;
+        b162: block {
+            l163: loop {
+                if j_9 >= left_pad {
+                    break b162;
+                }
+                index_19 = start_pos + j_9;
+                builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
+                j_9 = j_9 + 1;
+                continue l163;
             };
         };
         "core:prelude/string.wado/String::append_byte_filled"(self.buf, fill_byte, right_pad);
@@ -1533,20 +1521,18 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
                 continue l166;
             };
         };
-        __for_2: block {
-            j_11 = 0;
-            _licm_buf_32 = self.buf;
-            _licm_repr_36 = _licm_buf_32.repr;
-            block {
-                l169: loop {
-                    if j_11 >= padding {
-                        break __for_2;
-                    }
-                    index_27 = start_pos + j_11;
-                    builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
-                    j_11 = j_11 + 1;
-                    continue l169;
-                };
+        j_11 = 0;
+        _licm_buf_32 = self.buf;
+        _licm_repr_36 = _licm_buf_32.repr;
+        b168: block {
+            l169: loop {
+                if j_11 >= padding {
+                    break b168;
+                }
+                index_27 = start_pos + j_11;
+                builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
+                j_11 = j_11 + 1;
+                continue l169;
             };
         };
     }

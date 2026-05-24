@@ -2,13 +2,14 @@
 
 use crate::ast::{
     self, AstId, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr, ExprStmt,
-    ForOfStmt, IdentExpr, IfStmt, LetStmt, Literal, LoopStmt, MethodCallExpr, Pattern, ReturnStmt,
-    Stmt, TaskReturnStmt, Type, UnaryExpr, UnaryOp,
+    ForOfStmt, ForStmt, IdentExpr, IfStmt, LetStmt, Literal, LoopStmt, MethodCallExpr, Pattern,
+    ReturnStmt, Stmt, TaskReturnStmt, Type, UnaryExpr, UnaryOp, WhileStmt,
 };
 use crate::compiler_host::CompilerHost;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirStructField, TirStructPatternField, TypeId, TypeTable,
+    TirPattern, TirStmt, TirStmtKind, TirStructField, TirStructPatternField, TirUnaryOp, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -76,9 +77,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Stmt::Return(ret_stmt) => vec![self.resolve_return(ret_stmt, ctx)],
             Stmt::TaskReturn(tr_stmt) => vec![self.resolve_task_return(tr_stmt, ctx)],
             Stmt::If(if_stmt) => self.resolve_if_stmt(if_stmt, ctx),
-            // While, For are desugared to Loop in the desugar phase
-            Stmt::While(_) => unreachable!("While should be desugared before resolving"),
-            Stmt::For(_) => unreachable!("For should be desugared before resolving"),
+            Stmt::While(while_stmt) => self.resolve_while(while_stmt, ctx),
+            Stmt::For(for_stmt) => self.resolve_for(for_stmt, ctx),
             Stmt::ForOf(for_of) => self.resolve_for_of(for_of, ctx),
             Stmt::Loop(loop_stmt) => vec![self.resolve_loop(loop_stmt, ctx)],
             Stmt::Match(match_expr) => {
@@ -97,7 +97,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 vec![TirStmt::new(TirStmtKind::Expr(tir), match_expr.span)]
             }
             Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt, ctx)],
-            Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt)],
+            Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt, ctx)],
             Stmt::Assert(a) => self.desugar_assert(a, ctx),
             Stmt::LabeledBlock(labeled_block) => {
                 vec![self.resolve_labeled_block(labeled_block, ctx)]
@@ -2060,13 +2060,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
         TypeTable::UNKNOWN
     }
-    /// Resolve a loop statement (infinite loop)
+    /// Resolve a loop statement (infinite loop).
+    ///
+    /// Naked `continue` inside this loop's body must jump to the top of
+    /// *this* loop, regardless of any enclosing C-style `for` whose
+    /// continue-retarget label is still on the stack. Take + restore
+    /// `for_continue_labels` around body resolution so the inner
+    /// `resolve_continue` sees an empty stack and lowers naturally.
     pub(super) fn resolve_loop(
         &mut self,
         loop_stmt: &LoopStmt,
         ctx: &mut FunctionContext,
     ) -> TirStmt {
+        let saved = std::mem::take(&mut ctx.for_continue_labels);
         let body = self.resolve_block(&loop_stmt.body, ctx, None);
+        ctx.for_continue_labels = saved;
         TirStmt::new(TirStmtKind::Loop { body }, loop_stmt.span)
     }
 
@@ -2080,6 +2088,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
         let _ = for_of.span;
+        // Naked `continue` inside this for-of's body targets *this* loop,
+        // not an enclosing C-style `for` body label. The iterable itself
+        // is an expression — no `continue` stmt syntactically — but we
+        // clear the stack early so all internal resolve_* calls share the
+        // same invariant.
+        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
 
         // Check if the iterable is `.enumerate()` on something
         let (actual_iterable, is_enumerate) = match &for_of.iterable {
@@ -2110,7 +2124,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let is_zip_variadic = matches!(&iterable.kind, TirExprKind::TupleZip { .. })
             && self.type_contains_pack(iterable_type_id);
 
-        if let Some((elems, has_type_pack)) = tuple_info {
+        let result = if let Some((elems, has_type_pack)) = tuple_info {
             if has_type_pack || is_zip_variadic {
                 assert!(
                     !is_enumerate,
@@ -2143,7 +2157,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 });
             }
             self.resolve_iterator_for_of(for_of, is_enumerate, ctx)
-        }
+        };
+
+        ctx.for_continue_labels = saved_continue;
+        result
     }
 
     /// Expand `for let v of tuple { body }` by unrolling the body once per element.
@@ -2707,14 +2724,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
             span,
         };
 
+        // Make the synthesised `__for_of_N` label visible while the body
+        // resolves, so any `resolve_break` inside it sees it on
+        // `active_labels`. The pop happens after we have finished
+        // building the LabeledBlock TIR.
+        ctx.active_labels.push(label.clone());
         let if_let_tir = self.resolve_if_stmt(&if_let, ctx);
 
         // loop { if let ... }
         let loop_body = TirBlock::new(if_let_tir, span);
         let loop_tir = TirStmt::new(TirStmtKind::Loop { body: loop_body }, span);
 
-        // Wrap in labeled block
-        ctx.active_labels.push(label.clone());
         let result = vec![TirStmt::new(
             TirStmtKind::LabeledBlock {
                 label,
@@ -2815,9 +2835,391 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
     }
 
-    /// Resolve a continue statement
-    pub(super) fn resolve_continue(&mut self, continue_stmt: &ContinueStmt) -> TirStmt {
-        TirStmt::new(TirStmtKind::Continue, continue_stmt.span)
+    /// Resolve a continue statement.
+    ///
+    /// Inside a C-style `for` body the loop's `update` expression must run
+    /// before the next iteration, so we re-target naked `continue` to break
+    /// out of the labeled body block instead of jumping to the top of the
+    /// loop. `ctx.for_continue_labels` holds the body labels stacked by
+    /// [`Self::resolve_for`]; empty outside a for body, in which case
+    /// continue lowers naturally.
+    pub(super) fn resolve_continue(
+        &mut self,
+        continue_stmt: &ContinueStmt,
+        ctx: &FunctionContext,
+    ) -> TirStmt {
+        if let Some(label) = ctx.for_continue_labels.last() {
+            TirStmt::new(
+                TirStmtKind::Break {
+                    label: Some(label.clone()),
+                    value: None,
+                },
+                continue_stmt.span,
+            )
+        } else {
+            TirStmt::new(TirStmtKind::Continue, continue_stmt.span)
+        }
+    }
+
+    /// Resolve a `while` or `while let` loop directly into TIR.
+    ///
+    /// `while cond { B }` lowers to:
+    ///
+    /// ```text
+    /// loop {
+    ///     if !cond { break; }
+    ///     B
+    /// }
+    /// ```
+    ///
+    /// `while let pat = expr { B }` (and the let-chain variant) lowers to:
+    ///
+    /// ```text
+    /// loop {
+    ///     match expr { pat => B, _ => break; }
+    /// }
+    /// ```
+    ///
+    /// Naked `break` / `continue` inside `B` target the synthesised
+    /// `loop`, which is the correct semantics — no label re-targeting is
+    /// required (unlike C-style `for`).
+    pub(super) fn resolve_while(
+        &mut self,
+        w: &WhileStmt,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TirStmt> {
+        let span = w.span;
+        // Naked `continue` inside this while's body targets *this* loop,
+        // not an enclosing C-style `for` body label.
+        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
+        let stmts = match &w.condition {
+            Condition::Expr(cond_expr) => {
+                let cond_tir = self.resolve_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                let cond_span = cond_expr.span();
+                let neg_cond = TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Not,
+                        expr: Box::new(cond_tir),
+                    },
+                    TypeTable::BOOL,
+                    cond_span,
+                );
+                let break_stmt = TirStmt::new(
+                    TirStmtKind::Break {
+                        label: None,
+                        value: None,
+                    },
+                    span,
+                );
+                let if_break = TirStmt::new(
+                    TirStmtKind::If {
+                        condition: neg_cond,
+                        then_block: TirBlock::new(vec![break_stmt], span),
+                        else_block: None,
+                    },
+                    span,
+                );
+                let body_block = self.resolve_block(&w.body, ctx, None);
+                let mut stmts = Vec::with_capacity(1 + body_block.stmts.len());
+                stmts.push(if_break);
+                stmts.extend(body_block.stmts);
+                stmts
+            }
+            Condition::LetChain {
+                elements,
+                span: cond_span,
+            } => {
+                // The else-branch unconditionally terminates the loop. Build it as a
+                // TirBlock holding a single `Break` so `resolve_let_chain_stmts`
+                // (shared with `if let` resolution) can splice it in as the
+                // wildcard arm of the synthesised match.
+                let break_stmt = TirStmt::new(
+                    TirStmtKind::Break {
+                        label: None,
+                        value: None,
+                    },
+                    span,
+                );
+                let else_block = TirBlock::new(vec![break_stmt], *cond_span);
+                ctx.enter_scope();
+                let body_stmts = self.resolve_let_chain_stmts(
+                    elements,
+                    &w.body,
+                    Some(&else_block),
+                    ctx,
+                    None,
+                    *cond_span,
+                );
+                ctx.exit_scope();
+                body_stmts
+            }
+        };
+
+        ctx.for_continue_labels = saved_continue;
+        vec![TirStmt::new(
+            TirStmtKind::Loop {
+                body: TirBlock::new(stmts, span),
+            },
+            span,
+        )]
+    }
+
+    /// Resolve a C-style `for init; cond; update { B }` loop directly into TIR.
+    ///
+    /// Lowered shape:
+    ///
+    /// ```text
+    /// {
+    ///     init;                        // when present
+    ///     loop {
+    ///         if !cond { break; }      // omitted when `cond` is absent
+    ///         __for_N_body: { B }
+    ///         update;                  // when present
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// The outer `{ … }` is a fresh resolver scope so `init`'s bindings stay
+    /// local to the for. `B` is wrapped in `__for_N_body` so that naked
+    /// `continue` (which would otherwise skip the `update`) is rerouted via
+    /// [`Self::resolve_continue`] to `break __for_N_body`, letting control
+    /// fall through to `update;` before the next iteration. Naked `break`
+    /// already targets the innermost loop, which is the `loop {}` here, so
+    /// no extra rewriting is needed.
+    ///
+    /// `while let` form `for init; let pat = e; update { B }` lowers to:
+    ///
+    /// ```text
+    /// {
+    ///     init;
+    ///     loop {
+    ///         match e {
+    ///             pat => {
+    ///                 __for_N_body: { B }
+    ///                 update;
+    ///             }
+    ///             _ => break;
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
+        let span = f.span;
+        let loop_id = ctx.next_loop_id;
+        ctx.next_loop_id += 1;
+        let body_label = format!("__for_{loop_id}_body");
+
+        // Mirror `resolve_loop` / `resolve_while` / `resolve_for_of`: clear the
+        // continue-retarget stack at the loop boundary so the invariant
+        // ("the stack lists labels for the enclosing C-style `for` bodies that
+        // a naked `continue` should `break` to, innermost-first") cannot be
+        // violated by a future refactor that resolves part of the body
+        // outside `resolve_for_labeled_body`. Today the push/pop inside
+        // that helper alone would suffice, but the symmetry guards against
+        // a body-resolution path moving above the helper.
+        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
+
+        // The outer scope holds `init`'s bindings so the loop body can see
+        // them while the surrounding function cannot.
+        ctx.enter_scope();
+
+        let mut outer_stmts: Vec<TirStmt> = Vec::new();
+        if let Some(init) = &f.init {
+            outer_stmts.extend(self.resolve_stmt(init, ctx));
+        }
+
+        // Build the per-iteration sequence. Body and update are resolved
+        // here (rather than up-front) because in the let-chain form the
+        // pattern's bindings must be in scope for both — see
+        // `lib/core/prelude/string.wado::String::find_char` for a real
+        // case where `update` references a pattern-bound name.
+        let iter_stmts: Vec<TirStmt> = match &f.condition {
+            None => {
+                let labeled_body = self.resolve_for_labeled_body(&body_label, &f.body, ctx);
+                let mut s = vec![labeled_body];
+                s.extend(self.resolve_for_update(f.update.as_ref(), ctx));
+                s
+            }
+            Some(Condition::Expr(cond_expr)) => {
+                let cond_tir = self.resolve_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                let cond_span = cond_expr.span();
+                let neg_cond = TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Not,
+                        expr: Box::new(cond_tir),
+                    },
+                    TypeTable::BOOL,
+                    cond_span,
+                );
+                let break_stmt = TirStmt::new(
+                    TirStmtKind::Break {
+                        label: None,
+                        value: None,
+                    },
+                    span,
+                );
+                let if_break = TirStmt::new(
+                    TirStmtKind::If {
+                        condition: neg_cond,
+                        then_block: TirBlock::new(vec![break_stmt], span),
+                        else_block: None,
+                    },
+                    span,
+                );
+                let labeled_body = self.resolve_for_labeled_body(&body_label, &f.body, ctx);
+                let mut s = vec![if_break, labeled_body];
+                s.extend(self.resolve_for_update(f.update.as_ref(), ctx));
+                s
+            }
+            Some(Condition::LetChain {
+                elements,
+                span: cond_span,
+            }) => {
+                // The parser only accepts a single Let element in a for
+                // header — multi-element let-chains are syntactically
+                // limited to `if`/`while`. Future grammar evolution that
+                // relaxes this should surface here as a diagnostic, not
+                // an ICE.
+                let single_let = if elements.len() == 1 {
+                    match &elements[0] {
+                        ConditionElement::Let {
+                            pattern,
+                            expr,
+                            span: elem_span,
+                        } => Some((pattern, expr, *elem_span)),
+                        ConditionElement::Expr(_) => None,
+                    }
+                } else {
+                    None
+                };
+                let Some((pattern, expr, elem_span)) = single_let else {
+                    let _ = self.logger.error(TypeError::InvalidPattern {
+                        message: "for-header let-chain must consist of a single \
+                                  `let pattern = expr` element"
+                            .to_string(),
+                        span: *cond_span,
+                    });
+                    ctx.exit_scope();
+                    ctx.for_continue_labels = saved_continue;
+                    return vec![];
+                };
+
+                let scrutinee = self.resolve_expr(expr, ctx, None);
+                let scrutinee_type = scrutinee.type_id;
+                ctx.enter_scope();
+                let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx, elem_span);
+                // Body and update both run inside the pattern scope so
+                // they can name the bindings introduced by `pat`.
+                let labeled_body = self.resolve_for_labeled_body(&body_label, &f.body, ctx);
+                let update_stmts = self.resolve_for_update(f.update.as_ref(), ctx);
+                ctx.exit_scope();
+
+                let mut then_stmts = vec![labeled_body];
+                then_stmts.extend(update_stmts);
+                // The match sits in statement position, so its overall type
+                // is Unit. The then-block ends without a value-producing
+                // trailing expression (labeled_body is a stmt and update
+                // is a Unit-typed Expr-stmt), so its block_result_type is
+                // Unit. The else-block holds only a `Break`, which makes
+                // it Never; mark it as such rather than lying with Unit
+                // so any downstream analysis that consults arm body
+                // types sees the truth.
+                let then_body = TirExpr::new(
+                    TirExprKind::Block(TirBlock::new(then_stmts, *cond_span)),
+                    TypeTable::UNIT,
+                    *cond_span,
+                );
+                let else_body = TirExpr::new(
+                    TirExprKind::Block(TirBlock::new(
+                        vec![TirStmt::new(
+                            TirStmtKind::Break {
+                                label: None,
+                                value: None,
+                            },
+                            span,
+                        )],
+                        *cond_span,
+                    )),
+                    TypeTable::NEVER,
+                    *cond_span,
+                );
+                let arms = vec![
+                    TirMatchArm {
+                        pattern: tir_pattern,
+                        guard: None,
+                        body: then_body,
+                        span: elem_span,
+                    },
+                    TirMatchArm {
+                        pattern: TirPattern::Wildcard,
+                        guard: None,
+                        body: else_body,
+                        span: *cond_span,
+                    },
+                ];
+                vec![TirStmt::new(
+                    TirStmtKind::Expr(TirExpr::new(
+                        TirExprKind::Match {
+                            expr: Box::new(scrutinee),
+                            arms,
+                        },
+                        TypeTable::UNIT,
+                        *cond_span,
+                    )),
+                    *cond_span,
+                )]
+            }
+        };
+
+        outer_stmts.push(TirStmt::new(
+            TirStmtKind::Loop {
+                body: TirBlock::new(iter_stmts, span),
+            },
+            span,
+        ));
+
+        ctx.exit_scope();
+        ctx.for_continue_labels = saved_continue;
+        outer_stmts
+    }
+
+    /// Resolve a for loop's body wrapped in its continue-retarget label.
+    /// Pushes `body_label` onto both `for_continue_labels` (so naked
+    /// `continue` inside the body becomes `break <body_label>`) and
+    /// `active_labels` (so the label validates as a known break target).
+    fn resolve_for_labeled_body(
+        &mut self,
+        body_label: &str,
+        body: &Block,
+        ctx: &mut FunctionContext,
+    ) -> TirStmt {
+        ctx.for_continue_labels.push(body_label.to_string());
+        ctx.active_labels.push(body_label.to_string());
+        let body_block = self.resolve_block(body, ctx, None);
+        ctx.active_labels.pop();
+        ctx.for_continue_labels.pop();
+        TirStmt::new(
+            TirStmtKind::LabeledBlock {
+                label: body_label.to_string(),
+                block: body_block,
+            },
+            body.span,
+        )
+    }
+
+    /// Resolve a for loop's optional update expression as a single
+    /// statement, or no statements if absent.
+    fn resolve_for_update(
+        &mut self,
+        update: Option<&Expr>,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TirStmt> {
+        update
+            .map(|u| {
+                let tir = self.resolve_expr(u, ctx, None);
+                vec![TirStmt::new(TirStmtKind::Expr(tir), u.span())]
+            })
+            .unwrap_or_default()
     }
 }
 

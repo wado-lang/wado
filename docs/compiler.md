@@ -10,7 +10,7 @@ The Wado compiler (`wado-compiler/`) translates `.wado` source into a Wasm compo
 
 ```
 Source (.wado)
-  → Lex → Parse → Bind → Desugar          (per module, in loader)
+  → Lex → Parse → Bind                    (per module, in loader)
   → Annotate (Analyze + Resolve + lower TIR)
   → Default-purity Check
   → Synthesis (auto-derives, template, From, serde, pre-CM effect dispatch, CM bindings)
@@ -30,7 +30,6 @@ The driver is `compile_after_load` in `src/lib.rs`.
 | ---------------------- | --------------- | ------------------------------------------------ |
 | Lex / Parse            | AST             | `lexer.rs`, `parser.rs`, `token.rs`, `syntax.rs` |
 | Bind                   | AST + bindings  | `bind.rs`                                        |
-| Desugar                | AST             | `desugar.rs`                                     |
 | Loader                 | All modules     | `loader.rs`                                      |
 | Annotate               | TIR + facts     | `annotate.rs`, `analyze.rs`, `resolver/`         |
 | Default-purity Check   | (validation)    | `effect_check.rs::check_default_purity`          |
@@ -60,12 +59,13 @@ Codegen takes `&NirPackage` + `&WirPackage` (`emit_wasm`) and has no knowledge o
 
 ## Frontend (per-module)
 
-The loader runs `lexer → parser → bind → desugar` on every loaded module:
+The loader runs `lexer → parser → bind` on every loaded module:
 
 - The lexer extracts the optional `__DATA__` section and tokenizes the rest.
-- The parser builds a faithful AST. Compound assigns, comparison chains, struct shorthand, and `&self` parameters are kept verbatim so `wado format` round-trips; sugar is removed in `desugar.rs`.
+- The parser builds a faithful AST. Compound assigns, comparison chains, struct shorthand, and `&self` parameters are kept verbatim so `wado format` round-trips.
 - `bind.rs` performs local name resolution, scope/mutability checking, and use-before-define detection.
-- `desugar.rs` rewrites `x += y` to `x = x + y`, for/while loops to explicit loop blocks, and other purely syntactic constructs. The `assert` statement, the `matches` operator, the comparison chain `a < b < c`, and `use … namespace` prefixes (`helper::foo`) are deferred to the resolver (`desugar_assert`, `desugar_matches_expr`, `desugar_comparison_chain` in `resolver/{assert,matches,operators}.rs`; `Resolver::strip_ns_prefix` in `resolver.rs`) because they either need typed sub-expressions or rely on the canonical `imported_functions` / `namespace_imports` tables. Keeping the AST intact also lets LSP queries land on the user's text.
+
+The AST is parser-immutable from this point on. The desugar-replacement surface rewrites — compound assignment (`x += y` → `x = x + y`), `while` / C-style `for` → explicit `loop`, the `assert` statement, the `matches` operator, the comparison chain `a < b < c`, template-string interpolations, and `use … namespace` prefix stripping (`helper::foo`) — happen inside the resolver and are built TIR-direct: each rewrite resolves the user AST and constructs `TirExpr` / `TirStmt` nodes directly without producing synthetic AST. The implementations live in `resolver/{stmt,operators,assert,matches}.rs` (`resolve_while`, `resolve_for`, `resolve_compound_assign`, `desugar_assert`, `desugar_matches_expr`, `desugar_comparison_chain`) and `Resolver::strip_ns_prefix` in `resolver.rs`. Keeping the AST parser-shaped is what lets LSP queries land on the user's text rather than on a synthesised replacement. (`for x of expr` iteration and `Self::method` / `T::method` static-call rewriting still synthesise AST under the hood; that predates this track and is on a separate cleanup queue.)
 
 ## Annotate (Analyze + Resolve + TIR Lowering)
 

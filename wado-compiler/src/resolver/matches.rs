@@ -1,64 +1,83 @@
-//! Desugar the `matches` operator at TIR-lowering time.
+//! TIR-direct lowering of the `matches` operator.
 //!
-//! `s matches { p [&& guard] }` is synthesised as
-//! `match s { p => guard_or_true, _ => false }` and routed through
-//! [`Resolver::resolve_match_expr`]. Keeping the AST `MatchesExpr`
-//! until here means LSP queries (hover, jump-to-def, references) land
-//! on the user's `matches` text rather than on a synthetic match arm.
+//! `s matches { p [&& guard] }` lowers to a two-arm `TirExpr::Match`:
+//! `match s { p => guard_or_true, _ => false }`. The match is built
+//! directly in TIR (no synthetic AST), so the AST keeps the user's
+//! `matches` shape for LSP cursor lookups and `wado format` round-trips.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::{TirExpr, TypeId};
+use crate::tir::{TirExpr, TirExprKind, TirMatchArm, TirPattern, TypeId, TypeTable};
 
 use super::Resolver;
 use super::types::FunctionContext;
 
 impl<H: CompilerHost> Resolver<'_, H> {
-    /// Desugar `matches` into its `match`-shaped equivalent and resolve:
+    /// Lower `matches` to a TIR `Match`:
     ///
     /// - No guard: `s matches { p }` → `match s { p => true, _ => false }`
     /// - Guarded:  `s matches { p && g }` → `match s { p => g, _ => false }`
     ///
     /// When the pattern matches, the arm body returns the guard's value
-    /// (or `true` if absent); the wildcard arm returns `false`.
+    /// (or `true` if absent); the wildcard arm returns `false`. The wildcard
+    /// trivially makes the match exhaustive, so no `check_match_exhaustiveness`
+    /// call is needed here.
     pub(super) fn desugar_matches_expr(
         &mut self,
         m: &ast::MatchesExpr,
         ctx: &mut FunctionContext,
-        expected_type: Option<TypeId>,
+        _expected_type: Option<TypeId>,
     ) -> TirExpr {
-        let bool_lit = |value: bool| {
-            ast::Expr::Literal(ast::LiteralExpr {
-                id: m.id,
-                value: ast::Literal::Bool(value),
+        let scrutinee = self.resolve_expr(&m.expr, ctx, None);
+        let scrutinee_type = scrutinee.type_id;
+
+        // Pattern arm. The pattern's bindings (e.g. `Some(x)`) must be in
+        // scope for the optional guard.
+        ctx.enter_scope();
+        let pattern_tir = self.resolve_if_pattern(&m.pattern, scrutinee_type, ctx, m.span);
+        let arm_body = match &m.guard {
+            Some(guard) => {
+                let body = self.resolve_expr(guard, ctx, Some(TypeTable::BOOL));
+                // `expected_type` on `resolve_expr` is only a coercion hint;
+                // a non-bool guard (e.g. `Some(v) && v + 1`) would silently
+                // pass and leave the synthesised `Match`'s declared type
+                // (BOOL) inconsistent with the arm body's actual type. The
+                // pre-refactor path routed through `resolve_match_expr`'s
+                // `check_assignable` loop, which caught this; do the
+                // equivalent explicit check here.
+                self.typecheck(body.type_id, TypeTable::BOOL, guard.span());
+                body
+            }
+            None => bool_literal(true, m.span),
+        };
+        ctx.exit_scope();
+
+        let arms = vec![
+            TirMatchArm {
+                pattern: pattern_tir,
+                guard: None,
+                body: arm_body,
                 span: m.span,
-            })
-        };
+            },
+            TirMatchArm {
+                pattern: TirPattern::Wildcard,
+                guard: None,
+                body: bool_literal(false, m.span),
+                span: m.span,
+            },
+        ];
 
-        let match_body = m.guard.clone().unwrap_or_else(|| bool_lit(true));
-
-        let synthetic = ast::MatchExpr {
-            id: m.id,
-            expr: m.expr.clone(),
-            arms: vec![
-                ast::MatchArm {
-                    id: m.id,
-                    pattern: m.pattern.clone(),
-                    guard: None,
-                    body: match_body,
-                    span: m.span,
-                },
-                ast::MatchArm {
-                    id: m.id,
-                    pattern: ast::Pattern::Wildcard,
-                    guard: None,
-                    body: bool_lit(false),
-                    span: m.span,
-                },
-            ],
-            span: m.span,
-        };
-
-        self.resolve_match_expr(&synthetic, ctx, expected_type)
+        TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(scrutinee),
+                arms,
+            },
+            TypeTable::BOOL,
+            m.span,
+        )
     }
+}
+
+fn bool_literal(value: bool, span: crate::token::Span) -> TirExpr {
+    TirExpr::new(TirExprKind::BoolLiteral(value), TypeTable::BOOL, span)
 }

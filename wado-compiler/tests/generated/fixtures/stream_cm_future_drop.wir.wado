@@ -740,17 +740,15 @@ fn "wado-compiler/tests/fixtures/stream_cm_future_drop.wado/__cm_export__handle"
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l63: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l63;
-            };
+    i = 0;
+    b62: block {
+        l63: loop {
+            if i >= len {
+                break b62;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l63;
         };
     };
 }

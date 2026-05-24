@@ -302,17 +302,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l9: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l9;
-            };
+    i = 0;
+    b8: block {
+        l9: loop {
+            if i >= len {
+                break b8;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l9;
         };
     };
 }
@@ -394,17 +392,15 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         return 1;
     }
     n = 0;
-    __for_1: block {
-        t = val;
-        block {
-            l15: loop {
-                if t <= 0_i64 {
-                    break __for_1;
-                }
-                n = n + 1;
-                t = t / 10_i64;
-                continue l15;
-            };
+    t = val;
+    b14: block {
+        l15: loop {
+            if t <= 0_i64 {
+                break b14;
+            }
+            n = n + 1;
+            t = t / 10_i64;
+            continue l15;
         };
     };
     return n;
@@ -417,18 +413,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
     } else {
-        __for_2: block {
-            temp = abs_val;
-            block {
-                l19: loop {
-                    if temp <= 0_i64 {
-                        break __for_2;
-                    }
-                    pos = pos - 1;
-                    builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
-                    temp = temp / 10_i64;
-                    continue l19;
-                };
+        temp = abs_val;
+        b18: block {
+            l19: loop {
+                if temp <= 0_i64 {
+                    break b18;
+                }
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                temp = temp / 10_i64;
+                continue l19;
             };
         };
     }
@@ -534,18 +528,16 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
-    __for_0: block {
-        i = 0;
-        _licm_buf_4 = self.buf;
-        block {
-            l31: loop {
-                if i >= n {
-                    break __for_0;
-                }
-                "core:prelude/string.wado/String::push"(_licm_buf_4, c);
-                i = i + 1;
-                continue l31;
-            };
+    i = 0;
+    _licm_buf_4 = self.buf;
+    b30: block {
+        l31: loop {
+            if i >= n {
+                break b30;
+            }
+            "core:prelude/string.wado/String::push"(_licm_buf_4, c);
+            i = i + 1;
+            continue l31;
         };
     };
 }
@@ -664,79 +656,73 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<wado-compiler/tes
     src = self.repr;
     buf = builtin::array_new<i32>(n);
     width = 1;
-    __for_5: block {
-        block {
-            l52: loop {
-                if width >= n {
-                    break __for_5;
-                }
-                __for_6: block {
-                    start = 0;
-                    block {
-                        l55: loop {
-                            if start >= n {
-                                break __for_6;
-                            }
-                            mid = start + width;
-                            if mid < n {
-                                end = __inline_i32_min_0: block -> i32 {
-                                    a_14 = start + (width * 2);
-                                    break __inline_i32_min_0: select i32(a_14 < n, a_14, n);
-                                    unreachable;
-                                };
-                                i = start;
-                                j = mid;
-                                __for_7: block {
-                                    k = start;
-                                    block {
-                                        l59: loop {
-                                            if k >= end {
-                                                break __for_7;
-                                            }
-                                            if i < mid {
-                                                if j < end {
-                                                    __sroa_a_value = builtin::array_get<i32>(src, i);
-                                                    __sroa_b_value = builtin::array_get<i32>(src, j);
-                                                    __match_14 = __inline_i32_Ord__cmp_2: block -> "core:prelude/traits.wado//enum:Ordering" {
-                                                        if __sroa_a_value < __sroa_b_value {
-                                                            break __inline_i32_Ord__cmp_2: 0;
-                                                        }
-                                                        if __sroa_a_value > __sroa_b_value {
-                                                            break __inline_i32_Ord__cmp_2: 2;
-                                                        }
-                                                        break __inline_i32_Ord__cmp_2: 1;
-                                                        unreachable;
-                                                    };
-                                                    if __match_14 == 2 {
-                                                        builtin::array_set<i32>(buf, k, __sroa_b_value);
-                                                        j = j + 1;
-                                                    } else {
-                                                        builtin::array_set<i32>(buf, k, __sroa_a_value);
-                                                        i = i + 1;
-                                                    }
-                                                } else {
-                                                    builtin::array_set<i32>(buf, k, builtin::array_get<i32>(src, i));
-                                                    i = i + 1;
-                                                }
-                                            } else {
-                                                builtin::array_set<i32>(buf, k, builtin::array_get<i32>(src, j));
-                                                j = j + 1;
-                                            }
-                                            k = k + 1;
-                                            continue l59;
-                                        };
-                                    };
-                                };
-                                builtin::array_copy<i32>(src, start, buf, start, end - start);
-                            }
-                            start = start + (width * 2);
-                            continue l55;
+    b51: block {
+        l52: loop {
+            if width >= n {
+                break b51;
+            }
+            start = 0;
+            b54: block {
+                l55: loop {
+                    if start >= n {
+                        break b54;
+                    }
+                    mid = start + width;
+                    if mid < n {
+                        end = __inline_i32_min_0: block -> i32 {
+                            a_14 = start + (width * 2);
+                            break __inline_i32_min_0: select i32(a_14 < n, a_14, n);
+                            unreachable;
                         };
-                    };
+                        i = start;
+                        j = mid;
+                        k = start;
+                        b58: block {
+                            l59: loop {
+                                if k >= end {
+                                    break b58;
+                                }
+                                if i < mid {
+                                    if j < end {
+                                        __sroa_a_value = builtin::array_get<i32>(src, i);
+                                        __sroa_b_value = builtin::array_get<i32>(src, j);
+                                        __match_14 = __inline_i32_Ord__cmp_2: block -> "core:prelude/traits.wado//enum:Ordering" {
+                                            if __sroa_a_value < __sroa_b_value {
+                                                break __inline_i32_Ord__cmp_2: 0;
+                                            }
+                                            if __sroa_a_value > __sroa_b_value {
+                                                break __inline_i32_Ord__cmp_2: 2;
+                                            }
+                                            break __inline_i32_Ord__cmp_2: 1;
+                                            unreachable;
+                                        };
+                                        if __match_14 == 2 {
+                                            builtin::array_set<i32>(buf, k, __sroa_b_value);
+                                            j = j + 1;
+                                        } else {
+                                            builtin::array_set<i32>(buf, k, __sroa_a_value);
+                                            i = i + 1;
+                                        }
+                                    } else {
+                                        builtin::array_set<i32>(buf, k, builtin::array_get<i32>(src, i));
+                                        i = i + 1;
+                                    }
+                                } else {
+                                    builtin::array_set<i32>(buf, k, builtin::array_get<i32>(src, j));
+                                    j = j + 1;
+                                }
+                                k = k + 1;
+                                continue l59;
+                            };
+                        };
+                        builtin::array_copy<i32>(src, start, buf, start, end - start);
+                    }
+                    start = start + (width * 2);
+                    continue l55;
                 };
-                width = width * 2;
-                continue l52;
             };
+            width = width * 2;
+            continue l52;
         };
     };
 }

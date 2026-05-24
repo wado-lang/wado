@@ -655,14 +655,6 @@ fn dump_tokens() {
 }
 
 #[test]
-fn dump_desugared() {
-    let parser = Parser::from_args(&["--desugared", "input.wado"]);
-    let opts = wado_cli::dump::parse_args(parser).unwrap();
-    assert!(opts.show_desugared);
-    assert!(!opts.show_ast);
-}
-
-#[test]
 fn dump_modules() {
     let parser = Parser::from_args(&["--modules", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
