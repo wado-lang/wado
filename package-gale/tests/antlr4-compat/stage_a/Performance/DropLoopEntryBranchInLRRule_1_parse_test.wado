@@ -1,0 +1,34 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source descriptor: Performance/DropLoopEntryBranchInLRRule_1 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+
+use t from "../../grammars/Performance/DropLoopEntryBranchInLRRule_1.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/antlr4_compat_a/Performance/DropLoopEntryBranchInLRRule_1",
+        },
+    };
+
+test "stage_a_parse: Performance/DropLoopEntryBranchInLRRule_1" {
+    let input = "X1 and X2 and X3 and X4 and X5 and X6 and X7 or
+X1 and X2 and X3 and X4 and X5 and X6 and X7 or
+X1 and X2 and X3 and X4 and X5 and X6 and X7 or
+X1 and X2 and X3 and X4 and X5 and X6 and X7 or
+X1 and X2 and X3 and X4 and X5 and X6 and X7 or
+X1 and X2 and X3 and X4 and X5 and X6 and X7 or
+X1 and X2 and X3 and X4 and X5 and X6 and X7 or
+X1 and X2 and X3 and X4 and X5 and X6 and X7
+;
+";
+    let result = t::parse(&input);
+    if let Err(err) = &result {
+        panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);
+    }
+}

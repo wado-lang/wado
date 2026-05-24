@@ -12,13 +12,13 @@ use t from "../../grammars/ParseTrees/NoViableAlt.g4"
         generator: {
             module: "../../../../src/generator.wado",
             options: { highlight: false },
-            output_dir: "tests/generated/antlr4_compat_sub_b/ParseTrees/NoViableAlt",
+            output_dir: "tests/generated/antlr4_compat_b/ParseTrees/NoViableAlt",
         },
     };
 use { normalize_tree } from "../../grammars/ParseTrees/NoViableAlt.g4";
 
 #[TODO]
-// triage: expected [output] is ANTLR4's error-recovered sub-tree; Gale has no error recovery so parse returns Err and the sub-tree navigation never runs
+// triage: sub-tree: expected [output] is ANTLR4's error-recovered sub-tree; Gale has no error recovery so parse returns Err and the sub-tree navigation never runs (Stage C-independent)
 test "stage_b_sub: ParseTrees/NoViableAlt" {
     let input = "z";
     let expected = "(a z)";

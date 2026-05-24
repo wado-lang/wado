@@ -12,13 +12,13 @@ use t from "../../grammars/ParseTrees/Sync.g4"
         generator: {
             module: "../../../../src/generator.wado",
             options: { highlight: false },
-            output_dir: "tests/generated/antlr4_compat_sub_b/ParseTrees/Sync",
+            output_dir: "tests/generated/antlr4_compat_b/ParseTrees/Sync",
         },
     };
 use { normalize_tree } from "../../grammars/ParseTrees/Sync.g4";
 
 #[TODO]
-// triage: expected [output] is ANTLR4's error-recovered sub-tree; Gale has no error recovery so parse returns Err and the sub-tree navigation never runs
+// triage: sub-tree: expected [output] is ANTLR4's error-recovered sub-tree; Gale has no error recovery so parse returns Err and the sub-tree navigation never runs (Stage C-independent)
 test "stage_b_sub: ParseTrees/Sync" {
     let input = "xzyy!";
     let expected = "(a x z y y !)";

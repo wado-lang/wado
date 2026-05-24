@@ -302,21 +302,17 @@ impl TriageMap {
 ///   extracted `.g4` parses cleanly with `g4::parse`). Drives whether a
 ///   descriptor is emitted at all and whether it is `#[TODO]`-marked.
 /// - **stage_a** comes from the `[stage_a_todo]` / `[stage_a_skip]` buckets
-///   and applies to the per-descriptor parse-accepts-input driver
-///   (Stage A claim (b): the generated parser accepts `[input]`).
+///   and applies to per-descriptor generated-code-behaviour drivers
+///   (Stage A claims (b) parse-accepts-input, (c) parse-must-error,
+///   (d) tokens-equivalence). At most one variant per descriptor exists
+///   today (the variants are mutually exclusive on `[type]` / `[errors]`),
+///   so a single `Category/Name` triage entry unambiguously addresses the
+///   right test file.
 /// - **stage_b** comes from the `[stage_b_todo]` / `[stage_b_skip]` buckets
-///   and applies to the per-descriptor tree-shape equivalence tests.
-///   A descriptor can be Stage A green and Stage B skipped if its `[output]`
-///   block is a host-language artefact rather than a parse tree, and vice
-///   versa.
-/// - **stage_e** comes from the `[stage_e_todo]` / `[stage_e_skip]` buckets
-///   and applies to per-descriptor parse-must-error drivers (Stage E: the
-///   generated parser/lexer must report an error for `[input]`). Only
-///   `ParserErrors` / `LexerErrors` descriptors are eligible today.
-/// - **stage_l** comes from the `[stage_l_todo]` / `[stage_l_skip]` buckets
-///   and applies to per-descriptor token-stream-equivalence drivers
-///   (Stage L: `tokenize(&input)`'s ANTLR4-format dump equals `[output]`).
-///   Only Lexer-type descriptors are eligible.
+///   and applies to the per-descriptor tree-shape equivalence tests
+///   (full-tree or sub-tree). A descriptor can be Stage A green and Stage B
+///   skipped if its `[output]` block is a host-language artefact rather
+///   than a parse tree, and vice versa.
 ///
 /// The maps are deliberately independent so triaging one axis never quietly
 /// toggles the others.
@@ -324,8 +320,6 @@ struct TriageMaps {
     pub category: TriageMap,
     pub stage_a: TriageMap,
     pub stage_b: TriageMap,
-    pub stage_e: TriageMap,
-    pub stage_l: TriageMap,
 }
 
 /// Parse the status file. Tolerant of missing file (returns empty maps).
@@ -348,12 +342,10 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
     let mut category = TriageMap::new();
     let mut stage_a = TriageMap::new();
     let mut stage_b = TriageMap::new();
-    let mut stage_e = TriageMap::new();
-    let mut stage_l = TriageMap::new();
     let text = match content {
         Some(t) => t,
         None => {
-            return TriageMaps { category, stage_a, stage_b, stage_e, stage_l };
+            return TriageMaps { category, stage_a, stage_b };
         },
     };
     let mut section: String = "";
@@ -382,15 +374,11 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
             "stage_a_skip" => stage_a.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
             "stage_b_todo" => stage_b.entries.push(TriageEntry { key, triage: Triage::Todo(reason) }),
             "stage_b_skip" => stage_b.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
-            "stage_e_todo" => stage_e.entries.push(TriageEntry { key, triage: Triage::Todo(reason) }),
-            "stage_e_skip" => stage_e.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
-            "stage_l_todo" => stage_l.entries.push(TriageEntry { key, triage: Triage::Todo(reason) }),
-            "stage_l_skip" => stage_l.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
             _ => {
             },
         }
     }
-    return TriageMaps { category, stage_a, stage_b, stage_e, stage_l };
+    return TriageMaps { category, stage_a, stage_b };
 }
 
 /// Per-category convenience wrapper retained so the test blocks at the
@@ -654,7 +642,7 @@ fn emit_stage_b_test_file(category: &String, name: &String, input: &String, expe
     w.line(&"        generator: {");
     w.line(&`            module: "../../../../src/generator.wado",`);
     w.line(&"            options: { highlight: false },");
-    w.line(&`            output_dir: "tests/generated/antlr4_compat/{*category}/{*name}",`);
+    w.line(&`            output_dir: "tests/generated/antlr4_compat_b/{*category}/{*name}",`);
     w.line(&"        },");
     w.line(&"    };");
     w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
@@ -702,7 +690,7 @@ fn emit_stage_sub_b_test_file(category: &String, name: &String, input: &String, 
     w.line(&"        generator: {");
     w.line(&`            module: "../../../../src/generator.wado",`);
     w.line(&"            options: { highlight: false },");
-    w.line(&`            output_dir: "tests/generated/antlr4_compat_sub_b/{*category}/{*name}",`);
+    w.line(&`            output_dir: "tests/generated/antlr4_compat_b/{*category}/{*name}",`);
     w.line(&"        },");
     w.line(&"    };");
     w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
@@ -724,25 +712,19 @@ fn emit_stage_sub_b_test_file(category: &String, name: &String, input: &String, 
     return w.to_string();
 }
 
-/// Emit one Stage A (parse-accepts-input) driver test file for a single
-/// descriptor.
+/// Emit one Stage A claim (b) driver test file (parse-accepts-input)
+/// for a single descriptor.
 ///
-/// Stage A sits between Stage A (the `.g4` grammar parses) and Stage B
-/// (tree-shape equivalence): it only checks that Gale's *generated parser*
-/// accepts the descriptor's `[input]` without error. This covers
-/// descriptors whose `[output]` is a host-language artefact (action-print,
-/// token-name stream, `$text` echo, sub-tree print) and therefore
-/// auto-skipped by `normalize_output_for_stage_b`, but for which the
-/// generated parser must still accept the canonical input.
-///
-/// The emitted test:
-///   1. Imports the descriptor's `.g4` through Gale's generator,
-///   2. Runs the generated parser on `[input]`,
-///   3. Asserts that the result is `Ok` (no error message comparison).
+/// Asserts that Gale's *generated parser* accepts the descriptor's
+/// `[input]` without error. Covers descriptors whose `[output]` is a
+/// host-language artefact (action-print, token-name stream, `$text`
+/// echo, sub-tree print) and therefore auto-skipped by
+/// `normalize_output_for_stage_b`, but for which the generated parser
+/// must still accept the canonical input.
 ///
 /// Triage (`[stage_a_todo]` / `[stage_a_skip]`) decorates the emission
-/// the same way Stage A and Stage B do.
-fn emit_stage_a_driver_test_file(category: &String, name: &String, input: &String, triage: &Triage) -> String {
+/// the same way Stage B does.
+fn emit_stage_a_parse_test_file(category: &String, name: &String, input: &String, triage: &Triage) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
@@ -750,8 +732,8 @@ fn emit_stage_a_driver_test_file(category: &String, name: &String, input: &Strin
     w.line(&`// Source descriptor: {*category}/{*name} (ANTLR4 runtime-testsuite).`);
     w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).");
     w.line(&"//");
-    w.line(&"// Stage A: the generated parser must accept the descriptor's [input]");
-    w.line(&"// without returning an error. No parse-tree shape comparison.");
+    w.line(&"// Stage A claim (b): the generated parser must accept the descriptor's");
+    w.line(&"// [input] without returning an error. No parse-tree shape comparison.");
     w.blank();
     w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
     w.line(&"    with {");
@@ -766,7 +748,7 @@ fn emit_stage_a_driver_test_file(category: &String, name: &String, input: &Strin
         w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
     }
-    w.begin(&`test "stage_a: {*category}/{*name}"`);
+    w.begin(&`test "stage_a_parse: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
     w.line(&"let result = t::parse(&input);");
     w.line(&"if let Err(err) = &result {");
@@ -778,21 +760,21 @@ fn emit_stage_a_driver_test_file(category: &String, name: &String, input: &Strin
     return w.to_string();
 }
 
-/// Categories whose descriptors are emitted as Stage E
+/// Categories whose descriptors are emitted as Stage A claim (c)
 /// (parse-must-error) drivers. Other categories may carry non-empty
 /// `[errors]` blocks for ambiguity reports, predicate failures, or
 /// other diagnostics that don't actually fail the parse — those are
-/// not Stage E candidates.
-fn stage_e_category_eligible(category: &String) -> bool {
+/// not parse-must-error candidates.
+fn stage_a_err_category_eligible(category: &String) -> bool {
     return match *category {
         "ParserErrors" | "LexerErrors" => true,
         _ => false,
     };
 }
 
-/// Decide whether a descriptor `[output]` block is a Stage L
-/// (token-stream-equivalence) target. ANTLR4's `Token.toString()` dump
-/// has the form
+/// Decide whether a descriptor `[output]` block is a Stage A claim (d)
+/// (tokens-equivalence) target. ANTLR4's `Token.toString()` dump has
+/// the form
 ///
 ///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]
 ///
@@ -803,7 +785,7 @@ fn stage_e_category_eligible(category: &String) -> bool {
 ///
 /// Returns `Some(stripped)` when the output is a usable token dump (with
 /// any leading/trailing whitespace trimmed), `None` otherwise.
-fn normalize_output_for_stage_l(raw: &String) -> Option<String> {
+fn normalize_output_for_tokens(raw: &String) -> Option<String> {
     let mut first_seen = false;
     for let line of raw.lines() {
         let t = line.trim();
@@ -838,60 +820,49 @@ fn normalize_output_for_stage_l(raw: &String) -> Option<String> {
     return Option::<String>::Some(out);
 }
 
-/// Emit one Stage E (parse-must-error) driver test file for a single
-/// descriptor.
+/// Emit one Stage A claim (c) driver test file (parse-must-error) for
+/// a single descriptor.
 ///
-/// Stage E inverts Stage A: instead of asserting `Ok`, it asserts that
-/// `g::parse(&input)` (for Parser-type grammars) returns `Err`, or that
-/// `g::tokenize(&input)` (for Lexer-type grammars) produces at least one
-/// `TK_ERROR` token. ANTLR4 may report errors yet continue via error
-/// recovery and produce a tree — Gale does not (yet) do error recovery,
-/// so `Err` is the well-defined "Gale noticed the error" check.
+/// Inverts Stage A claim (b): instead of asserting `Ok`, asserts that
+/// `g::parse(&input)` (for Parser-type grammars) returns `Err`, or
+/// that `g::tokenize(&input)` (for Lexer-type grammars) produces at
+/// least one `TK_ERROR` token. ANTLR4 may report errors yet continue
+/// via error recovery and produce a tree — Gale does not (yet) do
+/// error recovery, so `Err` is the well-defined "Gale noticed the
+/// error" check.
 ///
 /// Eligibility is decided by the caller (Parser/Lexer type, non-empty
 /// `[input]`, non-empty `[errors]`, single grammar, category in the
-/// whitelist).
-///
-/// Triage (`[stage_e_todo]` / `[stage_e_skip]`) decorates the emission
-/// the same way Stage A and Stage B do.
-fn emit_stage_e_test_file(category: &String, name: &String, input: &String, is_lexer: bool, triage: &Triage) -> String {
+/// whitelist via `stage_a_err_category_eligible`).
+fn emit_stage_a_err_test_file(category: &String, name: &String, input: &String, is_lexer: bool, triage: &Triage) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
     w.line(&"//");
     w.line(&`// Source descriptor: {*category}/{*name} (ANTLR4 runtime-testsuite).`);
-    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_e_*]).");
+    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).");
     w.line(&"//");
-    w.line(&"// Stage E: the generated parser/lexer must report an error for [input].");
+    w.line(&"// Stage A claim (c): the generated parser/lexer must report an error for [input].");
     w.line(&"//   - Parser-type: t::parse(&input) must return Err.");
     w.line(&"//   - Lexer-type:  t::tokenize(&input) must produce at least one TK_ERROR.");
     w.blank();
+    w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
+    w.line(&"    with {");
+    w.line(&"        generator: {");
+    w.line(&`            module: "../../../../src/generator.wado",`);
+    w.line(&"            options: { highlight: false },");
+    w.line(&`            output_dir: "tests/generated/antlr4_compat_a/{*category}/{*name}",`);
+    w.line(&"        },");
+    w.line(&"    };");
     if is_lexer {
-        w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
-        w.line(&"    with {");
-        w.line(&"        generator: {");
-        w.line(&`            module: "../../../../src/generator.wado",`);
-        w.line(&"            options: { highlight: false },");
-        w.line(&`            output_dir: "tests/generated/antlr4_compat_e/{*category}/{*name}",`);
-        w.line(&"        },");
-        w.line(&"    };");
         w.line(&`use \{ TK_ERROR \} from "../../grammars/{*category}/{*name}.g4";`);
-    } else {
-        w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
-        w.line(&"    with {");
-        w.line(&"        generator: {");
-        w.line(&`            module: "../../../../src/generator.wado",`);
-        w.line(&"            options: { highlight: false },");
-        w.line(&`            output_dir: "tests/generated/antlr4_compat_e/{*category}/{*name}",`);
-        w.line(&"        },");
-        w.line(&"    };");
     }
     w.blank();
     if let Todo(reason) = triage {
         w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
     }
-    w.begin(&`test "stage_e: {*category}/{*name}"`);
+    w.begin(&`test "stage_a_err: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
     if is_lexer {
         w.line(&"let tokens = t::tokenize(&input);");
@@ -911,35 +882,35 @@ fn emit_stage_e_test_file(category: &String, name: &String, input: &String, is_l
     return w.to_string();
 }
 
-/// Emit one Stage L (token-stream equivalence) driver test file for a
-/// single descriptor.
+/// Emit one Stage A claim (d) driver test file (tokens-equivalence)
+/// for a single descriptor.
 ///
-/// Stage L runs `t::tokenize(&input)` and renders the result through
+/// Runs `t::tokenize(&input)` and renders the result through
 /// `to_lexer_string` (defined in `runtime.wado`, inlined into every
 /// generated module). The output is compared verbatim against the
-/// descriptor's `[output]` after `normalize_output_for_stage_l` has
+/// descriptor's `[output]` after `normalize_output_for_tokens` has
 /// stripped surrounding whitespace.
 ///
-/// Eligibility is decided by the caller (Lexer type, non-empty `[input]`,
-/// non-empty `[output]`, empty `[errors]`, single grammar, output is a
-/// clean `[@…]` dump).
-fn emit_stage_l_test_file(category: &String, name: &String, input: &String, expected: &String, triage: &Triage) -> String {
+/// Eligibility is decided by the caller (Lexer type, non-empty
+/// `[input]`, non-empty `[output]`, empty `[errors]`, single grammar,
+/// output is a clean `[@…]` dump).
+fn emit_stage_a_tokens_test_file(category: &String, name: &String, input: &String, expected: &String, triage: &Triage) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
     w.line(&"//");
     w.line(&`// Source descriptor: {*category}/{*name} (ANTLR4 runtime-testsuite).`);
-    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_l_*]).");
+    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).");
     w.line(&"//");
-    w.line(&"// Stage L: t::tokenize(&input) renders to the same ANTLR4-format");
+    w.line(&"// Stage A claim (d): t::tokenize(&input) renders to the same ANTLR4-format");
     w.line(&"// dump as the descriptor's [output] block.");
     w.blank();
     w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
     w.line(&"    with {");
     w.line(&"        generator: {");
     w.line(&`            module: "../../../../src/generator.wado",`);
-    w.line(&"        options: { highlight: false },");
-    w.line(&`            output_dir: "tests/generated/antlr4_compat_l/{*category}/{*name}",`);
+    w.line(&"            options: { highlight: false },");
+    w.line(&`            output_dir: "tests/generated/antlr4_compat_a/{*category}/{*name}",`);
     w.line(&"        },");
     w.line(&"    };");
     w.line(&`use \{ TK_EOF \} from "../../grammars/{*category}/{*name}.g4";`);
@@ -948,7 +919,7 @@ fn emit_stage_l_test_file(category: &String, name: &String, input: &String, expe
         w.line(&"#[TODO]");
         w.line(&`// triage: {escape_for_wado_str(reason)}`);
     }
-    w.begin(&`test "stage_l: {*category}/{*name}"`);
+    w.begin(&`test "stage_a_tokens: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
     w.line(&`let expected = "{escape_for_wado_str(expected)}";`);
     w.line(&"let tokens = t::tokenize(&input);");
@@ -1052,8 +1023,6 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     let triage_map = triage_maps.category;
     let stage_a_triage_map = triage_maps.stage_a;
     let stage_b_triage_map = triage_maps.stage_b;
-    let stage_e_triage_map = triage_maps.stage_e;
-    let stage_l_triage_map = triage_maps.stage_l;
 
     let grammars_dir = match ensure_dir(&compat_dir, &grammars_subdir()) {
         Ok(d) => d,
@@ -1079,26 +1048,12 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         },
     };
 
-    let stage_e_dir = match ensure_dir(&compat_dir, &"stage_e") {
-        Ok(d) => d,
-        Err(_) => {
-            eprintln("extract: cannot create or open antlr4-compat/stage_e/");
-            return;
-        },
-    };
-
-    let stage_l_dir = match ensure_dir(&compat_dir, &"stage_l") {
-        Ok(d) => d,
-        Err(_) => {
-            eprintln("extract: cannot create or open antlr4-compat/stage_l/");
-            return;
-        },
-    };
-
     let mut total_emitted = 0;
     let mut total_todo = 0;
     let mut total_skip = 0;
-    let mut stage_a_emitted = 0;
+    let mut stage_a_parse_emitted = 0;
+    let mut stage_a_err_emitted = 0;
+    let mut stage_a_tokens_emitted = 0;
     let mut stage_a_todo = 0;
     let mut stage_a_skip = 0;
     let mut stage_a_auto_skip = 0;
@@ -1106,14 +1061,6 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     let mut stage_b_todo = 0;
     let mut stage_b_skip = 0;
     let mut stage_b_auto_skip = 0;
-    let mut stage_e_emitted = 0;
-    let mut stage_e_todo = 0;
-    let mut stage_e_skip = 0;
-    let mut stage_e_auto_skip = 0;
-    let mut stage_l_emitted = 0;
-    let mut stage_l_todo = 0;
-    let mut stage_l_skip = 0;
-    let mut stage_l_auto_skip = 0;
 
     for let category of &categories {
         let cat_src_dir = match open_dir(&src_root, category, false) {
@@ -1144,20 +1091,6 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 continue;
             },
         };
-        let stage_e_cat_dir = match ensure_dir(&stage_e_dir, category) {
-            Ok(d) => d,
-            Err(_) => {
-                eprintln(`extract: cannot create stage_e/{*category}/, skipping`);
-                continue;
-            },
-        };
-        let stage_l_cat_dir = match ensure_dir(&stage_l_dir, category) {
-            Ok(d) => d,
-            Err(_) => {
-                eprintln(`extract: cannot create stage_l/{*category}/, skipping`);
-                continue;
-            },
-        };
 
         let txt_files = list_files_with_suffix(&cat_src_dir, &".txt");
         let mut entries: Array<DescriptorEntry> = [];
@@ -1180,15 +1113,14 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 // Category-level [skip] supersedes all per-stage emission, so
                 // sweep any stale per-stage files away. Without this, flipping
                 // a descriptor from a per-stage [todo] / pass into [skip] would
-                // leave the previous Stage A/E/L test files behind.
-                let stale_filename = `{base}_test.wado`;
-                if let Err(_) = remove_file(&stage_a_cat_dir, &stale_filename) {
+                // leave the previous Stage A / Stage B test files behind.
+                let stale_b_filename = `{base}_test.wado`;
+                if let Err(_) = remove_file(&stage_b_cat_dir, &stale_b_filename) {
                 }
-                if let Err(_) = remove_file(&stage_b_cat_dir, &stale_filename) {
-                }
-                if let Err(_) = remove_file(&stage_e_cat_dir, &stale_filename) {
-                }
-                if let Err(_) = remove_file(&stage_l_cat_dir, &stale_filename) {
+                for let suffix of ["_parse_test.wado", "_err_test.wado", "_tokens_test.wado"] {
+                    let stale = `{base}{suffix}`;
+                    if let Err(_) = remove_file(&stage_a_cat_dir, &stale) {
+                    }
                 }
                 continue;
             }
@@ -1242,154 +1174,107 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 triage,
             });
 
-            // ----- Stage A: parse-accepts-input. Asserts that the
-            // generated parser accepts the descriptor's [input] without
-            // returning an error. Eligibility:
-            //   * [type] is `Parser` (lexer-only descriptors are Stage L
-            //     territory; CompositeParser is deferred until multi-input
-            //     plumbing for the Stage * emitters lands),
-            //   * non-empty [input],
-            //   * empty [errors] (descriptors that expect parse errors go
-            //     to Stage E, not Stage A),
-            //   * single grammar (no slave grammars).
-            // Stage A is independent of Stage B: even when Stage B can
-            // also be emitted (i.e. [output] is a clean parse tree), Stage
-            // A2 still runs because it exercises a strictly weaker
-            // assertion and a Stage B failure should not mask the Stage A
-            // smoke test underneath.
-            let a2_eligible = parsed.descriptor_type == "Parser"
+            // ----- Stage A claim (b/c/d): per-descriptor driver(s)
+            // asserting Gale's generated parser/lexer behaviour on
+            // `[input]`. The three claims are mutually exclusive on the
+            // descriptor's `[type]` / `[errors]` pair, so at most one
+            // variant is emitted per descriptor:
+            //
+            //   * (b) parse-accepts-input — Parser, empty `[errors]`
+            //         → stage_a/<C>/<N>_parse_test.wado
+            //   * (c) parse-must-error    — `ParserErrors` /
+            //         `LexerErrors` category, non-empty `[errors]`
+            //         → stage_a/<C>/<N>_err_test.wado
+            //   * (d) tokens-equivalence  — Lexer, empty `[errors]`,
+            //         `[output]` is a clean `[@…` dump
+            //         → stage_a/<C>/<N>_tokens_test.wado
+            //
+            // A single `[stage_a_todo]` / `[stage_a_skip]` triage entry
+            // keyed by `Category/Name` addresses whichever variant fires.
+            // All variants share the same generated grammar under
+            // `tests/generated/antlr4_compat_a/<C>/<N>/`.
+            let parse_eligible = parsed.descriptor_type == "Parser"
                 && !parsed.input.is_empty()
                 && parsed.errors.is_empty()
                 && parsed.slave_grammars.len() == 0;
-            let stage_a_filename = `{base}_test.wado`;
-            if a2_eligible {
-                let stage_a_triage = stage_a_triage_map.lookup(&key);
-                if let Skip(reason) = &stage_a_triage {
-                    println(`  skipA : {key} — {*reason}`);
-                    stage_a_skip += 1;
-                    // Drop any previously-emitted file so triage state is
-                    // idempotent: flipping a descriptor from pass to
-                    // [stage_a_skip] removes the test on the next run.
-                    if let Err(_) = remove_file(&stage_a_cat_dir, &stage_a_filename) {
-                    }
-                } else {
-                    let stage_a_src = emit_stage_a_driver_test_file(
-                        category,
-                        &base,
-                        &parsed.input,
-                        &stage_a_triage,
-                    );
-                    if let Err(_) = write_file_string(&stage_a_cat_dir, &stage_a_filename, &stage_a_src) {
-                        eprintln(`extract: cannot write stage_a/{*category}/{stage_a_filename}`);
-                    } else {
-                        if let Todo(_) = &stage_a_triage {
-                            stage_a_todo += 1;
-                        }
-                        stage_a_emitted += 1;
-                    }
-                }
-            } else {
-                stage_a_auto_skip += 1;
-                // Same idempotency story as Skip: if the descriptor was
-                // previously eligible but a status.toml edit or descriptor
-                // change made it ineligible, sweep the stale file away.
-                if let Err(_) = remove_file(&stage_a_cat_dir, &stage_a_filename) {
-                }
-            }
-
-            // ----- Stage E: parse-must-error. Asserts that the generated
-            // parser (or lexer) reports an error for the descriptor's
-            // [input]. Eligibility:
-            //   * category is in the parse-error whitelist (ParserErrors /
-            //     LexerErrors) — other categories with [errors] (ambiguity
-            //     reports, predicate gates, …) are not Stage E candidates,
-            //   * [type] is `Parser` or `Lexer`,
-            //   * non-empty [input],
-            //   * non-empty [errors],
-            //   * single grammar.
-            // Stage E is independent of Stage A: a descriptor with non-empty
-            // [errors] is precisely the case Stage A's eligibility skips.
-            let stage_e_eligible = stage_e_category_eligible(category)
+            let err_eligible = stage_a_err_category_eligible(category)
                 && (parsed.descriptor_type == "Parser" || parsed.descriptor_type == "Lexer")
                 && !parsed.input.is_empty()
                 && !parsed.errors.is_empty()
                 && parsed.slave_grammars.len() == 0;
-            let stage_e_filename = `{base}_test.wado`;
-            if stage_e_eligible {
-                let stage_e_triage = stage_e_triage_map.lookup(&key);
-                if let Skip(reason) = &stage_e_triage {
-                    println(`  skipE : {key} — {*reason}`);
-                    stage_e_skip += 1;
-                    if let Err(_) = remove_file(&stage_e_cat_dir, &stage_e_filename) {
-                    }
-                } else {
-                    let is_lexer = parsed.descriptor_type == "Lexer";
-                    let stage_e_src = emit_stage_e_test_file(
-                        category,
-                        &base,
-                        &parsed.input,
-                        is_lexer,
-                        &stage_e_triage,
-                    );
-                    if let Err(_) = write_file_string(&stage_e_cat_dir, &stage_e_filename, &stage_e_src) {
-                        eprintln(`extract: cannot write stage_e/{*category}/{stage_e_filename}`);
-                    } else {
-                        if let Todo(_) = &stage_e_triage {
-                            stage_e_todo += 1;
-                        }
-                        stage_e_emitted += 1;
-                    }
-                }
-            } else {
-                stage_e_auto_skip += 1;
-                if let Err(_) = remove_file(&stage_e_cat_dir, &stage_e_filename) {
-                }
-            }
-
-            // ----- Stage L: token-stream equivalence. Asserts that
-            // `t::tokenize(&input)`, rendered through `to_lexer_string`,
-            // equals the descriptor's `[output]`. Eligibility:
-            //   * [type] is `Lexer`,
-            //   * non-empty [input] and [output],
-            //   * empty [errors] (Stage E covers the error case),
-            //   * single grammar,
-            //   * [output] passes normalize_output_for_stage_l (each non-empty
-            //     line is a `[@…` row — interleaved action-print lines are
-            //     not Stage L material).
-            let stage_l_filename = `{base}_test.wado`;
-            let l_basic = parsed.descriptor_type == "Lexer"
+            let tokens_basic = parsed.descriptor_type == "Lexer"
                 && !parsed.input.is_empty()
                 && !parsed.output.is_empty()
                 && parsed.errors.is_empty()
                 && parsed.slave_grammars.len() == 0;
-            let l_output = if l_basic { normalize_output_for_stage_l(&parsed.output) } else { null };
-            if let Some(normalised_l) = l_output {
-                let stage_l_triage = stage_l_triage_map.lookup(&key);
-                if let Skip(reason) = &stage_l_triage {
-                    println(`  skipL : {key} — {*reason}`);
-                    stage_l_skip += 1;
-                    if let Err(_) = remove_file(&stage_l_cat_dir, &stage_l_filename) {
-                    }
-                } else {
-                    let stage_l_src = emit_stage_l_test_file(
-                        category,
-                        &base,
-                        &parsed.input,
-                        &normalised_l,
-                        &stage_l_triage,
-                    );
-                    if let Err(_) = write_file_string(&stage_l_cat_dir, &stage_l_filename, &stage_l_src) {
-                        eprintln(`extract: cannot write stage_l/{*category}/{stage_l_filename}`);
-                    } else {
-                        if let Todo(_) = &stage_l_triage {
-                            stage_l_todo += 1;
-                        }
-                        stage_l_emitted += 1;
-                    }
+            let tokens_output = if tokens_basic { normalize_output_for_tokens(&parsed.output) } else { null };
+
+            let parse_filename = `{base}_parse_test.wado`;
+            let err_filename = `{base}_err_test.wado`;
+            let tokens_filename = `{base}_tokens_test.wado`;
+
+            // Stale-file sweep: only the variant that fires keeps its file;
+            // the other two get removed. Filename uniqueness across stages
+            // makes this idempotent without tracking the previous state.
+            if !parse_eligible {
+                if let Err(_) = remove_file(&stage_a_cat_dir, &parse_filename) {
                 }
-            } else {
-                stage_l_auto_skip += 1;
-                if let Err(_) = remove_file(&stage_l_cat_dir, &stage_l_filename) {
+            }
+            if !err_eligible {
+                if let Err(_) = remove_file(&stage_a_cat_dir, &err_filename) {
+                }
+            }
+            if tokens_output matches { None } {
+                if let Err(_) = remove_file(&stage_a_cat_dir, &tokens_filename) {
+                }
+            }
+
+            let stage_a_triage = stage_a_triage_map.lookup(&key);
+            let any_eligible = parse_eligible || err_eligible || tokens_output matches { Some(_) };
+            if !any_eligible {
+                stage_a_auto_skip += 1;
+            } else if let Skip(reason) = &stage_a_triage {
+                println(`  skipA: {key} — {*reason}`);
+                stage_a_skip += 1;
+                // Remove the variant's file if it exists (above sweep only
+                // touches the non-eligible variants; an eligible-but-skipped
+                // variant still needs removal).
+                if let Err(_) = remove_file(&stage_a_cat_dir, &parse_filename) {
+                }
+                if let Err(_) = remove_file(&stage_a_cat_dir, &err_filename) {
+                }
+                if let Err(_) = remove_file(&stage_a_cat_dir, &tokens_filename) {
+                }
+            } else if parse_eligible {
+                let src = emit_stage_a_parse_test_file(category, &base, &parsed.input, &stage_a_triage);
+                if let Err(_) = write_file_string(&stage_a_cat_dir, &parse_filename, &src) {
+                    eprintln(`extract: cannot write stage_a/{*category}/{parse_filename}`);
+                } else {
+                    if let Todo(_) = &stage_a_triage {
+                        stage_a_todo += 1;
+                    }
+                    stage_a_parse_emitted += 1;
+                }
+            } else if err_eligible {
+                let is_lexer = parsed.descriptor_type == "Lexer";
+                let src = emit_stage_a_err_test_file(category, &base, &parsed.input, is_lexer, &stage_a_triage);
+                if let Err(_) = write_file_string(&stage_a_cat_dir, &err_filename, &src) {
+                    eprintln(`extract: cannot write stage_a/{*category}/{err_filename}`);
+                } else {
+                    if let Todo(_) = &stage_a_triage {
+                        stage_a_todo += 1;
+                    }
+                    stage_a_err_emitted += 1;
+                }
+            } else if let Some(normalised_t) = tokens_output {
+                let src = emit_stage_a_tokens_test_file(category, &base, &parsed.input, &normalised_t, &stage_a_triage);
+                if let Err(_) = write_file_string(&stage_a_cat_dir, &tokens_filename, &src) {
+                    eprintln(`extract: cannot write stage_a/{*category}/{tokens_filename}`);
+                } else {
+                    if let Todo(_) = &stage_a_triage {
+                        stage_a_todo += 1;
+                    }
+                    stage_a_tokens_emitted += 1;
                 }
             }
 
@@ -1515,25 +1400,21 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     }
 
     println("");
-    println(`extract: stage A (.g4 parses): emitted {total_emitted} descriptor(s) across {categories.len()} categor(ies)`);
+    println(`extract: stage A claim (a) — .g4 parses cleanly: emitted {total_emitted} descriptor(s) across {categories.len()} categor(ies)`);
     println(`extract:           {total_todo} marked #[TODO]`);
     println(`extract:           {total_skip} skipped`);
-    println(`extract: stage A (parse accepts input): emitted {stage_a_emitted} per-descriptor driver(s)`);
+    let stage_a_emitted = stage_a_parse_emitted + stage_a_err_emitted + stage_a_tokens_emitted;
+    println(`extract: stage A claims (b/c/d) — generated parser/lexer behaviour: emitted {stage_a_emitted} per-descriptor driver(s)`);
+    println(`extract:           {stage_a_parse_emitted} parse-accepts-input (_parse_test.wado)`);
+    println(`extract:           {stage_a_err_emitted} parse-must-error    (_err_test.wado)`);
+    println(`extract:           {stage_a_tokens_emitted} tokens-equivalence  (_tokens_test.wado)`);
     println(`extract:           {stage_a_todo} marked #[TODO]`);
     println(`extract:           {stage_a_skip} explicit skip`);
-    println(`extract:           {stage_a_auto_skip} auto-skip (lexer / has-errors / composite)`);
-    println(`extract: stage B (tree shape): emitted {stage_b_emitted} per-descriptor driver(s)`);
+    println(`extract:           {stage_a_auto_skip} auto-skip (no eligible variant)`);
+    println(`extract: stage B — tree-shape equivalence: emitted {stage_b_emitted} per-descriptor driver(s)`);
     println(`extract:           {stage_b_todo} marked #[TODO]`);
     println(`extract:           {stage_b_skip} explicit skip`);
     println(`extract:           {stage_b_auto_skip} auto-skip (output is not a parse tree)`);
-    println(`extract: stage E (parse must error): emitted {stage_e_emitted} per-descriptor driver(s)`);
-    println(`extract:           {stage_e_todo} marked #[TODO]`);
-    println(`extract:           {stage_e_skip} explicit skip`);
-    println(`extract:           {stage_e_auto_skip} auto-skip (non-error category / no [errors] / composite)`);
-    println(`extract: stage L (token stream): emitted {stage_l_emitted} per-descriptor driver(s)`);
-    println(`extract:           {stage_l_todo} marked #[TODO]`);
-    println(`extract:           {stage_l_skip} explicit skip`);
-    println(`extract:           {stage_l_auto_skip} auto-skip (non-lexer / output is not a token dump / composite)`);
 }
 
 // ===== Stage B: descriptor [output] normaliser =====
@@ -1745,8 +1626,6 @@ fn lookup_for_axis(maps: &TriageMaps, axis: &String, key: &String) -> Triage {
     return match *axis {
         "cat" => maps.category.lookup(key),
         "a" => maps.stage_a.lookup(key),
-        "e" => maps.stage_e.lookup(key),
-        "l" => maps.stage_l.lookup(key),
         _ => maps.stage_b.lookup(key),
     };
 }
@@ -1777,8 +1656,6 @@ test "triage: missing file yields empty maps on all axes" {
     assert maps.category.entries.is_empty();
     assert maps.stage_a.entries.is_empty();
     assert maps.stage_b.entries.is_empty();
-    assert maps.stage_e.entries.is_empty();
-    assert maps.stage_l.entries.is_empty();
 }
 
 test "triage: stage_a skip and todo populate stage_a only" {
@@ -1890,22 +1767,19 @@ test "triage: unknown bucket section is silently ignored" {
     assert_triage_pass(&maps, &"b", &"Foo/Bar");
 }
 
-test "triage: stage E skip and todo populate stage_e only" {
+test "triage: stage_a entry applies to whichever variant (parse / err / tokens) fires for the descriptor" {
+    // The three Stage A variants are mutually exclusive on type+errors so
+    // a single `Category/Name` key in [stage_a_todo] unambiguously routes
+    // to the right test file regardless of which variant was emitted.
     let toml = Option::<String>::Some(
-        "[stage_e_todo]
-\"ParserErrors/Foo\" = \"Gale's error recovery returns Ok\"
-[stage_e_skip]
-\"LexerErrors/Bar\" = \"grammar uses an unsupported lexer command\"
+        "[stage_a_todo]
+\"ParserErrors/Foo\" = \"variant: parse must error — Gale's set-element dispatch elides the kind-check\"
 ",
     );
     let maps = load_triage_maps(&toml);
-    assert_triage_todo(&maps, &"e", &"ParserErrors/Foo", &"Gale's error recovery returns Ok");
-    assert_triage_skip(&maps, &"e", &"LexerErrors/Bar", &"grammar uses an unsupported lexer command");
-    // Other axes must remain untouched.
+    assert_triage_todo(&maps, &"a", &"ParserErrors/Foo", &"variant: parse must error — Gale's set-element dispatch elides the kind-check");
     assert_triage_pass(&maps, &"cat", &"ParserErrors/Foo");
-    assert_triage_pass(&maps, &"a", &"ParserErrors/Foo");
     assert_triage_pass(&maps, &"b", &"ParserErrors/Foo");
-    assert_triage_pass(&maps, &"l", &"ParserErrors/Foo");
 }
 
 test "extract_root_rule_name: simple tree returns the first identifier" {
@@ -1930,42 +1804,43 @@ test "extract_root_rule_name: rejects malformed prefixes" {
     assert extract_root_rule_name(&"(123 abc)") matches { None };  // starts with digit
 }
 
-test "normalize_l: clean token dump passes through trimmed" {
+test "normalize_tokens: clean token dump passes through trimmed" {
     let input = "[@0,0:2='end',<1>,1:0]\n[@1,3:3=' ',<3>,1:3]\n";
-    let result = normalize_output_for_stage_l(&input);
+    let result = normalize_output_for_tokens(&input);
     assert result matches { Some(_) };
     if let Some(s) = result {
         assert s == input, `unexpected: '{s}'`;
     }
 }
 
-test "normalize_l: action-print prefix rejects the descriptor" {
+test "normalize_tokens: action-print prefix rejects the descriptor" {
     // LexerExec descriptors with `{<writeln(...)>}` actions emit action
-    // output BEFORE the token dump. Stage L can't reproduce action prints
-    // without Stage C; reject so the descriptor falls into auto-skip.
+    // output BEFORE the token dump. The tokens-equivalence variant can't
+    // reproduce action prints without Stage C; reject so the descriptor
+    // falls into auto-skip.
     let raw = "stuff0:\nstuff1: a\n[@0,0:0='a',<1>,1:0]\n";
-    assert normalize_output_for_stage_l(&raw) matches { None };
+    assert normalize_output_for_tokens(&raw) matches { None };
 }
 
-test "normalize_l: empty output is not Stage L testable" {
-    assert normalize_output_for_stage_l(&"") matches { None };
-    assert normalize_output_for_stage_l(&"\n\n") matches { None };
+test "normalize_tokens: empty output is not tokens-testable" {
+    assert normalize_output_for_tokens(&"") matches { None };
+    assert normalize_output_for_tokens(&"\n\n") matches { None };
 }
 
-test "normalize_l: triple-quoted leading garbage rejects the descriptor" {
+test "normalize_tokens: triple-quoted leading garbage rejects the descriptor" {
     // Some descriptors land here through the post_process path which
     // trims `"""` but leaves residual leading text. Anything other than
     // `[@…` first must be rejected.
-    assert normalize_output_for_stage_l(&"abc\n[@0,0:0='a',<1>,1:0]\n") matches { None };
+    assert normalize_output_for_tokens(&"abc\n[@0,0:0='a',<1>,1:0]\n") matches { None };
 }
 
-test "stage_e_category_eligible: only ParserErrors and LexerErrors" {
-    assert stage_e_category_eligible(&"ParserErrors") == true;
-    assert stage_e_category_eligible(&"LexerErrors") == true;
+test "stage_a_err_category_eligible: only ParserErrors and LexerErrors" {
+    assert stage_a_err_category_eligible(&"ParserErrors") == true;
+    assert stage_a_err_category_eligible(&"LexerErrors") == true;
     // Categories with [errors] for ambiguity / predicate reports, not real
-    // parse failures, are not Stage E candidates.
-    assert stage_e_category_eligible(&"FullContextParsing") == false;
-    assert stage_e_category_eligible(&"SemPredEvalParser") == false;
-    assert stage_e_category_eligible(&"LexerExec") == false;
-    assert stage_e_category_eligible(&"") == false;
+    // parse failures, are not parse-must-error candidates.
+    assert stage_a_err_category_eligible(&"FullContextParsing") == false;
+    assert stage_a_err_category_eligible(&"SemPredEvalParser") == false;
+    assert stage_a_err_category_eligible(&"LexerExec") == false;
+    assert stage_a_err_category_eligible(&"") == false;
 }

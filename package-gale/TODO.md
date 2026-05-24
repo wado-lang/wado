@@ -7,12 +7,6 @@ Open work towards full ANTLR4 compatibility and the performance budget it implie
 
 This file lists what is **not yet done**. Closed work belongs in commit history.
 
-## Generated parser bugs
-
-### Set-element groups skip the kind-check dispatch (`p.advance()` only)
-
-`a : 'a' ('b'|'c') ;` codegen emits `let lit_b_or_lit_c = p.advance();` with no kind-check on `TK_LIT_B | TK_LIT_C`, so any token (including the wrong one) is silently consumed. Stage E regression: `ParserErrors/SingleTokenDeletionExpectingSet` returns `Ok` for `aab` instead of `Err` at the second `a`. The fix lives in the alt-group emission path for single-mandatory-element groups; the kind-check dispatch is being elided because the group has exactly one mandatory element. Write a `tests/grammars/parser_set_group_dispatch.g4` fixture before the fix.
-
 ## LL prediction — remaining gaps
 
 ### Iter-body K-prefix for `Repeat` inner `RuleRef`s
@@ -58,10 +52,37 @@ All 17 `CompositeLexers` / `CompositeParsers` upstream descriptors auto-skip tod
 
 ## Descriptor importer expansion (no Stage C required)
 
-Stage E (parse-must-error), Stage L (token-stream equivalence), and sub-tree Stage B (the `@after { <ToStringTree("$r.ctx"):writeln()> }` pattern) have all landed; see `antlr4-compatibility.md` for the contract and `tests/antlr4-compat/status.toml` for triage state. Remaining gaps:
+Stage A now covers four sub-claims (a/b/c/d) — parse-accepts-input, parse-must-error, tokens-equivalence — in addition to the original `.g4`-parses claim. Sub-tree Stage B (the `@after { <ToStringTree("$r.ctx"):writeln()> }` pattern) has also landed. See `antlr4-compatibility.md` for the contract and `tests/antlr4-compat/status.toml` for triage state. Remaining gaps:
 
 - **Composite (slave-grammar) descriptors** still require multi-input plumbing in the emitter (`extract_antlr4_descriptors.wado`'s `parsed.slave_grammars.len() > 0` short-circuit). Most of their `[output]`s are Stage C territory either way; re-evaluate the plumbing once Stage C lands.
-- **Stage L `channel=N` annotations**. Non-default-channel tokens are routed to `Token.leading_trivia` rather than the main stream in Gale's lexer codegen, so descriptors that include `channel=<n>` rows in `[output]` (e.g. `LexerExec/ReservedWordsEscaping`) can't be tokenised back into a matching dump today. Either change the lexer codegen to keep non-default-channel tokens in the main stream and have the parser filter them, or extend `to_lexer_string` to walk trivia.
+- **Stage A claim (d) `channel=N` annotations**. Non-default-channel tokens are routed to `Token.leading_trivia` rather than the main stream in Gale's lexer codegen, so descriptors that include `channel=<n>` rows in `[output]` (e.g. `LexerExec/ReservedWordsEscaping`) can't be tokenised back into a matching dump today. Either change the lexer codegen to keep non-default-channel tokens in the main stream and have the parser filter them, or extend `to_lexer_string` to walk trivia.
+
+## Stage-C-independent Gale bugs (fix before Stage C)
+
+These are the real Gale codegen / lexer / parser gaps surfaced by the per-descriptor Stage A drivers. Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Order roughly by impact:
+
+### Parser codegen
+
+- **Set element `('b' | 'c')` skips the kind-check dispatch.** `a : 'a' ('b'|'c') ;` is currently emitted as `let lit_b_or_lit_c = p.advance();` with no `peek_kind` guard, so any token silently consumes. Stage A regression: `ParserErrors/SingleTokenDeletionExpectingSet` returns `Ok` for `aab` instead of `Err`. Write a `tests/grammars/parser_set_group_dispatch.g4` fixture before the fix.
+- **LR rule with `returns` + list-label combination.** `LeftRecursion/ReturnValueAndActionsList1_{2,4}`: parse stops at the first comma in the input list. Investigate the LR-alt-rewrite path's interaction with list-label storage.
+- **LR operator-precedence chain.** `Performance/DropLoopEntryBranchInLRRule_4`: Gale picks the wrong precedence chain for an or-then-and expression.
+
+### Lexer codegen
+
+- **EOF-suffixed rule priority.** `LexerExec/EOFSuffixInFirstRule_2`: when two rules can match the same prefix (`A : 'a' EOF;` vs `B : 'a';`), ANTLR4 prefers the one that consumes the trailing EOF. Gale picks the lexically-later rule. Fix in the longest-match tiebreaker.
+- **Recursive lexer rule with `.+?` / `.*?` wildcard.** `LexerExec/RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`: nested `/* /*...*/ */` comments mistokenize because the recursive call doesn't re-enter under the non-greedy bound.
+- **`-> more, mode(...)` chain across modes.** `LexerExec/ZeroLengthToken`: a token built via `-> more, pushMode(...)` followed by `-> more, mode(...)` should merge into a single token spanning all the `more`'d chars, but Gale emits the final piece only.
+
+### Codegen edge cases blocking `[stage_a_skip]` entries
+
+These would need fresh `wado-compiler/tests/fixtures/` reproducers before fixing — they reject grammars wholesale:
+
+- All-binary-op LR rule (`LeftRecursion/WhitespaceInfluence_{1,2}`, `Performance/ExpressionGrammar_{1,2}`)
+- Non-greedy optional `??` in parser rules (`ParserExec/IfIfElseNonGreedyBinding1`)
+- Parser-rule list-label `b2+=b*` / `b3+=';'` (`ParserExec/Labels`)
+- `val+=(INT | FLOAT)*` set list-label (`ParserExec/ListLabelsOnSet`)
+- Wado-reserved words as rule names (`ParserExec/ReservedWordsEscaping`)
+- High-numbered explicit token id (`LexerExec/TokenType0xFFFF` — `TK_65535`)
 
 ## Stage C — action / predicate execution
 
