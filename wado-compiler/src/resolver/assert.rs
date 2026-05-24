@@ -85,7 +85,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // something else.
         let cond_tir = self.resolve_expr(&assert_stmt.condition, ctx, None);
 
-        // Phase 2b: walk the resulting TIR post-order; each sub-expression
+        // Phase 2b: walk the resulting TIR pre-order; each sub-expression
         // whose span matches a captured AST sub-expression is extracted
         // into a fresh `let __vK = ...;` (pushed onto `inner_stmts`) and
         // replaced with `Local(__vK)`.
@@ -93,7 +93,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // `add_local` receives `defining_ast_id = None` so the synthetic
         // locals do not leak into `local_symbols` (which would key on
         // `synth_id` and shadow other entries via LSP queries).
-        let cond_tir = {
+        //
+        // `emitted_indexes` records which scanned captures actually
+        // landed in the TIR — some AST sub-expressions evaporate during
+        // resolution (e.g. reflexive `T::from(T_val)` returns its arg
+        // unchanged) and have no matching `TirExpr.span` to extract. We
+        // suppress those from the failure message below so it never
+        // refers to an undeclared `__vK`.
+        let (cond_tir, emitted_indexes) = {
             let mut walker = TirCaptureWalker {
                 captures: &captures,
                 span_to_capture: &span_to_capture,
@@ -104,9 +111,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             };
             let mut cond_tir = cond_tir;
             walker.visit_expr(&mut cond_tir);
+            let emitted: Vec<usize> = walker.emitted.keys().copied().collect();
             inner_stmts.extend(walker.emitted_lets);
-            cond_tir
+            (cond_tir, emitted)
         };
+        let captures_for_message: Vec<&Capture> = emitted_indexes
+            .iter()
+            .map(|&idx| &captures[idx])
+            .collect();
 
         // `let __cond = <cond_tir>;`
         let cond_type = cond_tir.type_id;
@@ -130,7 +142,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // symbol-pollution concern above does not apply; the standard
         // ident lookup of `__cond` and the template-string + `panic`
         // resolution paths take over.
-        let panic_message = build_panic_message(assert_stmt, &captures, synth_id, span);
+        let panic_message =
+            build_panic_message(assert_stmt, &captures_for_message, synth_id, span);
         let panic_call = Expr::Call(Box::new(CallExpr {
             id: synth_id,
             callee: Expr::Ident(IdentExpr {
@@ -465,10 +478,13 @@ impl TirMutVisitor for TirCaptureWalker<'_, '_> {
     }
 }
 
-/// Build the template-string expression passed to `panic(...)`.
+/// Build the template-string expression passed to `panic(...)`. The
+/// `captures` slice must contain only entries the TIR walker actually
+/// emitted (filtered by `desugar_assert`), so every `__vK` referenced
+/// here is guaranteed to be in scope.
 fn build_panic_message(
     assert_stmt: &AssertStmt,
-    captures: &[Capture],
+    captures: &[&Capture],
     synth_id: AstId,
     span: crate::token::Span,
 ) -> Expr {
