@@ -2086,10 +2086,8 @@ fn walk_stmt(
             // mutation value is then discarded by the return. Hoist the
             // value into a temp local so the writeback can run between
             // the expression's evaluation and the return jump.
-            let needs_post_eval_writeback = value.is_some()
-                && states
-                    .iter()
-                    .any(|s| *s == CanonState::ScalarOnly);
+            let needs_post_eval_writeback =
+                value.is_some() && states.contains(&CanonState::ScalarOnly);
             if needs_post_eval_writeback {
                 let return_value = value.take().expect("checked Some above");
                 let return_type = return_value.type_id;
