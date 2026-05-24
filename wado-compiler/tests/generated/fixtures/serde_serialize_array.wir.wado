@@ -573,15 +573,15 @@ fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/Array<core:prelude/s
             break __inline_Array_core_prelude_string_wado_String__IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<core:prelude/string.wado/String>" { repr: self.repr, used: self.used, index: 0 };
             unreachable;
         };
-        block {
+        b42: block {
             l43: loop {
                 __match_7 = "core:prelude/array.wado/ArrayIter<core:prelude/string.wado/String>^Iterator::next"(__iter_4);
-                drop((if ref.is_null(__match_7) == 0 -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError" {
+                if ref.is_null(__match_7) == 0 {
                     item = ref.as_non_null(__match_7);
-                    "wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(seq_3, item);
+                    drop("wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(seq_3, item));
                 } else {
                     break b42;
-                }));
+                }
                 continue l43;
             };
         };
@@ -605,16 +605,16 @@ fn "wado-compiler/tests/fixtures/serde_serialize_array.wado/Array<i32>^Serialize
             break __inline_Array_i32__IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: self.repr, used: self.used, index: 0 };
             unreachable;
         };
-        block {
+        b45: block {
             l46: loop {
                 let __sroa___match_7_discriminant: i32;
                 let __sroa___match_7_payload_0: i32;
                 multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_4);
-                drop((if __sroa___match_7_discriminant == 0 -> ref null "wado-compiler/tests/fixtures/serde_serialize_array.wado//SerializeError" {
-                    "wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<i32>"(seq_3, __sroa___match_7_payload_0);
+                if __sroa___match_7_discriminant == 0 {
+                    drop("wado-compiler/tests/fixtures/serde_serialize_array.wado/JsonSeqSerializer^SerializeSeq::element<i32>"(seq_3, __sroa___match_7_payload_0));
                 } else {
                     break b45;
-                }));
+                }
                 continue l46;
             };
         };
