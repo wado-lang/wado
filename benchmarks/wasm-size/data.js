@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779614439991,
+  "lastUpdate": 1779616005650,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25533,6 +25533,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8147645bf2d4fb04adf63c966796f63d687aa479"
         },
         "date": 1779614439513,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17246,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 461807,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6eaf125f939e7299865e3f5bde109845b50550da",
+          "message": "Merge pull request #1178 from wado-lang/claude/wado-nir-optimizer-quality-eheVs\n\nrefactor(optimize): tidy NIR optimizer (docs, TODOs, visitor reuse)",
+          "timestamp": "2026-05-24T18:40:00+09:00",
+          "tree_id": "6f96d6b3f523392206896cc387fbde743803e378",
+          "url": "https://github.com/wado-lang/wado/commit/6eaf125f939e7299865e3f5bde109845b50550da"
+        },
+        "date": 1779616005325,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
