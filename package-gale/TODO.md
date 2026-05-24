@@ -9,7 +9,9 @@ This file lists what is **not yet done**. Closed work belongs in commit history.
 
 ## Generated parser bugs
 
-(none currently)
+### Set-element groups skip the kind-check dispatch (`p.advance()` only)
+
+`a : 'a' ('b'|'c') ;` codegen emits `let lit_b_or_lit_c = p.advance();` with no kind-check on `TK_LIT_B | TK_LIT_C`, so any token (including the wrong one) is silently consumed. Stage E regression: `ParserErrors/SingleTokenDeletionExpectingSet` returns `Ok` for `aab` instead of `Err` at the second `a`. The fix lives in the alt-group emission path for single-mandatory-element groups; the kind-check dispatch is being elided because the group has exactly one mandatory element. Write a `tests/grammars/parser_set_group_dispatch.g4` fixture before the fix.
 
 ## LL prediction — remaining gaps
 
@@ -56,13 +58,10 @@ All 17 `CompositeLexers` / `CompositeParsers` upstream descriptors auto-skip tod
 
 ## Descriptor importer expansion (no Stage C required)
 
-The Stage A parse-accepts-input drivers cover 206 / 345 descriptors. The remaining importable test modes are:
+Stage E (parse-must-error), Stage L (token-stream equivalence), and sub-tree Stage B (the `@after { <ToStringTree("$r.ctx"):writeln()> }` pattern) have all landed; see `antlr4-compatibility.md` for the contract and `tests/antlr4-compat/status.toml` for triage state. Remaining gaps:
 
-- **Stage E (parse-must-error)** for `LexerErrors` / `ParserErrors` (46 descriptors): `g::parse(&input)` must return `Err`. Optionally tighten by matching line/col against `[errors]`.
-- **Stage L (token-stream equivalence)** for lexer-only descriptors (`LexerExec` 42, `Performance` 7, `SemPredEvalLexer` 8, lexer half of `Sets`): add a `to_lexer_string(&Array<Token>) -> String` helper that mimics ANTLR4's `Token.toString()` / token-name-per-line dumps, then assert `g::tokenize(&input).to_lexer_string() == expected` (modulo skip-channel filtering).
-- **Sub-tree Stage B** (`<ToStringTree("$X.ctx"):writeln()>` pattern, ~11 descriptors across `ParseTrees` / `FullContextParsing`): teach the extractor to recognise the `@after` print, look up the labeled element in the start rule, and emit a Stage B test that drills into the corresponding subtree.
-
-Each axis gets its own `status.toml` bucket pair (`[stage_e_*]`, `[stage_l_*]`, …). Composite (slave-grammar) descriptors require multi-input plumbing in the emitter on top of those modes, and most of their `[output]`s are still Stage C territory.
+- **Composite (slave-grammar) descriptors** still require multi-input plumbing in the emitter (`extract_antlr4_descriptors.wado`'s `parsed.slave_grammars.len() > 0` short-circuit). Most of their `[output]`s are Stage C territory either way; re-evaluate the plumbing once Stage C lands.
+- **Stage L `channel=N` annotations**. Non-default-channel tokens are routed to `Token.leading_trivia` rather than the main stream in Gale's lexer codegen, so descriptors that include `channel=<n>` rows in `[output]` (e.g. `LexerExec/ReservedWordsEscaping`) can't be tokenised back into a matching dump today. Either change the lexer codegen to keep non-default-channel tokens in the main stream and have the parser filter them, or extend `to_lexer_string` to walk trivia.
 
 ## Stage C — action / predicate execution
 

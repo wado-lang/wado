@@ -1,0 +1,32 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source descriptor: LexerErrors/EnforcedGreedyNestedBraces_2 (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_e_*]).
+//
+// Stage E: the generated parser/lexer must report an error for [input].
+//   - Parser-type: t::parse(&input) must return Err.
+//   - Lexer-type:  t::tokenize(&input) must produce at least one TK_ERROR.
+
+use t from "../../grammars/LexerErrors/EnforcedGreedyNestedBraces_2.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/antlr4_compat_e/LexerErrors/EnforcedGreedyNestedBraces_2",
+        },
+    };
+use { TK_ERROR } from "../../grammars/LexerErrors/EnforcedGreedyNestedBraces_2.g4";
+
+test "stage_e: LexerErrors/EnforcedGreedyNestedBraces_2" {
+    let input = "{ { }";
+    let tokens = t::tokenize(&input);
+    let mut has_err = false;
+    for let tok of &tokens {
+        if tok.kind == TK_ERROR {
+            has_err = true;
+            break;
+        }
+    }
+    assert has_err, `expected at least one TK_ERROR token in tokenize output`;
+}

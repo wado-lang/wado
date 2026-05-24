@@ -1,0 +1,28 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source descriptor: LexerExec/ReservedWordsEscaping_NULL (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_l_*]).
+//
+// Stage L: t::tokenize(&input) renders to the same ANTLR4-format
+// dump as the descriptor's [output] block.
+
+use t from "../../grammars/LexerExec/ReservedWordsEscaping_NULL.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+        options: { highlight: false },
+            output_dir: "tests/generated/antlr4_compat_l/LexerExec/ReservedWordsEscaping_NULL",
+        },
+    };
+use { TK_EOF } from "../../grammars/LexerExec/ReservedWordsEscaping_NULL.g4";
+
+test "stage_l: LexerExec/ReservedWordsEscaping_NULL" {
+    let input = "NULL";
+    let expected = "[@0,0:3='NULL',<1>,1:0]
+[@1,4:3='<EOF>',<-1>,1:4]
+";
+    let tokens = t::tokenize(&input);
+    let actual = t::to_lexer_string(&tokens, &input, TK_EOF);
+    assert actual == expected, `actual:\n{actual}\nexpected:\n{expected}`;
+}

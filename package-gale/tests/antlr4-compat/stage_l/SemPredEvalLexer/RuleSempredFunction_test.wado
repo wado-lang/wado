@@ -1,0 +1,30 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source descriptor: SemPredEvalLexer/RuleSempredFunction (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_l_*]).
+//
+// Stage L: t::tokenize(&input) renders to the same ANTLR4-format
+// dump as the descriptor's [output] block.
+
+use t from "../../grammars/SemPredEvalLexer/RuleSempredFunction.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+        options: { highlight: false },
+            output_dir: "tests/generated/antlr4_compat_l/SemPredEvalLexer/RuleSempredFunction",
+        },
+    };
+use { TK_EOF } from "../../grammars/SemPredEvalLexer/RuleSempredFunction.g4";
+
+test "stage_l: SemPredEvalLexer/RuleSempredFunction" {
+    let input = "aaa";
+    let expected = "[@0,0:0='a',<1>,1:0]
+[@1,1:1='a',<1>,1:1]
+[@2,2:2='a',<1>,1:2]
+[@3,3:2='<EOF>',<-1>,1:3]
+";
+    let tokens = t::tokenize(&input);
+    let actual = t::to_lexer_string(&tokens, &input, TK_EOF);
+    assert actual == expected, `actual:\n{actual}\nexpected:\n{expected}`;
+}

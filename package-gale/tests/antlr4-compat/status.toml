@@ -30,6 +30,19 @@
 #            invalid Wado for the descriptor's grammar) so a `#[TODO]`
 #            marker has nothing to attach to.
 #
+#   [stage_e_todo] — Stage E: the parse-must-error test fails at
+#            runtime (the generated parser/lexer did NOT report an
+#            error for [input]). Eligible categories are ParserErrors
+#            and LexerErrors. Drop once the gap is closed.
+#   [stage_e_skip] — Stage E: emission is skipped entirely. Use when
+#            Gale codegen produces invalid Wado for the descriptor's
+#            grammar so a `#[TODO]` marker has nothing to attach to.
+#
+#   [stage_l_todo] — Stage L: token-stream equivalence fails (the
+#            ANTLR4-format dump of `tokenize(&input)` does not match
+#            `[output]`). Eligible categories are lexer-type descriptors.
+#   [stage_l_skip] — Stage L: emission is skipped entirely.
+#
 # The free-form value is a one-line reason that flows into the generated
 # test as a comment. The reason text is written verbatim — keep it free
 # of backslashes (the parser does not unescape) and double quotes.
@@ -50,6 +63,7 @@
 "Listeners/TokenGetters_1" = "top-level <ImportListener(...)> / <TokenGetterListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
 "Listeners/TokenGetters_2" = "top-level <ImportListener(...)> / <TokenGetterListener(...)> StringTemplate directives the testsuite substitutes per target — not a self-contained .g4"
 "ParserExec/ParserProperty" = "top-level <ParserPropertyMember()> StringTemplate directive the testsuite substitutes per target — not a self-contained .g4"
+"LexerExec/PositionAdjustingLexer" = "@definitions / @members carry <PositionAdjustingLexerDef()> / <PositionAdjustingLexer()> directives that override Java nextToken() — the [output] depends on the host-side implementation, not the .g4"
 "ParserErrors/SingleSetInsertionConsumption" = "trailing <! ... !> StringTemplate comment outside any rule — testsuite descriptor artifact, not a self-contained .g4"
 "ParserErrors/SingleTokenDeletionConsumption" = "trailing <! ... !> StringTemplate comment outside any rule — testsuite descriptor artifact, not a self-contained .g4"
 
@@ -76,5 +90,24 @@
 "LeftRecursion/SemPredFailOption" = "Stage B parse-tree shape diverges because action bodies are skipped (the predicate guard is dropped) — Stage C territory"
 "SemPredEvalParser/PredFromAltTestedInLoopBack_1" = "Stage B test parse fails with Result::Err — semantic predicate enforcement is Stage C"
 "SemPredEvalParser/PredFromAltTestedInLoopBack_2" = "Stage B test parse fails with Result::Err — semantic predicate enforcement is Stage C"
+"ParseTrees/ExtraToken" = "expected [output] is ANTLR4's error-recovered sub-tree; Gale has no error recovery so parse returns Err and the sub-tree navigation never runs"
+"ParseTrees/NoViableAlt" = "expected [output] is ANTLR4's error-recovered sub-tree; Gale has no error recovery so parse returns Err and the sub-tree navigation never runs"
+"ParseTrees/Sync" = "expected [output] is ANTLR4's error-recovered sub-tree; Gale has no error recovery so parse returns Err and the sub-tree navigation never runs"
 
 [stage_b_skip]
+
+[stage_e_todo]
+"ParserErrors/SingleTokenDeletionBeforeAlt" = "descriptor [start] is `a` but Gale enters first parser rule `q`; q matches the leading `a` token then stops without verifying EOF, so parse returns Ok"
+"ParserErrors/SingleTokenDeletionExpectingSet" = "Gale codegen bug: a set element like `('b'|'c')` is emitted as `p.advance()` without a kind-check dispatch, so any token is silently consumed"
+
+[stage_e_skip]
+
+[stage_l_todo]
+"LexerExec/EOFSuffixInFirstRule_2" = "Gale lexer picks rule B (later) over rule A (with explicit EOF suffix) for input `a` — ANTLR4 prefers the rule that can match the trailing EOF"
+"LexerExec/RecursiveLexerRuleRefWithWildcardPlus_1" = "Gale lexer mistokenizes nested `/* /*...*/ */` comments — recursive lexer rule with `.+?` wildcard plus does not nest correctly"
+"LexerExec/RecursiveLexerRuleRefWithWildcardStar_1" = "Gale lexer mistokenizes nested `/* /*...*/ */` comments — recursive lexer rule with `.*?` wildcard star does not nest correctly"
+"LexerExec/ZeroLengthToken" = "Gale lexer does not merge the `-> more, pushMode(...)` and `-> more, mode(...)` chain into a single token across mode transitions"
+
+[stage_l_skip]
+"LexerExec/ReservedWordsEscaping" = "expected output includes a `channel=N` token which Gale routes to trivia (non-default-channel tokens are not part of the main stream by design)"
+"LexerExec/TokenType0xFFFF" = "Gale codegen generates an `unknown identifier TK_65535` reference — high-numbered explicit token id rule needs codegen support"

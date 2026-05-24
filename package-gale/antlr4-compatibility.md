@@ -87,14 +87,60 @@ Two test sources cover Stage B:
    `tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado`, emitted
    by the descriptor extractor for every descriptor whose `[output]` is
    a clean parse tree (rejected by `normalize_output_for_stage_b`
-   otherwise — action-body prints, `Token.toString` dumps, ATN traces,
-   sub-tree-only `[output]` from `<ToStringTree("$X.ctx"):writeln()>`
-   actions). Compares `to_string_tree()` against the normalised
-   descriptor `[output]`.
+   otherwise — action-body prints, `Token.toString` dumps, ATN traces).
+   Two emit shapes:
+   - **Full-tree** when the `[output]` root rule equals `[start]`.
+     Compares `t::to_tree(&root).to_string_tree()` against the
+     normalised descriptor `[output]`.
+   - **Sub-tree** when the root differs from `[start]` — typical of
+     descriptors using `@after { <ToStringTree("$r.ctx"):writeln()> }`
+     to print a labelled child rather than the start rule's full tree.
+     The emitted test navigates the full tree via the runtime helper
+     `find_first_child_node` before comparing.
 
 Descriptors whose `[output]` cannot survive normalisation auto-skip;
 those become eligible only when Stage C makes their host-language
 prints reproducible.
+
+### Stage E — parse-must-error
+
+> **Claim:** For every `ParserErrors` / `LexerErrors` descriptor whose
+> `[input]` triggers a reported error in upstream ANTLR4, Gale's
+> generated parser/lexer also detects it: `g::parse(&input)` returns
+> `Err` for Parser-type grammars, or `g::tokenize(&input)` produces at
+> least one `TK_ERROR` token for Lexer-type grammars.
+
+Gale does not (yet) do ANTLR4-style error recovery — `parse()` returns
+on the first error rather than attempting single-token deletion /
+insertion. Stage E is the well-defined "Gale noticed the error" check
+against the descriptor's canonical bad input. Eligibility is gated to
+the `ParserErrors` and `LexerErrors` categories so that ambiguity
+reports, predicate gates, and other `[errors]`-carrying descriptors
+in other categories aren't conflated with real parse failures.
+
+Tests live under `tests/antlr4-compat/stage_e/<Category>/<Name>_test.wado`,
+emitted by the same descriptor extractor.
+
+### Stage L — token-stream equivalence
+
+> **Claim:** For every Lexer-type descriptor whose `[output]` is a
+> clean `Token.toString()` dump, `g::tokenize(&input)` rendered through
+> `to_lexer_string(&tokens, &input, TK_EOF)` equals the descriptor's
+> `[output]` verbatim.
+
+The `to_lexer_string` runtime helper lives in `runtime.wado` and is
+inlined into every generated module. It mirrors ANTLR4's
+`CommonToken.toString` format:
+`[@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]` per token,
+with `\n` / `\r` / `\t` text escapes, EOF rendered as `<EOF>` with
+type `-1`, and lexer-rule type ids remapped from Gale's 0-based
+numbering to ANTLR4's 1-based.
+
+Tests live under `tests/antlr4-compat/stage_l/<Category>/<Name>_test.wado`.
+Descriptors whose `[output]` includes leading action-print lines
+(`<writeln(...)>` echoes) are auto-skipped by
+`normalize_output_for_stage_l` — they become eligible only after Stage C
+makes the action prints reproducible.
 
 ### Stage C — action-body translation (not yet built)
 
