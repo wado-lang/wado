@@ -156,8 +156,8 @@ impl Engine {
 
     /// Compute diagnostics for the given document.
     ///
-    /// Runs the compiler's `annotate` pipeline (parse → bind → desugar → load
-    /// → analyze → resolve) with a silent host that collects diagnostics
+    /// Runs the compiler's `annotate` pipeline (parse → bind → load → analyze
+    /// → resolve) with a silent host that collects diagnostics
     /// without printing. Codegen and downstream phases are intentionally
     /// skipped: they can panic on compiler-internal bugs (e.g. invalid Wasm
     /// emitted from an unusual entry module) and produce nothing useful for

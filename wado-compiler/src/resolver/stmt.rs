@@ -2724,14 +2724,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
             span,
         };
 
+        // Make the synthesised `__for_of_N` label visible while the body
+        // resolves, so any `resolve_break` inside it sees it on
+        // `active_labels`. The pop happens after we have finished
+        // building the LabeledBlock TIR.
+        ctx.active_labels.push(label.clone());
         let if_let_tir = self.resolve_if_stmt(&if_let, ctx);
 
         // loop { if let ... }
         let loop_body = TirBlock::new(if_let_tir, span);
         let loop_tir = TirStmt::new(TirStmtKind::Loop { body: loop_body }, span);
 
-        // Wrap in labeled block
-        ctx.active_labels.push(label.clone());
         let result = vec![TirStmt::new(
             TirStmtKind::LabeledBlock {
                 label,

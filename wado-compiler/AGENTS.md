@@ -148,7 +148,7 @@ Pipeline:
 parse → bind → load → analyze → annotate → lower_tir → monomorphize → lower → optimize → codegen
 ```
 
-- `annotate` is AST-preserving type resolution; returns `Annotated` (see `src/annotate.rs`). Used by both LSP and batch compilation. Surface rewrites (`x += y`, `while`, C-style `for`, `assert`, `matches`, comparison chain, …) all happen inside the resolver — either by building TIR directly or via short-lived AST scaffolds with `AstId::SYNTHETIC` ids — so the parsed AST stays parser-shaped end to end.
+- `annotate` is AST-preserving type resolution; returns `Annotated` (see `src/annotate.rs`). Used by both LSP and batch compilation. The desugar-replacement surface rewrites (`x += y`, `while`, C-style `for`, `assert`, `matches`, comparison chain) are TIR-direct: the resolver builds TIR from the parsed AST without producing synthetic AST nodes for them, so the parsed AST stays parser-shaped end to end. (`for x of expr` and `Self::method` / `T::method` static-call rewriting still synthesise AST under the hood; that is a pre-existing implementation detail and is on a separate cleanup track.)
 - `lower_tir` emits TIR from `&Annotated`; used only by batch compilation.
 - `(ModuleSource, AstId)` (`SymbolKey`) is the canonical identity for every semantic entity that originates in source. `AstId` is dense over `Block` / `Stmt` / `Expr` / `Pattern` / `Type` / `Item` / `Decl`, so every source position resolves to a key via `Module::ast_id_at`. Builtins live in `ModuleSource::Builtin` with their own dense ID range.
 - AST is the source of truth: `annotate` attaches facts, never mutates or moves AST nodes. Decl-backed `ResolvedType` variants and `Symbol` both carry `defined_at: SymbolKey`.

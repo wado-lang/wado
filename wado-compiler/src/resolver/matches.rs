@@ -36,7 +36,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx.enter_scope();
         let pattern_tir = self.resolve_if_pattern(&m.pattern, scrutinee_type, ctx, m.span);
         let arm_body = match &m.guard {
-            Some(guard) => self.resolve_expr(guard, ctx, Some(TypeTable::BOOL)),
+            Some(guard) => {
+                let body = self.resolve_expr(guard, ctx, Some(TypeTable::BOOL));
+                // `expected_type` on `resolve_expr` is only a coercion hint;
+                // a non-bool guard (e.g. `Some(v) && v + 1`) would silently
+                // pass and leave the synthesised `Match`'s declared type
+                // (BOOL) inconsistent with the arm body's actual type. The
+                // pre-refactor path routed through `resolve_match_expr`'s
+                // `check_assignable` loop, which caught this; do the
+                // equivalent explicit check here.
+                self.typecheck(body.type_id, TypeTable::BOOL, guard.span());
+                body
+            }
             None => bool_literal(true, m.span),
         };
         ctx.exit_scope();

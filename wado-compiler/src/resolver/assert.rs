@@ -263,13 +263,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if !cap.emitted {
                 continue;
             }
+            // Look up the __vK local that the capture hook bound earlier.
+            // The hook runs in this expansion's outer scope (entered at
+            // `ctx.enter_scope` above), so the binding is reachable here.
+            // If a future scanner extension ever fires the capture inside
+            // a sub-expression's own scope and the binding has gone out
+            // of scope by the time the template is built, fall back to
+            // skipping the slot's interpolation rather than ICEing.
+            let Some(lv) = ctx.lookup(&cap.name) else {
+                continue;
+            };
             parts.push(TirTemplatePart::Literal(format!("{}: ", cap.source)));
-            // Look up the __vK local that the capture hook bound earlier;
-            // both the index and the type come from `ctx.lookup` so we
-            // don't have to thread them through `Capture`.
-            let lv = ctx
-                .lookup(&cap.name)
-                .expect("__vK local must be live while building the assert template");
             let local_ref = TirExpr::new(
                 TirExprKind::Local {
                     index: lv.index,
