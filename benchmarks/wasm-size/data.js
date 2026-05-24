@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779580149941,
+  "lastUpdate": 1779581688190,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25181,6 +25181,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6ce0ecf4fca846b10448bffc56de75317eb48ac4"
         },
         "date": 1779580149494,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17246,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 462125,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "27569f5fc04692953c618c4175e30ea5f7fd3dc6",
+          "message": "Merge pull request #1162 from wado-lang/claude/kiln-refresh-tidy-workflow-HznGO\n\nrefactor(cli): rebuild `wado test` as a 3-stage pipeline; add `--no-run`",
+          "timestamp": "2026-05-24T09:08:33+09:00",
+          "tree_id": "f3db08f5ba6ce935442646f479ff8cec844b8e36",
+          "url": "https://github.com/wado-lang/wado/commit/27569f5fc04692953c618c4175e30ea5f7fd3dc6"
+        },
+        "date": 1779581687735,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
