@@ -143,28 +143,14 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, l
             idx += 1;
         }
     }
-    // ANTLR4 token names are `[A-Z][A-Za-z0-9_]*`, so `ERROR` is a legal
-    // user-rule name even though Gale also uses `TK_ERROR` as its no-match
-    // sentinel (referenced from `gen_lexer_match_fns` and `gen_tokenize_fn`).
-    // When the user declares `ERROR : ...;` we let that rule own the
-    // `TK_ERROR` identifier — the canonical `ERROR : .;` shape is itself a
-    // catch-all, semantically the same role Gale's sentinel plays, so
-    // collapsing the two yields a single error kind that flows through
-    // both code paths without behaviour drift. Skipping the sentinel emit
-    // is required because emitting the same identifier twice rejects with
-    // `duplicate definition 'TK_ERROR'` from wado compile; covers
-    // ANTLR4 runtime-testsuite descriptors Performance/ExpressionGrammar_{1,2}
-    // (`grammar Expr; ... ERROR: .;`).
-    //
-    // `TK_EOF` is not collapsible the same way — ANTLR4 reserves `EOF` as
-    // a built-in token id (-1) and the generated parser relies on
-    // `kind == TK_EOF` meaning end-of-stream. No grammar in the corpus
-    // defines `EOF` as a lexer rule today; if one ever does, the
-    // collision must be diagnosed at the g4-parse layer rather than
-    // collapsed here.
     let eof_init = `{idx}`;
     GlobalSpec::new("TK_EOF", "i32", &eof_init).emit(w);
     idx += 1;
+    // A user rule named `ERROR` claims the same identifier as Gale's
+    // no-match sentinel; let the rule own it — `ERROR : .;` is itself a
+    // catch-all aligned with the sentinel's role. `EOF` stays uncollapsed
+    // (ANTLR4-reserved built-in; collision should be a g4-parse-layer
+    // diagnostic, not a silent merge).
     if !rule_name_exists(lexer_rules, &"ERROR") {
         let err_init = `{idx}`;
         GlobalSpec::new("TK_ERROR", "i32", &err_init).emit(w);
@@ -175,18 +161,12 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, l
         GlobalSpec::new(&lit.const_name, "i32", &init).emit(w);
         idx += 1;
     }
-    // ANTLR4's `-> type(N)` with a numeric N assigns the emitted token an
-    // explicit type id of exactly N (spec: vendor/antlr4/doc/lexer-rules.md).
-    // The lexer body references `TK_<N>` at the assignment site, so the
-    // constant has to exist as a global.
-    //
-    // Value of the constant: Gale stores kinds as 0-based and remaps to
-    // ANTLR4's 1-based type id with `kind + 1` inside `to_lexer_string`
-    // (runtime.wado). For a `type(N)` override the ANTLR4-visible type id
-    // must round-trip to exactly N, so the Gale-side kind is `N - 1`. We
-    // require N >= 1 since N == 0 would store a negative kind that
-    // collides with the lexer's `best_end = -1` sentinel and N == -1 is
-    // already reserved by ANTLR4 for EOF.
+    // `-> type(N)` (numeric) assigns the emitted token an explicit ANTLR4
+    // type id of exactly N (vendor/antlr4/doc/lexer-rules.md). The lexer
+    // body emits `TK_<N>`; we emit the matching global here with value
+    // `N - 1` so `to_lexer_string`'s `kind + 1` remap round-trips to N.
+    // `N == 0` would yield a negative kind clashing with `best_end = -1`
+    // and is reserved as INVALID_TYPE upstream; skip it.
     let mut emitted_numeric: Array<i32> = [];
     for let rule of lexer_rules {
         if rule.is_fragment {
@@ -1983,10 +1963,8 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, li
         }
     }
     w.line(&"TK_EOF => \"Eof\",");
-    // When the user declared an `ERROR` rule, `gen_token_constants`
-    // suppressed the sentinel global emit and the rule already owns
-    // the `TK_ERROR => "ERROR"` arm above; emitting the sentinel arm
-    // here would shadow it as dead code.
+    // Mirror the sentinel collapse in `gen_token_constants`: when the
+    // user owns `TK_ERROR`, the rule's own arm covers it.
     if !rule_name_exists(lexer_rules, &"ERROR") {
         w.line(&"TK_ERROR => \"Error\",");
     }

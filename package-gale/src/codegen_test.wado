@@ -1186,12 +1186,6 @@ WS : [ \\t\\n\\r]+ -> skip ;
 }
 
 test "set list-label `name+=(A | B)*` emits Array<Token> + match_set" {
-    // `val+=(INT | FLOAT)*` is a list-label whose inner is a Group of
-    // single-token alts. Previously `gen_op_inner_for_storable_repeat`
-    // forwarded the un-unwrapped `Label(Group)` surface element to
-    // `gen_op_storable_group_inner`, which panicked with
-    // `surface element is not Group` (no Wado was emitted). Covers
-    // ANTLR4 runtime-testsuite ParserExec/ListLabelsOnSet.
     let input = "grammar T;
 b : ID val+=(INT | FLOAT)* ;
 ID : 'a'..'z'+ ;
@@ -1202,22 +1196,12 @@ WS : (' '|'\\n') -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let body = extract_fn_body(&output, &"fn _parse_b(");
-    assert str_contains(&body, &"let mut val: Array<Token>"), `set list-label must allocate Array<Token>:\n{body}`;
-    assert str_contains(&body, &"p.match_set([TK_INT, TK_FLOAT])"), `set list-label must dispatch via match_set:\n{body}`;
-    assert str_contains(&body, &"val.push("), `set list-label must push into the container:\n{body}`;
+    assert str_contains(&body, &"let mut val: Array<Token>"), body;
+    assert str_contains(&body, &"p.match_set([TK_INT, TK_FLOAT])"), body;
+    assert str_contains(&body, &"val.push("), body;
 }
 
-test "non-greedy optional (??) emits an Option<T> field, not Array<T>" {
-    // Non-greedy `(elem)??` and greedy `(elem)?` produce the same parse
-    // tree shape (0 or 1 occurrence wrapped in `Option<T>`); only the
-    // prediction layer differs. Previously the `??` Repeat was routed
-    // through `gen_op_repeat_non_greedy_storable` and emitted
-    // `let mut <field>: Array<T> = []` plus a `while` loop, which
-    // failed to type-check the surrounding CST struct's `Option<T>`
-    // decl. Covers ANTLR4 runtime-testsuite
-    // ParserExec/IfIfElseNonGreedyBinding1; the prefer-skip
-    // prediction-layer semantics needed for full parity stay tracked
-    // in package-gale/TODO.md.
+test "non-greedy optional (??) emits Option<T> + single if" {
     let input = "grammar T;
 start : statement+ EOF ;
 statement : 'x' | ifStmt ;

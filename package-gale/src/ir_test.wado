@@ -149,12 +149,6 @@ fn parsed(src: String) -> Grammar {
     return g;
 }
 
-// ANTLR4 silently treats an uppercase identifier referenced from a parser
-// rule but defined nowhere as an implicit token type. Gale's
-// `synthesize_implicit_tokens` mirrors that by pushing a
-// `LexerRule::virtual_token` so downstream codegen and `check_references`
-// see a defined token. Covers LeftRecursion/WhitespaceInfluence_{1,2}
-// (multiple K_* references with no defining lexer rule).
 test "synthesize_implicit_tokens: undefined parser-rule TokenRef becomes a virtual rule" {
     let mut g = parsed("grammar T; prog : ID K_IN ID EOF; ID : [a-z]+; WS : [ \\t]+ -> skip;");
     synthesize_implicit_tokens(&mut g);
@@ -162,17 +156,14 @@ test "synthesize_implicit_tokens: undefined parser-rule TokenRef becomes a virtu
     for let lr of &g.lexer_rules {
         if lr.name == "K_IN" {
             found_k_in = true;
-            assert lr.is_virtual, "synthesized rule must be virtual";
-            assert lr.body.len() == 0, "synthesized rule must have no body";
+            assert lr.is_virtual;
+            assert lr.body.len() == 0;
         }
     }
-    assert found_k_in, "K_IN should be synthesized as a virtual rule";
-    // And `check_references` must now succeed for the same grammar.
+    assert found_k_in;
     assert check_references(&g) matches { Ok(_) };
 }
 
-// Idempotent across distinct references to the same name: a parser rule
-// that mentions K_IN twice still results in one virtual rule.
 test "synthesize_implicit_tokens: dedups repeated references" {
     let mut g = parsed("grammar T; prog : K_IN K_IN EOF;");
     synthesize_implicit_tokens(&mut g);
@@ -183,24 +174,22 @@ test "synthesize_implicit_tokens: dedups repeated references" {
     assert count == 1, `expected 1 K_IN, got {count}`;
 }
 
-// A lexer-defined token is not re-synthesized.
 test "synthesize_implicit_tokens: defined tokens are left alone" {
     let mut g = parsed("grammar T; prog : K_IN EOF; K_IN : 'in'; WS : [ \\t]+ -> skip;");
     let before = g.lexer_rules.len();
     synthesize_implicit_tokens(&mut g);
-    assert g.lexer_rules.len() == before, "no new rules expected when the token is defined";
+    assert g.lexer_rules.len() == before;
     for let lr of &g.lexer_rules {
         if lr.name == "K_IN" {
-            assert !lr.is_virtual, "the user-defined K_IN must remain non-virtual";
+            assert !lr.is_virtual;
         }
     }
 }
 
-// EOF is built-in and must never be synthesized.
-test "synthesize_implicit_tokens: EOF reference does not produce a virtual rule" {
+test "synthesize_implicit_tokens: EOF is built-in, never synthesized" {
     let mut g = parsed("grammar T; prog : ID EOF; ID : [a-z]+;");
     synthesize_implicit_tokens(&mut g);
     for let lr of &g.lexer_rules {
-        assert lr.name != "EOF", "EOF must not be synthesized as a lexer rule";
+        assert lr.name != "EOF";
     }
 }

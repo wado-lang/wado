@@ -89,10 +89,7 @@ fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr,
     }
 
     let mut merged = merge_grammars(grammars);
-    // Synthesize virtual lexer rules for any uppercase token name a parser
-    // rule references but no lexer rule defines (ANTLR4-compatible implicit
-    // token types). Must run before `check_references` so the synthesized
-    // rules satisfy the unresolved-token check.
+    // Must run before `check_references`. See `ir.wado` for rationale.
     synthesize_implicit_tokens(&mut merged);
     // Run ANTLR4-compatible semantic rule-reference validation after the
     // split-grammar halves are combined. This is the same check ANTLR4's

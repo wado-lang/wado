@@ -131,21 +131,11 @@ pub struct Grammar {
     pub source_files: Array<String>,
 }
 
-/// Synthesize a virtual lexer rule for every uppercase token name a parser
-/// rule references but no lexer rule defines. Mirrors ANTLR4, which treats
-/// an unresolved uppercase identifier in a parser rule as an implicit
-/// token type declaration (vendor/antlr4/doc/lexer-rules.md): downstream
-/// codegen still needs the `TK_<name>` constant so emit can compile, even
-/// though the lexer cannot produce the token on its own (the user is
-/// expected to supply it via a sibling grammar, a `tokens { }` block, or
-/// `-> type(<name>)` in another rule). Without this pass, grammars like
-/// `LeftRecursion/WhitespaceInfluence_{1,2}` are rejected with
-/// `reference to undefined token "K_IN"` before codegen.
-///
-/// Synthesis only fires for `Combined` grammars (post-merge, the only
-/// context where the lexer side is final). `Parser`-side grammars still
-/// have a pending merge against a sibling lexer; running here would
-/// prematurely shadow names the lexer half is about to bring in.
+/// Push a `LexerRule::virtual_token` for every uppercase parser-rule
+/// reference with no defining lexer rule, matching ANTLR4's silent
+/// implicit-token-type behaviour (vendor/antlr4/doc/lexer-rules.md).
+/// Must run before `check_references`; `Combined`-only because
+/// split-grammar halves are about to merge a sibling lexer.
 pub fn synthesize_implicit_tokens(grammar: &mut Grammar) {
     if !(grammar.kind matches { Combined }) {
         return;

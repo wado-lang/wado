@@ -2247,17 +2247,9 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
 /// `gen_op_repeat_with_follow_override`'s non-storable Group arm.
 fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, rep_op: &RepeatOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
     let op = &rep_op.body;
-    // `lower_repeat_op`'s list-label branch lowers `lab.element` (the
-    // Group inside `name+=(...)`) directly into `rep_op.body`, so
-    // `body_shape == StorableGroup` describes the inner Group. The
-    // surface element handed in here, however, is the un-unwrapped
-    // `rep.element` — for `name+=(INT | FLOAT)*` that's still the
-    // outer `Label(Group)`. `gen_op_storable_group_inner` peels its
-    // own surface element via `if let Group(g) = elem`, so without
-    // this unwrap it panics with `surface element is not Group`
-    // (ParserExec/ListLabelsOnSet was the regression). Strip the
-    // list-Label wrapper here so the surface side stays in lockstep
-    // with lower's body op.
+    // `lower_repeat_op`'s list-label branch unwraps `Label(Group)` on
+    // the body op; mirror the unwrap on the surface side so
+    // `gen_op_storable_group_inner` sees a Group, not a Label.
     let unwrapped_elem = if let Label(lab) = elem {
         if lab.list {
             &lab.element;
@@ -2944,19 +2936,13 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
     sync_name_counts_for_op_list_label(ll, name_counts);
     let inner_type = op_field_type(&ll.inner);
     w.line(&`let mut {ll.field}: Array<{inner_type}> = [];`);
-    // The per-iteration parse result sits in the same scope as the
-    // container `ll.field` (no enclosing loop for the non-Repeat
-    // list label). Lower keeps the inner's field at whatever
-    // `lab.element.field_name` dictates — that name can equal the
-    // label name (`if+=IF` after Wado-keyword rename gives
-    // `field_name = "if_"` on both the Label and the inner
-    // TokenRef), which would emit `let if_ = …` shadowing the array
-    // and break `if_.push(if_)` with `no method push found on Token`.
-    // Resolve emit-side by suffixing `_item` whenever the inner's
-    // lower-time field collides with `ll.field`; rebind locally so
-    // `gen_op_leaf` emits the let with the unique name without
-    // perturbing lower's struct decls or the visitor's parallel
-    // naming pipeline.
+    // Non-Repeat list label emits both lines in the alt's outer
+    // scope, so the per-iter binding must differ from the container.
+    // When lower already chose the same name for both (e.g. `if+=IF`
+    // after the keyword rename), suffix `_item` locally — perturbing
+    // lower's `name_counts` here would desync the visitor's parallel
+    // naming pipeline. The Repeat case is handled in `lower_repeat_op`
+    // by pre-seeding `inner_counts`.
     let leaf = if op_field(&ll.inner) == ll.field {
         rebind_op_field(*(&ll.inner), &`{ll.field}_item`, &op_leaf_dedup_base(&ll.inner))
     } else {
@@ -3157,19 +3143,9 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
         }
     }
     if rep.non_greedy {
-        // Non-greedy `??` shares the parse-tree shape of greedy `?`
-        // (0 or 1 occurrence wrapped in `Option<T>`); the two differ
-        // only at the prediction layer, where `??` prefers
-        // not-matching when the lookahead is ambiguous between
-        // matching and yielding to the surrounding rule. Routing
-        // through `gen_op_repeat_non_greedy` (designed for `*?` /
-        // `+?`) emitted an `Array<T>` field plus a `while` loop,
-        // which fails to type-check the surrounding CST struct
-        // (`expected Option<T>, found Array<T>`). Dispatch the
-        // Optional case through the greedy Optional emitter so the
-        // emit shape matches the lower-side `FieldKind::Option`
-        // decl; the prediction-layer prefer-skip semantics required
-        // for ANTLR4 parity stay tracked in package-gale/TODO.md.
+        // `??` routes through the greedy Optional emitter because lower
+        // already picked a greedy strategy for it (see `lower_repeat_op`).
+        // `*?` / `+?` keep the dedicated non-greedy emit path.
         if let Optional = rep.kind {
             gen_op_repeat_optional_greedy(w, rep, rep_op, ctx, name_counts, follow);
             return;

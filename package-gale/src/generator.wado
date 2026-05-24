@@ -70,11 +70,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 
     let mut grammar = merge_grammars(grammars);
 
-    // ANTLR4-compatible implicit-token synthesis: a parser rule may
-    // reference an uppercase identifier that has no defining lexer rule,
-    // and ANTLR4 silently treats it as an implicit token type. Run this
-    // before `check_references` so the synthesized virtual rules satisfy
-    // the unresolved-token check.
+    // Must run before `check_references`. See `ir.wado` for rationale.
     synthesize_implicit_tokens(&mut grammar);
 
     match check_references(&grammar) {
