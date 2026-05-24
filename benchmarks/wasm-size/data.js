@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779581688190,
+  "lastUpdate": 1779584202008,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25225,6 +25225,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/27569f5fc04692953c618c4175e30ea5f7fd3dc6"
         },
         "date": 1779581687735,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1894,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9817,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17246,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 462125,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d72c0c30dc06f7dae8f28cf968491c6a71eef38a",
+          "message": "Merge pull request #1167 from wado-lang/claude/loving-darwin-OH5af\n\nci(release): drop version from artifact basenames",
+          "timestamp": "2026-05-24T09:49:37+09:00",
+          "tree_id": "6fcb89e32fbe2330f50b5a9bca50b83c6643e682",
+          "url": "https://github.com/wado-lang/wado/commit/d72c0c30dc06f7dae8f28cf968491c6a71eef38a"
+        },
+        "date": 1779584201545,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
