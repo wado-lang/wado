@@ -1,46 +1,72 @@
 // Regression: `tir/copy_prop` at -O3 drops the side effect of a `&mut self`
 // method call whose argument is an `Array<T>` literal built via
-// `SequenceLiteralBuilder` (i.e. `m.method([a, b])` after inline /
-// fixed-point iteration).
+// `SequenceLiteralBuilder` and whose `Result<T, E>` return value is consumed
+// via the `?` operator.
 //
 // Surface symptom in package-gale: `p.match_set([TK_A, TK_B])?` does not
 // advance `Parser::pos`, so the next `p.expect(...)` sees the token the set
 // element should have consumed (`ParserErrors/SingleTokenDeletionExpectingSet`,
 // `ParserErrors/SingleTokenDeletionBeforeAlt`).
 //
-// Root cause is not investigated here — the fixture pins the minimal shape so
-// the next fix can drive it red→green.
+// Minimal trigger (verified at each -Ox level):
+//   * -O0 / -O1 / -O2 / -Os: pass — `pos` is advanced as expected.
+//   * -O3: fails — `pos` stays 0 after the call.
 //
-// Reduction: a struct method that mutates `self.counter` after a membership
-// scan over an `Array<i32>` parameter. The caller passes an inline `[1, 2]`
-// literal and observes `counter` afterwards.
-//
-// Mirrors the failing TIR shape verbatim:
-//   * `&mut self` method with `Array<i32>` value parameter
-//   * `for let x of <param>` loop body
-//   * conditional `self.counter += 1` inside the matched arm
-//   * caller binds the return value but the side effect is what matters
+// The trigger requires the matched arm of the `for let x of included` loop
+// to carry a **nested** early-return (`if cond { return Ok(snapshot); }`)
+// in addition to the outer `return Ok(self.advance())`. Collapsing the
+// nested return path makes the bug disappear at -O3.
 
-struct Counter {
-    counter: i32,
+struct Token {
+    kind: i32,
 }
 
-impl Counter {
-    fn bump_if_member(&mut self, key: i32, included: Array<i32>) -> bool {
+struct Err {
+    msg: String,
+}
+
+struct State {
+    tokens: Array<Token>,
+    pos: i32,
+}
+
+impl State {
+    fn advance(&mut self) -> Token {
+        let tok = self.tokens[self.pos];
+        self.pos += 1;
+        return tok;
+    }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, Err> {
+        let k = self.tokens[self.pos].kind;
         for let x of included {
-            if x == key {
-                self.counter += 1;
-                return true;
+            if x == k {
+                if k == 0 {
+                    // Nested early-return path. Without it, -O3 does not
+                    // mis-eliminate the outer `advance()` call below.
+                    return Result::<Token, Err>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, Err>::Ok(self.advance());
             }
         }
-        return false;
+        return Result::<Token, Err>::Err(Err { msg: "no match" });
     }
 }
 
+fn drive(s: &mut State) -> Result<Token, Err> {
+    let bound = s.match_set([1, 2])?;
+    return Result::<Token, Err>::Ok(bound);
+}
+
 export fn run() {
-    let mut c = Counter { counter: 0 };
-    let _matched = c.bump_if_member(2, [1, 2]);
-    assert c.counter == 1, `counter must be 1 after bump_if_member, got {c.counter}`;
+    let tokens: Array<Token> = [Token { kind: 2 }, Token { kind: 9 }];
+    let mut s = State { tokens, pos: 0 };
+    let r = drive(&mut s);
+    if let Err(e) = &r {
+        panic(`expected Ok, got Err({e.msg})`);
+    }
+    assert s.pos == 1, `expected pos==1 after match_set, got pos={s.pos}`;
+    assert r.unwrap().kind == 2;
 }
 
 __DATA__
