@@ -13,7 +13,10 @@ use {
     CharClass,
     CharRange,
     Visibility,
+    synthesize_implicit_tokens,
+    check_references,
 } from "./ir.wado";
+use { parse } from "./g4/parser.wado";
 
 test "Grammar construction" {
     let g = Grammar {
@@ -138,4 +141,55 @@ test "CharRange helpers" {
     let range = CharRange::range('0', '9');
     assert range.start == '0';
     assert range.end == '9';
+}
+
+fn parsed(src: String) -> Grammar {
+    let mut g = parse(src).unwrap();
+    g.source_files.push("(test)");
+    return g;
+}
+
+test "synthesize_implicit_tokens: undefined parser-rule TokenRef becomes a virtual rule" {
+    let mut g = parsed("grammar T; prog : ID K_IN ID EOF; ID : [a-z]+; WS : [ \\t]+ -> skip;");
+    synthesize_implicit_tokens(&mut g);
+    let mut found_k_in = false;
+    for let lr of &g.lexer_rules {
+        if lr.name == "K_IN" {
+            found_k_in = true;
+            assert lr.is_virtual;
+            assert lr.body.len() == 0;
+        }
+    }
+    assert found_k_in;
+    assert check_references(&g) matches { Ok(_) };
+}
+
+test "synthesize_implicit_tokens: dedups repeated references" {
+    let mut g = parsed("grammar T; prog : K_IN K_IN EOF;");
+    synthesize_implicit_tokens(&mut g);
+    let mut count = 0;
+    for let lr of &g.lexer_rules {
+        if lr.name == "K_IN" { count += 1; }
+    }
+    assert count == 1, `expected 1 K_IN, got {count}`;
+}
+
+test "synthesize_implicit_tokens: defined tokens are left alone" {
+    let mut g = parsed("grammar T; prog : K_IN EOF; K_IN : 'in'; WS : [ \\t]+ -> skip;");
+    let before = g.lexer_rules.len();
+    synthesize_implicit_tokens(&mut g);
+    assert g.lexer_rules.len() == before;
+    for let lr of &g.lexer_rules {
+        if lr.name == "K_IN" {
+            assert !lr.is_virtual;
+        }
+    }
+}
+
+test "synthesize_implicit_tokens: EOF is built-in, never synthesized" {
+    let mut g = parsed("grammar T; prog : ID EOF; ID : [a-z]+;");
+    synthesize_implicit_tokens(&mut g);
+    for let lr of &g.lexer_rules {
+        assert lr.name != "EOF";
+    }
 }

@@ -32,6 +32,7 @@ use {
     DEFAULT_CHANNEL,
     HIDDEN_CHANNEL,
     check_references,
+    synthesize_implicit_tokens,
 } from "../ir.wado";
 use { G4Token, make_token } from "./token.wado";
 use { tokenize } from "./lexer.wado";
@@ -1736,7 +1737,9 @@ pub fn parse(input: String) -> Result<Grammar, ParseError> {
 /// rely on a sibling translation unit should still go through `parse`
 /// and call `check_references` after `merge_grammars`.
 pub fn parse_checked(input: String) -> Result<Grammar, ParseError> {
-    let grammar = parse(input)?;
+    let mut grammar = parse(input)?;
+    // Must run before `check_references`. See `ir.wado` for rationale.
+    synthesize_implicit_tokens(&mut grammar);
     check_references(&grammar)?;
     return Result::<Grammar, ParseError>::Ok(grammar);
 }

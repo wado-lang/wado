@@ -1429,14 +1429,26 @@ ID : [a-z]+ ;";
     assert result matches { Err(_) }, "expected undefined parser rule reference to be rejected";
 }
 
-test "parse_checked rejects undefined token reference" {
-    // Combined grammar: `UNDEFINED_TOK` has no lexer rule and no `tokens {}`
-    // entry, so the reference is unresolvable.
+test "parse_checked synthesizes a virtual rule for undefined parser-rule token reference" {
+    // ANTLR4 silently treats an uppercase identifier referenced from a
+    // parser rule but defined nowhere as an implicit token type
+    // (vendor/antlr4/doc/lexer-rules.md). `parse_checked` runs
+    // `synthesize_implicit_tokens` before `check_references`, so the
+    // unresolved-token check now sees the synthesized rule and accepts
+    // the grammar. The synthesized rule is marked virtual; the lexer
+    // cannot produce the token on its own.
     let input = "grammar Test;
 root : UNDEFINED_TOK ;
 ID : [a-z]+ ;";
-    let result = parse_checked(input);
-    assert result matches { Err(_) }, "expected undefined token reference to be rejected";
+    let grammar = parse_checked(input).unwrap();
+    let mut found = false;
+    for let lr of &grammar.lexer_rules {
+        if lr.name == "UNDEFINED_TOK" {
+            assert lr.is_virtual, "synthesized rule must be virtual";
+            found = true;
+        }
+    }
+    assert found, "synthesized UNDEFINED_TOK should be present in lexer_rules";
 }
 
 test "parse_checked rejects undefined lexer rule reference in lexer grammar" {

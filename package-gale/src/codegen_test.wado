@@ -1185,6 +1185,37 @@ WS : [ \\t\\n\\r]+ -> skip ;
     assert str_contains(&output, &"first_char == 'B'"), `tokenize dispatch must include 'B':\n{output}`;
 }
 
+test "set list-label `name+=(A | B)*` emits Array<Token> + match_set" {
+    let input = "grammar T;
+b : ID val+=(INT | FLOAT)* ;
+ID : 'a'..'z'+ ;
+INT : '0'..'9'+ ;
+FLOAT : [0-9]+ '.' [0-9]+ ;
+WS : (' '|'\\n') -> skip ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    let body = extract_fn_body(&output, &"fn _parse_b(");
+    assert str_contains(&body, &"let mut val: Array<Token>"), body;
+    assert str_contains(&body, &"p.match_set([TK_INT, TK_FLOAT])"), body;
+    assert str_contains(&body, &"val.push("), body;
+}
+
+test "non-greedy optional (??) emits Option<T> + single if" {
+    let input = "grammar T;
+start : statement+ EOF ;
+statement : 'x' | ifStmt ;
+ifStmt : 'if' 'y' statement ('else' statement)?? ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, &"lit_else_statement: Option<"), `?? must emit an Option<T> field:\n{output}`;
+    assert !str_contains(&output, &"lit_else_statement: Array<"), `?? must NOT emit an Array<T> field:\n{output}`;
+    let body = extract_fn_body(&output, &"fn _parse_if_stmt(");
+    assert str_contains(&body, &"if p.peek_kind() == TK_LIT_ELSE"), `?? emit must use a single if-check, not a while loop:\n{body}`;
+    assert !str_contains(&body, &"while p.peek_kind() == TK_LIT_ELSE"), `?? emit must not use a while loop:\n{body}`;
+}
+
 test "single-char literal with an ID carrier stays a keyword (no try_ matcher)" {
     // `A : 'A'` is a keyword candidate, and `ID : [a-zA-Z]+` covers 'A' as a
     // first character. The classify_keyword path is therefore reachable, so

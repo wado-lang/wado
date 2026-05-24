@@ -81,7 +81,7 @@ use {
     rule_alt_scan_body,
 } from "./gir.wado";
 use { unwrap_label } from "./lr_util.wado";
-use { compute_shapes_for_alt, shape_lookahead_signature_for_alt } from "./lower.wado";
+use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
 
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     // Phase 3 — `lowered` mirrors `grammar.parser_rules` rule-for-rule
@@ -2247,9 +2247,21 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
 /// `gen_op_repeat_with_follow_override`'s non-storable Group arm.
 fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, rep_op: &RepeatOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
     let op = &rep_op.body;
+    // `lower_repeat_op`'s list-label branch unwraps `Label(Group)` on
+    // the body op; mirror the unwrap on the surface side so
+    // `gen_op_storable_group_inner` sees a Group, not a Label.
+    let unwrapped_elem = if let Label(lab) = elem {
+        if lab.list {
+            &lab.element;
+        } else {
+            elem;
+        }
+    } else {
+        elem;
+    };
     return match rep_op.body_shape {
         LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts),
-        StorableGroup => gen_op_storable_group_inner(w, op, elem, ctx, name_counts, outer_follow),
+        StorableGroup => gen_op_storable_group_inner(w, op, unwrapped_elem, ctx, name_counts, outer_follow),
         TransparentGroup => panic(
             "gen_op_inner_for_storable_repeat: TransparentGroup body is not storable here — caller must dispatch via the non-storable arm",
         ),
@@ -2924,8 +2936,20 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
     sync_name_counts_for_op_list_label(ll, name_counts);
     let inner_type = op_field_type(&ll.inner);
     w.line(&`let mut {ll.field}: Array<{inner_type}> = [];`);
-    let inner_field = op_field(&ll.inner);
-    gen_op_leaf(w, &ll.inner, ctx, name_counts);
+    // Non-Repeat list label emits both lines in the alt's outer
+    // scope, so the per-iter binding must differ from the container.
+    // When lower already chose the same name for both (e.g. `if+=IF`
+    // after the keyword rename), suffix `_item` locally — perturbing
+    // lower's `name_counts` here would desync the visitor's parallel
+    // naming pipeline. The Repeat case is handled in `lower_repeat_op`
+    // by pre-seeding `inner_counts`.
+    let leaf = if op_field(&ll.inner) == ll.field {
+        rebind_op_field(*(&ll.inner), &`{ll.field}_item`, &op_leaf_dedup_base(&ll.inner))
+    } else {
+        *(&ll.inner)
+    };
+    let inner_field = op_field(&leaf);
+    gen_op_leaf(w, &leaf, ctx, name_counts);
     w.line(&`{ll.field}.push({inner_field});`);
 }
 
@@ -3119,6 +3143,13 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
         }
     }
     if rep.non_greedy {
+        // `??` routes through the greedy Optional emitter because lower
+        // already picked a greedy strategy for it (see `lower_repeat_op`).
+        // `*?` / `+?` keep the dedicated non-greedy emit path.
+        if let Optional = rep.kind {
+            gen_op_repeat_optional_greedy(w, rep, rep_op, ctx, name_counts, follow);
+            return;
+        }
         gen_op_repeat_non_greedy(w, rep, rep_op, ctx, name_counts, follow);
         return;
     }

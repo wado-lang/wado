@@ -146,15 +146,79 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, l
     let eof_init = `{idx}`;
     GlobalSpec::new("TK_EOF", "i32", &eof_init).emit(w);
     idx += 1;
-    let err_init = `{idx}`;
-    GlobalSpec::new("TK_ERROR", "i32", &err_init).emit(w);
-    idx += 1;
+    // A user rule named `ERROR` claims the same identifier as Gale's
+    // no-match sentinel; let the rule own it — `ERROR : .;` is itself a
+    // catch-all aligned with the sentinel's role. `EOF` stays uncollapsed
+    // (ANTLR4-reserved built-in; collision should be a g4-parse-layer
+    // diagnostic, not a silent merge).
+    if !rule_name_exists(lexer_rules, &"ERROR") {
+        let err_init = `{idx}`;
+        GlobalSpec::new("TK_ERROR", "i32", &err_init).emit(w);
+        idx += 1;
+    }
     for let lit of lit_tokens {
         let init = `{idx}`;
         GlobalSpec::new(&lit.const_name, "i32", &init).emit(w);
         idx += 1;
     }
+    // `-> type(N)` (numeric) assigns the emitted token an explicit ANTLR4
+    // type id of exactly N (vendor/antlr4/doc/lexer-rules.md). The lexer
+    // body emits `TK_<N>`; we emit the matching global here with value
+    // `N - 1` so `to_lexer_string`'s `kind + 1` remap round-trips to N.
+    // `N == 0` would yield a negative kind clashing with `best_end = -1`
+    // and is reserved as INVALID_TYPE upstream; skip it.
+    let mut emitted_numeric: Array<i32> = [];
+    for let rule of lexer_rules {
+        if rule.is_fragment {
+            continue;
+        }
+        if let Some(target) = &rule.type_override {
+            if let Some(n) = parse_token_type_numeric(target) {
+                if n < 1 {
+                    continue;
+                }
+                if rule_name_exists(lexer_rules, &`{n}`) {
+                    continue;
+                }
+                if emitted_numeric.contains(&n) {
+                    continue;
+                }
+                GlobalSpec::new(&`TK_{n}`, "i32", &`{n - 1}`).emit(w);
+                emitted_numeric.push(n);
+            }
+        }
+    }
     w.blank();
+}
+
+/// Returns `Some(n)` when `s` is a non-negative base-10 integer that fits in
+/// `i32` (the runtime token-kind type). Anything else — a token name, an
+/// overflowing value, an empty string — returns `None` so the caller can
+/// defer to the regular `TK_<name>` path.
+fn parse_token_type_numeric(s: &String) -> Option<i32> {
+    if s.is_empty() {
+        return null;
+    }
+    let mut acc: i64 = 0;
+    for let c of s.chars() {
+        if c < '0' || c > '9' {
+            return null;
+        }
+        acc = acc * 10 + ((c as i32) - ('0' as i32)) as i64;
+        if acc > i32::MAX as i64 {
+            return null;
+        }
+    }
+    return Option::<i32>::Some(acc as i32);
+}
+
+fn rule_name_exists(lexer_rules: &Array<LexerRule>, name: &String) -> bool {
+    for let rule of lexer_rules {
+        if !rule.is_fragment && rule.name == *name {
+            return true;
+        }
+    }
+    return false;
 }
 
 pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
@@ -1899,7 +1963,11 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, li
         }
     }
     w.line(&"TK_EOF => \"Eof\",");
-    w.line(&"TK_ERROR => \"Error\",");
+    // Mirror the sentinel collapse in `gen_token_constants`: when the
+    // user owns `TK_ERROR`, the rule's own arm covers it.
+    if !rule_name_exists(lexer_rules, &"ERROR") {
+        w.line(&"TK_ERROR => \"Error\",");
+    }
     for let lit of lit_tokens {
         let name = lit.const_name;
         w.line(&`{name} => "{name}",`);

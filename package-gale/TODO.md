@@ -63,23 +63,13 @@ Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Rou
 
 - **LR rule with `returns` + list-label combination.** `LeftRecursion/ReturnValueAndActionsList1_{2,4}`: parse stops at the first comma in the input list. Investigate the LR-alt-rewrite path's interaction with list-label storage.
 - **LR operator-precedence chain.** `Performance/DropLoopEntryBranchInLRRule_4`: Gale picks the wrong precedence chain for an or-then-and expression.
+- **Non-greedy `??` prediction layer.** `ParserExec/IfIfElseNonGreedyBinding1`: the emit shape is `Option<T>` (compile-blocker gone) but the dispatch reuses the greedy first-set predictor, so the dangling `else` binds to the inner `if` instead of the outer one ANTLR4 picks. Needs either a follow-guarded Optional dispatcher or runtime ATN simulation.
 
 ### Lexer codegen
 
 - **EOF-suffixed rule priority.** `LexerExec/EOFSuffixInFirstRule_2`: when two rules can match the same prefix (`A : 'a' EOF;` vs `B : 'a';`), ANTLR4 prefers the one that consumes the trailing EOF. Gale picks the lexically-later rule. Fix in the longest-match tiebreaker.
 - **Recursive lexer rule with `.+?` / `.*?` wildcard.** `LexerExec/RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`: nested `/* /*...*/ */` comments mistokenize because the recursive call doesn't re-enter under the non-greedy bound.
 - **`-> more, mode(...)` chain across modes.** `LexerExec/ZeroLengthToken`: a token built via `-> more, pushMode(...)` followed by `-> more, mode(...)` should merge into a single token spanning all the `more`'d chars, but Gale emits the final piece only.
-
-### Compile-blocking codegen failures (`[stage_a_skip]`)
-
-These reject grammars wholesale — Gale codegen produces invalid Wado, so the descriptor's test file cannot even compile. They need fresh `wado-compiler/tests/fixtures/` reproducers before fixing.
-
-- All-binary-op LR rule (`LeftRecursion/WhitespaceInfluence_{1,2}`, `Performance/ExpressionGrammar_{1,2}`)
-- Non-greedy optional `??` in parser rules (`ParserExec/IfIfElseNonGreedyBinding1`)
-- Parser-rule list-label `b2+=b*` / `b3+=';'` (`ParserExec/Labels`)
-- `val+=(INT | FLOAT)*` set list-label (`ParserExec/ListLabelsOnSet`)
-- Wado-reserved words as rule names (`ParserExec/ReservedWordsEscaping`)
-- High-numbered explicit token id (`LexerExec/TokenType0xFFFF` — `TK_65535`)
 
 ### Runtime gaps (test compiles, fails at runtime)
 

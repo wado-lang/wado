@@ -2767,7 +2767,18 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     }
 
     let strategy = if rep.non_greedy {
-        compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
+        // `??` shares the Option<T> emit shape of greedy `?` — only the
+        // prediction layer differs (prefer-skip vs first-set match).
+        // Reuse the greedy strategy pipeline so emit's Optional
+        // dispatcher accepts it; the prefer-skip semantics remain
+        // tracked in package-gale/TODO.md. `*?` / `+?` keep the
+        // dedicated non-greedy strategy.
+        if let Optional = rep.kind {
+            let mask_decision = choose_greedy_repeat_strategy(&inner_first, variant_mask);
+            pick_greedy_strategy(mask_decision, opt_specialised);
+        } else {
+            compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
+        }
     } else {
         // Mask-driven `Suppressed` always wins — if every iteration's
         // first token is in the variant mask, the loop never enters
@@ -2787,22 +2798,26 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     let iter_follow = union_kind_arrays(&inner_first, outer_follow);
 
     let mut inner_counts: Array<[String, i32]> = [];
-    // `(name+=elem)*` / `name+=elem+` / `name+=elem?` — the Repeat
-    // itself supplies the `Array<>` typing via its `field`; the inner
-    // Label only contributes its name, not an extra `Array<>` wrap.
-    // Bypass `lower_label_op`'s `Op::ListLabel` wrapper here and
-    // lower the labelled inner directly, rebinding to the Repeat's
-    // outer field name so emit's runtime construction (which
-    // references the binding as `<outer_field>.push(...)`) matches.
-    // The iter body sits at a different input depth than the
-    // surrounding alt position — the surrounding K-prefix (e.g. caller
-    // `c : X Y Z` at the outer site) does not apply here. The iter's
-    // own K-prefix would be `first(iter again | exit-to-caller)`, a
-    // fixed-point computation we defer; passing `[]` is sound and
-    // preserves the existing 1-token mask path for inner RuleRefs.
+    // `(name+=elem)*` / `name+=elem+` / `name+=elem?`: the Repeat
+    // supplies the `Array<>` typing via its `field`; bypass
+    // `lower_label_op`'s `Op::ListLabel` wrapper and lower the inner
+    // directly. Seed `inner_counts` with `outer_field` so the inner's
+    // `dedup_name` forks the name when it would collide with the
+    // container — keeps `let <natural>` for the common case while
+    // guaranteeing `<inner>.push(<natural>)` never self-shadows. The
+    // non-Repeat counterpart is handled emit-side in
+    // `gen_op_list_label` (lower's `name_counts` can't track it there
+    // without desyncing the visitor's parallel naming pipeline).
+    //
+    // K-prefix masks reset to `[]` because the iter body sits at a
+    // different input depth than the surrounding alt position; the
+    // iter's own K-prefix (`first(iter again | exit-to-caller)`) is
+    // a fixed-point computation we defer. The 1-token mask path for
+    // inner RuleRefs is unaffected.
     let body = if repeat_inner_is_list_label(&rep.element) {
         if let Label(lab) = &rep.element {
-            let inner_op = lower_op(
+            let _ = dedup_name(&outer_field, &mut inner_counts);
+            lower_op(
                 &lab.element,
                 &mut inner_counts,
                 rule_name,
@@ -2815,11 +2830,6 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
                 outer_position_mask,
                 &empty_k_prefix(),
             );
-            // The Repeat's outer field carries `lab.field_name` as
-            // its base (deduped earlier in `outer_field`); the rebind
-            // adopts that base on the inner op so emit's leaf sync
-            // bumps the actually-emitted name, not the elided inner.
-            rebind_op_field(inner_op, &outer_field, &lab.field_name);
         } else {
             panic("repeat_inner_is_list_label returned true for non-Label");
         }
@@ -3631,7 +3641,7 @@ fn transparent_group_inner_decl(_g: &GroupOp) -> Option<FieldDecl> {
 /// * `ListLabel` carries `dedup_base` itself; rebinding the outer
 ///   field here updates `dedup_base` to `new_dedup_base` for the same
 ///   reason as the leaf arms.
-fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> Op {
+pub fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> Op {
     return match op {
         Token(t) => Op::Token(TokenOp { kind: t.kind, field: *new_field, dedup_base: *new_dedup_base }),
         Literal(l) => Op::Literal(LiteralOp { kind: l.kind, field: *new_field, dedup_base: *new_dedup_base }),
