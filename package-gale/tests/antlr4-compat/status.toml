@@ -75,9 +75,7 @@
 "LeftRecursion/WhitespaceInfluence_1" = "parser rule references implicit (lexer-undefined) tokens K_IN / K_AND / K_OR / K_TRUE / K_FALSE / K_NULL — Gale check_references rejects before codegen (ANTLR4 synthesizes implicit lexer rules for this shape). Min repro: tests/grammars/parser_rule_refs_implicit_token.g4"
 "LeftRecursion/WhitespaceInfluence_2" = "parser rule references implicit (lexer-undefined) tokens K_IN / K_AND / K_OR / K_TRUE / K_FALSE / K_NULL — Gale check_references rejects before codegen (ANTLR4 synthesizes implicit lexer rules for this shape). Min repro: tests/grammars/parser_rule_refs_implicit_token.g4"
 "ParserExec/IfIfElseNonGreedyBinding1" = "non-greedy optional ??  routed through the *-style codegen path; emits Array-of-struct field plus shadowed per-iteration temp. wado compile rejects with `no method push found on LitElseStatementItem` plus `type mismatch: expected Option<…>, found Array<…>`"
-"ParserExec/Labels" = "list-label `b2+=b*` shadows the container array with the per-iteration RuleRef result (`let mut b2: Array<BNode> = []; let b2 = _parse_b(p)?; b2.push(b2);`). wado compile rejects with `no method push found on BNode`. Literal labels like `b3+=';'` work because the temp is derived from the literal text"
 "ParserExec/ListLabelsOnSet" = "set list-label `val+=(INT | FLOAT)*` panics inside Gale's parser_gen: gen_op_storable_group_inner → `surface element is not Group`; no Wado is emitted"
-"ParserExec/ReservedWordsEscaping" = "Gale renames rules whose names hit Wado keywords (`if → if_` etc.); the renamed identifier then collides with the list-label container (same root as ParserExec/Labels). wado compile rejects with `cannot redeclare 'if_' in the same scope`"
 
 [stage_b_todo]
 "LeftRecursion/SemPredFailOption" = "Stage B parse-tree shape diverges because action bodies are skipped (the predicate guard is dropped) — Stage C territory"

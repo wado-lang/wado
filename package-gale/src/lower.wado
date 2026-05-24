@@ -2790,10 +2790,27 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     // `(name+=elem)*` / `name+=elem+` / `name+=elem?` — the Repeat
     // itself supplies the `Array<>` typing via its `field`; the inner
     // Label only contributes its name, not an extra `Array<>` wrap.
-    // Bypass `lower_label_op`'s `Op::ListLabel` wrapper here and
-    // lower the labelled inner directly, rebinding to the Repeat's
-    // outer field name so emit's runtime construction (which
-    // references the binding as `<outer_field>.push(...)`) matches.
+    // Bypass `lower_label_op`'s `Op::ListLabel` wrapper here and lower
+    // the labelled inner directly. The emit shape is:
+    //
+    //   let mut <outer_field>: Array<...> = [];
+    //   loop {
+    //       let <inner_field> = parse_*(p)?;
+    //       <outer_field>.push(<inner_field>);
+    //   }
+    //
+    // so the per-iter `<inner_field>` MUST differ from the container
+    // `<outer_field>` — otherwise the `let <inner_field>` shadows the
+    // array and the push lands on a scalar (`b2+=b*` regression:
+    // generated `let b2 = _parse_b(p)?; b2.push(b2);` failed to compile
+    // with `no method push found on BNode`). Seed `inner_counts` with
+    // `outer_field` so the inner lowering's `dedup_name` deterministically
+    // forks the name when (and only when) it would collide — natural
+    // names like `b` stay as `b`, exact-match names like another `b2`
+    // become `b2_2`. This keeps the readable shape `let <natural> =
+    // _parse_<rule>(p)?` for the common case and reaches uniqueness by
+    // construction without an after-the-fact rebind.
+    //
     // The iter body sits at a different input depth than the
     // surrounding alt position — the surrounding K-prefix (e.g. caller
     // `c : X Y Z` at the outer site) does not apply here. The iter's
@@ -2802,7 +2819,8 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     // preserves the existing 1-token mask path for inner RuleRefs.
     let body = if repeat_inner_is_list_label(&rep.element) {
         if let Label(lab) = &rep.element {
-            let inner_op = lower_op(
+            let _ = dedup_name(&outer_field, &mut inner_counts);
+            lower_op(
                 &lab.element,
                 &mut inner_counts,
                 rule_name,
@@ -2815,11 +2833,6 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
                 outer_position_mask,
                 &empty_k_prefix(),
             );
-            // The Repeat's outer field carries `lab.field_name` as
-            // its base (deduped earlier in `outer_field`); the rebind
-            // adopts that base on the inner op so emit's leaf sync
-            // bumps the actually-emitted name, not the elided inner.
-            rebind_op_field(inner_op, &outer_field, &lab.field_name);
         } else {
             panic("repeat_inner_is_list_label returned true for non-Label");
         }
@@ -3631,7 +3644,7 @@ fn transparent_group_inner_decl(_g: &GroupOp) -> Option<FieldDecl> {
 /// * `ListLabel` carries `dedup_base` itself; rebinding the outer
 ///   field here updates `dedup_base` to `new_dedup_base` for the same
 ///   reason as the leaf arms.
-fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> Op {
+pub fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> Op {
     return match op {
         Token(t) => Op::Token(TokenOp { kind: t.kind, field: *new_field, dedup_base: *new_dedup_base }),
         Literal(l) => Op::Literal(LiteralOp { kind: l.kind, field: *new_field, dedup_base: *new_dedup_base }),

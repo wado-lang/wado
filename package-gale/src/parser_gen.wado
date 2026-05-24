@@ -81,7 +81,7 @@ use {
     rule_alt_scan_body,
 } from "./gir.wado";
 use { unwrap_label } from "./lr_util.wado";
-use { compute_shapes_for_alt, shape_lookahead_signature_for_alt } from "./lower.wado";
+use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
 
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     // Phase 3 — `lowered` mirrors `grammar.parser_rules` rule-for-rule
@@ -2924,8 +2924,26 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
     sync_name_counts_for_op_list_label(ll, name_counts);
     let inner_type = op_field_type(&ll.inner);
     w.line(&`let mut {ll.field}: Array<{inner_type}> = [];`);
-    let inner_field = op_field(&ll.inner);
-    gen_op_leaf(w, &ll.inner, ctx, name_counts);
+    // The per-iteration parse result sits in the same scope as the
+    // container `ll.field` (no enclosing loop for the non-Repeat
+    // list label). Lower keeps the inner's field at whatever
+    // `lab.element.field_name` dictates — that name can equal the
+    // label name (`if+=IF` after Wado-keyword rename gives
+    // `field_name = "if_"` on both the Label and the inner
+    // TokenRef), which would emit `let if_ = …` shadowing the array
+    // and break `if_.push(if_)` with `no method push found on Token`.
+    // Resolve emit-side by suffixing `_item` whenever the inner's
+    // lower-time field collides with `ll.field`; rebind locally so
+    // `gen_op_leaf` emits the let with the unique name without
+    // perturbing lower's struct decls or the visitor's parallel
+    // naming pipeline.
+    let leaf = if op_field(&ll.inner) == ll.field {
+        rebind_op_field(*(&ll.inner), &`{ll.field}_item`, &op_leaf_dedup_base(&ll.inner))
+    } else {
+        *(&ll.inner)
+    };
+    let inner_field = op_field(&leaf);
+    gen_op_leaf(w, &leaf, ctx, name_counts);
     w.line(&`{ll.field}.push({inner_field});`);
 }
 
