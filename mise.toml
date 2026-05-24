@@ -154,12 +154,14 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 touch wado-compiler/tests/e2e.rs
-# Cap the harness thread count. Each e2e test compiles a Wado program and
-# runs it under wasmtime; at full nproc on constrained sandboxes we have
-# seen SIGSEGV from resource exhaustion. A fixed cap of 2 keeps memory
-# pressure low while still parallelising on single-thread sandboxes
-# (where nproc/3 collapsed to 1).
-cargo test -- --test-threads=2
+# Run the harness with nproc-1 (floor 1) threads. Each e2e test compiles a
+# Wado program and runs it under wasmtime; wasmtime spawns its own worker
+# threads (codegen, epoch ticker, async I/O), so leaving one core free for
+# them avoids contention. The previous fixed cap of 2 was a workaround for
+# SIGSEGV from resource exhaustion on a constrained sandbox; reinstate that
+# cap if it recurs.
+n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
+cargo test -- --test-threads="$threads"
 """
 
 [tasks.test-wado]
