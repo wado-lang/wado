@@ -100,7 +100,10 @@ jobs:
       - name: Stage artifacts
         shell: bash
         run: |
-          name="wado-${{ needs.validate.outputs.tag }}-${{ matrix.asset_id }}"
+          # Keep the asset basename version-free so that
+          # `releases/latest/download/<name>` URLs resolve to the most
+          # recent release without needing to embed the version.
+          name="wado-${{ matrix.asset_id }}"
           mkdir -p "dist/$name"
           cp "target/${{ matrix.target }}/release/wado${{ matrix.ext }}" "dist/$name/"
           cp LICENSE README.md "dist/$name/"
