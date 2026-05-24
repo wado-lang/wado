@@ -63,6 +63,46 @@ cargo check -p wado-compiler --target wasm32-unknown-unknown
 cargo check -p wado-manifest --target wasm32-unknown-unknown
 """
 
+[tasks.check-deps]
+description = "Fail if wasm-tools crates drift off wasmtime's generation (duplicate 0.x trees)"
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+
+# wado pins the wasm-tools family (wasmparser/wasm-encoder/wasmprinter/wit-parser/
+# wat) to the same generation wasmtime depends on, so cargo dedupes instead of
+# compiling parallel 0.x trees. See [workspace.dependencies] in Cargo.toml. This
+# guard fails when a new duplicate sneaks in (e.g. a dep bumped back to a
+# different generation, or `wat` floating up past its tilde pin).
+#
+# A few duplicates are irreducible: they come from transitive deps we do not pin
+# directly. List their exact versions in `allow` so the guard ignores them:
+#   wasmparser / wasm-encoder 0.245.1  <- walrus 0.26
+#   wast 35.0.2                        <- witx <- wasmtime-wasi (wiggle)
+# (wit-bindgen's 0.244 generation is pulled by the target-gated `wasip3` guest
+#  crate, never reaches the host tree, and so never shows up in `cargo tree -d`.)
+family='wasm-encoder|wasmparser|wasmprinter|wasm-metadata|wat|wast|wit-parser|wit-component'
+allow='wasmparser v0.245.1|wasm-encoder v0.245.1|wast v35.0.2'
+
+offenders=$(cargo tree -d 2>/dev/null \
+    | awk '{print $1, $2}' \
+    | grep -E "^(${family}) v" \
+    | sort -u \
+    | grep -Ev "^(${allow})$" \
+    | awk '{seen[$1]++; vers[$1]=vers[$1] " " $2} END {for (n in seen) if (seen[n] > 1) print "  " n ":" vers[n]}' \
+    || true)
+
+if [ -n "${offenders}" ]; then
+    echo "error: wasm-tools crates are not aligned with wasmtime's generation:" >&2
+    echo "${offenders}" >&2
+    echo "" >&2
+    echo "Pin them in [workspace.dependencies] to match wasmtime, or add the exact" >&2
+    echo "version to 'allow' above if it comes from an unpinnable transitive dep." >&2
+    exit 1
+fi
+echo "ok: wasm-tools crates are deduped on wasmtime's generation"
+"""
+
 [tasks.release-build]
 description = "Build the wado CLI with the release profile (LTO, fully optimized)"
 run = """

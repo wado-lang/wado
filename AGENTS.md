@@ -220,6 +220,16 @@ Whenever the syntax changes, regenerate the grammar and update the formatter fix
 
 See `wado-vscode/README.md` for more details.
 
+## Dependencies
+
+The wasm-tools crates (`wasmparser`, `wasm-encoder`, `wasmprinter`, `wit-parser`, `wat`) are pinned in `[workspace.dependencies]` to the same generation wasmtime depends on, so cargo dedupes them instead of compiling parallel 0.x trees. `mise run check-deps` enforces this (also a CI job) and lists the irreducible exceptions.
+
+When bumping wasmtime, re-align them:
+
+1. Find wasmtime's generation, e.g. `cargo tree -i wasmparser@<ver>`.
+2. Re-pin the wasm-tools crates in `Cargo.toml` to that generation (`wat = "~1.<gen>"`, the rest `"0.<gen>"`).
+3. `cargo update`, then `mise run check-deps`.
+
 ## References
 
 ### Wasm and WASI

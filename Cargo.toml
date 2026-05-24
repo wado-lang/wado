@@ -18,12 +18,16 @@ libm = { version = "0.2" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
-wat = { version = "1" }
-wasm-encoder = { version = "0.249" }
-wasmparser = { version = "0.249" }
-wasmprinter = { version = "0.249" }
+# Keep the wasm-tools family aligned with the generation wasmtime depends on
+# (wasmtime 44 -> 0.246) so cargo can dedupe instead of carrying parallel 0.x
+# trees. `wat` must use the tilde pin: a bare "1" floats up to 1.249 and drags
+# wast/wasm-encoder 0.249 back in through both wado and wasmtime's wasm-compose.
+wat = { version = "~1.246" }
+wasm-encoder = { version = "0.246" }
+wasmparser = { version = "0.246" }
+wasmprinter = { version = "0.246" }
 walrus = { version = "0.26" }
-wit-parser = { version = "0.249" }
+wit-parser = { version = "0.246" }
 wasmtime = { version = "44", features = ["async", "component-model", "component-model-async"] }
 wasmtime-wasi = { version = "44", features = ["p3"] }
 wasmtime-wasi-http = { version = "44", features = ["p3"] }
