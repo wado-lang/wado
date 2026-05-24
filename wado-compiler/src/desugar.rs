@@ -1110,5 +1110,4 @@ mod tests {
             _ => panic!("expected assign"),
         }
     }
-
 }
