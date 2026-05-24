@@ -3009,6 +3009,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx.next_loop_id += 1;
         let body_label = format!("__for_{loop_id}_body");
 
+        // Mirror `resolve_loop` / `resolve_while` / `resolve_for_of`: clear the
+        // continue-retarget stack at the loop boundary so the invariant
+        // ("the stack lists labels for the enclosing C-style `for` bodies that
+        // a naked `continue` should `break` to, innermost-first") cannot be
+        // violated by a future refactor that resolves part of the body
+        // outside `resolve_for_labeled_body`. Today the push/pop inside
+        // that helper alone would suffice, but the symmetry guards against
+        // a body-resolution path moving above the helper.
+        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
+
         // The outer scope holds `init`'s bindings so the loop body can see
         // them while the surrounding function cannot.
         ctx.enter_scope();
@@ -3067,25 +3077,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }) => {
                 // The parser only accepts a single Let element in a for
                 // header — multi-element let-chains are syntactically
-                // limited to `if`/`while`.
-                assert_eq!(
-                    elements.len(),
-                    1,
-                    "for header let-chain must have a single Let element"
-                );
-                let ConditionElement::Let {
-                    pattern,
-                    expr,
-                    span: elem_span,
-                } = &elements[0]
-                else {
-                    panic!("for header let-chain element must be Let");
+                // limited to `if`/`while`. Future grammar evolution that
+                // relaxes this should surface here as a diagnostic, not
+                // an ICE.
+                let single_let = if elements.len() == 1 {
+                    match &elements[0] {
+                        ConditionElement::Let {
+                            pattern,
+                            expr,
+                            span: elem_span,
+                        } => Some((pattern, expr, *elem_span)),
+                        ConditionElement::Expr(_) => None,
+                    }
+                } else {
+                    None
+                };
+                let Some((pattern, expr, elem_span)) = single_let else {
+                    let _ = self.logger.error(TypeError::InvalidPattern {
+                        message: "for-header let-chain must consist of a single \
+                                  `let pattern = expr` element"
+                            .to_string(),
+                        span: *cond_span,
+                    });
+                    ctx.exit_scope();
+                    ctx.for_continue_labels = saved_continue;
+                    return vec![];
                 };
 
                 let scrutinee = self.resolve_expr(expr, ctx, None);
                 let scrutinee_type = scrutinee.type_id;
                 ctx.enter_scope();
-                let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx, *elem_span);
+                let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx, elem_span);
                 // Body and update both run inside the pattern scope so
                 // they can name the bindings introduced by `pat`.
                 let labeled_body = self.resolve_for_labeled_body(&body_label, &f.body, ctx);
@@ -3094,6 +3116,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 let mut then_stmts = vec![labeled_body];
                 then_stmts.extend(update_stmts);
+                // The match sits in statement position, so its overall type
+                // is Unit. The then-block ends without a value-producing
+                // trailing expression (labeled_body is a stmt and update
+                // is a Unit-typed Expr-stmt), so its block_result_type is
+                // Unit. The else-block holds only a `Break`, which makes
+                // it Never; mark it as such rather than lying with Unit
+                // so any downstream analysis that consults arm body
+                // types sees the truth.
                 let then_body = TirExpr::new(
                     TirExprKind::Block(TirBlock::new(then_stmts, *cond_span)),
                     TypeTable::UNIT,
@@ -3110,7 +3140,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         )],
                         *cond_span,
                     )),
-                    TypeTable::UNIT,
+                    TypeTable::NEVER,
                     *cond_span,
                 );
                 let arms = vec![
@@ -3118,7 +3148,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         pattern: tir_pattern,
                         guard: None,
                         body: then_body,
-                        span: *elem_span,
+                        span: elem_span,
                     },
                     TirMatchArm {
                         pattern: TirPattern::Wildcard,
@@ -3149,6 +3179,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ));
 
         ctx.exit_scope();
+        ctx.for_continue_labels = saved_continue;
         outer_stmts
     }
 
