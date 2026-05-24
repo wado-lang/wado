@@ -50,19 +50,15 @@ Reduces coupling between the codegen walk and the analysis layer; no behaviour c
 
 All 17 `CompositeLexers` / `CompositeParsers` upstream descriptors auto-skip today. The bottleneck is _not_ multi-input plumbing (`extract_antlr4_descriptors.wado`'s `parsed.slave_grammars.len() > 0` short-circuit could be lifted; Kiln already supports multi-input). Every composite descriptor's `[output]` is a host-side artefact — `<writeln(...)>` action-body prints (`S.a`, `M.b`, `T.y`), `Token.toString` dumps (`[@0,0:2='abc',<1>,1:0]`), or empty `[output]`. None survive `normalize_output_for_stage_b`. Re-evaluate this entry once Stage C lands.
 
-## Descriptor importer expansion
+## Descriptor importer — infrastructure gaps
 
-Stage A covers four sub-claims (a/b/c/d) — parse-accepts-input, parse-must-error, tokens-equivalence — in addition to the original `.g4`-parses claim. Sub-tree Stage B (the `@after { <ToStringTree("$r.ctx"):writeln()> }` pattern) has landed. Stage A claim (d) also emits auto-`#[TODO]`-marked tests for Lexer descriptors whose `[output]` carries an action-print prefix (`<writeln(...)>` echoes), so those gaps are visible in CI rather than hidden under auto-skip. See `antlr4-compatibility.md` for the contract and `tests/antlr4-compat/status.toml` for triage state.
+- **Composite (slave-grammar) descriptors.** 17 descriptors short-circuit on `parsed.slave_grammars.len() > 0`. Kiln's `use t from "<C>/<Name>.g4" with { ... }` directive needs to resolve `import S;` against sibling `<Name>.slaveN.g4` files. Once that lands the short-circuit comes out.
+- **Captured action output (Stage C deliverable).** Parser descriptors whose `[output]` is purely action-print stdout (e.g. `<writeln("S.a")>`) get claim (b) but no `[output]` comparison. Needs Stage C action-body translation in `codegen.wado` plus a parser-side `accumulated_output: String` API.
+- **`parse_<rule>` per-rule entries.** Several descriptors specify `[start]` as a non-first parser rule (`ParserExec/OpenDeviceStatement_*`, `ParserErrors/SingleTokenDeletionBeforeAlt`). Gale's `parse()` always enters at the first parser rule. Add a `parse_<rule>(input)` (or `parse_with_start(rule, input)`) and dispatch from the test file when `[start]` differs.
 
-Remaining infrastructure gaps that block mechanical extraction (NOT compatibility judgements — every gap is something to close):
+## Gale bugs surfaced by Stage A drivers
 
-- **Composite (slave-grammar) descriptors** — `parsed.slave_grammars.len() > 0` short-circuits Stage A (b/c/d) and Stage B today. 17 descriptors are deferred and the extractor summary reports the count. Needs Kiln's `use t from "<C>/<Name>.g4" with { ... }` directive to resolve `import S;` against sibling `<Name>.slaveN.g4` files. Once that lands, the short-circuit comes out and these descriptors flow through the normal Stage A/B paths.
-- **Stage A claim (e) — captured action output**. Parser descriptors whose `[output]` is purely action-print stdout (e.g. `<writeln("S.a")>`) currently get claim (b) (parse accepts input) but no `[output]` comparison. Closing this needs (1) Stage C action-body translation in `codegen.wado` and (2) a parser-side `accumulated_output: String` API. Track this as a Stage C deliverable, not as a separate stage letter.
-- **Parser-side `parse_<rule>` entries**. Several descriptors specify `[start]` as a non-first parser rule (e.g. `ParserExec/OpenDeviceStatement_*`, `ParserErrors/SingleTokenDeletionBeforeAlt`). Gale's `parse()` always enters at the first parser rule, so these tests are `[stage_a_todo]` with a "start-rule API" rationale. Add a `parse_<rule>` per-rule entry point (or a `parse_with_start(rule, input)`) and dispatch into it from the test file when `[start]` differs.
-
-## Stage-C-independent Gale bugs (fix before Stage C)
-
-These are the real Gale codegen / lexer / parser gaps surfaced by the per-descriptor Stage A drivers. Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Order roughly by impact:
+Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Roughly ordered by impact:
 
 ### Parser codegen
 
@@ -87,11 +83,9 @@ These reject grammars wholesale — Gale codegen produces invalid Wado, so the d
 - Wado-reserved words as rule names (`ParserExec/ReservedWordsEscaping`)
 - High-numbered explicit token id (`LexerExec/TokenType0xFFFF` — `TK_65535`)
 
-### Runtime gaps recorded as `[stage_a_todo]` (test compiles, fails at runtime)
+### Runtime gaps (test compiles, fails at runtime)
 
-These are surfaced via `#[TODO]`-marked Stage A drivers so the gap stays visible in CI:
-
-- **`parse()` ignores `[start]` rule** — `ParserExec/OpenDeviceStatement_{1,2}`, `ParserExec/ListLabelForClosureContext`, `ParserErrors/SingleTokenDeletionBeforeAlt`. Fix: add a `parse_<rule>(input)` per-rule entry point (or a `parse_with_start(rule, input)`), and have the test file dispatch into the rule named by `[start]`.
+- **`parse()` ignores `[start]` rule** — `ParserExec/OpenDeviceStatement_{1,2}`, `ParserExec/ListLabelForClosureContext`, `ParserErrors/SingleTokenDeletionBeforeAlt`. Fix: add a `parse_<rule>(input)` per-rule entry point (or a `parse_with_start(rule, input)`), and dispatch into the rule named by `[start]` from the test file.
 - **Non-default-channel tokens don't appear in `to_lexer_string`** — `LexerExec/ReservedWordsEscaping`. Fix: either land non-default-channel tokens in the main stream (with a channel attribute) and have the parser filter, or extend `to_lexer_string` to walk `Token.leading_trivia` in source order.
 
 ## Stage C — action / predicate execution
