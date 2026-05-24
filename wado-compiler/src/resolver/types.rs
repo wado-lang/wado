@@ -1181,6 +1181,14 @@ pub(super) struct FunctionContext {
     /// gets `__assert_0`, `__assert_1`, … so the names stay short and
     /// monotonic; the counter is reset per `FunctionContext::new`.
     pub(super) next_assert_id: u32,
+    /// Power-assert capture side-channel. `Some` only while
+    /// [`Resolver::desugar_assert`] is resolving an assert condition;
+    /// the [`Resolver::resolve_expr`] entry consults it to extract
+    /// scanner-flagged sub-expressions into `let __vK = …;` bindings
+    /// as they are resolved. Outside an assert this is always `None`,
+    /// so the hook is a single `Option` discriminant check on the hot
+    /// path.
+    pub(super) assert_capture_ctx: Option<super::assert::AssertCaptureContext>,
     /// Per-function allocator for synthetic `AstId`s used by lowering
     /// passes such as `lower_assert`. `None` until first use, then
     /// initialised by [`Resolver::alloc_synth_ast_id`] to start above
@@ -1213,6 +1221,7 @@ impl FunctionContext {
             in_handler_method: false,
             next_assert_id: 0,
             next_synth_ast_id: None,
+            assert_capture_ctx: None,
         }
     }
 
@@ -1269,6 +1278,7 @@ impl FunctionContext {
             in_handler_method: false,
             next_assert_id: 0,
             next_synth_ast_id: None,
+            assert_capture_ctx: None,
         }
     }
 

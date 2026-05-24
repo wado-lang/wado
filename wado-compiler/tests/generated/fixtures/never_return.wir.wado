@@ -108,8 +108,8 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/never_return.wado/__test_0_panic_as_function_return"() {
     let __v0_0: i32;
     let __cond_1: bool;
+    let __v0_2: ref "core:prelude/types.wado//Option<i32>";
     let __v1: i32;
-    let __v0_3: ref "core:prelude/types.wado//Option<i32>";
     let __cond_4: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
@@ -153,9 +153,9 @@ condition: conditional_panic(42) == 42
         });
         unreachable;
     }
-    __v0_3 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 };
-    __v1 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__v0_3) -> i32 {
-        v = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__v0_3).payload_0;
+    __v0_2 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 };
+    __v1 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__v0_2) -> i32 {
+        v = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__v0_2).payload_0;
         v;
     } else {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 });
@@ -181,7 +181,7 @@ condition: panic_in_match(Option<i32>::Some(10)) == 10
 "), used: 56 });
             "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option<i32>::Some(10): "), used: 23 });
             __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
-            "core:prelude/types.wado/Option<i32>^Inspect::inspect"(__v0_3, __local_8);
+            "core:prelude/types.wado/Option<i32>^Inspect::inspect"(__v0_2, __local_8);
             "core:prelude/string.wado/String::push"(__local_7, 10);
             "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("panic_in_match(Option<i32>::Some(10)): "), used: 39 });
             __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };

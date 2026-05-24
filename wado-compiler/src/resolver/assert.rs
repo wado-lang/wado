@@ -20,29 +20,40 @@
 //! that the rewritten condition (and the failure-message lines) refer
 //! to, so side-effecting sub-terms evaluate exactly once.
 //!
-//! The pass runs in two phases so the AST is never mutated — it stays
-//! the source of truth, and LSP queries land on the user's text as
-//! written:
+//! The pass runs in two phases, neither of which mutates the AST — the
+//! source stays as the user wrote it, and LSP queries land on it
+//! unchanged:
 //!
 //! 1. [`CaptureScanner`] walks the AST condition read-only, deciding
 //!    which sub-expressions should be captured. Captures are deduped by
 //!    source text (so `a + a` evaluates `a` once) and indexed by the
-//!    sub-expression's source span.
-//! 2. The condition is resolved to TIR untouched.
-//!    [`TirCaptureWalker`] then traverses that TIR post-order; every
-//!    `TirExpr` whose span matches a captured AST span is extracted
-//!    into a fresh `let __vK = <tir>;` and replaced with `Local(__vK)`.
-//!    Post-order keeps inner captures evaluated first.
+//!    sub-expression's [`AstId`].
+//!
+//! 2. The condition is resolved to TIR exactly once. While that
+//!    resolution is in flight, [`Resolver::resolve_expr`] consults the
+//!    [`AssertCaptureContext`] side-channel on the function context.
+//!    When the current `Expr`'s `AstId` is in the capture set, the
+//!    resolver allocates a fresh `__vK` local, emits a
+//!    `TirStmt::Let { value: <recursively resolved expr>, ... }`,
+//!    and returns `Local(__vK)` in place of the resolved sub-expression.
+//!    The `in_progress` guard prevents the hook from re-firing on the
+//!    same node during the recursive resolution.
+//!
+//! Because the hook fires on AST identity, not on TIR shape, the
+//! resolver-synthesised wrappers (auto-ref via
+//! `adjust_receiver_for_self_kind`, literal coercions, reflexive
+//! `T::from(T_val)` collapse, …) need no special handling: the wrappers
+//! live *inside* the resolved TIR that becomes the captured `let __vK =
+//! …;` value, and nodes that evaporate during resolution simply never
+//! trigger the hook.
 
 use crate::ast::{
     self, AssertStmt, AstId, Block, CallExpr, Condition, Expr, ExprStmt, FormatSpec, IdentExpr,
     IfStmt, Literal, LiteralExpr, TemplatePart, TemplateStringExpr, UnaryExpr, UnaryOp,
 };
 use crate::compiler_host::CompilerHost;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeId};
-use crate::tir_visitor::TirMutVisitor;
-use crate::token::Span;
 use crate::unparse::unparse_expr_simple;
 
 use super::Resolver;
@@ -70,14 +81,33 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Phase 1: read-only AST scan to decide captures.
         let mut scanner = CaptureScanner::new();
         scanner.scan_root(&assert_stmt.condition);
-        let captures = scanner.captures;
-        let span_to_capture = scanner.span_to_capture;
+        let CaptureScanner {
+            slots,
+            ast_id_to_slot,
+            ..
+        } = scanner;
 
         // Scope the synthetic locals to this expansion.
         ctx.enter_scope();
-        let mut inner_stmts: Vec<TirStmt> = Vec::with_capacity(captures.len() + 2);
 
-        // Phase 2a: resolve the unmodified AST condition to TIR.
+        // Phase 2: resolve the unmodified AST condition to TIR with the
+        // capture hook armed. The hook (in `Resolver::resolve_expr`)
+        // consumes `ast_id_to_slot` to decide which sub-expressions
+        // become `let __vK = …;` bindings, and appends the bindings to
+        // `emitted_lets` in inner-first order.
+        //
+        // We `replace` the field rather than `insert` it so a panic
+        // inside resolution doesn't strand a stale context on
+        // `FunctionContext` (and so nested asserts, were they ever
+        // legal inside an assert condition, would assert!() here).
+        debug_assert!(ctx.assert_capture_ctx.is_none());
+        ctx.assert_capture_ctx = Some(AssertCaptureContext {
+            slots,
+            ast_id_to_slot,
+            in_progress: IndexSet::default(),
+            emitted_lets: Vec::new(),
+        });
+
         // We pass `None` for the expected type: a `bool` expectation
         // here would propagate into branch types of an `Expr::If` /
         // `Expr::Match` inside the condition and reject valid asserts
@@ -85,38 +115,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // something else.
         let cond_tir = self.resolve_expr(&assert_stmt.condition, ctx, None);
 
-        // Phase 2b: walk the resulting TIR pre-order; each sub-expression
-        // whose span matches a captured AST sub-expression is extracted
-        // into a fresh `let __vK = ...;` (pushed onto `inner_stmts`) and
-        // replaced with `Local(__vK)`.
-        //
-        // `add_local` receives `defining_ast_id = None` so the synthetic
-        // locals do not leak into `local_symbols` (which would key on
-        // `synth_id` and shadow other entries via LSP queries).
-        //
-        // `emitted_indexes` records which scanned captures actually
-        // landed in the TIR — some AST sub-expressions evaporate during
-        // resolution (e.g. reflexive `T::from(T_val)` returns its arg
-        // unchanged) and have no matching `TirExpr.span` to extract. We
-        // suppress those from the failure message below so it never
-        // refers to an undeclared `__vK`.
-        let (cond_tir, emitted_indexes) = {
-            let mut walker = TirCaptureWalker {
-                captures: &captures,
-                span_to_capture: &span_to_capture,
-                ctx,
-                emitted: IndexMap::default(),
-                emitted_lets: Vec::with_capacity(captures.len()),
-                excluded_spans: Vec::new(),
-            };
-            let mut cond_tir = cond_tir;
-            walker.visit_expr(&mut cond_tir);
-            let emitted: Vec<usize> = walker.emitted.keys().copied().collect();
-            inner_stmts.extend(walker.emitted_lets);
-            (cond_tir, emitted)
-        };
-        let captures_for_message: Vec<&Capture> =
-            emitted_indexes.iter().map(|&idx| &captures[idx]).collect();
+        let AssertCaptureContext {
+            slots,
+            emitted_lets,
+            ..
+        } = ctx
+            .assert_capture_ctx
+            .take()
+            .expect("assert_capture_ctx must survive resolution");
+
+        let mut inner_stmts: Vec<TirStmt> = Vec::with_capacity(emitted_lets.len() + 2);
+        inner_stmts.extend(emitted_lets);
 
         // `let __cond = <cond_tir>;`
         let cond_type = cond_tir.type_id;
@@ -140,7 +149,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // symbol-pollution concern above does not apply; the standard
         // ident lookup of `__cond` and the template-string + `panic`
         // resolution paths take over.
-        let panic_message = build_panic_message(assert_stmt, &captures_for_message, synth_id, span);
+        //
+        // Only slots whose hook fired contribute lines to the failure
+        // message — a slot stays with `emitted == false` when its AST
+        // node evaporates during resolution (e.g. reflexive
+        // `T::from(T_val)` returns its argument directly, so the outer
+        // `Call` is never resolved as a node and `resolve_expr` is
+        // never called on its `AstId`). The corresponding `__vK` would
+        // be unbound and `resolve_ident` would reject the template.
+        let panic_message = build_panic_message(assert_stmt, &slots, synth_id, span);
         let panic_call = Expr::Call(Box::new(CallExpr {
             id: synth_id,
             callee: Expr::Ident(IdentExpr {
@@ -199,6 +216,82 @@ impl<H: CompilerHost> Resolver<'_, H> {
             span,
         )]
     }
+
+    /// Handle a `resolve_expr` call whose `Expr` was flagged for
+    /// power-assert capture by [`CaptureScanner`]. Re-enters
+    /// `resolve_expr` to produce the resolved TIR for the sub-tree,
+    /// emits `let __vK = <resolved>;` onto the capture context's
+    /// pending-let buffer, and returns `Local(__vK)` so the surrounding
+    /// resolution sees the binding in place of the original
+    /// sub-expression.
+    ///
+    /// `in_progress` is set around the recursive call so the hook in
+    /// `resolve_expr` doesn't fire again on the same `AstId` and recurse
+    /// forever.
+    pub(super) fn resolve_with_assert_capture(
+        &mut self,
+        ast_id: AstId,
+        slot_idx: usize,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TirExpr {
+        ctx.assert_capture_ctx
+            .as_mut()
+            .expect("assert_capture_ctx present (guarded by caller)")
+            .in_progress
+            .insert(ast_id);
+
+        let resolved = self.resolve_expr(expr, ctx, expected_type);
+
+        ctx.assert_capture_ctx
+            .as_mut()
+            .expect("assert_capture_ctx survives recursive resolve")
+            .in_progress
+            .shift_remove(&ast_id);
+
+        let type_id = resolved.type_id;
+        let cap_span = resolved.span;
+        let cap_name = ctx
+            .assert_capture_ctx
+            .as_ref()
+            .expect("assert_capture_ctx survives recursive resolve")
+            .slots[slot_idx]
+            .name
+            .clone();
+
+        // `add_local` receives `defining_ast_id = None` so the synthetic
+        // locals do not leak into `local_symbols` (which would key on
+        // `synth_id` and shadow other entries via LSP queries).
+        let local_index = ctx.add_local(cap_name.clone(), type_id, false, None);
+
+        let cap_ctx = ctx
+            .assert_capture_ctx
+            .as_mut()
+            .expect("assert_capture_ctx survives recursive resolve");
+        cap_ctx.slots[slot_idx].emitted = true;
+        cap_ctx.emitted_lets.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: cap_name.clone(),
+                local_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id,
+                value: resolved,
+                skip_value_copy: false,
+            },
+            cap_span,
+        ));
+
+        TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name: cap_name,
+            },
+            type_id,
+            cap_span,
+        )
+    }
 }
 
 /// One sub-expression captured during the power-assert scan.
@@ -207,21 +300,61 @@ struct Capture {
     name: String,
     /// Source text of the original sub-expression, used in the failure message.
     source: String,
+    /// Set to `true` once the resolver hook fires for this slot.
+    /// Slots that stay `false` had their AST node evaporate during
+    /// resolution (e.g. reflexive `T::from(T_val)` returns its argument
+    /// directly, so the outer `Call` is never resolved as a node and
+    /// `resolve_expr` is never called on its `AstId`). Those slots are
+    /// dropped from the failure message — `resolve_ident` would
+    /// otherwise reject the unbound `__vK` reference.
+    emitted: bool,
+}
+
+/// Per-assert state carried on [`FunctionContext::assert_capture_ctx`]
+/// while [`Resolver::resolve_expr`] is resolving the condition.
+pub(super) struct AssertCaptureContext {
+    /// Pre-scanned captures, indexed by slot. The resolver hook reads
+    /// `name` to produce the `let __vK` binding and writes `local` once
+    /// the slot is realised.
+    slots: Vec<Capture>,
+    /// AST node identity → slot index. The resolver hook consults this
+    /// at every `resolve_expr` entry.
+    ast_id_to_slot: IndexMap<AstId, usize>,
+    /// `AstId`s currently being recursively resolved by the hook. Stops
+    /// the hook from re-firing on the same node during the inner
+    /// `resolve_expr` call.
+    in_progress: IndexSet<AstId>,
+    /// `let __vK = …;` bindings produced so far, in emission (inner →
+    /// outer) order. Drained into `inner_stmts` once resolution
+    /// finishes.
+    emitted_lets: Vec<TirStmt>,
+}
+
+impl AssertCaptureContext {
+    /// Slot index for `ast_id`, when (a) the scanner flagged it for
+    /// capture and (b) it isn't already being recursively resolved by
+    /// the hook itself.
+    pub(super) fn slot_for(&self, ast_id: AstId) -> Option<usize> {
+        if self.in_progress.contains(&ast_id) {
+            return None;
+        }
+        self.ast_id_to_slot.get(&ast_id).copied()
+    }
 }
 
 /// Read-only AST scanner: decides which sub-expressions of the assert
-/// condition deserve a `__vK` capture and records each capture's source
-/// span so the matching TIR node can later be extracted by
-/// [`TirCaptureWalker`].
+/// condition deserve a `__vK` capture and records each capture's
+/// originating [`AstId`] so the resolver hook in `resolve_expr` can find
+/// it.
 struct CaptureScanner {
-    captures: Vec<Capture>,
-    /// Source span of each captureable sub-expression → its capture index.
-    /// Two AST nodes with the same source text share one capture entry
+    slots: Vec<Capture>,
+    /// `AstId` of each captureable sub-expression → its capture slot
+    /// index. Two AST nodes with the same source text share one slot
     /// (dedup keeps the failure message terse and avoids re-evaluating
-    /// identical sub-terms); both spans map to the same index here.
-    span_to_capture: IndexMap<Span, usize>,
-    /// Source text → capture index, used to dedup before allocating a
-    /// new `__vK`. Discarded after the scan.
+    /// identical sub-terms); both ids map to the same slot here.
+    ast_id_to_slot: IndexMap<AstId, usize>,
+    /// Source text → slot index, used to dedup before allocating a new
+    /// `__vK`. Discarded after the scan.
     source_to_idx: IndexMap<String, usize>,
     /// `true` only for the root call (the condition itself). The root
     /// `Binary` / `Unary` is not captured because it would just
@@ -238,8 +371,8 @@ struct CaptureScanner {
 impl CaptureScanner {
     fn new() -> Self {
         Self {
-            captures: Vec::new(),
-            span_to_capture: IndexMap::default(),
+            slots: Vec::new(),
+            ast_id_to_slot: IndexMap::default(),
             source_to_idx: IndexMap::default(),
             is_root: true,
             in_call_arg: false,
@@ -251,27 +384,27 @@ impl CaptureScanner {
         self.scan(expr);
     }
 
-    /// Add a capture (dedup'd by source text); the sub-expression's span
-    /// is recorded so the TIR walker can match the corresponding TIR
-    /// node.
-    fn add(&mut self, source: String, span: Span) {
+    /// Add a capture (dedup'd by source text); the sub-expression's
+    /// `AstId` is recorded so the resolver hook can match it.
+    fn add(&mut self, source: String, ast_id: AstId) {
         let idx = if let Some(&idx) = self.source_to_idx.get(&source) {
             idx
         } else {
-            let idx = self.captures.len();
+            let idx = self.slots.len();
             let name = format!("__v{idx}");
-            self.captures.push(Capture {
+            self.slots.push(Capture {
                 name,
                 source: source.clone(),
+                emitted: false,
             });
             self.source_to_idx.insert(source, idx);
             idx
         };
-        self.span_to_capture.insert(span, idx);
+        self.ast_id_to_slot.insert(ast_id, idx);
     }
 
     fn scan(&mut self, expr: &Expr) {
-        let span = expr.span();
+        let ast_id = expr.id();
         let is_root = std::mem::replace(&mut self.is_root, false);
         let in_call_arg = std::mem::replace(&mut self.in_call_arg, false);
 
@@ -281,13 +414,13 @@ impl CaptureScanner {
                     // Function-reference coercion site — leave as-is.
                     return;
                 }
-                self.add(ident.name.clone(), span);
+                self.add(ident.name.clone(), ast_id);
             }
             Expr::Binary(b) => {
                 self.scan(&b.left);
                 self.scan(&b.right);
                 if !is_root {
-                    self.add(unparse_expr_simple(expr), span);
+                    self.add(unparse_expr_simple(expr), ast_id);
                 }
             }
             Expr::Unary(u) => {
@@ -312,7 +445,7 @@ impl CaptureScanner {
                 }
                 self.scan(&u.expr);
                 if !is_root {
-                    self.add(unparse_expr_simple(expr), span);
+                    self.add(unparse_expr_simple(expr), ast_id);
                 }
             }
             Expr::Call(c) => {
@@ -324,7 +457,7 @@ impl CaptureScanner {
                     self.in_call_arg = true;
                     self.scan(arg);
                 }
-                self.add(unparse_expr_simple(expr), span);
+                self.add(unparse_expr_simple(expr), ast_id);
             }
             Expr::MethodCall(m) => {
                 // Receiver recursion is intentionally skipped:
@@ -338,19 +471,19 @@ impl CaptureScanner {
                     self.in_call_arg = true;
                     self.scan(arg);
                 }
-                self.add(unparse_expr_simple(expr), span);
+                self.add(unparse_expr_simple(expr), ast_id);
             }
             Expr::StaticMethodCall(s) => {
                 for arg in &s.args {
                     self.in_call_arg = true;
                     self.scan(arg);
                 }
-                self.add(unparse_expr_simple(expr), span);
+                self.add(unparse_expr_simple(expr), ast_id);
             }
             Expr::FieldAccess(_) | Expr::Index(_) => {
                 // Receiver / index recursion deferred (same reason as
                 // `MethodCall`): capture the access whole.
-                self.add(unparse_expr_simple(expr), span);
+                self.add(unparse_expr_simple(expr), ast_id);
             }
             // Every other `Expr` variant is treated as an opaque leaf:
             // it is neither captured nor recursed into. This keeps
@@ -362,126 +495,12 @@ impl CaptureScanner {
     }
 }
 
-/// Bookkeeping for a capture that's already been extracted: the TIR
-/// walker stores this on first match so a second occurrence of the same
-/// source span reuses the same local without emitting another `let`.
-#[derive(Clone)]
-struct EmittedCapture {
-    name: String,
-    local_index: u32,
-    type_id: TypeId,
-}
-
-/// TIR walker: pre-order traversal of the resolved condition TIR. The
-/// outermost `TirExpr` whose span matches a [`CaptureScanner`] entry is
-/// extracted into a fresh `let __vK = …;` (appended to `emitted_lets`)
-/// and replaced with `Local(__vK)`. The walker then recurses into the
-/// captured subtree to surface any nested captures (so inner `__vK`s
-/// bind before the outer one that references them).
-///
-/// Span exclusion: the resolver inherits the parent's span when it
-/// synthesises auto-ref / auto-deref wrappers around a receiver (see
-/// `adjust_receiver_for_self_kind`). Naively matching by span would
-/// trip on those wrappers and capture them instead of the outer
-/// method call. `excluded_spans` holds the spans we've already
-/// captured at, so when we descend into the captured subtree the
-/// immediate synthesised children (which share the parent's span) are
-/// passed through untouched.
-struct TirCaptureWalker<'a, 'ctx> {
-    captures: &'a [Capture],
-    span_to_capture: &'a IndexMap<Span, usize>,
-    ctx: &'ctx mut FunctionContext,
-    emitted: IndexMap<usize, EmittedCapture>,
-    emitted_lets: Vec<TirStmt>,
-    excluded_spans: Vec<Span>,
-}
-
-impl TirMutVisitor for TirCaptureWalker<'_, '_> {
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
-        // Resolver-synthesised wrapper around an already-captured node:
-        // recurse but never match.
-        if self.excluded_spans.contains(&expr.span) {
-            self.walk_expr(expr);
-            return;
-        }
-
-        let Some(&cap_idx) = self.span_to_capture.get(&expr.span) else {
-            // Not a capture target; walk children normally.
-            self.walk_expr(expr);
-            return;
-        };
-
-        if let Some(emitted) = self.emitted.get(&cap_idx).cloned() {
-            // Same source text already captured — reuse its local
-            // instead of emitting another `let`.
-            *expr = TirExpr::new(
-                TirExprKind::Local {
-                    index: emitted.local_index,
-                    name: emitted.name,
-                },
-                emitted.type_id,
-                expr.span,
-            );
-            return;
-        }
-
-        // Take the matching TIR subtree out so we can recurse into it
-        // for nested captures. The placeholder we leave behind is
-        // overwritten with the final `Local(__vK)` below.
-        let cap_name = self.captures[cap_idx].name.clone();
-        let type_id = expr.type_id;
-        let cap_span = expr.span;
-        let local_index = self.ctx.add_local(cap_name.clone(), type_id, false, None);
-        let mut captured = std::mem::replace(
-            expr,
-            TirExpr::new(
-                TirExprKind::Local {
-                    index: local_index,
-                    name: cap_name.clone(),
-                },
-                type_id,
-                cap_span,
-            ),
-        );
-
-        // Surface nested captures inside `captured`. The captured node
-        // itself is skipped (we're already capturing it); its
-        // descendants are walked, with the same-span synthesised
-        // wrappers excluded by `excluded_spans`.
-        self.excluded_spans.push(cap_span);
-        self.walk_expr(&mut captured);
-        self.excluded_spans.pop();
-
-        self.emitted_lets.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: cap_name.clone(),
-                local_index,
-                is_mut: false,
-                is_reactive: false,
-                type_id,
-                value: captured,
-                skip_value_copy: false,
-            },
-            cap_span,
-        ));
-        self.emitted.insert(
-            cap_idx,
-            EmittedCapture {
-                name: cap_name,
-                local_index,
-                type_id,
-            },
-        );
-    }
-}
-
-/// Build the template-string expression passed to `panic(...)`. The
-/// `captures` slice must contain only entries the TIR walker actually
-/// emitted (filtered by `desugar_assert`), so every `__vK` referenced
-/// here is guaranteed to be in scope.
+/// Build the template-string expression passed to `panic(...)`. Slots
+/// whose hook never fired (their AST node evaporated during resolution)
+/// are skipped so the message never references an unbound `__vK`.
 fn build_panic_message(
     assert_stmt: &AssertStmt,
-    captures: &[&Capture],
+    slots: &[Capture],
     synth_id: AstId,
     span: crate::token::Span,
 ) -> Expr {
@@ -527,7 +546,10 @@ fn build_panic_message(
         "\ncondition: {condition_source}\n"
     )));
 
-    for cap in captures {
+    for cap in slots {
+        if !cap.emitted {
+            continue;
+        }
         parts.push(TemplatePart::String(format!("{}: ", cap.source)));
         parts.push(TemplatePart::Interpolation {
             expr: Box::new(Expr::Ident(IdentExpr {

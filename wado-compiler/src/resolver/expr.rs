@@ -138,6 +138,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
+        // Power-assert capture hook. While `desugar_assert` is resolving
+        // an assert condition, the scanner-flagged sub-expressions are
+        // extracted into `let __vK = <resolved>;` bindings and replaced
+        // with `Local(__vK)`. Common case (no assert in flight): a
+        // single `Option` discriminant check, so the cost on the hot
+        // path is negligible. See `resolver/assert.rs` for the design.
+        if let Some(cap_ctx) = ctx.assert_capture_ctx.as_ref() {
+            let ast_id = expr.id();
+            if let Some(slot_idx) = cap_ctx.slot_for(ast_id) {
+                return self.resolve_with_assert_capture(
+                    ast_id,
+                    slot_idx,
+                    expr,
+                    ctx,
+                    expected_type,
+                );
+            }
+        }
+
         // Try literal coercion when expected type is known
         if let Some(target_type) = expected_type
             && let Some(coerced) = self.try_coerce(expr, ctx, target_type)
