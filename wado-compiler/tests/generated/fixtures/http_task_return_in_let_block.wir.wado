@@ -790,17 +790,15 @@ fn "wado-compiler/tests/fixtures/http_task_return_in_let_block.wado/__cm_export_
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l65: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l65;
-            };
+    i = 0;
+    b64: block {
+        l65: loop {
+            if i >= len {
+                break b64;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l65;
         };
     };
 }

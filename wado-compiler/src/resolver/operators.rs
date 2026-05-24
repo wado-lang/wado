@@ -151,7 +151,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: left_name,
                             found: right_name,
-                            span: span,
+                            span,
                         });
                     }
                 }
@@ -193,7 +193,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 };
                 let _ = self.logger.error(TypeError::InvalidPattern {
                     message: format!("operator `{op_str}` cannot be applied to type `{type_name}`"),
-                    span: span,
+                    span,
                 });
                 return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
             }
@@ -260,7 +260,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             message: format!(
                                 "operator `{op_str}` cannot be applied to type `{type_name}` (does not implement Eq trait)"
                             ),
-                            span: span,
+                            span,
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
                     };
@@ -313,7 +313,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             message: format!(
                                 "operator `{op_str}` cannot be applied to type `{type_name}` (does not implement Ord trait)"
                             ),
-                            span: span,
+                            span,
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
                     };
@@ -616,7 +616,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     message: format!(
                         "arithmetic operator `{op_char}` is not allowed on flags types; use bitwise operators (`|`, `&`, `^`) instead"
                     ),
-                    span: span,
+                    span,
                 });
                 return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
             }
@@ -640,7 +640,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     message: format!(
                         "operator `%` is not supported on `{type_name}`; use `{type_name}::fmod(a, b)` instead"
                     ),
-                    span: span,
+                    span,
                 });
                 return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
             }
@@ -728,7 +728,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     message: format!(
                         "operator `{op_char}` cannot be applied to type `{type_name}`: type does not implement `{trait_name}`"
                     ),
-                    span: span,
+                    span,
                 });
                 return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
             }
@@ -756,7 +756,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: left_name,
                     found: right_name,
-                    span: span,
+                    span,
                 });
             }
         }
@@ -1022,7 +1022,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ///
     /// This is the shared core of [`Self::resolve_assign`] and
     /// [`Self::resolve_compound_assign`]: both go through the same target
-    /// dispatch (IndexAssign trait on custom types, `GlobalVarSet` on
+    /// dispatch (`IndexAssign` trait on custom types, `GlobalVarSet` on
     /// globals, plain `Assign` otherwise), differing only in where the
     /// right-hand value comes from.
     pub(super) fn assign_to_target(

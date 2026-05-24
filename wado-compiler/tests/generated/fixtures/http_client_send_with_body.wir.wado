@@ -1449,17 +1449,15 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     let arr: ref builtin::array<u8>;
     let i: i32;
     arr = builtin::array_new<u8>(len);
-    __for_0: block {
-        i = 0;
-        block {
-            l140: loop {
-                if i >= len {
-                    break __for_0;
-                }
-                builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
-                i = i + 1;
-                continue l140;
-            };
+    i = 0;
+    b139: block {
+        l140: loop {
+            if i >= len {
+                break b139;
+            }
+            builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
+            i = i + 1;
+            continue l140;
         };
     };
     return arr;
@@ -1467,17 +1465,15 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l143: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l143;
-            };
+    i = 0;
+    b142: block {
+        l143: loop {
+            if i >= len {
+                break b142;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l143;
         };
     };
 }

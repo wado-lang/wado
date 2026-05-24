@@ -399,19 +399,17 @@ fn "wado-compiler/tests/fixtures/array_index_1.wado/array_index_inline_loop"() w
         unreachable;
     };
     sum = 0;
-    __for_2: block {
-        i_3 = 0;
-        _licm_used_67 = 5;
-        _licm_repr_68 = arr.repr;
-        block {
-            l13: loop {
-                if i_3 >= _licm_used_67 {
-                    break __for_2;
-                }
-                sum = sum + builtin::array_get<i32>(_licm_repr_68, i_3);
-                i_3 = i_3 + 1;
-                continue l13;
-            };
+    i_3 = 0;
+    _licm_used_67 = 5;
+    _licm_repr_68 = arr.repr;
+    b12: block {
+        l13: loop {
+            if i_3 >= _licm_used_67 {
+                break b12;
+            }
+            sum = sum + builtin::array_get<i32>(_licm_repr_68, i_3);
+            i_3 = i_3 + 1;
+            continue l13;
         };
     };
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -431,24 +429,22 @@ fn "wado-compiler/tests/fixtures/array_index_1.wado/array_index_inline_loop"() w
         break __seq_lit: __b_4;
         unreachable;
     };
-    __for_3: block {
-        i_6 = 0;
-        _licm_used_69 = arr2.used;
-        _licm_repr_70 = arr2.repr;
-        block {
-            l16: loop {
-                if i_6 >= 3 {
-                    break __for_3;
-                }
-                value_44 = i_6 * 10;
-                if i_6 >= _licm_used_69 {
-                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                    unreachable;
-                }
-                builtin::array_set<i32>(_licm_repr_70, i_6, value_44);
-                i_6 = i_6 + 1;
-                continue l16;
-            };
+    i_6 = 0;
+    _licm_used_69 = arr2.used;
+    _licm_repr_70 = arr2.repr;
+    b15: block {
+        l16: loop {
+            if i_6 >= 3 {
+                break b15;
+            }
+            value_44 = i_6 * 10;
+            if i_6 >= _licm_used_69 {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            }
+            builtin::array_set<i32>(_licm_repr_70, i_6, value_44);
+            i_6 = i_6 + 1;
+            continue l16;
         };
     };
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -539,17 +535,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l24: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l24;
-            };
+    i = 0;
+    b23: block {
+        l24: loop {
+            if i >= len {
+                break b23;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l24;
         };
     };
 }
@@ -631,17 +625,15 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         return 1;
     }
     n = 0;
-    __for_1: block {
-        t = val;
-        block {
-            l30: loop {
-                if t <= 0_i64 {
-                    break __for_1;
-                }
-                n = n + 1;
-                t = t / 10_i64;
-                continue l30;
-            };
+    t = val;
+    b29: block {
+        l30: loop {
+            if t <= 0_i64 {
+                break b29;
+            }
+            n = n + 1;
+            t = t / 10_i64;
+            continue l30;
         };
     };
     return n;
@@ -654,18 +646,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
     } else {
-        __for_2: block {
-            temp = abs_val;
-            block {
-                l34: loop {
-                    if temp <= 0_i64 {
-                        break __for_2;
-                    }
-                    pos = pos - 1;
-                    builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
-                    temp = temp / 10_i64;
-                    continue l34;
-                };
+        temp = abs_val;
+        b33: block {
+            l34: loop {
+                if temp <= 0_i64 {
+                    break b33;
+                }
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                temp = temp / 10_i64;
+                continue l34;
             };
         };
     }
@@ -757,24 +747,22 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
     min_len = select i32(len_a < len_b, len_a, len_b);
     a_repr = self.repr;
     b_repr = other.repr;
-    __for_2: block {
-        i = 0;
-        block {
-            l42: loop {
-                if i >= min_len {
-                    break __for_2;
-                }
-                a_byte = builtin::array_get_u8(a_repr, i);
-                b_byte = builtin::array_get_u8(b_repr, i);
-                if a_byte <u b_byte {
-                    return 0;
-                }
-                if a_byte >u b_byte {
-                    return 2;
-                }
-                i = i + 1;
-                continue l42;
-            };
+    i = 0;
+    b41: block {
+        l42: loop {
+            if i >= min_len {
+                break b41;
+            }
+            a_byte = builtin::array_get_u8(a_repr, i);
+            b_byte = builtin::array_get_u8(b_repr, i);
+            if a_byte <u b_byte {
+                return 0;
+            }
+            if a_byte >u b_byte {
+                return 2;
+            }
+            i = i + 1;
+            continue l42;
         };
     };
     if len_a < len_b {
@@ -814,18 +802,16 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
-    __for_0: block {
-        i = 0;
-        _licm_buf_4 = self.buf;
-        block {
-            l53: loop {
-                if i >= n {
-                    break __for_0;
-                }
-                "core:prelude/string.wado/String::push"(_licm_buf_4, c);
-                i = i + 1;
-                continue l53;
-            };
+    i = 0;
+    _licm_buf_4 = self.buf;
+    b52: block {
+        l53: loop {
+            if i >= n {
+                break b52;
+            }
+            "core:prelude/string.wado/String::push"(_licm_buf_4, c);
+            i = i + 1;
+            continue l53;
         };
     };
 }
@@ -964,29 +950,27 @@ fn "wado-compiler/tests/fixtures/array_index_1.wado/Node<core:prelude/string.wad
     let _licm_used_10: i32;
     let _licm_repr_11: ref builtin::array<bool>;
     count = 0;
-    __for_1: block {
-        i = 0;
-        _licm_keys_7 = self.keys;
-        _licm_deleted_8 = self.deleted;
-        _licm_used_9 = _licm_keys_7.used;
-        _licm_used_10 = _licm_deleted_8.used;
-        _licm_repr_11 = _licm_deleted_8.repr;
-        block {
-            l79: loop {
-                if i >= _licm_used_9 {
-                    break __for_1;
-                }
-                count = count + (__inline_Array_bool__IndexValue_i32___index_value_1: block -> bool {
-                    if i >= _licm_used_10 {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_bool__IndexValue_i32___index_value_1: builtin::array_get<bool>(_licm_repr_11, i);
+    i = 0;
+    _licm_keys_7 = self.keys;
+    _licm_deleted_8 = self.deleted;
+    _licm_used_9 = _licm_keys_7.used;
+    _licm_used_10 = _licm_deleted_8.used;
+    _licm_repr_11 = _licm_deleted_8.repr;
+    b78: block {
+        l79: loop {
+            if i >= _licm_used_9 {
+                break b78;
+            }
+            count = count + (__inline_Array_bool__IndexValue_i32___index_value_1: block -> bool {
+                if i >= _licm_used_10 {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                } == 0);
-                i = i + 1;
-                continue l79;
-            };
+                }
+                break __inline_Array_bool__IndexValue_i32___index_value_1: builtin::array_get<bool>(_licm_repr_11, i);
+                unreachable;
+            } == 0);
+            i = i + 1;
+            continue l79;
         };
     };
     return count >= max_keys;
@@ -1001,29 +985,27 @@ fn "wado-compiler/tests/fixtures/array_index_1.wado/Node<core:prelude/string.wad
     let _licm_used_9: i32;
     let _licm_repr_10: ref builtin::array<bool>;
     count = 0;
-    __for_0: block {
-        i = 0;
-        _licm_keys_6 = self.keys;
-        _licm_deleted_7 = self.deleted;
-        _licm_used_8 = _licm_keys_6.used;
-        _licm_used_9 = _licm_deleted_7.used;
-        _licm_repr_10 = _licm_deleted_7.repr;
-        block {
-            l83: loop {
-                if i >= _licm_used_8 {
-                    break __for_0;
-                }
-                count = count + (__inline_Array_bool__IndexValue_i32___index_value_1: block -> bool {
-                    if i >= _licm_used_9 {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_bool__IndexValue_i32___index_value_1: builtin::array_get<bool>(_licm_repr_10, i);
+    i = 0;
+    _licm_keys_6 = self.keys;
+    _licm_deleted_7 = self.deleted;
+    _licm_used_8 = _licm_keys_6.used;
+    _licm_used_9 = _licm_deleted_7.used;
+    _licm_repr_10 = _licm_deleted_7.repr;
+    b82: block {
+        l83: loop {
+            if i >= _licm_used_8 {
+                break b82;
+            }
+            count = count + (__inline_Array_bool__IndexValue_i32___index_value_1: block -> bool {
+                if i >= _licm_used_9 {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                } == 0);
-                i = i + 1;
-                continue l83;
-            };
+                }
+                break __inline_Array_bool__IndexValue_i32___index_value_1: builtin::array_get<bool>(_licm_repr_10, i);
+                unreachable;
+            } == 0);
+            i = i + 1;
+            continue l83;
         };
     };
     return count;

@@ -251,46 +251,44 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {
         map = ref.cast "./sub/cross_module_treemap_variant_helper.wado//Value::Obj"(v).payload_0;
         result = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{"), used: 1 };
         entries = "core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::entries"(map);
-        __for_0: block {
-            i = 0;
-            block {
-                l2: loop {
-                    if i >= entries.used {
-                        break __for_0;
-                    }
-                    if i > 0 {
-                        result = __tmpl: block -> ref "core:prelude/string.wado//String" {
-                            __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
-                            "core:prelude/string.wado/String::push_str"(__local_9, result);
-                            "core:prelude/string.wado/String::push"(__local_9, 44);
-                            break __tmpl: __local_9;
-                            unreachable;
-                        };
-                    }
-                    __local_12 = __inline_Array_core_prelude_types_wado_Tuple_core_prelude_string_wado_String___sub_cross_module_treemap_variant_helper_wado_Value___IndexValue_i32___index_value_3: block -> ref "tuple//[String, Value]" {
-                        if i >= entries.used {
-                            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                            unreachable;
-                        }
-                        break __inline_Array_core_prelude_types_wado_Tuple_core_prelude_string_wado_String___sub_cross_module_treemap_variant_helper_wado_Value___IndexValue_i32___index_value_3: builtin::array_get<ref "tuple//[String, Value]">(entries.repr, i);
-                        unreachable;
-                    };
-                    key = __local_12.0;
-                    val = struct.new "core:prelude/types.wado//Box<Value>" { value: __local_12.1 };
+        i = 0;
+        b1: block {
+            l2: loop {
+                if i >= entries.used {
+                    break b1;
+                }
+                if i > 0 {
                     result = __tmpl: block -> ref "core:prelude/string.wado//String" {
-                        __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(51), used: 0 };
-                        "core:prelude/string.wado/String::push_str"(__local_10, result);
-                        "core:prelude/string.wado/String::push"(__local_10, 34);
-                        "core:prelude/string.wado/String::push_str"(__local_10, key);
-                        "core:prelude/string.wado/String::push"(__local_10, 34);
-                        "core:prelude/string.wado/String::push"(__local_10, 58);
-                        "core:prelude/string.wado/String::push_str"(__local_10, "./sub/cross_module_treemap_variant_helper.wado/stringify"(val.value));
-                        break __tmpl: __local_10;
+                        __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
+                        "core:prelude/string.wado/String::push_str"(__local_9, result);
+                        "core:prelude/string.wado/String::push"(__local_9, 44);
+                        break __tmpl: __local_9;
                         unreachable;
                     };
-                    i = i + 1;
-                    continue l2;
+                }
+                __local_12 = __inline_Array_core_prelude_types_wado_Tuple_core_prelude_string_wado_String___sub_cross_module_treemap_variant_helper_wado_Value___IndexValue_i32___index_value_3: block -> ref "tuple//[String, Value]" {
+                    if i >= entries.used {
+                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    }
+                    break __inline_Array_core_prelude_types_wado_Tuple_core_prelude_string_wado_String___sub_cross_module_treemap_variant_helper_wado_Value___IndexValue_i32___index_value_3: builtin::array_get<ref "tuple//[String, Value]">(entries.repr, i);
+                    unreachable;
                 };
+                key = __local_12.0;
+                val = struct.new "core:prelude/types.wado//Box<Value>" { value: __local_12.1 };
+                result = __tmpl: block -> ref "core:prelude/string.wado//String" {
+                    __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(51), used: 0 };
+                    "core:prelude/string.wado/String::push_str"(__local_10, result);
+                    "core:prelude/string.wado/String::push"(__local_10, 34);
+                    "core:prelude/string.wado/String::push_str"(__local_10, key);
+                    "core:prelude/string.wado/String::push"(__local_10, 34);
+                    "core:prelude/string.wado/String::push"(__local_10, 58);
+                    "core:prelude/string.wado/String::push_str"(__local_10, "./sub/cross_module_treemap_variant_helper.wado/stringify"(val.value));
+                    break __tmpl: __local_10;
+                    unreachable;
+                };
+                i = i + 1;
+                continue l2;
             };
         };
         __tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -334,17 +332,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l8: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l8;
-            };
+    i = 0;
+    b7: block {
+        l8: loop {
+            if i >= len {
+                break b7;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l8;
         };
     };
 }
@@ -460,19 +456,17 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l16: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
-                    return 0;
-                }
-                i = i + 1;
-                continue l16;
-            };
+    i = 0;
+    b15: block {
+        l16: loop {
+            if i >= len {
+                break b15;
+            }
+            if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
+                return 0;
+            }
+            i = i + 1;
+            continue l16;
         };
     };
     return 1;
@@ -492,24 +486,22 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
     min_len = select i32(len_a < len_b, len_a, len_b);
     a_repr = self.repr;
     b_repr = other.repr;
-    __for_2: block {
-        i = 0;
-        block {
-            l20: loop {
-                if i >= min_len {
-                    break __for_2;
-                }
-                a_byte = builtin::array_get_u8(a_repr, i);
-                b_byte = builtin::array_get_u8(b_repr, i);
-                if a_byte <u b_byte {
-                    return 0;
-                }
-                if a_byte >u b_byte {
-                    return 2;
-                }
-                i = i + 1;
-                continue l20;
-            };
+    i = 0;
+    b19: block {
+        l20: loop {
+            if i >= min_len {
+                break b19;
+            }
+            a_byte = builtin::array_get_u8(a_repr, i);
+            b_byte = builtin::array_get_u8(b_repr, i);
+            if a_byte <u b_byte {
+                return 0;
+            }
+            if a_byte >u b_byte {
+                return 2;
+            }
+            i = i + 1;
+            continue l20;
         };
     };
     if len_a < len_b {

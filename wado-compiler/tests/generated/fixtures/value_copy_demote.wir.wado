@@ -135,42 +135,40 @@ fn "wado-compiler/tests/fixtures/value_copy_demote.wado/distinct_count"(tokens) 
     };
     "wado-compiler/tests/fixtures/value_copy_demote.wado/Array<core:prelude/string.wado/String>::sort_by$__Closure_2"(sorted);
     n = 0;
-    __for_0: block {
-        i = 0;
-        _licm_used_14 = sorted.used;
-        _licm_repr_15 = sorted.repr;
-        block {
-            l1: loop {
-                if i >= _licm_used_14 {
-                    break __for_0;
-                }
-                if (if i == 0 -> i32 {
-                    1;
-                } else {
-                    __inline_String_Eq__eq_5: block -> bool {
-                        self_11 = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_15, i);
-                        other = __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_4: block -> ref "core:prelude/string.wado//String" {
-                            index_10 = i - 1;
-                            if index_10 >= _licm_used_14 {
-                                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                                unreachable;
-                            }
-                            break __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_4: builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_15, index_10);
+    i = 0;
+    _licm_used_14 = sorted.used;
+    _licm_repr_15 = sorted.repr;
+    b0: block {
+        l1: loop {
+            if i >= _licm_used_14 {
+                break b0;
+            }
+            if (if i == 0 -> i32 {
+                1;
+            } else {
+                __inline_String_Eq__eq_5: block -> bool {
+                    self_11 = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_15, i);
+                    other = __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_4: block -> ref "core:prelude/string.wado//String" {
+                        index_10 = i - 1;
+                        if index_10 >= _licm_used_14 {
+                            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
-                        };
-                        len_a = self_11.used;
-                        if len_a != other.used {
-                            break __inline_String_Eq__eq_5: 0;
                         }
-                        break __inline_String_Eq__eq_5: "core:prelude/string.wado/String^Eq::eq_bytes"(self_11.repr, other.repr, len_a);
+                        break __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_4: builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_15, index_10);
                         unreachable;
-                    } == 0;
-                }) {
-                    n = n + 1;
-                }
-                i = i + 1;
-                continue l1;
-            };
+                    };
+                    len_a = self_11.used;
+                    if len_a != other.used {
+                        break __inline_String_Eq__eq_5: 0;
+                    }
+                    break __inline_String_Eq__eq_5: "core:prelude/string.wado/String^Eq::eq_bytes"(self_11.repr, other.repr, len_a);
+                    unreachable;
+                } == 0;
+            }) {
+                n = n + 1;
+            }
+            i = i + 1;
+            continue l1;
         };
     };
     return n;
@@ -255,17 +253,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l11: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l11;
-            };
+    i = 0;
+    b10: block {
+        l11: loop {
+            if i >= len {
+                break b10;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l11;
         };
     };
 }
@@ -347,17 +343,15 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         return 1;
     }
     n = 0;
-    __for_1: block {
-        t = val;
-        block {
-            l17: loop {
-                if t <= 0_i64 {
-                    break __for_1;
-                }
-                n = n + 1;
-                t = t / 10_i64;
-                continue l17;
-            };
+    t = val;
+    b16: block {
+        l17: loop {
+            if t <= 0_i64 {
+                break b16;
+            }
+            n = n + 1;
+            t = t / 10_i64;
+            continue l17;
         };
     };
     return n;
@@ -370,18 +364,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
     } else {
-        __for_2: block {
-            temp = abs_val;
-            block {
-                l21: loop {
-                    if temp <= 0_i64 {
-                        break __for_2;
-                    }
-                    pos = pos - 1;
-                    builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
-                    temp = temp / 10_i64;
-                    continue l21;
-                };
+        temp = abs_val;
+        b20: block {
+            l21: loop {
+                if temp <= 0_i64 {
+                    break b20;
+                }
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                temp = temp / 10_i64;
+                continue l21;
             };
         };
     }
@@ -461,19 +453,17 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l29: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
-                    return 0;
-                }
-                i = i + 1;
-                continue l29;
-            };
+    i = 0;
+    b28: block {
+        l29: loop {
+            if i >= len {
+                break b28;
+            }
+            if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
+                return 0;
+            }
+            i = i + 1;
+            continue l29;
         };
     };
     return 1;
@@ -493,24 +483,22 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
     min_len = select i32(len_a < len_b, len_a, len_b);
     a_repr = self.repr;
     b_repr = other.repr;
-    __for_2: block {
-        i = 0;
-        block {
-            l33: loop {
-                if i >= min_len {
-                    break __for_2;
-                }
-                a_byte = builtin::array_get_u8(a_repr, i);
-                b_byte = builtin::array_get_u8(b_repr, i);
-                if a_byte <u b_byte {
-                    return 0;
-                }
-                if a_byte >u b_byte {
-                    return 2;
-                }
-                i = i + 1;
-                continue l33;
-            };
+    i = 0;
+    b32: block {
+        l33: loop {
+            if i >= min_len {
+                break b32;
+            }
+            a_byte = builtin::array_get_u8(a_repr, i);
+            b_byte = builtin::array_get_u8(b_repr, i);
+            if a_byte <u b_byte {
+                return 0;
+            }
+            if a_byte >u b_byte {
+                return 2;
+            }
+            i = i + 1;
+            continue l33;
         };
     };
     if len_a < len_b {
@@ -550,18 +538,16 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
-    __for_0: block {
-        i = 0;
-        _licm_buf_4 = self.buf;
-        block {
-            l44: loop {
-                if i >= n {
-                    break __for_0;
-                }
-                "core:prelude/string.wado/String::push"(_licm_buf_4, c);
-                i = i + 1;
-                continue l44;
-            };
+    i = 0;
+    _licm_buf_4 = self.buf;
+    b43: block {
+        l44: loop {
+            if i >= n {
+                break b43;
+            }
+            "core:prelude/string.wado/String::push"(_licm_buf_4, c);
+            i = i + 1;
+            continue l44;
         };
     };
 }
@@ -668,70 +654,64 @@ fn "wado-compiler/tests/fixtures/value_copy_demote.wado/Array<core:prelude/strin
     src = self.repr;
     buf = builtin::array_new<ref "core:prelude/string.wado//String">(n);
     width = 1;
-    __for_5: block {
-        block {
-            l65: loop {
-                if width >= n {
-                    break __for_5;
-                }
-                __for_6: block {
-                    start = 0;
-                    block {
-                        l68: loop {
-                            if start >= n {
-                                break __for_6;
-                            }
-                            mid = start + width;
-                            if mid < n {
-                                end = __inline_i32_min_0: block -> i32 {
-                                    a_14 = start + (width * 2);
-                                    break __inline_i32_min_0: select i32(a_14 < n, a_14, n);
-                                    unreachable;
-                                };
-                                i = start;
-                                j = mid;
-                                __for_7: block {
-                                    k = start;
-                                    block {
-                                        l72: loop {
-                                            if k >= end {
-                                                break __for_7;
-                                            }
-                                            if i < mid {
-                                                if j < end {
-                                                    a_11 = builtin::array_get<ref "core:prelude/string.wado//String">(src, i);
-                                                    b_12 = builtin::array_get<ref "core:prelude/string.wado//String">(src, j);
-                                                    __match_14 = "core:prelude/string.wado/String^Ord::cmp"(a_11, b_12);
-                                                    if __match_14 == 2 {
-                                                        builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, b_12);
-                                                        j = j + 1;
-                                                    } else {
-                                                        builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, a_11);
-                                                        i = i + 1;
-                                                    }
-                                                } else {
-                                                    builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, builtin::array_get<ref "core:prelude/string.wado//String">(src, i));
-                                                    i = i + 1;
-                                                }
-                                            } else {
-                                                builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, builtin::array_get<ref "core:prelude/string.wado//String">(src, j));
-                                                j = j + 1;
-                                            }
-                                            k = k + 1;
-                                            continue l72;
-                                        };
-                                    };
-                                };
-                                builtin::array_copy<ref "core:prelude/string.wado//String">(src, start, buf, start, end - start);
-                            }
-                            start = start + (width * 2);
-                            continue l68;
+    b64: block {
+        l65: loop {
+            if width >= n {
+                break b64;
+            }
+            start = 0;
+            b67: block {
+                l68: loop {
+                    if start >= n {
+                        break b67;
+                    }
+                    mid = start + width;
+                    if mid < n {
+                        end = __inline_i32_min_0: block -> i32 {
+                            a_14 = start + (width * 2);
+                            break __inline_i32_min_0: select i32(a_14 < n, a_14, n);
+                            unreachable;
                         };
-                    };
+                        i = start;
+                        j = mid;
+                        k = start;
+                        b71: block {
+                            l72: loop {
+                                if k >= end {
+                                    break b71;
+                                }
+                                if i < mid {
+                                    if j < end {
+                                        a_11 = builtin::array_get<ref "core:prelude/string.wado//String">(src, i);
+                                        b_12 = builtin::array_get<ref "core:prelude/string.wado//String">(src, j);
+                                        __match_14 = "core:prelude/string.wado/String^Ord::cmp"(a_11, b_12);
+                                        if __match_14 == 2 {
+                                            builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, b_12);
+                                            j = j + 1;
+                                        } else {
+                                            builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, a_11);
+                                            i = i + 1;
+                                        }
+                                    } else {
+                                        builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, builtin::array_get<ref "core:prelude/string.wado//String">(src, i));
+                                        i = i + 1;
+                                    }
+                                } else {
+                                    builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, builtin::array_get<ref "core:prelude/string.wado//String">(src, j));
+                                    j = j + 1;
+                                }
+                                k = k + 1;
+                                continue l72;
+                            };
+                        };
+                        builtin::array_copy<ref "core:prelude/string.wado//String">(src, start, buf, start, end - start);
+                    }
+                    start = start + (width * 2);
+                    continue l68;
                 };
-                width = width * 2;
-                continue l65;
             };
+            width = width * 2;
+            continue l65;
         };
     };
 }

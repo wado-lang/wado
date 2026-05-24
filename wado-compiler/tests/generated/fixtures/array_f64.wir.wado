@@ -267,17 +267,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l7: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l7;
-            };
+    i = 0;
+    b6: block {
+        l7: loop {
+            if i >= len {
+                break b6;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l7;
         };
     };
 }
@@ -1448,20 +1446,18 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
                 continue l147;
             };
         };
-        __for_1: block {
-            j_9 = 0;
-            _licm_buf_30 = self.buf;
-            _licm_repr_34 = _licm_buf_30.repr;
-            block {
-                l150: loop {
-                    if j_9 >= left_pad {
-                        break __for_1;
-                    }
-                    index_19 = start_pos + j_9;
-                    builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
-                    j_9 = j_9 + 1;
-                    continue l150;
-                };
+        j_9 = 0;
+        _licm_buf_30 = self.buf;
+        _licm_repr_34 = _licm_buf_30.repr;
+        b149: block {
+            l150: loop {
+                if j_9 >= left_pad {
+                    break b149;
+                }
+                index_19 = start_pos + j_9;
+                builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
+                j_9 = j_9 + 1;
+                continue l150;
             };
         };
         "core:prelude/string.wado/String::append_byte_filled"(self.buf, fill_byte, right_pad);
@@ -1486,20 +1482,18 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
                 continue l153;
             };
         };
-        __for_2: block {
-            j_11 = 0;
-            _licm_buf_32 = self.buf;
-            _licm_repr_36 = _licm_buf_32.repr;
-            block {
-                l156: loop {
-                    if j_11 >= padding {
-                        break __for_2;
-                    }
-                    index_27 = start_pos + j_11;
-                    builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
-                    j_11 = j_11 + 1;
-                    continue l156;
-                };
+        j_11 = 0;
+        _licm_buf_32 = self.buf;
+        _licm_repr_36 = _licm_buf_32.repr;
+        b155: block {
+            l156: loop {
+                if j_11 >= padding {
+                    break b155;
+                }
+                index_27 = start_pos + j_11;
+                builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
+                j_11 = j_11 + 1;
+                continue l156;
             };
         };
     }

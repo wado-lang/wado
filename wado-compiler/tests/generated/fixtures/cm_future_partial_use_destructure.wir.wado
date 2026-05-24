@@ -781,17 +781,15 @@ fn "wado-compiler/tests/fixtures/cm_future_partial_use_destructure.wado/__cm_exp
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l64: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l64;
-            };
+    i = 0;
+    b63: block {
+        l64: loop {
+            if i >= len {
+                break b63;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l64;
         };
     };
 }

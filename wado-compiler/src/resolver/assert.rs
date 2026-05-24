@@ -151,7 +151,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let cond_ref = TirExpr::new(
             TirExprKind::Local {
                 index: cond_local_index,
-                name: cond_name.clone(),
+                name: cond_name,
             },
             cond_type,
             span,
