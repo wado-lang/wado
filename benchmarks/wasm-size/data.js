@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779663887730,
+  "lastUpdate": 1779664655418,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25763,6 +25763,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "pi_approx",
             "value": 9805,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17192,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 465275,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d4d40f1eae05486f6c196586c61266baf425ce04",
+          "message": "Merge pull request #1188 from wado-lang/claude/optimizer-benchmark-fpfmt-HiAoL\n\nperf(optimizer): niri bool/match collapses + select_lowering on leaf-pure arms",
+          "timestamp": "2026-05-25T08:10:27+09:00",
+          "tree_id": "ff58173873cfecbe3640070e2ebbad273d60afb0",
+          "url": "https://github.com/wado-lang/wado/commit/d4d40f1eae05486f6c196586c61266baf425ce04"
+        },
+        "date": 1779664654929,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9754,
             "unit": "bytes"
           },
           {
