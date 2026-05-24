@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.0.5](https://github.com/wado-lang/wado/compare/v0.0.4...v0.0.5) - 2026-05-23
+
+- Fix SROA regression on pattern-destructured bindings (#1158 follow-up) by @gfx in https://github.com/wado-lang/wado/pull/1159
+- refactor(stdlib): replace manual element-copy loops with builtin::array_copy by @gfx in https://github.com/wado-lang/wado/pull/1161
+- ci(release): rename assets to `<os>-<arch>` matching `uname` output by @gfx in https://github.com/wado-lang/wado/pull/1164
+
+## [v0.0.4](https://github.com/wado-lang/wado/compare/v0.0.3...v0.0.4) - 2026-05-23
+
+- fix: create tagpr release as draft so release.yml can upload assets by @gfx in https://github.com/wado-lang/wado/pull/1156
+- NIR WEP Step 5: lower's body rewrites move into the TIR→NIR fold by @gfx in https://github.com/wado-lang/wado/pull/1158
+
 ## [v0.0.3](https://github.com/wado-lang/wado/compare/v0.0.2...v0.0.3) - 2026-05-23
 
 - refactor(name): split interning and `ModuleSource` out of `name.rs` by @gfx in https://github.com/wado-lang/wado/pull/1045

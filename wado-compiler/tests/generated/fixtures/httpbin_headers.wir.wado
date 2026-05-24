@@ -5424,16 +5424,16 @@ fn "core:prelude/string.wado/StrSplitIter^Iterator::next"(self) {
                 break b540;
             }
             matched = 1;
-            __for_13: block {
+            __for_12: block {
                 j = 0;
                 block {
                     l544: loop {
                         if j >= _licm_sep_len_13 {
-                            break __for_13;
+                            break __for_12;
                         }
                         if builtin::array_get_u8(_licm_repr_14, i + j) != builtin::array_get_u8(_licm_sep_repr_15, j) {
                             matched = 0;
-                            break __for_13;
+                            break __for_12;
                         }
                         j = j + 1;
                         continue l544;
@@ -6535,9 +6535,6 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<u8>;
-    let old_repr: ref builtin::array<u8>;
-    let used: i32;
-    let i: i32;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
@@ -6546,21 +6543,7 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
         unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l724: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
-                i = i + 1;
-                continue l724;
-            };
-        };
-    };
+    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -6605,8 +6588,8 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:json_value/Val
     _licm_used_17 = _licm_entries_14.used;
     _licm_repr_18 = _licm_entries_14.repr;
     _licm_used_23 = key.used;
-    b728: block {
-        l729: loop {
+    b725: block {
+        l726: loop {
             let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
             __match_scrut_0 = current;
             if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) {
@@ -6646,9 +6629,9 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:json_value/Val
                     current = n.right;
                 }
             } else {
-                break b728;
+                break b725;
             }
-            continue l729;
+            continue l726;
         };
     };
     return -1;
@@ -6658,9 +6641,6 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/str
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>>";
-    let old_repr: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/array.wado/Array<u8>>>";
-    let used: i32;
-    let i: i32;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
@@ -6669,21 +6649,7 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/str
         unreachable;
     };
     new_repr = builtin::array_new<ref "tuple//[String, Array<u8>]">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l738: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "tuple//[String, Array<u8>]">(new_repr, i, builtin::array_get<ref "tuple//[String, Array<u8>]">(old_repr, i));
-                i = i + 1;
-                continue l738;
-            };
-        };
-    };
+    builtin::array_copy<ref "tuple//[String, Array<u8>]">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -6691,9 +6657,6 @@ fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::grow"(self
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:prelude/array.wado/Array<u8>>";
-    let old_repr: ref "builtin::array<core:prelude/array.wado/Array<u8>>";
-    let used: i32;
-    let i: i32;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
@@ -6702,21 +6665,7 @@ fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::grow"(self
         unreachable;
     };
     new_repr = builtin::array_new<ref "core:prelude//Array<u8>">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l741: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "core:prelude//Array<u8>">(new_repr, i, builtin::array_get<ref "core:prelude//Array<u8>">(old_repr, i));
-                i = i + 1;
-                continue l741;
-            };
-        };
-    };
+    builtin::array_copy<ref "core:prelude//Array<u8>">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -6724,9 +6673,6 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/str
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:json_value/Value>>";
-    let old_repr: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:json_value/Value>>";
-    let used: i32;
-    let i: i32;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
@@ -6735,21 +6681,7 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/str
         unreachable;
     };
     new_repr = builtin::array_new<ref "tuple//[String, Value]">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l744: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "tuple//[String, Value]">(new_repr, i, builtin::array_get<ref "tuple//[String, Value]">(old_repr, i));
-                i = i + 1;
-                continue l744;
-            };
-        };
-    };
+    builtin::array_copy<ref "tuple//[String, Value]">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -6910,9 +6842,6 @@ fn "core:prelude/array.wado/Array<core:collections/TreeMapEntry<core:prelude/str
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:json_value/Value>>";
-    let old_repr: ref "builtin::array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:json_value/Value>>";
-    let used: i32;
-    let i: i32;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
@@ -6921,21 +6850,7 @@ fn "core:prelude/array.wado/Array<core:collections/TreeMapEntry<core:prelude/str
         unreachable;
     };
     new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:json_value/Value>">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l762: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:json_value/Value>">(new_repr, i, builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:json_value/Value>">(old_repr, i));
-                i = i + 1;
-                continue l762;
-            };
-        };
-    };
+    builtin::array_copy<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:json_value/Value>">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -7110,9 +7025,6 @@ fn "core:prelude/array.wado/Array<core:collections/TreeMapNode<core:prelude/stri
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
-    let old_repr: ref "builtin::array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
-    let used: i32;
-    let i: i32;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
@@ -7121,21 +7033,7 @@ fn "core:prelude/array.wado/Array<core:collections/TreeMapNode<core:prelude/stri
         unreachable;
     };
     new_repr = builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l788: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(new_repr, i, builtin::array_get<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(old_repr, i));
-                i = i + 1;
-                continue l788;
-            };
-        };
-    };
+    builtin::array_copy<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 

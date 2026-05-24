@@ -723,9 +723,6 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>";
-    let old_repr: ref "builtin::array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>";
-    let used: i32;
-    let i: i32;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
@@ -734,21 +731,7 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/
         unreachable;
     };
     new_repr = builtin::array_new<ref "tuple//[Descriptor, String]">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l66: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<ref "tuple//[Descriptor, String]">(new_repr, i, builtin::array_get<ref "tuple//[Descriptor, String]">(old_repr, i));
-                i = i + 1;
-                continue l66;
-            };
-        };
-    };
+    builtin::array_copy<ref "tuple//[Descriptor, String]">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 

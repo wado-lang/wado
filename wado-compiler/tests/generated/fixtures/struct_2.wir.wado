@@ -420,8 +420,6 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_nested"() with Stdout {
 fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_rename"() with Stdout {
     let x: i32;
     let vertical2: i32;
-    let person: ref "wado-compiler/tests/fixtures/struct_2.wado//SDPerson";
-    let n: ref "core:prelude/string.wado//String";
     let a: i32;
     let b: i32;
     let __local_9: ref "core:prelude/string.wado//String";
@@ -436,6 +434,7 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_rename"() with Stdout {
     let f_38: ref "core:prelude/format.wado//Formatter";
     let f_44: ref "core:prelude/format.wado//Formatter";
     let f_49: ref "core:prelude/format.wado//Formatter";
+    let __sroa_person_name: ref "core:prelude/string.wado//String";
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
         __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
@@ -464,9 +463,8 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_rename"() with Stdout {
         break __tmpl: __local_11;
         unreachable;
     });
-    person = struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPerson" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, email: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alice@example.com"), used: 17 } };
-    n = person.name;
-    "core:cli/println"(n);
+    __sroa_person_name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
+    "core:cli/println"(__sroa_person_name);
     a = 10;
     b = 20;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -485,7 +483,6 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_rename"() with Stdout {
 }
 
 fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_wildcard"() with Stdout {
-    let y: i32;
     let person: ref "wado-compiler/tests/fixtures/struct_2.wado//SDPerson";
     let name: ref "core:prelude/string.wado//String";
     let age: i32;
@@ -502,11 +499,10 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_wildcard"() with Stdout 
         break __tmpl: __local_6;
         unreachable;
     });
-    y = 20;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(y, __local_9);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(20, __local_9);
         break __tmpl: __local_8;
         unreachable;
     });

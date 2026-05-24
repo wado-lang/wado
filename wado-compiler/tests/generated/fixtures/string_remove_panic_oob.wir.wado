@@ -399,7 +399,7 @@ fn "core:prelude/string.wado/String::remove"(self, byte_index) {
             "core:prelude/string.wado/String::push"(__local_9, 58);
             __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
             f_16 = __local_10;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(924, f_16);
+            "core:prelude/primitive.wado/i32::fmt_decimal"(910, f_16);
             "core:prelude/string.wado/String::push"(__local_9, 58);
             "core:prelude/string.wado/String::push"(__local_9, 32);
             "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -453,7 +453,7 @@ condition: byte_index >= 0 && byte_index < self.used
             "core:prelude/string.wado/String::push"(__local_11, 58);
             __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
             f_42 = __local_12;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(925, f_42);
+            "core:prelude/primitive.wado/i32::fmt_decimal"(911, f_42);
             "core:prelude/string.wado/String::push"(__local_11, 58);
             "core:prelude/string.wado/String::push"(__local_11, 32);
             "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("remove index not on UTF-8 character boundary"), used: 44 });
@@ -487,10 +487,6 @@ fn "core:prelude/string.wado/String::remove_unchecked"(self, byte_index) {
     let b2_8: u32;
     let b3: u32;
     let code: u32;
-    let src: i32;
-    let i: i32;
-    let _licm_used_14: i32;
-    let _licm_repr_15: ref builtin::array<u8>;
     b0 = builtin::array_get_u8(self.repr, byte_index);
     char_len = (if b0 <u 128 -> i32 {
         1;
@@ -514,22 +510,7 @@ fn "core:prelude/string.wado/String::remove_unchecked"(self, byte_index) {
         b3 = builtin::array_get_u8(self.repr, byte_index + 3);
         ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
     });
-    src = byte_index + char_len;
-    __for_10: block {
-        i = src;
-        _licm_used_14 = self.used;
-        _licm_repr_15 = self.repr;
-        block {
-            l39: loop {
-                if i >= _licm_used_14 {
-                    break __for_10;
-                }
-                builtin::array_set_u8(_licm_repr_15, i - char_len, builtin::array_get_u8(_licm_repr_15, i));
-                i = i + 1;
-                continue l39;
-            };
-        };
-    };
+    builtin::array_copy<u8>(self.repr, byte_index, self.repr, byte_index + char_len, (self.used - byte_index) - char_len);
     self.used = self.used - char_len;
     return code;
 }
@@ -541,13 +522,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l42: loop {
+            l39: loop {
                 if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l42;
+                continue l39;
             };
         };
     };

@@ -766,40 +766,23 @@ fn "core:prelude/array.wado/Array<u8>::grow_to"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<u8>;
-    let old_repr: ref builtin::array<u8>;
-    let used: i32;
-    let i: i32;
-    let a_8: i32;
-    let a_10: i32;
+    let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
     new_capacity = __inline_i32_max_0: block -> i32 {
-        a_8 = __inline_i32_max_1: block -> i32 {
-            a_10 = capacity * 2;
-            break __inline_i32_max_1: select i32(a_10 > min_capacity, a_10, min_capacity);
+        a_5 = __inline_i32_max_1: block -> i32 {
+            a_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
             unreachable;
         };
-        break __inline_i32_max_0: select i32(a_8 > 4, a_8, 4);
+        break __inline_i32_max_0: select i32(a_5 > 4, a_5, 4);
         unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_1: block {
-        i = 0;
-        block {
-            l66: loop {
-                if i >= used {
-                    break __for_1;
-                }
-                builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
-                i = i + 1;
-                continue l66;
-            };
-        };
-    };
+    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 

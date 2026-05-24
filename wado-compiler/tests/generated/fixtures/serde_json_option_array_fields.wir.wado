@@ -3747,9 +3747,6 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<i32>;
-    let old_repr: ref builtin::array<i32>;
-    let used: i32;
-    let i: i32;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     new_capacity = __inline_i32_max_0: block -> i32 {
@@ -3758,21 +3755,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
         unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l408: loop {
-                if i >= used {
-                    break __for_0;
-                }
-                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
-                i = i + 1;
-                continue l408;
-            };
-        };
-    };
+    builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -3801,8 +3784,8 @@ fn "core:serde/Array<i32>^Serialize::serialize<core:json/JsonSerializer>"(self, 
         break __inline__i32_IntoIterator__into_iter_2: struct.new "core:prelude/array.wado//ArrayRefIter<i32>" { repr: self.repr, used: self.used, index: 0 };
         unreachable;
     };
-    b411: block {
-        l412: loop {
+    b408: block {
+        l409: loop {
             __match_9 = "core:prelude/array.wado/ArrayRefIter<i32>^Iterator::next"(__iter_5);
             if ref.is_null(__match_9) == 0 {
                 item = ref.as_non_null(__match_9);
@@ -3813,9 +3796,9 @@ fn "core:serde/Array<i32>^Serialize::serialize<core:json/JsonSerializer>"(self, 
                     return __qm_e_8;
                 }
             } else {
-                break b411;
+                break b408;
             }
-            continue l412;
+            continue l409;
         };
     };
     return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref null "core:serde//SerializeError" {
@@ -3906,7 +3889,7 @@ fn "core:serde/Array<i32>^Deserialize::deserialize<core:json/JsonDeserializer>"(
         items = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(2), used: 0 };
         "core:prelude/array.wado/Array<i32>::push"(items, first_elem);
         block {
-            l423: loop {
+            l420: loop {
                 let __match_scrut_5: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:serde/DeserializeError>";
                 __match_scrut_5 = "core:json/JsonSeqAccess^DeserializeSeq::next_element<i32>"(seq);
                 next_opt = (if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:serde/DeserializeError>::Ok"(__match_scrut_5) -> ref "core:prelude/types.wado//Option<i32>" {
@@ -3928,7 +3911,7 @@ fn "core:serde/Array<i32>^Deserialize::deserialize<core:json/JsonDeserializer>"(
                     }
                     return 0, items, ref.null none;
                 }
-                continue l423;
+                continue l420;
             };
         };
     } else {
