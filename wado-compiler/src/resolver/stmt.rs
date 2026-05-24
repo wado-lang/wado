@@ -2544,7 +2544,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// nothing to do with it. The pre-refactor implementation wrapped the
     /// already-enumerated AST in a second `.enumerate()`, producing
     /// `IterEnumerate<IterEnumerate<…>>` and ICE-ing at codegen with
-    /// "unsubstituted AssocTypeProjection `Item` reached codegen" — see
+    /// "unsubstituted `AssocTypeProjection` `Item` reached codegen" — see
     /// `tests/fixtures/for_of_iterator_enumerate.wado`.)
     fn resolve_iterator_for_of(
         &mut self,
@@ -2677,13 +2677,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         ctx.enter_scope();
-        let binding_pattern = self.resolve_if_pattern_inner(
-            &for_of.binding,
-            item_type,
-            ctx,
-            span,
-            RefBinding::None,
-        );
+        let binding_pattern =
+            self.resolve_if_pattern_inner(&for_of.binding, item_type, ctx, span, RefBinding::None);
         let body_block = self.resolve_block(&for_of.body, ctx, None);
         ctx.exit_scope();
 
