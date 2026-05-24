@@ -115,10 +115,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             inner_stmts.extend(walker.emitted_lets);
             (cond_tir, emitted)
         };
-        let captures_for_message: Vec<&Capture> = emitted_indexes
-            .iter()
-            .map(|&idx| &captures[idx])
-            .collect();
+        let captures_for_message: Vec<&Capture> =
+            emitted_indexes.iter().map(|&idx| &captures[idx]).collect();
 
         // `let __cond = <cond_tir>;`
         let cond_type = cond_tir.type_id;
@@ -142,8 +140,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // symbol-pollution concern above does not apply; the standard
         // ident lookup of `__cond` and the template-string + `panic`
         // resolution paths take over.
-        let panic_message =
-            build_panic_message(assert_stmt, &captures_for_message, synth_id, span);
+        let panic_message = build_panic_message(assert_stmt, &captures_for_message, synth_id, span);
         let panic_call = Expr::Call(Box::new(CallExpr {
             id: synth_id,
             callee: Expr::Ident(IdentExpr {
