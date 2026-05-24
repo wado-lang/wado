@@ -2115,11 +2115,16 @@ fn try_match_bool_discriminator(arms: &[NirMatchArm]) -> Option<EnumEqReplacemen
     else {
         return None;
     };
+    // Anchor the synthesised `EnumConstruct`'s span on the whole arm
+    // (which covers the pattern that names the case) rather than the
+    // arm's body span (which would point at the `true` literal — a
+    // location with no relation to the case name the construct now
+    // stands in for).
     Some(EnumEqReplacement {
         enum_type: *enum_type,
         case_index: *case_index,
         case_name: case_name.clone(),
-        span: yes_arm.body.span,
+        span: yes_arm.span,
     })
 }
 
