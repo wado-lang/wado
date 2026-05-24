@@ -47,13 +47,13 @@
 //! …;` value, and nodes that evaporate during resolution simply never
 //! trigger the hook.
 
-use crate::ast::{
-    self, AssertStmt, AstId, Block, CallExpr, Condition, Expr, ExprStmt, FormatSpec, IdentExpr,
-    IfStmt, Literal, LiteralExpr, TemplatePart, TemplateStringExpr, UnaryExpr, UnaryOp,
-};
+use crate::ast::{AssertStmt, AstId, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeId};
+use crate::tir::{
+    CallArg, FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirTemplatePart,
+    TirUnaryOp, TypeId, TypeTable,
+};
 use crate::unparse::unparse_expr_simple;
 
 use super::Resolver;
@@ -68,13 +68,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
         let span = assert_stmt.span;
-
-        // Every scaffold node this expansion creates shares
-        // `AstId::SYNTHETIC`. The sentinel is outside any parser
-        // allocation range (`u32::MAX`), so it can never be returned by
-        // `AstIndex::ast_id_at`; collisions inside the resolver's
-        // record maps are therefore unreachable from any LSP query.
-        let synth_id = AstId::SYNTHETIC;
 
         // Phase 1: read-only AST scan to decide captures.
         let mut scanner = CaptureScanner::new();
@@ -142,61 +135,49 @@ impl<H: CompilerHost> Resolver<'_, H> {
             span,
         ));
 
-        // `if !__cond { panic(<template>); }` — synthesised as AST and
-        // routed through `resolve_stmt`. No `let` lives inside, so the
-        // symbol-pollution concern above does not apply; the standard
-        // ident lookup of `__cond` and the template-string + `panic`
-        // resolution paths take over.
+        // `if !__cond { panic(<template>); }` — built TIR-direct.
         //
-        // Only slots whose hook fired contribute lines to the failure
-        // message — a slot stays `emitted == false` when its AST node
-        // evaporates during resolution (e.g. reflexive
-        // `T::from(T_val)` returns its argument directly, so the outer
-        // `Call` is never resolved as a node and `resolve_expr` is
-        // never called on its `AstId`). The corresponding `__vK` would
-        // be unbound and `resolve_ident` would reject the template.
-        let panic_message = build_panic_message(assert_stmt, &slots, synth_id, span);
-        let panic_call = Expr::Call(Box::new(CallExpr {
-            id: synth_id,
-            callee: Expr::Ident(IdentExpr {
-                id: synth_id,
-                name: "panic".to_string(),
-                segments: Vec::new(),
-                type_args: Vec::new(),
-                span,
-            }),
-            type_args: Vec::new(),
-            args: vec![panic_message],
-            has_trailing_comma: false,
-            span,
-        }));
-        let if_ast = ast::Stmt::If(IfStmt {
-            id: synth_id,
-            condition: Condition::Expr(Expr::Unary(Box::new(UnaryExpr {
-                id: synth_id,
-                op: UnaryOp::Not,
-                expr: Expr::Ident(IdentExpr {
-                    id: synth_id,
-                    name: cond_name,
-                    segments: Vec::new(),
-                    type_args: Vec::new(),
-                    span,
-                }),
-                span,
-            }))),
-            then_block: Block {
-                id: synth_id,
-                stmts: vec![ast::Stmt::Expr(ExprStmt {
-                    id: synth_id,
-                    expr: panic_call,
-                    span,
-                })],
-                span,
+        // The condition is `!Local(__cond)`. The panic call resolves
+        // through a hand-built `FunctionRef` to `core:internal::panic`
+        // (re-exported through `core:prelude`). The template message
+        // is constructed as `TirExprKind::TemplateString`; only slots
+        // whose capture hook fired contribute interpolation lines —
+        // a slot stays `emitted == false` when its AST node evaporates
+        // during resolution (e.g. reflexive `T::from(T_val)` returns
+        // its argument directly, so the outer `Call` is never
+        // resolved as a node and the corresponding `__vK` is never
+        // bound). Referencing such an unbound local would later panic
+        // in lowering.
+        let cond_ref = TirExpr::new(
+            TirExprKind::Local {
+                index: cond_local_index,
+                name: cond_name.clone(),
             },
-            else_block: None,
+            cond_type,
             span,
-        });
-        inner_stmts.extend(self.resolve_stmt(&if_ast, ctx));
+        );
+        let neg_cond = TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Not,
+                expr: Box::new(cond_ref),
+            },
+            TypeTable::BOOL,
+            span,
+        );
+        let template_tir = self.build_assert_panic_template(assert_stmt, &slots, ctx, span);
+        let panic_call = self.build_panic_call(template_tir, span);
+        let then_block = TirBlock::new(
+            vec![TirStmt::new(TirStmtKind::Expr(panic_call), span)],
+            span,
+        );
+        inner_stmts.push(TirStmt::new(
+            TirStmtKind::If {
+                condition: neg_cond,
+                then_block,
+                else_block: None,
+            },
+            span,
+        ));
 
         ctx.exit_scope();
 
@@ -213,6 +194,129 @@ impl<H: CompilerHost> Resolver<'_, H> {
             },
             span,
         )]
+    }
+
+    /// Build the `TirExpr::TemplateString` passed to `panic(...)`. Slots
+    /// whose capture hook never fired (their AST node evaporated during
+    /// resolution) are skipped so the message never references an
+    /// unbound `__vK`.
+    fn build_assert_panic_template(
+        &mut self,
+        assert_stmt: &AssertStmt,
+        slots: &[Capture],
+        ctx: &mut FunctionContext,
+        span: crate::token::Span,
+    ) -> TirExpr {
+        let string_type = self.get_string_struct_type();
+        let mut parts: Vec<TirTemplatePart> = Vec::new();
+
+        // "Assertion failed in <#function> at <#file>:<#line>[: <msg>]\n"
+        parts.push(TirTemplatePart::Literal("Assertion failed in ".to_string()));
+        parts.push(TirTemplatePart::Interpolation {
+            expr: Box::new(TirExpr::new(
+                TirExprKind::StringLiteral(ctx.function_name.clone()),
+                string_type,
+                span,
+            )),
+            format_spec: None,
+        });
+        parts.push(TirTemplatePart::Literal(" at ".to_string()));
+        parts.push(TirTemplatePart::Interpolation {
+            expr: Box::new(TirExpr::new(
+                TirExprKind::StringLiteral(self.current_module_source.to_string()),
+                string_type,
+                span,
+            )),
+            format_spec: None,
+        });
+        parts.push(TirTemplatePart::Literal(":".to_string()));
+        let line = span.line as u64;
+        parts.push(TirTemplatePart::Interpolation {
+            expr: Box::new(TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: line,
+                    repr: line.to_string(),
+                },
+                TypeTable::I32,
+                span,
+            )),
+            format_spec: None,
+        });
+        if let Some(msg) = &assert_stmt.message {
+            parts.push(TirTemplatePart::Literal(": ".to_string()));
+            let msg_tir = self.resolve_expr(msg, ctx, None);
+            parts.push(TirTemplatePart::Interpolation {
+                expr: Box::new(msg_tir),
+                format_spec: None,
+            });
+        }
+
+        // The condition reaches `desugar_assert` unmodified, so its
+        // printout reads in the user's words (`s matches { p }`,
+        // `a < b < c`, …) rather than the resolver-internal expansion.
+        let condition_source = unparse_expr_simple(&assert_stmt.condition);
+        parts.push(TirTemplatePart::Literal(format!(
+            "\ncondition: {condition_source}\n"
+        )));
+
+        for cap in slots {
+            if !cap.emitted {
+                continue;
+            }
+            parts.push(TirTemplatePart::Literal(format!("{}: ", cap.source)));
+            // Look up the __vK local that the capture hook bound earlier;
+            // both the index and the type come from `ctx.lookup` so we
+            // don't have to thread them through `Capture`.
+            let lv = ctx
+                .lookup(&cap.name)
+                .expect("__vK local must be live while building the assert template");
+            let local_ref = TirExpr::new(
+                TirExprKind::Local {
+                    index: lv.index,
+                    name: cap.name.clone(),
+                },
+                lv.type_id,
+                span,
+            );
+            parts.push(TirTemplatePart::Interpolation {
+                expr: Box::new(local_ref),
+                format_spec: Some(crate::tir::TemplateFormatSpec {
+                    fill: None,
+                    align: None,
+                    sign_plus: false,
+                    alternate: false,
+                    zero_pad: false,
+                    width: None,
+                    precision: None,
+                    type_char: Some('?'),
+                }),
+            });
+            parts.push(TirTemplatePart::Literal("\n".to_string()));
+        }
+
+        TirExpr::new(TirExprKind::TemplateString { parts }, string_type, span)
+    }
+
+    /// Build a TIR-direct call to `core:internal::panic(message)`. The
+    /// `FunctionRef` is hand-constructed against the known canonical
+    /// definition rather than re-routing through `resolve_call` (which
+    /// would need an AST identifier and the prelude re-export plumbing).
+    fn build_panic_call(&mut self, message: TirExpr, span: crate::token::Span) -> TirExpr {
+        let module_source = self.interner.borrow_mut().core("internal");
+        TirExpr::new(
+            TirExprKind::Call {
+                func: FunctionRef {
+                    module_source,
+                    name: "panic".to_string(),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: Vec::new(),
+                args: vec![CallArg::new(message, false)],
+            },
+            TypeTable::NEVER,
+            span,
+        )
     }
 
     /// Handle a `resolve_expr` call whose `Expr` was flagged for
@@ -258,9 +362,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .name
             .clone();
 
-        // `add_local` receives `defining_ast_id = None` so the synthetic
-        // locals do not leak into `local_symbols` (which would key on
-        // `synth_id` and shadow other entries via LSP queries).
+        // `defining_ast_id = None` so the synthetic `__vK` locals do not
+        // enter `local_symbols` and pollute LSP hover / go-to-def lookups.
         let local_index = ctx.add_local(cap_name.clone(), type_id, false, None);
 
         let cap_ctx = ctx
@@ -486,82 +589,4 @@ impl CaptureScanner {
             _ => {}
         }
     }
-}
-
-/// Build the template-string expression passed to `panic(...)`. Slots
-/// whose hook never fired (their AST node evaporated during resolution)
-/// are skipped so the message never references an unbound `__vK`.
-fn build_panic_message(
-    assert_stmt: &AssertStmt,
-    slots: &[Capture],
-    synth_id: AstId,
-    span: crate::token::Span,
-) -> Expr {
-    let mut parts: Vec<TemplatePart> = Vec::new();
-
-    let make_loc = |value: Literal| {
-        Expr::Literal(LiteralExpr {
-            id: synth_id,
-            value,
-            span,
-        })
-    };
-
-    // "Assertion failed in <#function> at <#file>:<#line>[: <msg>]"
-    parts.push(TemplatePart::String("Assertion failed in ".to_string()));
-    parts.push(TemplatePart::Interpolation {
-        expr: Box::new(make_loc(Literal::LocationFunction)),
-        format: None,
-    });
-    parts.push(TemplatePart::String(" at ".to_string()));
-    parts.push(TemplatePart::Interpolation {
-        expr: Box::new(make_loc(Literal::LocationFile)),
-        format: None,
-    });
-    parts.push(TemplatePart::String(":".to_string()));
-    parts.push(TemplatePart::Interpolation {
-        expr: Box::new(make_loc(Literal::LocationLine)),
-        format: None,
-    });
-    if let Some(msg) = &assert_stmt.message {
-        parts.push(TemplatePart::String(": ".to_string()));
-        parts.push(TemplatePart::Interpolation {
-            expr: Box::new(msg.clone()),
-            format: None,
-        });
-    }
-
-    // The condition reaches `desugar_assert` unmodified, so its
-    // printout reads in the user's words (`s matches { p }`,
-    // `a < b < c`, …) rather than the resolver-internal expansion.
-    let condition_source = unparse_expr_simple(&assert_stmt.condition);
-    parts.push(TemplatePart::String(format!(
-        "\ncondition: {condition_source}\n"
-    )));
-
-    for cap in slots {
-        if !cap.emitted {
-            continue;
-        }
-        parts.push(TemplatePart::String(format!("{}: ", cap.source)));
-        parts.push(TemplatePart::Interpolation {
-            expr: Box::new(Expr::Ident(IdentExpr {
-                id: synth_id,
-                name: cap.name.clone(),
-                segments: Vec::new(),
-                type_args: Vec::new(),
-                span,
-            })),
-            format: Some(FormatSpec {
-                spec: "?".to_string(),
-            }),
-        });
-        parts.push(TemplatePart::String("\n".to_string()));
-    }
-
-    Expr::TemplateString(Box::new(TemplateStringExpr {
-        id: synth_id,
-        parts,
-        span,
-    }))
 }

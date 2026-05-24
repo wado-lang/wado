@@ -15,24 +15,6 @@ use crate::token::Span;
 pub struct AstId(pub u32);
 
 impl AstId {
-    /// Sentinel id for AST nodes that the resolver synthesises while
-    /// expanding constructs like `assert`, `matches`, or comparison
-    /// chains. Those expansions build short-lived AST scaffolds whose
-    /// only consumer is the resolver itself; the scaffold nodes never
-    /// enter the parsed [`Module`] tree, so they have no LSP-visible
-    /// source position to carry.
-    ///
-    /// `u32::MAX` is outside any parser allocation range (parsers count
-    /// from `0`), and [`crate::ast_index::AstIndex`] is built purely
-    /// from the parser-visited node ids, so the sentinel can never be
-    /// returned by `Annotated::ast_id_at` and cannot be reached through
-    /// the LSP cursor → key → record-map lookup path. Hash collisions
-    /// on `(ModuleSource, AstId::SYNTHETIC)` inside
-    /// `references` / `local_symbols` are therefore unobservable from
-    /// any LSP query and form the load-bearing invariant that makes
-    /// scaffolding safe.
-    pub const SYNTHETIC: AstId = AstId(u32::MAX);
-
     /// Allocate a fresh `AstId` for a transient AST node that is never owned
     /// by a parsed [`Module`].
     ///
