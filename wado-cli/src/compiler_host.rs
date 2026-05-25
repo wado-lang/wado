@@ -1,7 +1,6 @@
-//! Filesystem-based compiler host for CLI usage.
-//!
-//! Wraps [`wado_lsp::FilesystemCompilerHost`] with CLI-specific decorations:
-//! phase-tracking timestamps, log-level filtering, and stderr printing.
+//! Filesystem-based compiler host for CLI usage. Wraps
+//! [`wado_lsp::FilesystemCompilerHost`] with CLI decorations: phase-tracking
+//! timestamps, log-level filtering, and stderr printing.
 
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
@@ -15,11 +14,6 @@ use wado_compiler::{
 use crate::kiln_runtime::{self, KilnRunPolicy};
 use crate::runtime::create_kiln_engine;
 
-/// Filesystem-based compiler host for the CLI.
-///
-/// Loads sources and collects diagnostics via an inner
-/// [`wado_lsp::FilesystemCompilerHost`], then layers stderr printing with
-/// timestamps and a log-level filter on top.
 pub struct FilesystemCompilerHost {
     inner: Arc<wado_lsp::FilesystemCompilerHost>,
     print_diagnostics: bool,
@@ -40,8 +34,6 @@ impl FilesystemCompilerHost {
         }
     }
 
-    /// Collect diagnostics without printing — equivalent to the bare
-    /// `wado_lsp::FilesystemCompilerHost`, but kept for API compatibility.
     #[must_use]
     pub fn silent(base_path: PathBuf) -> Self {
         Self {
@@ -91,16 +83,13 @@ impl FilesystemCompilerHost {
         }
     }
 
-    /// Format elapsed time as `hh:mm:ss.mmmm` (fixed-width under 100 minutes).
-    ///
-    /// Time tracking is done here in the CLI to keep the compiler syscall-free.
+    // Timestamps live here, not in the compiler, to keep the compiler syscall-free.
     fn format_timestamp(&self) -> String {
         let elapsed = self.start_time.elapsed();
         let total_secs = elapsed.as_secs();
         let hours = total_secs / 3600;
         let minutes = (total_secs % 3600) / 60;
         let seconds = total_secs % 60;
-        // 4 decimal places = 0.1ms precision
         let frac = elapsed.subsec_micros() / 100;
         format!("[{hours:02}:{minutes:02}:{seconds:02}.{frac:04}]")
     }
@@ -158,9 +147,7 @@ impl CompilerHost for FilesystemCompilerHost {
                     "failed to create kiln wasmtime engine: {error}"
                 ))
             })?;
-            // Racing callers may both compute an engine; the first `set`
-            // wins and we clone from the stored value. `OnceLock` keeps
-            // at most one.
+            // Racing callers: first `set` wins; we always clone from the stored value.
             let _ = self.kiln_engine.set(engine);
             self.kiln_engine
                 .get()

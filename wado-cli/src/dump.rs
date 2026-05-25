@@ -1,7 +1,6 @@
 use std::fmt::Write as FmtWrite;
 use std::fs;
 use std::path::Path;
-use std::process;
 
 use lexopt::Arg::Value;
 use wado_compiler::OptLevel;
@@ -199,11 +198,6 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Parse command-line arguments for the `dump` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let usage = format_usage();
     let mut inputs: Vec<String> = Vec::new();
@@ -328,7 +322,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     })
 }
 
-pub async fn run(opts: DumpOptions) {
+pub async fn run(opts: DumpOptions) -> Result<(), CliExit> {
     let multiple_files = opts.inputs.len() > 1;
 
     for input in &opts.inputs {
@@ -336,34 +330,27 @@ pub async fn run(opts: DumpOptions) {
             println!("// ========== {input} ==========");
         }
 
-        run_single(&opts, input).await;
+        run_single(&opts, input).await?;
     }
+    Ok(())
 }
 
-async fn run_single(opts: &DumpOptions, input: &str) {
+async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
     let path = Path::new(input);
 
-    // Read source file
-    let source = match fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Error reading '{}': {e}", path.display());
-            process::exit(1);
-        }
-    };
+    let source = fs::read_to_string(path)
+        .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
 
-    // Get base path for relative imports
     let base_path = path
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
     let host = FilesystemCompilerHost::new(base_path);
 
-    // Extract target world from __DATA__ section if present
     let target_world = extract_world_from_data_section(&source);
 
-    // Dump using async API with target world
-    let result = match wado_compiler::dump_with_host_and_world(
+    // Diagnostics are already emitted by the host; signal silently on failure.
+    let result = wado_compiler::dump_with_host_and_world(
         &source,
         &host,
         Some(input),
@@ -373,15 +360,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         opts.opt_iterations,
     )
     .await
-    {
-        Ok(r) => r,
-        Err(_bail) => {
-            // Errors already printed by host via emit_diagnostic
-            process::exit(1);
-        }
-    };
-
-    // Tokens section (Lexer phase)
+    .map_err(|_bail| CliExit::silent_failure(1))?;
     if opts.show_tokens {
         println!("=== Tokens ===");
         for (i, token) in result.tokens.iter().enumerate() {
@@ -389,8 +368,6 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         }
         println!();
     }
-
-    // AST section (Parser phase)
     if opts.show_ast {
         println!("=== AST ===");
         let unparser = wado_compiler::unparse::Unparser::new().with_trivia(&result.trivia);
@@ -398,8 +375,6 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         println!("{unparsed}");
         println!();
     }
-
-    // Modules section
     if opts.show_modules {
         println!("=== Loaded Modules ===");
         for module_source in &result.loaded_modules {
@@ -420,8 +395,6 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         }
         println!();
     }
-
-    // Symbols section
     if opts.show_symbols {
         println!("=== Symbol Table ===");
         for symbol in result.symbols.all_symbols() {
@@ -529,8 +502,6 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         }
         println!();
     }
-
-    // Types section (after type resolution)
     if opts.show_types {
         if let Some(ref tir_modules) = result.tir_modules {
             // Type table is shared across modules; grab from the first one
@@ -575,8 +546,6 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         }
         println!();
     }
-
-    // TIR resolved section (after type resolution, before lowering)
     if opts.show_tir_resolved {
         if let Some(ref tir_modules) = result.tir_modules {
             println!("=== TIR Resolved ===");
@@ -592,8 +561,6 @@ async fn run_single(opts: &DumpOptions, input: &str) {
             println!();
         }
     }
-
-    // TIR monomorphized section
     if opts.show_tir_monomorphized {
         if let Some(ref text) = result.monomorphized_tir_text {
             println!("=== TIR Monomorphized ===");
@@ -604,8 +571,6 @@ async fn run_single(opts: &DumpOptions, input: &str) {
             println!();
         }
     }
-
-    // NIR lowered section (NIR right after `lower`, before optimize).
     if opts.show_nir_lowered {
         if let Some(ref text) = result.lowered_nir_text {
             println!("=== NIR Lowered ===");
@@ -616,8 +581,6 @@ async fn run_single(opts: &DumpOptions, input: &str) {
             println!();
         }
     }
-
-    // Final NIR section (after optimization).
     if opts.show_nir {
         if let Some(ref project) = result.optimized_package {
             println!("=== NIR ===");
@@ -630,8 +593,6 @@ async fn run_single(opts: &DumpOptions, input: &str) {
             println!();
         }
     }
-
-    // Final WIR section (after optimization)
     if opts.show_wir {
         if let Some(ref wir_package) = result.wir_package {
             let unparsed = wado_compiler::wir_unparse::unparse_wir(wir_package, None);
@@ -647,6 +608,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
             println!();
         }
     }
+    Ok(())
 }
 
 /// Extract the target world from the `__DATA__` JSON section of a source file.

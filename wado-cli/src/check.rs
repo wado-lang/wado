@@ -9,7 +9,6 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
-use std::process;
 
 use lexopt::Arg::Value;
 use wado_compiler::{Code, LogLevel};
@@ -79,11 +78,6 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Parse command-line arguments for the `check` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
     let usage = format_usage();
     let mut input: Option<String> = None;
@@ -113,7 +107,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
     })
 }
 
-pub async fn run(opts: CheckOptions) {
+pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     let path = Path::new(&opts.input);
     let base_path = path
         .parent()
@@ -139,35 +133,22 @@ pub async fn run(opts: CheckOptions) {
             .map(|(m, _)| m)
             .unwrap_or_else(crate::compile::empty_manifest);
         let provider = CliGeneratorProvider::new(manifest_root.clone());
-        match crate::kiln_driver::check_pipeline(
-            &manifest,
-            &manifest_root,
-            &host,
-            &provider,
-            inline,
-        )
-        .await
-        {
-            Ok(o) => o,
-            Err(e) => {
-                eprintln!("{}", FormatPipelineError(&e));
-                process::exit(1);
-            }
-        }
+        crate::kiln_driver::check_pipeline(&manifest, &manifest_root, &host, &provider, inline)
+            .await
+            .map_err(|e| CliExit::error(FormatPipelineError(&e)))?
     };
 
     let kiln_drift = !outcome.stale.is_empty() || !outcome.missing.is_empty();
 
-    // Run the rest of the compile pipeline so type-/resolve-level errors
-    // also gate `wado check`. We discard the produced wasm; codegen-skip
-    // is a follow-up optimization.
-    let source = match fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("wado check: failed to read {}: {e}", path.display());
-            process::exit(1);
-        }
-    };
+    // Drive the rest of the compile pipeline so type/resolve errors also
+    // gate `wado check`. The produced wasm is discarded; skipping codegen
+    // is a follow-up.
+    let source = fs::read_to_string(path).map_err(|e| {
+        CliExit::error(format!(
+            "wado check: failed to read {}: {e}",
+            path.display()
+        ))
+    })?;
     let compiler_options = wado_compiler::CompilerOptions {
         log_level: Some(opts.log_level),
         invocations: outcome.invocations.clone(),
@@ -184,16 +165,16 @@ pub async fn run(opts: CheckOptions) {
         .any(|d| is_kiln_diagnostic(&d.code));
 
     if has_compile_errors {
-        process::exit(1);
+        return Err(CliExit::silent_failure(1));
     }
     if !opts.warn_only && (kiln_drift || has_kiln_warnings) {
-        eprintln!(
+        return Err(CliExit::error(
             "wado check: Kiln integrity check failed — \
              one or more generators produced output that differs from on-disk source. \
-             Pass --warn to keep warnings as warnings."
-        );
-        process::exit(1);
+             Pass --warn to keep warnings as warnings.",
+        ));
     }
+    Ok(())
 }
 
 fn is_kiln_diagnostic(code: &Code) -> bool {

@@ -13,7 +13,7 @@ use serde_json::json;
 
 use wado_compiler::syntax::SyntaxDefinition;
 
-use crate::args::{self, CliExit, exit_error};
+use crate::args::{self, CliExit};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SyntaxFormat {
@@ -92,11 +92,6 @@ fn format_usage() -> String {
     buf
 }
 
-/// Parse command-line arguments for the `syntax` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: Parser) -> Result<SyntaxOptions, CliExit> {
     let usage = format_usage();
     let mut format = SyntaxFormat::TmLanguage;
@@ -126,7 +121,7 @@ pub fn parse_args(mut parser: Parser) -> Result<SyntaxOptions, CliExit> {
     Ok(SyntaxOptions { format, output })
 }
 
-pub fn run(opts: SyntaxOptions) {
+pub fn run(opts: SyntaxOptions) -> Result<(), CliExit> {
     let def = SyntaxDefinition::wado();
 
     let output_str = match opts.format {
@@ -141,9 +136,8 @@ pub fn run(opts: SyntaxOptions) {
     };
 
     if let Some(path) = opts.output {
-        fs::write(&path, &output_str).unwrap_or_else(|e| {
-            exit_error(&format!("failed to write to {path}: {e}"));
-        });
+        fs::write(&path, &output_str)
+            .map_err(|e| CliExit::error(format!("failed to write to {path}: {e}")))?;
         eprintln!("Generated: {path}");
     } else {
         io::stdout()
@@ -151,6 +145,7 @@ pub fn run(opts: SyntaxOptions) {
             .expect("failed to write to stdout");
         println!();
     }
+    Ok(())
 }
 
 /// Generate `TextMate` grammar JSON for VS Code

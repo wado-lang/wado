@@ -2,11 +2,10 @@ use std::process;
 
 use lexopt::Arg::{Long, Value};
 use mimalloc::MiMalloc;
+use wado_cli::args::CliExit;
 
-// `wado serve` allocates and frees a burst of small per-request objects
-// (request/response buffers, header maps, resource tables) on every request.
-// The system allocator's cross-thread contention dominates the host CPU
-// profile under load, so route all allocation through mimalloc.
+// `wado serve` is allocation-heavy per request; mimalloc avoids the
+// system allocator's cross-thread contention.
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
@@ -91,24 +90,29 @@ impl Cmd {
     }
 }
 
-fn print_usage() {
-    eprintln!("Usage: wado <command> [options]");
-    eprintln!();
-    eprintln!("Commands:");
+fn write_usage(buf: &mut String) {
+    use std::fmt::Write as _;
+    writeln!(buf, "Usage: wado <command> [options]").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Commands:").unwrap();
     let labels: Vec<String> = Cmd::ALL
         .iter()
         .map(|c| format!("{} {}", c.name(), c.args()))
         .collect();
     let max_w = labels.iter().map(String::len).max().unwrap_or(0);
     for (label, cmd) in labels.iter().zip(Cmd::ALL) {
-        eprintln!("  {label:<max_w$}  {}", cmd.desc());
+        writeln!(buf, "  {label:<max_w$}  {}", cmd.desc()).unwrap();
     }
-    eprintln!();
-    eprintln!("Global options:");
-    eprintln!("  --help     Show this help message");
-    eprintln!("  --version  Show version information");
-    eprintln!();
-    eprintln!("Use 'wado <command> --help' for more information on a command.");
+    writeln!(buf).unwrap();
+    writeln!(buf, "Global options:").unwrap();
+    writeln!(buf, "  --help     Show this help message").unwrap();
+    writeln!(buf, "  --version  Show version information").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(
+        buf,
+        "Use 'wado <command> --help' for more information on a command."
+    )
+    .unwrap();
 }
 
 fn print_version() {
@@ -123,106 +127,102 @@ fn main() {
             eprintln!("Error: failed to create tokio runtime: {e}");
             process::exit(1);
         });
-    runtime.block_on(async_main());
+    let outcome = runtime.block_on(async_main());
+    outcome.exit();
 }
 
-async fn async_main() {
+async fn async_main() -> CliExit {
+    match dispatch().await {
+        Ok(()) => CliExit::silent_failure(0),
+        Err(exit) => exit,
+    }
+}
+
+async fn dispatch() -> Result<(), CliExit> {
     let mut parser = lexopt::Parser::from_env();
 
-    let Some(arg) = parser.next().unwrap_or_else(|e| {
-        eprintln!("Error: {e}");
-        process::exit(1);
-    }) else {
-        print_usage();
-        process::exit(1);
+    let Some(arg) = parser.next().map_err(CliExit::error)? else {
+        let mut usage = String::new();
+        write_usage(&mut usage);
+        return Err(CliExit::error_with_usage("missing command", &usage));
     };
 
     match arg {
         Long("help") => {
-            print_usage();
-            process::exit(0);
+            let mut usage = String::new();
+            write_usage(&mut usage);
+            Err(CliExit::help(usage))
         }
         Long("version") => {
             print_version();
-            process::exit(0);
+            Ok(())
         }
         Value(cmd_val) => {
             let cmd_str = cmd_val.to_string_lossy();
-            if let Some(cmd) = Cmd::from_name(&cmd_str) {
-                match cmd {
-                    Cmd::Init => {
-                        let opts = wado_cli::init::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        wado_cli::init::run(opts);
-                    }
-                    // Each subcommand's `async fn run()` is wrapped in
-                    // `Box::pin` so its future is type-erased at this
-                    // boundary. Without this, the compiler must compute
-                    // the layout of `async_main`'s state machine by
-                    // recursively inlining the futures of EVERY subcommand
-                    // (12 of them), each of which transitively pulls in
-                    // its own await chain (compile → try_compile →
-                    // wado_compiler::compile_with_options → ...). That
-                    // recursion blows past Rust's default query-depth
-                    // limit on `--release` builds. Boxing here costs one
-                    // heap allocation per CLI invocation, which is free
-                    // for a one-shot binary.
-                    Cmd::Compile => {
-                        let opts =
-                            wado_cli::compile::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        Box::pin(wado_cli::compile::run(opts)).await;
-                    }
-                    Cmd::Check => {
-                        let opts = wado_cli::check::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        Box::pin(wado_cli::check::run(opts)).await;
-                    }
-                    Cmd::Run => {
-                        let opts = wado_cli::run::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        Box::pin(wado_cli::run::run(opts)).await;
-                    }
-                    Cmd::Serve => {
-                        let opts = wado_cli::serve::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        Box::pin(wado_cli::serve::run(opts)).await;
-                    }
-                    Cmd::Test => {
-                        let opts = wado_cli::test::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        Box::pin(wado_cli::test::run(opts)).await;
-                    }
-                    Cmd::Format => {
-                        let opts =
-                            wado_cli::format::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        wado_cli::format::run(opts);
-                    }
-                    Cmd::Doc => {
-                        let opts = wado_cli::doc::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        wado_cli::doc::run(opts);
-                    }
-                    Cmd::Dump => {
-                        let opts = wado_cli::dump::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        Box::pin(wado_cli::dump::run(opts)).await;
-                    }
-                    Cmd::Syntax => {
-                        let opts =
-                            wado_cli::syntax::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        wado_cli::syntax::run(opts);
-                    }
-                    Cmd::Lsp => {
-                        Box::pin(wado_cli::lsp::run()).await;
-                    }
-                    Cmd::Query => {
-                        let opts = wado_cli::query::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        Box::pin(wado_cli::query::run(opts)).await;
-                    }
+            let Some(cmd) = Cmd::from_name(&cmd_str) else {
+                let mut usage = String::new();
+                write_usage(&mut usage);
+                return Err(CliExit::error_with_usage(
+                    format!("unknown command '{cmd_str}'"),
+                    &usage,
+                ));
+            };
+            match cmd {
+                Cmd::Init => {
+                    let opts = wado_cli::init::parse_args(parser)?;
+                    wado_cli::init::run(opts)
                 }
-            } else {
-                eprintln!("Error: unknown command '{cmd_str}'");
-                print_usage();
-                process::exit(1);
+                // Each subcommand's future is boxed so `dispatch`'s state
+                // machine doesn't recursively inline all 12 subcommands'
+                // await chains and blow past Rust's query-depth limit on
+                // `--release` builds.
+                Cmd::Compile => {
+                    let opts = wado_cli::compile::parse_args(parser)?;
+                    Box::pin(wado_cli::compile::run(opts)).await
+                }
+                Cmd::Check => {
+                    let opts = wado_cli::check::parse_args(parser)?;
+                    Box::pin(wado_cli::check::run(opts)).await
+                }
+                Cmd::Run => {
+                    let opts = wado_cli::run::parse_args(parser)?;
+                    Box::pin(wado_cli::run::run(opts)).await
+                }
+                Cmd::Serve => {
+                    let opts = wado_cli::serve::parse_args(parser)?;
+                    Box::pin(wado_cli::serve::run(opts)).await
+                }
+                Cmd::Test => {
+                    let opts = wado_cli::test::parse_args(parser)?;
+                    Box::pin(wado_cli::test::run(opts)).await
+                }
+                Cmd::Format => {
+                    let opts = wado_cli::format::parse_args(parser)?;
+                    wado_cli::format::run(opts)
+                }
+                Cmd::Doc => {
+                    let opts = wado_cli::doc::parse_args(parser)?;
+                    wado_cli::doc::run(opts)
+                }
+                Cmd::Dump => {
+                    let opts = wado_cli::dump::parse_args(parser)?;
+                    Box::pin(wado_cli::dump::run(opts)).await
+                }
+                Cmd::Syntax => {
+                    let opts = wado_cli::syntax::parse_args(parser)?;
+                    wado_cli::syntax::run(opts)
+                }
+                Cmd::Lsp => Box::pin(wado_cli::lsp::run()).await,
+                Cmd::Query => {
+                    let opts = wado_cli::query::parse_args(parser)?;
+                    Box::pin(wado_cli::query::run(opts)).await
+                }
             }
         }
         _ => {
-            eprintln!("Error: expected command");
-            print_usage();
-            process::exit(1);
+            let mut usage = String::new();
+            write_usage(&mut usage);
+            Err(CliExit::error_with_usage("expected command", &usage))
         }
     }
 }
