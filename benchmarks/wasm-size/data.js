@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779701172186,
+  "lastUpdate": 1779714197629,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25929,6 +25929,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bf57b9027d10079863db27132caf5d36cd850710"
         },
         "date": 1779701171700,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9754,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17192,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 465275,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6033b913c695eec53f394f199a302ad91b0ea9ad",
+          "message": "Merge pull request #1193 from wado-lang/claude/wado-lsp-architecture-2iHn2\n\nrefactor(lsp): partial-result Annotated, snapshot cache, position-encoding negotiation",
+          "timestamp": "2026-05-25T21:56:46+09:00",
+          "tree_id": "0daf3db99d0fab69d5b27a99b96191d203496439",
+          "url": "https://github.com/wado-lang/wado/commit/6033b913c695eec53f394f199a302ad91b0ea9ad"
+        },
+        "date": 1779714197305,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
