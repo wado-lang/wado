@@ -500,6 +500,43 @@ mod tests {
     }
 
     #[test]
+    fn for_of_keyword_no_synthetic_iter_hover() {
+        // The cursor on the `for` keyword of `for x of items { ... }` must
+        // never surface the resolver's synthetic `__iter_N` local. A hover
+        // here should return None (the cursor lands between recognised
+        // names) or, at most, surface the user's loop variable — never
+        // a `let __iter_N` line that exposes compiler internals.
+        futures::executor::block_on(async {
+            let source = concat!(
+                "fn f(items: Array<i32>) -> i32 {\n",
+                "    let mut total = 0;\n",
+                "    for let item of items {\n",
+                "        total = total + item;\n",
+                "    }\n",
+                "    return total;\n",
+                "}\n",
+            );
+            let result = hover_at(source, 2, 4).await;
+            if let Some(r) = &result {
+                assert!(
+                    !r.contents.value.contains("__iter"),
+                    "hover on `for` exposed synthetic iter local: {}",
+                    r.contents.value
+                );
+                // The cursor isn't on a name the user wrote, so we should
+                // also not surface unrelated symbols (e.g. dragging the
+                // user into `Iterator::next` in core:prelude/array.wado).
+                assert!(
+                    !r.contents.value.contains("fn next")
+                        && !r.contents.value.contains("fn into_iter"),
+                    "hover on `for` jumped into the iterator impl: {}",
+                    r.contents.value
+                );
+            }
+        });
+    }
+
+    #[test]
     fn match_arm_binding_hover() {
         futures::executor::block_on(async {
             let source = concat!(

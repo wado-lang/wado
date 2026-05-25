@@ -266,6 +266,38 @@ fn for_of_binding_definition() {
 }
 
 #[test]
+fn for_of_keyword_does_not_resolve_to_synthetic_iter() {
+    // Cursor on the `for` keyword of `for let item of items { ... }` must
+    // never resolve to the resolver's synthetic `__iter_N` local. The user
+    // never typed that name; surfacing it in jump-to-def / hover leaks
+    // compiler internals into the editor.
+    futures::executor::block_on(async {
+        let source = concat!(
+            "fn f(items: Array<i32>) -> i32 {\n",
+            "    let mut total = 0;\n",
+            "    for let item of items {\n",
+            "        total = total + item;\n",
+            "    }\n",
+            "    return total;\n",
+            "}\n",
+        );
+        // Cursor on the `f` of `for` (line 2 col 4). The cursor should
+        // either resolve to nothing or to the loop variable binding — never
+        // to a synthetic helper local nor to the `.into_iter()` / `.next()`
+        // method defs in `core:prelude/array.wado`. The bug being fixed
+        // dragged the click into core stdlib (the synthetic `MethodCall`
+        // reused `for_of.id` as its `method_id`, planting a use→def edge
+        // there).
+        if let Some(r) = def_at(source, 2, 4).await {
+            assert!(
+                r.uri == "file:///test.wado",
+                "cursor on `for` should not jump out of the source file: {r:?}"
+            );
+        }
+    });
+}
+
+#[test]
 fn c_style_for_binding_definition() {
     futures::executor::block_on(async {
         let source = concat!(
