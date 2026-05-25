@@ -1582,15 +1582,104 @@ pub fn remove_unreachable_functions(
     });
 }
 
-/// Compute the set of reachable types from reachable functions.
-/// A type is reachable if it's used in any reachable function's signature,
-/// locals, or expressions.
-fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
-    let mut reachable_types: IndexSet<TypeId> = IndexSet::default();
+/// Reachability analysis result: the set of reachable type IDs plus
+/// name-keyed views over that set that match the predicates
+/// [`remove_unreachable_types`] uses to filter `project.structs`,
+/// `project.variants`, and `project.enums`.
+///
+/// The indexes are computed once during [`analyze_reachability`] and
+/// reused both inside the fixed-point loop (for O(1) per-struct /
+/// per-variant reachability checks) and by the downstream retain
+/// step, so the same name-by-name walk over `types` never runs twice.
+pub struct Reachability {
+    pub types: IndexSet<TypeId>,
+    /// Non-monomorphized `Struct` types in `types`, keyed by (name, module).
+    pub struct_exact: IndexSet<(String, ModuleSource)>,
+    /// Monomorphized struct names in `types` (e.g. `"Box<i32>"`).
+    pub struct_monomorph_names: IndexSet<String>,
+    /// Base names of monomorphized structs in `types` (e.g. `"Box"`).
+    pub struct_monomorph_bases: IndexSet<String>,
+    /// `GenericInstance` names in `types`.
+    pub generic_instance_names: IndexSet<String>,
+    /// `Variant` types in `types`, keyed by (name, module).
+    pub variant_exact: IndexSet<(String, ModuleSource)>,
+    /// `Enum` types in `types`, keyed by (name, module).
+    pub enum_exact: IndexSet<(String, ModuleSource)>,
+}
+
+impl Reachability {
+    fn new() -> Self {
+        Self {
+            types: IndexSet::default(),
+            struct_exact: IndexSet::default(),
+            struct_monomorph_names: IndexSet::default(),
+            struct_monomorph_bases: IndexSet::default(),
+            generic_instance_names: IndexSet::default(),
+            variant_exact: IndexSet::default(),
+            enum_exact: IndexSet::default(),
+        }
+    }
+
+    /// Rebuild the name-keyed indexes from the current `self.types`.
+    /// Cheap relative to the alternative of `iter().any()` lookups —
+    /// see [`analyze_reachability`]'s Phase 2 comment.
+    fn refresh_indexes(&mut self, type_table: &TypeTable) {
+        self.struct_exact.clear();
+        self.struct_monomorph_names.clear();
+        self.struct_monomorph_bases.clear();
+        self.generic_instance_names.clear();
+        self.variant_exact.clear();
+        self.enum_exact.clear();
+        for &id in &self.types {
+            match type_table.get(id) {
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    is_monomorphized,
+                    base_name,
+                } => {
+                    if *is_monomorphized {
+                        self.struct_monomorph_names.insert(name.clone());
+                        if let Some(base) = base_name {
+                            self.struct_monomorph_bases.insert(base.clone());
+                        }
+                    } else {
+                        self.struct_exact
+                            .insert((name.clone(), module_source.clone()));
+                    }
+                }
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                } => {
+                    self.variant_exact
+                        .insert((name.clone(), module_source.clone()));
+                }
+                ResolvedType::Enum {
+                    name,
+                    module_source,
+                } => {
+                    self.enum_exact
+                        .insert((name.clone(), module_source.clone()));
+                }
+                ResolvedType::GenericInstance { name, .. } => {
+                    self.generic_instance_names.insert(name.clone());
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Compute the set of reachable types from reachable functions, plus
+/// name-keyed views over the result. A type is reachable if it's used
+/// in any reachable function's signature, locals, or expressions.
+fn analyze_reachability(project: &NirPackage) -> Reachability {
+    let mut reach = Reachability::new();
 
     // Always include primitive types (TypeId 0-17)
     for i in 0..18 {
-        reachable_types.insert(TypeId(i));
+        reach.types.insert(TypeId(i));
     }
 
     // Always include BuiltinArray(U8) as it's fundamental for String operations
@@ -1602,7 +1691,7 @@ fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
             if let ResolvedType::BuiltinArray(elem) = type_table.get(type_id)
                 && *elem == TypeTable::U8
             {
-                reachable_types.insert(type_id);
+                reach.types.insert(type_id);
                 break;
             }
         }
@@ -1617,12 +1706,12 @@ fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
 
         for func_rc in &project.functions {
             let func = func_rc.borrow();
-            collect_types_from_function(&func, &type_table, &mut reachable_types);
+            collect_types_from_function(&func, &type_table, &mut reach.types);
         }
 
         // Collect types from global variables
         for global in &project.globals {
-            collect_types_from_expr(&global.initializer, &type_table, &mut reachable_types);
+            collect_types_from_expr(&global.initializer, &type_table, &mut reach.types);
         }
 
         // Closure functor types are collected transitively from
@@ -1650,8 +1739,8 @@ fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
         for functor in &project.closure_functors {
             let cm_ptr = std::rc::Rc::as_ptr(&functor.call_method);
             if surviving_ptrs.contains(&cm_ptr) {
-                reachable_types.insert(functor.struct_type_id);
-                reachable_types.insert(functor.ref_type_id);
+                reach.types.insert(functor.struct_type_id);
+                reach.types.insert(functor.ref_type_id);
             }
         }
     }
@@ -1660,40 +1749,19 @@ fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
     let mut changed = true;
     while changed {
         changed = false;
-        let before_len = reachable_types.len();
+        let before_len = reach.types.len();
 
         let type_table = project.type_table.borrow();
 
-        // Per-iteration: build name-keyed lookup tables from `reachable_types`
-        // so the struct/variant reachability checks below are O(1) hash
-        // probes instead of O(N) `iter().any()` scans over `reachable_types`.
-        // Without this, this loop was O(S × N) per iteration where S = struct
-        // count and N = reachable type count — for a 900-struct / 2200-type
-        // project (a Gale-generated parser) that is ~2M `type_table.get` +
+        // Rebuild the name-keyed indexes from `reach.types` so the
+        // struct/variant reachability checks below are O(1) hash probes
+        // instead of O(N) `iter().any()` scans. Without this, this loop
+        // was O(S × N) per iteration where S = struct count and N =
+        // reachable type count — for a 900-struct / 2200-type project
+        // (a Gale-generated parser) that is ~2M `type_table.get` +
         // pattern-match ops *per iteration*, dominating
         // `remove_unreachable_types`.
-        let mut reachable_generic_instance_names: IndexSet<&str> = IndexSet::default();
-        let mut reachable_struct_monomorph_names: IndexSet<&str> = IndexSet::default();
-        let mut reachable_struct_monomorph_bases: IndexSet<&str> = IndexSet::default();
-        for &id in &reachable_types {
-            match type_table.get(id) {
-                ResolvedType::Struct {
-                    name,
-                    is_monomorphized: true,
-                    base_name,
-                    ..
-                } => {
-                    reachable_struct_monomorph_names.insert(name.as_str());
-                    if let Some(base) = base_name {
-                        reachable_struct_monomorph_bases.insert(base.as_str());
-                    }
-                }
-                ResolvedType::GenericInstance { name, .. } => {
-                    reachable_generic_instance_names.insert(name.as_str());
-                }
-                _ => {}
-            }
-        }
+        reach.refresh_indexes(&type_table);
 
         // Collect struct field types for reachable structs
         // A struct's fields should be collected if:
@@ -1701,33 +1769,33 @@ fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
         // 2. Any GenericInstance with this struct name is reachable, OR
         // 3. Any monomorphized version with this base name is reachable
         for tir_struct in &project.structs {
-            let module_source = &tir_struct.module_source;
             let struct_reachable = if tir_struct.monomorph_info.is_none() {
-                // Non-monomorphized struct
-                let direct_reachable = type_table
-                    .find_struct_type(&tir_struct.name, module_source)
-                    .map(|id| reachable_types.contains(&id))
-                    .unwrap_or(false);
-
-                direct_reachable
-                    || reachable_generic_instance_names.contains(tir_struct.name.as_str())
-                    || reachable_struct_monomorph_bases.contains(tir_struct.name.as_str())
+                reach.struct_exact.contains(&(
+                    tir_struct.name.clone(),
+                    tir_struct.module_source.clone(),
+                )) || reach
+                    .generic_instance_names
+                    .contains(tir_struct.name.as_str())
+                    || reach
+                        .struct_monomorph_bases
+                        .contains(tir_struct.name.as_str())
             } else {
-                // Monomorphized struct - check by exact name match
-                reachable_struct_monomorph_names.contains(tir_struct.name.as_str())
+                reach
+                    .struct_monomorph_names
+                    .contains(tir_struct.name.as_str())
             };
 
             if struct_reachable {
                 for field in &tir_struct.fields {
-                    collect_type_transitive(field.type_id, &type_table, &mut reachable_types);
+                    collect_type_transitive(field.type_id, &type_table, &mut reach.types);
                 }
                 // Monomorphization type args are used by WIR for name mangling
                 if let Some(info) = &tir_struct.monomorph_info {
                     for &ta in &info.impl_type_args {
-                        collect_type_transitive(ta, &type_table, &mut reachable_types);
+                        collect_type_transitive(ta, &type_table, &mut reach.types);
                     }
                     for &ta in &info.method_type_args {
-                        collect_type_transitive(ta, &type_table, &mut reachable_types);
+                        collect_type_transitive(ta, &type_table, &mut reach.types);
                     }
                 }
             }
@@ -1738,35 +1806,40 @@ fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
         // 1. The base Variant type is reachable, OR
         // 2. Any GenericInstance with this variant name is reachable
         for variant in &project.variants {
-            let base_reachable = type_table
-                .find_variant_type(&variant.name, &variant.module_source)
-                .map(|id| reachable_types.contains(&id))
-                .unwrap_or(false);
-
-            let instance_reachable =
-                reachable_generic_instance_names.contains(variant.name.as_str());
+            let base_reachable = reach
+                .variant_exact
+                .contains(&(variant.name.clone(), variant.module_source.clone()));
+            let instance_reachable = reach.generic_instance_names.contains(variant.name.as_str());
 
             if base_reachable || instance_reachable {
                 for case in &variant.cases {
-                    collect_type_transitive(case.payload, &type_table, &mut reachable_types);
+                    collect_type_transitive(case.payload, &type_table, &mut reach.types);
                 }
             }
         }
 
         // Collect type dependencies (array elements, option inner, etc.)
-        let current_types: Vec<TypeId> = reachable_types.iter().copied().collect();
+        let current_types: Vec<TypeId> = reach.types.iter().copied().collect();
         for type_id in current_types {
-            collect_type_dependencies(type_id, &type_table, &mut reachable_types);
+            collect_type_dependencies(type_id, &type_table, &mut reach.types);
         }
 
         drop(type_table);
 
-        if reachable_types.len() > before_len {
+        if reach.types.len() > before_len {
             changed = true;
         }
     }
 
-    reachable_types
+    // Final index refresh so downstream consumers (e.g. the retain
+    // calls in `remove_unreachable_types`) see indexes matching the
+    // converged `reach.types` rather than the second-to-last snapshot.
+    {
+        let type_table = project.type_table.borrow();
+        reach.refresh_indexes(&type_table);
+    }
+
+    reach
 }
 
 /// Collect all types used in a function
@@ -2135,112 +2208,36 @@ fn collect_type_dependencies(
 /// Remove unreachable types from the project's `TypeTable` and module definitions.
 /// This should be called after function DCE.
 pub fn remove_unreachable_types(project: &mut NirPackage) {
-    let reachable_types = compute_reachable_types(project);
+    let reach = analyze_reachability(project);
 
-    // Collect names of structs to keep
     // A struct is kept if:
     // 1. Its Struct type is reachable, OR
     // 2. Any GenericInstance with its base name is reachable (e.g., Box<i32> for Box)
     // 3. Any monomorphized Struct with its base name is reachable
-    {
-        let type_table = project.type_table.borrow();
-
-        // Single pass over reachable_types to build lookup indices keyed by the
-        // metadata already carried on each ResolvedType. This replaces the
-        // earlier O(|structs| × |reachable_types|) repeated linear scans.
-        let mut reachable_struct_exact: IndexSet<(String, ModuleSource)> = IndexSet::default();
-        let mut reachable_struct_monomorph_names: IndexSet<String> = IndexSet::default();
-        let mut reachable_struct_monomorph_bases: IndexSet<String> = IndexSet::default();
-        let mut reachable_generic_instance_names: IndexSet<String> = IndexSet::default();
-        let mut reachable_variant_exact: IndexSet<(String, ModuleSource)> = IndexSet::default();
-        let mut reachable_enum_exact: IndexSet<(String, ModuleSource)> = IndexSet::default();
-
-        for &id in &reachable_types {
-            match type_table.get(id) {
-                ResolvedType::Struct {
-                    name,
-                    module_source,
-                    is_monomorphized,
-                    base_name,
-                } => {
-                    if *is_monomorphized {
-                        reachable_struct_monomorph_names.insert(name.clone());
-                        if let Some(base) = base_name {
-                            reachable_struct_monomorph_bases.insert(base.clone());
-                        }
-                    } else {
-                        reachable_struct_exact.insert((name.clone(), module_source.clone()));
-                    }
-                }
-                ResolvedType::GenericInstance { name, .. } => {
-                    reachable_generic_instance_names.insert(name.clone());
-                }
-                ResolvedType::Variant {
-                    name,
-                    module_source,
-                } => {
-                    reachable_variant_exact.insert((name.clone(), module_source.clone()));
-                }
-                ResolvedType::Enum {
-                    name,
-                    module_source,
-                } => {
-                    reachable_enum_exact.insert((name.clone(), module_source.clone()));
-                }
-                _ => {}
-            }
+    project.structs.retain(|s| {
+        if s.monomorph_info.is_none() {
+            reach.struct_exact
+                .contains(&(s.name.clone(), s.module_source.clone()))
+                || reach.generic_instance_names.contains(s.name.as_str())
+                || reach.struct_monomorph_bases.contains(s.name.as_str())
+        } else {
+            reach.struct_monomorph_names.contains(s.name.as_str())
         }
-
-        let keep_structs: IndexSet<(String, ModuleSource)> = project
-            .structs
-            .iter()
-            .filter(|s| {
-                if s.monomorph_info.is_none() {
-                    reachable_struct_exact.contains(&(s.name.clone(), s.module_source.clone()))
-                        || reachable_generic_instance_names.contains(&s.name)
-                        || reachable_struct_monomorph_bases.contains(&s.name)
-                } else {
-                    reachable_struct_monomorph_names.contains(&s.name)
-                }
-            })
-            .map(|s| (s.name.clone(), s.module_source.clone()))
-            .collect();
-
-        let keep_variants: IndexSet<(String, ModuleSource)> = project
-            .variants
-            .iter()
-            .filter(|v| {
-                reachable_variant_exact.contains(&(v.name.clone(), v.module_source.clone()))
-                    || reachable_generic_instance_names.contains(&v.name)
-            })
-            .map(|v| (v.name.clone(), v.module_source.clone()))
-            .collect();
-
-        let keep_enums: IndexSet<(String, ModuleSource)> = project
-            .enums
-            .iter()
-            .filter(|e| reachable_enum_exact.contains(&(e.name.clone(), e.module_source.clone())))
-            .map(|e| (e.name.clone(), e.module_source.clone()))
-            .collect();
-
-        drop(type_table);
-
-        // Remove unreachable definitions
-        project
-            .structs
-            .retain(|s| keep_structs.contains(&(s.name.clone(), s.module_source.clone())));
-        project
-            .variants
-            .retain(|v| keep_variants.contains(&(v.name.clone(), v.module_source.clone())));
-        project
-            .enums
-            .retain(|e| keep_enums.contains(&(e.name.clone(), e.module_source.clone())));
-    }
+    });
+    project.variants.retain(|v| {
+        reach.variant_exact
+            .contains(&(v.name.clone(), v.module_source.clone()))
+            || reach.generic_instance_names.contains(v.name.as_str())
+    });
+    project.enums.retain(|e| {
+        reach.enum_exact
+            .contains(&(e.name.clone(), e.module_source.clone()))
+    });
 
     // Remove unreachable entries from the shared TypeTable.
     // This ensures that subsequent phases (WIR type registration, codegen) do not
     // emit types that are no longer referenced by any surviving function.
-    project.type_table.borrow_mut().retain(&reachable_types);
+    project.type_table.borrow_mut().retain(&reach.types);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
