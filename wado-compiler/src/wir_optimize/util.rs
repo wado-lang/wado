@@ -197,6 +197,26 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
 /// to enable CSE / dead-load elimination of trapping operations whose
 /// result IS used.
 pub(super) fn may_trap(instr: &WirInstr) -> bool {
+    // Operand-dependent: `ref.as_non_null(inner)` only traps when `inner`
+    // could itself produce null. `is_nonnull_result` recognises
+    // `struct.new`/`array.new*`/`ref.func`/`ref.i31`/already-non-null
+    // typed locals, so a `ref.as_non_null(ref.func "…")` produced by
+    // closure lowering doesn't keep the surrounding `Drop` alive.
+    if let WirInstr::RefAsNonNull(inner) = instr {
+        return may_trap(inner) || !inner.is_nonnull_result();
+    }
+    // Operand-dependent: `ref.cast T(struct.new T { … })` is identity
+    // (`struct.new` always produces exactly `T`), so the cast can't
+    // trap. Only handles the direct-`StructNew`-operand case; tracing
+    // through `LocalGet` would need def-use analysis.
+    if let WirInstr::RefCast { type_id, expr, .. } = instr
+        && let WirInstr::StructNew {
+            type_id: src_type, ..
+        } = expr.as_ref()
+        && src_type == type_id
+    {
+        return may_trap(expr);
+    }
     if matches!(
         instr,
         // GC array reads trap on null / OOB.
@@ -210,7 +230,10 @@ pub(super) fn may_trap(instr: &WirInstr) -> bool {
         | WirInstr::ArrayNewData { .. }
         // GC struct reads trap on null receiver.
         | WirInstr::StructGet { .. }
-        // Ref cast / non-null assertion trap on failure.
+        // Ref cast / non-null assertion trap on failure. The
+        // operand-dependent early returns above peel off the
+        // statically-safe shapes; whatever's left here is the
+        // conservative case.
         | WirInstr::RefAsNonNull(_)
         | WirInstr::RefCast { .. }
         // Integer divide / remainder trap on zero divisor (and signed
