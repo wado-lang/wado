@@ -261,14 +261,8 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
 }
 
 fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(self, other) {
-    return (if (if __inline_i32_Eq__eq_0: block -> bool {
-        break __inline_i32_Eq__eq_0: self.x == other.x;
-        unreachable;
-    } -> i32 {
-        __inline_i32_Eq__eq_1: block -> bool {
-            break __inline_i32_Eq__eq_1: self.y == other.y;
-            unreachable;
-        };
+    return (if (if self.x == other.x -> i32 {
+        self.y == other.y;
     } else {
         0;
     }) -> i32 {
@@ -286,7 +280,6 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Container^Eq:
             break __inline_String_Eq__eq_0: 0;
         }
         break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(self.label.repr, other.label.repr, len_a);
-        unreachable;
     } -> i32 {
         "core:prelude/types.wado/Option<i32>^Eq::eq"(self.value, other.value);
     } else {

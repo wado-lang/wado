@@ -88,11 +88,8 @@ fn "wado-compiler/tests/fixtures/ordering_basic.wado/run"() with Stdout {
     let equal: "core:prelude/traits.wado//enum:Ordering";
     let greater: "core:prelude/traits.wado//enum:Ordering";
     let __b_3: ref "core:prelude//Array<i32>";
-    let arr1: ref "core:prelude//Array<i32>";
     let __b_5: ref "core:prelude//Array<i32>";
-    let arr2: ref "core:prelude//Array<i32>";
     let __b_7: ref "core:prelude//Array<i32>";
-    let arr3: ref "core:prelude//Array<i32>";
     let s1: ref "core:prelude/string.wado//String";
     let s2: ref "core:prelude/string.wado//String";
     let s3: ref "core:prelude/string.wado//String";
@@ -109,34 +106,22 @@ fn "wado-compiler/tests/fixtures/ordering_basic.wado/run"() with Stdout {
     if greater == 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Greater matches Greater"), used: 23 });
     }
-    arr1 = __seq_lit: block -> ref "core:prelude//Array<i32>" {
-        __b_3 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-        break __seq_lit: __b_3;
-        unreachable;
-    };
-    arr2 = __seq_lit: block -> ref "core:prelude//Array<i32>" {
-        __b_5 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 4), used: 3 };
-        break __seq_lit: __b_5;
-        unreachable;
-    };
-    arr3 = __seq_lit: block -> ref "core:prelude//Array<i32>" {
-        __b_7 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-        break __seq_lit: __b_7;
-        unreachable;
-    };
-    if "core:prelude/array.wado/Array<i32>^Ord::cmp"(arr1, arr2) == 0 {
+    __b_3 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    __b_5 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 4), used: 3 };
+    __b_7 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    if "core:prelude/array.wado/Array<i32>^Ord::cmp"(__b_3, __b_5) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 < arr2"), used: 11 });
     }
-    if "core:prelude/array.wado/Array<i32>^Ord::cmp"(arr1, arr3) != 2 {
+    if "core:prelude/array.wado/Array<i32>^Ord::cmp"(__b_3, __b_7) != 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 <= arr3"), used: 12 });
     }
-    if "core:prelude/array.wado/Array<i32>^Ord::cmp"(arr2, arr1) == 2 {
+    if "core:prelude/array.wado/Array<i32>^Ord::cmp"(__b_5, __b_3) == 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr2 > arr1"), used: 11 });
     }
-    if "core:prelude/array.wado/Array<i32>^Ord::cmp"(arr3, arr1) != 0 {
+    if "core:prelude/array.wado/Array<i32>^Ord::cmp"(__b_7, __b_3) != 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr3 >= arr1"), used: 12 });
     }
-    if "core:prelude/array.wado/Array<i32>^Eq::eq"(arr1, arr3) {
+    if "core:prelude/array.wado/Array<i32>^Eq::eq"(__b_3, __b_7) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 == arr3"), used: 12 });
     }
     s1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
@@ -157,7 +142,6 @@ fn "wado-compiler/tests/fixtures/ordering_basic.wado/run"() with Stdout {
             break __inline_String_Eq__eq_20: 0;
         }
         break __inline_String_Eq__eq_20: "core:prelude/string.wado/String^Eq::eq_bytes"(s1.repr, s3.repr, len_a);
-        unreachable;
     } {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple == apple"), used: 14 });
     }
@@ -351,12 +335,9 @@ fn "core:prelude/array.wado/Array<i32>^Ord::cmp"(self, other) {
     let other_11: ref "core:prelude/types.wado//Box<i32>";
     let _licm_repr_12: ref builtin::array<i32>;
     let _licm_repr_13: ref builtin::array<i32>;
-    min_len = __inline_i32_min_0: block -> i32 {
-        a_6 = self.used;
-        b_7 = other.used;
-        break __inline_i32_min_0: select i32(a_6 < b_7, a_6, b_7);
-        unreachable;
-    };
+    a_6 = self.used;
+    b_7 = other.used;
+    min_len = select i32(a_6 < b_7, a_6, b_7);
     i = 0;
     _licm_repr_12 = self.repr;
     _licm_repr_13 = other.repr;
@@ -377,7 +358,6 @@ fn "core:prelude/array.wado/Array<i32>^Ord::cmp"(self, other) {
                     break __inline_i32_Ord__cmp_1: 2;
                 }
                 break __inline_i32_Ord__cmp_1: 1;
-                unreachable;
             } == 0 {
                 return 0;
             }
@@ -391,7 +371,6 @@ fn "core:prelude/array.wado/Array<i32>^Ord::cmp"(self, other) {
                     break __inline_i32_Ord__cmp_2: 2;
                 }
                 break __inline_i32_Ord__cmp_2: 1;
-                unreachable;
             } == 2 {
                 return 2;
             }

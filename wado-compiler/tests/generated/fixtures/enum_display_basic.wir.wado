@@ -94,27 +94,9 @@ fn "wado-compiler/tests/fixtures/enum_display_basic.wado/run"() with Stdout {
     r = 0;
     g = 1;
     b = 2;
-    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-        "wado-compiler/tests/fixtures/enum_display_basic.wado/Color^Inspect::inspect"(r, __local_4);
-        break __tmpl: __local_3;
-        unreachable;
-    });
-    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
-        "wado-compiler/tests/fixtures/enum_display_basic.wado/Color^Inspect::inspect"(g, __local_6);
-        break __tmpl: __local_5;
-        unreachable;
-    });
-    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-        __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
-        "wado-compiler/tests/fixtures/enum_display_basic.wado/Color^Inspect::inspect"(b, __local_8);
-        break __tmpl: __local_7;
-        unreachable;
-    });
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 }; "wado-compiler/tests/fixtures/enum_display_basic.wado/Color^Inspect::inspect"(r, __local_4); __local_3);
+    "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 }; "wado-compiler/tests/fixtures/enum_display_basic.wado/Color^Inspect::inspect"(g, __local_6); __local_5);
+    "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 }; "wado-compiler/tests/fixtures/enum_display_basic.wado/Color^Inspect::inspect"(b, __local_8); __local_7);
 }
 
 fn "wado-compiler/tests/fixtures/enum_display_basic.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -216,15 +198,9 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a_5 = __inline_i32_max_1: block -> i32 {
-            a_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
-            unreachable;
-        };
-        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
-        unreachable;
-    };
+    a_7 = capacity * 2;
+    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
+    new_capacity = select i32(a_5 > 8, a_5, 8);
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;

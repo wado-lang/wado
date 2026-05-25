@@ -186,3 +186,96 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
         | WirInstr::Return { .. }
     )
 }
+
+/// True if `instr` (or any descendant) can trap at runtime on some inputs.
+///
+/// Used to keep `Drop(value)` instructions whose `value` is otherwise
+/// `is_side_effect_free` but would trap on certain inputs — the Wado
+/// language requires those traps to be observable even when the read
+/// value is discarded (`let _ = arr[-1]` must trap). Distinct from
+/// [`is_root_observable`] which the WIR optimizer deliberately keeps lax
+/// to enable CSE / dead-load elimination of trapping operations whose
+/// result IS used.
+pub(super) fn may_trap(instr: &WirInstr) -> bool {
+    // Operand-dependent: `ref.as_non_null(inner)` only traps when `inner`
+    // could itself produce null. `is_nonnull_result` recognises
+    // `struct.new`/`array.new*`/`ref.func`/`ref.i31`/already-non-null
+    // typed locals, so a `ref.as_non_null(ref.func "…")` produced by
+    // closure lowering doesn't keep the surrounding `Drop` alive.
+    if let WirInstr::RefAsNonNull(inner) = instr {
+        return may_trap(inner) || !inner.is_nonnull_result();
+    }
+    // Operand-dependent: `ref.cast T(struct.new T { … })` is identity
+    // (`struct.new` always produces exactly `T`), so the cast can't
+    // trap. Only handles the direct-`StructNew`-operand case; tracing
+    // through `LocalGet` would need def-use analysis.
+    if let WirInstr::RefCast { type_id, expr, .. } = instr
+        && let WirInstr::StructNew {
+            type_id: src_type, ..
+        } = expr.as_ref()
+        && src_type == type_id
+    {
+        return may_trap(expr);
+    }
+    if matches!(
+        instr,
+        // GC array reads trap on null / OOB.
+        WirInstr::ArrayGet { .. }
+        | WirInstr::ArrayGetS { .. }
+        | WirInstr::ArrayGetU { .. }
+        // `array.len` traps when the array reference is null.
+        | WirInstr::ArrayLen(_)
+        // `array.new_data` traps when offset + len overruns the data
+        // segment.
+        | WirInstr::ArrayNewData { .. }
+        // GC struct reads trap on null receiver.
+        | WirInstr::StructGet { .. }
+        // Ref cast / non-null assertion trap on failure. The
+        // operand-dependent early returns above peel off the
+        // statically-safe shapes; whatever's left here is the
+        // conservative case.
+        | WirInstr::RefAsNonNull(_)
+        | WirInstr::RefCast { .. }
+        // Integer divide / remainder trap on zero divisor (and signed
+        // div/rem of MIN by -1 overflows).
+        | WirInstr::I32DivS(_, _)
+        | WirInstr::I32DivU(_, _)
+        | WirInstr::I32RemS(_, _)
+        | WirInstr::I32RemU(_, _)
+        | WirInstr::I64DivS(_, _)
+        | WirInstr::I64DivU(_, _)
+        | WirInstr::I64RemS(_, _)
+        | WirInstr::I64RemU(_, _)
+        // Non-saturating float-to-int truncation traps on out-of-range
+        // values (the saturating variants — `*TruncSatF*` — don't).
+        | WirInstr::I32TruncF32S(_)
+        | WirInstr::I32TruncF32U(_)
+        | WirInstr::I32TruncF64S(_)
+        | WirInstr::I32TruncF64U(_)
+        | WirInstr::I64TruncF32S(_)
+        | WirInstr::I64TruncF32U(_)
+        | WirInstr::I64TruncF64S(_)
+        | WirInstr::I64TruncF64U(_)
+        // Linear-memory loads trap on out-of-bounds access.
+        | WirInstr::I32Load { .. }
+        | WirInstr::I32Load8U { .. }
+        | WirInstr::I32Load8S { .. }
+        | WirInstr::I32Load16U { .. }
+        | WirInstr::I32Load16S { .. }
+        | WirInstr::I64Load { .. }
+        | WirInstr::V128Load { .. }
+        // `table.get` traps when the index is out of bounds.
+        | WirInstr::TableGet { .. }
+        // Explicit trap.
+        | WirInstr::Unreachable
+    ) {
+        return true;
+    }
+    let mut trap = false;
+    instr.for_each_child(&mut |child| {
+        if !trap && may_trap(child) {
+            trap = true;
+        }
+    });
+    trap
+}

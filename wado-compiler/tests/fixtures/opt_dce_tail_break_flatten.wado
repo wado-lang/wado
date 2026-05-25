@@ -1,0 +1,44 @@
+// Verifies (issue #1184, C2 and C3) that labeled blocks whose only
+// reference is a tail `break LABEL` (with or without a value) are
+// flattened: the wrapping `LABEL: block { ... break LABEL[: V]; }`
+// disappears from WIR.
+//
+// C2: stmt-position `LABEL: block { …; break LABEL; }` → straight-line stmts.
+// C3: value-position `LABEL: block -> T { …; break LABEL: V; }` → `{ …; V }`.
+
+use { println, Stdout } from "core:cli";
+
+#[inline]
+fn double(n: i32) -> i32 {
+    return n * 2;
+}
+
+#[inline]
+fn iter_sum(arr: Array<i32>) -> i32 {
+    let mut total = 0;
+    for let x of arr {
+        total += x;
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    // Value-producing inline (C3 target).
+    let x = double(21);
+    assert x == 42;
+
+    // Iterator-style fused labeled block (C2 target).
+    let s = iter_sum([1, 2, 3, 4, 5]);
+    assert s == 15;
+
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O2": [
+        "__inline_double_",
+        "__fused___inline_"
+    ]
+}

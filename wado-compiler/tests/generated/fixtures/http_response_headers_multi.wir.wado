@@ -285,9 +285,7 @@ import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 fn "wado-compiler/tests/fixtures/http_response_headers_multi.wado/handle"(request) {
     let headers: i32;
     let __b_4: ref "core:prelude//Array<u8>";
-    let v1: ref "core:prelude//Array<u8>";
     let __b_6: ref "core:prelude//Array<u8>";
-    let v2: ref "core:prelude//Array<u8>";
     let response: i32;
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_1: i32;
@@ -430,18 +428,10 @@ fn "wado-compiler/tests/fixtures/http_response_headers_multi.wado/handle"(reques
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
     headers = "wado-compiler/tests/fixtures/http_response_headers_multi.wado/__cm_binding__Fields_new"();
-    v1 = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __b_4 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
-        break __seq_lit: __b_4;
-        unreachable;
-    };
-    drop("wado-compiler/tests/fixtures/http_response_headers_multi.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-first"), used: 7 }, v1));
-    v2 = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __b_6 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(119, 111, 114, 108, 100), used: 5 };
-        break __seq_lit: __b_6;
-        unreachable;
-    };
-    drop("wado-compiler/tests/fixtures/http_response_headers_multi.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-second"), used: 8 }, v2));
+    __b_4 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
+    drop("wado-compiler/tests/fixtures/http_response_headers_multi.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-first"), used: 7 }, __b_4));
+    __b_6 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(119, 111, 114, 108, 100), used: 5 };
+    drop("wado-compiler/tests/fixtures/http_response_headers_multi.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-second"), used: 8 }, __b_6));
     __pattern_temp_1 = "wado-compiler/tests/fixtures/http_response_headers_multi.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_1);
     response = __pattern_temp_1.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
@@ -797,12 +787,9 @@ fn "wado-compiler/tests/fixtures/http_response_headers_multi.wado/__cm_binding__
     let len_18: i32;
     let arr_19: ref builtin::array<u8>;
     __name_packed = "core:internal/cm_lower_string"(name);
-    __value_packed = __inline_cm_lower_array_u8_0: block -> i64 {
-        data = value.repr;
-        len_14 = value.used;
-        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(data, len_14);
-        unreachable;
-    };
+    data = value.repr;
+    len_14 = value.used;
+    __value_packed = "core:internal/cm_lower_list_u8"(data, len_14);
     __outptr = "mem/realloc"(0, 0, 4, 20);
     "wasi/wasi:http/Fields::append"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64), builtin::i32_wrap_i64(__value_packed), builtin::i32_wrap_i64(__value_packed >> 32_i64), __outptr);
     __disc_6 = builtin::load_u8(__outptr);
@@ -824,13 +811,7 @@ fn "wado-compiler/tests/fixtures/http_response_headers_multi.wado/__cm_binding__
             __disc_10 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_10 != 0 {
-                __option_result = ref.as_non_null(__inline_memory_to_gc_string_3: block -> ref "core:prelude/string.wado//String" {
-                    ptr = builtin::load_i32(((__outptr + 4) + 4) + 4);
-                    len_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
-                    arr_19 = "core:internal/memory_to_gc_array"(ptr, len_18);
-                    break __inline_memory_to_gc_string_3: struct.new "core:prelude/string.wado//String" { repr: arr_19, used: len_18 };
-                    unreachable;
-                });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_19 = "core:internal/memory_to_gc_array"(ptr, len_18); struct.new "core:prelude/string.wado//String" { repr: arr_19, used: len_18 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: __option_result };

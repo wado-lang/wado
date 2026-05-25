@@ -50,18 +50,10 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/run"() {
     let __b_0: ref "core:prelude//Array<i32>";
-    let arr: ref "core:prelude//Array<i32>";
-    arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
-        __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
-        break __seq_lit: __b_0;
-        unreachable;
+    __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
+    block {
     };
-    drop(__inline_Array_i32__IndexValue_i32___index_value_8: block -> i32 {
-        block {
-        };
-        break __inline_Array_i32__IndexValue_i32___index_value_8: builtin::array_get<i32>(arr.repr, -1);
-        unreachable;
-    });
+    drop(builtin::array_get<i32>(__b_0.repr, -1));
 }
 
 fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/__cm_export__run"() {

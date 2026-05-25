@@ -82,9 +82,7 @@ fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_bind
 fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_export__run"() {
     let sql: ref "core:prelude/string.wado//String";
     sql = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("select 1"), used: 8 };
-    __inline_run_with_______Closure_2_5: block {
-        break __inline_run_with_______Closure_2_5: "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__Closure_2::__call"(sql);
-    };
+    "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__Closure_2::__call"(sql);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 });
     "wasi/task-return"(0);
 }
@@ -213,15 +211,9 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a_5 = __inline_i32_max_1: block -> i32 {
-            a_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
-            unreachable;
-        };
-        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
-        unreachable;
-    };
+    a_7 = capacity * 2;
+    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
+    new_capacity = select i32(a_5 > 8, a_5, 8);
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
@@ -248,13 +240,7 @@ fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__Closure
     __fused___inline_parse_0: block {
         if self.used == 0 {
             __sroa___fused_payload_2_message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("empty"), used: 5 };
-            "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-                __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
-                "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Parse error: "), used: 13 });
-                "core:prelude/string.wado/String::push_str"(__local_3, __sroa___fused_payload_2_message);
-                break __tmpl: __local_3;
-                unreachable;
-            });
+            "core:internal/panic"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Parse error: "), used: 13 }); "core:prelude/string.wado/String::push_str"(__local_3, __sroa___fused_payload_2_message); __local_3);
             unreachable;
             break __fused___inline_parse_0;
         }

@@ -216,30 +216,15 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/run"() with Stdout
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("open_at: no preopened directories available"), used: 43 });
         return;
     }
-    dir = __inline_Array_core_prelude_types_wado_Tuple_wasi_filesystem_types_wado_Descriptor_core_prelude_string_wado_String___IndexValue_i32___index_value_3: block -> ref "tuple//[Descriptor, String]" {
-        if 0 >= dirs.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_core_prelude_types_wado_Tuple_wasi_filesystem_types_wado_Descriptor_core_prelude_string_wado_String___IndexValue_i32___index_value_3: builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0);
+    dir = if 0 >= dirs.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }.0;
-    preopen_path = __inline_Array_core_prelude_types_wado_Tuple_wasi_filesystem_types_wado_Descriptor_core_prelude_string_wado_String___IndexValue_i32___index_value_4: block -> ref "tuple//[Descriptor, String]" {
-        if 0 >= dirs.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_core_prelude_types_wado_Tuple_wasi_filesystem_types_wado_Descriptor_core_prelude_string_wado_String___IndexValue_i32___index_value_4: builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0);
+    }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).0;
+    preopen_path = if 0 >= dirs.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }.1;
-    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(43), used: 0 };
-        "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("open_at: preopened dir = \""), used: 26 });
-        "core:prelude/string.wado/String::push_str"(__local_7, preopen_path);
-        "core:prelude/string.wado/String::push"(__local_7, 34);
-        break __tmpl: __local_7;
-        unreachable;
-    });
+    }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).1;
+    "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(43), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("open_at: preopened dir = \""), used: 26 }); "core:prelude/string.wado/String::push_str"(__local_7, preopen_path); "core:prelude/string.wado/String::push"(__local_7, 34); __local_7);
     open_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }, 0, 1));
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(open_result) {
         _file = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(open_result).payload_0;
@@ -252,6 +237,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/run"() with Stdout
     }
     missing_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("does_not_exist.txt"), used: 18 }, 0, 1));
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(missing_result) {
+        drop(ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(missing_result).payload_0);
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("open_at: nonexistent file returns error (correct)"), used: 49 });
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("open_at: nonexistent file should have returned an error"), used: 55 });
@@ -261,6 +247,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/run"() with Stdout
         __drop_v_8 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(missing_result).payload_0;
         "wasi/resource-drop:descriptor"(__drop_v_8);
     } else {
+        drop(ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(missing_result).payload_0);
     }
     "wasi/resource-drop:descriptor"(dir);
 }
@@ -298,13 +285,10 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/__cm_binding__Preo
             }
             __elem_addr = __base + (__i * 12);
             __lifted_result_6 = builtin::load_i32(__elem_addr + 0);
-            __lifted_result_7 = __inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
-                ptr = builtin::load_i32(__elem_addr + 4);
-                len_10 = builtin::load_i32((__elem_addr + 4) + 4);
-                arr = "core:internal/memory_to_gc_array"(ptr, len_10);
-                break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_10 };
-                unreachable;
-            };
+            ptr = builtin::load_i32(__elem_addr + 4);
+            len_10 = builtin::load_i32((__elem_addr + 4) + 4);
+            arr = "core:internal/memory_to_gc_array"(ptr, len_10);
+            __lifted_result_7 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_10 };
             "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::push"(__result, struct.new "tuple//[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
@@ -333,7 +317,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/__cm_binding__Desc
     builtin::store_u8(__params_buf + 16, open_flags);
     builtin::store_u8(__params_buf + 17, flags);
     __subtask_packed = "wasi/wasi:filesystem/Descriptor::open_at"(__params_buf, __async_outptr);
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/__closure_wrapper_0") } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado//__Closure_2" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/__closure_wrapper_0" } };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/__cm_lift__Descriptor_open_at"(__outptr) {
@@ -429,13 +413,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado/__cm_lift__Descrip
             __disc_5 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_5 != 0 {
-                __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref "core:prelude/string.wado//String" {
-                    ptr = builtin::load_i32(((__outptr + 4) + 4) + 4);
-                    len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
-                    arr = "core:internal/memory_to_gc_array"(ptr, len_8);
-                    break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 };
-                    unreachable;
-                });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:internal/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
@@ -628,15 +606,9 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a_5 = __inline_i32_max_1: block -> i32 {
-            a_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
-            unreachable;
-        };
-        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
-        unreachable;
-    };
+    a_7 = capacity * 2;
+    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
+    new_capacity = select i32(a_5 > 8, a_5, 8);
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
@@ -699,11 +671,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesy
     handle_1 = self.__cm_packed >> 4;
     if handle_1 != 0 {
         ws_3 = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            "wasi/waitable-join"(handle_1, ws_3);
-            break __inline_cm_waitable_join_0: handle_1;
-            unreachable;
-        });
+        "wasi/waitable-join"(handle_1, ws_3);
         b66: block {
             l67: loop {
                 let event_mv_code: i32;
@@ -734,11 +702,8 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/
     let new_repr: ref "builtin::array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a = capacity * 2;
-        break __inline_i32_max_0: select i32(a > 4, a, 4);
-        unreachable;
-    };
+    a = capacity * 2;
+    new_capacity = select i32(a > 4, a, 4);
     new_repr = builtin::array_new<ref "tuple//[Descriptor, String]">(new_capacity);
     builtin::array_copy<ref "tuple//[Descriptor, String]">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;

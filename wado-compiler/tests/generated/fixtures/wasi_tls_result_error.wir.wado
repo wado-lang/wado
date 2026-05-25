@@ -139,7 +139,7 @@ fn "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_binding__Connec
     __server_name_packed = "core:internal/cm_lower_string"(server_name);
     __async_outptr = "mem/realloc"(0, 0, 4, 8);
     __subtask_packed = "wasi/wasi:tls/Connector::connect"(this, builtin::i32_wrap_i64(__server_name_packed), builtin::i32_wrap_i64(__server_name_packed >> 32_i64), __async_outptr);
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 8, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_tls_result_error.wado//__Closure_2" {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__closure_wrapper_0") } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 8, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_tls_result_error.wado//__Closure_2" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__closure_wrapper_0" } };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_lift__Connector_connect"(__outptr) {
@@ -271,11 +271,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls
     handle_1 = self.__cm_packed >> 4;
     if handle_1 != 0 {
         ws_3 = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            "wasi/waitable-join"(handle_1, ws_3);
-            break __inline_cm_waitable_join_0: handle_1;
-            unreachable;
-        });
+        "wasi/waitable-join"(handle_1, ws_3);
         b8: block {
             l9: loop {
                 let event_mv_code: i32;

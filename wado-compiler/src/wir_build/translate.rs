@@ -1212,7 +1212,14 @@ impl FunctionTranslator<'_, '_> {
                     // Wasm validator knows the enclosing value-block's `end` is
                     // unreachable (void intermediate blocks don't push the expected
                     // typed result to the outer block's type stack).
-                    if expr.type_id == TypeTable::UNIT {
+                    //
+                    // If the translated instruction already ends with an
+                    // unconditional branch / return / `unreachable`, the
+                    // polymorphic-stack rule covers the typed-block `end`
+                    // without a trailing `unreachable`.
+                    if expr.type_id == TypeTable::UNIT
+                        && !instrs.last().is_some_and(WirInstr::ends_with_terminator)
+                    {
                         instrs.push(WirInstr::Unreachable);
                     }
                     continue;
@@ -1252,13 +1259,26 @@ impl FunctionTranslator<'_, '_> {
                 // unreachable; append `unreachable` so the Wasm validator accepts the
                 // typed block even when it has no stack value at the `end`.
                 //
+                // When the instruction already ends with an
+                // unconditional branch / return / `unreachable`
+                // (`ends_with_terminator`), the Wasm validator's
+                // polymorphic stack rule accepts the implicit `end`
+                // without a trailing `unreachable`. Skipping it here
+                // trims the dead opcodes the issue calls "C1" (dead
+                // code after `break`). NOTE: do not widen this to
+                // `always_diverges` — Wasm validation does not treat
+                // `if` with both diverging arms as polymorphic, so
+                // skipping the trailing `unreachable` after such an
+                // `if` would produce an invalid module.
+                //
                 // This covers all non-value-producing last statements:
                 //  - explicit divergence (Return, Br, BrTable, Unreachable)
                 //  - void blocks / loops whose only exits are outer labeled breaks
                 //    (e.g. a TIR `loop {}` translated to `Block{result:None,[Loop{…}]}`)
                 //  - any other void WIR instruction that should never reach this point
                 //    in well-typed TIR
-                let needs_unreachable = is_last && !instr.produces_stack_value();
+                let needs_unreachable =
+                    is_last && !instr.produces_stack_value() && !instr.ends_with_terminator();
                 instrs.push(instr);
                 if needs_unreachable {
                     instrs.push(WirInstr::Unreachable);

@@ -75,23 +75,15 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_complex.wado/run"() with Stdout {
     let __b_0: ref "core:prelude//Array<i32>";
-    let arr: ref "core:prelude//Array<i32>";
-    arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
-        __b_0 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-        break __seq_lit: __b_0;
+    __b_0 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    "core:prelude/array.wado/Array<i32>::push"(__b_0, 1);
+    "core:prelude/array.wado/Array<i32>::push"(__b_0, 2);
+    "core:prelude/array.wado/Array<i32>::push"(__b_0, 3);
+    if 5 >= __b_0.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    };
-    "core:prelude/array.wado/Array<i32>::push"(arr, 1);
-    "core:prelude/array.wado/Array<i32>::push"(arr, 2);
-    "core:prelude/array.wado/Array<i32>::push"(arr, 3);
-    drop(__inline_Array_i32__IndexValue_i32___index_value_6: block -> i32 {
-        if 5 >= arr.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_i32__IndexValue_i32___index_value_6: builtin::array_get<i32>(arr.repr, 5);
-        unreachable;
-    });
+    }
+    drop(builtin::array_get<i32>(__b_0.repr, 5));
 }
 
 fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_complex.wado/__cm_export__run"() {
@@ -200,11 +192,8 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     let new_repr: ref builtin::array<i32>;
     let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a = capacity * 2;
-        break __inline_i32_max_0: select i32(a > 4, a, 4);
-        unreachable;
-    };
+    a = capacity * 2;
+    new_capacity = select i32(a > 4, a, 4);
     new_repr = builtin::array_new<i32>(new_capacity);
     builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
