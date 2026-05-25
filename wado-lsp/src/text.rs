@@ -103,10 +103,7 @@ pub fn lsp_position_to_line_col(
             // terminator before locating the column so a cursor at the
             // end-of-line does not slide into the next line on UTF-16
             // counting.
-            let line_content = line
-                .strip_suffix('\n')
-                .map(|s| s.strip_suffix('\r').unwrap_or(s))
-                .unwrap_or(line);
+            let line_content = line_without_terminator(line);
             let codepoint_col =
                 character_to_codepoint_offset(line_content, position.character, encoding);
             // Compiler convention: 1-based line + 1-based codepoint column.
@@ -116,6 +113,16 @@ pub fn lsp_position_to_line_col(
     // Cursor past EOF: out-of-range sentinel so the compiler's
     // `ast_id_at` returns `None`. See doc-comment above.
     (usize::MAX, 1)
+}
+
+/// Strip a trailing `\n` (and optional preceding `\r`) from a single
+/// line slice. Every line lookup in this crate uses this idiom because
+/// `split_inclusive('\n')` keeps the terminator on each line.
+#[must_use]
+pub(crate) fn line_without_terminator(line: &str) -> &str {
+    line.strip_suffix('\n')
+        .map(|s| s.strip_suffix('\r').unwrap_or(s))
+        .unwrap_or(line)
 }
 
 /// Convert a compiler `Span` to an LSP `Range` in the negotiated
@@ -191,8 +198,12 @@ fn character_to_codepoint_offset(line: &str, character: u32, encoding: PositionE
 }
 
 /// Translate a 0-based codepoint offset at `line` (of `source`) into a
-/// 0-based `character` in `encoding` code units.
-fn codepoint_offset_to_character(
+/// 0-based `character` in `encoding` code units. Looks the line up in
+/// `source` on each call; callers that already have the line slice on
+/// hand (e.g. a delta-encoding loop) should use
+/// [`codepoints_to_code_units`] directly to skip the lookup.
+#[must_use]
+pub(crate) fn codepoint_offset_to_character(
     source: &str,
     line: u32,
     codepoint_col: u32,
@@ -201,19 +212,34 @@ fn codepoint_offset_to_character(
     let Some(line_text) = source.split_inclusive('\n').nth(line as usize) else {
         return codepoint_col;
     };
-    let line_content = line_text
-        .strip_suffix('\n')
-        .map(|s| s.strip_suffix('\r').unwrap_or(s))
-        .unwrap_or(line_text);
-    let max = line_content.chars().count() as u32;
-    let codepoint_col = codepoint_col.min(max);
+    let line_content = line_without_terminator(line_text);
+    let line_codepoints = line_content.chars().count() as u32;
+    codepoints_to_code_units(line_content, line_codepoints, codepoint_col, encoding)
+}
+
+/// Codepoint offset → LSP `character` (code-unit count) inside a single
+/// line slice. The caller supplies `line_codepoints` (the line's
+/// pre-computed codepoint count) so hot loops can hoist the
+/// `chars().count()` walk out — see `semantic_tokens::delta_encode`,
+/// which converts twice per emitted token.
+///
+/// `codepoint_col` is saturated against `line_codepoints` so callers
+/// don't need a separate clamp.
+#[must_use]
+pub(crate) fn codepoints_to_code_units(
+    line: &str,
+    line_codepoints: u32,
+    codepoint_col: u32,
+    encoding: PositionEncoding,
+) -> u32 {
+    let codepoint_col = codepoint_col.min(line_codepoints);
     match encoding {
-        PositionEncoding::Utf8 => line_content
+        PositionEncoding::Utf8 => line
             .chars()
             .take(codepoint_col as usize)
             .map(|c| c.len_utf8() as u32)
             .sum(),
-        PositionEncoding::Utf16 => line_content
+        PositionEncoding::Utf16 => line
             .chars()
             .take(codepoint_col as usize)
             .map(|c| c.len_utf16() as u32)

@@ -18,36 +18,18 @@ use wado_compiler::annotate::Annotated;
 
 use crate::diagnostics::{Position, Range};
 use crate::location::span_to_range;
+use crate::macros::lsp_repr_u32_enum;
 use crate::text::{PositionEncoding, lsp_position_to_line_col};
 
-/// LSP `DocumentHighlightKind` values. Serializes as the 1..=3 integer
-/// defined by the LSP wire format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(into = "u32", try_from = "u32")]
-pub enum HighlightKind {
-    Text = 1,
-    Read = 2,
-    Write = 3,
-}
-
-impl From<HighlightKind> for u32 {
-    fn from(k: HighlightKind) -> Self {
-        k as Self
+lsp_repr_u32_enum!(
+    /// LSP `DocumentHighlightKind` values. Serializes as the 1..=3 integer
+    /// defined by the LSP wire format.
+    pub enum HighlightKind {
+        Text = 1,
+        Read = 2,
+        Write = 3,
     }
-}
-
-impl TryFrom<u32> for HighlightKind {
-    type Error = String;
-
-    fn try_from(n: u32) -> Result<Self, <Self as TryFrom<u32>>::Error> {
-        match n {
-            1 => Ok(Self::Text),
-            2 => Ok(Self::Read),
-            3 => Ok(Self::Write),
-            _ => Err(format!("invalid HighlightKind: {n}")),
-        }
-    }
-}
+);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocumentHighlight {
@@ -112,40 +94,13 @@ pub fn document_highlight(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use indexmap::IndexMap;
-    use wado_compiler::CompilerHost;
+    use crate::test_support::MapHost;
     use wado_compiler::annotate::annotate_with_invocations;
-    use wado_compiler::{Diagnostic as CompilerDiagnostic, SourceError};
-
-    struct TestHost {
-        sources: IndexMap<String, Vec<u8>>,
-    }
-
-    impl TestHost {
-        fn single(path: &str, source: &str) -> Self {
-            let mut sources = IndexMap::new();
-            sources.insert(path.to_string(), source.as_bytes().to_vec());
-            Self { sources }
-        }
-    }
-
-    impl CompilerHost for TestHost {
-        async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-            self.sources
-                .get(path)
-                .cloned()
-                .ok_or_else(|| SourceError::NotFound {
-                    path: path.to_string(),
-                })
-        }
-
-        fn emit_diagnostic(&self, _diagnostic: CompilerDiagnostic) {}
-    }
 
     async fn highlights_at(source: &str, line: u32, character: u32) -> Vec<DocumentHighlight> {
         let path = "/test.wado";
         let uri = format!("file://{path}");
-        let host = TestHost::single(path, source);
+        let host = MapHost::single(path, source);
         let invocations = wado_compiler::kiln::InvocationIndex::new();
         let annotated = annotate_with_invocations(source, &host, Some(path), invocations).await;
         document_highlight(

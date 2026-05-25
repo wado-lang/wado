@@ -1,3 +1,5 @@
+mod macros;
+
 mod definition;
 mod diagnostics;
 mod document_highlight;
@@ -8,6 +10,8 @@ mod location;
 mod references;
 pub mod semantic_tokens;
 pub mod server;
+#[doc(hidden)]
+pub mod test_support;
 pub mod text;
 pub mod uri;
 
@@ -191,6 +195,29 @@ impl Engine {
         Some(snapshot)
     }
 
+    /// Compute the snapshot + document text for `uri` and hand them to
+    /// `f`. Returns `default` when either lookup misses (closed
+    /// document or load failure).
+    ///
+    /// Every position-bearing query (`definition`, `hover`, `references`,
+    /// `document_highlight`) used to inline the same `snapshot.await? +
+    /// doc_text` prologue. Centralising it here means a future change
+    /// to that prologue (e.g. caching the doc text on `Snapshot`) lands
+    /// in one place.
+    async fn with_doc_snapshot<H, F, R>(&self, uri: &str, host: &H, default: R, f: F) -> R
+    where
+        H: CompilerHost,
+        F: FnOnce(&Snapshot, &str) -> R,
+    {
+        let Some(snapshot) = self.snapshot(uri, host).await else {
+            return default;
+        };
+        let Some(doc_text) = self.documents.get(uri).map(|d| d.text.as_str()) else {
+            return default;
+        };
+        f(&snapshot, doc_text)
+    }
+
     /// Find the definition of the symbol at the given position.
     pub async fn definition<H: CompilerHost>(
         &self,
@@ -198,15 +225,16 @@ impl Engine {
         position: Position,
         host: &H,
     ) -> Option<DefinitionResult> {
-        let snapshot = self.snapshot(uri, host).await?;
-        let doc_text = self.documents.get(uri)?.text.as_str();
-        definition::find_definition(
-            &snapshot.annotated,
-            doc_text,
-            position,
-            uri,
-            self.position_encoding,
-        )
+        self.with_doc_snapshot(uri, host, None, |snapshot, doc_text| {
+            definition::find_definition(
+                &snapshot.annotated,
+                doc_text,
+                position,
+                uri,
+                self.position_encoding,
+            )
+        })
+        .await
     }
 
     /// Compute hover information for the symbol at the given position.
@@ -216,15 +244,16 @@ impl Engine {
         position: Position,
         host: &H,
     ) -> Option<HoverResult> {
-        let snapshot = self.snapshot(uri, host).await?;
-        let doc_text = self.documents.get(uri)?.text.as_str();
-        hover::find_hover(
-            &snapshot.annotated,
-            doc_text,
-            position,
-            uri,
-            self.position_encoding,
-        )
+        self.with_doc_snapshot(uri, host, None, |snapshot, doc_text| {
+            hover::find_hover(
+                &snapshot.annotated,
+                doc_text,
+                position,
+                uri,
+                self.position_encoding,
+            )
+        })
+        .await
     }
 
     /// Find every reference to the symbol named at the given position.
@@ -235,20 +264,17 @@ impl Engine {
         include_declaration: bool,
         host: &H,
     ) -> Vec<ReferenceLocation> {
-        let Some(snapshot) = self.snapshot(uri, host).await else {
-            return Vec::new();
-        };
-        let Some(doc_text) = self.documents.get(uri).map(|d| d.text.as_str()) else {
-            return Vec::new();
-        };
-        references::find_references(
-            &snapshot.annotated,
-            doc_text,
-            position,
-            uri,
-            include_declaration,
-            self.position_encoding,
-        )
+        self.with_doc_snapshot(uri, host, Vec::new(), |snapshot, doc_text| {
+            references::find_references(
+                &snapshot.annotated,
+                doc_text,
+                position,
+                uri,
+                include_declaration,
+                self.position_encoding,
+            )
+        })
+        .await
     }
 
     /// Find every occurrence of the symbol named at the given position
@@ -260,19 +286,16 @@ impl Engine {
         position: Position,
         host: &H,
     ) -> Vec<DocumentHighlight> {
-        let Some(snapshot) = self.snapshot(uri, host).await else {
-            return Vec::new();
-        };
-        let Some(doc_text) = self.documents.get(uri).map(|d| d.text.as_str()) else {
-            return Vec::new();
-        };
-        document_highlight::document_highlight(
-            &snapshot.annotated,
-            doc_text,
-            position,
-            uri,
-            self.position_encoding,
-        )
+        self.with_doc_snapshot(uri, host, Vec::new(), |snapshot, doc_text| {
+            document_highlight::document_highlight(
+                &snapshot.annotated,
+                doc_text,
+                position,
+                uri,
+                self.position_encoding,
+            )
+        })
+        .await
     }
 
     /// Resolve a `core:` / `wasi:` URI to its bundled stdlib source.
@@ -400,51 +423,8 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::MapHost;
     use futures::executor::block_on;
-    use indexmap::IndexMap as IndexMapAlias;
-    use wado_compiler::SourceError;
-
-    struct EmptyHost;
-    impl CompilerHost for EmptyHost {
-        async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-            Err(SourceError::NotFound {
-                path: path.to_string(),
-            })
-        }
-        fn emit_diagnostic(&self, _: CompilerDiagnostic) {}
-    }
-
-    struct MapHost {
-        sources: IndexMapAlias<String, Vec<u8>>,
-        emitted: std::sync::Mutex<Vec<CompilerDiagnostic>>,
-    }
-
-    impl MapHost {
-        fn new(entries: &[(&str, &str)]) -> Self {
-            let mut sources = IndexMapAlias::new();
-            for (path, body) in entries {
-                sources.insert((*path).to_string(), body.as_bytes().to_vec());
-            }
-            Self {
-                sources,
-                emitted: std::sync::Mutex::new(Vec::new()),
-            }
-        }
-    }
-
-    impl CompilerHost for MapHost {
-        async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-            self.sources
-                .get(path)
-                .cloned()
-                .ok_or_else(|| SourceError::NotFound {
-                    path: path.to_string(),
-                })
-        }
-        fn emit_diagnostic(&self, d: CompilerDiagnostic) {
-            self.emitted.lock().unwrap().push(d);
-        }
-    }
 
     #[test]
     fn test_open_and_close_document() {
@@ -474,7 +454,7 @@ mod tests {
         // removed.
         let mut engine = Engine::new();
         engine.open_document("file:///t.wado", "fn a() {}".to_string());
-        let host = EmptyHost;
+        let host = MapHost::empty();
         let _ = block_on(engine.snapshot("file:///t.wado", &host)).expect("snapshot");
         assert!(
             engine
@@ -508,7 +488,7 @@ mod tests {
         let mut engine = Engine::new();
         engine.open_document("file:///foo.wado", "fn a() {}".to_string());
         engine.open_document("file:///bar.wado", "fn b() {}".to_string());
-        let host = EmptyHost;
+        let host = MapHost::empty();
         let _ = block_on(engine.snapshot("file:///foo.wado", &host)).expect("foo snapshot");
         let _ = block_on(engine.snapshot("file:///bar.wado", &host)).expect("bar snapshot");
         engine.update_document("file:///bar.wado", "fn bb() {}".to_string());
@@ -531,13 +511,12 @@ mod tests {
         // side effects (logging, error counting) would otherwise vanish
         // silently when Engine::snapshot wraps the host.
         let text = "fn f() -> i32 { return \"oops\"; }";
-        let host = MapHost::new(&[("/t.wado", text)]);
+        let host = MapHost::single("/t.wado", text);
         let mut engine = Engine::new();
         engine.open_document("file:///t.wado", text.to_string());
         let _ = block_on(engine.snapshot("file:///t.wado", &host)).expect("snapshot");
-        let emitted = host.emitted.lock().unwrap();
         assert!(
-            !emitted.is_empty(),
+            !host.emitted().is_empty(),
             "inner host should have received forwarded diagnostics",
         );
     }
