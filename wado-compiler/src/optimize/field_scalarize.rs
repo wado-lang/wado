@@ -2080,7 +2080,10 @@ fn walk_stmt(
             walk_nested_loop(body, states, out, ctx, span);
             out.push(stmt);
         }
-        NirStmtKind::LabeledBlock { label, block: inner } => {
+        NirStmtKind::LabeledBlock {
+            label,
+            block: inner,
+        } => {
             walk_labeled_block(label, inner, states, ctx);
             out.push(stmt);
         }
