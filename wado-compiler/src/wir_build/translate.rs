@@ -1259,11 +1259,17 @@ impl FunctionTranslator<'_, '_> {
                 // unreachable; append `unreachable` so the Wasm validator accepts the
                 // typed block even when it has no stack value at the `end`.
                 //
-                // When the instruction already ends with an unconditional branch /
-                // return / `unreachable` (`ends_with_terminator`), the Wasm
-                // validator's polymorphic stack rule accepts the implicit `end`
-                // without a trailing `unreachable`. Skipping it here trims the
-                // dead opcodes the issue calls "C1" (dead code after `break`).
+                // When the instruction already ends with an
+                // unconditional branch / return / `unreachable`
+                // (`ends_with_terminator`), the Wasm validator's
+                // polymorphic stack rule accepts the implicit `end`
+                // without a trailing `unreachable`. Skipping it here
+                // trims the dead opcodes the issue calls "C1" (dead
+                // code after `break`). NOTE: do not widen this to
+                // `always_diverges` — Wasm validation does not treat
+                // `if` with both diverging arms as polymorphic, so
+                // skipping the trailing `unreachable` after such an
+                // `if` would produce an invalid module.
                 //
                 // This covers all non-value-producing last statements:
                 //  - explicit divergence (Return, Br, BrTable, Unreachable)

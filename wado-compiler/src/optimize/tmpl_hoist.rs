@@ -930,62 +930,104 @@ fn extract_formatter_fields(
                 NirStmtKind::Break { value: Some(v), .. } => v,
                 _ => return None,
             };
-            let NirExprKind::StructLiteral {
-                struct_name,
-                fields,
-                struct_type,
-            } = &break_value.kind
-            else {
+            extract_formatter_fields_from_block(
+                block,
+                break_value,
+                hoisted_buf_index,
+                value.type_id,
+                value.span,
+            )
+        }
+        NirExprKind::Block(block) => {
+            // After `branch_prune`'s C3 rewrite flattens
+            // `__inline_Formatter__new_*: { …; break: Formatter { … } }`
+            // into a plain `Block { …; Expr(Formatter { … }) }`, the
+            // surface shape `extract_formatter_fields` used to match on
+            // (`LabeledBlock`) is gone. Defensively support the flattened
+            // shape here so a future change to the inliner (e.g. one that
+            // leaves a multi-use `buf` binding `copy_prop` can't fold) does
+            // not silently disable Formatter hoisting.
+            let tail_stmt = block.stmts.last()?;
+            let NirStmtKind::Expr(tail) = &tail_stmt.kind else {
                 return None;
             };
-
-            // Check if buf traces to hoisted buffer (directly or via intermediate local)
-            let buf_field = fields.iter().find(|f| f.name == "buf")?;
-            if buf_field_references_local(&buf_field.value, hoisted_buf_index) {
-                return Some((struct_name, fields, *struct_type, value.type_id, value.span));
-            }
-
-            // Trace through intermediate local in the block
-            let buf_inner_local = extract_local_from_ref(&buf_field.value)?;
-            for stmt in &block.stmts {
-                match &stmt.kind {
-                    NirStmtKind::Let {
-                        local_index,
-                        value: let_value,
-                        ..
-                    } if *local_index == buf_inner_local => {
-                        if references_local(let_value, hoisted_buf_index) {
-                            return Some((
-                                struct_name,
-                                fields,
-                                *struct_type,
-                                value.type_id,
-                                value.span,
-                            ));
-                        }
-                    }
-                    NirStmtKind::Expr(expr) => {
-                        if let NirExprKind::Assign { target, value: av } = &expr.kind
-                            && let NirExprKind::Local { index, .. } = &target.kind
-                            && *index == buf_inner_local
-                            && references_local(av, hoisted_buf_index)
-                        {
-                            return Some((
-                                struct_name,
-                                fields,
-                                *struct_type,
-                                value.type_id,
-                                value.span,
-                            ));
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            None
+            extract_formatter_fields_from_block(
+                block,
+                tail,
+                hoisted_buf_index,
+                value.type_id,
+                value.span,
+            )
         }
         _ => None,
     }
+}
+
+/// Shared "block carrying a `Formatter { … }` value" matcher used by both
+/// the `LabeledBlock` (inlined `Formatter::new`) and the post-C3 `Block`
+/// (flattened version of the same shape) arms of
+/// `extract_formatter_fields`. `value_expr` is the producing expression —
+/// either the broken value or the trailing `Expr` stmt.
+fn extract_formatter_fields_from_block<'a>(
+    block: &'a NirBlock,
+    value_expr: &'a NirExpr,
+    hoisted_buf_index: u32,
+    value_type_id: TypeId,
+    value_span: Span,
+) -> Option<(&'a str, &'a [crate::nir::NirStructField], TypeId, TypeId, Span)> {
+    let NirExprKind::StructLiteral {
+        struct_name,
+        fields,
+        struct_type,
+    } = &value_expr.kind
+    else {
+        return None;
+    };
+
+    // Check if buf traces to hoisted buffer (directly or via intermediate local)
+    let buf_field = fields.iter().find(|f| f.name == "buf")?;
+    if buf_field_references_local(&buf_field.value, hoisted_buf_index) {
+        return Some((struct_name, fields, *struct_type, value_type_id, value_span));
+    }
+
+    // Trace through intermediate local in the block
+    let buf_inner_local = extract_local_from_ref(&buf_field.value)?;
+    for stmt in &block.stmts {
+        match &stmt.kind {
+            NirStmtKind::Let {
+                local_index,
+                value: let_value,
+                ..
+            } if *local_index == buf_inner_local => {
+                if references_local(let_value, hoisted_buf_index) {
+                    return Some((
+                        struct_name,
+                        fields,
+                        *struct_type,
+                        value_type_id,
+                        value_span,
+                    ));
+                }
+            }
+            NirStmtKind::Expr(expr) => {
+                if let NirExprKind::Assign { target, value: av } = &expr.kind
+                    && let NirExprKind::Local { index, .. } = &target.kind
+                    && *index == buf_inner_local
+                    && references_local(av, hoisted_buf_index)
+                {
+                    return Some((
+                        struct_name,
+                        fields,
+                        *struct_type,
+                        value_type_id,
+                        value_span,
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Extract the local index from a reference expression.

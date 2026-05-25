@@ -203,6 +203,11 @@ pub(super) fn may_trap(instr: &WirInstr) -> bool {
         WirInstr::ArrayGet { .. }
         | WirInstr::ArrayGetS { .. }
         | WirInstr::ArrayGetU { .. }
+        // `array.len` traps when the array reference is null.
+        | WirInstr::ArrayLen(_)
+        // `array.new_data` traps when offset + len overruns the data
+        // segment.
+        | WirInstr::ArrayNewData { .. }
         // GC struct reads trap on null receiver.
         | WirInstr::StructGet { .. }
         // Ref cast / non-null assertion trap on failure.
@@ -228,6 +233,16 @@ pub(super) fn may_trap(instr: &WirInstr) -> bool {
         | WirInstr::I64TruncF32U(_)
         | WirInstr::I64TruncF64S(_)
         | WirInstr::I64TruncF64U(_)
+        // Linear-memory loads trap on out-of-bounds access.
+        | WirInstr::I32Load { .. }
+        | WirInstr::I32Load8U { .. }
+        | WirInstr::I32Load8S { .. }
+        | WirInstr::I32Load16U { .. }
+        | WirInstr::I32Load16S { .. }
+        | WirInstr::I64Load { .. }
+        | WirInstr::V128Load { .. }
+        // `table.get` traps when the index is out of bounds.
+        | WirInstr::TableGet { .. }
         // Explicit trap.
         | WirInstr::Unreachable
     ) {

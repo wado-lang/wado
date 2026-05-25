@@ -72,7 +72,7 @@ impl NirOptVisitor for BranchPruner {
         // Bottom-up: walk stmts first
         let mut changed = opt_walk_block(self, block);
         // Then eliminate dead stmts
-        changed |= eliminate_dead_stmts(block);
+        changed |= eliminate_dead_stmts(block, self.mode);
         changed
     }
 }
@@ -82,10 +82,16 @@ impl NirOptVisitor for BranchPruner {
 /// control flow over their straight-line body and the labeled wrapper can be
 /// removed by dropping the trailing `break label` and lifting the rest of
 /// `inner.stmts` into the parent stmt list.
-fn is_tail_break_only_labeled_block(stmt: &NirStmt) -> bool {
+///
+/// `mode` mirrors C3's PostFixpoint / Fixpoint distinction: in `Fixpoint`
+/// mode the `__tmpl:` carve-out preserves the anchor `tmpl_hoist` needs.
+fn is_tail_break_only_labeled_block(stmt: &NirStmt, mode: PruneMode) -> bool {
     let NirStmtKind::LabeledBlock { label, block: inner } = &stmt.kind else {
         return false;
     };
+    if mode == PruneMode::Fixpoint && label == "__tmpl" {
+        return false;
+    }
     let Some(last) = inner.stmts.last() else {
         return false;
     };
@@ -102,6 +108,17 @@ fn is_tail_break_only_labeled_block(stmt: &NirStmt) -> bool {
     !inner.stmts[..inner.stmts.len() - 1]
         .iter()
         .any(|s| stmt_has_break_to(label, s))
+}
+
+/// True if the trailing instruction of `stmts` unconditionally exits the
+/// enclosing stmt list (`Break` / `Continue` / `Return`). Used by
+/// `eliminate_dead_stmts` to keep the `terminated` flag accurate after
+/// flatten paths hoist a terminator out of an inner block.
+fn ends_with_terminator_stmt(stmts: &[NirStmt]) -> bool {
+    matches!(
+        stmts.last().map(|s| &s.kind),
+        Some(NirStmtKind::Break { .. } | NirStmtKind::Continue | NirStmtKind::Return { .. })
+    )
 }
 
 /// Simplify trivial blocks at the expression level.
@@ -160,11 +177,7 @@ fn prune_expr(expr: &mut NirExpr, mode: PruneMode) -> bool {
         let block_span = block.span;
         let mut stmts = block.stmts;
         let last = stmts.pop().unwrap();
-        let NirStmt {
-            span: break_span,
-            kind,
-            ..
-        } = last;
+        let NirStmt { kind, .. } = last;
         let NirStmtKind::Break {
             value: Some(value),
             ..
@@ -175,7 +188,12 @@ fn prune_expr(expr: &mut NirExpr, mode: PruneMode) -> bool {
         if stmts.is_empty() {
             *expr = value;
         } else {
-            stmts.push(NirStmt::new(NirStmtKind::Expr(value), break_span));
+            // Anchor the synthetic tail Expr stmt on the broken
+            // value's own span so diagnostics / hovers point at the
+            // value's source location, not the `break label: …`
+            // statement.
+            let tail_span = value.span;
+            stmts.push(NirStmt::new(NirStmtKind::Expr(value), tail_span));
             expr.kind = NirExprKind::Block(NirBlock::new(stmts, block_span));
         }
         changed = true;
@@ -186,7 +204,12 @@ fn prune_expr(expr: &mut NirExpr, mode: PruneMode) -> bool {
     // to C3 with an empty prefix, but the C3 rule above requires
     // `value: Some(_)`, so this rule additionally covers the `value: None`
     // case and any subtle path the N-stmt collapse leaves behind.
+    //
+    // `__tmpl` carve-out mirrors C3: during the fixpoint loop, leave
+    // `__tmpl:` blocks alone so `tmpl_hoist` can still anchor on them
+    // even if some other pass shrinks the body to a single break.
     if let NirExprKind::LabeledBlock { label, block, .. } = &expr.kind
+        && (mode == PruneMode::PostFixpoint || label != "__tmpl")
         && block.stmts.len() == 1
         && let NirStmtKind::Break {
             label: Some(brk_label),
@@ -230,19 +253,26 @@ fn prune_expr(expr: &mut NirExpr, mode: PruneMode) -> bool {
 /// Constant-condition `if` statement folding (`if true { … }` →
 /// inline branch) lives in `niri::Interpreter::reduce_local_block`
 /// and runs as part of the `const_folding` pass.
-fn eliminate_dead_stmts(block: &mut NirBlock) -> bool {
+fn eliminate_dead_stmts(block: &mut NirBlock, mode: PruneMode) -> bool {
+    // In `Fixpoint` mode the unused-label flatten still has to keep `__tmpl:`
+    // wrappers alive: even if no `break __tmpl` survives, `tmpl_hoist` still
+    // anchors on the labeled-block shape itself.
+    let unused_label_flattenable = |label: &str, inner: &NirBlock| {
+        (mode == PruneMode::PostFixpoint || label != "__tmpl")
+            && (inner.stmts.is_empty() || !block_has_break_to(label, inner))
+    };
     let dominated = |s: &NirStmt| {
         matches!(
             &s.kind,
             NirStmtKind::LabeledBlock { label, block }
-                if block.stmts.is_empty() || !block_has_break_to(label, block)
+                if unused_label_flattenable(label, block)
         ) || matches!(
             &s.kind,
             NirStmtKind::Expr(e) if matches!(e.kind, NirExprKind::Unit | NirExprKind::Block(_))
         ) || matches!(
             &s.kind,
-            NirStmtKind::Expr(e) if matches!(&e.kind, NirExprKind::LabeledBlock { label, block, .. } if !block_has_break_to(label, block))
-        ) || is_tail_break_only_labeled_block(s)
+            NirStmtKind::Expr(e) if matches!(&e.kind, NirExprKind::LabeledBlock { label, block, .. } if unused_label_flattenable(label, block))
+        ) || is_tail_break_only_labeled_block(s, mode)
     };
     let has_dead_after_terminator = block.stmts.iter().enumerate().any(|(i, s)| {
         i + 1 < block.stmts.len()
@@ -269,17 +299,24 @@ fn eliminate_dead_stmts(block: &mut NirBlock) -> bool {
             ref label,
             block: ref inner,
         } = stmt.kind
-            && !block_has_break_to(label, inner)
+            && unused_label_flattenable(label, inner)
         {
             let NirStmtKind::LabeledBlock { block: inner, .. } = stmt.kind else {
                 unreachable!();
             };
+            // If the hoisted-out inner stmts end with a terminator, mark the
+            // outer list as terminated so the rest of `old_stmts` is dropped
+            // in this same pass instead of waiting for the next fixpoint
+            // iteration.
+            if ends_with_terminator_stmt(&inner.stmts) {
+                terminated = true;
+            }
             block.stmts.extend(inner.stmts);
             continue;
         }
         // (C2) Labeled block whose only `break LABEL` is a value-less tail
         // statement → drop the trailing break, flatten the rest into parent.
-        if is_tail_break_only_labeled_block(&stmt) {
+        if is_tail_break_only_labeled_block(&stmt, mode) {
             let NirStmtKind::LabeledBlock {
                 block: mut inner, ..
             } = stmt.kind
@@ -287,6 +324,9 @@ fn eliminate_dead_stmts(block: &mut NirBlock) -> bool {
                 unreachable!();
             };
             inner.stmts.pop();
+            if ends_with_terminator_stmt(&inner.stmts) {
+                terminated = true;
+            }
             block.stmts.extend(inner.stmts);
             continue;
         }
@@ -306,11 +346,14 @@ fn eliminate_dead_stmts(block: &mut NirBlock) -> bool {
             let NirExprKind::Block(inner) = e.kind else {
                 unreachable!();
             };
+            if ends_with_terminator_stmt(&inner.stmts) {
+                terminated = true;
+            }
             block.stmts.extend(inner.stmts);
             continue;
         }
         if let NirStmtKind::Expr(e) = &stmt.kind
-            && matches!(&e.kind, NirExprKind::LabeledBlock { label, block, .. } if !block_has_break_to(label, block))
+            && matches!(&e.kind, NirExprKind::LabeledBlock { label, block, .. } if unused_label_flattenable(label, block))
         {
             let NirStmtKind::Expr(e) = stmt.kind else {
                 unreachable!();
@@ -318,6 +361,9 @@ fn eliminate_dead_stmts(block: &mut NirBlock) -> bool {
             let NirExprKind::LabeledBlock { block: inner, .. } = e.kind else {
                 unreachable!();
             };
+            if ends_with_terminator_stmt(&inner.stmts) {
+                terminated = true;
+            }
             block.stmts.extend(inner.stmts);
             continue;
         }

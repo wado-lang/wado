@@ -581,9 +581,14 @@ fn run_optimization_passes(
     // preserved as anchors for `tmpl_hoist`. `tmpl_hoist` has finished
     // by now (it runs inside the fixpoint loop), so the wrappers are
     // pure overhead — peel them so codegen emits the inner straight-line
-    // body directly.
+    // body directly. Iterate until convergence because one flatten can
+    // expose another (e.g. single-stmt Block collapse on a freshly
+    // produced `Block { Expr(tail) }`).
     run_pass("nir/branch_prune_final", project, profiler, |p| {
-        prune_template_block_wrappers(p);
-        true
+        let mut any_changed = false;
+        while prune_template_block_wrappers(p) {
+            any_changed = true;
+        }
+        any_changed
     });
 }

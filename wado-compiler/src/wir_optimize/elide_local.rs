@@ -68,7 +68,13 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
             && !self.read_locals.contains(name.as_str())
         {
             let value_expr = std::mem::replace(value.as_mut(), WirInstr::Nop);
-            if is_side_effect_free(&value_expr) {
+            // Preserve `may_trap` sub-trees (OOB array/memory reads,
+            // null receiver, div-by-zero, …) — Wado language semantics
+            // requires those traps to fire even when the binding
+            // target is unused. Drops them through a `Drop` so the
+            // peephole-level `Drop(may_trap)` guard in path 2 below
+            // keeps them out of harm's way.
+            if is_side_effect_free(&value_expr) && !may_trap(&value_expr) {
                 *instr = WirInstr::Nop;
             } else {
                 *instr = WirInstr::Drop(Box::new(value_expr));
