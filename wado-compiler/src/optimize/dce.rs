@@ -1664,6 +1664,37 @@ fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
 
         let type_table = project.type_table.borrow();
 
+        // Per-iteration: build name-keyed lookup tables from `reachable_types`
+        // so the struct/variant reachability checks below are O(1) hash
+        // probes instead of O(N) `iter().any()` scans over `reachable_types`.
+        // Without this, this loop was O(S × N) per iteration where S = struct
+        // count and N = reachable type count — for a 900-struct / 2200-type
+        // project (a Gale-generated parser) that is ~2M `type_table.get` +
+        // pattern-match ops *per iteration*, dominating
+        // `remove_unreachable_types`.
+        let mut reachable_generic_instance_names: IndexSet<&str> = IndexSet::default();
+        let mut reachable_struct_monomorph_names: IndexSet<&str> = IndexSet::default();
+        let mut reachable_struct_monomorph_bases: IndexSet<&str> = IndexSet::default();
+        for &id in &reachable_types {
+            match type_table.get(id) {
+                ResolvedType::Struct {
+                    name,
+                    is_monomorphized: true,
+                    base_name,
+                    ..
+                } => {
+                    reachable_struct_monomorph_names.insert(name.as_str());
+                    if let Some(base) = base_name {
+                        reachable_struct_monomorph_bases.insert(base.as_str());
+                    }
+                }
+                ResolvedType::GenericInstance { name, .. } => {
+                    reachable_generic_instance_names.insert(name.as_str());
+                }
+                _ => {}
+            }
+        }
+
         // Collect struct field types for reachable structs
         // A struct's fields should be collected if:
         // 1. The Struct type itself is reachable, OR
@@ -1678,29 +1709,12 @@ fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
                     .map(|id| reachable_types.contains(&id))
                     .unwrap_or(false);
 
-                let instance_reachable = reachable_types.iter().any(|&id| {
-                    matches!(
-                        type_table.get(id),
-                        ResolvedType::GenericInstance { name, .. } if name == &tir_struct.name
-                    )
-                });
-
-                let monomorph_reachable = reachable_types.iter().any(|&id| {
-                    matches!(
-                        type_table.get(id),
-                        ResolvedType::Struct { base_name: Some(base), is_monomorphized: true, .. } if base == &tir_struct.name
-                    )
-                });
-
-                direct_reachable || instance_reachable || monomorph_reachable
+                direct_reachable
+                    || reachable_generic_instance_names.contains(tir_struct.name.as_str())
+                    || reachable_struct_monomorph_bases.contains(tir_struct.name.as_str())
             } else {
                 // Monomorphized struct - check by exact name match
-                reachable_types.iter().any(|&id| {
-                    matches!(
-                        type_table.get(id),
-                        ResolvedType::Struct { name, is_monomorphized: true, .. } if name == &tir_struct.name
-                    )
-                })
+                reachable_struct_monomorph_names.contains(tir_struct.name.as_str())
             };
 
             if struct_reachable {
@@ -1725,17 +1739,12 @@ fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
         // 2. Any GenericInstance with this variant name is reachable
         for variant in &project.variants {
             let base_reachable = type_table
-                .iter_type_ids()
-                .find(|&id| matches!(type_table.get(id), ResolvedType::Variant { name, .. } if name == &variant.name))
+                .find_variant_type(&variant.name, &variant.module_source)
                 .map(|id| reachable_types.contains(&id))
                 .unwrap_or(false);
 
-            let instance_reachable = reachable_types.iter().any(|&id| {
-                matches!(
-                    type_table.get(id),
-                    ResolvedType::GenericInstance { name, .. } if name == &variant.name
-                )
-            });
+            let instance_reachable =
+                reachable_generic_instance_names.contains(variant.name.as_str());
 
             if base_reachable || instance_reachable {
                 for case in &variant.cases {
