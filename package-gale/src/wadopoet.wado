@@ -15,8 +15,16 @@ pub struct CodeWriter {
 
 impl CodeWriter {
     pub fn new() -> CodeWriter {
+        // For small grammars the 64 KB headroom is a few-page overhead;
+        // for production grammars (Rust*.g4 ≈ 1.3 MB output) this
+        // single-shot allocation replaces ~9 `String::grow` doubling
+        // events through the codegen pass.
+        return CodeWriter::with_capacity(65536);
+    }
+
+    pub fn with_capacity(initial: i32) -> CodeWriter {
         return CodeWriter {
-            buf: String::with_capacity(4096),
+            buf: String::with_capacity(initial),
             indent_level: 0,
             fresh_line: true,
             id_counter: 0,
