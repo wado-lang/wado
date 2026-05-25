@@ -149,23 +149,9 @@ fn "wado-compiler/tests/fixtures/wasi_cli.wado/run"() with Stdout, Stderr, Envir
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: stdout works"), used: 18 });
     "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: stderr works"), used: 18 });
     arguments = "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Environment_get_arguments"();
-    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(57), used: 0 };
-        "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: Environment::get_arguments().len = "), used: 41 });
-        __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(arguments.used, __local_3);
-        break __tmpl: __local_2;
-        unreachable;
-    });
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(57), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: Environment::get_arguments().len = "), used: 41 }); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(arguments.used, __local_3); __local_2);
     env_vars = "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Environment_get_environment"();
-    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(59), used: 0 };
-        "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: Environment::get_environment().len = "), used: 43 });
-        __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(env_vars.used, __local_5);
-        break __tmpl: __local_4;
-        unreachable;
-    });
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(59), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: Environment::get_environment().len = "), used: 43 }); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(env_vars.used, __local_5); __local_4);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all cli tests passed"), used: 20 });
 }
 
@@ -204,20 +190,14 @@ fn "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Environment_get_env
                 break b0;
             }
             __elem_addr = __base + (__i * 16);
-            __lifted_result_6 = __inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
-                ptr_9 = builtin::load_i32(__elem_addr + 0);
-                len_10 = builtin::load_i32((__elem_addr + 0) + 4);
-                arr_11 = "core:internal/memory_to_gc_array"(ptr_9, len_10);
-                break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: arr_11, used: len_10 };
-                unreachable;
-            };
-            __lifted_result_7 = __inline_memory_to_gc_string_3: block -> ref "core:prelude/string.wado//String" {
-                ptr_14 = builtin::load_i32(__elem_addr + 8);
-                len_15 = builtin::load_i32((__elem_addr + 8) + 4);
-                arr_16 = "core:internal/memory_to_gc_array"(ptr_14, len_15);
-                break __inline_memory_to_gc_string_3: struct.new "core:prelude/string.wado//String" { repr: arr_16, used: len_15 };
-                unreachable;
-            };
+            ptr_9 = builtin::load_i32(__elem_addr + 0);
+            len_10 = builtin::load_i32((__elem_addr + 0) + 4);
+            arr_11 = "core:internal/memory_to_gc_array"(ptr_9, len_10);
+            __lifted_result_6 = struct.new "core:prelude/string.wado//String" { repr: arr_11, used: len_10 };
+            ptr_14 = builtin::load_i32(__elem_addr + 8);
+            len_15 = builtin::load_i32((__elem_addr + 8) + 4);
+            arr_16 = "core:internal/memory_to_gc_array"(ptr_14, len_15);
+            __lifted_result_7 = struct.new "core:prelude/string.wado//String" { repr: arr_16, used: len_15 };
             "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push"(__result, struct.new "tuple//[String, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 0), builtin::load_i32((__elem_addr + 0) + 4), 1, 0));
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 8), builtin::load_i32((__elem_addr + 8) + 4), 1, 0));
@@ -254,13 +234,7 @@ fn "wado-compiler/tests/fixtures/wasi_cli.wado/__cm_binding__Environment_get_arg
                 break b4;
             }
             __elem_addr = __base + (__i * 8);
-            "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(__result, __inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
-                ptr = builtin::load_i32(__elem_addr);
-                len_8 = builtin::load_i32(__elem_addr + 4);
-                arr = "core:internal/memory_to_gc_array"(ptr, len_8);
-                break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 };
-                unreachable;
-            });
+            "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(__result, ptr = builtin::load_i32(__elem_addr); len_8 = builtin::load_i32(__elem_addr + 4); arr = "core:internal/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr), builtin::load_i32(__elem_addr + 4), 1, 0));
             __i = __i + 1;
             continue l5;
@@ -445,11 +419,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     });
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
-        self_6 = f.buf;
-        break __inline_String__internal_raw_bytes_0: self_6.repr;
-        unreachable;
-    }, offset, abs_val, digit_count);
+    "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
@@ -462,15 +432,9 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a_5 = __inline_i32_max_1: block -> i32 {
-            a_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
-            unreachable;
-        };
-        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
-        unreachable;
-    };
+    a_7 = capacity * 2;
+    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
+    new_capacity = select i32(a_5 > 8, a_5, 8);
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
@@ -651,11 +615,8 @@ fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self) 
     let new_repr: ref "builtin::array<core:prelude/string.wado/String>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a = capacity * 2;
-        break __inline_i32_max_0: select i32(a > 4, a, 4);
-        unreachable;
-    };
+    a = capacity * 2;
+    new_capacity = select i32(a > 4, a, 4);
     new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(new_capacity);
     builtin::array_copy<ref "core:prelude/string.wado//String">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
@@ -667,11 +628,8 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/str
     let new_repr: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a = capacity * 2;
-        break __inline_i32_max_0: select i32(a > 4, a, 4);
-        unreachable;
-    };
+    a = capacity * 2;
+    new_capacity = select i32(a > 4, a, 4);
     new_repr = builtin::array_new<ref "tuple//[String, String]">(new_capacity);
     builtin::array_copy<ref "tuple//[String, String]">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;

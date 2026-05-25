@@ -37,12 +37,7 @@ fn "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__cm_ex
     let count: ref "core:prelude/types.wado//Box<i32>";
     let inc: ref struct;
     let __indirect_call_0: ref "canonical//CanonicalClosure_0";
-    __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__inline_make_counter_3: block -> ref "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado//Counter" {
-        count = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
-        inc = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado//__Closure_2" { __capture_0: count }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__closure_wrapper_0") };
-        break __inline_make_counter_3: struct.new "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado//Counter" { f: inc };
-        unreachable;
-    }.f);
+    __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(count = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }; inc = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado//__Closure_2" { __capture_0: count }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__closure_wrapper_0") }; struct.new "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado//Counter" { f: inc }.f);
     call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
     "wasi/task-return"(0);
 }

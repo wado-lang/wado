@@ -407,18 +407,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/read_all"(file) w
     let read_stream: i32;
     let read_future: i32;
     let __b: ref "core:prelude//Array<u8>";
-    let result: ref "core:prelude//Array<u8>";
     let chunk: ref "core:prelude//Array<u8>";
     let __iter_6: ref "core:prelude/array.wado//ArrayIter<u8>";
     let __pattern_temp_0: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
     __pattern_temp_0 = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_read_via_stream"(file, 0_i64);
     read_stream = __pattern_temp_0.0;
     read_future = __pattern_temp_0.1;
-    result = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __b = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-        break __seq_lit: __b;
-        unreachable;
-    };
+    __b = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     b0: block {
         l1: loop {
             chunk = "core:internal/cm_stream_read_u8"(read_stream, 4096);
@@ -432,7 +427,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/read_all"(file) w
                     let __sroa___match_9_payload_0: u8;
                     multivalue_bind [__sroa___match_9_discriminant, __sroa___match_9_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(__iter_6);
                     if __sroa___match_9_discriminant == 0 {
-                        "core:prelude/array.wado/Array<u8>::push"(result, __sroa___match_9_payload_0);
+                        "core:prelude/array.wado/Array<u8>::push"(__b, __sroa___match_9_payload_0);
                     } else {
                         break b3;
                     }
@@ -444,7 +439,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/read_all"(file) w
     };
     "wasi/stream-drop-readable"(read_stream);
     "wasi/future-drop-readable:transmission-filesystem"(read_future);
-    return result;
+    return __b;
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdout, Stderr, Preopens, Descriptor {
@@ -453,7 +448,6 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
     let file_result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
     let file: i32;
     let __b_4: ref "core:prelude//Array<u8>";
-    let data: ref "core:prelude//Array<u8>";
     let stat1: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";
     let s_7: ref "wasi:filesystem/types.wado//DescriptorStat";
     let sz_8: u64;
@@ -480,23 +474,15 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
         return;
     }
-    dir = __inline_Array_core_prelude_types_wado_Tuple_wasi_filesystem_types_wado_Descriptor_core_prelude_string_wado_String___IndexValue_i32___index_value_3: block -> ref "tuple//[Descriptor, String]" {
-        if 0 >= dirs.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_core_prelude_types_wado_Tuple_wasi_filesystem_types_wado_Descriptor_core_prelude_string_wado_String___IndexValue_i32___index_value_3: builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0);
+    dir = if 0 >= dirs.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }.0;
+    }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).0;
     file_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size_test.txt"), used: 17 }, 9, 3));
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(file_result) {
         file = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(file_result).payload_0;
-        data = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-            __b_4 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74), used: 10 };
-            break __seq_lit: __b_4;
-            unreachable;
-        };
-        "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/write_bytes"(file, data);
+        __b_4 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74), used: 10 };
+        "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/write_bytes"(file, __b_4);
         stat1 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_stat"(file));
         if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat1) {
             s_7 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(stat1).payload_0;
@@ -504,15 +490,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
                 "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: initial size is 10 (correct)"), used: 38 });
             } else {
                 sz_8 = s_7.size;
-                "core:cli/eprintln"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-                    __local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(55), used: 0 };
-                    "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: initial size is "), used: 26 });
-                    __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
-                    "core:prelude/primitive.wado/u64::fmt_decimal"(sz_8, __local_19);
-                    "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", expected 10"), used: 13 });
-                    break __tmpl: __local_18;
-                    unreachable;
-                });
+                "core:cli/eprintln"(__local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(55), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: initial size is "), used: 26 }); __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 }; "core:prelude/primitive.wado/u64::fmt_decimal"(sz_8, __local_19); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", expected 10"), used: 13 }); __local_18);
             }
         } else {
         }
@@ -532,85 +510,50 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
                 "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncated size is 5 (correct)"), used: 39 });
             } else {
                 sz_12 = s_11.size;
-                "core:cli/eprintln"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-                    __local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(56), used: 0 };
-                    "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncated size is "), used: 28 });
-                    __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
-                    "core:prelude/primitive.wado/u64::fmt_decimal"(sz_12, __local_21);
-                    "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", expected 5"), used: 12 });
-                    break __tmpl: __local_20;
-                    unreachable;
-                });
+                "core:cli/eprintln"(__local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(56), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncated size is "), used: 28 }); __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 }; "core:prelude/primitive.wado/u64::fmt_decimal"(sz_12, __local_21); "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", expected 5"), used: 12 }); __local_20);
             }
         } else {
         }
         content = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/read_all"(file);
         if (if (if (if (if (if content.used == 5 -> i32 {
-            __inline_Array_u8__IndexValue_i32___index_value_26: block -> u8 {
-                if 0 >= content.used {
-                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                    unreachable;
-                }
-                break __inline_Array_u8__IndexValue_i32___index_value_26: builtin::array_get<u8>(content.repr, 0);
+            if 0 >= content.used {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            } == 65;
+            }; builtin::array_get<u8>(content.repr, 0) == 65;
         } else {
             0;
         }) -> i32 {
-            __inline_Array_u8__IndexValue_i32___index_value_27: block -> u8 {
-                if 1 >= content.used {
-                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                    unreachable;
-                }
-                break __inline_Array_u8__IndexValue_i32___index_value_27: builtin::array_get<u8>(content.repr, 1);
+            if 1 >= content.used {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            } == 66;
+            }; builtin::array_get<u8>(content.repr, 1) == 66;
         } else {
             0;
         }) -> i32 {
-            __inline_Array_u8__IndexValue_i32___index_value_28: block -> u8 {
-                if 2 >= content.used {
-                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                    unreachable;
-                }
-                break __inline_Array_u8__IndexValue_i32___index_value_28: builtin::array_get<u8>(content.repr, 2);
+            if 2 >= content.used {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            } == 67;
+            }; builtin::array_get<u8>(content.repr, 2) == 67;
         } else {
             0;
         }) -> i32 {
-            __inline_Array_u8__IndexValue_i32___index_value_29: block -> u8 {
-                if 3 >= content.used {
-                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                    unreachable;
-                }
-                break __inline_Array_u8__IndexValue_i32___index_value_29: builtin::array_get<u8>(content.repr, 3);
+            if 3 >= content.used {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            } == 68;
+            }; builtin::array_get<u8>(content.repr, 3) == 68;
         } else {
             0;
         }) -> i32 {
-            __inline_Array_u8__IndexValue_i32___index_value_30: block -> u8 {
-                if 4 >= content.used {
-                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                    unreachable;
-                }
-                break __inline_Array_u8__IndexValue_i32___index_value_30: builtin::array_get<u8>(content.repr, 4);
+            if 4 >= content.used {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            } == 69;
+            }; builtin::array_get<u8>(content.repr, 4) == 69;
         } else {
             0;
         }) {
             "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncated content is ABCDE (correct)"), used: 46 });
         } else {
-            "core:cli/eprintln"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-                __local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(60), used: 0 };
-                "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncated content unexpected, len="), used: 44 });
-                __local_23 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
-                "core:prelude/primitive.wado/i32::fmt_decimal"(content.used, __local_23);
-                break __tmpl: __local_22;
-                unreachable;
-            });
+            "core:cli/eprintln"(__local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(60), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncated content unexpected, len="), used: 44 }); __local_23 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 }; "core:prelude/primitive.wado/i32::fmt_decimal"(content.used, __local_23); __local_22);
         }
         extend_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_set_size"(file, 8_i64));
         if ref.is_null(extend_result) {
@@ -625,15 +568,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
                 "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: extended size is 8 (correct)"), used: 38 });
             } else {
                 sz_17 = s_16.size;
-                "core:cli/eprintln"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-                    __local_24 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(55), used: 0 };
-                    "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: extended size is "), used: 27 });
-                    __local_25 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 };
-                    "core:prelude/primitive.wado/u64::fmt_decimal"(sz_17, __local_25);
-                    "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", expected 8"), used: 12 });
-                    break __tmpl: __local_24;
-                    unreachable;
-                });
+                "core:cli/eprintln"(__local_24 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(55), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: extended size is "), used: 27 }); __local_25 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_24 }; "core:prelude/primitive.wado/u64::fmt_decimal"(sz_17, __local_25); "core:prelude/string.wado/String::push_str"(__local_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", expected 8"), used: 12 }); __local_24);
             }
         } else {
         }
@@ -696,13 +631,10 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Pre
             }
             __elem_addr = __base + (__i * 12);
             __lifted_result_6 = builtin::load_i32(__elem_addr + 0);
-            __lifted_result_7 = __inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
-                ptr = builtin::load_i32(__elem_addr + 4);
-                len_10 = builtin::load_i32((__elem_addr + 4) + 4);
-                arr = "core:internal/memory_to_gc_array"(ptr, len_10);
-                break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_10 };
-                unreachable;
-            };
+            ptr = builtin::load_i32(__elem_addr + 4);
+            len_10 = builtin::load_i32((__elem_addr + 4) + 4);
+            arr = "core:internal/memory_to_gc_array"(ptr, len_10);
+            __lifted_result_7 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_10 };
             "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::push"(__result, struct.new "tuple//[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
@@ -853,13 +785,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_lift__Descri
             __disc_5 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_5 != 0 {
-                __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref "core:prelude/string.wado//String" {
-                    ptr = builtin::load_i32(((__outptr + 4) + 4) + 4);
-                    len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
-                    arr = "core:internal/memory_to_gc_array"(ptr, len_8);
-                    break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 };
-                    unreachable;
-                });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:internal/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
@@ -927,13 +853,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_lift__Descri
             __disc_5 = builtin::load_u8((__outptr + 8) + 4);
             __option_result_6 = ref.null none;
             if __disc_5 != 0 {
-                __option_result_6 = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref "core:prelude/string.wado//String" {
-                    ptr_29 = builtin::load_i32(((__outptr + 8) + 4) + 4);
-                    len_30 = builtin::load_i32((((__outptr + 8) + 4) + 4) + 4);
-                    arr_31 = "core:internal/memory_to_gc_array"(ptr_29, len_30);
-                    break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: arr_31, used: len_30 };
-                    unreachable;
-                });
+                __option_result_6 = ref.as_non_null(ptr_29 = builtin::load_i32(((__outptr + 8) + 4) + 4); len_30 = builtin::load_i32((((__outptr + 8) + 4) + 4) + 4); arr_31 = "core:internal/memory_to_gc_array"(ptr_29, len_30); struct.new "core:prelude/string.wado//String" { repr: arr_31, used: len_30 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 8) + 4) + 4), builtin::load_i32((((__outptr + 8) + 4) + 4) + 4), 1, 0));
             }
             __vresult_4 = struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: __option_result_6 };
@@ -1045,13 +965,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_lift__Descri
             __disc_27 = builtin::load_u8((__outptr + 8) + 4);
             __option_result_28 = ref.null none;
             if __disc_27 != 0 {
-                __option_result_28 = ref.as_non_null(__inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
-                    ptr_32 = builtin::load_i32(((__outptr + 8) + 4) + 4);
-                    len_33 = builtin::load_i32((((__outptr + 8) + 4) + 4) + 4);
-                    arr_34 = "core:internal/memory_to_gc_array"(ptr_32, len_33);
-                    break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: arr_34, used: len_33 };
-                    unreachable;
-                });
+                __option_result_28 = ref.as_non_null(ptr_32 = builtin::load_i32(((__outptr + 8) + 4) + 4); len_33 = builtin::load_i32((((__outptr + 8) + 4) + 4) + 4); arr_34 = "core:internal/memory_to_gc_array"(ptr_32, len_33); struct.new "core:prelude/string.wado//String" { repr: arr_34, used: len_33 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 8) + 4) + 4), builtin::load_i32((((__outptr + 8) + 4) + 4) + 4), 1, 0));
             }
             __vresult_26 = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result_28 };
@@ -1154,13 +1068,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_lift__Descri
             __disc_5 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_5 != 0 {
-                __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref "core:prelude/string.wado//String" {
-                    ptr = builtin::load_i32(((__outptr + 4) + 4) + 4);
-                    len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
-                    arr = "core:internal/memory_to_gc_array"(ptr, len_8);
-                    break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 };
-                    unreachable;
-                });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:internal/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
@@ -1263,13 +1171,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_lift__Descri
             __disc_5 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_5 != 0 {
-                __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref "core:prelude/string.wado//String" {
-                    ptr = builtin::load_i32(((__outptr + 4) + 4) + 4);
-                    len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
-                    arr = "core:internal/memory_to_gc_array"(ptr, len_8);
-                    break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 };
-                    unreachable;
-                });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:internal/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
@@ -1447,12 +1349,9 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {
     let result: i32;
     let data_9: ref builtin::array<u8>;
     let len_10: i32;
-    packed = __inline_cm_lower_array_u8_0: block -> i64 {
-        data_9 = data.repr;
-        len_10 = data.used;
-        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(data_9, len_10);
-        unreachable;
-    };
+    data_9 = data.repr;
+    len_10 = data.used;
+    packed = "core:internal/cm_lower_list_u8"(data_9, len_10);
     ptr = builtin::i32_wrap_i64(packed);
     len_4 = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, len_4);
@@ -1547,11 +1446,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     });
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
-        self_6 = f.buf;
-        break __inline_String__internal_raw_bytes_0: self_6.repr;
-        unreachable;
-    }, offset, abs_val, digit_count);
+    "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
 fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
@@ -1574,11 +1469,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     let self_20: ref "core:prelude/string.wado//String";
     if self == 0_i64 {
         offset_3 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, 1);
-        builtin::array_set_u8(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
-            self_19 = f.buf;
-            break __inline_String__internal_raw_bytes_0: self_19.repr;
-            unreachable;
-        }, offset_3, 48);
+        builtin::array_set_u8(self_19 = f.buf; self_19.repr, offset_3, 48);
         return;
     }
     digit_count = 0;
@@ -1605,11 +1496,8 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
         };
     };
     offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    repr = __inline_String__internal_raw_bytes_1: block -> ref builtin::array<u8> {
-        self_20 = f.buf;
-        break __inline_String__internal_raw_bytes_1: self_20.repr;
-        unreachable;
-    };
+    self_20 = f.buf;
+    repr = self_20.repr;
     pos = offset_11 + digit_count;
     temp = self;
     b221: block {
@@ -1653,15 +1541,9 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a_5 = __inline_i32_max_1: block -> i32 {
-            a_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
-            unreachable;
-        };
-        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
-        unreachable;
-    };
+    a_7 = capacity * 2;
+    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
+    new_capacity = select i32(a_5 > 8, a_5, 8);
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
@@ -1833,11 +1715,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:fil
     handle_1 = self.__cm_packed >> 4;
     if handle_1 != 0 {
         ws_3 = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            "wasi/waitable-join"(handle_1, ws_3);
-            break __inline_cm_waitable_join_0: handle_1;
-            unreachable;
-        });
+        "wasi/waitable-join"(handle_1, ws_3);
         b257: block {
             l258: loop {
                 let event_mv_code: i32;
@@ -1869,11 +1747,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesy
     handle_1 = self.__cm_packed >> 4;
     if handle_1 != 0 {
         ws_3 = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            "wasi/waitable-join"(handle_1, ws_3);
-            break __inline_cm_waitable_join_0: handle_1;
-            unreachable;
-        });
+        "wasi/waitable-join"(handle_1, ws_3);
         b262: block {
             l263: loop {
                 let event_mv_code: i32;
@@ -1905,11 +1779,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesy
     handle_1 = self.__cm_packed >> 4;
     if handle_1 != 0 {
         ws_3 = "wasi/waitable-set-new"();
-        drop(__inline_cm_waitable_join_0: block -> i32 {
-            "wasi/waitable-join"(handle_1, ws_3);
-            break __inline_cm_waitable_join_0: handle_1;
-            unreachable;
-        });
+        "wasi/waitable-join"(handle_1, ws_3);
         b267: block {
             l268: loop {
                 let event_mv_code: i32;
@@ -1960,11 +1830,8 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     let new_repr: ref builtin::array<u8>;
     let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a = capacity * 2;
-        break __inline_i32_max_0: select i32(a > 4, a, 4);
-        unreachable;
-    };
+    a = capacity * 2;
+    new_capacity = select i32(a > 4, a, 4);
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
@@ -1976,11 +1843,8 @@ fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/
     let new_repr: ref "builtin::array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a = capacity * 2;
-        break __inline_i32_max_0: select i32(a > 4, a, 4);
-        unreachable;
-    };
+    a = capacity * 2;
+    new_capacity = select i32(a > 4, a, 4);
     new_repr = builtin::array_new<ref "tuple//[Descriptor, String]">(new_capacity);
     builtin::array_copy<ref "tuple//[Descriptor, String]">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;

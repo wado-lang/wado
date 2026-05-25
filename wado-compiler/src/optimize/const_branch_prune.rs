@@ -83,10 +83,14 @@ impl NirOptVisitor for BranchPruner {
 /// removed by dropping the trailing `break label` and lifting the rest of
 /// `inner.stmts` into the parent stmt list.
 ///
-/// `mode` mirrors C3's PostFixpoint / Fixpoint distinction: in `Fixpoint`
+/// `mode` mirrors C3's `PostFixpoint` / Fixpoint distinction: in `Fixpoint`
 /// mode the `__tmpl:` carve-out preserves the anchor `tmpl_hoist` needs.
 fn is_tail_break_only_labeled_block(stmt: &NirStmt, mode: PruneMode) -> bool {
-    let NirStmtKind::LabeledBlock { label, block: inner } = &stmt.kind else {
+    let NirStmtKind::LabeledBlock {
+        label,
+        block: inner,
+    } = &stmt.kind
+    else {
         return false;
     };
     if mode == PruneMode::Fixpoint && label == "__tmpl" {
@@ -179,8 +183,7 @@ fn prune_expr(expr: &mut NirExpr, mode: PruneMode) -> bool {
         let last = stmts.pop().unwrap();
         let NirStmt { kind, .. } = last;
         let NirStmtKind::Break {
-            value: Some(value),
-            ..
+            value: Some(value), ..
         } = kind
         else {
             unreachable!();
@@ -216,7 +219,9 @@ fn prune_expr(expr: &mut NirExpr, mode: PruneMode) -> bool {
             value: brk_value,
         } = &block.stmts[0].kind
         && brk_label == label
-        && !brk_value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
+        && !brk_value
+            .as_ref()
+            .is_some_and(|v| expr_has_break_to(label, v))
     {
         let NirExprKind::LabeledBlock { block, .. } =
             std::mem::replace(&mut expr.kind, NirExprKind::Unit)
@@ -278,9 +283,7 @@ fn eliminate_dead_stmts(block: &mut NirBlock, mode: PruneMode) -> bool {
         i + 1 < block.stmts.len()
             && matches!(
                 &s.kind,
-                NirStmtKind::Break { .. }
-                    | NirStmtKind::Continue
-                    | NirStmtKind::Return { .. }
+                NirStmtKind::Break { .. } | NirStmtKind::Continue | NirStmtKind::Return { .. }
             )
     });
     if !has_dead_after_terminator && !block.stmts.iter().any(dominated) {

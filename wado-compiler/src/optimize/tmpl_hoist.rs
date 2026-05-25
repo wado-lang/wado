@@ -974,7 +974,13 @@ fn extract_formatter_fields_from_block<'a>(
     hoisted_buf_index: u32,
     value_type_id: TypeId,
     value_span: Span,
-) -> Option<(&'a str, &'a [crate::nir::NirStructField], TypeId, TypeId, Span)> {
+) -> Option<(
+    &'a str,
+    &'a [crate::nir::NirStructField],
+    TypeId,
+    TypeId,
+    Span,
+)> {
     let NirExprKind::StructLiteral {
         struct_name,
         fields,
@@ -1000,13 +1006,7 @@ fn extract_formatter_fields_from_block<'a>(
                 ..
             } if *local_index == buf_inner_local => {
                 if references_local(let_value, hoisted_buf_index) {
-                    return Some((
-                        struct_name,
-                        fields,
-                        *struct_type,
-                        value_type_id,
-                        value_span,
-                    ));
+                    return Some((struct_name, fields, *struct_type, value_type_id, value_span));
                 }
             }
             NirStmtKind::Expr(expr) => {
@@ -1015,13 +1015,7 @@ fn extract_formatter_fields_from_block<'a>(
                     && *index == buf_inner_local
                     && references_local(av, hoisted_buf_index)
                 {
-                    return Some((
-                        struct_name,
-                        fields,
-                        *struct_type,
-                        value_type_id,
-                        value_span,
-                    ));
+                    return Some((struct_name, fields, *struct_type, value_type_id, value_span));
                 }
             }
             _ => {}

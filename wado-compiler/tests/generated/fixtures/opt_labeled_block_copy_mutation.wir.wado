@@ -71,32 +71,13 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/opt_labeled_block_copy_mutation.wado/run"() with Stdout {
     let s: ref "core:prelude/string.wado//String";
     let x: ref "core:prelude/string.wado//String";
-    let t: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 };
-    t = l: block -> ref "core:prelude/string.wado//String" {
-        x = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(s.repr)), used: s.used };
-        "core:prelude/string.wado/String::push"(s, 98);
-        break l: x;
-        unreachable;
-    };
-    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
-        "core:prelude/string.wado/String::push"(__local_3, 115);
-        "core:prelude/string.wado/String::push"(__local_3, 61);
-        "core:prelude/string.wado/String::push_str"(__local_3, s);
-        break __tmpl: __local_3;
-        unreachable;
-    });
-    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
-        "core:prelude/string.wado/String::push"(__local_4, 116);
-        "core:prelude/string.wado/String::push"(__local_4, 61);
-        "core:prelude/string.wado/String::push_str"(__local_4, t);
-        break __tmpl: __local_4;
-        unreachable;
-    });
+    x = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(s.repr)), used: s.used };
+    "core:prelude/string.wado/String::push"(s, 98);
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_3, 115); "core:prelude/string.wado/String::push"(__local_3, 61); "core:prelude/string.wado/String::push_str"(__local_3, s); __local_3);
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 61); "core:prelude/string.wado/String::push_str"(__local_4, x); __local_4);
 }
 
 fn "wado-compiler/tests/fixtures/opt_labeled_block_copy_mutation.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -198,15 +179,9 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a_5 = __inline_i32_max_1: block -> i32 {
-            a_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
-            unreachable;
-        };
-        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
-        unreachable;
-    };
+    a_7 = capacity * 2;
+    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
+    new_capacity = select i32(a_5 > 8, a_5, 8);
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
