@@ -61,11 +61,6 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Parse command-line arguments for the `format` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<FormatOptions, CliExit> {
     let usage = format_usage();
     let mut inputs: Vec<String> = Vec::new();
@@ -112,7 +107,6 @@ pub fn run(opts: FormatOptions) -> Result<(), CliExit> {
     for input in &opts.inputs {
         let path = Path::new(input);
 
-        // Read original source
         let original = match fs::read_to_string(path) {
             Ok(s) => s,
             Err(e) => {
@@ -122,7 +116,6 @@ pub fn run(opts: FormatOptions) -> Result<(), CliExit> {
             }
         };
 
-        // Format
         let start = Instant::now();
         let formatted = match wado_compiler::format(&original) {
             Ok(f) => f,
@@ -135,13 +128,11 @@ pub fn run(opts: FormatOptions) -> Result<(), CliExit> {
         let elapsed_ms = start.elapsed().as_millis();
 
         if opts.check {
-            // Check mode: track if any file would change
             if original != formatted {
                 eprintln!("{input}: would reformat");
                 any_would_reformat = true;
             }
         } else if opts.write_in_place {
-            // Write back to file only if changed
             if original != formatted {
                 match fs::write(path, &formatted) {
                     Ok(()) => {
@@ -154,7 +145,6 @@ pub fn run(opts: FormatOptions) -> Result<(), CliExit> {
                 }
             }
         } else {
-            // Output to stdout (single file only)
             print!("{formatted}");
         }
     }

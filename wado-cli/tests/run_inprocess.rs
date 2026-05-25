@@ -1,10 +1,5 @@
-//! In-process `run()` tests.
-//!
-//! Exercises subcommand `run()` functions directly without spawning a
-//! subprocess. These are only possible because every `run()` returns
-//! `Result<(), CliExit>` instead of calling `process::exit(...)`; the
-//! exit-code propagates through the result, so the test can assert on it
-//! without forking.
+//! In-process subcommand `run()` tests — call each subcommand directly
+//! and assert on the returned `CliExit`, no subprocess.
 
 use std::env;
 use std::fs;
@@ -16,18 +11,11 @@ use wado_cli::compile::{self, CompileOptions, OptLevel, OutputFormat};
 
 mod common;
 
-/// Absolute path to a fixture under the repo root. Each in-process test
-/// runs with cwd = `wado-cli/` (cargo's default), but the existing example
-/// fixtures live one level up, so relative paths from the subprocess tests
-/// would resolve wrong here.
 fn fixture(rel: &str) -> PathBuf {
     common::project_root().join(rel)
 }
 
-/// Several tests below `env::set_current_dir` into a temporary directory.
-/// `set_current_dir` is process-wide, so without serialization concurrent
-/// cargo-test threads would race. The Mutex is held for the duration of
-/// each test that touches cwd.
+// `set_current_dir` is process-wide, so cwd-mutating tests serialize on this.
 fn cwd_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
@@ -97,10 +85,8 @@ fn init_run_force_overwrites() {
     });
 }
 
-/// Build a `CompileOptions` that writes `example/hello.wado` to the given
-/// output path. Each field is set explicitly because `CompileOptions` does
-/// not implement `Default` — defaulting fields piecemeal would invite drift
-/// the moment a new option is added.
+// Listed exhaustively so adding a new `CompileOptions` field forces a
+// conscious decision here instead of silently defaulting.
 fn hello_compile_opts(output_path: &Path, format: Option<OutputFormat>) -> CompileOptions {
     CompileOptions {
         input: fixture("example/hello.wado").to_string_lossy().into_owned(),
@@ -125,8 +111,6 @@ fn compile_writes_wasm_output() {
     let opts = hello_compile_opts(&out, None);
     futures::executor::block_on(compile::run(opts)).expect("compile should succeed");
     let bytes = fs::read(&out).unwrap();
-    // Component model binaries start with the 0asm magic but a distinct
-    // version word, so only the magic prefix is asserted here.
     assert!(bytes.len() > 4, "wasm output looked empty");
     assert_eq!(&bytes[0..4], b"\0asm", "wasm magic missing");
 }
@@ -146,7 +130,6 @@ fn compile_writes_wat_output() {
 
 #[test]
 fn compile_format_overrides_extension() {
-    // Non-`.wat` extension + `--format wat` must still write WAT text.
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("out.txt");
     let opts = hello_compile_opts(&out, Some(OutputFormat::Wat));
@@ -157,7 +140,6 @@ fn compile_format_overrides_extension() {
         "expected WAT despite .txt suffix"
     );
 
-    // Mirror: `--format wasm` with a non-`.wasm` extension still writes bytes.
     let out = dir.path().join("out.bin");
     let opts = hello_compile_opts(&out, Some(OutputFormat::Wasm));
     futures::executor::block_on(compile::run(opts)).expect("compile should succeed");
@@ -167,10 +149,6 @@ fn compile_format_overrides_extension() {
 
 #[test]
 fn compile_succeeds_at_each_opt_level() {
-    // Each optimization level threads a different config through the compiler
-    // pipeline; this test verifies none of them ICE on the hello-world
-    // program. Output content is incidental — `compile_writes_wat_output`
-    // already pins the happy path's shape.
     let dir = tempfile::tempdir().unwrap();
     for level in [
         OptLevel::O0,
@@ -193,21 +171,13 @@ fn compile_succeeds_at_each_opt_level() {
 
 #[test]
 fn compile_helper_returns_silent_failure_on_missing_file() {
-    // `compile::compile` is the helper shared by `run` / `serve` / `test`.
-    // A missing source file used to abort the process; now the caller can
-    // observe the failure and decide how to react.
     let flags = wado_cli::compile::CompileFlags::default();
     let err: CliExit = futures::executor::block_on(wado_cli::compile::compile(
         "/definitely/does/not/exist.wado",
         &flags,
     ))
     .expect_err("expected CliExit");
-    // The diagnostics ("Error reading ...") were already printed by the
-    // host, so the failure is silent: just an exit code.
+    // Host already printed "Error reading ...", so the CliExit is empty.
     assert_eq!(err.exit_code, 1);
-    assert!(
-        err.message.is_empty(),
-        "expected silent failure (no message), got {:?}",
-        err.message
-    );
+    assert!(err.message.is_empty(), "got {:?}", err.message);
 }

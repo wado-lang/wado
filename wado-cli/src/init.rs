@@ -64,11 +64,6 @@ fn format_usage() -> String {
     buf
 }
 
-/// Parse command-line arguments for the `init` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<InitOptions, CliExit> {
     let usage = format_usage();
     let mut name: Option<String> = None;

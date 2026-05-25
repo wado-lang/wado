@@ -92,11 +92,6 @@ fn format_usage() -> String {
     buf
 }
 
-/// Parse command-line arguments for the `syntax` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: Parser) -> Result<SyntaxOptions, CliExit> {
     let usage = format_usage();
     let mut format = SyntaxFormat::TmLanguage;

@@ -43,7 +43,6 @@ fn position_from_one_based(line: u32, column: u32) -> Position {
     }
 }
 
-/// Run diagnostics query and print results.
 pub async fn run_diagnostics(filename: &str, json_output: bool) -> Result<(), CliExit> {
     let prepared = prepare_query(filename)?;
     let diagnostics = prepared
@@ -66,7 +65,6 @@ pub async fn run_diagnostics(filename: &str, json_output: bool) -> Result<(), Cl
     Ok(())
 }
 
-/// Run references query and print results.
 pub async fn run_references(
     filename: &str,
     line: u32,
@@ -91,7 +89,6 @@ pub async fn run_references(
     Ok(())
 }
 
-/// Run definition query and print results.
 pub async fn run_definition(
     filename: &str,
     line: u32,
@@ -115,7 +112,6 @@ pub async fn run_definition(
     Ok(())
 }
 
-/// Run document-highlight query and print results.
 pub async fn run_document_highlight(
     filename: &str,
     line: u32,
@@ -139,11 +135,9 @@ pub async fn run_document_highlight(
     Ok(())
 }
 
-/// When a position-based query returns no results, the cause is ambiguous —
-/// the cursor might genuinely be on nothing, or the file might have failed to
-/// compile far enough to populate the symbol table. Surface the compiler
-/// errors on stderr so users can distinguish the two without re-running
-/// `wado query diagnostics`.
+/// An empty position-based result is ambiguous (cursor on nothing vs.
+/// symbol table never populated). Surface the underlying errors so the
+/// user doesn't need to re-run `wado query diagnostics` to find out.
 fn warn_on_compile_errors(host: &FilesystemCompilerHost, result_was_empty: bool) {
     if !result_was_empty || !host.has_errors() {
         return;

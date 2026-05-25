@@ -78,11 +78,6 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Parse command-line arguments for the `check` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
     let usage = format_usage();
     let mut input: Option<String> = None;
@@ -145,9 +140,9 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
 
     let kiln_drift = !outcome.stale.is_empty() || !outcome.missing.is_empty();
 
-    // Run the rest of the compile pipeline so type-/resolve-level errors
-    // also gate `wado check`. We discard the produced wasm; codegen-skip
-    // is a follow-up optimization.
+    // Drive the rest of the compile pipeline so type/resolve errors also
+    // gate `wado check`. The produced wasm is discarded; skipping codegen
+    // is a follow-up.
     let source = fs::read_to_string(path).map_err(|e| {
         CliExit::error(format!(
             "wado check: failed to read {}: {e}",

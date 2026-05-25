@@ -4,10 +4,8 @@ use lexopt::Arg::{Long, Value};
 use mimalloc::MiMalloc;
 use wado_cli::args::CliExit;
 
-// `wado serve` allocates and frees a burst of small per-request objects
-// (request/response buffers, header maps, resource tables) on every request.
-// The system allocator's cross-thread contention dominates the host CPU
-// profile under load, so route all allocation through mimalloc.
+// `wado serve` is allocation-heavy per request; mimalloc avoids the
+// system allocator's cross-thread contention.
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
@@ -174,18 +172,10 @@ async fn dispatch() -> Result<(), CliExit> {
                     let opts = wado_cli::init::parse_args(parser)?;
                     wado_cli::init::run(opts)
                 }
-                // Each subcommand's `async fn run()` is wrapped in
-                // `Box::pin` so its future is type-erased at this
-                // boundary. Without this, the compiler must compute
-                // the layout of `dispatch`'s state machine by
-                // recursively inlining the futures of EVERY subcommand
-                // (12 of them), each of which transitively pulls in
-                // its own await chain (compile → try_compile →
-                // wado_compiler::compile_with_options → ...). That
-                // recursion blows past Rust's default query-depth
-                // limit on `--release` builds. Boxing here costs one
-                // heap allocation per CLI invocation, which is free
-                // for a one-shot binary.
+                // Each subcommand's future is boxed so `dispatch`'s state
+                // machine doesn't recursively inline all 12 subcommands'
+                // await chains and blow past Rust's query-depth limit on
+                // `--release` builds.
                 Cmd::Compile => {
                     let opts = wado_cli::compile::parse_args(parser)?;
                     Box::pin(wado_cli::compile::run(opts)).await

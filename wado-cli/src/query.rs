@@ -112,11 +112,6 @@ fn parse_position_value(opt_name: &str, val: String) -> Result<u32, CliExit> {
     })
 }
 
-/// Parse command-line arguments for the `query` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
     let usage = format_usage();
     let mut kind: Option<QueryKind> = None;

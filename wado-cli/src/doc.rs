@@ -112,11 +112,6 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Parse command-line arguments for the `doc` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
     let usage = format_usage();
     let mut inputs: Vec<String> = Vec::new();

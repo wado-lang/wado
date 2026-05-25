@@ -12,32 +12,24 @@ use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::kiln_provider::CliGeneratorProvider;
 use crate::manifest;
 
-/// Optimization level
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum OptLevel {
-    /// No optimizations. Used for debugging.
     O0,
-    /// Development optimizations. All passes except DCE.
-    /// Keeps dead code visible for debugging while improving runtime.
-    /// Iterations: 2, Inline threshold: 10.
+    /// All passes except DCE. Iterations: 2, inline threshold: 10.
     O1,
-    /// Production optimizations. Full passes including DCE (default).
-    /// Iterations: 10, Inline threshold: 10.
+    /// Production: all passes, including DCE. Iterations: 10, inline threshold: 10.
     #[default]
     O2,
-    /// Aggressive production optimizations. Full passes including DCE.
-    /// Iterations: 100, Inline threshold: 20.
+    /// Aggressive. Iterations: 100, inline threshold: 20.
     O3,
-    /// Size optimizations. O2 plus name section stripping.
+    /// `O2` plus name-section stripping.
     Os,
 }
 
 impl OptLevel {
-    /// Convert to the matching wasmtime Cranelift `opt_level` so the runtime
-    /// JIT pipeline tracks the Wado front-end optimization level. wasmtime
-    /// has only three Cranelift settings (`None`/`Speed`/`SpeedAndSize`),
-    /// so `O1`/`O2`/`O3` collapse to the same `Speed`. This mirrors what
-    /// `wasmtime` CLI's own `-O` mapping does.
+    /// wasmtime exposes only `None`/`Speed`/`SpeedAndSize`, so `O1`/`O2`/
+    /// `O3` collapse to `Speed` — mirroring the `wasmtime` CLI's own `-O`
+    /// mapping.
     #[must_use]
     pub const fn to_wasmtime(self) -> wasmtime::OptLevel {
         match self {
@@ -89,14 +81,11 @@ pub struct CompileOptions {
     pub lib: bool,
 }
 
-/// Compile-time options shared by every subcommand that produces a Wasm
-/// component (`compile`, `run`, `serve`, `test`).
+/// Compile-time options shared by `compile`/`run`/`serve`/`test`.
 ///
-/// `target_world` and `allocator` are left as `Option`s because each
-/// subcommand has a different default: `wado run` expects
-/// `wasi:cli/command`, `wado serve` pins `wasi:http/service`, `wado test`
-/// pins `test`, and `wado compile` lets the user override via `--world`.
-/// Same for the allocator, which the compiler picks per-world when `None`.
+/// `target_world` and `allocator` stay `Option` so each subcommand can
+/// pin its own default (`run` → cli/command, `serve` → http/service,
+/// `test` → test) while letting `compile` accept `--world`.
 #[derive(Clone, Debug, Default)]
 pub struct CompileFlags {
     pub opt_level: OptLevel,
@@ -208,11 +197,6 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Parse command-line arguments for the `compile` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit> {
     let usage = format_usage();
     let mut output: Option<String> = None;
@@ -290,7 +274,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     })
 }
 
-/// Convert CLI `OptLevel` to compiler `OptLevel`
 fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
     match level {
         OptLevel::O0 => wado_compiler::OptLevel::O0,
@@ -301,12 +284,8 @@ fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
     }
 }
 
-/// Parse the `-O<n>` value (with optional bare-`-O`). Shared by every
-/// subcommand that exposes optimization-level control.
-///
-/// # Errors
-///
-/// Returns an error if the level token after `-O` is not recognised.
+/// Parse `-O<n>` (with optional bare-`-O`). Shared by every subcommand
+/// that exposes optimization-level control.
 pub fn parse_opt_level_arg(parser: &mut Parser) -> Result<OptLevel, CliExit> {
     let val = parser.optional_value();
     let level_str = val
@@ -325,13 +304,9 @@ pub fn parse_opt_level_arg(parser: &mut Parser) -> Result<OptLevel, CliExit> {
     }
 }
 
-/// Try to compile a Wado source file, returning the compiler result without
-/// exiting. Used by the test runner to handle `#![TODO]` modules gracefully.
-///
-/// # Errors
-///
-/// Propagates the compiler's own `CompileFailure` (with `is_todo_module`
-/// set when the failure was an expected one for a `#![TODO]` module).
+/// Compile without bailing. Used by the test runner so `#![TODO]` modules
+/// can be observed (via `CompileFailure::is_todo_module`) rather than
+/// aborting the whole batch.
 pub async fn try_compile(
     filename: &str,
     flags: &CompileFlags,
@@ -379,17 +354,9 @@ pub async fn try_compile(
     wado_compiler::compile_with_options(&source, &host, Some(filename), options).await
 }
 
-/// Compile a Wado source file and return the produced wasm bytes.
-///
-/// On failure, diagnostics have already been printed via the compiler host;
-/// the returned [`CliExit::silent_failure`] tells the caller to exit non-zero
-/// without printing anything extra.
-///
-/// # Errors
-///
-/// Returns [`CliExit::silent_failure`] when compilation fails. Diagnostics
-/// for the failure are emitted by the configured `CompilerHost` (see
-/// [`FilesystemCompilerHost`]).
+/// Compile a Wado source file and return the produced wasm bytes. On
+/// failure, the host has already printed diagnostics — the returned
+/// `CliExit::silent_failure` only carries the exit code.
 pub async fn compile(filename: &str, flags: &CompileFlags) -> Result<Vec<u8>, CliExit> {
     try_compile(filename, flags)
         .await
@@ -433,13 +400,8 @@ async fn maybe_run_pipeline(
     crate::kiln_driver::run_pipeline(&manifest, &manifest_root, host, &provider, inline).await
 }
 
-/// Parse the entry file to collect inline Kiln invocations from
-/// `use ... with { generator: { ... } }` clauses. Returns an empty vector when
-/// the file cannot be parsed — downstream compilation will surface the parse
-/// error, so we don't need to report it twice.
-/// Construct an empty in-memory `wado.toml` manifest used as a fallback
-/// when the compiled file has no nearby manifest. Shared with
-/// [`crate::check`].
+/// Empty in-memory `wado.toml` manifest used as a fallback when the
+/// compiled file has no nearby manifest. Shared with [`crate::check`].
 #[must_use]
 pub fn empty_manifest() -> wado_manifest::Manifest {
     wado_manifest::Manifest {
@@ -465,11 +427,9 @@ pub fn collect_inline_invocations_for_entry(
     };
     let mut modules =
         wado_compiler::hashmap::IndexMap::<String, wado_compiler::ast::Module>::default();
-    // Key the module by the same string the loader uses as the entry's
-    // `ModuleSource::EntryPoint { filename }` — the full path — so the
-    // The `decl_site.module` recorded here matches the `decl_file`
-    // the loader feeds into `InvocationIndex::redirect` at resolve time.
-    // Without this, the inline redirect misses entirely.
+    // Key by the full path so `decl_site.module` here matches the
+    // `decl_file` the loader feeds into `InvocationIndex::redirect`;
+    // otherwise the inline redirect misses.
     let entry_name = entry_file.to_string_lossy().to_string();
     modules.insert(entry_name, parsed.ast);
     let descriptors = wado_compiler::hashmap::IndexMap::default();
@@ -478,11 +438,8 @@ pub fn collect_inline_invocations_for_entry(
         .unwrap_or_default()
 }
 
-/// Walk up from `entry_file` looking for the nearest `wado.toml`. Returns the
-/// parsed manifest plus the directory that contains it (the Kiln pipeline's
-/// `manifest_root`). Silently returns `None` when no manifest is found or the
-/// manifest cannot be parsed — the caller treats this as "no Kiln config" and
-/// continues.
+/// Walk up from `entry_file` looking for the nearest `wado.toml`. Returns
+/// `None` (treated as "no Kiln config") on missing or malformed manifest.
 pub fn load_nearest_manifest(
     entry_file: &Path,
 ) -> Option<(wado_manifest::Manifest, std::path::PathBuf)> {
@@ -506,7 +463,6 @@ pub fn load_nearest_manifest(
     }
 }
 
-/// Convert Wasm binary to WAT text format (folded style).
 fn wasm_to_wat(wasm: &[u8]) -> Result<String, CliExit> {
     let mut config = wasmprinter::Config::new();
     config.fold_instructions(true);
@@ -521,14 +477,13 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
     let flags = opts.flags();
     let wasm = compile(&opts.input, &flags).await?;
 
-    // Handle --wat-to-stdout: output WAT to stdout and return
     if opts.wat_to_stdout {
         let wat = wasm_to_wat(&wasm)?;
         print!("{wat}");
         return Ok(());
     }
 
-    // Determine format: explicit > guessed from -o extension > default (wasm)
+    // Format precedence: explicit `--format` > guessed from `-o` extension > wasm.
     let format = opts
         .format
         .or_else(|| {
@@ -538,7 +493,6 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
         })
         .unwrap_or(OutputFormat::Wasm);
 
-    // Determine output path, using format to pick extension if no -o specified
     let output_path = if let Some(path) = &opts.output {
         Path::new(path).to_path_buf()
     } else {

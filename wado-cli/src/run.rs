@@ -20,10 +20,9 @@ pub struct RunOptions {
     pub opt_level: OptLevel,
     pub log_level: LogLevel,
     pub profile: ProfileMode,
-    /// Preopened directories as `(host_path, guest_path)` pairs.
-    /// Populated by `--dir host_path[::guest_path]`.
+    /// `(host_path, guest_path)` pairs from `--dir host[::guest]`.
     pub preopened_dirs: Vec<(String, String)>,
-    /// Arguments passed to the guest program via `wasi:cli/environment.get-arguments`.
+    /// Arguments forwarded to the guest via `wasi:cli/environment.get-arguments`.
     pub program_args: Vec<String>,
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
@@ -58,8 +57,8 @@ impl Opt {
 
     const fn spec(self) -> args::OptSpec {
         match self {
-            // `run` overrides the shared --dir description because it
-            // ALSO documents the implicit "preopen cwd by default" rule.
+            // Override the shared --dir description to also document the
+            // implicit "preopen cwd by default" rule.
             Self::Dir => args::OptSpec {
                 long: Some("dir"),
                 short: None,
@@ -131,13 +130,7 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Parse a `--profile` argument value into a [`ProfileMode`].
-///
-/// Shared by the `run` and `serve` subcommands.
-///
-/// # Errors
-///
-/// Returns an error if the profile mode string is unrecognized.
+/// Parse `--profile`. Shared by `run` and `serve`.
 pub fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
     if s == "jitdump" {
         return Ok(ProfileMode::JitDump);
@@ -172,11 +165,6 @@ pub fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
     )))
 }
 
-/// Parse command-line arguments for the `run` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let usage = format_usage();
     let mut input: Option<String> = None;
@@ -222,8 +210,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
             }
         } else if let Value(val) = arg {
             input = Some(val.to_string_lossy().into_owned());
-            // Once the input file is captured, all remaining arguments
-            // (including --flags) are passed to the guest program.
+            // Everything after the input file (flags included) is forwarded to the guest.
             if let Some(raw) = parser.try_raw_args() {
                 for raw_arg in raw {
                     program_args.push(raw_arg.to_string_lossy().into_owned());
@@ -265,7 +252,6 @@ async fn run_cli_component(
     let linker = runtime::create_linker(&engine)?;
     let mut store = runtime::create_store(&engine, preopened_dirs, program_args)?;
 
-    // Set up guest profiler if requested.
     let profiler = if let ProfileMode::Guest { interval_ms, .. } = profile {
         let interval = Duration::from_millis(*interval_ms);
         let profiler = GuestProfiler::new_component(
@@ -277,7 +263,6 @@ async fn run_cli_component(
         )?;
         let profiler = Arc::new(Mutex::new(Some(profiler)));
 
-        // Register epoch deadline callback for sampling.
         let profiler_for_cb = profiler.clone();
         store.epoch_deadline_callback(move |store_ctx| {
             if let Some(ref mut p) = *profiler_for_cb.lock().unwrap() {
@@ -287,7 +272,6 @@ async fn run_cli_component(
         });
         store.set_epoch_deadline(1);
 
-        // Start epoch-bumping thread.
         let stop = Arc::new(AtomicBool::new(false));
         let stop_clone = stop.clone();
         let engine_clone = engine.clone();
@@ -308,7 +292,6 @@ async fn run_cli_component(
 
     let (result,) = run_func.call_async(&mut store, ()).await?;
 
-    // Finish guest profiling.
     if let Some((profiler_arc, stop)) = profiler {
         stop.store(true, Ordering::Relaxed);
 
@@ -327,9 +310,8 @@ async fn run_cli_component(
 }
 
 pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
-    // `wado run` always targets `wasi:cli/command`; pass `None` so the
-    // compiler picks its default world (and bump allocator unless the
-    // caller overrode it via --allocator).
+    // Pass `target_world: None` so the compiler picks the cli/command default
+    // (and bump allocator unless overridden).
     let flags = CompileFlags {
         opt_level: opts.opt_level,
         log_level: opts.log_level,

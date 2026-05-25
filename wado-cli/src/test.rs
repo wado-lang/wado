@@ -27,17 +27,13 @@ use crate::runtime::{self, WasiState};
 use wado_compiler::LogLevel;
 
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
-// Epoch tick interval for wasmtime's epoch-based interruption.
-// A coarser interval (1s) reduces thread wake-ups. The trade-off is up to 1s
-// of overshoot beyond the nominal timeout, which is acceptable since timeouts
-// only fire on runaway tests, not on normal execution.
+// Coarse epoch interval to keep thread wake-ups down. Cost: up to 1s
+// overshoot, which is fine because timeouts only fire on runaway tests.
 const EPOCH_INTERVAL_MS: u64 = 1000;
 
 pub struct TestOptions {
-    /// Each entry corresponds to one package context. The first entry is the
-    /// root package (or the synthetic `"."` label when `wado test` is invoked
-    /// outside a `wado.toml` project); subsequent entries come from
-    /// recursively discovered sub-packages.
+    /// First entry is the root package (label `"."` outside a `wado.toml`
+    /// project); later entries are sub-packages discovered recursively.
     pub package_runs: Vec<PackageRun>,
     pub jobs: usize,
     pub opt_level: OptLevel,
@@ -45,21 +41,17 @@ pub struct TestOptions {
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
     /// `None` lets the compiler auto-select the debug allocator for the
-    /// `test` world; explicit `--allocator` overrides that.
+    /// `test` world; `--allocator` overrides.
     pub allocator: Option<String>,
-    /// Preopened directories as `(host_path, guest_path)` pairs.
     pub preopened_dirs: Vec<(String, String)>,
-    /// `true` when `--no-run` is set: compile every discovered file
-    /// (which still writes `<primary>.kiln.json` as a side-effect of the
-    /// compile pipeline) but skip Phase 2 — the wasmtime execution.
-    /// Mirrors `cargo test --no-run`.
+    /// `--no-run`: compile every file (which still refreshes
+    /// `<primary>.kiln.json` as a side-effect) but skip wasmtime execution.
     pub no_run: bool,
 }
 
 impl TestOptions {
-    /// Build the `CompileFlags` shared with `compile`/`run`/`serve`. The
-    /// `target_world` is pinned to `test` so test functions become exports
-    /// and DCE prunes everything else.
+    // Pin `target_world` to `test` so test functions become exports and
+    // DCE prunes everything else.
     fn compile_flags(&self) -> CompileFlags {
         CompileFlags {
             opt_level: self.opt_level,
@@ -73,10 +65,8 @@ impl TestOptions {
     }
 }
 
-/// One package context's discovered test files.
 pub struct PackageRun {
-    /// Display label, relative to the original invocation directory
-    /// (`"."` for the root, `"subpkg"` for a nested sub-package).
+    /// `"."` for the root, `"subpkg"` for a nested sub-package.
     pub label: String,
     pub paths: Vec<String>,
 }
@@ -175,18 +165,13 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Walk `root` and produce one `PackageRun` for the root and one for each
-/// sub-package discovered transitively (cargo-workspace-style).
+/// Cargo-workspace-style walk: one `PackageRun` for `root`, plus one per
+/// transitively discovered sub-package. Returned root-first.
 ///
-/// `apply_manifest_excludes` controls whether the root package's
-/// `[test].exclude` is honoured. Sub-packages always apply their own
-/// manifest. CLI `--exclude` patterns (`extra_excludes`) apply to *every*
-/// package walked: each pattern is matched relative to the package being
-/// walked, so a project-wide `--exclude 'tests/**'` drops `tests/` in the
-/// root and in every nested package consistently.
-///
-/// The returned list is ordered: the root package first, then sub-packages in
-/// source order.
+/// `apply_manifest_excludes` gates the root's `[test].exclude`
+/// (sub-packages always apply their own). `extra_excludes` (CLI
+/// `--exclude`) apply per-package and are matched relative to the package
+/// being walked.
 fn discover_packages(
     root: &Path,
     apply_manifest_excludes: bool,
@@ -229,9 +214,8 @@ fn discover_packages(
     Ok(runs)
 }
 
-/// Compile a package's exclude set: the manifest's `[test].exclude` plus
-/// any CLI `--exclude` patterns. Both layers share the same shape so the
-/// walker treats them uniformly.
+// `[test].exclude` (manifest) + `--exclude` (CLI) share the same shape so
+// the walker treats them uniformly.
 fn compile_excludes(
     manifest: &[String],
     extra_excludes: &[String],
@@ -244,17 +228,12 @@ fn compile_excludes(
     discover::ExcludeSet::compile(&combined).map_err(CliExit::error)
 }
 
-/// Compile a package's include set from the manifest's `[test].include`
-/// patterns. There is no CLI counterpart (yet) — includes are a manifest
-/// concept that lets stdlib-style packages keep `*_test.wado` files visible
-/// inside an otherwise-excluded directory.
+// `[test].include` is manifest-only (no CLI flag yet) and lets stdlib-style
+// packages keep `*_test.wado` files visible inside an excluded directory.
 fn compile_includes(manifest: &[String]) -> Result<discover::IncludeSet, CliExit> {
     discover::IncludeSet::compile(manifest).map_err(CliExit::error)
 }
 
-/// Walk a single package root, append its `PackageRun`, and queue its
-/// sub-packages (in source order — pushed in reverse so the LIFO `pop`
-/// emits them root-first).
 fn walk_into(
     pkg_root: &Path,
     invocation_root: &Path,
@@ -274,10 +253,8 @@ fn walk_into(
     Ok(())
 }
 
-/// Read `[test].exclude` and `[test].include` from the `wado.toml` rooted at
-/// `pkg_root` (if any). Returns empty lists when no manifest sits exactly at
-/// that directory — sub-packages without their own `wado.toml` simply
-/// contribute no filters.
+// Returns `(exclude, include)` from the `wado.toml` rooted exactly at
+// `pkg_root`. Sub-packages without their own manifest contribute nothing.
 fn package_manifest_test_filters(pkg_root: &Path) -> Result<(Vec<String>, Vec<String>), CliExit> {
     match project_manifest::discover(pkg_root) {
         Ok(Some(project)) if project.root == pkg_root => {
@@ -288,8 +265,6 @@ fn package_manifest_test_filters(pkg_root: &Path) -> Result<(Vec<String>, Vec<St
     }
 }
 
-/// Format a sub-package path relative to the invocation root, falling back to
-/// the absolute display when not a descendant.
 fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
     if pkg_root == invocation_root {
         return ".".to_string();
@@ -300,12 +275,9 @@ fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
     )
 }
 
-/// Render a discovered path as the canonical string the runner stores and
-/// matches against. The walker emits `./pkg/file.wado` (or `.\pkg\file.wado`
-/// on Windows) when rooted at `.`; we normalise separators to `/` and strip
-/// the leading `./` so that `--filter` and `[test].exclude` patterns — which
-/// are documented as forward-slash globs — see a consistent shape regardless
-/// of OS or how the user invoked `wado test`.
+// Canonical path shape: forward-slashes, no leading `./`, regardless of
+// OS or invocation root. `--filter` and `[test].exclude` patterns are
+// documented as forward-slash globs and rely on this.
 fn display_path(p: &Path) -> String {
     let raw = p.display().to_string();
     let normalised = if cfg!(windows) {
@@ -319,8 +291,7 @@ fn display_path(p: &Path) -> String {
     }
 }
 
-/// Resolve a mix of files and directory arguments into a single flat path
-/// list. Directories are walked with the discovery rules; files pass through.
+// Directories are walked with the discovery rules; files pass through.
 fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<String>, CliExit> {
     let excludes = discover::ExcludeSet::compile(extra_excludes).map_err(CliExit::error)?;
     let mut resolved = Vec::new();
@@ -338,11 +309,10 @@ fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<St
                 resolved.extend(run.paths);
             }
         } else {
-            // Run explicit file arguments through the same canonical form
-            // as discovered paths so `--filter` and `--exclude` patterns
-            // see one consistent shape (forward-slash, no leading `./`).
-            // Honour `--exclude` even for explicit args, matching the
-            // flag's documented "drop files whose path matches" behaviour.
+            // Canonicalize so explicit args and discovered paths match
+            // filters/excludes against the same shape. `--exclude` applies
+            // to explicit args too — the flag is documented as "drop files
+            // whose path matches".
             let canonical = display_path(p);
             if !excludes.matches_str(&canonical) {
                 resolved.push(canonical);
@@ -352,11 +322,6 @@ fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<St
     Ok(resolved)
 }
 
-/// Parse command-line arguments for the `test` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let usage = format_usage();
     let mut paths: Vec<String> = Vec::new();
@@ -425,10 +390,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         preopened_dirs.push((".".to_owned(), ".".to_owned()));
     }
 
-    // Resolve paths into per-package runs. With no args, recurse from cwd
-    // through every nested `wado.toml`. With explicit args, collapse
-    // everything into a single synthetic root run; sub-package recursion
-    // only kicks in for the no-args (project-wide) case.
+    // No args ⇒ project-wide recursion through every nested `wado.toml`.
+    // With explicit args, collapse everything into one synthetic root run.
     let mut package_runs: Vec<PackageRun> = if paths.is_empty() {
         discover_packages(Path::new("."), true, &cli_excludes)?
     } else {
@@ -439,9 +402,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         }]
     };
 
-    // --filter: shell-style wildcard match against each discovered path.
-    // To match anywhere within a path, wrap the term in `*`s (e.g.
-    // `*foo*`). Repeatable: a path is kept if any pattern matches.
+    // `--filter` is a shell-style wildcard (`*foo*` to match anywhere) and
+    // is repeatable: a path is kept if any pattern matches. It shares the
+    // walker's match semantics (`discover::WALK_MATCH_OPTIONS`) with
+    // `--exclude` and `[test].exclude`.
     if !filters.is_empty() {
         let patterns: Vec<Pattern> = filters
             .iter()
@@ -450,9 +414,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                     .map_err(|e| CliExit::error(format!("invalid --filter pattern {s:?}: {e}")))
             })
             .collect::<Result<_, _>>()?;
-        // `--filter` shares the walker's match semantics so users get
-        // consistent results between `--filter`, `--exclude`, and the
-        // manifest's `[test].exclude`. See `discover::WALK_MATCH_OPTIONS`.
         for run in &mut package_runs {
             run.paths.retain(|p| {
                 patterns
@@ -475,11 +436,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         });
     }
 
-    // Default `jobs` = `cpus` (saturates physical cores for compile and
-    // execute). The load stage internally derives a lower cap because
-    // wasmtime's Cranelift JIT is itself multi-threaded — see `run`.
-    // The `.max(2)` floor handles single-core / containerised
-    // environments where `available_parallelism` reports 1.
+    // Default to CPU count to saturate compile/execute. Load derives a
+    // lower cap internally (Cranelift JIT is multi-threaded; see `run`).
+    // `.max(2)` covers single-core environments.
     let jobs = jobs.unwrap_or_else(|| {
         let cpus = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
         cpus.max(2)
@@ -498,30 +457,23 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     })
 }
 
-/// Output of the **compile** stage: the wado source compiled to a wasm
-/// component, without yet handing the bytes to wasmtime. Flows into the
-/// load stage, or — under `--no-run` — is dropped after the kiln cache
-/// side-effect has been written.
+/// Compile-stage output. Flows into the load stage, or — under `--no-run`
+/// — is dropped after kiln-cache side-effects have been written.
 struct CompiledArtifact {
     path: String,
     wasm: Vec<u8>,
 }
 
-/// Output of the **load** stage: a wasm component fully resident in
-/// wasmtime, with its `Engine`, `Component`, `Linker`, and discovered
-/// test exports cached for the execute stage. Wrapped in `Arc` so the
-/// execute stage can fan out multiple test jobs across the same module
-/// without re-cloning the heavy wasmtime objects.
+/// Load-stage output: a module fully resident in wasmtime. Wrapped in
+/// `Arc` so the execute stage can fan out test jobs without re-cloning
+/// the heavy wasmtime objects.
 ///
-/// The `Linker` is built once per engine alongside loading; every test
-/// in the module instantiates against the same linker so the WASI binding
-/// registration (`p3::add_to_linker` × 4) is paid once instead of per-test.
+/// The `Linker` is built once per engine; every test in the module
+/// instantiates against it so the four `p3::add_to_linker` calls are
+/// amortised across all tests in the module.
 ///
-/// Holds an `OwnedSemaphorePermit` for the pipeline's `modules` budget:
-/// when the last `Arc<LoadedModule>` drops, the permit releases and a
-/// new module is allowed to load. This caps simultaneously-live
-/// wasmtime `Component`s (the heaviest in-flight resource by far)
-/// regardless of how channels between stages buffer.
+/// `_module_permit` caps simultaneously-live `Component`s — the heaviest
+/// in-flight resource — independent of how channels between stages buffer.
 struct LoadedModule {
     path: String,
     engine: Arc<Engine>,
@@ -531,31 +483,21 @@ struct LoadedModule {
     _module_permit: OwnedSemaphorePermit,
 }
 
-/// A non-TODO module that failed the **load** stage (wasmtime
-/// `Component::new` / `create_linker` failed, or the load worker
-/// panicked). Counted on the `load` axis of the summary; does not
-/// abort the run.
+/// Non-TODO module that failed `Component::new`/`create_linker` or whose
+/// load worker panicked. Counted on the `load` axis; does not abort the run.
 struct LoadFailure {
     path: String,
 }
 
-/// Shared resource budget for the whole pipeline.
+/// Pipeline-wide resource caps.
 ///
-/// `cpu` caps the **total** number of CPU-bound tasks executing across
-/// all three stages, sized to `--parallel N` (default `cpus`). Every
-/// worker — compile, load, and execute — acquires one permit before
-/// doing its work and holds it until done. This gives a hard
-/// guarantee: peak in-flight CPU tasks never exceed `N`, irrespective
-/// of per-stage `buffer_unordered` caps. `--parallel N` is therefore
-/// a truthful cap, not a per-stage knob the streaming overlap can
-/// secretly multiply.
+/// `cpu` caps total CPU-bound tasks across all three stages — every worker
+/// acquires one permit. This makes `--parallel N` a truthful global cap
+/// that per-stage buffer sizes can't multiply.
 ///
-/// `modules` caps the number of fully-loaded wasmtime `Component`s
-/// alive simultaneously, regardless of how the inter-stage channels
-/// buffer. A `LoadedModule` acquires one permit before `Component::new`
-/// and holds it via `_module_permit` until the last `Arc<LoadedModule>`
-/// drops at the end of the execute stage. This bounds peak memory
-/// independently of `cpu`.
+/// `modules` caps live wasmtime `Component`s independently of channel
+/// buffering, bounding peak memory. The permit is held via
+/// `LoadedModule::_module_permit` until execute-stage `Arc`s drop.
 struct PipelineBudget {
     cpu: Arc<Semaphore>,
     modules: Arc<Semaphore>,
@@ -572,15 +514,10 @@ impl PipelineBudget {
     }
 }
 
-/// Per-stage timing observable from outside.
-///
-/// `record_input` / `record_output` mark the wall-clock span during
-/// which the stage was producing output. `add_work` is the more useful
-/// number for understanding bottlenecks: it accumulates the actual
-/// per-fixture / per-test work time across all workers, so the
-/// reported per-stage figure equals `Σ worker_duration` rather than
-/// the streaming span (which, for a well-overlapped pipeline, is
-/// indistinguishable from total wall-clock for every stage).
+/// `record_input`/`record_output` mark the stage's output wall-clock span;
+/// `add_work` accumulates per-worker durations — the latter is what reveals
+/// bottlenecks in a well-overlapped pipeline (the streaming span is
+/// indistinguishable from total wall-clock).
 struct StageObserver {
     first_input_at: Mutex<Option<Instant>>,
     last_output_at: Mutex<Option<Instant>>,
@@ -616,20 +553,15 @@ impl StageObserver {
     }
 }
 
-/// `lock().unwrap()` panics if any previous holder of the mutex
-/// panicked while holding it, which would silently take down the
-/// `EpochTicker` thread and disable timeout enforcement for the rest
-/// of the run. Recover the inner value instead — none of the data we
-/// protect with these mutexes is logically invalidated by a panic in
-/// an unrelated holder.
+// Plain `lock().unwrap()` would propagate poison — and the EpochTicker
+// thread silently dies with it, disabling timeout enforcement. None of
+// these mutexes guard logically-coupled invariants, so just recover.
 fn lock_resilient<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// Format a panic payload into a one-line message suitable for the
-/// per-fixture failure log. Recovers `&'static str` and `String`
-/// payloads (the two `panic!` macro produces); anything else collapses
-/// to a placeholder.
+// Recovers `&'static str` and `String` payloads (what `panic!` produces);
+// anything else collapses to a placeholder.
 fn format_panic_payload(payload: &Box<dyn Any + Send>) -> String {
     if let Some(s) = payload.downcast_ref::<&'static str>() {
         (*s).to_string()
@@ -640,9 +572,6 @@ fn format_panic_payload(payload: &Box<dyn Any + Send>) -> String {
     }
 }
 
-/// A single test job to execute, carrying the module it belongs to so
-/// the execute stage can drive jobs across modules without a separate
-/// indirection table. The `Arc` clone is cheap.
 struct TestJob {
     module: Arc<LoadedModule>,
     test_name: String,
@@ -652,12 +581,9 @@ struct TestJob {
     timeout_ms: u64,
 }
 
-/// Outcome of a single test execution.
-///
-/// Regular tests are either Pass or Fail.
-/// TODO tests live on a separate axis:
-///   - `TodoPending`: trapped as expected (the feature is still unimplemented)
-///   - `TodoResolved`: passed unexpectedly (the feature may now work — remove #[TODO])
+/// Regular tests are Pass/Fail. TODO tests live on a separate axis:
+/// `TodoPending` trapped as expected, `TodoResolved` passed unexpectedly
+/// (consider dropping the `#[TODO]`).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum TestOutcome {
     Pass,
@@ -666,7 +592,6 @@ enum TestOutcome {
     TodoResolved,
 }
 
-/// Result from a test execution
 struct TestResult {
     file_path: String,
     test_name: String,
@@ -676,7 +601,6 @@ struct TestResult {
     duration: Duration,
 }
 
-/// Kind of test, parsed from the export name prefix.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum TestKind {
     Normal,
@@ -684,16 +608,10 @@ enum TestKind {
     Todo,
 }
 
-/// Parsed test export name.
-///
-/// The compiler emits names of the shape
-/// `test-(trap-|todo-)?(tm{N}-)?{index}(-{name})?` when targeting the
-/// `test` world. The parser is intentionally tolerant of two edges so a
-/// stray name doesn't drop a test from the run:
-/// - a `tm…-` prefix that doesn't have a parseable `u64` (e.g. `tmfoo-…`)
-///   falls through into the index/name branch instead of being rejected;
-/// - a trailing dash with no name segment (`test-0-`) is treated as
-///   "no name provided" and rendered as `<test {index}>`.
+/// Parser for `test-(trap-|todo-)?(tm{N}-)?{index}(-{name})?` exports.
+/// Tolerant of two edges so a stray name doesn't drop a test from the
+/// run: malformed `tm…-` (e.g. `tmfoo-…`) falls into the index/name
+/// branch, and trailing-dash names (`test-0-`) render as `<test {index}>`.
 #[derive(Debug, PartialEq, Eq)]
 struct TestExportName {
     kind: TestKind,
