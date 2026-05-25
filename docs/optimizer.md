@@ -204,9 +204,18 @@ E2E: [opt_const.wado](../wado-compiler/tests/fixtures/opt_const.wado).
 
 ### Constant Branch Pruning (`const_branch_prune.rs`)
 
-Eliminates branches with compile-time-known boolean conditions and simplifies degenerate block patterns (single-expression blocks, trivial labeled blocks, empty blocks). Also performs labeled-block copy propagation: when a block starts with `let x = y` and neither name is modified within, `x` is replaced by `y` and the binding is dropped — flattening residual parameter copies left by inlining.
+Eliminates branches with compile-time-known boolean conditions and simplifies degenerate block patterns:
 
-E2E: [opt_wir_dead_if_zero.wado](../wado-compiler/tests/fixtures/opt_wir_dead_if_zero.wado), [array_bounds_elim_const_wir.wado](../wado-compiler/tests/fixtures/array_bounds_elim_const_wir.wado).
+- Empty blocks → `()`.
+- Single-expression blocks (`{ expr }`) → `expr`.
+- Tail-break-only labeled blocks (`label: { stmts...; break label: V }`) → `{ stmts...; V }` when the only reference to `label` is the trailing break.
+- Stmt-position tail-break-only labeled blocks (`label: { stmts...; break label; }`) → straight-line `stmts...`.
+- Dead statements after a `break` / `continue` / `return` in the same stmt list.
+- Labeled-block copy propagation: when a block starts with `let x = y` and neither name is modified within, `x` is substituted by `y` and the binding is dropped — flattening residual parameter copies left by inlining.
+
+`__tmpl:` labeled blocks are carved out during the optimizer fixpoint so that `tmpl_hoist` can anchor on them. A separate post-fixpoint invocation (`nir/branch_prune_final`) flattens them once `tmpl_hoist` has finished, iterating until convergence.
+
+E2E: [opt_wir_dead_if_zero.wado](../wado-compiler/tests/fixtures/opt_wir_dead_if_zero.wado), [array_bounds_elim_const_wir.wado](../wado-compiler/tests/fixtures/array_bounds_elim_const_wir.wado), [opt_dce_break_then_unreachable.wado](../wado-compiler/tests/fixtures/opt_dce_break_then_unreachable.wado), [opt_dce_tail_break_flatten.wado](../wado-compiler/tests/fixtures/opt_dce_tail_break_flatten.wado), [opt_dce_trap_preserved_unread_let.wado](../wado-compiler/tests/fixtures/opt_dce_trap_preserved_unread_let.wado).
 
 ### Loop-Invariant Code Motion (`licm.rs`)
 
