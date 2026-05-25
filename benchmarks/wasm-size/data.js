@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779743235585,
+  "lastUpdate": 1779743472218,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26105,6 +26105,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/505116aacab3005da0f6d94389e10952c5159ab1"
         },
         "date": 1779743235277,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 443310,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "457a4e1eaf3b24d233e1c5866997a5aa0609b465",
+          "message": "Merge pull request #1195 from wado-lang/claude/package-gale-gen-perf-SpWKy\n\nperf(gale): speed up `gale gen` on large grammars",
+          "timestamp": "2026-05-26T06:02:45+09:00",
+          "tree_id": "a2453fda7ac87a4421c8f9425faccbf167d29f5f",
+          "url": "https://github.com/wado-lang/wado/commit/457a4e1eaf3b24d233e1c5866997a5aa0609b465"
+        },
+        "date": 1779743471746,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
