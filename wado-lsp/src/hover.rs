@@ -8,14 +8,14 @@
 //! `wado_compiler::unparse`.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::CompilerHost;
-use wado_compiler::annotate::{Annotated, annotate_with_invocations};
+use wado_compiler::annotate::Annotated;
 use wado_compiler::ast::{self, AstId, Expr, Item, Module, Stmt};
 use wado_compiler::symbol::{Symbol, SymbolKey, SymbolKind};
 use wado_compiler::unparse;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{span_to_range, uri_to_filename};
+use crate::location::span_to_range;
+use crate::text::{PositionEncoding, lsp_position_to_line_col};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HoverResult {
@@ -37,29 +37,24 @@ pub enum MarkupKind {
     Markdown,
 }
 
-pub async fn find_hover<H: CompilerHost>(
+#[must_use]
+pub fn find_hover(
+    annotated: &Annotated,
     source: &str,
     position: Position,
-    uri: &str,
-    host: &H,
+    _uri: &str,
+    encoding: PositionEncoding,
 ) -> Option<HoverResult> {
-    let filename = uri_to_filename(uri);
-    let invocations = crate::kiln::prepare_invocations(&filename, source, host);
-    let annotated = annotate_with_invocations(source, host, Some(&filename), invocations)
-        .await
-        .ok()?;
-
     let module = annotated.entry_module_source.clone();
-    let line = position.line as usize + 1;
-    let col = position.character as usize + 1;
+    let (line, col) = lsp_position_to_line_col(source, position, encoding);
 
     let cursor = annotated.cursor_at(&module, line, col)?;
     let symbol = cursor.def_symbol()?;
     let signature = match &symbol.kind {
         SymbolKind::Variable(_) => {
-            render_local_binding(&annotated, &symbol.defined_at, &symbol.name)?
+            render_local_binding(annotated, &symbol.defined_at, &symbol.name)?
         }
-        _ => render_item_signature(&annotated, symbol)?,
+        _ => render_item_signature(annotated, symbol)?,
     };
 
     let cursor_span = cursor.span()?;
@@ -68,7 +63,7 @@ pub async fn find_hover<H: CompilerHost>(
             kind: MarkupKind::Markdown,
             value: format!("```wado\n{signature}\n```"),
         },
-        range: Some(span_to_range(&cursor_span)),
+        range: Some(span_to_range(&cursor_span, Some(source), encoding)),
     })
 }
 
@@ -377,6 +372,8 @@ fn item_info(item: &Item, name: &str) -> Option<String> {
 mod tests {
     use super::*;
     use indexmap::IndexMap;
+    use wado_compiler::CompilerHost;
+    use wado_compiler::annotate::annotate_with_invocations;
     use wado_compiler::{Diagnostic as CompilerDiagnostic, SourceError};
 
     struct TestHost {
@@ -408,7 +405,15 @@ mod tests {
         let path = "/test.wado";
         let uri = format!("file://{path}");
         let host = TestHost::new(path, source);
-        find_hover(source, Position { line, character }, &uri, &host).await
+        let invocations = wado_compiler::kiln::InvocationIndex::new();
+        let annotated = annotate_with_invocations(source, &host, Some(path), invocations).await;
+        find_hover(
+            &annotated,
+            source,
+            Position { line, character },
+            &uri,
+            PositionEncoding::Utf16,
+        )
     }
 
     #[test]
@@ -549,6 +554,94 @@ mod tests {
             );
             let result = hover_at(source, 2, 19).await.expect("hover on v");
             assert_eq!(result.contents.value, "```wado\nlet v\n```");
+        });
+    }
+
+    async fn hover_at_with_encoding(
+        source: &str,
+        line: u32,
+        character: u32,
+        encoding: PositionEncoding,
+    ) -> Option<HoverResult> {
+        let path = "/test.wado";
+        let uri = format!("file://{path}");
+        let host = TestHost::new(path, source);
+        let invocations = wado_compiler::kiln::InvocationIndex::new();
+        let annotated = annotate_with_invocations(source, &host, Some(path), invocations).await;
+        find_hover(
+            &annotated,
+            source,
+            Position { line, character },
+            &uri,
+            encoding,
+        )
+    }
+
+    #[test]
+    fn hover_after_non_ascii_identifier_under_utf16() {
+        // Pre-existing bug: every query took `position.character + 1` as a
+        // compiler byte column, which treated UTF-16 code units as UTF-8
+        // bytes. Cursor positions past a multi-byte character on the same
+        // line drifted by `byte_len - 1` per character — silently breaking
+        // hover on every identifier that followed a non-ASCII string,
+        // template, or comment.
+        //
+        // The fixture puts a use of the parameter `x` on the same line as
+        // a comment containing a 3-byte UTF-8 character ('あ'). Under
+        // UTF-16 the LSP `character` index of `x` differs from its byte
+        // column; the conversion in `text::lsp_position_to_line_col` now
+        // bridges them.
+        futures::executor::block_on(async {
+            // Same-line non-ASCII variant: `あ` lives on the cursor line
+            // so the bug fires whether the conversion is wrong or right.
+            let source = concat!(
+                "fn f(x: i32) -> i32 {\n",
+                "    let _s: String = \"あ\"; return x;\n",
+                "}\n",
+            );
+            let line1 = "    let _s: String = \"あ\"; return x;";
+            let byte_in_line = line1.rfind('x').unwrap();
+            let utf16_in_line: u32 = line1[..byte_in_line]
+                .chars()
+                .map(|c| c.len_utf16() as u32)
+                .sum();
+            // Sanity: UTF-16 index differs from byte offset because of `あ`.
+            assert_ne!(
+                utf16_in_line as usize, byte_in_line,
+                "fixture must contain a multi-byte char before the cursor",
+            );
+
+            let result = hover_at_with_encoding(source, 1, utf16_in_line, PositionEncoding::Utf16)
+                .await
+                .expect("hover on return-position x under utf-16 encoding");
+            assert_eq!(result.contents.value, "```wado\nx: i32\n```");
+        });
+    }
+
+    #[test]
+    fn hover_on_well_formed_part_survives_unrelated_error() {
+        // Partial-result behaviour: a type-error elsewhere in the file must
+        // not blank out hover on the unrelated, well-formed function. The
+        // resolver bails on the bad body, but the LSP should still surface
+        // signatures for whatever was successfully resolved before/around it.
+        futures::executor::block_on(async {
+            let source = concat!(
+                "fn add(a: i32, b: i32) -> i32 {\n",
+                "    return a + b;\n",
+                "}\n",
+                "fn broken() -> i32 {\n",
+                "    return \"not an i32\";\n", // type mismatch
+                "}\n",
+            );
+            let result = hover_at(source, 0, 4).await.expect("hover on `add`");
+            assert!(
+                result
+                    .contents
+                    .value
+                    .contains("fn add(a: i32, b: i32) -> i32"),
+                "got: {}",
+                result.contents.value,
+            );
         });
     }
 }

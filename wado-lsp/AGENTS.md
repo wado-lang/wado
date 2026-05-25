@@ -11,24 +11,57 @@ Language service engine for the Wado compiler toolchain.
 
 | File                        | Role                                                                                                                      |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `src/lib.rs`                | `Engine` struct: document management + query dispatch                                                                     |
+| `src/lib.rs`                | `Engine` struct: document state + per-document `Annotated` snapshot cache + query dispatch                                |
 | `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                                           |
-| `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion                                                           |
-| `src/semantic_tokens.rs`    | Semantic token computation (lexer + AST classification)                                                                   |
+| `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting  |
+| `src/text.rs`               | `PositionEncoding` and LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion                               |
+| `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion (re-encodes spans in the negotiated position encoding)    |
+| `src/semantic_tokens.rs`    | Semantic token computation (lexer + AST classification). Re-encodes start/length at delta-encode time.                    |
 | `src/definition.rs`         | Go-to-definition via `Cursor::{def_key, def_span}` and a file-path matcher for `use`/`#include` paths                     |
 | `src/hover.rs`              | Hover info; `Cursor::def_symbol` selects the binding, locals render from the AST node, items via `wado_compiler::unparse` |
 | `src/references.rs`         | Find-references via `Cursor::references_to_def`                                                                           |
 | `src/document_highlight.rs` | Document highlight; Read/Write classification consults `Annotated::is_write_target`                                       |
-| `src/location.rs`           | URI / span helpers for translating compiler positions to LSP types                                                        |
+| `src/location.rs`           | URI / span helpers for translating compiler `ModuleSource` to LSP URIs                                                    |
 | `src/server.rs`             | `run_stdio()`: blocking stdin/stdout loop feeding the async dispatcher                                                    |
 | `src/server/transport.rs`   | Content-Length framing + typed JSON-RPC send/receive helpers                                                              |
-| `src/server/dispatch.rs`    | LSP method routing and server-lifecycle enforcement                                                                       |
+| `src/server/dispatch.rs`    | LSP method routing, position-encoding negotiation, and server-lifecycle enforcement                                       |
 | `src/server/rpc.rs`         | LSP wire types (params, capabilities, notifications)                                                                      |
 | `src/bin/wado-lsp.rs`       | Binary entrypoint; drives `run_stdio()` via `futures::executor::block_on`                                                 |
 
 ### Engine
 
-`Engine` manages open documents (`IndexMap<String, String>`) and provides query methods. Each query takes a `&impl CompilerHost` to load imported modules.
+`Engine` owns per-document state: source text, last reported version,
+and a cached `Rc<Annotated>` produced by `annotate_with_invocations`.
+The snapshot is built on first query and shared across back-to-back
+queries on the same document version; `update_document` /
+`close_document` invalidates it. The negotiated `PositionEncoding`
+lives on `Engine` and is consulted by every position-bearing query.
+
+Each query takes a `&impl CompilerHost` so the caller decides how
+imported modules are loaded. Pass the same host across queries to
+keep cross-file resolution consistent; the snapshot cache itself is
+keyed by document text, not by host identity.
+
+### Partial-result `Annotated`
+
+`wado_compiler::annotate` always returns an `Annotated` — even when an
+analysis phase bails. LSP queries operate on whatever partial state
+the phases produced (e.g. hover still works on a well-formed function
+even when another function has a type error). Batch compilation
+checks `Annotated::is_complete()` and aborts on partial results;
+LSP-side queries simply degrade to "no answer" for fields the bailed
+phase would have populated.
+
+### Position encoding
+
+`PositionEncoding` (UTF-8 / UTF-16 / UTF-32) is negotiated at
+`initialize` from the client's `general.positionEncodings`
+capability. Server preference: UTF-8 (cheapest — Wado source is
+already UTF-8) → UTF-32 → UTF-16 (LSP default). The compiler's
+`Span::column` is a 1-based **codepoint** index (`lexer.rs::Lexer::advance`
+increments per character, not per byte and not per UTF-16 code unit), so
+every conversion lives in `text.rs` and routes through
+`codepoint_offset_to_character` / `character_to_codepoint_offset`.
 
 ### DiagnosticCollector
 

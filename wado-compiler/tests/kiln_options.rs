@@ -29,7 +29,7 @@ pub struct Options {
 pub fn generate() {}
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
     let desc = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap();
     assert_eq!(desc.fields.len(), 3);
 
@@ -56,7 +56,7 @@ pub struct Options {
 pub fn generate() {}
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
     let desc = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap();
     assert_eq!(desc.fields.len(), 1);
     match &desc.fields[0].ty {
@@ -81,7 +81,7 @@ pub struct Options {
 pub fn generate() {}
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
     let desc = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap();
     assert_eq!(desc.fields.len(), 1);
     match &desc.fields[0].ty {
@@ -112,7 +112,7 @@ pub struct Options {
 pub fn generate() {}
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
     let desc = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap();
     assert_eq!(desc.fields.len(), 1);
     let OptionsType::Struct { name, descriptor } = &desc.fields[0].ty else {
@@ -136,7 +136,7 @@ fn descriptor_missing_options_struct_errors() {
 pub fn generate() {}
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
     let err = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap_err();
     assert!(
         err.iter()
@@ -152,7 +152,7 @@ pub struct Options {
 }
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
     let err = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap_err();
     assert!(
         err.iter()

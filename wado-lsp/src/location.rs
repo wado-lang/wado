@@ -1,30 +1,19 @@
 //! Shared helpers for translating between compiler positions/symbols and LSP
 //! types. Used by go-to-definition, find-references, and document highlight.
+//!
+//! URI handling lives in [`crate::uri`]; position-encoding-aware span
+//! conversion lives in [`crate::text`]. This module only retains the
+//! `ModuleSource → URI` helpers that read the compiler's per-module
+//! metadata.
 
 use wado_compiler::annotate::Annotated;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::symbol::Symbol;
 use wado_compiler::token::Span;
 
-use crate::diagnostics::{Position, Range};
-
-pub(crate) fn uri_to_filename(uri: &str) -> String {
-    if let Some(path) = uri.strip_prefix("file://") {
-        path.to_string()
-    } else {
-        uri.to_string()
-    }
-}
-
-pub(crate) fn filename_to_uri(filename: &str) -> String {
-    if filename.starts_with("file://") {
-        filename.to_string()
-    } else if filename.starts_with('/') {
-        format!("file://{filename}")
-    } else {
-        filename.to_string()
-    }
-}
+use crate::diagnostics::Range;
+use crate::text::PositionEncoding;
+use crate::uri::{Uri, UriScheme};
 
 /// Resolve the URI of a module relative to the requesting document's URI.
 ///
@@ -56,16 +45,35 @@ pub(crate) fn module_uri(
     }
 }
 
+fn filename_to_uri(filename: &str) -> String {
+    if filename.starts_with("file://") {
+        filename.to_string()
+    } else if filename.starts_with('/') {
+        format!("file://{filename}")
+    } else {
+        filename.to_string()
+    }
+}
+
 fn resolve_local_uri(module_path: &str, request_uri: &str) -> String {
     if module_path.starts_with('/') || module_path.starts_with("file://") {
         return filename_to_uri(module_path);
     }
-    let request_path = uri_to_filename(request_uri);
+    // Local imports anchor at the request URI's directory. Non-file
+    // request URIs (`core:`, `wasi:`, `kiln:`, `untitled:`) cannot
+    // anchor a relative path; fall back to the literal module path so
+    // the result is still navigable in the LSP client even though it
+    // won't open a real file.
+    let request_uri_typed = Uri::new(request_uri);
+    let normalized = module_path.strip_prefix("./").unwrap_or(module_path);
+    if request_uri_typed.scheme() != UriScheme::File {
+        return filename_to_uri(normalized);
+    }
+    let request_path = request_uri_typed.to_filename();
     let base_dir = request_path
         .rsplit_once('/')
         .map(|(dir, _)| dir)
         .unwrap_or("");
-    let normalized = module_path.strip_prefix("./").unwrap_or(module_path);
     // When the request path is rooted at "/" (e.g. "/test.wado"), rsplit_once
     // yields an empty base_dir, so preserve the leading slash explicitly.
     if base_dir.is_empty() {
@@ -88,15 +96,16 @@ pub(crate) fn symbol_uri(
     module_uri(annotated, &symbol.defined_at.module, request_uri)
 }
 
-pub(crate) fn span_to_range(span: &Span) -> Range {
-    Range {
-        start: Position {
-            line: span.line.saturating_sub(1) as u32,
-            character: span.column.saturating_sub(1) as u32,
-        },
-        end: Position {
-            line: span.end_line.saturating_sub(1) as u32,
-            character: span.end_column.saturating_sub(1) as u32,
-        },
-    }
+/// Convert a compiler `Span` (1-based byte column) to an LSP `Range` in
+/// the negotiated `encoding`. Pass `Some(source)` for spans inside the
+/// request document so non-ASCII columns survive the round-trip; pass
+/// `None` only when the source text is not available for the span's
+/// module (cross-file references), and accept the ASCII-only correctness
+/// implied by that.
+pub(crate) fn span_to_range(
+    span: &Span,
+    source: Option<&str>,
+    encoding: PositionEncoding,
+) -> Range {
+    crate::text::span_to_range(span, source, encoding)
 }

@@ -8,13 +8,14 @@ use serde_json::Value;
 use crate::Engine;
 use crate::server::rpc::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-    InitializeResult, JsonRpcRequest, PublishDiagnosticsParams, ReferenceParams, SemanticTokens,
-    SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams, ServerCapabilities,
-    ServerInfo, TextDocumentContentOptions, TextDocumentContentParams, TextDocumentContentResult,
-    TextDocumentPositionParams, TextDocumentSyncOptions, WorkspaceServerCapabilities, error_codes,
-    text_document_sync_kind,
+    InitializeParams, InitializeResult, JsonRpcRequest, PublishDiagnosticsParams, ReferenceParams,
+    SemanticTokens, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
+    ServerCapabilities, ServerInfo, TextDocumentContentOptions, TextDocumentContentParams,
+    TextDocumentContentResult, TextDocumentPositionParams, TextDocumentSyncOptions,
+    WorkspaceServerCapabilities, error_codes, text_document_sync_kind,
 };
 use crate::server::transport;
+use crate::text::PositionEncoding;
 
 const STDLIB_SCHEMES: &[&str] = &["core", "wasi"];
 
@@ -82,8 +83,18 @@ pub async fn dispatch<W: Write>(
                     )?;
                     return Ok(());
                 }
+                let parsed: InitializeParams = serde_json::from_value(params).unwrap_or_default();
+                let client_encodings = parsed
+                    .capabilities
+                    .general
+                    .as_ref()
+                    .and_then(|g| g.position_encodings.clone())
+                    .unwrap_or_default();
+                let encoding = PositionEncoding::negotiate(&client_encodings);
+                engine.set_position_encoding(encoding);
                 let result = InitializeResult {
                     capabilities: ServerCapabilities {
+                        position_encoding: Some(encoding.as_wire()),
                         text_document_sync: Some(TextDocumentSyncOptions {
                             open_close: true,
                             change: text_document_sync_kind::FULL,

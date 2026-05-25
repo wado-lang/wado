@@ -3,6 +3,8 @@ use wado_compiler::ast::{self, Expr, Item, Stmt, Type};
 use wado_compiler::lexer::Lexer;
 use wado_compiler::token::{Token, TokenKind};
 
+use crate::text::PositionEncoding;
+
 /// LSP semantic token type indices (must match `TOKEN_TYPES` order).
 pub mod token_type {
     pub const NAMESPACE: u32 = 0;
@@ -53,6 +55,11 @@ pub struct SemanticToken {
 }
 
 /// Compute semantic tokens for a Wado source string.
+///
+/// The returned tokens carry `start_char` as a 0-based **codepoint** column
+/// (matching `Span::column - 1` from the lexer) and `length` as a codepoint
+/// count. [`delta_encode`] later converts both into the negotiated LSP
+/// position encoding.
 pub fn compute(source: &str) -> Vec<SemanticToken> {
     // 1. Lex
     let mut lexer = Lexer::new(source);
@@ -71,7 +78,7 @@ pub fn compute(source: &str) -> Vec<SemanticToken> {
     // 3. Classify lexer tokens
     let mut result = Vec::new();
     for i in 0..tokens.len() {
-        if let Some(st) = classify_token(&tokens, i, &ast_types) {
+        if let Some(st) = classify_token(source, &tokens, i, &ast_types) {
             result.push(st);
         }
     }
@@ -80,7 +87,7 @@ pub fn compute(source: &str) -> Vec<SemanticToken> {
     for comment in &comments {
         let line = comment.span.line.saturating_sub(1) as u32;
         let start_char = comment.span.column.saturating_sub(1) as u32;
-        let length = (comment.span.end - comment.span.start) as u32;
+        let length = source[comment.span.start..comment.span.end].chars().count() as u32;
         result.push(SemanticToken {
             line,
             start_char,
@@ -96,29 +103,73 @@ pub fn compute(source: &str) -> Vec<SemanticToken> {
 }
 
 /// Delta-encode semantic tokens for LSP response.
-pub fn delta_encode(tokens: &[SemanticToken]) -> Vec<u32> {
+///
+/// The tokens emitted by [`compute`] carry 0-based codepoint positions
+/// and codepoint lengths — matching the compiler's `Span` semantics.
+/// The LSP wire format expects positions and lengths in the negotiated
+/// encoding's code units; re-encoding happens here.
+pub fn delta_encode(
+    tokens: &[SemanticToken],
+    source: &str,
+    encoding: PositionEncoding,
+) -> Vec<u32> {
+    // Pre-split lines once: every token re-encodes against its own
+    // line's content, and we'd otherwise re-scan the source per token.
+    let lines: Vec<&str> = source
+        .split_inclusive('\n')
+        .map(|line| {
+            line.strip_suffix('\n')
+                .map(|s| s.strip_suffix('\r').unwrap_or(s))
+                .unwrap_or(line)
+        })
+        .collect();
+
     let mut data = Vec::with_capacity(tokens.len() * 5);
     let mut prev_line = 0u32;
     let mut prev_start = 0u32;
 
     for token in tokens {
+        let line_text = lines.get(token.line as usize).copied().unwrap_or("");
+        let start_char = codepoint_to_encoding(line_text, token.start_char, encoding);
+        let end_char = codepoint_to_encoding(line_text, token.start_char + token.length, encoding);
+        let length_in_encoding = end_char.saturating_sub(start_char);
+
         let delta_line = token.line - prev_line;
         let delta_start = if delta_line == 0 {
-            token.start_char - prev_start
+            start_char - prev_start
         } else {
-            token.start_char
+            start_char
         };
 
         data.push(delta_line);
         data.push(delta_start);
-        data.push(token.length);
+        data.push(length_in_encoding);
         data.push(token.token_type);
         data.push(token.modifiers);
 
         prev_line = token.line;
-        prev_start = token.start_char;
+        prev_start = start_char;
     }
     data
+}
+
+/// Codepoint offset → LSP code-unit offset in the requested `encoding`.
+fn codepoint_to_encoding(line: &str, codepoint_col: u32, encoding: PositionEncoding) -> u32 {
+    let max = line.chars().count() as u32;
+    let codepoint_col = codepoint_col.min(max);
+    match encoding {
+        PositionEncoding::Utf8 => line
+            .chars()
+            .take(codepoint_col as usize)
+            .map(|c| c.len_utf8() as u32)
+            .sum(),
+        PositionEncoding::Utf16 => line
+            .chars()
+            .take(codepoint_col as usize)
+            .map(|c| c.len_utf16() as u32)
+            .sum(),
+        PositionEncoding::Utf32 => codepoint_col,
+    }
 }
 
 // --- AST-based type span collection ---
@@ -473,7 +524,12 @@ fn visit_expr(spans: &mut TypeSpans, expr: &Expr) {
 
 // --- Lexer token classification ---
 
-fn classify_token(tokens: &[Token], index: usize, ast_types: &TypeSpans) -> Option<SemanticToken> {
+fn classify_token(
+    source: &str,
+    tokens: &[Token],
+    index: usize,
+    ast_types: &TypeSpans,
+) -> Option<SemanticToken> {
     let token = &tokens[index];
     if token.kind == TokenKind::Eof {
         return None;
@@ -481,7 +537,7 @@ fn classify_token(tokens: &[Token], index: usize, ast_types: &TypeSpans) -> Opti
 
     let line = token.span.line.saturating_sub(1) as u32;
     let start_char = token.span.column.saturating_sub(1) as u32;
-    let length = (token.span.end - token.span.start) as u32;
+    let length = source[token.span.start..token.span.end].chars().count() as u32;
     if length == 0 {
         return None;
     }
@@ -679,7 +735,9 @@ mod tests {
                 modifiers: 0,
             },
         ];
-        let data = delta_encode(&tokens);
+        // Test source matching the token columns so re-encoding is a no-op.
+        let src = "fn foo()\n    x\n";
+        let data = delta_encode(&tokens, src, PositionEncoding::Utf16);
         assert_eq!(
             data,
             vec![

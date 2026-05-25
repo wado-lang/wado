@@ -149,29 +149,39 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let type_table = Rc::new(RefCell::new(
             snapshot.map_or_else(TypeTable::new, |s| s.types.clone()),
         ));
-        let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> = snapshot
-            .map(|s| (*s.state.all_newtypes).clone())
+        // The stdlib snapshot is built by `stdlib_snapshot::build_snapshot`
+        // which asserts `is_complete()`, so `state` is always populated when
+        // a snapshot is handed in here.
+        let snapshot_state = snapshot.map(|s| {
+            s.state
+                .as_ref()
+                .expect("stdlib snapshot must have a populated annotate state")
+        });
+        let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> = snapshot_state
+            .map(|s| (*s.all_newtypes).clone())
             .unwrap_or_default();
         let mut all_generic_newtypes: IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>> =
-            snapshot
-                .map(|s| (*s.state.all_generic_newtypes).clone())
+            snapshot_state
+                .map(|s| (*s.all_generic_newtypes).clone())
                 .unwrap_or_default();
         let mut all_struct_fields: IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>> =
-            snapshot
-                .map(|s| (*s.state.all_struct_fields).clone())
+            snapshot_state
+                .map(|s| (*s.all_struct_fields).clone())
                 .unwrap_or_default();
-        let mut all_variant_cases: IndexMap<ModuleSource, IndexMap<String, VariantInfo>> = snapshot
-            .map(|s| (*s.state.all_variant_cases).clone())
+        let mut all_variant_cases: IndexMap<ModuleSource, IndexMap<String, VariantInfo>> =
+            snapshot_state
+                .map(|s| (*s.all_variant_cases).clone())
+                .unwrap_or_default();
+        let mut all_enum_cases: IndexMap<ModuleSource, IndexMap<String, EnumInfo>> = snapshot_state
+            .map(|s| (*s.all_enum_cases).clone())
             .unwrap_or_default();
-        let mut all_enum_cases: IndexMap<ModuleSource, IndexMap<String, EnumInfo>> = snapshot
-            .map(|s| (*s.state.all_enum_cases).clone())
-            .unwrap_or_default();
-        let mut all_flags_cases: IndexMap<ModuleSource, IndexMap<String, FlagsInfo>> = snapshot
-            .map(|s| (*s.state.all_flags_cases).clone())
-            .unwrap_or_default();
+        let mut all_flags_cases: IndexMap<ModuleSource, IndexMap<String, FlagsInfo>> =
+            snapshot_state
+                .map(|s| (*s.all_flags_cases).clone())
+                .unwrap_or_default();
         let mut all_resource_types: IndexMap<ModuleSource, IndexMap<String, ResourceInfo>> =
-            snapshot
-                .map(|s| (*s.state.all_resource_types).clone())
+            snapshot_state
+                .map(|s| (*s.all_resource_types).clone())
                 .unwrap_or_default();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
@@ -616,11 +626,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         };
         let builtin_registry = {
             let _span = logger.span("resolve/builtin_registry");
-            let mut registry = if let Some(snap) = snapshot {
+            let mut registry = if let Some(snap_state) = snapshot_state {
                 // The snapshot's registry is bound to the snapshot's
                 // `TypeTable`, whose entries we cloned into `type_table`
                 // above — so the registered `TypeId`s remain valid.
-                snap.state.builtin_registry.clone()
+                snap_state.builtin_registry.clone()
             } else {
                 BuiltinRegistry::build_from_stdlib(&type_table)
             };
@@ -724,8 +734,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // Pre-build function name → index maps for all loaded modules (O(1) lookup)
         let all_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>> = {
-            let mut indices: IndexMap<ModuleSource, IndexMap<String, usize>> = snapshot
-                .map(|s| s.state.all_module_func_indices.clone())
+            let mut indices: IndexMap<ModuleSource, IndexMap<String, usize>> = snapshot_state
+                .map(|s| s.all_module_func_indices.clone())
                 .unwrap_or_default();
             for (src, module) in modules {
                 if stdlib_set.contains(src) {
