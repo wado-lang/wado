@@ -79,6 +79,7 @@ pub struct CompileOptions {
     pub opt_iterations: Option<u32>,
     pub allocator: Option<String>,
     pub lib: bool,
+    pub no_cache: bool,
 }
 
 /// Compile-time options shared by `compile`/`run`/`serve`/`test`.
@@ -95,6 +96,12 @@ pub struct CompileFlags {
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
     pub allocator: Option<String>,
+    /// When true, ignore all build caches: every Kiln invocation re-runs
+    /// its generator, and the generator wasm itself is recompiled from
+    /// source instead of reused from `build/kiln/generators/`. Cache
+    /// *writes* still happen, so a follow-up run without `--no-cache`
+    /// benefits from a warm cache again.
+    pub no_cache: bool,
 }
 
 impl CompileOptions {
@@ -108,6 +115,7 @@ impl CompileOptions {
             inline_threshold: self.inline_threshold,
             opt_iterations: self.opt_iterations,
             allocator: self.allocator.clone(),
+            no_cache: self.no_cache,
         }
     }
 }
@@ -123,6 +131,7 @@ enum Opt {
     OptIterations,
     LogLevel,
     NoValidate,
+    NoCache,
     Allocator,
     Lib,
     Help,
@@ -139,6 +148,7 @@ impl Opt {
         Self::OptIterations,
         Self::LogLevel,
         Self::NoValidate,
+        Self::NoCache,
         Self::Allocator,
         Self::Lib,
         Self::Help,
@@ -170,6 +180,7 @@ impl Opt {
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::LogLevel => args::LOG_LEVEL_SPEC,
             Self::NoValidate => args::NO_VALIDATE_SPEC,
+            Self::NoCache => args::NO_CACHE_SPEC,
             Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Lib => args::OptSpec {
                 long: Some("lib"),
@@ -211,6 +222,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut opt_iterations: Option<u32> = None;
     let mut allocator: Option<String> = None;
     let mut lib = false;
+    let mut no_cache = false;
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
@@ -238,6 +250,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 }
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::NoValidate => skip_validation = true,
+                Opt::NoCache => no_cache = true,
                 Opt::Allocator => {
                     allocator = Some(args::require_string(&mut parser)?);
                 }
@@ -271,6 +284,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         opt_iterations,
         allocator,
         lib,
+        no_cache,
     })
 }
 
@@ -329,7 +343,7 @@ pub async fn try_compile(
         .unwrap_or_default();
     let host = FilesystemCompilerHost::with_log_level(base_path, flags.log_level);
 
-    let pipeline_outcome = match maybe_run_pipeline(path, &host).await {
+    let pipeline_outcome = match maybe_run_pipeline(path, &host, flags.no_cache).await {
         Ok(outcome) => outcome,
         Err(e) => {
             eprintln!("{e}");
@@ -375,6 +389,7 @@ pub async fn compile(filename: &str, flags: &CompileFlags) -> Result<Vec<u8>, Cl
 async fn maybe_run_pipeline(
     entry_file: &Path,
     host: &FilesystemCompilerHost,
+    no_cache: bool,
 ) -> Result<PipelineOutcome, PipelineError> {
     let manifest_pair = load_nearest_manifest(entry_file);
 
@@ -396,8 +411,9 @@ async fn maybe_run_pipeline(
     if inline.is_empty() {
         return Ok(PipelineOutcome::default());
     }
-    let provider = CliGeneratorProvider::new(manifest_root.clone());
-    crate::kiln_driver::run_pipeline(&manifest, &manifest_root, host, &provider, inline).await
+    let provider = CliGeneratorProvider::new(manifest_root.clone()).with_no_cache(no_cache);
+    crate::kiln_driver::run_pipeline(&manifest, &manifest_root, host, &provider, inline, no_cache)
+        .await
 }
 
 /// Empty in-memory `wado.toml` manifest used as a fallback when the

@@ -38,6 +38,7 @@ use wado_compiler::kiln::{
     Plan, PlanError, content_hash, encode_options_canonical, file_hash, generator_identity,
     has_generated_marker, hex_digest, validate_options,
 };
+use wado_compiler::{Code, Diagnostic, Severity};
 use wado_manifest::Manifest;
 
 use crate::kiln_metadata::{
@@ -866,6 +867,53 @@ impl From<DriverError> for PipelineError {
     }
 }
 
+/// Emit a debug-severity `SpanStart` diagnostic. The CLI host renders
+/// these as `[hh:mm:ss.tttt] >> <name>` when `--log-level debug` is set,
+/// so timing breakdowns of the Kiln pipeline are visible alongside the
+/// existing `parse` / `bind` / `wir_optimize` spans the compiler emits.
+fn span_start<H: CompilerHost>(host: &H, name: &str) {
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Debug,
+        code: Code::SpanStart,
+        message: name.to_string(),
+        span: None,
+    });
+}
+
+fn span_end<H: CompilerHost>(host: &H, name: &str) {
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Debug,
+        code: Code::SpanEnd,
+        message: name.to_string(),
+        span: None,
+    });
+}
+
+/// RAII guard: emits `SpanStart` on construction, `SpanEnd` on drop.
+/// Lets the surrounding function early-return on any error branch
+/// without manually pairing every `return` with a `span_end` call —
+/// which kept the Kiln driver's `?` flow free and avoided an extra
+/// `async fn` wrapper that would otherwise inflate the layout depth
+/// of `compile::run` past rustc's default recursion limit.
+struct KilnSpan<'a, H: CompilerHost> {
+    host: &'a H,
+    name: String,
+}
+
+impl<'a, H: CompilerHost> KilnSpan<'a, H> {
+    fn new(host: &'a H, name: impl Into<String>) -> Self {
+        let name = name.into();
+        span_start(host, &name);
+        Self { host, name }
+    }
+}
+
+impl<H: CompilerHost> Drop for KilnSpan<'_, H> {
+    fn drop(&mut self) {
+        span_end(self.host, &self.name);
+    }
+}
+
 /// Run the full Kiln pipeline for the given inline invocations: plan →
 /// per-invocation cache check → execute on miss → reconcile stale outputs →
 /// persist lockfile.
@@ -881,6 +929,11 @@ impl From<DriverError> for PipelineError {
 ///
 /// Returns an empty outcome when `inline_invocations` is empty.
 ///
+/// When `no_cache` is `true`, the per-invocation sidecar metadata is
+/// ignored (every invocation falls through to the run branch) and the
+/// generator wasm itself is recompiled from source. Writes still happen
+/// so a subsequent cache-enabled run is warm again.
+///
 /// # Errors
 /// See [`PipelineError`].
 pub async fn run_pipeline<H, P>(
@@ -889,11 +942,13 @@ pub async fn run_pipeline<H, P>(
     host: &H,
     provider: &P,
     inline_invocations: Vec<wado_compiler::kiln::Invocation>,
+    no_cache: bool,
 ) -> Result<PipelineOutcome, PipelineError>
 where
     H: CompilerHost,
     P: GeneratorProvider,
 {
+    let _pipeline_span = KilnSpan::new(host, "kiln");
     let plan_order =
         wado_compiler::kiln::build_plan(inline_invocations).map_err(DriverError::Plan)?;
     let mut planned = PlanOutcome {
@@ -904,7 +959,10 @@ where
         return Ok(PipelineOutcome::default());
     }
 
-    typed_encode_options(manifest, &mut planned.plan.order, provider, host).await;
+    {
+        let _s = KilnSpan::new(host, "kiln/typed_encode_options");
+        typed_encode_options(manifest, &mut planned.plan.order, provider, host).await;
+    }
 
     let mut outcome = PipelineOutcome::default();
     let mut kept_by_dir: indexmap::IndexMap<String, Vec<String>> = indexmap::IndexMap::new();
@@ -918,16 +976,25 @@ where
 
     for invocation in &planned.plan.order {
         let invocation_name = invocation_id(invocation);
+        let _inv_span = KilnSpan::new(host, format!("kiln/{invocation_name}"));
 
-        let existing = match kiln_metadata::load(
-            manifest_root,
-            invocation.output_dir.as_str(),
-            invocation.from.as_str(),
-        ) {
-            Ok(m) => m,
-            Err(source) => {
-                emit_metadata_load_warning(host, &invocation_name, &source);
-                None
+        // --no-cache: drop the previously-recorded metadata so the
+        // invocation always falls through to the run branch below.
+        // We still let `run_and_build_metadata` write a fresh sidecar
+        // so a subsequent cache-enabled run can hit it.
+        let existing = if no_cache {
+            None
+        } else {
+            match kiln_metadata::load(
+                manifest_root,
+                invocation.output_dir.as_str(),
+                invocation.from.as_str(),
+            ) {
+                Ok(m) => m,
+                Err(source) => {
+                    emit_metadata_load_warning(host, &invocation_name, &source);
+                    None
+                }
             }
         };
 
@@ -939,56 +1006,68 @@ where
         // pipeline-level cache here ensures we don't repeat that walk
         // for every invocation that shares the same module.
         let component_result: Result<Arc<GeneratorComponent>, ProviderError> =
-            match module_cache.iter().find(|(m, _)| m == &invocation.module) {
-                Some((_, cached)) => Ok(Arc::clone(cached)),
-                None => match provider.get_component(&invocation.module).await {
+            if let Some((_, cached)) = module_cache.iter().find(|(m, _)| m == &invocation.module) {
+                Ok(Arc::clone(cached))
+            } else {
+                let _s = KilnSpan::new(host, "kiln/get_component");
+                match provider.get_component(&invocation.module).await {
                     Ok(c) => {
                         let arc = Arc::new(c);
                         module_cache.push((invocation.module.clone(), Arc::clone(&arc)));
                         Ok(arc)
                     }
                     Err(e) => Err(e),
-                },
+                }
             };
 
         let (entry, executed) =
             if let Some(prior) = existing.clone().filter(|m| m.options_hash == options_hash) {
                 match component_result {
-                    Ok(component) => match cache_matches(
-                        &prior,
-                        invocation,
-                        manifest_root,
-                        host,
-                        &component.source_hash,
-                    )
-                    .await
-                    {
-                        CacheCheck::Hit | CacheCheck::HitButModified => {
-                            outcome.cached.push(invocation_name.clone());
-                            (Some(prior), false)
-                        }
-                        CacheCheck::Miss => match run_and_build_metadata(
-                            &invocation_name,
-                            invocation,
-                            manifest_root,
-                            host,
-                            component.as_ref(),
-                            options_hash.clone(),
-                        )
-                        .await
-                        {
-                            Ok(metadata) => {
-                                outcome.executed.push(invocation_name.clone());
-                                (Some(metadata), true)
-                            }
-                            Err(e) if is_unsupported(&e) => {
-                                emit_stale_warning(host, &invocation_name);
-                                outcome.stale.push(invocation_name.clone());
+                    Ok(component) => {
+                        let check = {
+                            let _s = KilnSpan::new(host, "kiln/cache_check");
+                            cache_matches(
+                                &prior,
+                                invocation,
+                                manifest_root,
+                                host,
+                                &component.source_hash,
+                            )
+                            .await
+                        };
+                        match check {
+                            CacheCheck::Hit | CacheCheck::HitButModified => {
+                                outcome.cached.push(invocation_name.clone());
                                 (Some(prior), false)
                             }
-                            Err(e) => return Err(e),
-                        },
-                    },
+                            CacheCheck::Miss => {
+                                let r = {
+                                    let _s = KilnSpan::new(host, "kiln/run");
+                                    run_and_build_metadata(
+                                        &invocation_name,
+                                        invocation,
+                                        manifest_root,
+                                        host,
+                                        component.as_ref(),
+                                        options_hash.clone(),
+                                    )
+                                    .await
+                                };
+                                match r {
+                                    Ok(metadata) => {
+                                        outcome.executed.push(invocation_name.clone());
+                                        (Some(metadata), true)
+                                    }
+                                    Err(e) if is_unsupported(&e) => {
+                                        emit_stale_warning(host, &invocation_name);
+                                        outcome.stale.push(invocation_name.clone());
+                                        (Some(prior), false)
+                                    }
+                                    Err(e) => return Err(e),
+                                }
+                            }
+                        }
+                    }
                     Err(ProviderError::Unsupported { .. }) => {
                         emit_stale_warning(host, &invocation_name);
                         outcome.stale.push(invocation_name.clone());
@@ -1003,27 +1082,32 @@ where
                 }
             } else {
                 match component_result {
-                    Ok(component) => match run_and_build_metadata(
-                        &invocation_name,
-                        invocation,
-                        manifest_root,
-                        host,
-                        component.as_ref(),
-                        options_hash,
-                    )
-                    .await
-                    {
-                        Ok(metadata) => {
-                            outcome.executed.push(invocation_name.clone());
-                            (Some(metadata), true)
+                    Ok(component) => {
+                        let r = {
+                            let _s = KilnSpan::new(host, "kiln/run");
+                            run_and_build_metadata(
+                                &invocation_name,
+                                invocation,
+                                manifest_root,
+                                host,
+                                component.as_ref(),
+                                options_hash,
+                            )
+                            .await
+                        };
+                        match r {
+                            Ok(metadata) => {
+                                outcome.executed.push(invocation_name.clone());
+                                (Some(metadata), true)
+                            }
+                            Err(e) if is_unsupported(&e) => {
+                                emit_stale_warning(host, &invocation_name);
+                                outcome.stale.push(invocation_name.clone());
+                                (existing, false)
+                            }
+                            Err(e) => return Err(e),
                         }
-                        Err(e) if is_unsupported(&e) => {
-                            emit_stale_warning(host, &invocation_name);
-                            outcome.stale.push(invocation_name.clone());
-                            (existing, false)
-                        }
-                        Err(e) => return Err(e),
-                    },
+                    }
                     Err(ProviderError::Unsupported { .. }) => {
                         emit_stale_warning(host, &invocation_name);
                         outcome.stale.push(invocation_name.clone());

@@ -47,6 +47,7 @@ pub struct TestOptions {
     /// `--no-run`: compile every file (which still refreshes
     /// `<primary>.kiln.json` as a side-effect) but skip wasmtime execution.
     pub no_run: bool,
+    pub no_cache: bool,
 }
 
 impl TestOptions {
@@ -61,6 +62,7 @@ impl TestOptions {
             inline_threshold: self.inline_threshold,
             opt_iterations: self.opt_iterations,
             allocator: self.allocator.clone(),
+            no_cache: self.no_cache,
         }
     }
 }
@@ -84,6 +86,7 @@ enum Opt {
     Dir,
     NoDir,
     NoRun,
+    NoCache,
     Help,
 }
 
@@ -100,6 +103,7 @@ impl Opt {
         Self::Dir,
         Self::NoDir,
         Self::NoRun,
+        Self::NoCache,
         Self::Help,
     ];
 
@@ -136,6 +140,7 @@ impl Opt {
                 value: None,
                 desc: "Compile (and refresh Kiln caches) but skip the wasmtime execution phase",
             },
+            Self::NoCache => args::NO_CACHE_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -337,6 +342,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut explicit_dirs = false;
     let mut no_dir = false;
     let mut no_run = false;
+    let mut no_cache = false;
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
@@ -376,6 +382,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                 }
                 Opt::NoDir => no_dir = true,
                 Opt::NoRun => no_run = true,
+                Opt::NoCache => no_cache = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -454,6 +461,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         allocator,
         preopened_dirs,
         no_run,
+        no_cache,
     })
 }
 

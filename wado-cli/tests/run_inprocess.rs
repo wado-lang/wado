@@ -101,6 +101,7 @@ fn hello_compile_opts(output_path: &Path, format: Option<OutputFormat>) -> Compi
         opt_iterations: None,
         allocator: None,
         lib: false,
+        no_cache: false,
     }
 }
 

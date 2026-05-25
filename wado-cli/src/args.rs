@@ -177,6 +177,13 @@ pub const NO_DIR_SPEC: OptSpec = OptSpec {
     desc: "Do not preopen any directories (disables the default)",
 };
 
+pub const NO_CACHE_SPEC: OptSpec = OptSpec {
+    long: Some("no-cache"),
+    short: None,
+    value: None,
+    desc: "Bypass all build caches: re-run Kiln generators on every invocation\nand recompile generator wasm components from source.\nIntended for profiling and cache-bug debugging.",
+};
+
 pub fn match_opt<T: Copy>(
     arg: &lexopt::Arg<'_>,
     all: &[T],

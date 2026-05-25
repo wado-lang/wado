@@ -58,6 +58,9 @@ pub const METADATA_DIR: &str = "build/kiln/metadata";
 pub struct CliGeneratorProvider {
     manifest_root: PathBuf,
     compile_count: Arc<AtomicUsize>,
+    /// When true, skip reads from the on-disk generator cache. Writes
+    /// still happen, so a follow-up cache-enabled run is warm again.
+    no_cache: bool,
 }
 
 impl CliGeneratorProvider {
@@ -68,7 +71,15 @@ impl CliGeneratorProvider {
         Self {
             manifest_root,
             compile_count: Arc::new(AtomicUsize::new(0)),
+            no_cache: false,
         }
+    }
+
+    /// Toggle the cache-bypass mode; see [`CompileFlags::no_cache`].
+    #[must_use]
+    pub fn with_no_cache(mut self, no_cache: bool) -> Self {
+        self.no_cache = no_cache;
+        self
     }
 
     /// Number of times this provider has run the inner wado-compiler
@@ -595,7 +606,8 @@ impl GeneratorProvider for CliGeneratorProvider {
                 // `stable_id` would still match), so the kiln-output
                 // cache further down the pipeline would be checked
                 // against an old generator.
-                if cache_path.is_file()
+                if !self.no_cache
+                    && cache_path.is_file()
                     && let Some(source_hash) = self.validate_sources_sidecar(&stable_id, &base)
                     && let Ok(bytes) = std::fs::read(&cache_path)
                 {
@@ -629,7 +641,8 @@ impl GeneratorProvider for CliGeneratorProvider {
                 // Same validation rule as `get_component`: a cached
                 // descriptor is only honored when the recorded source
                 // closure still matches on disk.
-                if desc_path.is_file()
+                if !self.no_cache
+                    && desc_path.is_file()
                     && self.validate_sources_sidecar(&stable_id, &base).is_some()
                     && let Ok(bytes) = std::fs::read(&desc_path)
                     && let Ok(descriptor) = serde_json::from_slice::<OptionsDescriptor>(&bytes)
