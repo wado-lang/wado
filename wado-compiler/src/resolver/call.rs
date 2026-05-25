@@ -24,6 +24,52 @@ struct FnSignature {
     return_type: TypeId,
 }
 
+/// Classification of an `Ident`-form call callee after resolving any
+/// `Self::` / `T::` prefix that needs to be substituted before
+/// `resolve_call` does its parameter-type lookup and argument resolution.
+///
+/// Hoisting this classification to the top of `resolve_call` lets the
+/// argument resolution run once with the correct expected-type hints
+/// (issue #1181). The previous implementation re-entered `resolve_call`
+/// with a freshly built synthetic `CallExpr`, which made the assert
+/// capture hook fire twice on each scanner-flagged sub-expression and
+/// caused `let __vK = ...` bindings to be emitted twice.
+enum CalleeIdentKind<'a> {
+    /// No prefix substitution needed. Covers plain ident calls
+    /// (`foo(x)`), already-concrete qualified calls (`Type::method(x)`,
+    /// `Effect::op(x)`, `builtin::f(x)`), and so on. Borrows
+    /// `ident.name` for `effective_name`.
+    AsIs(&'a ast::IdentExpr),
+    /// `Self::suffix(...)` or `T::suffix(...)` where `T` is a type
+    /// parameter currently bound to a concrete type. Holds the fully
+    /// resolved `Concrete::suffix` name.
+    Rewritten(String),
+    /// `T::suffix(...)` where `T` is still an abstract type parameter
+    /// constrained only by trait bounds. Dispatched independently via
+    /// `resolve_type_param_static_call`.
+    AbstractTypeParam {
+        prefix: String,
+        suffix: String,
+        type_param_type_id: TypeId,
+    },
+}
+
+impl CalleeIdentKind<'_> {
+    /// The effective callee name used by `lookup_function_param_types`
+    /// and the dispatch match. Not callable on `AbstractTypeParam`
+    /// because that variant takes its own dispatch path before any name
+    /// lookup happens.
+    fn effective_name(&self) -> &str {
+        match self {
+            Self::AsIs(ident) => &ident.name,
+            Self::Rewritten(name) => name,
+            Self::AbstractTypeParam { .. } => {
+                unreachable!("AbstractTypeParam takes the type-param dispatch path")
+            }
+        }
+    }
+}
+
 impl<H: CompilerHost> Resolver<'_, H> {
     /// If `type_id` is a function type — possibly behind references or
     /// fn-type newtypes such as `type Handler = fn(...);` — return its
@@ -102,6 +148,52 @@ impl<H: CompilerHost> Resolver<'_, H> {
             name: root.name.clone(),
             span: root.span,
         });
+    }
+
+    /// Classify a call callee's prefix so `resolve_call` can rewrite
+    /// `Self::` / `T::` (T bound to concrete) before any name lookup
+    /// happens. `T::` (T abstract) is routed through its own static
+    /// dispatch path; everything else is left as written.
+    fn classify_call_callee<'a>(&self, ident: &'a ast::IdentExpr) -> CalleeIdentKind<'a> {
+        let Some(pos) = ident.name.find("::") else {
+            return CalleeIdentKind::AsIs(ident);
+        };
+        let prefix = &ident.name[..pos];
+        let suffix = &ident.name[pos + 2..];
+
+        if prefix == "Self"
+            && let Some(self_type_id) = self.trait_ctx.self_type
+        {
+            let self_name = self.type_table.borrow().type_name(self_type_id);
+            return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
+        }
+
+        if let Some(&(_, type_param_type_id)) = self.trait_ctx.type_params.get(prefix) {
+            // If the type parameter is bound to a concrete type (e.g. a
+            // trait default method synthesised for an impl binds the
+            // trait's `T` to the impl's concrete arg), dispatch
+            // statically on that concrete type. Otherwise keep the
+            // abstract form and route through the trait-bound dispatch
+            // path so the monomorphizer can substitute later.
+            let is_abstract = matches!(
+                self.type_table.borrow().get(type_param_type_id),
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+            );
+            if is_abstract {
+                return CalleeIdentKind::AbstractTypeParam {
+                    prefix: prefix.to_string(),
+                    suffix: suffix.to_string(),
+                    type_param_type_id,
+                };
+            }
+            let concrete_name = self
+                .type_table
+                .borrow()
+                .mangle_type_name(type_param_type_id);
+            return CalleeIdentKind::Rewritten(format!("{concrete_name}::{suffix}"));
+        }
+
+        CalleeIdentKind::AsIs(ident)
     }
 
     pub(super) fn resolve_call(
@@ -187,17 +279,54 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
         }
 
-        // First, determine expected parameter types to handle coercion
-        let mut param_types = self.lookup_function_param_types(&call.callee);
+        // After the closure-call and non-Ident-callee fast paths above
+        // the callee is necessarily an `Ident`. Resolve any `Self::` /
+        // `T::` prefix BEFORE looking up parameter types so the single
+        // argument-resolution pass below sees the correct expected-type
+        // hints.
+        let Expr::Ident(ident) = &call.callee else {
+            unreachable!("non-Ident callees are handled by the indirect-call fast path above")
+        };
+        let callee_kind = self.classify_call_callee(ident);
+
+        // Abstract `T::method(...)` takes its own dispatch path. Args
+        // are resolved without coercion hints (the trait-bound dispatch
+        // walks them on its own; threading hints through here is a
+        // separate concern from the synthetic-AST removal).
+        if let CalleeIdentKind::AbstractTypeParam {
+            prefix,
+            suffix,
+            type_param_type_id,
+            ..
+        } = &callee_kind
+        {
+            let args: Vec<TirExpr> = call
+                .args
+                .iter()
+                .map(|a| self.resolve_expr(a, ctx, None))
+                .collect();
+            return self.resolve_type_param_static_call(
+                prefix,
+                suffix,
+                *type_param_type_id,
+                &args,
+                call,
+                ctx,
+            );
+        }
+
+        let effective_name = callee_kind.effective_name();
+
+        // First, determine expected parameter types to handle coercion.
+        let mut param_types = self.lookup_function_param_types(effective_name);
 
         // For variant constructors with type args (e.g., Option::<Array<u8>>::Some([])),
         // compute substituted payload type so literal coercion works on first resolve.
         if param_types.is_empty()
-            && let Expr::Ident(ident) = &call.callee
-            && let Some(pos) = ident.name.find("::")
+            && let Some(pos) = effective_name.find("::")
         {
-            let prefix = &ident.name[..pos];
-            let suffix = &ident.name[pos + 2..];
+            let prefix = &effective_name[..pos];
+            let suffix = &effective_name[pos + 2..];
             if let Some(variant_info) = self.lookup_variant_case(prefix).cloned()
                 && let Some((_, case_data)) = variant_info
                     .cases
@@ -253,322 +382,380 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Resolve the callee's identity. `Some(CalleeRef)` means we know
         // both the defining module and the name-as-defined; `None` means the
         // call target could not be resolved and we'll emit `UnknownFunction`.
-        // `display_name` is always populated for diagnostics.
-        let (callee_opt, display_name): (Option<CalleeRef>, String) = match &call.callee {
-            Expr::Ident(ident) => {
-                // Check for qualified name with :: (e.g., "Stdout::write_via_stream")
-                // Parser creates a single ident for Effect::operation syntax
-                if let Some(pos) = ident.name.find("::") {
-                    let prefix = &ident.name[..pos];
-                    let suffix = &ident.name[pos + 2..];
+        // `display_name` is always populated for diagnostics. The match
+        // dispatches on `effective_name` (after any `Self::` / `T::`
+        // prefix rewriting) while `ident` is kept around for LSP
+        // segment-edge recording and other AST-id needs.
+        let (callee_opt, display_name): (Option<CalleeRef>, String) = if let Some(pos) =
+            effective_name.find("::")
+        {
+            let prefix = &effective_name[..pos];
+            let suffix = &effective_name[pos + 2..];
 
-                    // Builtin functions: resolve through core:builtin module
-                    if prefix == "builtin" {
-                        (
-                            Some(CalleeRef::new(ModuleSource::builtin(), suffix)),
-                            ident.name.clone(),
-                        )
-                    }
-                    // Self::method() — resolve Self to the concrete type name
-                    else if prefix == "Self"
-                        && let Some(self_type_id) = self.trait_ctx.self_type
+            // Builtin functions: resolve through core:builtin module
+            if prefix == "builtin" {
+                (
+                    Some(CalleeRef::new(ModuleSource::builtin(), suffix)),
+                    effective_name.to_string(),
+                )
+            }
+            // Static method call (Type::method). Static methods are
+            // registered with mangled names "Type::method".
+            else if self.is_static_method(prefix, suffix) {
+                // Record the receiver-type segment (prefix) as a reference to
+                // the type's decl. After `Self::` / `T::` rewriting, `prefix`
+                // is the concrete type name and the segment's AstId is the
+                // `Self` / `T` token — the edge correctly resolves clicks on
+                // `Self` to the concrete type's decl.
+                if let Some(prefix_seg) = ident.segments.first() {
+                    self.record_item_reference_by_name(prefix_seg.id, prefix);
+                }
+                // Record the method segment (suffix) as a reference to the
+                // impl-block method's AstId in its defining module. Try the
+                // actual impl module first (trait-qualified resolution),
+                // falling back to the struct's own module.
+                if let Some(suffix_seg) = ident.segments.get(1) {
+                    let arg_hint = if (suffix == "from" || suffix == "try_from") && args.len() == 1
                     {
-                        let self_name = self.type_table.borrow().type_name(self_type_id);
-                        let synthetic_call = ast::CallExpr {
-                            id: call.id,
-                            callee: Expr::Ident(ast::IdentExpr {
-                                id: ident.id,
-                                name: format!("{self_name}::{suffix}"),
-                                segments: Vec::new(),
-                                type_args: Vec::new(),
-                                span: ident.span,
-                            }),
-                            type_args: call.type_args.clone(),
-                            args: call.args.clone(),
-                            has_trailing_comma: call.has_trailing_comma,
-                            span: call.span,
-                        };
-                        return self.resolve_call(&synthetic_call, ctx, expected_type);
-                    }
-                    // Check if this is a type parameter static call (T::method where T: Trait)
-                    else if let Some(&(_param_idx, type_param_type_id)) =
-                        self.trait_ctx.type_params.get(prefix)
+                        Some(self.type_table.borrow().type_name(args[0].type_id))
+                    } else {
+                        None
+                    };
+                    let method_module = self
+                        .locate_static_method_impl(prefix, suffix, arg_hint.as_deref())
+                        .map_or_else(|| self.find_struct_module_source(prefix), |r| r.module);
+                    if let Some(method_ast_id) =
+                        self.find_impl_method_ast_id(&method_module, prefix, suffix)
                     {
-                        // If the "type parameter" is actually bound to a concrete
-                        // type (e.g., trait default method synthesized for an
-                        // impl binds the trait's `T` to the impl's concrete arg),
-                        // dispatch statically on that concrete type instead of
-                        // emitting a `T^Trait::method` call that would need a
-                        // monomorphizer substitution that never arrives.
-                        let is_abstract_type_param = matches!(
-                            self.type_table.borrow().get(type_param_type_id),
-                            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-                        );
-                        if !is_abstract_type_param {
-                            let concrete_name = self
-                                .type_table
-                                .borrow()
-                                .mangle_type_name(type_param_type_id);
-                            let new_name = format!("{concrete_name}::{suffix}");
-                            let synthetic_call = ast::CallExpr {
-                                id: call.id,
-                                callee: Expr::Ident(ast::IdentExpr {
-                                    id: ident.id,
-                                    name: new_name,
-                                    segments: Vec::new(),
-                                    type_args: Vec::new(),
-                                    span: ident.span,
-                                }),
-                                type_args: call.type_args.clone(),
-                                args: call.args.clone(),
-                                has_trailing_comma: call.has_trailing_comma,
-                                span: call.span,
-                            };
-                            return self.resolve_call(&synthetic_call, ctx, expected_type);
-                        }
-                        return self.resolve_type_param_static_call(
-                            prefix,
-                            suffix,
-                            type_param_type_id,
-                            &args,
-                            call,
-                            ctx,
-                        );
+                        self.record_reference_to_decl(suffix_seg.id, &method_module, method_ast_id);
                     }
-                    // Check if this is a static method call (Type::method)
-                    // Static methods are registered with mangled names "Type::method"
-                    else if self.is_static_method(prefix, suffix) {
-                        // Record the receiver-type segment (prefix) as a reference to
-                        // the type's decl.
-                        if let Some(prefix_seg) = ident.segments.first() {
-                            self.record_item_reference_by_name(prefix_seg.id, prefix);
-                        }
-                        // Record the method segment (suffix) as a reference to the
-                        // impl-block method's AstId in its defining module. Try the
-                        // actual impl module first (trait-qualified resolution),
-                        // falling back to the struct's own module.
-                        if let Some(suffix_seg) = ident.segments.get(1) {
-                            let arg_hint =
-                                if (suffix == "from" || suffix == "try_from") && args.len() == 1 {
-                                    Some(self.type_table.borrow().type_name(args[0].type_id))
+                }
+                // Resolve method-level type args (e.g., i32::deserialize::<MockDeserializer>)
+                let mut method_type_args: Vec<TypeId> = call
+                    .type_args
+                    .iter()
+                    .map(|ty| self.resolve_type(ty))
+                    .collect();
+                // Impl-level type args inferred from the LHS / receiver type.
+                // Only populated by `infer_static_method_type_args`; the
+                // explicit `call.type_args` only carries method-level args.
+                let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
+                // If no explicit type args, try to infer from argument types.
+                // This is an exploratory probe: the `suffix` may match a
+                // builtin-registry entry (e.g. `builtin::foo`) keyed by bare
+                // name; otherwise the local-module lookup almost never
+                // succeeds and `infer_static_method_type_args` below runs.
+                let mangled_name = MethodName::format_local(prefix, None, suffix);
+                if method_type_args.is_empty() {
+                    let probe = CalleeRef::local(&self.current_module_source, suffix.to_string());
+                    method_type_args =
+                        self.infer_fn_type_args(&probe, &call.args, &args, expected_type);
+                }
+                if method_type_args.is_empty() {
+                    let (impl_args, method_args) = self.infer_static_method_type_args(
+                        prefix,
+                        suffix,
+                        &call.args,
+                        &args,
+                        expected_type,
+                    );
+                    impl_type_args_inferred = impl_args;
+                    method_type_args = method_args;
+                }
+                // Check trait bounds and register assoc type resolutions for inferred type args
+                if !method_type_args.is_empty() {
+                    let mtype_params = self.lookup_static_method_type_params(prefix, suffix);
+                    for (i, param) in mtype_params.iter().enumerate() {
+                        if let Some(&type_arg) = method_type_args.get(i) {
+                            for bound in &param.bounds {
+                                // Skip `fn(...)` / `fn mut(...)` bounds:
+                                // realised eagerly, not real traits.
+                                if bound.fn_signature.is_some() {
+                                    continue;
+                                }
+                                if self.type_implements_trait(type_arg, &bound.name) {
+                                    self.register_assoc_types_for_concrete_type_and_trait(
+                                        type_arg,
+                                        &bound.name.clone(),
+                                    );
                                 } else {
-                                    None
-                                };
-                            let method_module = self
-                                .locate_static_method_impl(prefix, suffix, arg_hint.as_deref())
-                                .map_or_else(
-                                    || self.find_struct_module_source(prefix),
-                                    |r| r.module,
-                                );
-                            if let Some(method_ast_id) =
-                                self.find_impl_method_ast_id(&method_module, prefix, suffix)
-                            {
-                                self.record_reference_to_decl(
-                                    suffix_seg.id,
-                                    &method_module,
-                                    method_ast_id,
-                                );
-                            }
-                        }
-                        // Resolve method-level type args (e.g., i32::deserialize::<MockDeserializer>)
-                        let mut method_type_args: Vec<TypeId> = call
-                            .type_args
-                            .iter()
-                            .map(|ty| self.resolve_type(ty))
-                            .collect();
-                        // Impl-level type args inferred from the LHS / receiver type.
-                        // Only populated by `infer_static_method_type_args`; the
-                        // explicit `call.type_args` only carries method-level args.
-                        let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
-                        // If no explicit type args, try to infer from argument types.
-                        // This is an exploratory probe: the `suffix` may match a
-                        // builtin-registry entry (e.g. `builtin::foo`) keyed by bare
-                        // name; otherwise the local-module lookup almost never
-                        // succeeds and `infer_static_method_type_args` below runs.
-                        let mangled_name = MethodName::format_local(prefix, None, suffix);
-                        if method_type_args.is_empty() {
-                            let probe =
-                                CalleeRef::local(&self.current_module_source, suffix.to_string());
-                            method_type_args =
-                                self.infer_fn_type_args(&probe, &call.args, &args, expected_type);
-                        }
-                        if method_type_args.is_empty() {
-                            let (impl_args, method_args) = self.infer_static_method_type_args(
-                                prefix,
-                                suffix,
-                                &call.args,
-                                &args,
-                                expected_type,
-                            );
-                            impl_type_args_inferred = impl_args;
-                            method_type_args = method_args;
-                        }
-                        // Check trait bounds and register assoc type resolutions for inferred type args
-                        if !method_type_args.is_empty() {
-                            let mtype_params =
-                                self.lookup_static_method_type_params(prefix, suffix);
-                            for (i, param) in mtype_params.iter().enumerate() {
-                                if let Some(&type_arg) = method_type_args.get(i) {
-                                    for bound in &param.bounds {
-                                        // Skip `fn(...)` / `fn mut(...)` bounds:
-                                        // realised eagerly, not real traits.
-                                        if bound.fn_signature.is_some() {
-                                            continue;
-                                        }
-                                        if self.type_implements_trait(type_arg, &bound.name) {
-                                            self.register_assoc_types_for_concrete_type_and_trait(
-                                                type_arg,
-                                                &bound.name.clone(),
-                                            );
-                                        } else {
-                                            let type_name = self.type_id_to_string(type_arg);
-                                            let _ = self.logger.error(
-                                                TypeError::TraitBoundNotSatisfied {
-                                                    type_name,
-                                                    trait_name: bound.name.clone(),
-                                                    param_name: param.name.clone(),
-                                                    span: call.span,
-                                                },
-                                            );
-                                        }
-                                    }
+                                    let type_name = self.type_id_to_string(type_arg);
+                                    let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
+                                        type_name,
+                                        trait_name: bound.name.clone(),
+                                        param_name: param.name.clone(),
+                                        span: call.span,
+                                    });
                                 }
                             }
                         }
-                        // Handle From conversions with no explicit impl: reflexive and newtype.
-                        if suffix == "from" && args.len() == 1 {
-                            let arg_type = args[0].type_id;
-                            let arg_type_name = self.type_table.borrow().type_name(arg_type);
-
-                            // Reflexive: T::from(T_val) — identity conversion
-                            if arg_type_name == prefix {
-                                return args[0].clone();
-                            }
-
-                            // Newtype→Base: u64::from(UserId_val) where type UserId = u64
-                            let base_of_arg = self.type_table.borrow().get_newtype_base(arg_type);
-                            if let Some(base_id) = base_of_arg
-                                && self.type_table.borrow().type_name(base_id) == prefix
-                            {
-                                return TirExpr::new(
-                                    TirExprKind::Cast {
-                                        expr: Box::new(args[0].clone()),
-                                        target_type: base_id,
-                                    },
-                                    base_id,
-                                    call.span,
-                                );
-                            }
-
-                            // Base→Newtype: UserId::from(u64_val) where type UserId = u64
-                            if let Some(newtype_type_id) = self.lookup_newtype(prefix) {
-                                let base_opt =
-                                    self.type_table.borrow().get_newtype_base(newtype_type_id);
-                                if let Some(base_id) = base_opt
-                                    && self.type_table.borrow().type_name(base_id) == arg_type_name
-                                {
-                                    return TirExpr::new(
-                                        TirExprKind::Cast {
-                                            expr: Box::new(args[0].clone()),
-                                            target_type: newtype_type_id,
-                                        },
-                                        newtype_type_id,
-                                        call.span,
-                                    );
-                                }
-                            }
-                        }
-
-                        // Re-coerce literal-number args to inferred parameter types and
-                        // typecheck each arg against the substituted parameter type.
-                        // Before inference, the literal args were resolved with `TypeParam`
-                        // (or `Unknown`) as the expected type, so they fell back to defaults
-                        // (i32/f64). Now that we know the concrete substitution, retry
-                        // coercion and verify the inferred type-arg binding is consistent
-                        // with every arg (e.g. `two_static<T>(1 as u8, 2 as u32)` must
-                        // fail because `T` cannot be both `u8` and `u32`).
-                        if !method_type_args.is_empty() || !impl_type_args_inferred.is_empty() {
-                            let raw_param_types =
-                                self.lookup_static_method_param_types(prefix, suffix);
-                            let mut combined_type_args = impl_type_args_inferred.clone();
-                            combined_type_args.extend_from_slice(&method_type_args);
-                            let substituted: Vec<TypeId> = raw_param_types
-                                .iter()
-                                .map(|&t| self.substitute_type_params(t, &combined_type_args))
-                                .collect();
-                            self.recoerce_literal_args(&call.args, &mut args, &substituted);
-                            for (i, arg) in args.iter().enumerate() {
-                                if let Some(&expected) = substituted.get(i) {
-                                    self.typecheck(
-                                        arg.type_id,
-                                        expected,
-                                        call.args.get(i).map_or(call.span, ast::Expr::span),
-                                    );
-                                }
-                            }
-                        }
-
-                        return self.resolve_static_method_call_from_qualified(
-                            prefix,
-                            suffix,
-                            &mangled_name,
-                            &args,
-                            &impl_type_args_inferred,
-                            &method_type_args,
-                            call.span,
-                            ctx,
-                        );
                     }
-                    // Check if this is a flags type method call: Perms::none(), Perms::all()
-                    else if let Some(flags_info) = self.lookup_flags_case(prefix).cloned()
-                        && matches!(suffix, "none" | "all")
+                }
+                // Handle From conversions with no explicit impl: reflexive and newtype.
+                if suffix == "from" && args.len() == 1 {
+                    let arg_type = args[0].type_id;
+                    let arg_type_name = self.type_table.borrow().type_name(arg_type);
+
+                    // Reflexive: T::from(T_val) — identity conversion
+                    if arg_type_name == prefix {
+                        return args[0].clone();
+                    }
+
+                    // Newtype→Base: u64::from(UserId_val) where type UserId = u64
+                    let base_of_arg = self.type_table.borrow().get_newtype_base(arg_type);
+                    if let Some(base_id) = base_of_arg
+                        && self.type_table.borrow().type_name(base_id) == prefix
                     {
-                        if let Some(prefix_seg) = ident.segments.first() {
-                            self.record_item_reference_by_name(prefix_seg.id, prefix);
-                        }
-                        let member_count = flags_info.members.len();
-                        let value: u64 = match suffix {
-                            "none" => 0,
-                            "all" => u64::from((1u32 << member_count) - 1),
-                            _ => unreachable!(),
-                        };
                         return TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value,
-                                repr: value.to_string(),
+                            TirExprKind::Cast {
+                                expr: Box::new(args[0].clone()),
+                                target_type: base_id,
                             },
-                            flags_info.type_id,
+                            base_id,
                             call.span,
                         );
                     }
-                    // Check if this is a variant case construction (Color::Red)
-                    else if let Some(variant_info) = self.lookup_variant_case(prefix) {
-                        // Clone needed data to release the borrow on self
-                        let variant_info = variant_info.clone();
+
+                    // Base→Newtype: UserId::from(u64_val) where type UserId = u64
+                    if let Some(newtype_type_id) = self.lookup_newtype(prefix) {
+                        let base_opt = self.type_table.borrow().get_newtype_base(newtype_type_id);
+                        if let Some(base_id) = base_opt
+                            && self.type_table.borrow().type_name(base_id) == arg_type_name
+                        {
+                            return TirExpr::new(
+                                TirExprKind::Cast {
+                                    expr: Box::new(args[0].clone()),
+                                    target_type: newtype_type_id,
+                                },
+                                newtype_type_id,
+                                call.span,
+                            );
+                        }
+                    }
+                }
+
+                // Re-coerce literal-number args to inferred parameter types and
+                // typecheck each arg against the substituted parameter type.
+                // Before inference, the literal args were resolved with `TypeParam`
+                // (or `Unknown`) as the expected type, so they fell back to defaults
+                // (i32/f64). Now that we know the concrete substitution, retry
+                // coercion and verify the inferred type-arg binding is consistent
+                // with every arg (e.g. `two_static<T>(1 as u8, 2 as u32)` must
+                // fail because `T` cannot be both `u8` and `u32`).
+                if !method_type_args.is_empty() || !impl_type_args_inferred.is_empty() {
+                    let raw_param_types = self.lookup_static_method_param_types(prefix, suffix);
+                    let mut combined_type_args = impl_type_args_inferred.clone();
+                    combined_type_args.extend_from_slice(&method_type_args);
+                    let substituted: Vec<TypeId> = raw_param_types
+                        .iter()
+                        .map(|&t| self.substitute_type_params(t, &combined_type_args))
+                        .collect();
+                    self.recoerce_literal_args(&call.args, &mut args, &substituted);
+                    for (i, arg) in args.iter().enumerate() {
+                        if let Some(&expected) = substituted.get(i) {
+                            self.typecheck(
+                                arg.type_id,
+                                expected,
+                                call.args.get(i).map_or(call.span, ast::Expr::span),
+                            );
+                        }
+                    }
+                }
+
+                return self.resolve_static_method_call_from_qualified(
+                    prefix,
+                    suffix,
+                    &mangled_name,
+                    &args,
+                    &impl_type_args_inferred,
+                    &method_type_args,
+                    call.span,
+                    ctx,
+                );
+            }
+            // Check if this is a flags type method call: Perms::none(), Perms::all()
+            else if let Some(flags_info) = self.lookup_flags_case(prefix).cloned()
+                && matches!(suffix, "none" | "all")
+            {
+                if let Some(prefix_seg) = ident.segments.first() {
+                    self.record_item_reference_by_name(prefix_seg.id, prefix);
+                }
+                let member_count = flags_info.members.len();
+                let value: u64 = match suffix {
+                    "none" => 0,
+                    "all" => u64::from((1u32 << member_count) - 1),
+                    _ => unreachable!(),
+                };
+                return TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value,
+                        repr: value.to_string(),
+                    },
+                    flags_info.type_id,
+                    call.span,
+                );
+            }
+            // Check if this is a variant case construction (Color::Red)
+            else if let Some(variant_info) = self.lookup_variant_case(prefix) {
+                // Clone needed data to release the borrow on self
+                let variant_info = variant_info.clone();
+                let case_match = variant_info
+                    .cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, c)| c.name == suffix)
+                    .map(|(i, c)| (i, c.clone()));
+                let prefix_owned = prefix.to_string();
+
+                // Find the case by name
+                if let Some((case_index, case_data)) = case_match {
+                    self.record_qualified_case(
+                        ident,
+                        &prefix_owned,
+                        &variant_info.module_source,
+                        case_data.ast_id,
+                    );
+                    // Each variant case has exactly one payload.
+                    // Unit variants expect 0 args, non-unit variants expect 1 arg.
+                    let payload_is_unit = matches!(
+                        self.type_table.borrow().get(case_data.payload),
+                        ResolvedType::Unit
+                    );
+                    let expected_args = usize::from(!payload_is_unit);
+
+                    if args.len() != expected_args {
+                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                            expected: expected_args,
+                            found: args.len(),
+                            span: call.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+                    }
+
+                    let payload = args.into_iter().next().map(Box::new);
+
+                    // Infer variant type: use GenericInstance for generic variants
+                    let variant_type = if variant_info.type_params.is_empty() {
+                        self.type_table.borrow_mut().make_variant(
+                            variant_info.name.clone(),
+                            variant_info.module_source.clone(),
+                        )
+                    } else {
+                        self.infer_variant_type_args(
+                            &prefix_owned,
+                            &variant_info,
+                            &case_data,
+                            payload.as_deref(),
+                            expected_type,
+                        )
+                    };
+
+                    return TirExpr::new(
+                        TirExprKind::VariantConstruct {
+                            variant_type,
+                            case_index: case_index as u32,
+                            case_name: case_data.name.clone(),
+                            payload,
+                        },
+                        variant_type,
+                        call.span,
+                    );
+                }
+                // If no matching case, check for From<T> synthesis requests
+                else if suffix == "from" && args.len() == 1 {
+                    let target_type_id = self.type_table.borrow_mut().make_variant(
+                        variant_info.name.clone(),
+                        variant_info.module_source.clone(),
+                    );
+                    let from_type = args[0].type_id;
+                    let from_type_name = self.type_table.borrow().type_name(from_type);
+                    let from_trait_name = self
+                        .type_table
+                        .borrow()
+                        .compiler_items()
+                        .trait_name(crate::compiler_item::CompilerItem::From)
+                        .to_string();
+                    let matching_impl = self.current_module_items.iter().any(|item| {
+                        if let Item::Impl(impl_block) = item
+                            && impl_block.is_synthesize_request
+                            && let Some(trait_type) = &impl_block.trait_type
+                            && Self::get_type_name_static(trait_type) == from_trait_name
+                            && Self::get_type_name_static(&impl_block.ty) == prefix
+                        {
+                            if let ast::Type::Generic(generic) = trait_type
+                                && generic.args.len() == 1
+                            {
+                                self.get_type_name_full(&generic.args[0]) == from_type_name
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    });
+                    if matching_impl {
+                        return self.resolve_from_call(
+                            target_type_id,
+                            from_type,
+                            args.into_iter().next().unwrap(),
+                            call.span,
+                        );
+                    }
+                    let _ = self.logger.error(TypeError::UnknownFunction {
+                        name: format!("{prefix}::{suffix}"),
+                        span: call.span,
+                    });
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+                } else {
+                    // Unknown case name
+                    let _ = self.logger.error(TypeError::UnknownFunction {
+                        name: format!("{prefix}::{suffix}"),
+                        span: call.span,
+                    });
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+                }
+            }
+            // If prefix is a known type (struct/enum/newtype/flags) with no matching
+            // static method, emit a compile error.
+            else if self.is_known_type_name(prefix) {
+                let _ = self.logger.error(TypeError::UnknownFunction {
+                    name: format!("{prefix}::{suffix}"),
+                    span: call.span,
+                });
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+            }
+            // Namespace import: `use ns from "..."` then `ns::Type::method()`
+            // or `ns::VariantType::Case(...)`.
+            else if let Some(ns_source) = self.namespace_imports.get(prefix).cloned() {
+                // suffix may be "Type::method" or plain "func"
+                if let Some(inner_pos) = suffix.find("::") {
+                    let type_name = &suffix[..inner_pos];
+                    let method_name = &suffix[inner_pos + 2..];
+
+                    // Check if this is a variant construction in the namespace
+                    let ns_variant = self
+                        .all_variant_cases
+                        .get(&ns_source)
+                        .and_then(|m| m.get(type_name))
+                        .cloned();
+                    if let Some(variant_info) = ns_variant {
                         let case_match = variant_info
                             .cases
                             .iter()
                             .enumerate()
-                            .find(|(_, c)| c.name == suffix)
+                            .find(|(_, c)| c.name == method_name)
                             .map(|(i, c)| (i, c.clone()));
-                        let prefix_owned = prefix.to_string();
-
-                        // Find the case by name
                         if let Some((case_index, case_data)) = case_match {
-                            self.record_qualified_case(
+                            self.record_namespaced_case(
                                 ident,
-                                &prefix_owned,
                                 &variant_info.module_source,
                                 case_data.ast_id,
                             );
-                            // Each variant case has exactly one payload.
-                            // Unit variants expect 0 args, non-unit variants expect 1 arg.
                             let payload_is_unit = matches!(
                                 self.type_table.borrow().get(case_data.payload),
                                 ResolvedType::Unit
                             );
                             let expected_args = usize::from(!payload_is_unit);
-
                             if args.len() != expected_args {
                                 let _ = self.logger.error(TypeError::ArgumentCountMismatch {
                                     expected: expected_args,
@@ -581,10 +768,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     call.span,
                                 );
                             }
-
                             let payload = args.into_iter().next().map(Box::new);
-
-                            // Infer variant type: use GenericInstance for generic variants
                             let variant_type = if variant_info.type_params.is_empty() {
                                 self.type_table.borrow_mut().make_variant(
                                     variant_info.name.clone(),
@@ -592,14 +776,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 )
                             } else {
                                 self.infer_variant_type_args(
-                                    &prefix_owned,
+                                    type_name,
                                     &variant_info,
                                     &case_data,
                                     payload.as_deref(),
                                     expected_type,
                                 )
                             };
-
                             return TirExpr::new(
                                 TirExprKind::VariantConstruct {
                                     variant_type,
@@ -611,323 +794,161 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 call.span,
                             );
                         }
-                        // If no matching case, check for From<T> synthesis requests
-                        else if suffix == "from" && args.len() == 1 {
-                            let target_type_id = self.type_table.borrow_mut().make_variant(
-                                variant_info.name.clone(),
-                                variant_info.module_source.clone(),
-                            );
-                            let from_type = args[0].type_id;
-                            let from_type_name = self.type_table.borrow().type_name(from_type);
-                            let from_trait_name = self
-                                .type_table
-                                .borrow()
-                                .compiler_items()
-                                .trait_name(crate::compiler_item::CompilerItem::From)
-                                .to_string();
-                            let matching_impl = self.current_module_items.iter().any(|item| {
-                                if let Item::Impl(impl_block) = item
-                                    && impl_block.is_synthesize_request
-                                    && let Some(trait_type) = &impl_block.trait_type
-                                    && Self::get_type_name_static(trait_type) == from_trait_name
-                                    && Self::get_type_name_static(&impl_block.ty) == prefix
-                                {
-                                    if let ast::Type::Generic(generic) = trait_type
-                                        && generic.args.len() == 1
-                                    {
-                                        self.get_type_name_full(&generic.args[0]) == from_type_name
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                }
-                            });
-                            if matching_impl {
-                                return self.resolve_from_call(
-                                    target_type_id,
-                                    from_type,
-                                    args.into_iter().next().unwrap(),
-                                    call.span,
-                                );
-                            }
-                            let _ = self.logger.error(TypeError::UnknownFunction {
-                                name: format!("{prefix}::{suffix}"),
-                                span: call.span,
-                            });
-                            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
-                        } else {
-                            // Unknown case name
-                            let _ = self.logger.error(TypeError::UnknownFunction {
-                                name: format!("{prefix}::{suffix}"),
-                                span: call.span,
-                            });
-                            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
-                        }
                     }
-                    // If prefix is a known type (struct/enum/newtype/flags) with no matching
-                    // static method, emit a compile error.
-                    else if self.is_known_type_name(prefix) {
-                        let _ = self.logger.error(TypeError::UnknownFunction {
-                            name: format!("{prefix}::{suffix}"),
-                            span: call.span,
-                        });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
-                    }
-                    // Namespace import: `use ns from "..."` then `ns::Type::method()`
-                    // or `ns::VariantType::Case(...)`.
-                    else if let Some(ns_source) = self.namespace_imports.get(prefix).cloned() {
-                        // suffix may be "Type::method" or plain "func"
-                        if let Some(inner_pos) = suffix.find("::") {
-                            let type_name = &suffix[..inner_pos];
-                            let method_name = &suffix[inner_pos + 2..];
 
-                            // Check if this is a variant construction in the namespace
-                            let ns_variant = self
-                                .all_variant_cases
-                                .get(&ns_source)
-                                .and_then(|m| m.get(type_name))
-                                .cloned();
-                            if let Some(variant_info) = ns_variant {
-                                let case_match = variant_info
-                                    .cases
-                                    .iter()
-                                    .enumerate()
-                                    .find(|(_, c)| c.name == method_name)
-                                    .map(|(i, c)| (i, c.clone()));
-                                if let Some((case_index, case_data)) = case_match {
-                                    self.record_namespaced_case(
-                                        ident,
-                                        &variant_info.module_source,
-                                        case_data.ast_id,
-                                    );
-                                    let payload_is_unit = matches!(
-                                        self.type_table.borrow().get(case_data.payload),
-                                        ResolvedType::Unit
-                                    );
-                                    let expected_args = usize::from(!payload_is_unit);
-                                    if args.len() != expected_args {
-                                        let _ =
-                                            self.logger.error(TypeError::ArgumentCountMismatch {
-                                                expected: expected_args,
-                                                found: args.len(),
-                                                span: call.span,
-                                            });
-                                        return TirExpr::new(
-                                            TirExprKind::Unit,
-                                            TypeTable::ERROR,
-                                            call.span,
-                                        );
-                                    }
-                                    let payload = args.into_iter().next().map(Box::new);
-                                    let variant_type = if variant_info.type_params.is_empty() {
-                                        self.type_table.borrow_mut().make_variant(
-                                            variant_info.name.clone(),
-                                            variant_info.module_source.clone(),
-                                        )
-                                    } else {
-                                        self.infer_variant_type_args(
-                                            type_name,
-                                            &variant_info,
-                                            &case_data,
-                                            payload.as_deref(),
-                                            expected_type,
-                                        )
-                                    };
-                                    return TirExpr::new(
-                                        TirExprKind::VariantConstruct {
-                                            variant_type,
-                                            case_index: case_index as u32,
-                                            case_name: case_data.name.clone(),
-                                            payload,
-                                        },
-                                        variant_type,
-                                        call.span,
-                                    );
-                                }
-                            }
+                    // Static method call on a type from the namespace module.
+                    // Use the namespace module source so codegen finds the right impl.
+                    let mangled_name = MethodName::format_local(type_name, None, method_name);
+                    let method_type_args: Vec<TypeId> = call
+                        .type_args
+                        .iter()
+                        .map(|ty| self.resolve_type(ty))
+                        .collect();
 
-                            // Static method call on a type from the namespace module.
-                            // Use the namespace module source so codegen finds the right impl.
-                            let mangled_name =
-                                MethodName::format_local(type_name, None, method_name);
-                            let method_type_args: Vec<TypeId> = call
-                                .type_args
-                                .iter()
-                                .map(|ty| self.resolve_type(ty))
-                                .collect();
-
-                            // Find the impl module via the trait env (global index)
-                            let arg_type_hint = if (method_name == "from"
-                                || method_name == "try_from")
-                                && args.len() == 1
-                            {
-                                Some(self.type_table.borrow().type_name(args[0].type_id))
-                            } else {
-                                None
-                            };
-                            let resolved = self.locate_static_method_impl(
-                                type_name,
-                                method_name,
-                                arg_type_hint.as_deref(),
-                            );
-                            let method_ref = resolved.unwrap_or_else(|| {
-                                StaticMethodRef::new(
-                                    ns_source.clone(),
-                                    type_name,
-                                    method_name,
-                                    None,
-                                )
-                            });
-                            let trait_name = method_ref.trait_name.clone();
-                            let struct_module = method_ref.module.clone();
-
-                            let final_mangled = if let Some(ref tn) = method_ref.trait_name {
-                                MethodName::format_local(type_name, Some(tn), method_name)
-                            } else {
-                                mangled_name
-                            };
-
-                            let mut return_type =
-                                self.lookup_static_method_return_type(&method_ref, &final_mangled);
-                            if !method_type_args.is_empty() {
-                                return_type =
-                                    self.substitute_type_params(return_type, &method_type_args);
-                            }
-
-                            let monomorph_info = if method_type_args.is_empty() {
-                                None
-                            } else {
-                                Some(MonomorphInfo {
-                                    generic_name: final_mangled.clone(),
-                                    impl_type_args: vec![],
-                                    method_type_args: method_type_args.clone(),
-                                    is_blanket: false,
-                                })
-                            };
-
-                            let param_is_mut =
-                                self.lookup_static_method_param_is_mut(type_name, method_name);
-                            let call_args: Vec<CallArg> = args
-                                .into_iter()
-                                .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
-                                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                                .collect();
-
-                            return TirExpr::new(
-                                TirExprKind::Call {
-                                    func: FunctionRef {
-                                        module_source: struct_module,
-                                        name: final_mangled,
-                                        monomorph_info,
-                                        method_info: Some(LocalMethodName::new(
-                                            type_name.to_string(),
-                                            trait_name,
-                                            method_name.to_string(),
-                                        )),
-                                    },
-                                    type_args: vec![],
-                                    args: call_args,
-                                },
-                                return_type,
-                                call.span,
-                            );
-                        }
-                        (Some(CalleeRef::new(ns_source, suffix)), ident.name.clone())
-                    }
-                    // Effect operations and module namespace calls - pass through to codegen.
-                    // This covers Stdout::write(), etc.
-                    else {
-                        (
-                            Some(CalleeRef::local_namespace(
-                                &mut self.interner.borrow_mut(),
-                                prefix,
-                                suffix,
-                            )),
-                            ident.name.clone(),
-                        )
-                    }
-                }
-                // Check if it's a local function (defined in this module) or
-                // a built-in type constructor (Ok, Err, Some, None).
-                // The four constructor names flow through the
-                // `CompilerItem` registry so a stdlib rename of any of
-                // them is picked up here without re-editing the literal set.
-                else if self.function_return_types.contains_key(&ident.name) || {
-                    let tt = self.type_table.borrow();
-                    let items = tt.compiler_items();
-                    let name = ident.name.as_str();
-                    name == items.variant_case_name(crate::compiler_item::CompilerItem::ResultOk)
-                        || name
-                            == items
-                                .variant_case_name(crate::compiler_item::CompilerItem::ResultErr)
-                        || name
-                            == items
-                                .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
-                        || name
-                            == items
-                                .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
-                } {
-                    self.record_item_reference_by_name(ident.id, &ident.name);
-                    (
-                        Some(CalleeRef::local(
-                            &self.current_module_source,
-                            ident.name.clone(),
-                        )),
-                        ident.name.clone(),
-                    )
-                }
-                // Check for prelude functions (panic, unreachable)
-                // These are defined in core:internal and re-exported by core:prelude
-                else if matches!(ident.name.as_str(), "panic" | "unreachable") {
-                    (
-                        Some(CalleeRef::internal_prelude(&ident.name)),
-                        ident.name.clone(),
-                    )
-                }
-                // Check if this is an imported function (per-module imports).
-                // We go through the `Symbol` directly so both the use→def edge
-                // and the `CalleeRef` come from the same resolution — this is
-                // the single place the alias→defining-name translation happens.
-                else if self.imported_functions.contains(&ident.name) {
-                    if let Some(symbol) = self.symbols.lookup(&ident.name) {
-                        self.record_reference_to_key(ident.id, symbol.defined_at.clone());
-                        (
-                            Some(CalleeRef::from_imported_symbol(symbol)),
-                            ident.name.clone(),
-                        )
+                    // Find the impl module via the trait env (global index)
+                    let arg_type_hint = if (method_name == "from" || method_name == "try_from")
+                        && args.len() == 1
+                    {
+                        Some(self.type_table.borrow().type_name(args[0].type_id))
                     } else {
-                        // Imported but not in symbols - shouldn't happen but allow
-                        (
-                            Some(CalleeRef::local(
-                                &self.current_module_source,
-                                ident.name.clone(),
-                            )),
-                            ident.name.clone(),
-                        )
+                        None
+                    };
+                    let resolved = self.locate_static_method_impl(
+                        type_name,
+                        method_name,
+                        arg_type_hint.as_deref(),
+                    );
+                    let method_ref = resolved.unwrap_or_else(|| {
+                        StaticMethodRef::new(ns_source.clone(), type_name, method_name, None)
+                    });
+                    let trait_name = method_ref.trait_name.clone();
+                    let struct_module = method_ref.module.clone();
+
+                    let final_mangled = if let Some(ref tn) = method_ref.trait_name {
+                        MethodName::format_local(type_name, Some(tn), method_name)
+                    } else {
+                        mangled_name
+                    };
+
+                    let mut return_type =
+                        self.lookup_static_method_return_type(&method_ref, &final_mangled);
+                    if !method_type_args.is_empty() {
+                        return_type = self.substitute_type_params(return_type, &method_type_args);
                     }
-                } else {
-                    // Unknown function - will report error
-                    (None, ident.name.clone())
+
+                    let monomorph_info = if method_type_args.is_empty() {
+                        None
+                    } else {
+                        Some(MonomorphInfo {
+                            generic_name: final_mangled.clone(),
+                            impl_type_args: vec![],
+                            method_type_args: method_type_args.clone(),
+                            is_blanket: false,
+                        })
+                    };
+
+                    let param_is_mut =
+                        self.lookup_static_method_param_is_mut(type_name, method_name);
+                    let call_args: Vec<CallArg> = args
+                        .into_iter()
+                        .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                        .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+                        .collect();
+
+                    return TirExpr::new(
+                        TirExprKind::Call {
+                            func: FunctionRef {
+                                module_source: struct_module,
+                                name: final_mangled,
+                                monomorph_info,
+                                method_info: Some(LocalMethodName::new(
+                                    type_name.to_string(),
+                                    trait_name,
+                                    method_name.to_string(),
+                                )),
+                            },
+                            type_args: vec![],
+                            args: call_args,
+                        },
+                        return_type,
+                        call.span,
+                    );
                 }
+                (
+                    Some(CalleeRef::new(ns_source, suffix)),
+                    effective_name.to_string(),
+                )
             }
-            Expr::FieldAccess(field_access) => {
-                // e.g., Stdout.write (unlikely but possible)
-                // These are always considered known - validated elsewhere
-                if let Expr::Ident(ident) = &field_access.expr {
-                    (
-                        Some(CalleeRef::local_namespace(
-                            &mut self.interner.borrow_mut(),
-                            &ident.name,
-                            field_access.field.clone(),
-                        )),
-                        format!("{}.{}", ident.name, field_access.field),
-                    )
-                } else {
-                    (None, String::from("unknown"))
-                }
+            // Effect operations and module namespace calls - pass through to codegen.
+            // This covers Stdout::write(), etc.
+            else {
+                (
+                    Some(CalleeRef::local_namespace(
+                        &mut self.interner.borrow_mut(),
+                        prefix,
+                        suffix,
+                    )),
+                    effective_name.to_string(),
+                )
             }
-            _ => (None, String::from("unknown")),
+        }
+        // Check if it's a local function (defined in this module) or
+        // a built-in type constructor (Ok, Err, Some, None).
+        // The four constructor names flow through the
+        // `CompilerItem` registry so a stdlib rename of any of
+        // them is picked up here without re-editing the literal set.
+        else if self.function_return_types.contains_key(effective_name) || {
+            let tt = self.type_table.borrow();
+            let items = tt.compiler_items();
+            effective_name == items.variant_case_name(crate::compiler_item::CompilerItem::ResultOk)
+                || effective_name
+                    == items.variant_case_name(crate::compiler_item::CompilerItem::ResultErr)
+                || effective_name
+                    == items.variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+                || effective_name
+                    == items.variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+        } {
+            self.record_item_reference_by_name(ident.id, effective_name);
+            (
+                Some(CalleeRef::local(
+                    &self.current_module_source,
+                    effective_name.to_string(),
+                )),
+                effective_name.to_string(),
+            )
+        }
+        // Check for prelude functions (panic, unreachable)
+        // These are defined in core:internal and re-exported by core:prelude
+        else if matches!(effective_name, "panic" | "unreachable") {
+            (
+                Some(CalleeRef::internal_prelude(effective_name)),
+                effective_name.to_string(),
+            )
+        }
+        // Check if this is an imported function (per-module imports).
+        // We go through the `Symbol` directly so both the use→def edge
+        // and the `CalleeRef` come from the same resolution — this is
+        // the single place the alias→defining-name translation happens.
+        else if self.imported_functions.contains(effective_name) {
+            if let Some(symbol) = self.symbols.lookup(effective_name) {
+                self.record_reference_to_key(ident.id, symbol.defined_at.clone());
+                (
+                    Some(CalleeRef::from_imported_symbol(symbol)),
+                    effective_name.to_string(),
+                )
+            } else {
+                // Imported but not in symbols - shouldn't happen but allow
+                (
+                    Some(CalleeRef::local(
+                        &self.current_module_source,
+                        effective_name.to_string(),
+                    )),
+                    effective_name.to_string(),
+                )
+            }
+        } else {
+            // Unknown function - will report error
+            (None, effective_name.to_string())
         };
 
         // Resolve the callee down to a single `CalleeRef`. For unknown
@@ -1562,120 +1583,116 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .unwrap_or(TypeTable::UNIT)
     }
 
-    /// Look up function parameter types from callee expression
-    pub(super) fn lookup_function_param_types(&mut self, callee: &Expr) -> Vec<TypeId> {
-        match callee {
-            Expr::Ident(ident) => {
-                // Check for qualified name (Type::method or Effect::operation)
-                if let Some(pos) = ident.name.find("::") {
-                    let prefix = &ident.name[..pos];
-                    let suffix = &ident.name[pos + 2..];
-                    // Check if it's a static method
-                    if self.is_static_method(prefix, suffix) {
-                        return self.lookup_static_method_param_types(prefix, suffix);
-                    }
-
-                    // Builtin functions: look up param types from core:builtin module
-                    if prefix == "builtin" {
-                        let module_source = ModuleSource::builtin();
-                        let params = Self::lookup_func_in_loaded_module(
-                            self.loaded_modules,
-                            &self.loaded_module_func_indices,
-                            &module_source,
-                            suffix,
-                        )
-                        .map(|func| func.params.clone());
-                        if let Some(params) = params {
-                            return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
-                        }
-                    }
-
-                    return Vec::new(); // Effect operations handled separately
-                }
-
-                // Check if it's a local function (defined in this module)
-                if self.function_return_types.contains_key(&ident.name) {
-                    // Clone params and type_params to avoid borrow issues
-                    let func_info: Option<(Vec<ast::Param>, Vec<ast::GenericParam>)> = self
-                        .lookup_current_func(&ident.name)
-                        .map(|func| (func.params.clone(), func.type_params.clone()));
-
-                    if let Some((params, type_params)) = func_info {
-                        // Set up the callee's generic-param scope before resolving
-                        // its parameter types. Effect params have their own
-                        // channel (`current_effect_param_decls`) and must be
-                        // installed BEFORE `register_generic_params` — eager
-                        // `<F: fn() with E>` bound resolution runs inside
-                        // `register_generic_params` and consults that channel
-                        // to recognise `E` as `EffectRef::Param`.
-                        let mut scope = self.enter_inherited_type_param_scope();
-                        scope.trait_ctx.type_params.clear();
-                        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
-                        let old_effect_param_decls =
-                            std::mem::take(&mut scope.current_effect_param_decls);
-                        let effect_params: Vec<&ast::GenericParam> =
-                            type_params.iter().filter(|p| p.is_effect).collect();
-                        scope.current_effect_params =
-                            effect_params.iter().map(|p| p.name.clone()).collect();
-                        scope.current_effect_param_decls = effect_params
-                            .iter()
-                            .map(|p| (p.name.clone(), p.id))
-                            .collect();
-                        scope.register_generic_params(&type_params, 0);
-                        let result = params.iter().map(|p| scope.resolve_type(&p.ty)).collect();
-                        scope.current_effect_params = old_effect_params;
-                        scope.current_effect_param_decls = old_effect_param_decls;
-                        drop(scope);
-                        return result;
-                    }
-                }
-
-                // Check imported functions — resolve param types using
-                // the definition module's newtypes to avoid same-name collisions
-                if let Some(symbol) = self.symbols.lookup(&ident.name) {
-                    let src = symbol.module_source().clone();
-                    let name = symbol.name.clone();
-                    let params = Self::lookup_func_in_loaded_module(
-                        self.loaded_modules,
-                        &self.loaded_module_func_indices,
-                        &src,
-                        &name,
-                    )
-                    .map(|func| func.params.clone());
-                    if let Some(params) = params {
-                        // Resolve types in the definition module's perspective
-                        // so that type names resolve to the correct module's types
-                        // (e.g., "Direction" resolves to module B's Direction, not module A's)
-                        let callee_module = self
-                            .loaded_modules
-                            .iter()
-                            .find(|(ms, _)| **ms == src)
-                            .map(|(_, m)| m);
-                        let (imported_type_sources, import_original_names) =
-                            if let Some(module) = callee_module {
-                                Self::build_imported_type_sources(
-                                    &mut self.interner.borrow_mut(),
-                                    module,
-                                    &src,
-                                    Some(&self.entry_module_source),
-                                    &self.invocations,
-                                )
-                            } else {
-                                (IndexMap::default(), IndexMap::default())
-                            };
-                        return self.with_module_perspective(
-                            src.clone(),
-                            imported_type_sources,
-                            import_original_names,
-                            |s| params.iter().map(|p| s.resolve_type(&p.ty)).collect(),
-                        );
-                    }
-                }
-
-                Vec::new()
+    /// Look up function parameter types for a call by the effective callee
+    /// name (after any `Self::` / `T::` prefix rewriting performed by
+    /// [`Self::classify_call_callee`]).
+    pub(super) fn lookup_function_param_types(&mut self, name: &str) -> Vec<TypeId> {
+        // Check for qualified name (Type::method or Effect::operation)
+        if let Some(pos) = name.find("::") {
+            let prefix = &name[..pos];
+            let suffix = &name[pos + 2..];
+            // Check if it's a static method
+            if self.is_static_method(prefix, suffix) {
+                return self.lookup_static_method_param_types(prefix, suffix);
             }
-            _ => Vec::new(),
+
+            // Builtin functions: look up param types from core:builtin module
+            if prefix == "builtin" {
+                let module_source = ModuleSource::builtin();
+                let params = Self::lookup_func_in_loaded_module(
+                    self.loaded_modules,
+                    &self.loaded_module_func_indices,
+                    &module_source,
+                    suffix,
+                )
+                .map(|func| func.params.clone());
+                if let Some(params) = params {
+                    return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+                }
+            }
+
+            return Vec::new(); // Effect operations handled separately
         }
+
+        // Check if it's a local function (defined in this module)
+        if self.function_return_types.contains_key(name) {
+            // Clone params and type_params to avoid borrow issues
+            let func_info: Option<(Vec<ast::Param>, Vec<ast::GenericParam>)> = self
+                .lookup_current_func(name)
+                .map(|func| (func.params.clone(), func.type_params.clone()));
+
+            if let Some((params, type_params)) = func_info {
+                // Set up the callee's generic-param scope before resolving
+                // its parameter types. Effect params have their own
+                // channel (`current_effect_param_decls`) and must be
+                // installed BEFORE `register_generic_params` — eager
+                // `<F: fn() with E>` bound resolution runs inside
+                // `register_generic_params` and consults that channel
+                // to recognise `E` as `EffectRef::Param`.
+                let mut scope = self.enter_inherited_type_param_scope();
+                scope.trait_ctx.type_params.clear();
+                let old_effect_params = std::mem::take(&mut scope.current_effect_params);
+                let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
+                let effect_params: Vec<&ast::GenericParam> =
+                    type_params.iter().filter(|p| p.is_effect).collect();
+                scope.current_effect_params =
+                    effect_params.iter().map(|p| p.name.clone()).collect();
+                scope.current_effect_param_decls = effect_params
+                    .iter()
+                    .map(|p| (p.name.clone(), p.id))
+                    .collect();
+                scope.register_generic_params(&type_params, 0);
+                let result = params.iter().map(|p| scope.resolve_type(&p.ty)).collect();
+                scope.current_effect_params = old_effect_params;
+                scope.current_effect_param_decls = old_effect_param_decls;
+                drop(scope);
+                return result;
+            }
+        }
+
+        // Check imported functions — resolve param types using
+        // the definition module's newtypes to avoid same-name collisions
+        if let Some(symbol) = self.symbols.lookup(name) {
+            let src = symbol.module_source().clone();
+            let sym_name = symbol.name.clone();
+            let params = Self::lookup_func_in_loaded_module(
+                self.loaded_modules,
+                &self.loaded_module_func_indices,
+                &src,
+                &sym_name,
+            )
+            .map(|func| func.params.clone());
+            if let Some(params) = params {
+                // Resolve types in the definition module's perspective
+                // so that type names resolve to the correct module's types
+                // (e.g., "Direction" resolves to module B's Direction, not module A's)
+                let callee_module = self
+                    .loaded_modules
+                    .iter()
+                    .find(|(ms, _)| **ms == src)
+                    .map(|(_, m)| m);
+                let (imported_type_sources, import_original_names) =
+                    if let Some(module) = callee_module {
+                        Self::build_imported_type_sources(
+                            &mut self.interner.borrow_mut(),
+                            module,
+                            &src,
+                            Some(&self.entry_module_source),
+                            &self.invocations,
+                        )
+                    } else {
+                        (IndexMap::default(), IndexMap::default())
+                    };
+                return self.with_module_perspective(
+                    src.clone(),
+                    imported_type_sources,
+                    import_original_names,
+                    |s| params.iter().map(|p| s.resolve_type(&p.ty)).collect(),
+                );
+            }
+        }
+
+        Vec::new()
     }
 
     /// Fill missing trailing arguments with the callee's declared default
