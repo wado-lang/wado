@@ -166,8 +166,7 @@ fn licm_block(
                 // monotone-correct (extra aliases never cause wrong
                 // hoists, only conservative misses), sharing the same
                 // accumulator is safe.
-                changed |=
-                    licm_block(then_block, local_count, locals, type_table, outer_aliases);
+                changed |= licm_block(then_block, local_count, locals, type_table, outer_aliases);
                 if let Some(eb) = else_block {
                     changed |= licm_block(eb, local_count, locals, type_table, outer_aliases);
                 }
