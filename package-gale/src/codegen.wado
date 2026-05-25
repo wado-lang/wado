@@ -35,7 +35,13 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> String {
     // `normalize_caches` is a one-time `is_empty()` sweep and a fallback
     // for IR constructed with struct-literal syntax (e.g. unit tests).
     normalize_caches(grammar);
-    let mut w = CodeWriter::new();
+    // Pre-size the output buffer from the grammar's rule count so the
+    // bulk of `String::push_str` calls in `CodeWriter::line` don't
+    // trigger `String::grow` doubling events. Empirical Rust*.g4 output
+    // is ~1.3 MB across 197 parser + 130 lexer rules; the 4 KB +
+    // 4 KB/rule heuristic matches that within one doubling.
+    let estimated_size = 4096 + 4096 * (grammar.parser_rules.len() + grammar.lexer_rules.len());
+    let mut w = CodeWriter::with_capacity(estimated_size);
     // Lower up-front so CST emission can consume `AltBody.fields` /
     // `GroupShape` directly. Sharing the GenContext primes the
     // follow-variant / kind-set registries and the first / nullable
