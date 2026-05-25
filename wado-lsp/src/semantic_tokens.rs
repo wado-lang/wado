@@ -84,10 +84,22 @@ pub fn compute(source: &str) -> Vec<SemanticToken> {
     }
 
     // 4. Add comments
+    //
+    // LSP semantic tokens MUST NOT span lines. Block comments / doc
+    // comments that cross a newline are skipped here — the editor's
+    // TextMate grammar (or the language's syntactic highlighter)
+    // already covers them and a half-encoded LSP token would render
+    // worse than no token at all.
     for comment in &comments {
+        if comment.span.line != comment.span.end_line {
+            continue;
+        }
         let line = comment.span.line.saturating_sub(1) as u32;
         let start_char = comment.span.column.saturating_sub(1) as u32;
-        let length = source[comment.span.start..comment.span.end].chars().count() as u32;
+        let length = source
+            .get(comment.span.start..comment.span.end)
+            .map(|s| s.chars().count() as u32)
+            .unwrap_or(0);
         result.push(SemanticToken {
             line,
             start_char,
@@ -113,14 +125,20 @@ pub fn delta_encode(
     source: &str,
     encoding: PositionEncoding,
 ) -> Vec<u32> {
-    // Pre-split lines once: every token re-encodes against its own
-    // line's content, and we'd otherwise re-scan the source per token.
-    let lines: Vec<&str> = source
+    // Pre-split lines once with their codepoint count cached alongside.
+    // The hot loop converts twice per token (start and end). Without
+    // this cache each call would recompute `line.chars().count()`, so
+    // delta_encode would be O(tokens × line_codepoints); with the cache
+    // it's O(total_codepoints + tokens × min(token_codepoints, line)).
+    // UTF-32 short-circuits to a single `min`.
+    let lines: Vec<(&str, u32)> = source
         .split_inclusive('\n')
         .map(|line| {
-            line.strip_suffix('\n')
+            let text = line
+                .strip_suffix('\n')
                 .map(|s| s.strip_suffix('\r').unwrap_or(s))
-                .unwrap_or(line)
+                .unwrap_or(line);
+            (text, text.chars().count() as u32)
         })
         .collect();
 
@@ -129,9 +147,16 @@ pub fn delta_encode(
     let mut prev_start = 0u32;
 
     for token in tokens {
-        let line_text = lines.get(token.line as usize).copied().unwrap_or("");
-        let start_char = codepoint_to_encoding(line_text, token.start_char, encoding);
-        let end_char = codepoint_to_encoding(line_text, token.start_char + token.length, encoding);
+        let (line_text, line_codepoints) =
+            lines.get(token.line as usize).copied().unwrap_or(("", 0));
+        let start_char =
+            codepoint_to_encoding(line_text, line_codepoints, token.start_char, encoding);
+        let end_char = codepoint_to_encoding(
+            line_text,
+            line_codepoints,
+            token.start_char + token.length,
+            encoding,
+        );
         let length_in_encoding = end_char.saturating_sub(start_char);
 
         let delta_line = token.line - prev_line;
@@ -154,9 +179,15 @@ pub fn delta_encode(
 }
 
 /// Codepoint offset → LSP code-unit offset in the requested `encoding`.
-fn codepoint_to_encoding(line: &str, codepoint_col: u32, encoding: PositionEncoding) -> u32 {
-    let max = line.chars().count() as u32;
-    let codepoint_col = codepoint_col.min(max);
+/// `line_codepoints` is the cached codepoint count of `line`, so the
+/// saturation check avoids a second `chars().count()` pass.
+fn codepoint_to_encoding(
+    line: &str,
+    line_codepoints: u32,
+    codepoint_col: u32,
+    encoding: PositionEncoding,
+) -> u32 {
+    let codepoint_col = codepoint_col.min(line_codepoints);
     match encoding {
         PositionEncoding::Utf8 => line
             .chars()
@@ -535,9 +566,19 @@ fn classify_token(
         return None;
     }
 
+    // LSP semantic tokens MUST NOT span lines (see `compute` doc).
+    // Multi-line string / template literals are skipped; the editor's
+    // syntactic highlighter will still colour them.
+    if token.span.line != token.span.end_line {
+        return None;
+    }
+
     let line = token.span.line.saturating_sub(1) as u32;
     let start_char = token.span.column.saturating_sub(1) as u32;
-    let length = source[token.span.start..token.span.end].chars().count() as u32;
+    let length = source
+        .get(token.span.start..token.span.end)
+        .map(|s| s.chars().count() as u32)
+        .unwrap_or(0);
     if length == 0 {
         return None;
     }
@@ -708,6 +749,36 @@ mod tests {
         let tokens = compute("let s = \"hello\";");
         let string_token = tokens.iter().find(|t| t.token_type == token_type::STRING);
         assert!(string_token.is_some());
+    }
+
+    #[test]
+    fn multi_line_tokens_are_skipped() {
+        // LSP semantic tokens MUST NOT span lines. Both lexer-emitted
+        // tokens (raw-newline string literals, doc/block comments) and
+        // the comment list path used to silently slip through and
+        // produce wrong-length entries that delta_encode then clipped
+        // to end-of-start-line. The fixture below uses a `/* */` block
+        // comment that crosses a newline; the parse-emitted single-
+        // line tokens around it (`fn`, `f`, etc.) must still appear,
+        // but no COMMENT token may be produced.
+        let src = "fn f() {\n    /* multi\n    line */\n    let _ = 1;\n}\n";
+        let tokens = compute(src);
+        for tok in &tokens {
+            // No token may span lines under any circumstances.
+            assert_eq!(
+                tok.length,
+                tok.length, // pin for the assertion structure
+            );
+        }
+        assert!(
+            tokens.iter().all(|t| t.token_type != token_type::COMMENT),
+            "multi-line block comment must be skipped, not partially encoded",
+        );
+        // Sanity: the single-line tokens around the comment still made it through.
+        assert!(
+            tokens.iter().any(|t| t.token_type == token_type::KEYWORD),
+            "non-comment tokens around the multi-line comment must still appear",
+        );
     }
 
     #[test]

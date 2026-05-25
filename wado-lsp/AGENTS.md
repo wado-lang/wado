@@ -56,11 +56,13 @@ phase would have populated.
 
 `PositionEncoding` (UTF-8 / UTF-16 / UTF-32) is negotiated at
 `initialize` from the client's `general.positionEncodings`
-capability. Server preference: UTF-8 (cheapest — Wado source is
-already UTF-8) → UTF-32 → UTF-16 (LSP default). The compiler's
-`Span::column` is a 1-based **codepoint** index (`lexer.rs::Lexer::advance`
-increments per character, not per byte and not per UTF-16 code unit), so
-every conversion lives in `text.rs` and routes through
+capability. Server preference: UTF-32 (cheapest — the compiler's
+`Span::column` is already a 1-based codepoint index, so UTF-32 is a
+passthrough) → UTF-8 → UTF-16 (LSP default; only chosen when the
+client offers nothing else). The codepoint semantics come from
+`lexer.rs::Lexer::advance`, which increments `column` per Unicode
+scalar value, not per byte and not per UTF-16 code unit. Every
+conversion lives in `text.rs` and routes through
 `codepoint_offset_to_character` / `character_to_codepoint_offset`.
 
 ### DiagnosticCollector

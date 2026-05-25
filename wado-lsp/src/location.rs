@@ -13,7 +13,7 @@ use wado_compiler::token::Span;
 
 use crate::diagnostics::Range;
 use crate::text::PositionEncoding;
-use crate::uri::{Uri, UriScheme};
+use crate::uri::Uri;
 
 /// Resolve the URI of a module relative to the requesting document's URI.
 ///
@@ -59,17 +59,16 @@ fn resolve_local_uri(module_path: &str, request_uri: &str) -> String {
     if module_path.starts_with('/') || module_path.starts_with("file://") {
         return filename_to_uri(module_path);
     }
-    // Local imports anchor at the request URI's directory. Non-file
-    // request URIs (`core:`, `wasi:`, `kiln:`, `untitled:`) cannot
-    // anchor a relative path; fall back to the literal module path so
-    // the result is still navigable in the LSP client even though it
-    // won't open a real file.
-    let request_uri_typed = Uri::new(request_uri);
     let normalized = module_path.strip_prefix("./").unwrap_or(module_path);
-    if request_uri_typed.scheme() != UriScheme::File {
-        return filename_to_uri(normalized);
-    }
-    let request_path = request_uri_typed.to_filename();
+    // String-based parent extraction. `Uri::to_filename` is a passthrough
+    // for non-`file:` schemes, so for `kiln:/abs/path/foo.wado` we get
+    // `kiln:/abs/path/foo.wado` back and `rsplit_once('/')` yields the
+    // sibling-import-aware base `kiln:/abs/path`. For schemes with no
+    // path component (`core:cli`, `wasi:filesystem/types.wado` *with*
+    // a path, `untitled:1`), `rsplit_once` either returns the right
+    // thing or yields an empty `base_dir` and we fall back to the bare
+    // normalized path. Matches the pre-refactor string-based behaviour.
+    let request_path = Uri::new(request_uri).to_filename();
     let base_dir = request_path
         .rsplit_once('/')
         .map(|(dir, _)| dir)
@@ -108,4 +107,43 @@ pub(crate) fn span_to_range(
     encoding: PositionEncoding,
 ) -> Range {
     crate::text::span_to_range(span, source, encoding)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_import_off_kiln_uri_preserves_parent_directory() {
+        // Regression test for the Layer-2 refactor: the typed-Uri
+        // rewrite of `resolve_local_uri` short-circuited every
+        // non-`file:` scheme to `filename_to_uri(normalized)`,
+        // dropping the parent directory of kiln-redirected modules.
+        // For `kiln:/abs/path/foo.wado` importing `./sibling.wado` the
+        // result must remain `kiln:/abs/path/sibling.wado`, not the
+        // unanchored `sibling.wado`.
+        let resolved = resolve_local_uri("./sibling.wado", "kiln:/abs/path/foo.wado");
+        assert_eq!(resolved, "kiln:/abs/path/sibling.wado");
+    }
+
+    #[test]
+    fn relative_import_off_wasi_uri_preserves_parent_directory() {
+        // wasi: URIs that include a path segment
+        // (`wasi:filesystem/preopens.wado`) should anchor sibling
+        // imports under that segment.
+        let resolved = resolve_local_uri("./types.wado", "wasi:filesystem/preopens.wado");
+        assert_eq!(resolved, "wasi:filesystem/types.wado");
+    }
+
+    #[test]
+    fn relative_import_off_file_uri_anchors_at_request_dir() {
+        let resolved = resolve_local_uri("./other.wado", "file:///home/user/foo.wado");
+        assert_eq!(resolved, "file:///home/user/other.wado");
+    }
+
+    #[test]
+    fn absolute_module_path_is_passed_through() {
+        let resolved = resolve_local_uri("/abs/x.wado", "file:///home/user/foo.wado");
+        assert_eq!(resolved, "file:///abs/x.wado");
+    }
 }

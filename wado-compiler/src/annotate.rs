@@ -57,10 +57,22 @@ pub struct Annotated {
     /// instead of re-walking the AST on every request.
     pub(crate) ast_indices: IndexMap<ModuleSource, AstIndex>,
     /// Shared resolver state produced by [`Resolver::annotate_modules`].
-    /// `None` when annotate bailed before resolve could populate it
-    /// (typical in LSP partial-result mode). Batch compilation rejects
-    /// partial results via [`Annotated::is_complete`], so the `unwrap` in
-    /// `compile_with_options` is safe.
+    ///
+    /// `None` when analyze or [`Resolver::annotate_modules`] bailed before
+    /// the state could be built. `Some(_)` once resolve completed — even
+    /// if a later [`Resolver::lower_tir_from_state`] bail set
+    /// [`Self::is_complete`] to `false`. The pair `(state, is_complete)`
+    /// therefore has three distinguishable states:
+    ///
+    /// - `(None, false)` — analyze or resolve bailed; the snapshot has
+    ///   only `symbols` + `ast_indices`.
+    /// - `(Some(_), false)` — resolve completed but `lower_tir` bailed; the
+    ///   snapshot has everything except `tir_modules` (which is empty).
+    /// - `(Some(_), true)` — full success.
+    ///
+    /// Batch compilation rejects every non-`true` case via
+    /// [`Annotated::is_complete`], so the `expect` in `compile_with_options`
+    /// is safe. LSP queries do not inspect `state` directly.
     pub(crate) state: Option<AnnotateState>,
     /// Use→def map populated by the real resolver as it walks function
     /// bodies in `lower_tir_from_state`. Maps `(module, IdentExpr.id)` to

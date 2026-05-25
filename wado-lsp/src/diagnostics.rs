@@ -261,6 +261,69 @@ mod tests {
     }
 
     #[test]
+    fn source_none_passes_codepoint_columns_through_verbatim() {
+        // When the caller cannot supply the right module's source
+        // (cross-file diagnostic, no on-hand text), `from_compiler_diagnostic`
+        // must NOT re-encode against the wrong text. Codepoint columns
+        // are emitted verbatim — correct under UTF-32 / ASCII, drifts
+        // under UTF-16 but the alternative (re-encoding against a
+        // different file's bytes) is worse.
+        let compiler_diag = CompilerDiagnostic {
+            severity: CompilerSeverity::Error,
+            code: Code::TypeMismatch,
+            message: "x".to_string(),
+            span: Some(DiagnosticSpan {
+                file: "imported.wado".to_string(),
+                line: 1,
+                column: 13, // codepoint col in imported.wado
+                end_line: Some(1),
+                end_column: Some(15),
+            }),
+        };
+        let diag = from_compiler_diagnostic(
+            &compiler_diag,
+            "file:///entry.wado",
+            None, // cross-file: no source on hand
+            PositionEncoding::Utf16,
+        )
+        .unwrap();
+        // Codepoint 13 (1-based) → LSP 0-based 12.
+        assert_eq!(diag.range.start.character, 12);
+        assert_eq!(diag.range.end.character, 14);
+    }
+
+    #[test]
+    fn source_some_reencodes_to_utf16_for_non_ascii() {
+        // When the diagnostic's span IS in the entry document, the
+        // caller passes `Some(source)` and we re-express the codepoint
+        // column in the requested encoding. For "// 🦀🦀" the
+        // codepoint column 4 ("after '// 🦀'") sits at UTF-16 unit 5
+        // because 🦀 is two UTF-16 units.
+        let src = "// 🦀🦀\n";
+        let compiler_diag = CompilerDiagnostic {
+            severity: CompilerSeverity::Error,
+            code: Code::TypeMismatch,
+            message: "x".to_string(),
+            span: Some(DiagnosticSpan {
+                file: "entry.wado".to_string(),
+                line: 1,
+                column: 5,
+                end_line: Some(1),
+                end_column: Some(6),
+            }),
+        };
+        let diag = from_compiler_diagnostic(
+            &compiler_diag,
+            "file:///entry.wado",
+            Some(src),
+            PositionEncoding::Utf16,
+        )
+        .unwrap();
+        // Codepoint 5 → "// 🦀" → 3 ASCII + 1 codepoint (2 utf-16 units) = 5 utf-16 units.
+        assert_eq!(diag.range.start.character, 5);
+    }
+
+    #[test]
     fn end_column_is_used_when_provided() {
         // Compiler now always populates end_column (via Span::end_column) when
         // building a DiagnosticSpan from a Span. Verify the conversion uses it

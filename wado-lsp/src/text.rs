@@ -56,18 +56,6 @@ impl PositionEncoding {
         }
     }
 
-    /// Parse the wire string. Returns `None` for anything the LSP spec
-    /// does not define.
-    #[must_use]
-    pub fn from_wire(s: &str) -> Option<Self> {
-        match s {
-            "utf-8" => Some(Self::Utf8),
-            "utf-16" => Some(Self::Utf16),
-            "utf-32" => Some(Self::Utf32),
-            _ => None,
-        }
-    }
-
     /// Pick the most-preferred encoding the client advertises.
     ///
     /// Preference order: utf-32 > utf-8 > utf-16. UTF-32 wins because
@@ -92,11 +80,14 @@ impl PositionEncoding {
 /// codepoint index within the line — matching what `lexer.rs` records
 /// on each [`Span`].
 ///
-/// Returns `(1, 1)` for any position whose line is past the end of
-/// `source`, so call sites can still attempt a cursor lookup at "after
-/// the document"; the compiler-side `ast_id_at` returns `None` for
-/// out-of-range positions either way, and a synthetic `(1, 1)` is
-/// strictly better than a panic on slicing.
+/// Returns an out-of-range sentinel `(usize::MAX, 1)` for any position
+/// whose line is past the end of `source`. The compiler-side
+/// `ast_id_at` searches for nodes containing the position; no real
+/// span has line `usize::MAX`, so the lookup correctly returns `None`
+/// — call sites can keep using `?` to bail. (Returning `(1, 1)` here
+/// would map every past-EOF cursor onto the first AST node, silently
+/// resolving hover / definition to whatever symbol starts at the
+/// document head.)
 #[must_use]
 pub fn lsp_position_to_line_col(
     source: &str,
@@ -122,8 +113,9 @@ pub fn lsp_position_to_line_col(
             return (current_line as usize + 1, codepoint_col + 1);
         }
     }
-    // Cursor past EOF.
-    (1, 1)
+    // Cursor past EOF: out-of-range sentinel so the compiler's
+    // `ast_id_at` returns `None`. See doc-comment above.
+    (usize::MAX, 1)
 }
 
 /// Convert a compiler `Span` to an LSP `Range` in the negotiated
@@ -236,6 +228,22 @@ mod tests {
 
     fn pos(line: u32, character: u32) -> Position {
         Position { line, character }
+    }
+
+    #[test]
+    fn past_eof_returns_out_of_range_sentinel() {
+        // A stale cursor (line beyond source) used to fall back to
+        // (1, 1) — a valid in-range position that silently bound LSP
+        // queries to the first AST node. The sentinel must be a line
+        // no real `Span` can have, so the compiler's `ast_id_at`
+        // returns `None` and the LSP query bails cleanly.
+        let src = "fn f() {}\nfn g() {}\n";
+        let (line, col) = lsp_position_to_line_col(src, pos(99, 0), PositionEncoding::Utf16);
+        assert_eq!(
+            (line, col),
+            (usize::MAX, 1),
+            "past-EOF cursor must yield an out-of-range sentinel",
+        );
     }
 
     #[test]

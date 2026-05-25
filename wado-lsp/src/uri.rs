@@ -88,19 +88,37 @@ impl Uri {
             .map_or_else(|| self.0.clone(), str::to_owned)
     }
 
+    /// Path / opaque component after the scheme delimiter `:`.
+    ///
+    /// Returns `None` when the URI has no `:` (i.e. [`Self::scheme`]
+    /// returns [`UriScheme::Other`]). Callers that have already
+    /// classified the scheme as one of the known kinds may safely
+    /// `.expect()` on the result.
+    #[must_use]
+    pub fn rest(&self) -> Option<&str> {
+        self.0.split_once(':').map(|(_, r)| r)
+    }
+
     /// Directory containing this URI's file, for use as a
     /// `FilesystemCompilerHost` base path.
     ///
     /// Returns `None` for non-`file:` URIs (`core:` / `wasi:` / `kiln:`
     /// modules don't have a workspace root to resolve relative imports
-    /// against). Returns `Some(".")` when the URI's path has no
-    /// directory component.
+    /// against) AND for malformed `file://` URIs that carry no path —
+    /// silently CWD-rooting a bad URI would let buggy clients trigger
+    /// reads against the LSP process's working directory. Returns
+    /// `Some(PathBuf::from("/"))` for absolute-root paths
+    /// (e.g. `file:///foo.wado`).
     #[must_use]
     pub fn workspace_root(&self) -> Option<PathBuf> {
         if self.scheme() != UriScheme::File {
             return None;
         }
         let filename = self.to_filename();
+        if filename.is_empty() {
+            // `file://` with no path: refuse rather than CWD-root.
+            return None;
+        }
         Some(
             Path::new(&filename)
                 .parent()
@@ -181,5 +199,26 @@ mod tests {
         // treated the empty string oddly. Verify the typed accessor.
         let u = Uri::new("file:///foo.wado");
         assert_eq!(u.workspace_root(), Some(PathBuf::from("/")));
+    }
+
+    #[test]
+    fn malformed_file_uri_without_path_has_no_workspace_root() {
+        // `file://` (no path component) used to silently CWD-root the
+        // FilesystemCompilerHost. That let a buggy client read
+        // arbitrary files under the LSP process's cwd via relative
+        // imports off the bad URI. The typed accessor refuses such
+        // URIs.
+        assert_eq!(Uri::new("file://").workspace_root(), None);
+    }
+
+    #[test]
+    fn rest_returns_part_after_colon() {
+        assert_eq!(Uri::new("core:cli").rest(), Some("cli"));
+        assert_eq!(
+            Uri::new("file:///home/x.wado").rest(),
+            Some("///home/x.wado"),
+        );
+        assert_eq!(Uri::new("untitled:1").rest(), Some("1"));
+        assert_eq!(Uri::new("no-colon").rest(), None);
     }
 }
