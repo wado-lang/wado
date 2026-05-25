@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779739103251,
+  "lastUpdate": 1779743235585,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26061,6 +26061,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3a6a182d1868549c7264c9d07aadca5eb85907f4"
         },
         "date": 1779739102777,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 443310,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "505116aacab3005da0f6d94389e10952c5159ab1",
+          "message": "Merge pull request #1196 from wado-lang/claude/wado-lsp-maintainability-kY1jR\n\nrefactor(lsp): dedupe test fixtures, codepoint helpers, enum repr, query plumbing, and dispatch",
+          "timestamp": "2026-05-26T06:01:03+09:00",
+          "tree_id": "6019ff222749ab5dbb27662934069fb1ed7d5e11",
+          "url": "https://github.com/wado-lang/wado/commit/505116aacab3005da0f6d94389e10952c5159ab1"
+        },
+        "date": 1779743235277,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
