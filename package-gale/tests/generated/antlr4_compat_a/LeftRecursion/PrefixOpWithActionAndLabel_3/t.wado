@@ -889,6 +889,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_s(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -957,20 +975,20 @@ fn scan_e(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
-    let e = parse_e(p)?;
+    let e = _parse_e(p)?;
     return Result::<SNode, ParseError>::Ok(SNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         e,
     });
 }
 
-fn parse_e_bt_0(p: &mut Parser) -> Result<ENode, ParseError> {
+fn _parse_e_bt_0(p: &mut Parser) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let eq = p.expect(TK_LIT_EQ)?;
-    let e1 = parse_e(p, 2)?;
+    let e1 = _parse_e(p, 2)?;
     return Result::<ENode, ParseError>::Ok(ENode::Alt0(EAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
         id,
@@ -979,7 +997,7 @@ fn parse_e_bt_0(p: &mut Parser) -> Result<ENode, ParseError> {
     }));
 }
 
-fn parse_e_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_e_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
@@ -990,7 +1008,7 @@ fn parse_e_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn parse_e_bt_1(p: &mut Parser) -> Result<ENode, ParseError> {
+fn _parse_e_bt_1(p: &mut Parser) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     return Result::<ENode, ParseError>::Ok(ENode::Alt1(EAlt1 {
@@ -999,21 +1017,21 @@ fn parse_e_bt_1(p: &mut Parser) -> Result<ENode, ParseError> {
     }));
 }
 
-fn parse_e_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_e_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
+fn _parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_ID {
         let _sd_tokens = &p.tokens;
         let _sd_pos = p.pos;
-        let _sd_p_0 = parse_e_scan_0(_sd_tokens, _sd_pos);
-        let _sd_p_1 = parse_e_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_0 = _parse_e_scan_0(_sd_tokens, _sd_pos);
+        let _sd_p_1 = _parse_e_scan_1(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -1025,12 +1043,12 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
             _sd_best_i = 1;
         }
         if _sd_best_i == 0 {
-            return parse_e_bt_0(p);
+            return _parse_e_bt_0(p);
         }
         if _sd_best_i == 1 {
-            return parse_e_bt_1(p);
+            return _parse_e_bt_1(p);
         }
-        return parse_e_bt_1(p);
+        return _parse_e_bt_1(p);
     }
     return Result::<ENode, ParseError>::Err(ParseError::new(
         "expected e",
@@ -1039,9 +1057,9 @@ fn parse_e_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     ));
 }
 
-fn parse_e_lr_2(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
+fn _parse_e_lr_2(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
     let plus = p.expect(TK_LIT_PLUS)?;
-    let e = parse_e(p, 2)?;
+    let e = _parse_e(p, 2)?;
     let e2 = e;
     return Result::<ENode, ParseError>::Ok(ENode::Alt2(EAlt2 {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1051,9 +1069,9 @@ fn parse_e_lr_2(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseE
     }));
 }
 
-fn parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
+fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = parse_e_atom(p)?;
+    let mut result = _parse_e_atom(p)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_LIT_PLUS {
@@ -1061,7 +1079,7 @@ fn parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
                 if scan_e_lr_2(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_e_lr_2(p, result, start)?;
+                result = _parse_e_lr_2(p, result, start)?;
             } else {
                 break;
             }
@@ -1072,10 +1090,20 @@ fn parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
     return Result::<ENode, ParseError>::Ok(result);
 }
 
-pub fn parse(input: &String) -> Result<SNode, ParseError> {
+pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_s(&mut parser);
+    return _parse_s(&mut parser);
+}
+
+pub fn parse_e(input: &String) -> Result<ENode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_e(&mut parser, 0);
+}
+
+pub fn parse(input: &String) -> Result<SNode, ParseError> {
+    return parse_s(input);
 }
 
 pub fn walk_s<V: Visitor>(v: &mut V, node: &SNode) {

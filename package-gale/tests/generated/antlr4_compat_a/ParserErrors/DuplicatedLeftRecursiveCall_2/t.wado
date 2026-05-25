@@ -792,6 +792,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_start(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -837,9 +855,9 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
+fn _parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
     let start = p.peek().span.start;
-    let expr = parse_expr(p)?;
+    let expr = _parse_expr(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<StartNode, ParseError>::Ok(StartNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -848,7 +866,7 @@ fn parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
     });
 }
 
-fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_X {
@@ -865,8 +883,8 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     ));
 }
 
-fn parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
-    let expr_2 = parse_expr(p, 2)?;
+fn _parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+    let expr_2 = _parse_expr(p, 2)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt1(ExprAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -874,9 +892,9 @@ fn parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
     }));
 }
 
-fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
+fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = parse_expr_atom(p)?;
+    let mut result = _parse_expr_atom(p)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_LIT_X {
@@ -884,7 +902,7 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
                 if scan_expr_lr_1(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_expr_lr_1(p, result, start)?;
+                result = _parse_expr_lr_1(p, result, start)?;
             } else {
                 break;
             }
@@ -895,10 +913,20 @@ fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError>
     return Result::<ExprNode, ParseError>::Ok(result);
 }
 
-pub fn parse(input: &String) -> Result<StartNode, ParseError> {
+pub fn parse_start(input: &String) -> Result<StartNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_start(&mut parser);
+    return _parse_start(&mut parser);
+}
+
+pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_expr(&mut parser, 0);
+}
+
+pub fn parse(input: &String) -> Result<StartNode, ParseError> {
+    return parse_start(input);
 }
 
 pub fn walk_start<V: Visitor>(v: &mut V, node: &StartNode) {

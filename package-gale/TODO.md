@@ -54,7 +54,6 @@ All 17 `CompositeLexers` / `CompositeParsers` upstream descriptors auto-skip tod
 
 - **Composite (slave-grammar) descriptors.** 17 descriptors short-circuit on `parsed.slave_grammars.len() > 0`. Kiln's `use t from "<C>/<Name>.g4" with { ... }` directive needs to resolve `import S;` against sibling `<Name>.slaveN.g4` files. Once that lands the short-circuit comes out.
 - **Captured action output (Stage C deliverable).** Parser descriptors whose `[output]` is purely action-print stdout (e.g. `<writeln("S.a")>`) get claim (b) but no `[output]` comparison. Needs Stage C action-body translation in `codegen.wado` plus a parser-side `accumulated_output: String` API.
-- **`parse_<rule>` per-rule entries.** Several descriptors specify `[start]` as a non-first parser rule (`ParserExec/OpenDeviceStatement_*`, `ParserErrors/SingleTokenDeletionBeforeAlt`). Gale's `parse()` always enters at the first parser rule. Add a `parse_<rule>(input)` (or `parse_with_start(rule, input)`) and dispatch from the test file when `[start]` differs.
 
 ## Gale bugs surfaced by Stage A drivers
 
@@ -62,9 +61,9 @@ Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Rou
 
 ### Parser codegen
 
-- **Set element `('b' | 'c')` skips the kind-check dispatch.** `a : 'a' ('b'|'c') ;` is currently emitted as `let lit_b_or_lit_c = p.advance();` with no `peek_kind` guard, so any token silently consumes. Stage A regression: `ParserErrors/SingleTokenDeletionExpectingSet` returns `Ok` for `aab` instead of `Err`. Write a `tests/grammars/parser_set_group_dispatch.g4` fixture before the fix.
 - **LR rule with `returns` + list-label combination.** `LeftRecursion/ReturnValueAndActionsList1_{2,4}`: parse stops at the first comma in the input list. Investigate the LR-alt-rewrite path's interaction with list-label storage.
 - **LR operator-precedence chain.** `Performance/DropLoopEntryBranchInLRRule_4`: Gale picks the wrong precedence chain for an or-then-and expression.
+- **Non-greedy `??` prediction layer.** `ParserExec/IfIfElseNonGreedyBinding1`: the emit shape is `Option<T>` (compile-blocker gone) but the dispatch reuses the greedy first-set predictor, so the dangling `else` binds to the inner `if` instead of the outer one ANTLR4 picks. Needs either a follow-guarded Optional dispatcher or runtime ATN simulation.
 
 ### Lexer codegen
 
@@ -72,20 +71,8 @@ Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Rou
 - **Recursive lexer rule with `.+?` / `.*?` wildcard.** `LexerExec/RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`: nested `/* /*...*/ */` comments mistokenize because the recursive call doesn't re-enter under the non-greedy bound.
 - **`-> more, mode(...)` chain across modes.** `LexerExec/ZeroLengthToken`: a token built via `-> more, pushMode(...)` followed by `-> more, mode(...)` should merge into a single token spanning all the `more`'d chars, but Gale emits the final piece only.
 
-### Compile-blocking codegen failures (`[stage_a_skip]`)
-
-These reject grammars wholesale — Gale codegen produces invalid Wado, so the descriptor's test file cannot even compile. They need fresh `wado-compiler/tests/fixtures/` reproducers before fixing.
-
-- All-binary-op LR rule (`LeftRecursion/WhitespaceInfluence_{1,2}`, `Performance/ExpressionGrammar_{1,2}`)
-- Non-greedy optional `??` in parser rules (`ParserExec/IfIfElseNonGreedyBinding1`)
-- Parser-rule list-label `b2+=b*` / `b3+=';'` (`ParserExec/Labels`)
-- `val+=(INT | FLOAT)*` set list-label (`ParserExec/ListLabelsOnSet`)
-- Wado-reserved words as rule names (`ParserExec/ReservedWordsEscaping`)
-- High-numbered explicit token id (`LexerExec/TokenType0xFFFF` — `TK_65535`)
-
 ### Runtime gaps (test compiles, fails at runtime)
 
-- **`parse()` ignores `[start]` rule** — `ParserExec/OpenDeviceStatement_{1,2}`, `ParserExec/ListLabelForClosureContext`, `ParserErrors/SingleTokenDeletionBeforeAlt`. Fix: add a `parse_<rule>(input)` per-rule entry point (or a `parse_with_start(rule, input)`), and dispatch into the rule named by `[start]` from the test file.
 - **Non-default-channel tokens don't appear in `to_lexer_string`** — `LexerExec/ReservedWordsEscaping`. Fix: either land non-default-channel tokens in the main stream (with a channel attribute) and have the parser filter, or extend `to_lexer_string` to walk `Token.leading_trivia` in source order.
 
 ## Stage C — action / predicate execution

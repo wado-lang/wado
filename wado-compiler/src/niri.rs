@@ -972,10 +972,17 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Rewrite an `if` expression. A constant-bool condition collapses
-    /// the node to the chosen arm's block; a non-constant but
-    /// speculatable condition with both arms reducing to the same
-    /// `Const(v)` collapses to that literal.
+    /// Rewrite an `if` expression. Three reductions:
+    ///
+    /// 1. **Const condition splice** — `if true { A } else { B }` → `A`,
+    ///    `if false { A } else { B }` → `B` (or `()` when no else).
+    /// 2. **Bool-arms collapse** — `if cond { true } else { false }` →
+    ///    `cond`, and `if cond { false } else { true }` → `!cond`.
+    ///    Preserves `cond`'s evaluation, so no speculatable-ness gate
+    ///    applies. Common shape from `match X { V => true, _ => false }`
+    ///    lowering and from explicit user-written bool selection.
+    /// 3. **Both-arms-equal collapse** — `if cond { K } else { K }` →
+    ///    `K`. Drops `cond`, so requires `cond` to be speculatable.
     fn rewrite_if_expr(&mut self, expr: &mut NirExpr) -> bool {
         let NirExprKind::If {
             condition,
@@ -987,10 +994,11 @@ impl<'a> Interpreter<'a> {
         };
         let cond_lat = self.expr_to_lattice(condition);
 
-        // Constant condition → splice the chosen arm. The unreachable arm
-        // is dropped without ever being asked for a lattice value, so a
-        // trapping `else { panic(…) }` does not contaminate the result —
-        // this is the SCCP "infeasible edge" treatment.
+        // (1) Constant condition → splice the chosen arm. The
+        // unreachable arm is dropped without ever being asked for a
+        // lattice value, so a trapping `else { panic(…) }` does not
+        // contaminate the result — this is the SCCP "infeasible edge"
+        // treatment.
         if let Lattice::Const(Value::Bool(b)) = cond_lat {
             let NirExprKind::If {
                 then_branch,
@@ -1009,17 +1017,12 @@ impl<'a> Interpreter<'a> {
             return true;
         }
 
-        // Non-constant condition: consider the both-arms-equal collapse.
-        // This is safe only when the condition is effect-free, since
-        // dropping the `if` drops its evaluation. See
-        // [`is_speculatable`] for what counts as effect-free.
-        //
-        // Require *both* arms to reduce to the same `Const(v)`. Using
-        // `Lattice::join` here would be tempting but unsound: join's
-        // `Unevaluated ⊔ Const(v) → Const(v)` rule encodes an SCCP
-        // infeasible-edge semantic that does not apply when both edges
-        // are feasible (an `Unevaluated` arm here means "reachable but
-        // value not known", not "unreachable"). Match `Const(_)` on
+        // The remaining rules require both arms to fold to `Const(_)`.
+        // Using `Lattice::join` here would be tempting but unsound:
+        // join's `Unevaluated ⊔ Const(v) → Const(v)` rule encodes an
+        // SCCP infeasible-edge semantic that does not apply when both
+        // edges are feasible (an `Unevaluated` arm here means "reachable
+        // but value not known", not "unreachable"). Match `Const(_)` on
         // both sides explicitly so an arm we couldn't analyze never
         // erases the surrounding `if`.
         let NirExprKind::If {
@@ -1030,9 +1033,6 @@ impl<'a> Interpreter<'a> {
         else {
             unreachable!();
         };
-        if !is_speculatable(condition) {
-            return false;
-        }
         let Lattice::Const(t) = self.block_lattice(then_branch) else {
             return false;
         };
@@ -1042,20 +1042,70 @@ impl<'a> Interpreter<'a> {
         let Lattice::Const(e) = self.block_lattice(eb) else {
             return false;
         };
+
+        // (2) Bool-arms collapse. The condition is preserved (under
+        // `Not` in the inverted case), so no `is_speculatable` gate is
+        // required — runtime evaluation order matches the original
+        // `if`. The `t != e` precondition for the inverted case follows
+        // from t and e being distinct Bool literals, which is handled
+        // by the `t_b != e_b` pattern below.
+        if let (Value::Bool(t_b), Value::Bool(e_b)) = (t, e)
+            && t_b != e_b
+        {
+            let NirExprKind::If { condition, .. } =
+                std::mem::replace(&mut expr.kind, NirExprKind::Unit)
+            else {
+                unreachable!();
+            };
+            if t_b {
+                // `if cond { true } else { false }` → `cond`. Unwrap
+                // the box and replace `expr.kind` with the condition's.
+                // `expr.type_id` stays as the if-expression's bool type,
+                // which equals `condition.type_id` (the resolver always
+                // types an `if` condition as bool).
+                let inner = *condition;
+                expr.kind = inner.kind;
+            } else {
+                // `if cond { false } else { true }` → `!cond`. Wrap in
+                // Unary::Not; bool stays bool.
+                expr.kind = NirExprKind::Unary {
+                    op: NirUnaryOp::Not,
+                    expr: condition,
+                };
+            }
+            return true;
+        }
+
+        // (3) Both-arms-equal collapse. Drops `cond`, so requires
+        // `is_speculatable(cond)` — anything observable in `cond`
+        // (calls, traps, mutations) cannot be erased.
         if t != e {
+            return false;
+        }
+        if !is_speculatable(condition) {
             return false;
         }
         expr.kind = value_to_expr_kind(t);
         true
     }
 
-    /// Rewrite a `match` expression. Two reductions:
+    /// Rewrite a `match` expression. Three reductions:
     ///
     /// 1. **Const scrutinee**: pick the first arm whose pattern provably
     ///    matches (no guard, definite `Yes`) and replace the `Match`
     ///    with `Block { stmts: [Expr(arm.body)] }`. An earlier `Unknown`
     ///    arm prevents us from proving a definite arm fires first; bail.
-    /// 2. **Non-const speculatable scrutinee, all-arms-equal collapse**:
+    /// 2. **`match X { Pat => true, _ => false }` collapse**: shrinks
+    ///    the two-arm boolean-discriminator shape produced by
+    ///    `x matches { Pat }` to the direct discriminator expression.
+    ///    Today covers `NirPattern::Enum` (replaced with
+    ///    `Binary { Eq, X, EnumConstruct(case) }`) — `NirPattern::Variant`
+    ///    is left intact because synthesising the matching `VariantTest`
+    ///    requires a variant→case-index lookup the interpreter doesn't
+    ///    yet carry. Preserves `X`'s evaluation, so no
+    ///    speculatable-ness gate applies. Fires before `match_to_switch`
+    ///    so the synthesised expression reaches subsequent passes.
+    /// 3. **Non-const speculatable scrutinee, all-arms-equal collapse**:
     ///    when every arm has no guard and reduces to the same
     ///    `Const(v)`, rewrite the whole match to that literal. The
     ///    same `is_speculatable` gate as the `if` rule applies, since
@@ -1110,7 +1160,21 @@ impl<'a> Interpreter<'a> {
             return true;
         }
 
-        // Rule 2: non-const speculatable scrutinee, all-arms-equal.
+        // Rule 2: `match X { Pat => true, _ => false } → <discriminator>`.
+        // Scrutinee is preserved (inside the synthesised Binary / VariantTest),
+        // so no speculatable-ness gate is needed.
+        if let Some(replacement) = try_match_bool_discriminator(arms) {
+            let NirExprKind::Match {
+                expr: scrut_box, ..
+            } = std::mem::replace(&mut expr.kind, NirExprKind::Unit)
+            else {
+                unreachable!();
+            };
+            expr.kind = replacement.into_kind(scrut_box);
+            return true;
+        }
+
+        // Rule 3: non-const speculatable scrutinee, all-arms-equal.
         if !is_speculatable(scrutinee) {
             return false;
         }
@@ -1971,6 +2035,97 @@ fn rewrite_short_circuit(expr: &mut NirExpr) -> bool {
         Pick::Right => *right,
     };
     true
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// `match X { Pat => true, _ => false }` discriminator collapse
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// The replacement shape produced by `try_match_bool_discriminator`. The
+/// scrutinee box is plugged in by the caller once it has taken ownership
+/// of the original `Match` expression.
+///
+/// Only the `EnumEq` shape exists today; `NirPattern::Variant` is left
+/// intact because synthesising the matching `VariantTest` requires a
+/// variant→case-index lookup that the pattern itself doesn't carry
+/// (the WIR builder resolves it via the variant decl's case list,
+/// which the interpreter doesn't carry today). The fpfmt motivator
+/// (`SpecialKind`) is an `enum`, so the Enum-only scope is sufficient
+/// for this PR; expanding to `Variant` is a follow-up.
+struct EnumEqReplacement {
+    enum_type: TypeId,
+    case_index: u32,
+    case_name: String,
+    span: crate::token::Span,
+}
+
+impl EnumEqReplacement {
+    fn into_kind(self, scrut: Box<NirExpr>) -> NirExprKind {
+        let right = Box::new(NirExpr::new(
+            NirExprKind::EnumConstruct {
+                enum_type: self.enum_type,
+                case_index: self.case_index,
+                case_name: self.case_name,
+            },
+            self.enum_type,
+            self.span,
+        ));
+        NirExprKind::Binary {
+            left: scrut,
+            op: NirBinaryOp::Eq,
+            right,
+        }
+    }
+}
+
+/// Recognise the `match X { Enum::Case => true, _ => false }` shape and,
+/// if it matches, return the discriminator replacement that subsumes the
+/// match's boolean meaning.
+///
+/// Accepts:
+/// - Exactly two arms, no guards.
+/// - First arm pattern is `NirPattern::Enum`.
+/// - Second arm pattern is `NirPattern::Wildcard`.
+/// - First arm body is `BoolLiteral(true)`, second arm body is
+///   `BoolLiteral(false)`. The inverted polarity is intentionally not
+///   handled here — the natural source for it is `!(x matches Pat)`,
+///   which already emits the negation outside the (non-inverted)
+///   match.
+fn try_match_bool_discriminator(arms: &[NirMatchArm]) -> Option<EnumEqReplacement> {
+    let [yes_arm, no_arm] = arms else {
+        return None;
+    };
+    if yes_arm.guard.is_some() || no_arm.guard.is_some() {
+        return None;
+    }
+    if !matches!(no_arm.pattern, NirPattern::Wildcard) {
+        return None;
+    }
+    if !matches!(yes_arm.body.kind, NirExprKind::BoolLiteral(true)) {
+        return None;
+    }
+    if !matches!(no_arm.body.kind, NirExprKind::BoolLiteral(false)) {
+        return None;
+    }
+    let NirPattern::Enum {
+        enum_type,
+        case_name,
+        case_index,
+    } = &yes_arm.pattern
+    else {
+        return None;
+    };
+    // Anchor the synthesised `EnumConstruct`'s span on the whole arm
+    // (which covers the pattern that names the case) rather than the
+    // arm's body span (which would point at the `true` literal — a
+    // location with no relation to the case name the construct now
+    // stands in for).
+    Some(EnumEqReplacement {
+        enum_type: *enum_type,
+        case_index: *case_index,
+        case_name: case_name.clone(),
+        span: yes_arm.span,
+    })
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

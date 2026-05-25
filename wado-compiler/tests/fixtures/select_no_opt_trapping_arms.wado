@@ -1,0 +1,74 @@
+// Verify that `select_lowering` rejects arms that could trap when
+// evaluated unconditionally. A divide-by-zero guard is the canonical
+// motivating case: if the rewriter lifted `num / denom` into a
+// `select` arm, the guard would no longer protect against the trap.
+//
+// `Mod` is rejected for the same reason as `Div`. Float→int Cast is
+// rejected because Wasm's `i*.trunc_f*_s/u` instructions trap on
+// NaN, infinity, or out-of-range values. The runtime must still
+// execute the original `if-else` shape so the guarded branch is only
+// entered when the precondition holds.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn opaque_i(x: i32) -> i32 {
+    return x;
+}
+
+#[inline(never)]
+fn opaque_f(x: f64) -> f64 {
+    return x;
+}
+
+#[inline(never)]
+fn opaque_bool(x: i32) -> bool {
+    return x > 0;
+}
+
+export fn run() with Stdout {
+    let denom = opaque_i(0);
+    let num = opaque_i(100);
+
+    // Division guard: must NOT become a `select` — that would trap
+    // when denom == 0.
+    let q = if denom != 0 {
+        num / denom;
+    } else {
+        0;
+    };
+
+    // Modulo guard: same trap concern.
+    let r = if denom != 0 {
+        num % denom;
+    } else {
+        0;
+    };
+
+    // Float-to-int Cast guard: `f as i32` lowers to `i32.trunc_f64_s`
+    // which traps on NaN / infinity / out-of-range. The conditional
+    // shape relies on the branch keeping the trunc out of unreachable
+    // paths; lifting it into a `select` arm would unconditionally
+    // trap.
+    let nan_val = opaque_f(f64::NAN);
+    let saw_nan = opaque_bool(1);
+    let c = if saw_nan {
+        0;
+    } else {
+        nan_val as i32;
+    };
+
+    assert q == 0;
+    assert r == 0;
+    assert c == 0;
+    println(`{q} {r} {c}`);
+}
+
+__DATA__
+{
+    "stdout": "0 0 0\n",
+    "wir_not_expect:O2": [
+        "select i32(denom != 0, ",
+        "select i32(saw_nan, "
+    ]
+}

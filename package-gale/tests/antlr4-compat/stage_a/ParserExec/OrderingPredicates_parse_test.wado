@@ -16,11 +16,9 @@ use t from "../../grammars/ParserExec/OrderingPredicates.g4"
         },
     };
 
-#[TODO]
-// triage: parse-accepts-input: semantic predicate gates an alt — discarded predicate causes wrong alt to be selected (Stage C territory)
 test "stage_a_parse: ParserExec/OrderingPredicates" {
     let input = "POINT AT X";
-    let result = t::parse(&input);
+    let result = t::parse_expr(&input);
     if let Err(err) = &result {
         panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);
     }

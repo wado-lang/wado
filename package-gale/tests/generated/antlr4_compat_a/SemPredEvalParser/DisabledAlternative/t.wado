@@ -812,6 +812,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_cpp_compilation_unit(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -868,7 +886,7 @@ fn scan_anything(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_cpp_compilation_unit(p: &mut Parser) -> Result<CppCompilationUnitNode, ParseError> {
+fn _parse_cpp_compilation_unit(p: &mut Parser) -> Result<CppCompilationUnitNode, ParseError> {
     let start = p.peek().span.start;
     let mut content_list: Array<ContentNode> = [];
     let mut _plus_first = true;
@@ -886,7 +904,7 @@ fn parse_cpp_compilation_unit(p: &mut Parser) -> Result<CppCompilationUnitNode, 
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let content = parse_content(p)?;
+        let content = _parse_content(p)?;
         content_list.push(content);
     }
     let eof = p.expect(TK_EOF)?;
@@ -897,11 +915,11 @@ fn parse_cpp_compilation_unit(p: &mut Parser) -> Result<CppCompilationUnitNode, 
     });
 }
 
-fn parse_content(p: &mut Parser) -> Result<ContentNode, ParseError> {
+fn _parse_content(p: &mut Parser) -> Result<ContentNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_ANY_CHAR {
-        let anything = parse_anything(p)?;
+        let anything = _parse_anything(p)?;
         return Result::<ContentNode, ParseError>::Ok(ContentNode::Alt0(ContentAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             anything,
@@ -921,7 +939,7 @@ fn parse_content(p: &mut Parser) -> Result<ContentNode, ParseError> {
     ));
 }
 
-fn parse_anything(p: &mut Parser) -> Result<AnythingNode, ParseError> {
+fn _parse_anything(p: &mut Parser) -> Result<AnythingNode, ParseError> {
     let start = p.peek().span.start;
     let any_char = p.expect(TK_ANY_CHAR)?;
     return Result::<AnythingNode, ParseError>::Ok(AnythingNode {
@@ -930,10 +948,26 @@ fn parse_anything(p: &mut Parser) -> Result<AnythingNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<CppCompilationUnitNode, ParseError> {
+pub fn parse_cpp_compilation_unit(input: &String) -> Result<CppCompilationUnitNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_cpp_compilation_unit(&mut parser);
+    return _parse_cpp_compilation_unit(&mut parser);
+}
+
+pub fn parse_content(input: &String) -> Result<ContentNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_content(&mut parser);
+}
+
+pub fn parse_anything(input: &String) -> Result<AnythingNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_anything(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<CppCompilationUnitNode, ParseError> {
+    return parse_cpp_compilation_unit(input);
 }
 
 pub fn walk_cppCompilationUnit<V: Visitor>(v: &mut V, node: &CppCompilationUnitNode) {

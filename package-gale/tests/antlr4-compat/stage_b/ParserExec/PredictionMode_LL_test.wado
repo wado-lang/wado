@@ -17,7 +17,7 @@ use { normalize_tree } from "../../grammars/ParserExec/PredictionMode_LL.g4";
 test "stage_b: ParserExec/PredictionMode_LL" {
     let input = "X Y";
     let expected = "(r (a X) (b Y))";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_r(&input).unwrap();
     let actual = t::to_tree(&root).to_string_tree();
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;

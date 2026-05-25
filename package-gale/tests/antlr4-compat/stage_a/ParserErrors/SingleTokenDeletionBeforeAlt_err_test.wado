@@ -17,10 +17,8 @@ use t from "../../grammars/ParserErrors/SingleTokenDeletionBeforeAlt.g4"
         },
     };
 
-#[TODO]
-// triage: parse-must-error: descriptor [start] is `a` but Gale's `parse()` always enters the first parser rule (`q`). q matches the leading `a` and stops without verifying EOF, so parse returns Ok where ANTLR4 reports an error. Gap: `parse()` needs a start-rule parameter (or `parse_<rule>` per-rule entry points) so descriptors can dispatch into the rule they intend.
 test "stage_a_err: ParserErrors/SingleTokenDeletionBeforeAlt" {
     let input = "ac";
-    let result = t::parse(&input);
+    let result = t::parse_a(&input);
     assert result matches { Err(_) }, `expected parse to fail but it succeeded`;
 }

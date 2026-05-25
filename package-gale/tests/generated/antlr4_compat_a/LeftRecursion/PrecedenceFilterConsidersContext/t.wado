@@ -808,6 +808,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_prog(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -866,7 +884,7 @@ fn scan_letter_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
+fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     let start = p.peek().span.start;
     let mut statement_list: Array<StatementNode> = [];
     loop {
@@ -880,7 +898,7 @@ fn parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let statement = parse_statement(p)?;
+        let statement = _parse_statement(p)?;
         statement_list.push(statement);
     }
     let eof = p.expect(TK_EOF)?;
@@ -891,11 +909,11 @@ fn parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     });
 }
 
-fn parse_statement_atom(p: &mut Parser) -> Result<StatementNode, ParseError> {
+fn _parse_statement_atom(p: &mut Parser) -> Result<StatementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_A {
-        let letter_a = parse_letter_a(p)?;
+        let letter_a = _parse_letter_a(p)?;
         return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt0(StatementAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             letter_a,
@@ -908,8 +926,8 @@ fn parse_statement_atom(p: &mut Parser) -> Result<StatementNode, ParseError> {
     ));
 }
 
-fn parse_statement_lr_1(p: &mut Parser, left: StatementNode, start: i32) -> Result<StatementNode, ParseError> {
-    let letter_a = parse_letter_a(p)?;
+fn _parse_statement_lr_1(p: &mut Parser, left: StatementNode, start: i32) -> Result<StatementNode, ParseError> {
+    let letter_a = _parse_letter_a(p)?;
     let lit_b = p.expect(TK_LIT_B)?;
     return Result::<StatementNode, ParseError>::Ok(StatementNode::Alt1(StatementAlt1 {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -919,9 +937,9 @@ fn parse_statement_lr_1(p: &mut Parser, left: StatementNode, start: i32) -> Resu
     }));
 }
 
-fn parse_statement(p: &mut Parser, min_prec: i32 = 0) -> Result<StatementNode, ParseError> {
+fn _parse_statement(p: &mut Parser, min_prec: i32 = 0) -> Result<StatementNode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = parse_statement_atom(p)?;
+    let mut result = _parse_statement_atom(p)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_LIT_A {
@@ -929,7 +947,7 @@ fn parse_statement(p: &mut Parser, min_prec: i32 = 0) -> Result<StatementNode, P
                 if scan_statement_lr_1(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = parse_statement_lr_1(p, result, start)?;
+                result = _parse_statement_lr_1(p, result, start)?;
             } else {
                 break;
             }
@@ -940,7 +958,7 @@ fn parse_statement(p: &mut Parser, min_prec: i32 = 0) -> Result<StatementNode, P
     return Result::<StatementNode, ParseError>::Ok(result);
 }
 
-fn parse_letter_a(p: &mut Parser) -> Result<LetterANode, ParseError> {
+fn _parse_letter_a(p: &mut Parser) -> Result<LetterANode, ParseError> {
     let start = p.peek().span.start;
     let lit_a = p.expect(TK_LIT_A)?;
     return Result::<LetterANode, ParseError>::Ok(LetterANode {
@@ -949,10 +967,26 @@ fn parse_letter_a(p: &mut Parser) -> Result<LetterANode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<ProgNode, ParseError> {
+pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_prog(&mut parser);
+    return _parse_prog(&mut parser);
+}
+
+pub fn parse_statement(input: &String) -> Result<StatementNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_statement(&mut parser, 0);
+}
+
+pub fn parse_letter_a(input: &String) -> Result<LetterANode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_letter_a(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<ProgNode, ParseError> {
+    return parse_prog(input);
 }
 
 pub fn walk_prog<V: Visitor>(v: &mut V, node: &ProgNode) {

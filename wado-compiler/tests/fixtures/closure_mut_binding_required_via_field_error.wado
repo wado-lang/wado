@@ -1,0 +1,22 @@
+// Calling a `fn mut` closure stored in a struct field through a
+// non-`mut` binding must be a compile error. Mirrors Rust's FnMut rule:
+// the *root* of the place expression must be `mut`. See issue #1098.
+
+struct Counter {
+    f: fn mut() -> (),
+}
+
+test "fn mut via field access requires mut root binding" {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    let h = Counter { f: inc };
+    // `h` is bound with `let` (not `let mut`). The callee `h.f` has a
+    // `fn mut` type, but the root binding `h` is immutable, so the
+    // call must be rejected.
+    (h.f)();
+}
+
+__DATA__
+{"test": {}, "compile_error": "mut"}

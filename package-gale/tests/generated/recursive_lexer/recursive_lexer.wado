@@ -873,6 +873,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_file(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -919,7 +937,7 @@ fn scan_file(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
+fn _parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
     let start = p.peek().span.start;
     let mut block_or_ident_list: Array<Token> = [];
     let mut _plus_first = true;
@@ -951,7 +969,7 @@ fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let block_or_ident = p.advance();
+        let block_or_ident = p.match_set([TK_BLOCK, TK_IDENT])?;
         block_or_ident_list.push(block_or_ident);
     }
     let eof = p.expect(TK_EOF)?;
@@ -962,10 +980,14 @@ fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<FileNode, ParseError> {
+pub fn parse_file(input: &String) -> Result<FileNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_file(&mut parser);
+    return _parse_file(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<FileNode, ParseError> {
+    return parse_file(input);
 }
 
 pub fn walk_file<V: Visitor>(v: &mut V, node: &FileNode) {

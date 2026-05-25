@@ -775,6 +775,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_u(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -784,7 +802,7 @@ fn scan_u(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_u(p: &mut Parser) -> Result<UNode, ParseError> {
+fn _parse_u(p: &mut Parser) -> Result<UNode, ParseError> {
     let start = p.peek().span.start;
     let lit_u = p.expect(TK_LIT_U)?;
     return Result::<UNode, ParseError>::Ok(UNode {
@@ -793,10 +811,14 @@ fn parse_u(p: &mut Parser) -> Result<UNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<UNode, ParseError> {
+pub fn parse_u(input: &String) -> Result<UNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_u(&mut parser);
+    return _parse_u(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<UNode, ParseError> {
+    return parse_u(input);
 }
 
 pub fn walk_u<V: Visitor>(v: &mut V, node: &UNode) {

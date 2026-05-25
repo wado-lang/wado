@@ -131,6 +131,41 @@ pub struct Grammar {
     pub source_files: Array<String>,
 }
 
+/// Push a `LexerRule::virtual_token` for every uppercase parser-rule
+/// reference with no defining lexer rule, matching ANTLR4's silent
+/// implicit-token-type behaviour (vendor/antlr4/doc/lexer-rules.md).
+/// Must run before `check_references`; `Combined`-only because
+/// split-grammar halves are about to merge a sibling lexer.
+pub fn synthesize_implicit_tokens(grammar: &mut Grammar) {
+    if !(grammar.kind matches { Combined }) {
+        return;
+    }
+    let mut synthesized: Array<String> = [];
+    for let r of &grammar.pending_refs {
+        if !(r.kind matches { TokenRef }) {
+            continue;
+        }
+        if r.referenced_name == "EOF" {
+            continue;
+        }
+        let mut defined = false;
+        for let lr of &grammar.lexer_rules {
+            if lr.name == r.referenced_name {
+                defined = true;
+                break;
+            }
+        }
+        if defined {
+            continue;
+        }
+        if synthesized.contains(&r.referenced_name) {
+            continue;
+        }
+        grammar.lexer_rules.push(LexerRule::virtual_token(r.referenced_name));
+        synthesized.push(r.referenced_name);
+    }
+}
+
 /// Resolve every reference in `grammar.pending_refs` against
 /// `grammar.parser_rules` / `grammar.lexer_rules`. Returns `Err` on the
 /// first unresolved reference. Mirrors ANTLR4's

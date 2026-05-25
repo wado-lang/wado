@@ -64,29 +64,15 @@
 [stage_a_todo]
 "LeftRecursion/ReturnValueAndActionsList1_2" = "parse-accepts-input: parse stops at the first comma in the input list — LR rule with returns / list-label combination not yet handled by Gale codegen (Stage C-independent)"
 "LeftRecursion/ReturnValueAndActionsList1_4" = "parse-accepts-input: parse stops at the first comma in the input list — LR rule with returns / list-label combination not yet handled by Gale codegen (Stage C-independent)"
-"ParserExec/OrderingPredicates" = "parse-accepts-input: semantic predicate gates an alt — discarded predicate causes wrong alt to be selected (Stage C territory)"
 "Performance/DropLoopEntryBranchInLRRule_4" = "parse-accepts-input: LR expression rule with operator precedence — Gale picks the wrong precedence chain for or-then-and (Stage C-independent)"
-"ParserErrors/SingleTokenDeletionExpectingSet" = "parse-must-error: Gale codegen bug — a set element like `('b'|'c')` is emitted as `p.advance()` without a kind-check dispatch, so any token is silently consumed (Stage C-independent)"
 "LexerExec/EOFSuffixInFirstRule_2" = "tokens-equivalence: Gale lexer picks rule B (later) over rule A (with explicit EOF suffix) for input `a` — ANTLR4 prefers the rule that can match the trailing EOF (Stage C-independent)"
 "LexerExec/RecursiveLexerRuleRefWithWildcardPlus_1" = "tokens-equivalence: Gale lexer mistokenizes nested `/* /*...*/ */` comments — recursive lexer rule with `.+?` wildcard plus does not nest correctly (Stage C-independent)"
 "LexerExec/RecursiveLexerRuleRefWithWildcardStar_1" = "tokens-equivalence: Gale lexer mistokenizes nested `/* /*...*/ */` comments — recursive lexer rule with `.*?` wildcard star does not nest correctly (Stage C-independent)"
 "LexerExec/ZeroLengthToken" = "tokens-equivalence: Gale lexer does not merge the `-> more, pushMode(...)` and `-> more, mode(...)` chain into a single token across mode transitions (Stage C-independent)"
-"ParserErrors/SingleTokenDeletionBeforeAlt" = "parse-must-error: descriptor [start] is `a` but Gale's `parse()` always enters the first parser rule (`q`). q matches the leading `a` and stops without verifying EOF, so parse returns Ok where ANTLR4 reports an error. Gap: `parse()` needs a start-rule parameter (or `parse_<rule>` per-rule entry points) so descriptors can dispatch into the rule they intend."
-"ParserExec/ListLabelForClosureContext" = "parse-accepts-input: descriptor [start] is `expression` but Gale's `parse()` enters the first parser rule (`ifStatement`). Same gap as `ParserErrors/SingleTokenDeletionBeforeAlt`: `parse()` needs a start-rule parameter."
-"ParserExec/OpenDeviceStatement_Case1" = "parse-accepts-input: descriptor [start] is `statement` but Gale's `parse()` enters the first parser rule (`program : statement+ '.'`). Same start-rule API gap."
-"ParserExec/OpenDeviceStatement_Case2" = "parse-accepts-input: descriptor [start] is `statement` but Gale's `parse()` enters the first parser rule (`program : statement+ '.'`). Same start-rule API gap."
 "LexerExec/ReservedWordsEscaping" = "tokens-equivalence: expected output includes a `channel=N` token but Gale's lexer codegen routes non-default-channel tokens to `Token.leading_trivia` rather than the main stream, so `to_lexer_string` does not emit them. Gap: either land non-default-channel tokens in the main stream with a channel attribute (have the parser filter), or extend `to_lexer_string` to walk trivia in source order."
+"ParserExec/IfIfElseNonGreedyBinding1" = "parse-accepts-input: emit shape for `(elem)??` now matches the Option<T> CST decl (so the test compiles), but the parser still applies greedy `(elem)?` prediction. ANTLR4's `??` prefers not-matching when the lookahead is ambiguous; the descriptor's expected parse tree binds the `else` to the outer if. Implementing prefer-skip prediction requires either a follow-set guard on the Optional dispatch or a runtime ATN simulator (TODO.md)."
 
 [stage_a_skip]
-"LeftRecursion/WhitespaceInfluence_1" = "Gale codegen produces invalid Wado for the all-binary-op LR `expression` rule (operator alt rewrite bug) — test cannot even compile"
-"LeftRecursion/WhitespaceInfluence_2" = "Gale codegen produces invalid Wado for the all-binary-op LR `expression` rule (operator alt rewrite bug) — test cannot even compile"
-"ParserExec/IfIfElseNonGreedyBinding1" = "Gale codegen fails on the non-greedy optional `??` operator in a parser rule — test cannot even compile"
-"ParserExec/Labels" = "Gale codegen fails on parser-rule list-label `b2+=b*` / `b3+=';'` shape — test cannot even compile"
-"ParserExec/ListLabelsOnSet" = "Gale codegen fails on `val+=(INT | FLOAT)*` set list-label shape — test cannot even compile"
-"ParserExec/ReservedWordsEscaping" = "grammar uses `continue` / `break` / `else` / `if` / `class` / `int` as rule names — Gale codegen emits invalid Wado identifiers, test cannot even compile"
-"Performance/ExpressionGrammar_1" = "Gale codegen produces invalid Wado for the all-binary-op LR `expr` rule (operator alt rewrite bug) — test cannot even compile"
-"Performance/ExpressionGrammar_2" = "Gale codegen produces invalid Wado for the all-binary-op LR `expr` rule (operator alt rewrite bug) — test cannot even compile"
-"LexerExec/TokenType0xFFFF" = "Gale codegen generates an `unknown identifier TK_65535` reference — high-numbered explicit token id rule needs codegen support, test cannot even compile"
 
 [stage_b_todo]
 "LeftRecursion/SemPredFailOption" = "Stage B parse-tree shape diverges because action bodies are skipped (the predicate guard is dropped) — Stage C territory"

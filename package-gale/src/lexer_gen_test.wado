@@ -2,10 +2,12 @@
 //! parser-rule literals like `'x'` that ANTLR4 auto-promotes to anonymous
 //! lexer tokens must be discovered by `collect_literal_tokens` regardless
 //! of which IR transformer (`Not`, `Label`, `Group`, `Repeat`) wraps them.
+//! `gen_token_constants` also handles `-> type(N)` numeric overrides.
 
 use { Grammar } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
-use { collect_literal_tokens, LitToken } from "./lexer_gen.wado";
+use { collect_literal_tokens, gen_token_constants, LitToken } from "./lexer_gen.wado";
+use { CodeWriter } from "./wadopoet.wado";
 
 fn parse_grammar(input: String) -> Grammar {
     let mut g = parse(input).unwrap();
@@ -88,4 +90,65 @@ test "collect_literal_tokens: literal inside Wildcard is ignored" {
     let names = const_names(&lits);
     assert names.len() == 1, `len={names.len()}`;
     assert names[0] == "TK_LIT_X", names[0];
+}
+
+fn token_globals_for(input: String) -> String {
+    let g = parse_grammar(input);
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let mut w = CodeWriter::new();
+    gen_token_constants(&mut w, &g.lexer_rules, &lits);
+    return w.to_string();
+}
+
+fn count_occurrences(haystack: &String, needle: String) -> i32 {
+    let needle_len = needle.len();
+    if needle_len == 0 {
+        return 0;
+    }
+    let mut count = 0;
+    let mut remainder = *haystack;
+    loop {
+        match remainder.find(needle) {
+            Some(idx) => {
+                count += 1;
+                remainder = remainder.substr_bytes(idx + needle_len, remainder.len());
+            },
+            None => { break; },
+        }
+    }
+    return count;
+}
+
+test "gen_token_constants: numeric type(N) override emits TK_<N> = N - 1" {
+    let out = token_globals_for("lexer grammar L; T_FFFF: 'FFFF' -> type(65535);");
+    assert out.contains("global TK_T_FFFF: i32 = 0"), out;
+    assert out.contains("global TK_EOF: i32 = 1"), out;
+    assert out.contains("global TK_ERROR: i32 = 2"), out;
+    assert out.contains("global TK_65535: i32 = 65534"), out;
+}
+
+test "gen_token_constants: duplicate type(N) overrides emit one global" {
+    let out = token_globals_for("lexer grammar L; A: 'a' -> type(99); B: 'b' -> type(99);");
+    assert count_occurrences(&out, "global TK_99:") == 1, out;
+}
+
+test "gen_token_constants: type(0) is skipped" {
+    let out = token_globals_for("lexer grammar L; A: 'a' -> type(0);");
+    assert !out.contains("TK_0:"), out;
+}
+
+test "gen_token_constants: named type(X) override emits no extra global" {
+    let out = token_globals_for("lexer grammar L; A: 'a' -> type(B); B: 'b';");
+    // Expected globals: TK_A, TK_B, TK_EOF, TK_ERROR.
+    assert count_occurrences(&out, "global TK_") == 4, out;
+}
+
+test "gen_token_constants: user ERROR rule suppresses sentinel emit" {
+    let out = token_globals_for("grammar T; a : ID; ID: [a-z]+; ERROR: .;");
+    assert count_occurrences(&out, "global TK_ERROR:") == 1, out;
+}
+
+test "gen_token_constants: TK_EOF sentinel is always emitted" {
+    let out = token_globals_for("grammar T; a : ID; ID: [a-z]+;");
+    assert count_occurrences(&out, "global TK_EOF:") == 1, out;
 }

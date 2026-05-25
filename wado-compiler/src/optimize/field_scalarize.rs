@@ -2083,8 +2083,55 @@ fn walk_stmt(
             // Escape: commit every ScalarOnly candidate to the field
             // before the return. After commit, only the field is
             // observable outside the loop.
-            commit_scalar_for_escape(states, out, ctx, span);
-            out.push(stmt);
+            //
+            // If the return expression itself transitioned a candidate to
+            // `ScalarOnly` (e.g. an inlined `self.pos = self.pos + 1`
+            // nested under `__inline_advance: { ... break tok; }` inside
+            // the return value), a writeback emitted before the Return
+            // stmt would run with the **pre-expression** scalar value at
+            // runtime — the expression mutates `__hfs_pos` after the
+            // writeback has already syncd the old value, and the post-
+            // mutation value is then discarded by the return. Hoist the
+            // value into a temp local so the writeback can run between
+            // the expression's evaluation and the return jump.
+            let needs_post_eval_writeback =
+                value.is_some() && states.contains(&CanonState::ScalarOnly);
+            if needs_post_eval_writeback {
+                let return_value = value.take().expect("checked Some above");
+                let return_type = return_value.type_id;
+                let tmp_idx = ctx.alloc_temp(return_type);
+                let tmp_name = ctx.temp_name(tmp_idx);
+                out.push(NirStmt::new(
+                    NirStmtKind::Let {
+                        name: tmp_name.clone(),
+                        local_index: tmp_idx,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: return_type,
+                        value: return_value,
+                        skip_value_copy: true,
+                    },
+                    span,
+                ));
+                commit_scalar_for_escape(states, out, ctx, span);
+                out.push(NirStmt::new(
+                    NirStmtKind::Return {
+                        value: Some(NirExpr::new(
+                            NirExprKind::Local {
+                                index: tmp_idx,
+                                name: tmp_name,
+                            },
+                            return_type,
+                            span,
+                        )),
+                    },
+                    span,
+                ));
+                ctx.free_temp(tmp_idx, return_type);
+            } else {
+                commit_scalar_for_escape(states, out, ctx, span);
+                out.push(stmt);
+            }
         }
         NirStmtKind::Break { value, label } => {
             if let Some(v) = value {

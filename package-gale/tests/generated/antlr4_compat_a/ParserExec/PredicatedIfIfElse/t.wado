@@ -891,6 +891,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_s(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -960,9 +978,9 @@ fn scan_if_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
-    let stmt = parse_stmt(p)?;
+    let stmt = _parse_stmt(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<SNode, ParseError>::Ok(SNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -971,11 +989,11 @@ fn parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     });
 }
 
-fn parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
+fn _parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_IF {
-        let if_stmt = parse_if_stmt(p)?;
+        let if_stmt = _parse_if_stmt(p)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt0(StmtAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             if_stmt,
@@ -995,16 +1013,16 @@ fn parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
     ));
 }
 
-fn parse_if_stmt(p: &mut Parser) -> Result<IfStmtNode, ParseError> {
+fn _parse_if_stmt(p: &mut Parser) -> Result<IfStmtNode, ParseError> {
     let start = p.peek().span.start;
     let lit_if = p.expect(TK_LIT_IF)?;
     let id = p.expect(TK_ID)?;
-    let stmt = parse_stmt(p)?;
+    let stmt = _parse_stmt(p)?;
     let mut group_0_inner: Option<IfStmtGroup0> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_ELSE {
         let lit_else = p.expect(TK_LIT_ELSE)?;
-        let stmt = parse_stmt(p)?;
+        let stmt = _parse_stmt(p)?;
         group_0_inner = Option::<IfStmtGroup0>::Some(IfStmtGroup0::Alt0(IfStmtGroup0Alt0 {
             lit_else,
             stmt,
@@ -1023,10 +1041,26 @@ fn parse_if_stmt(p: &mut Parser) -> Result<IfStmtNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<SNode, ParseError> {
+pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_s(&mut parser);
+    return _parse_s(&mut parser);
+}
+
+pub fn parse_stmt(input: &String) -> Result<StmtNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_stmt(&mut parser);
+}
+
+pub fn parse_if_stmt(input: &String) -> Result<IfStmtNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_if_stmt(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<SNode, ParseError> {
+    return parse_s(input);
 }
 
 pub fn walk_s<V: Visitor>(v: &mut V, node: &SNode) {

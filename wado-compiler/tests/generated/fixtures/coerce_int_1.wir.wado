@@ -720,11 +720,7 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
         "core:prelude/primitive.wado/write_decimal_digits"(repr, offset_7, 922337203685477580_i64, remaining_digits);
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
     } else {
-        abs_val = (if is_negative -> i64 {
-            0_i64 - self;
-        } else {
-            self;
-        });
+        abs_val = select i64(is_negative, 0_i64 - self, self);
         digit_count_10 = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
         offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_10);
         "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_1: block -> ref builtin::array<u8> {
@@ -764,10 +760,10 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     }
     digit_count = 0;
     temp = self;
-    b42: block {
-        l43: loop {
+    b41: block {
+        l42: loop {
             if temp == 0_i64 {
-                break b42;
+                break b41;
             }
             digit_count = digit_count + 1;
             if temp >= 0_i64 {
@@ -782,7 +778,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
                 }
                 temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
             }
-            continue l43;
+            continue l42;
         };
     };
     offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
@@ -793,10 +789,10 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     };
     pos = offset_11 + digit_count;
     temp = self;
-    b47: block {
-        l48: loop {
+    b46: block {
+        l47: loop {
             if temp == 0_i64 {
-                break b47;
+                break b46;
             }
             pos = pos - 1;
             digit = 0;
@@ -819,7 +815,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
                 temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
             }
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l48;
+            continue l47;
         };
     };
 }
@@ -905,14 +901,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b61: block {
-        l62: loop {
+    b60: block {
+        l61: loop {
             if i >= n {
-                break b61;
+                break b60;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l62;
+            continue l61;
         };
     };
 }

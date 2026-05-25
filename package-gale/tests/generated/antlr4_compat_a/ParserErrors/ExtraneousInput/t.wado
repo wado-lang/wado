@@ -799,6 +799,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_member(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -828,7 +846,7 @@ fn scan_file(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_member(p: &mut Parser) -> Result<MemberNode, ParseError> {
+fn _parse_member(p: &mut Parser) -> Result<MemberNode, ParseError> {
     let start = p.peek().span.start;
     let lit_a = p.expect(TK_LIT_A)?;
     return Result::<MemberNode, ParseError>::Ok(MemberNode {
@@ -837,7 +855,7 @@ fn parse_member(p: &mut Parser) -> Result<MemberNode, ParseError> {
     });
 }
 
-fn parse_body(p: &mut Parser) -> Result<BodyNode, ParseError> {
+fn _parse_body(p: &mut Parser) -> Result<BodyNode, ParseError> {
     let start = p.peek().span.start;
     let mut member_list: Array<MemberNode> = [];
     loop {
@@ -851,7 +869,7 @@ fn parse_body(p: &mut Parser) -> Result<BodyNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let member = parse_member(p)?;
+        let member = _parse_member(p)?;
         member_list.push(member);
     }
     return Result::<BodyNode, ParseError>::Ok(BodyNode {
@@ -860,9 +878,9 @@ fn parse_body(p: &mut Parser) -> Result<BodyNode, ParseError> {
     });
 }
 
-fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
+fn _parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
     let start = p.peek().span.start;
-    let body = parse_body(p)?;
+    let body = _parse_body(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<FileNode, ParseError>::Ok(FileNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -871,10 +889,26 @@ fn parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<MemberNode, ParseError> {
+pub fn parse_member(input: &String) -> Result<MemberNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_member(&mut parser);
+    return _parse_member(&mut parser);
+}
+
+pub fn parse_body(input: &String) -> Result<BodyNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_body(&mut parser);
+}
+
+pub fn parse_file(input: &String) -> Result<FileNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_file(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<MemberNode, ParseError> {
+    return parse_member(input);
 }
 
 pub fn walk_member<V: Visitor>(v: &mut V, node: &MemberNode) {

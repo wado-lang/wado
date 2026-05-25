@@ -1,0 +1,19 @@
+// Combination of index + field access: the root of the place (the
+// array binding) must still be `mut`. See issue #1098.
+
+struct Counter {
+    f: fn mut() -> (),
+}
+
+test "fn mut via index+field requires mut root binding" {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    let arr = [Counter { f: inc }];
+    // Root binding `arr` is immutable; the call must be rejected.
+    (arr[0].f)();
+}
+
+__DATA__
+{"test": {}, "compile_error": "mut"}

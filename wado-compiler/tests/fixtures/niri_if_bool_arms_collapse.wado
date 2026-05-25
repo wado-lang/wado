@@ -1,0 +1,67 @@
+// Verify niri's bool-arms collapse rules:
+//   `if cond { true } else { false }`  → `cond`
+//   `if cond { false } else { true }`  → `!cond`
+//
+// The unit tests in tests/niri.rs check the in-place NIR rewrite
+// directly. This e2e fixture verifies correctness end-to-end: the
+// compiled program must still produce the same observable booleans
+// regardless of whether the if-form or the rewritten form is in
+// effect, for both the cond-preserving and the negated case. The
+// `#[inline(never)]` keeps niri from pure-call-folding the cond to
+// a constant — without it the const-condition splice rule fires
+// first and the bool-arms rule never sees the if.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn opaque_pos(x: i32) -> bool {
+    return x > 0;
+}
+
+#[inline(never)]
+fn opaque_neg(x: i32) -> bool {
+    return x < 0;
+}
+
+export fn run() with Stdout {
+    // true/false → cond
+    let a = if opaque_pos(7) {
+        true;
+    } else {
+        false;
+    };
+
+    // false/true → !cond
+    let b = if opaque_neg(7) {
+        false;
+    } else {
+        true;
+    };
+
+    // Same shape with the polarity that produces `false`.
+    let c = if opaque_pos(-1) {
+        true;
+    } else {
+        false;
+    };
+    let d = if opaque_neg(-1) {
+        false;
+    } else {
+        true;
+    };
+
+    assert a;
+    assert b;
+    assert !c;
+    assert !d;
+    println(`{a} {b} {c} {d}`);
+}
+
+__DATA__
+{
+    "stdout": "true true false false\n",
+    "wir_expect:O2": [
+        "/opaque_pos\"(7);",
+        "/opaque_neg\"(7) == 0;"
+    ]
+}

@@ -844,6 +844,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -871,7 +889,7 @@ fn scan_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -896,7 +914,7 @@ fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
         opt_scan_pos = pos;
     }
     let id_or_int: Option<Token> = if opt_scan_pos >= 0 {
-        let id_or_int = p.advance();
+        let id_or_int = p.match_set([TK_ID, TK_INT])?;
         Option::<Token>::Some(id_or_int)
     } else {
         null
@@ -907,10 +925,14 @@ fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<ANode, ParseError> {
+pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_a(&mut parser);
+    return _parse_a(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<ANode, ParseError> {
+    return parse_a(input);
 }
 
 pub fn walk_a<V: Visitor>(v: &mut V, node: &ANode) {
