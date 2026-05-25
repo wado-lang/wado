@@ -510,7 +510,19 @@ fn test_parallel_non_numeric() {
 #[test]
 fn test_help() {
     let parser = Parser::from_args(&["--help"]);
-    assert_help(wado_cli::test::parse_args(parser), "Usage: wado test");
+    let Err(err) = wado_cli::test::parse_args(parser) else {
+        panic!("expected help exit");
+    };
+    assert_eq!(err.exit_code, 0);
+    // Spot-check that the rendered help still mentions the headline flags
+    // we want users to discover.
+    for fragment in ["Usage: wado test", "--filter", "-p, --parallel", "--no-run"] {
+        assert!(
+            err.message.contains(fragment),
+            "expected help to contain {fragment:?}, got {:?}",
+            err.message
+        );
+    }
 }
 
 #[test]
