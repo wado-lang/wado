@@ -7,25 +7,26 @@ hex relative-virtual-address). This script:
 
   1. keys every frame by (lib_index, rva) so identical raw addresses in
      different libraries are never merged;
-  2. symbolicates each lib with `atos` (macOS) — the main executable's
-     __TEXT base is 0x100000000, shared dylibs use base 0;
+  2. symbolicates each lib via the host's debuginfo tool:
+       - macOS: `atos` (main executable's __TEXT base is 0x100000000,
+         shared dylibs use base 0);
+       - Linux: `addr2line -fC -e <path>` (PIE base is 0 because RVAs in
+         the profile are already relative to the lib);
   3. weights samples by **threadCPUDelta** (real CPU), not wall-clock
      `weight` — otherwise parked tokio/rayon worker threads bury everything;
   4. reports a library breakdown, top self functions (all + main-binary
      only), and the syscall/alloc CPU attributed to its nearest Rust caller.
 
-macOS-specific (uses `atos`). On Linux, `samply load` symbolicates natively;
-the weighting/attribution logic here is the platform-agnostic part.
-
 Usage:
   analyze_native_profile.py PROFILE.json [--top N] [--binary wado]
-                            [--main-base 0x100000000]
+                            [--main-base 0x100000000] [--symbolicator auto|atos|addr2line]
 """
 import argparse
 import json
 import platform
 import re
 import subprocess
+import sys
 from collections import defaultdict
 
 HEXNAME = re.compile(r"^0x([0-9a-fA-F]+)$")
@@ -69,8 +70,60 @@ def thread_func_keys(thread):
     return keys
 
 
-def symbolicate(profile, binary, main_base, arch):
-    """(lib_index, rva) -> cleaned symbol, via atos batched per lib."""
+def _symbolicate_atos(path, base, rvas, lib_name, arch):
+    addrs = [hex(base + r) for r in rvas]
+    try:
+        lines = subprocess.run(
+            ["atos", "-o", path, "-arch", arch, "-l", hex(base), *addrs],
+            capture_output=True, text=True, timeout=180,
+        ).stdout.splitlines()
+    except (OSError, subprocess.SubprocessError):
+        lines = []
+    lines += [""] * (len(rvas) - len(lines))
+    out = {}
+    for r, line in zip(rvas, lines):
+        s = line.strip()
+        if not s or s.startswith("0x"):
+            s = f"[{lib_name}]+{hex(r)}"
+        out[r] = clean(s)
+    return out
+
+
+def _symbolicate_addr2line(path, rvas, lib_name):
+    """`addr2line -fC -e <path>` over stdin; output is paired (func, file:line).
+
+    PIE binaries on Linux store RVAs directly in the profile — no base offset
+    to add. `-i` (inlined frames) is intentionally omitted because addr2line
+    does not emit a per-input separator with `-i`, so the output cannot be
+    reliably split back into addresses. The outermost frame is the one that
+    matches the hot self-CPU bucket, which is what we want."""
+    addrs = [hex(r) for r in rvas]
+    try:
+        proc = subprocess.run(
+            ["addr2line", "-fC", "-e", path],
+            input="\n".join(addrs) + "\n",
+            capture_output=True, text=True, timeout=180,
+        )
+        lines = proc.stdout.splitlines()
+    except (OSError, subprocess.SubprocessError):
+        lines = []
+    out = {}
+    for idx, r in enumerate(rvas):
+        func = lines[idx * 2] if idx * 2 < len(lines) else ""
+        fileline = lines[idx * 2 + 1] if idx * 2 + 1 < len(lines) else ""
+        func = func.strip()
+        fileline = fileline.strip()
+        if not func or func == "??":
+            out[r] = f"[{lib_name}]+{hex(r)}"
+        else:
+            # Match the atos output shape so downstream filters
+            # like `(in wado)` work on both platforms.
+            out[r] = clean(f"{func} (in {lib_name}) ({fileline})")
+    return out
+
+
+def symbolicate(profile, binary, main_base, arch, symbolicator):
+    """(lib_index, rva) -> cleaned symbol, batched per lib."""
     libs = profile["libs"]
     all_keys = set()
     for thread in profile["threads"]:
@@ -89,22 +142,24 @@ def symbolicate(profile, binary, main_base, arch):
             continue
         meta = libs[lib]
         path = meta.get("path") or meta["name"]
-        base = main_base if meta["name"] == binary else 0
-        addrs = [hex(base + r) for r in rvas]
-        try:
-            lines = subprocess.run(
-                ["atos", "-o", path, "-arch", arch, "-l", hex(base), *addrs],
-                capture_output=True, text=True, timeout=180,
-            ).stdout.splitlines()
-        except (OSError, subprocess.SubprocessError):
-            lines = []
-        lines += [""] * (len(rvas) - len(lines))
-        for r, line in zip(rvas, lines):
-            s = line.strip()
-            if not s or s.startswith("0x"):
-                s = f"[{meta['name']}]+{hex(r)}"
-            out[(lib, r)] = clean(s)
+        if symbolicator == "atos":
+            base = main_base if meta["name"] == binary else 0
+            sym = _symbolicate_atos(path, base, rvas, meta["name"], arch)
+        elif symbolicator == "addr2line":
+            sym = _symbolicate_addr2line(path, rvas, meta["name"])
+        else:
+            raise SystemExit(f"unknown symbolicator: {symbolicator}")
+        for r, s in sym.items():
+            out[(lib, r)] = s
     return out
+
+
+def detect_symbolicator(explicit):
+    if explicit != "auto":
+        return explicit
+    if sys.platform == "darwin":
+        return "atos"
+    return "addr2line"
 
 
 def main():
@@ -113,14 +168,20 @@ def main():
     ap.add_argument("--top", type=int, default=30)
     ap.add_argument("--binary", default="wado", help="main executable lib name")
     ap.add_argument("--main-base", default="0x100000000",
-                    help="__TEXT vmaddr of the main executable")
+                    help="__TEXT vmaddr of the main executable (atos only; "
+                         "ignored on Linux PIE binaries)")
     ap.add_argument("--arch", default=platform.machine(),
                     help="atos -arch (defaults to the host arch, e.g. arm64 / x86_64)")
+    ap.add_argument("--symbolicator", default="auto",
+                    choices=["auto", "atos", "addr2line"],
+                    help="auto: atos on macOS, addr2line on Linux")
     args = ap.parse_args()
 
+    symbolicator = detect_symbolicator(args.symbolicator)
     profile = json.load(open(args.profile))
     libs = profile["libs"]
-    keyname = symbolicate(profile, args.binary, int(args.main_base, 16), args.arch)
+    keyname = symbolicate(profile, args.binary, int(args.main_base, 16),
+                          args.arch, symbolicator)
 
     self_by = defaultdict(float)
     incl_by = defaultdict(float)
@@ -192,12 +253,14 @@ def main():
             print(f"{v / total * 100:6.2f}%  {k}")
 
     in_bin = f"(in {args.binary})"
+    print(f"symbolicator = {symbolicator}")
     print(f"total CPU weight = {total:.0f}")
     print("\n=== CPU by library (self) ===")
     for k, v in sorted(lib_self.items(), key=lambda kv: kv[1], reverse=True):
         print(f"{v / total * 100:6.2f}%  {k}")
     show("Top SELF — all", self_by)
     show(f"Top SELF — {args.binary} (Rust) only", self_by, lambda n: in_bin in n)
+    show(f"Top INCLUSIVE — {args.binary} (Rust) only", incl_by, lambda n: in_bin in n)
     show("Syscall/alloc CPU attributed to nearest Rust caller", attr,
          lambda n: in_bin in n)
 
