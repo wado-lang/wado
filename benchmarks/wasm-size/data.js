@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779664655418,
+  "lastUpdate": 1779671089312,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25797,6 +25797,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d4d40f1eae05486f6c196586c61266baf425ce04"
         },
         "date": 1779664654929,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9754,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17192,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 465275,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2beb26c1652afc2647870861b5f6fa238b20a091",
+          "message": "Merge pull request #1186 from wado-lang/claude/for-of-desugar-refactor-Q2TzV\n\nfix(resolver): lower for-of iterator path directly into TIR",
+          "timestamp": "2026-05-25T09:58:27+09:00",
+          "tree_id": "4756b1f4bf3540e0dfea0cb6efb202236de82ec3",
+          "url": "https://github.com/wado-lang/wado/commit/2beb26c1652afc2647870861b5f6fa238b20a091"
+        },
+        "date": 1779671089146,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
