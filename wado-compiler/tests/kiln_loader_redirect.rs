@@ -73,20 +73,19 @@ pub fn greet() {}
         "build/kiln/test-invocation/sample.wado",
     );
 
-    let annotated = if let Ok(a) = block_on(annotate_with_invocations(
+    let annotated = block_on(annotate_with_invocations(
         entry,
         &host,
         Some("entry.wado"),
         idx,
-    )) {
-        a
-    } else {
+    ));
+    if !annotated.is_complete() {
         let diags = host.diagnostics.lock().unwrap().clone();
         panic!(
-            "annotate failed; diagnostics: {:#?}",
+            "annotate did not complete; diagnostics: {:#?}",
             diags.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
-    };
+    }
 
     let redirected = annotated
         .interner
@@ -111,8 +110,7 @@ export fn run() {}
         &host,
         Some("entry.wado"),
         idx,
-    ))
-    .unwrap();
+    ));
     let entry_ms = annotated.interner.borrow_mut().entry_point("entry.wado");
     assert!(annotated.modules.contains_key(&entry_ms));
 }

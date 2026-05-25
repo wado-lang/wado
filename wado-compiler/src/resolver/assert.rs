@@ -208,40 +208,40 @@ impl<H: CompilerHost> Resolver<'_, H> {
         span: crate::token::Span,
     ) -> TirExpr {
         let string_type = self.get_string_struct_type();
-        let mut parts: Vec<TirTemplatePart> = Vec::new();
-
-        // "Assertion failed in <#function> at <#file>:<#line>[: <msg>]\n"
-        parts.push(TirTemplatePart::Literal("Assertion failed in ".to_string()));
-        parts.push(TirTemplatePart::Interpolation {
-            expr: Box::new(TirExpr::new(
-                TirExprKind::StringLiteral(ctx.function_name.clone()),
-                string_type,
-                span,
-            )),
-            format_spec: None,
-        });
-        parts.push(TirTemplatePart::Literal(" at ".to_string()));
-        parts.push(TirTemplatePart::Interpolation {
-            expr: Box::new(TirExpr::new(
-                TirExprKind::StringLiteral(self.current_module_source.to_string()),
-                string_type,
-                span,
-            )),
-            format_spec: None,
-        });
-        parts.push(TirTemplatePart::Literal(":".to_string()));
         let line = span.line as u64;
-        parts.push(TirTemplatePart::Interpolation {
-            expr: Box::new(TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: line,
-                    repr: line.to_string(),
-                },
-                TypeTable::I32,
-                span,
-            )),
-            format_spec: None,
-        });
+        // "Assertion failed in <#function> at <#file>:<#line>[: <msg>]\n"
+        let mut parts: Vec<TirTemplatePart> = vec![
+            TirTemplatePart::Literal("Assertion failed in ".to_string()),
+            TirTemplatePart::Interpolation {
+                expr: Box::new(TirExpr::new(
+                    TirExprKind::StringLiteral(ctx.function_name.clone()),
+                    string_type,
+                    span,
+                )),
+                format_spec: None,
+            },
+            TirTemplatePart::Literal(" at ".to_string()),
+            TirTemplatePart::Interpolation {
+                expr: Box::new(TirExpr::new(
+                    TirExprKind::StringLiteral(self.current_module_source.to_string()),
+                    string_type,
+                    span,
+                )),
+                format_spec: None,
+            },
+            TirTemplatePart::Literal(":".to_string()),
+            TirTemplatePart::Interpolation {
+                expr: Box::new(TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: line,
+                        repr: line.to_string(),
+                    },
+                    TypeTable::I32,
+                    span,
+                )),
+                format_spec: None,
+            },
+        ];
         if let Some(msg) = &assert_stmt.message {
             parts.push(TirTemplatePart::Literal(": ".to_string()));
             let msg_tir = self.resolve_expr(msg, ctx, None);

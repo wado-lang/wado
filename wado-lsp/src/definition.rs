@@ -1,22 +1,22 @@
 //! Go-to-definition, powered by `wado_compiler::annotate`.
 //!
 //! Resolution flow:
-//! 1. Run `annotate` to produce a fully-resolved [`Annotated`] snapshot.
-//! 2. Use `Annotated::ast_id_at` to find the innermost AST node at the cursor.
+//! 1. Reuse the engine's [`Annotated`] snapshot.
+//! 2. Use `Annotated::cursor_at` to find the innermost AST node at the cursor.
 //! 3. If that node is a use-site (Ident of a local), follow
 //!    `Annotated::referenced_symbol` to the binding [`SymbolKey`].
 //! 4. Otherwise the cursor AST id itself points at a declared symbol.
 //! 5. Translate the resulting [`SymbolKey`] into a [`DefinitionResult`].
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::CompilerHost;
-use wado_compiler::annotate::{Annotated, annotate_with_invocations};
+use wado_compiler::annotate::Annotated;
 use wado_compiler::ast::{self, AstVisitor, Item, Literal, Module};
 use wado_compiler::name::resolve_import_with_entry;
 use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, span_to_range, symbol_uri, uri_to_filename};
+use crate::location::{module_uri, span_to_range, symbol_uri};
+use crate::text::{PositionEncoding, lsp_position_to_line_col};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DefinitionResult {
@@ -28,21 +28,16 @@ pub struct DefinitionResult {
 ///
 /// `uri` is the URI of the document being edited; cross-file results carry
 /// their own URI (derived from the defining module's `diagnostic_filename`).
-pub async fn find_definition<H: CompilerHost>(
+#[must_use]
+pub fn find_definition(
+    annotated: &Annotated,
     source: &str,
     position: Position,
     uri: &str,
-    host: &H,
+    encoding: PositionEncoding,
 ) -> Option<DefinitionResult> {
-    let filename = uri_to_filename(uri);
-    let invocations = crate::kiln::prepare_invocations(&filename, source, host);
-    let annotated = annotate_with_invocations(source, host, Some(&filename), invocations)
-        .await
-        .ok()?;
-
     let module = annotated.entry_module_source.clone();
-    let line = position.line as usize + 1;
-    let col = position.character as usize + 1;
+    let (line, col) = lsp_position_to_line_col(source, position, encoding);
 
     // Priority: file-path jumps first, symbol-based resolution second.
     //
@@ -62,7 +57,7 @@ pub async fn find_definition<H: CompilerHost>(
     // itself), keeping file-path resolution first preserves the current
     // behaviour: jump to the file, not to whatever symbol happens to share
     // the span.
-    if let Some(result) = file_path_definition(&annotated, &module, line, col, uri) {
+    if let Some(result) = file_path_definition(annotated, &module, line, col, uri) {
         return Some(result);
     }
 
@@ -75,12 +70,20 @@ pub async fn find_definition<H: CompilerHost>(
     // individually registered as symbols; the URI fallback handles both.
     let span = cursor.def_span()?;
     let def_uri = match annotated.symbol_at(&def_key) {
-        Some(symbol) => symbol_uri(&annotated, symbol, uri)?,
-        None => module_uri(&annotated, &def_key.module, uri)?,
+        Some(symbol) => symbol_uri(annotated, symbol, uri)?,
+        None => module_uri(annotated, &def_key.module, uri)?,
     };
+    // Mirror references.rs: spans for defs in OTHER modules are
+    // codepoint-indexed against their own module's source, not the
+    // request document. Re-encoding against `source` would walk the
+    // wrong text and emit a drifted `character` under UTF-16/UTF-8
+    // whenever the entry document and the def module differ on the
+    // matching line. Pass `None` to preserve the compiler's codepoint
+    // column verbatim (correct under UTF-32 / ASCII).
+    let source_for_range = (def_key.module == annotated.entry_module_source).then_some(source);
     Some(DefinitionResult {
         uri: def_uri,
-        range: span_to_range(&span),
+        range: span_to_range(&span, source_for_range, encoding),
     })
 }
 

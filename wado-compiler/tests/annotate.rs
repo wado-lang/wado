@@ -17,7 +17,7 @@ type Pair = [i32, i32];
 type Maybe = Option<i32>;
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
 
     let entry = annotated.interner.borrow_mut().entry_point("entry.wado");
 
@@ -51,7 +51,7 @@ export fn run() {
 }
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
 
     let entry = annotated.interner.borrow_mut().entry_point("entry.wado");
 
@@ -87,7 +87,7 @@ export fn run() {
 fn annotate_resolves_position_to_ast_id() {
     let source = "export fn run() {}\n";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
 
     let entry = annotated.interner.borrow_mut().entry_point("entry.wado");
 
@@ -120,7 +120,7 @@ export fn run() with Stdout {
 }
 "#;
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
 
     let entry = annotated.interner.borrow_mut().entry_point("entry.wado");
 
@@ -165,7 +165,7 @@ export fn run() {
 }
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
 
     let entry = annotated.interner.borrow_mut().entry_point("entry.wado");
 
@@ -229,10 +229,10 @@ export fn run() with Stdout {
         (def_key, name)
     };
 
-    let a1 = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+    let a1 = block_on(annotate(source, &host, Some("entry.wado")));
     let r1 = resolve_println_def(&a1);
 
-    let a2 = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
+    let a2 = block_on(annotate(source, &host, Some("entry.wado")));
     let r2 = resolve_println_def(&a2);
 
     assert_eq!(

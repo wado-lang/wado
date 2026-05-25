@@ -20,9 +20,14 @@ use super::util;
 /// TIR value (the [`Resolver::resolve_compound_assign`] path, where the
 /// RHS is `target op rhs` computed via
 /// [`Resolver::build_binary_op_tir`]).
+///
+/// The `Resolved` payload is boxed because `TirExpr` is ~460 bytes; an
+/// unboxed variant would balloon every `AssignValue<'_>` (including
+/// the `Ast(&expr)` form that fits in 8 bytes) to that size and waste
+/// stack space on every compound-assign visit.
 pub(super) enum AssignValue<'a> {
     Ast(&'a ast::Expr),
-    Resolved(TirExpr),
+    Resolved(Box<TirExpr>),
 }
 
 impl AssignValue<'_> {
@@ -1087,7 +1092,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             AssignValue::Ast(expr) => {
                                 self.resolve_expr(expr, ctx, Some(trait_info.input_type))
                             }
-                            AssignValue::Resolved(tir) => tir,
+                            AssignValue::Resolved(tir) => *tir,
                         };
 
                         // Check: reject &T/&mut T assigned where non-ref expected
@@ -1139,7 +1144,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let value_span = value.span();
         let value_tir = match value {
             AssignValue::Ast(expr) => self.resolve_expr(expr, ctx, Some(target.type_id)),
-            AssignValue::Resolved(tir) => tir,
+            AssignValue::Resolved(tir) => *tir,
         };
 
         // Reject &T assigned where non-ref T expected
@@ -1267,7 +1272,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let combined = self.build_binary_op_tir(read, op, rhs, compound.span);
         self.assign_to_target(
             &compound.target,
-            AssignValue::Resolved(combined),
+            AssignValue::Resolved(Box::new(combined)),
             compound.span,
             ctx,
         )

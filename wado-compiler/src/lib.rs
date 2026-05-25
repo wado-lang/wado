@@ -338,7 +338,15 @@ fn compile_after_load<H: CompilerHost>(
     // `annotate` performs analyze, type resolution, and body-level TIR
     // lowering. The resulting `Annotated` carries the `TirModule`s the batch
     // compiler needs plus the use→def reference map LSP queries need.
-    let annotated = annotate::annotate_loaded(load_result, logger)?;
+    //
+    // `annotate_loaded` always returns an `Annotated`. For batch compilation
+    // we refuse to continue when the pipeline did not fully resolve — the
+    // downstream phases assume populated `state` / `tir_modules`. Diagnostics
+    // explaining the failure have already been emitted to the host.
+    let annotated = annotate::annotate_loaded(load_result, logger);
+    if !annotated.is_complete() {
+        return Err(Bail);
+    }
 
     // === Phase 6c: Kiln `Options` descriptor extraction ===
     // For the `core:kiln/generator` target world, walk the entry module's
@@ -370,6 +378,10 @@ fn compile_after_load<H: CompilerHost>(
         interner,
         ..
     } = annotated;
+
+    // `is_complete()` was checked above, so the full pipeline ran and `state`
+    // is populated.
+    let state = state.expect("annotate state present when is_complete");
 
     let package = Package::new(
         entry_module_source,

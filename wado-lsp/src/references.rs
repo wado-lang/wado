@@ -9,12 +9,12 @@
 //! 5. Optionally prepend the defining occurrence itself.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::CompilerHost;
-use wado_compiler::annotate::{Annotated, annotate_with_invocations};
+use wado_compiler::annotate::Annotated;
 use wado_compiler::symbol::SymbolKey;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, span_to_range, symbol_uri, uri_to_filename};
+use crate::location::{module_uri, span_to_range, symbol_uri};
+use crate::text::{PositionEncoding, lsp_position_to_line_col};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReferenceLocation {
@@ -27,23 +27,17 @@ pub struct ReferenceLocation {
 /// When `include_declaration` is true, the defining occurrence (the
 /// identifier at the symbol's declaration site) is included in the result.
 /// The result is deduplicated and sorted by `(uri, range.start)`.
-pub async fn find_references<H: CompilerHost>(
+#[must_use]
+pub fn find_references(
+    annotated: &Annotated,
     source: &str,
     position: Position,
     uri: &str,
     include_declaration: bool,
-    host: &H,
+    encoding: PositionEncoding,
 ) -> Vec<ReferenceLocation> {
-    let filename = uri_to_filename(uri);
-    let invocations = crate::kiln::prepare_invocations(&filename, source, host);
-    let Ok(annotated) = annotate_with_invocations(source, host, Some(&filename), invocations).await
-    else {
-        return Vec::new();
-    };
-
     let module = annotated.entry_module_source.clone();
-    let line = position.line as usize + 1;
-    let col = position.character as usize + 1;
+    let (line, col) = lsp_position_to_line_col(source, position, encoding);
 
     let Some(cursor) = annotated.cursor_at(&module, line, col) else {
         return Vec::new();
@@ -53,11 +47,13 @@ pub async fn find_references<H: CompilerHost>(
     };
 
     let mut out = Vec::new();
-    if include_declaration && let Some(loc) = declaration_location(&annotated, &def_key, uri) {
+    if include_declaration
+        && let Some(loc) = declaration_location(annotated, &def_key, uri, source, encoding)
+    {
         out.push(loc);
     }
     for use_key in cursor.references_to_def() {
-        if let Some(loc) = use_site_location(&annotated, &use_key, uri) {
+        if let Some(loc) = use_site_location(annotated, &use_key, uri, source, encoding) {
             out.push(loc);
         }
     }
@@ -76,13 +72,24 @@ pub(crate) fn declaration_location(
     annotated: &Annotated,
     def_key: &SymbolKey,
     request_uri: &str,
+    source: &str,
+    encoding: PositionEncoding,
 ) -> Option<ReferenceLocation> {
     let symbol = annotated.symbol_at(def_key)?;
     let span = annotated.name_span_of(def_key).or(symbol.span)?;
     let uri = symbol_uri(annotated, symbol, request_uri)?;
+    // Spans for declarations in other modules are byte-indexed against
+    // *that* module's source, not the request document. Only re-encode
+    // against `source` when the def lives in the entry module; otherwise
+    // pass `None` so the conversion stays byte-accurate. This is the
+    // same conservative choice `span_to_range` documents for non-ASCII
+    // cross-file results — the value carries the compiler's byte column
+    // verbatim, which is correct for ASCII and the only choice we can
+    // make without loading the other module's text on every query.
+    let source_for_range = (def_key.module == annotated.entry_module_source).then_some(source);
     Some(ReferenceLocation {
         uri,
-        range: span_to_range(&span),
+        range: span_to_range(&span, source_for_range, encoding),
     })
 }
 
@@ -90,12 +97,15 @@ pub(crate) fn use_site_location(
     annotated: &Annotated,
     use_key: &SymbolKey,
     request_uri: &str,
+    source: &str,
+    encoding: PositionEncoding,
 ) -> Option<ReferenceLocation> {
     let span = annotated.span_of_key(use_key)?;
     let uri = module_uri(annotated, &use_key.module, request_uri)?;
+    let source_for_range = (use_key.module == annotated.entry_module_source).then_some(source);
     Some(ReferenceLocation {
         uri,
-        range: span_to_range(&span),
+        range: span_to_range(&span, source_for_range, encoding),
     })
 }
 
@@ -103,6 +113,8 @@ pub(crate) fn use_site_location(
 mod tests {
     use super::*;
     use indexmap::IndexMap;
+    use wado_compiler::CompilerHost;
+    use wado_compiler::annotate::annotate_with_invocations;
     use wado_compiler::{Diagnostic as CompilerDiagnostic, SourceError};
 
     struct TestHost {
@@ -139,14 +151,16 @@ mod tests {
         let path = "/test.wado";
         let uri = format!("file://{path}");
         let host = TestHost::single(path, source);
+        let invocations = wado_compiler::kiln::InvocationIndex::new();
+        let annotated = annotate_with_invocations(source, &host, Some(path), invocations).await;
         find_references(
+            &annotated,
             source,
             Position { line, character },
             &uri,
             include_declaration,
-            &host,
+            PositionEncoding::Utf16,
         )
-        .await
     }
 
     fn ranges(refs: &[ReferenceLocation]) -> Vec<(u32, u32, u32, u32)> {

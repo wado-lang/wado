@@ -16,7 +16,7 @@ use crate::ast_index::AstIndex;
 use crate::compiler_host::{CompilerHost, LogLevel};
 use crate::hashmap::IndexMap;
 use crate::loader;
-use crate::logger::{Bail, Logger};
+use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::resolver::Resolver;
 use crate::resolver::orchestration::AnnotateState;
@@ -56,20 +56,43 @@ pub struct Annotated {
     /// the in-tree [`name_span_of`] / [`span_of_key`] helpers) consult this
     /// instead of re-walking the AST on every request.
     pub(crate) ast_indices: IndexMap<ModuleSource, AstIndex>,
-    pub(crate) state: AnnotateState,
+    /// Shared resolver state produced by [`Resolver::annotate_modules`].
+    ///
+    /// `None` when analyze or [`Resolver::annotate_modules`] bailed before
+    /// the state could be built. `Some(_)` once resolve completed — even
+    /// if a later [`Resolver::lower_tir_from_state`] bail set
+    /// [`Self::is_complete`] to `false`. The pair `(state, is_complete)`
+    /// therefore has three distinguishable states:
+    ///
+    /// - `(None, false)` — analyze or resolve bailed; the snapshot has
+    ///   only `symbols` + `ast_indices`.
+    /// - `(Some(_), false)` — resolve completed but `lower_tir` bailed; the
+    ///   snapshot has everything except `tir_modules` (which is empty).
+    /// - `(Some(_), true)` — full success.
+    ///
+    /// Batch compilation rejects every non-`true` case via
+    /// [`Annotated::is_complete`], so the `expect` in `compile_with_options`
+    /// is safe. LSP queries do not inspect `state` directly.
+    pub(crate) state: Option<AnnotateState>,
     /// Use→def map populated by the real resolver as it walks function
     /// bodies in `lower_tir_from_state`. Maps `(module, IdentExpr.id)` to
-    /// the binding's defining `SymbolKey`.
+    /// the binding's defining `SymbolKey`. Empty when resolve did not run
+    /// or bailed before recording any edges.
     pub(crate) references: IndexMap<SymbolKey, SymbolKey>,
     /// Local binding [`Symbol`] entries (let / param / closure param)
     /// emitted by the resolver alongside `references`. Keyed by the
     /// binding's defining [`SymbolKey`]; consulted by
     /// [`Annotated::symbol_at`] when the key does not name an item-level
-    /// symbol.
+    /// symbol. Empty when resolve did not run or bailed early.
     pub(crate) locals: IndexMap<SymbolKey, Symbol>,
     /// TIR modules produced by [`crate::resolver::Resolver::lower_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
+    /// Empty when `lower_tir` did not run or bailed.
     pub(crate) tir_modules: IndexMap<ModuleSource, TirModule>,
+    /// True when every analysis phase ran to completion without bailing.
+    /// Batch compilation refuses to continue when this is false; LSP queries
+    /// proceed with whatever partial state the phases managed to produce.
+    pub(crate) is_complete: bool,
 }
 
 /// A definition location, assembled from a [`SymbolKey`].
@@ -86,6 +109,50 @@ pub struct Definition {
 }
 
 impl Annotated {
+    /// True when every analysis phase ran to completion without bailing.
+    ///
+    /// Batch compilation should treat `false` here as a hard error
+    /// (downstream phases assume populated `state` / `tir_modules`). LSP
+    /// queries ignore this flag — they answer whatever partial state allows.
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        self.is_complete
+    }
+
+    /// Construct an empty [`Annotated`] holding only the bookkeeping that
+    /// always exists (entry module source, interner) plus per-module
+    /// [`AstIndex`] entries for whatever modules the loader returned. Every
+    /// downstream field is empty and [`Self::is_complete`] returns `false`.
+    ///
+    /// Used as the partial-result return value when an analysis phase bails
+    /// in [`annotate_loaded`].
+    fn partial(
+        entry_module_source: ModuleSource,
+        modules: IndexMap<ModuleSource, Module>,
+        ast_indices: IndexMap<ModuleSource, AstIndex>,
+        symbols: SymbolTable,
+        types: TypeTable,
+        interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
+        state: Option<AnnotateState>,
+        references: IndexMap<SymbolKey, SymbolKey>,
+        locals: IndexMap<SymbolKey, Symbol>,
+        tir_modules: IndexMap<ModuleSource, TirModule>,
+    ) -> Self {
+        Self {
+            entry_module_source,
+            modules,
+            symbols,
+            types,
+            interner,
+            ast_indices,
+            state,
+            references,
+            locals,
+            tir_modules,
+            is_complete: false,
+        }
+    }
+
     /// Innermost AST node containing the given `(line, column)` in `module`.
     ///
     /// Returns `None` if the module is unknown or no node covers the position.
@@ -329,16 +396,20 @@ impl<'a> Cursor<'a> {
     }
 }
 
-/// Run parse → bind → desugar → load → analyze → resolve on `source` and
-/// return the resulting [`Annotated`].
+/// Run parse → bind → load → analyze → resolve on `source` and return the
+/// resulting [`Annotated`].
 ///
-/// Failures emit diagnostics to the host's logger and return [`Bail`] — the
-/// same error channel `compile_with_options` uses.
+/// Always returns an [`Annotated`]; on failure, [`Annotated::is_complete`]
+/// is `false` and the unreachable downstream fields are empty. Diagnostics
+/// are emitted to the host's logger as the phases run.
+///
+/// LSP queries consume the partial result as-is. Batch compilation must
+/// check [`Annotated::is_complete`] before continuing.
 pub async fn annotate<H: CompilerHost>(
     source: &str,
     host: &H,
     filename: Option<&str>,
-) -> Result<Annotated, Bail> {
+) -> Annotated {
     annotate_with_invocations(source, host, filename, crate::kiln::InvocationIndex::new()).await
 }
 
@@ -350,7 +421,7 @@ pub async fn annotate_with_invocations<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
     invocations: crate::kiln::InvocationIndex,
-) -> Result<Annotated, Bail> {
+) -> Annotated {
     let logger = Logger::new(host, LogLevel::default());
     if let Some(f) = filename {
         logger.set_file(f);
@@ -364,45 +435,65 @@ async fn annotate_with_logger_invocations<H: CompilerHost>(
     filename: Option<&str>,
     logger: &Logger<'_, H>,
     invocations: crate::kiln::InvocationIndex,
-) -> Result<Annotated, Bail> {
-    let load_result = {
-        let module_loader =
-            loader::ModuleLoader::new(host, LogLevel::default()).with_invocations(invocations);
-        module_loader
-            .load_all(source, filename)
-            .await
-            .map_err(|e| {
-                let _ = logger.error(e);
-                Bail
-            })?
-    };
+) -> Annotated {
+    let module_loader =
+        loader::ModuleLoader::new(host, LogLevel::default()).with_invocations(invocations);
+    match module_loader.load_all(source, filename).await {
+        Ok(load_result) => annotate_loaded(load_result, logger),
+        Err(e) => {
+            let _ = logger.error(e);
+            empty_annotated()
+        }
+    }
+}
 
-    annotate_loaded(load_result, logger)
+/// Construct an `Annotated` with no modules at all. Used when the loader
+/// failed outright (e.g. parse error on the entry module): callers can
+/// still treat the returned snapshot uniformly, with every query
+/// returning the natural empty answer.
+fn empty_annotated() -> Annotated {
+    let interner = std::rc::Rc::new(std::cell::RefCell::new(ModuleSourceInterner::new()));
+    Annotated::partial(
+        ModuleSource::entry_point_uninitialized(),
+        IndexMap::default(),
+        IndexMap::default(),
+        SymbolTable::new(),
+        TypeTable::new(),
+        interner,
+        None,
+        IndexMap::default(),
+        IndexMap::default(),
+        IndexMap::default(),
+    )
 }
 
 /// Run analyze + resolve on a pre-loaded module set and return the resulting
 /// [`Annotated`]. Used by `compile_with_options` which loads modules once and
 /// also needs to inspect the entry AST for `#![TODO]` detection.
+///
+/// Always returns an [`Annotated`]. When a phase bails, the downstream
+/// fields are left empty and [`Annotated::is_complete`] is set to `false`.
 pub(crate) fn annotate_loaded<H: CompilerHost>(
     load_result: loader::LoadResult,
     logger: &Logger<'_, H>,
-) -> Result<Annotated, Bail> {
+) -> Annotated {
     // Wrap the loader's interner in `Rc<RefCell<>>` so analyze and the
     // per-module resolvers can each `borrow_mut()` it from `&self`
     // contexts. Single-threaded sharing matches the rest of the
     // compiler's `Rc<RefCell<TypeTable>>` plumbing.
     let interner = std::rc::Rc::new(std::cell::RefCell::new(load_result.interner));
-    let symbols = {
-        let _span = logger.span("analyze");
-        let mut analyzer = Analyzer::new(logger)
-            .with_invocations(load_result.invocations.clone())
-            .with_interner(interner.clone());
-        analyzer.analyze_loaded_modules(
-            &load_result.modules,
-            &load_result.entry_module_source,
-            load_result.implicit_modules.clone(),
-        )?;
-        analyzer.into_symbols()
+
+    // Build per-module structural indices upfront — they depend only on the
+    // parsed AST, so they remain valid even if analyze/resolve bail. This
+    // keeps cursor positioning (`Annotated::ast_id_at`) working in partial
+    // mode, which the LSP relies on for file-path jumps.
+    let ast_indices = {
+        let _span = logger.span("ast_index");
+        let mut indices: IndexMap<ModuleSource, AstIndex> = IndexMap::default();
+        for (source, module) in &load_result.modules {
+            indices.insert(source.clone(), AstIndex::build(module));
+        }
+        indices
     };
 
     // Per-thread stdlib `Annotated` snapshot.  When present,
@@ -414,6 +505,39 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
     // itself (re-entry guard); a fresh full annotate runs in that case.
     let snapshot = crate::stdlib_snapshot::get_or_init_snapshot();
 
+    let (symbols, analyze_ok) = {
+        let _span = logger.span("analyze");
+        let mut analyzer = Analyzer::new(logger)
+            .with_invocations(load_result.invocations.clone())
+            .with_interner(interner.clone());
+        // Bail is converted to `analyze_ok = false`; we still consume the
+        // analyzer so partial symbol entries (whatever was recorded before
+        // the bail) survive into the returned Annotated.
+        let ok = analyzer
+            .analyze_loaded_modules(
+                &load_result.modules,
+                &load_result.entry_module_source,
+                load_result.implicit_modules.clone(),
+            )
+            .is_ok();
+        (analyzer.into_symbols(), ok)
+    };
+
+    if !analyze_ok {
+        return Annotated::partial(
+            load_result.entry_module_source,
+            load_result.modules,
+            ast_indices,
+            symbols,
+            TypeTable::new(),
+            interner,
+            None,
+            IndexMap::default(),
+            IndexMap::default(),
+            IndexMap::default(),
+        );
+    }
+
     let state = {
         let _span = logger.span("resolve/annotate");
         Resolver::annotate_modules(
@@ -424,7 +548,22 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
             load_result.invocations.clone(),
             interner.clone(),
             snapshot.as_deref(),
-        )?
+        )
+        .ok()
+    };
+    let Some(state) = state else {
+        return Annotated::partial(
+            load_result.entry_module_source,
+            load_result.modules,
+            ast_indices,
+            symbols,
+            TypeTable::new(),
+            interner,
+            None,
+            IndexMap::default(),
+            IndexMap::default(),
+            IndexMap::default(),
+        );
     };
 
     // Run the full body-level resolve pass so `state.references` and
@@ -432,9 +571,13 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
     // single source of truth for use→def edges — LSP and batch compilation
     // both consume what the resolver recorded here, with no separate lexical
     // re-scan to drift out of sync.
-    let tir_modules = {
+    //
+    // On Bail we still drain the partial reference / local maps so the LSP
+    // can answer cursor queries against whatever bodies the resolver did
+    // reach before bailing.
+    let (tir_modules, lower_ok) = {
         let _span = logger.span("resolve/lower_tir");
-        Resolver::lower_tir_from_state(
+        match Resolver::lower_tir_from_state(
             &state,
             &symbols,
             &load_result.modules,
@@ -442,7 +585,10 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
             logger,
             &load_result.included_files,
             snapshot.as_deref(),
-        )?
+        ) {
+            Ok(m) => (m, true),
+            Err(_) => (IndexMap::default(), false),
+        }
     };
 
     // Take an immutable snapshot of the type table at the end of lowering.
@@ -457,28 +603,17 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
     let references = std::mem::take(&mut *state.references.borrow_mut());
     let locals = std::mem::take(&mut *state.local_symbols.borrow_mut());
 
-    // Build per-module structural indices in one walk each. Cheap relative
-    // to the resolve/lower pass and lets LSP `name_span_of` /
-    // `is_write_target` answer in O(1).
-    let ast_indices = {
-        let _span = logger.span("ast_index");
-        let mut indices: IndexMap<ModuleSource, AstIndex> = IndexMap::default();
-        for (source, module) in &load_result.modules {
-            indices.insert(source.clone(), AstIndex::build(module));
-        }
-        indices
-    };
-
-    Ok(Annotated {
+    Annotated {
         entry_module_source: load_result.entry_module_source,
         modules: load_result.modules,
         symbols,
         types,
         interner,
         ast_indices,
-        state,
+        state: Some(state),
         references,
         locals,
         tir_modules,
-    })
+        is_complete: lower_ok,
+    }
 }

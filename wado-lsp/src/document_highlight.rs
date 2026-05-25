@@ -14,11 +14,11 @@
 //! highlight pass therefore performs no AST walks of its own.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::CompilerHost;
-use wado_compiler::annotate::annotate_with_invocations;
+use wado_compiler::annotate::Annotated;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{span_to_range, uri_to_filename};
+use crate::location::span_to_range;
+use crate::text::{PositionEncoding, lsp_position_to_line_col};
 
 /// LSP `DocumentHighlightKind` values. Serializes as the 1..=3 integer
 /// defined by the LSP wire format.
@@ -55,22 +55,16 @@ pub struct DocumentHighlight {
     pub kind: HighlightKind,
 }
 
-pub async fn document_highlight<H: CompilerHost>(
+#[must_use]
+pub fn document_highlight(
+    annotated: &Annotated,
     source: &str,
     position: Position,
-    uri: &str,
-    host: &H,
+    _uri: &str,
+    encoding: PositionEncoding,
 ) -> Vec<DocumentHighlight> {
-    let filename = uri_to_filename(uri);
-    let invocations = crate::kiln::prepare_invocations(&filename, source, host);
-    let Ok(annotated) = annotate_with_invocations(source, host, Some(&filename), invocations).await
-    else {
-        return Vec::new();
-    };
-
     let module = annotated.entry_module_source.clone();
-    let line = position.line as usize + 1;
-    let col = position.character as usize + 1;
+    let (line, col) = lsp_position_to_line_col(source, position, encoding);
 
     let Some(cursor) = annotated.cursor_at(&module, line, col) else {
         return Vec::new();
@@ -87,7 +81,7 @@ pub async fn document_highlight<H: CompilerHost>(
             .or_else(|| annotated.symbol_at(&def_key).and_then(|s| s.span))
     {
         out.push(DocumentHighlight {
-            range: span_to_range(&span),
+            range: span_to_range(&span, Some(source), encoding),
             kind: HighlightKind::Write,
         });
     }
@@ -105,7 +99,7 @@ pub async fn document_highlight<H: CompilerHost>(
             HighlightKind::Read
         };
         out.push(DocumentHighlight {
-            range: span_to_range(&span),
+            range: span_to_range(&span, Some(source), encoding),
             kind,
         });
     }
@@ -119,6 +113,8 @@ pub async fn document_highlight<H: CompilerHost>(
 mod tests {
     use super::*;
     use indexmap::IndexMap;
+    use wado_compiler::CompilerHost;
+    use wado_compiler::annotate::annotate_with_invocations;
     use wado_compiler::{Diagnostic as CompilerDiagnostic, SourceError};
 
     struct TestHost {
@@ -150,7 +146,15 @@ mod tests {
         let path = "/test.wado";
         let uri = format!("file://{path}");
         let host = TestHost::single(path, source);
-        document_highlight(source, Position { line, character }, &uri, &host).await
+        let invocations = wado_compiler::kiln::InvocationIndex::new();
+        let annotated = annotate_with_invocations(source, &host, Some(path), invocations).await;
+        document_highlight(
+            &annotated,
+            source,
+            Position { line, character },
+            &uri,
+            PositionEncoding::Utf16,
+        )
     }
 
     fn summarize(refs: &[DocumentHighlight]) -> Vec<(u32, u32, HighlightKind)> {

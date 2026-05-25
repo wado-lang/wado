@@ -613,6 +613,44 @@ fn generic_type_parameter_use_definition() {
 }
 
 #[test]
+fn cross_file_definition_uses_target_modules_codepoint_columns_not_entrys() {
+    // Pre-existing bug class fixed by this commit: `find_definition`
+    // passed `Some(source)` (the entry document's text) to
+    // `span_to_range` for cross-file def spans, re-encoding the target
+    // module's codepoint column against the WRONG source line. Under
+    // UTF-16, a 🦀-laden entry line of the same line number would
+    // inflate the def's `character` by `len_utf16 - 1` per emoji.
+    //
+    // Here `helper` lives at codepoint column 7..13 on line 0 of
+    // lib.wado (the `pub fn `'s name span). The entry document's line 0
+    // is `// 🦀🦀🦀🦀🦀` — 13 codepoints, 18 UTF-16 units. The
+    // correctly-encoded range start under UTF-16 must be 7 (lib's
+    // line) — not 13 (saturated entry length) and not anything in
+    // between.
+    futures::executor::block_on(async {
+        let lib = "pub fn helper() -> i32 { return 1; }\n";
+        let entry = concat!(
+            "// 🦀🦀🦀🦀🦀\n",
+            "use { helper } from \"./lib.wado\";\n",
+            "fn main() -> i32 { return helper(); }\n",
+        );
+        let result = def_at_in(
+            &[("./lib.wado", lib), ("/test.wado", entry)],
+            "/test.wado",
+            2,
+            26, // cursor on `helper` call (ASCII line, byte=codepoint)
+        )
+        .await
+        .expect("cross-file definition");
+        assert_eq!(result.uri, "file:///lib.wado");
+        // Codepoint columns 7..13 in lib.wado — under any encoding
+        // this is the value emitted when we DON'T re-encode against
+        // the entry's source.
+        assert_range(&result, 0, 7, 13);
+    });
+}
+
+#[test]
 fn imported_item_use_definition() {
     futures::executor::block_on(async {
         let lib = "pub fn helper() -> i32 { return 42; }\n";

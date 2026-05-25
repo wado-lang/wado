@@ -144,7 +144,12 @@ fn build_snapshot() -> Annotated {
     })
     .expect("stdlib snapshot loader should succeed");
 
-    annotate_loaded(load_result, &logger).expect("stdlib snapshot should annotate cleanly")
+    let annotated = annotate_loaded(load_result, &logger);
+    assert!(
+        annotated.is_complete(),
+        "stdlib snapshot should annotate cleanly",
+    );
+    annotated
 }
 
 /// Drive a future to completion under the assumption that it never
