@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779714197629,
+  "lastUpdate": 1779714683210,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25993,6 +25993,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 465275,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "efd1117c5ee70499f4034611d57a8e7586624d06",
+          "message": "Merge pull request #1192 from wado-lang/claude/wado-dce-design-O5T6n\n\nperf(optimizer): dead-code cleanups for issue #1184 (C1, C2, C3)",
+          "timestamp": "2026-05-25T22:01:15+09:00",
+          "tree_id": "87df6d5c6eb5ef666252b2d0b8d06a55be75315a",
+          "url": "https://github.com/wado-lang/wado/commit/efd1117c5ee70499f4034611d57a8e7586624d06"
+        },
+        "date": 1779714682735,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 443310,
             "unit": "bytes"
           }
         ]
