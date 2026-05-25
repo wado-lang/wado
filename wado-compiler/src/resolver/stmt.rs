@@ -2,8 +2,8 @@
 
 use crate::ast::{
     self, AstId, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr, ExprStmt,
-    ForOfStmt, ForStmt, IdentExpr, IfStmt, LetStmt, Literal, LoopStmt, MethodCallExpr, Pattern,
-    ReturnStmt, Stmt, TaskReturnStmt, Type, UnaryExpr, UnaryOp, WhileStmt,
+    ForOfStmt, ForStmt, IfStmt, LetStmt, Literal, LoopStmt, Pattern, ReturnStmt, Stmt,
+    TaskReturnStmt, Type, WhileStmt,
 };
 use crate::compiler_host::CompilerHost;
 use crate::tir::{
@@ -2156,7 +2156,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     span: for_of.span,
                 });
             }
-            self.resolve_iterator_for_of(for_of, is_enumerate, ctx)
+            self.resolve_iterator_for_of(for_of, ctx)
         };
 
         ctx.for_continue_labels = saved_continue;
@@ -2512,233 +2512,233 @@ impl<H: CompilerHost> Resolver<'_, H> {
         result
     }
 
-    /// Desugar `for let v of iterable { body }` to the iterator pattern for non-tuple types.
+    /// Lower `for let v of iterable { body }` directly into TIR for non-tuple
+    /// iterables. Produces:
     ///
-    /// Constructs AST for the pattern and resolves it:
     /// ```text
     /// __for_of_N: {
     ///     let mut __iter_N = iterable.into_iter();
     ///     loop {
-    ///         if let Some(v) = __iter_N.next() { body } else { break; }
+    ///         match __iter_N.next() {
+    ///             Option::Some(v) => body,
+    ///             _ => break,
+    ///         }
     ///     }
     /// }
     /// ```
+    ///
+    /// The synthetic `__iter_N` local is registered with `defining_ast_id:
+    /// None` (same convention as `assert`'s `__cond` / `__vK` temps) so it
+    /// never enters `local_symbols`. That keeps LSP hover / jump-to-def on
+    /// the `for` keyword from surfacing the helper name. The `.into_iter()`
+    /// / `.next()` dispatches go through [`Self::resolve_method_call_with`]
+    /// with `method_id: None`, so no use→def edges are recorded against
+    /// `for_of.id` either — clicking the `for` keyword no longer drags the
+    /// user into `Iterator::next` in `core:prelude/array.wado`.
+    ///
+    /// `for_of.iterable` is resolved as-is — if the user wrote
+    /// `for let item of expr.enumerate()`, the `.enumerate()` is part of
+    /// the AST and flows naturally into the iterator chain. (The previous
+    /// `is_enumerate` parameter survived only because `resolve_tuple_for_of`
+    /// uses it to special-case the index binding; the iterator path has
+    /// nothing to do with it. The pre-refactor implementation wrapped the
+    /// already-enumerated AST in a second `.enumerate()`, producing
+    /// `IterEnumerate<IterEnumerate<…>>` and ICE-ing at codegen with
+    /// "unsubstituted `AssocTypeProjection` `Item` reached codegen" — see
+    /// `tests/fixtures/for_of_iterator_enumerate.wado`.)
     fn resolve_iterator_for_of(
         &mut self,
         for_of: &ForOfStmt,
-        is_enumerate: bool,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
+        use super::method_call::MethodCallInput;
+
         let span = for_of.span;
         let unique_id = ctx.next_local;
         let iter_var = format!("__iter_{unique_id}");
         let label = format!("__for_of_{unique_id}");
 
-        // Reference iteration is handled by IntoIterator impls on &T (e.g., impl IntoIterator for &Array<T>).
-        // No special ref_mode detection is needed — the iterator's Item type determines the binding type.
-        let ref_mode = RefBinding::None;
+        // Resolve the iterable receiver verbatim, then dispatch `.into_iter()`
+        // on it. Whatever adapter chain the user wrote (e.g. `.enumerate()`,
+        // `.filter(…)`, `.map(…)`) is already part of `for_of.iterable`.
+        let into_iter_receiver = self.resolve_expr(&for_of.iterable, ctx, None);
 
-        // Build the iterable: either raw or with .enumerate()
-        let into_iter_receiver = if is_enumerate {
-            // iterable.enumerate().into_iter() — construct enumerate() call AST
-            Expr::MethodCall(Box::new(MethodCallExpr {
-                id: for_of.id,
-                receiver: for_of.iterable.clone(),
-                method: "enumerate".to_string(),
-                method_id: for_of.id,
-                method_span: span,
+        // `<receiver>.into_iter()`
+        let into_iter_call = self.resolve_method_call_with(
+            MethodCallInput {
+                receiver: into_iter_receiver,
+                method_name: "into_iter",
+                method_id: None,
                 type_args: vec![],
-                args: vec![],
-                has_trailing_comma: false,
-                span,
-            }))
-        } else {
-            for_of.iterable.clone()
-        };
-
-        // let mut __iter_N = receiver.into_iter();
-        let into_iter_let = LetStmt {
-            id: for_of.id,
-            pattern: Pattern::Ident {
-                id: for_of.id,
-                name: iter_var.clone(),
+                args: &[],
+                expected_type: None,
                 span,
             },
-            name_span: span,
-            is_mut: true,
-            is_reactive: false,
-            ty: None,
-            value: Some(Expr::MethodCall(Box::new(MethodCallExpr {
-                id: for_of.id,
-                receiver: into_iter_receiver,
-                method: "into_iter".to_string(),
-                method_id: for_of.id,
-                method_span: span,
-                type_args: vec![],
-                args: vec![],
-                has_trailing_comma: false,
-                span,
-            }))),
-            span,
-        };
-        let iter_let_tir = self.resolve_let(&into_iter_let, ctx);
+            ctx,
+        );
+        let iter_type = into_iter_call.type_id;
 
-        // Check that the iterator type implements Iterator
-        if let TirStmtKind::Let { type_id, .. } = &iter_let_tir.kind {
-            let iter_type_id = *type_id;
-            if !self.type_implements_trait(iter_type_id, "Iterator")
-                && !matches!(
-                    self.type_table.borrow().get(iter_type_id),
-                    ResolvedType::Unknown | ResolvedType::TypeParam { .. }
-                )
-            {
-                let type_name = self.type_table.borrow().type_name(iter_type_id);
-                let _ = self.logger.error(TypeError::MissingTraitImpl {
-                    type_name,
-                    trait_name: "Iterator".to_string(),
-                    span,
-                });
-            }
+        // Iterator-trait conformance check, mirroring the pre-refactor
+        // surface error.
+        if !self.type_implements_trait(iter_type, "Iterator")
+            && !matches!(
+                self.type_table.borrow().get(iter_type),
+                ResolvedType::Unknown | ResolvedType::TypeParam { .. }
+            )
+        {
+            let type_name = self.type_table.borrow().type_name(iter_type);
+            let _ = self.logger.error(TypeError::MissingTraitImpl {
+                type_name,
+                trait_name: "Iterator".to_string(),
+                span,
+            });
         }
 
-        // __iter_N.next()
-        let next_call = Expr::MethodCall(Box::new(MethodCallExpr {
-            id: for_of.id,
-            receiver: Expr::Ident(IdentExpr {
-                id: for_of.id,
-                name: iter_var,
-                segments: Vec::new(),
-                type_args: Vec::new(),
-                span,
-            }),
-            method: "next".to_string(),
-            method_id: for_of.id,
-            method_span: span,
-            type_args: vec![],
-            args: vec![],
-            has_trailing_comma: false,
+        // `let mut __iter_N = …;` — `defining_ast_id: None` keeps this
+        // synthetic local out of `local_symbols`.
+        let iter_local_index =
+            ctx.add_local(iter_var.clone(), iter_type, /* is_mut */ true, None);
+        let iter_let = TirStmt::new(
+            TirStmtKind::Let {
+                name: iter_var.clone(),
+                local_index: iter_local_index,
+                is_mut: true,
+                is_reactive: false,
+                type_id: iter_type,
+                value: into_iter_call,
+                skip_value_copy: false,
+            },
             span,
-        }));
+        );
 
-        // For reference iterables, use a temp variable and wrap with &/&mut:
-        //   if let Some(__elem_N) = iter.next() { let binding = &__elem_N; body }
-        // For value iterables:
-        //   if let Some(binding) = iter.next() { body }
+        // Make `__for_of_N` visible to a body-level `break __for_of_N`
+        // (no existing user does this, but the validation in `resolve_break`
+        // would otherwise reject it). Pop after the body has been resolved.
+        ctx.active_labels.push(label.clone());
+
+        // `__iter_N.next()` — dispatch on the Local receiver, no AST.
+        let iter_local_ref = TirExpr::new(
+            TirExprKind::Local {
+                index: iter_local_index,
+                name: iter_var,
+            },
+            iter_type,
+            span,
+        );
+        let next_call = self.resolve_method_call_with(
+            MethodCallInput {
+                receiver: iter_local_ref,
+                method_name: "next",
+                method_id: None,
+                type_args: vec![],
+                args: &[],
+                expected_type: None,
+                span,
+            },
+            ctx,
+        );
+        let option_type = next_call.type_id;
+
+        // Build the `Option::Some(<user binding>)` arm pattern directly as
+        // TIR. Resolving the user's `for_of.binding` against the Item type
+        // delegates name binding / destructuring to `resolve_if_pattern_inner`,
+        // which preserves the binding's real `AstId` (LSP hover on the loop
+        // variable still works). The wrapping `TirPattern::Variant` is
+        // built by hand so the lowering never synthesises an AST node — the
+        // `Some` token has no source position, so giving it one would be
+        // misleading.
         let some_case_name = self
             .type_table
             .borrow()
             .compiler_items()
             .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
             .to_string();
-        let (some_pattern, then_block) = if ref_mode == RefBinding::None {
-            let pattern = Pattern::Variant {
-                variant_name: some_case_name,
-                variant_qualifier: None,
-                name_id: None,
-                name_span: span,
-                bindings: vec![for_of.binding.clone()],
-                span,
-            };
-            (pattern, for_of.body.clone())
-        } else {
-            let elem_var = format!("__elem_{unique_id}");
-            // For &mut mode, the temp variable must be mutable
-            let elem_pattern = if ref_mode == RefBinding::MutRef {
-                Pattern::MutIdent {
-                    id: for_of.id,
-                    name: elem_var.clone(),
-                    span,
+        // `.next()` returns `Option<Item>`. Extract the `Some` payload type
+        // for the binding scrutinee. Bind out of the borrow first so the
+        // `get_variant_case_payload_type` call below can re-borrow `&mut self`.
+        let option_shape: Option<(String, Vec<TypeId>)> =
+            match self.type_table.borrow().get(option_type).clone() {
+                ResolvedType::GenericInstance {
+                    name, type_args, ..
+                } if self.contains_variant(&name) => Some((name, type_args)),
+                ResolvedType::Variant { name, .. } if self.contains_variant(&name) => {
+                    Some((name, vec![]))
                 }
-            } else {
-                Pattern::Ident {
-                    id: for_of.id,
-                    name: elem_var.clone(),
-                    span,
-                }
+                _ => None,
             };
-            let pattern = Pattern::Variant {
-                variant_name: some_case_name,
-                variant_qualifier: None,
-                name_id: None,
-                name_span: span,
-                bindings: vec![elem_pattern],
-                span,
-            };
-            let ref_op = match ref_mode {
-                RefBinding::MutRef => UnaryOp::MutRef,
-                _ => UnaryOp::Ref,
-            };
-            let ref_let = Stmt::Let(LetStmt {
-                id: for_of.id,
-                pattern: for_of.binding.clone(),
-                name_span: span,
-                is_mut: for_of.is_mut,
-                is_reactive: false,
-                ty: None,
-                value: Some(Expr::Unary(Box::new(UnaryExpr {
-                    id: for_of.id,
-                    op: ref_op,
-                    expr: Expr::Ident(IdentExpr {
-                        id: for_of.id,
-                        name: elem_var,
-                        segments: Vec::new(),
-                        type_args: Vec::new(),
-                        span,
-                    }),
-                    span,
-                }))),
-                span,
-            });
-            let mut body_stmts = vec![ref_let];
-            body_stmts.extend(for_of.body.stmts.clone());
-            let body = Block {
-                id: for_of.body.id,
-                stmts: body_stmts,
-                span: for_of.body.span,
-            };
-            (pattern, body)
+        let item_type = match option_shape {
+            Some((name, type_args)) => {
+                self.get_variant_case_payload_type(&name, &some_case_name, &type_args, span)
+            }
+            // `.next()` returned an unexpected non-Option type. The iterator-
+            // trait check above (or method dispatch downstream) has already
+            // diagnosed it; degrade to `UNKNOWN` to keep resolution going.
+            None => TypeTable::UNKNOWN,
         };
 
-        // if let Some(v) = __iter_N.next() { body } else { break; }
-        let if_let = IfStmt {
-            id: for_of.id,
-            condition: Condition::LetChain {
-                elements: vec![ConditionElement::Let {
-                    pattern: Box::new(some_pattern),
-                    expr: next_call,
-                    span,
-                }],
+        ctx.enter_scope();
+        let binding_pattern =
+            self.resolve_if_pattern_inner(&for_of.binding, item_type, ctx, span, RefBinding::None);
+        let body_block = self.resolve_block(&for_of.body, ctx, None);
+        ctx.exit_scope();
+
+        let some_pattern = TirPattern::Variant {
+            enum_type: option_type,
+            variant_name: some_case_name,
+            bindings: vec![binding_pattern],
+            payload_type: item_type,
+        };
+
+        let body_type = Self::block_result_type(&body_block);
+        let some_body = TirExpr::new(TirExprKind::Block(body_block), body_type, span);
+
+        // `_ => break;` — Wildcard arm body is a block holding a single
+        // `Break`, mirroring how `while let` lowers its fall-through arm
+        // (see `resolve_while`'s `Condition::LetChain` path).
+        let break_stmt = TirStmt::new(
+            TirStmtKind::Break {
+                label: None,
+                value: None,
+            },
+            span,
+        );
+        let break_block = TirBlock::new(vec![break_stmt], span);
+        let break_body = TirExpr::new(TirExprKind::Block(break_block), TypeTable::UNIT, span);
+
+        let match_type =
+            crate::tir::agree_branch_types(body_type, TypeTable::UNIT).unwrap_or(TypeTable::UNIT);
+        let arms = vec![
+            TirMatchArm {
+                pattern: some_pattern,
+                guard: None,
+                body: some_body,
                 span,
             },
-            then_block,
-            else_block: Some(Block {
-                id: for_of.body.id,
-                stmts: vec![Stmt::Break(BreakStmt {
-                    id: for_of.id,
-                    label: None,
-                    value: None,
-                    span,
-                })],
+            TirMatchArm {
+                pattern: TirPattern::Wildcard,
+                guard: None,
+                body: break_body,
                 span,
-            }),
+            },
+        ];
+        let match_expr = TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(next_call),
+                arms,
+            },
+            match_type,
             span,
-        };
-
-        // Make the synthesised `__for_of_N` label visible while the body
-        // resolves, so any `resolve_break` inside it sees it on
-        // `active_labels`. The pop happens after we have finished
-        // building the LabeledBlock TIR.
-        ctx.active_labels.push(label.clone());
-        let if_let_tir = self.resolve_if_stmt(&if_let, ctx);
-
-        // loop { if let ... }
-        let loop_body = TirBlock::new(if_let_tir, span);
+        );
+        let loop_body = TirBlock::new(
+            vec![TirStmt::new(TirStmtKind::Expr(match_expr), span)],
+            span,
+        );
         let loop_tir = TirStmt::new(TirStmtKind::Loop { body: loop_body }, span);
 
         let result = vec![TirStmt::new(
             TirStmtKind::LabeledBlock {
                 label,
-                block: TirBlock::new(vec![iter_let_tir, loop_tir], span),
+                block: TirBlock::new(vec![iter_let, loop_tir], span),
             },
             span,
         )];

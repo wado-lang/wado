@@ -1,6 +1,6 @@
 //! Method call and static method call resolution.
 
-use crate::ast::{self, Item};
+use crate::ast::{self, AstId, Item};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
@@ -14,6 +14,27 @@ use super::Resolver;
 use super::callee::StaticMethodRef;
 use super::method_lookup::MethodInferenceInput;
 use super::types::{FunctionContext, MethodInfo, TypeError};
+
+/// Inputs to [`Resolver::resolve_method_call_with`], the TIR-level method-call
+/// dispatcher. The AST-driven [`Resolver::resolve_method_call`] is a thin
+/// wrapper that resolves the receiver / type args / args from the
+/// [`ast::MethodCallExpr`] and forwards here; sites that synthesise method
+/// calls without a backing AST node (e.g. the for-of loop's `into_iter()` /
+/// `next()` dispatches) call this directly with their already-resolved
+/// receiver and an empty `args` slice.
+///
+/// `method_id == None` signals a synthetic call: no use→def edge is
+/// recorded against any AST node for the method name token. This is what
+/// keeps internal helper calls out of LSP jump-to-definition.
+pub(super) struct MethodCallInput<'a> {
+    pub receiver: TirExpr,
+    pub method_name: &'a str,
+    pub method_id: Option<AstId>,
+    pub type_args: Vec<TypeId>,
+    pub args: &'a [ast::Expr],
+    pub expected_type: Option<TypeId>,
+    pub span: Span,
+}
 
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_method_call(
@@ -32,9 +53,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return result;
         }
 
-        let mut receiver = self.resolve_expr(&method_call.receiver, ctx, None);
-        // NOTE: args are resolved later (after method lookup) to enable literal coercion
-        // using the method's parameter types as expected types.
+        let receiver = self.resolve_expr(&method_call.receiver, ctx, None);
 
         // Resolve explicit type arguments (method-level type args)
         let type_args: Vec<TypeId> = method_call
@@ -42,6 +61,39 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
+
+        self.resolve_method_call_with(
+            MethodCallInput {
+                receiver,
+                method_name: &method_call.method,
+                method_id: Some(method_call.method_id),
+                type_args,
+                args: &method_call.args,
+                expected_type,
+                span: method_call.span,
+            },
+            ctx,
+        )
+    }
+
+    /// Dispatch a method call from an already-resolved receiver TIR. See
+    /// [`MethodCallInput`] for the contract.
+    pub(super) fn resolve_method_call_with(
+        &mut self,
+        input: MethodCallInput<'_>,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let MethodCallInput {
+            mut receiver,
+            method_name,
+            method_id,
+            type_args,
+            args: args_ast,
+            expected_type,
+            span,
+        } = input;
+        // NOTE: args are resolved later (after method lookup) to enable literal coercion
+        // using the method's parameter types as expected types.
 
         // Get the base (non-ref) type for method lookup and struct name extraction
         let base_type_id = self.get_base_type(receiver.type_id);
@@ -130,7 +182,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 };
                 let result = self.find_trait_method_for_type(
                     ref_struct_name,
-                    &method_call.method,
+                    method_name,
                     &struct_module,
                     receiver_type_args_for_trait.as_deref(),
                     Some(base_type_id),
@@ -154,14 +206,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Look up method info based on receiver type (inherent + base type trait methods)
         if method_info.is_none() {
-            method_info = self.lookup_method_info(receiver.type_id, &method_call.method);
+            method_info = self.lookup_method_info(receiver.type_id, method_name);
         }
 
         // Fall back to base type trait methods
         if method_info.is_none()
             && let Some(trait_match) = self.find_trait_method_for_type(
                 &struct_name,
-                &method_call.method,
+                method_name,
                 &struct_module,
                 receiver_type_args_for_trait.as_deref(),
                 Some(base_type_id),
@@ -193,11 +245,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 && let Some(bounds) = self.trait_ctx.type_param_bounds.get(&name).cloned()
                 && let Some((found_trait, info)) = {
                     let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
-                    self.find_method_in_trait_bounds(
-                        &bound_names,
-                        &method_call.method,
-                        base_type_id,
-                    )
+                    self.find_method_in_trait_bounds(&bound_names, method_name, base_type_id)
                 }
             {
                 trait_name = Some(found_trait);
@@ -222,7 +270,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             };
             if let Some(bounds) = assoc_bounds
                 && let Some((found_trait, info)) =
-                    self.find_method_in_trait_bounds(&bounds, &method_call.method, base_type_id)
+                    self.find_method_in_trait_bounds(&bounds, method_name, base_type_id)
             {
                 trait_name = Some(found_trait);
                 method_info = Some(info);
@@ -247,9 +295,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let type_name = self.type_table.borrow().type_name(base_type_id);
             let _ = self.logger.error(TypeError::MethodNotFound {
                 type_name,
-                method_name: method_call.method.clone(),
+                method_name: method_name.to_string(),
                 hint: String::new(),
-                span: method_call.span,
+                span,
             });
             // Default to Unknown type for error recovery
             MethodInfo {
@@ -267,7 +315,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Tuple.len() is a compile-time constant — return immediately without a function call.
-        if method_call.method == "len" && self.type_table.borrow().is_tuple(base_type_id) {
+        if method_name == "len" && self.type_table.borrow().is_tuple(base_type_id) {
             let len = self
                 .type_table
                 .borrow()
@@ -280,13 +328,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     repr: len.to_string(),
                 },
                 TypeTable::I32,
-                method_call.span,
+                span,
             );
         }
 
         // Tuple.zip() transposes a tuple-of-tuples.
         // [[A0, A1], [B0, B1]].zip() → [[A0, B0], [A1, B1]]
-        if method_call.method == "zip" && self.type_table.borrow().is_tuple(base_type_id) {
+        if method_name == "zip" && self.type_table.borrow().is_tuple(base_type_id) {
             let has_type_pack = self.type_contains_pack(base_type_id);
             if has_type_pack {
                 // TypePack present: defer expansion to monomorphization.
@@ -295,7 +343,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         expr: Box::new(receiver),
                     },
                     return_type,
-                    method_call.span,
+                    span,
                 );
             }
             // Concrete tuples: expand inline now.
@@ -317,7 +365,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             field_name: row.to_string(),
                         },
                         outer_elems[row],
-                        method_call.span,
+                        span,
                     );
                     let cell = TirExpr::new(
                         TirExprKind::FieldAccess {
@@ -326,7 +374,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             field_name: col.to_string(),
                         },
                         row_types[col],
-                        method_call.span,
+                        span,
                     );
                     row_exprs.push(cell);
                 }
@@ -337,7 +385,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         elements: row_exprs,
                     },
                     col_tuple_type,
-                    method_call.span,
+                    span,
                 ));
             }
             return TirExpr::new(
@@ -345,7 +393,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     elements: col_exprs,
                 },
                 return_type,
-                method_call.span,
+                span,
             );
         }
 
@@ -355,14 +403,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let type_name = self.type_table.borrow().type_name(base_type_id);
             let _ = self.logger.error(TypeError::MethodNotFound {
                 type_name: type_name.clone(),
-                method_name: method_call.method.clone(),
+                method_name: method_name.to_string(),
                 hint: format!(
-                    "'{}' is a static method; use {}::{}() instead",
-                    method_call.method, type_name, method_call.method
+                    "'{method_name}' is a static method; use {type_name}::{method_name}() instead"
                 ),
-                span: method_call.span,
+                span,
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, method_call.span);
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
         }
 
         // Type check method arguments against expected parameter types (newtype-aware)
@@ -380,8 +427,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Resolve arguments with coercion using method parameter types
-        let mut args: Vec<TirExpr> = method_call
-            .args
+        let mut args: Vec<TirExpr> = args_ast
             .iter()
             .enumerate()
             .map(|(i, arg)| {
@@ -398,7 +444,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if args.len() < expected_param_types.len() && !param_defaults.is_empty() {
             let mut subs: crate::hashmap::IndexMap<String, ast::Expr> =
                 crate::hashmap::IndexMap::default();
-            for (i, arg_ast) in method_call.args.iter().enumerate() {
+            for (i, arg_ast) in args_ast.iter().enumerate() {
                 if let Some(name) = param_names.get(i) {
                     subs.insert(name.clone(), arg_ast.clone());
                 }
@@ -420,11 +466,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Check each argument against expected parameter type
         for (i, (arg, &expected_type)) in args.iter().zip(expected_param_types.iter()).enumerate() {
-            let span = method_call
-                .args
-                .get(i)
-                .map_or(method_call.span, super::ast::Expr::span);
-            self.typecheck(arg.type_id, expected_type, span);
+            let arg_span = args_ast.get(i).map_or(span, super::ast::Expr::span);
+            self.typecheck(arg.type_id, expected_type, arg_span);
         }
 
         // Substitute return type for inherited newtype methods
@@ -456,8 +499,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Adjust receiver based on what the method expects (self_kind)
-        receiver =
-            self.adjust_receiver_for_self_kind(receiver, self_kind, is_ref_impl, method_call.span);
+        receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, is_ref_impl, span);
 
         // Build unified substitution context for double generics
         // Type param indices are assigned as follows:
@@ -505,14 +547,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Try to infer method type args from actual arguments and expected return type
             self.infer_method_type_args(MethodInferenceInput {
                 receiver_type: receiver.type_id,
-                method_name: &method_call.method,
+                method_name,
                 impl_offset,
                 param_types: &expected_param_types,
                 args: &args,
-                raw_args: &method_call.args,
+                raw_args: args_ast,
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
-                span: method_call.span,
+                span,
             })
         } else {
             type_args
@@ -537,16 +579,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .iter()
                 .map(|&t| subst_ctx.substitute(t, &mut self.type_table.borrow_mut()))
                 .collect();
-            self.recoerce_literal_args(&method_call.args, &mut args, &substituted_param_types);
+            self.recoerce_literal_args(args_ast, &mut args, &substituted_param_types);
             for (i, arg) in args.iter().enumerate() {
                 if let Some(&expected) = substituted_param_types.get(i) {
                     self.typecheck(
                         arg.type_id,
                         expected,
-                        method_call
-                            .args
-                            .get(i)
-                            .map_or(method_call.span, super::ast::Expr::span),
+                        args_ast.get(i).map_or(span, super::ast::Expr::span),
                     );
                 }
             }
@@ -592,11 +631,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             base_struct_name = impl_name;
         }
 
-        let mangled_method_name = MethodName::format_local(
-            &receiver_struct_name,
-            trait_name.as_deref(),
-            &method_call.method,
-        );
+        let mangled_method_name =
+            MethodName::format_local(&receiver_struct_name, trait_name.as_deref(), method_name);
 
         // Build monomorph_info for method calls on generic types or with method type args
         let monomorph_info = if let Some(ref blanket_param) = blanket_type_param {
@@ -604,7 +640,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // The call site uses the concrete receiver (e.g., "ArrayIter<i32>").
             // monomorph_info maps from the concrete name back to the template.
             let generic_name =
-                MethodName::format_local(blanket_param, trait_name.as_deref(), &method_call.method);
+                MethodName::format_local(blanket_param, trait_name.as_deref(), method_name);
             Some(MonomorphInfo {
                 generic_name,
                 impl_type_args: vec![base_type_id],
@@ -612,8 +648,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_blanket: true,
             })
         } else if receiver_type_args.is_some() || !method_type_args.is_empty() {
-            let generic_name =
-                MethodName::format_local(&base_struct_name, None, &method_call.method);
+            let generic_name = MethodName::format_local(&base_struct_name, None, method_name);
             Some(MonomorphInfo {
                 generic_name,
                 impl_type_args: receiver_type_args.unwrap_or_default(),
@@ -638,11 +673,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 | ResolvedType::TypePack { .. }
                 | ResolvedType::AssocTypeProjection { .. }
         );
-        let param_is_mut = self.lookup_method_param_is_mut(&base_struct_name, &method_call.method);
+        let param_is_mut = self.lookup_method_param_is_mut(&base_struct_name, method_name);
         let mut method_info = LocalMethodName::new(
             base_struct_name.clone(), // Use base struct name without type params
             trait_name,
-            method_call.method.clone(),
+            method_name.to_string(),
         )
         .with_type_args(&impl_type_arg_names, &method_type_arg_names);
         method_info.is_type_param_receiver = is_type_param_receiver;
@@ -682,16 +717,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .unwrap_or_else(|| struct_module.clone());
 
         // Record use->def for jump-to-definition on the method name token.
-        if let Some(method_ast_id) = self.find_impl_method_ast_id(
-            &method_module_source,
-            &base_struct_name,
-            &method_call.method,
-        ) {
-            self.record_reference_to_decl(
-                method_call.method_id,
-                &method_module_source,
-                method_ast_id,
-            );
+        // Synthetic call sites (e.g. for-of's `.into_iter()` / `.next()`) pass
+        // `method_id == None` so no edge is recorded — the call has no
+        // source-level method name to navigate from.
+        if let Some(method_id) = method_id
+            && let Some(method_ast_id) =
+                self.find_impl_method_ast_id(&method_module_source, &base_struct_name, method_name)
+        {
+            self.record_reference_to_decl(method_id, &method_module_source, method_ast_id);
         }
 
         Self::build_tir_method_call(
@@ -708,7 +741,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
                 .collect(),
             return_type,
-            method_call.span,
+            span,
         )
     }
 

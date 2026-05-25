@@ -1,0 +1,29 @@
+/// Regression test for a P0 compiler bug: `for let item of expr.enumerate()`
+/// where `expr` is a non-tuple iterable (Array, etc.).
+///
+/// The bug: `resolve_iterator_for_of` stripped the user-written `.enumerate()`
+/// from `for_of.iterable` (into `actual_iterable`) for type-check purposes,
+/// then re-added a `.enumerate()` on `for_of.iterable` itself — i.e. on the
+/// expression that still had the user's enumerate. The synthetic AST became
+/// `expr.enumerate().enumerate().into_iter()`, which instantiated
+/// `IterEnumerate<IterEnumerate<...>>`. The outer enumerate's `Self::Item`
+/// associated type then failed to substitute, ICE-ing at codegen with
+/// "unsubstituted AssocTypeProjection `Item` reached codegen".
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let arr: Array<i32> = [10, 20, 30];
+    let mut sum: i32 = 0;
+    let mut count: i32 = 0;
+    for let [i, v] of arr.iter().enumerate() {
+        sum = sum + v;
+        count = count + 1;
+        println(`{i}: {v}`);
+    }
+    assert sum == 60;
+    assert count == 3;
+}
+
+__DATA__
+{"stdout": "0: 10\n1: 20\n2: 30\n"}
