@@ -52,19 +52,63 @@ struct FunctionAnalysis {
     pending_inspects: Vec<PendingInspectEdge>,
 }
 
-/// Analyze the project and populate its usage fields with DCE analysis results.
+/// Combined DCE analysis: which functions / globals / types are
+/// reachable from the project's entry points, plus name-keyed views
+/// over the reachable type set that the downstream
+/// `remove_unreachable_*` retain predicates need. Computed once up
+/// front by [`analyze_dce`], then consumed by pure mutators.
+pub struct DceAnalysis {
+    /// Indices into `project.functions` that are reachable.
+    pub functions: IndexSet<usize>,
+    /// `(module-path-joined-by-::, global-name)` pairs that are read
+    /// (via `GlobalVarGet`) by some reachable function. Globals only
+    /// written to are dead.
+    pub globals: IndexSet<(String, String)>,
+    /// Reachable type IDs (transitively closed over struct fields,
+    /// variant payloads, and per-type dependencies).
+    pub types: IndexSet<TypeId>,
+    /// Non-monomorphized `Struct` types in `types`, keyed by (name, module).
+    pub struct_exact: IndexSet<(String, ModuleSource)>,
+    /// Monomorphized struct names in `types` (e.g. `"Box<i32>"`).
+    pub struct_monomorph_names: IndexSet<String>,
+    /// Base names of monomorphized structs in `types` (e.g. `"Box"`).
+    pub struct_monomorph_bases: IndexSet<String>,
+    /// `GenericInstance` names in `types`.
+    pub generic_instance_names: IndexSet<String>,
+    /// `Variant` types in `types`, keyed by (name, module).
+    pub variant_exact: IndexSet<(String, ModuleSource)>,
+    /// `Enum` types in `types`, keyed by (name, module).
+    pub enum_exact: IndexSet<(String, ModuleSource)>,
+}
+
+/// Compute every DCE input from the unpruned `project` in dependency
+/// order: function reachability → global reachability → type
+/// reachability. Each downstream step (`remove_unreachable_functions`,
+/// `remove_unreachable_globals`, `remove_unreachable_types`) then
+/// becomes a pure mutator that consumes the corresponding field.
 ///
-/// This performs dead code elimination analysis starting from the entry point
-/// and populates the project's `used_wasi_functions` field and the `imports`
-/// list. Returns the set of indices into `project.functions` that survive DCE,
-/// for use by `remove_unreachable_functions`.
+/// Splitting analysis from mutation also means the type-reachability
+/// pass can run before `remove_unreachable_globals` mutates function
+/// bodies (dropping `GlobalVarSet`s) — those mutations don't expose
+/// any new types, but the explicit ordering makes the invariant
+/// observable.
+pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
+    let mut analysis = DceAnalysis::empty();
+    analysis.functions = analyze_function_reachability(project);
+    analysis.globals = analyze_global_reachability(project, &analysis.functions);
+    populate_type_reachability(project, &mut analysis);
+    analysis
+}
+
+/// Function reachability via call-graph BFS. Implementation detail of
+/// [`analyze_dce`]; not called directly anywhere else.
 ///
 /// The call graph is built in a single AST walk: edges that depend on the
 /// inspectable-signature set (the per-functor `__Closure_N^Inspect[Alt]`
 /// impls emitted from `ClosureToCanonical`) are collected as pending
 /// edges and added by `apply_inspect_edges` once the signature set is
 /// known. This avoids a second full walk of every function body.
-pub fn analyze_project(project: &mut NirPackage) -> IndexSet<usize> {
+fn analyze_function_reachability(project: &mut NirPackage) -> IndexSet<usize> {
     // Phase 1: build the raw call graph in a single pass.
     let AnalysisGraph {
         mut call_graph,
@@ -1582,34 +1626,11 @@ pub fn remove_unreachable_functions(
     });
 }
 
-/// Reachability analysis result: the set of reachable type IDs plus
-/// name-keyed views over that set that match the predicates
-/// [`remove_unreachable_types`] uses to filter `project.structs`,
-/// `project.variants`, and `project.enums`.
-///
-/// The indexes are computed once during [`analyze_reachability`] and
-/// reused both inside the fixed-point loop (for O(1) per-struct /
-/// per-variant reachability checks) and by the downstream retain
-/// step, so the same name-by-name walk over `types` never runs twice.
-pub struct Reachability {
-    pub types: IndexSet<TypeId>,
-    /// Non-monomorphized `Struct` types in `types`, keyed by (name, module).
-    pub struct_exact: IndexSet<(String, ModuleSource)>,
-    /// Monomorphized struct names in `types` (e.g. `"Box<i32>"`).
-    pub struct_monomorph_names: IndexSet<String>,
-    /// Base names of monomorphized structs in `types` (e.g. `"Box"`).
-    pub struct_monomorph_bases: IndexSet<String>,
-    /// `GenericInstance` names in `types`.
-    pub generic_instance_names: IndexSet<String>,
-    /// `Variant` types in `types`, keyed by (name, module).
-    pub variant_exact: IndexSet<(String, ModuleSource)>,
-    /// `Enum` types in `types`, keyed by (name, module).
-    pub enum_exact: IndexSet<(String, ModuleSource)>,
-}
-
-impl Reachability {
-    fn new() -> Self {
+impl DceAnalysis {
+    fn empty() -> Self {
         Self {
+            functions: IndexSet::default(),
+            globals: IndexSet::default(),
             types: IndexSet::default(),
             struct_exact: IndexSet::default(),
             struct_monomorph_names: IndexSet::default(),
@@ -1620,9 +1641,9 @@ impl Reachability {
         }
     }
 
-    /// Rebuild the name-keyed indexes from the current `self.types`.
-    /// Cheap relative to the alternative of `iter().any()` lookups —
-    /// see [`analyze_reachability`]'s Phase 2 comment.
+    /// Rebuild the name-keyed type-index views from the current
+    /// `self.types`. Cheap relative to the alternative of `iter().any()`
+    /// lookups — see [`populate_type_reachability`]'s Phase 2 comment.
     fn refresh_indexes(&mut self, type_table: &TypeTable) {
         self.struct_exact.clear();
         self.struct_monomorph_names.clear();
@@ -1671,15 +1692,21 @@ impl Reachability {
     }
 }
 
-/// Compute the set of reachable types from reachable functions, plus
-/// name-keyed views over the result. A type is reachable if it's used
-/// in any reachable function's signature, locals, or expressions.
-fn analyze_reachability(project: &NirPackage) -> Reachability {
-    let mut reach = Reachability::new();
-
+/// Populate `analysis.types` and the name-keyed type-index views.
+/// A type is reachable if it's used in any reachable function's
+/// signature, locals, or expressions, or in any reachable global's
+/// initializer (with transitive closure over struct fields, variant
+/// payloads, and per-type dependencies).
+///
+/// Reads `analysis.functions` and `analysis.globals` to filter the
+/// per-function / per-global walks — both must be populated first
+/// (see [`analyze_dce`]). Running pre-pruning, so all DCE analysis
+/// sits in `analyze_dce` and the downstream `remove_*` functions only
+/// mutate.
+fn populate_type_reachability(project: &NirPackage, analysis: &mut DceAnalysis) {
     // Always include primitive types (TypeId 0-17)
     for i in 0..18 {
-        reach.types.insert(TypeId(i));
+        analysis.types.insert(TypeId(i));
     }
 
     // Always include BuiltinArray(U8) as it's fundamental for String operations
@@ -1691,27 +1718,38 @@ fn analyze_reachability(project: &NirPackage) -> Reachability {
             if let ResolvedType::BuiltinArray(elem) = type_table.get(type_id)
                 && *elem == TypeTable::U8
             {
-                reach.types.insert(type_id);
+                analysis.types.insert(type_id);
                 break;
             }
         }
     }
 
-    // Phase 1: Collect types from all remaining functions
-    // Note: We collect from ALL functions that exist after function DCE,
-    // because function DCE has already removed unreachable functions.
-    // This is more conservative but ensures we don't miss any types.
+    // Phase 1: Collect types from reachable functions and reachable globals.
+    // The `analysis.functions` filter mirrors what would otherwise be
+    // visible *after* `remove_unreachable_functions` ran — keeping the
+    // walk pre-pruning lets `analyze_dce` finish before any mutation
+    // touches the package.
     {
         let type_table = project.type_table.borrow();
 
-        for func_rc in &project.functions {
+        for (pos, func_rc) in project.functions.iter().enumerate() {
+            if !analysis.functions.contains(&pos) {
+                continue;
+            }
             let func = func_rc.borrow();
-            collect_types_from_function(&func, &type_table, &mut reach.types);
+            collect_types_from_function(&func, &type_table, &mut analysis.types);
         }
 
-        // Collect types from global variables
+        // Collect types from reachable global variables only.
         for global in &project.globals {
-            collect_types_from_expr(&global.initializer, &type_table, &mut reach.types);
+            let global_key = (
+                global.module_source.to_path().join("::"),
+                global.name.clone(),
+            );
+            if !analysis.globals.contains(&global_key) {
+                continue;
+            }
+            collect_types_from_expr(&global.initializer, &type_table, &mut analysis.types);
         }
 
         // Closure functor types are collected transitively from
@@ -1732,15 +1770,22 @@ fn analyze_reachability(project: &NirPackage) -> Reachability {
         // same `Rc` when DCE has kept the function alive — comparing by
         // pointer identity avoids cloning `(ModuleSource, String)` per
         // function just to build a lookup set. Pre-compute a hash set of
-        // raw pointers so the per-functor check is O(1) instead of an
-        // O(|functions|) linear scan per functor.
-        let surviving_ptrs: IndexSet<*const _> =
-            project.functions.iter().map(std::rc::Rc::as_ptr).collect();
+        // raw pointers (filtered to reachable positions, since we run
+        // before `remove_unreachable_functions`) so the per-functor
+        // check is O(1) instead of an O(|functions|) linear scan per
+        // functor.
+        let surviving_ptrs: IndexSet<*const _> = project
+            .functions
+            .iter()
+            .enumerate()
+            .filter(|(pos, _)| analysis.functions.contains(pos))
+            .map(|(_, rc)| std::rc::Rc::as_ptr(rc))
+            .collect();
         for functor in &project.closure_functors {
             let cm_ptr = std::rc::Rc::as_ptr(&functor.call_method);
             if surviving_ptrs.contains(&cm_ptr) {
-                reach.types.insert(functor.struct_type_id);
-                reach.types.insert(functor.ref_type_id);
+                analysis.types.insert(functor.struct_type_id);
+                analysis.types.insert(functor.ref_type_id);
             }
         }
     }
@@ -1749,11 +1794,11 @@ fn analyze_reachability(project: &NirPackage) -> Reachability {
     let mut changed = true;
     while changed {
         changed = false;
-        let before_len = reach.types.len();
+        let before_len = analysis.types.len();
 
         let type_table = project.type_table.borrow();
 
-        // Rebuild the name-keyed indexes from `reach.types` so the
+        // Rebuild the name-keyed indexes from `analysis.types` so the
         // struct/variant reachability checks below are O(1) hash probes
         // instead of O(N) `iter().any()` scans. Without this, this loop
         // was O(S × N) per iteration where S = struct count and N =
@@ -1761,7 +1806,7 @@ fn analyze_reachability(project: &NirPackage) -> Reachability {
         // (a Gale-generated parser) that is ~2M `type_table.get` +
         // pattern-match ops *per iteration*, dominating
         // `remove_unreachable_types`.
-        reach.refresh_indexes(&type_table);
+        analysis.refresh_indexes(&type_table);
 
         // Collect struct field types for reachable structs
         // A struct's fields should be collected if:
@@ -1770,32 +1815,32 @@ fn analyze_reachability(project: &NirPackage) -> Reachability {
         // 3. Any monomorphized version with this base name is reachable
         for tir_struct in &project.structs {
             let struct_reachable = if tir_struct.monomorph_info.is_none() {
-                reach.struct_exact.contains(&(
+                analysis.struct_exact.contains(&(
                     tir_struct.name.clone(),
                     tir_struct.module_source.clone(),
-                )) || reach
+                )) || analysis
                     .generic_instance_names
                     .contains(tir_struct.name.as_str())
-                    || reach
+                    || analysis
                         .struct_monomorph_bases
                         .contains(tir_struct.name.as_str())
             } else {
-                reach
+                analysis
                     .struct_monomorph_names
                     .contains(tir_struct.name.as_str())
             };
 
             if struct_reachable {
                 for field in &tir_struct.fields {
-                    collect_type_transitive(field.type_id, &type_table, &mut reach.types);
+                    collect_type_transitive(field.type_id, &type_table, &mut analysis.types);
                 }
                 // Monomorphization type args are used by WIR for name mangling
                 if let Some(info) = &tir_struct.monomorph_info {
                     for &ta in &info.impl_type_args {
-                        collect_type_transitive(ta, &type_table, &mut reach.types);
+                        collect_type_transitive(ta, &type_table, &mut analysis.types);
                     }
                     for &ta in &info.method_type_args {
-                        collect_type_transitive(ta, &type_table, &mut reach.types);
+                        collect_type_transitive(ta, &type_table, &mut analysis.types);
                     }
                 }
             }
@@ -1806,40 +1851,40 @@ fn analyze_reachability(project: &NirPackage) -> Reachability {
         // 1. The base Variant type is reachable, OR
         // 2. Any GenericInstance with this variant name is reachable
         for variant in &project.variants {
-            let base_reachable = reach
+            let base_reachable = analysis
                 .variant_exact
                 .contains(&(variant.name.clone(), variant.module_source.clone()));
-            let instance_reachable = reach.generic_instance_names.contains(variant.name.as_str());
+            let instance_reachable = analysis
+                .generic_instance_names
+                .contains(variant.name.as_str());
 
             if base_reachable || instance_reachable {
                 for case in &variant.cases {
-                    collect_type_transitive(case.payload, &type_table, &mut reach.types);
+                    collect_type_transitive(case.payload, &type_table, &mut analysis.types);
                 }
             }
         }
 
         // Collect type dependencies (array elements, option inner, etc.)
-        let current_types: Vec<TypeId> = reach.types.iter().copied().collect();
+        let current_types: Vec<TypeId> = analysis.types.iter().copied().collect();
         for type_id in current_types {
-            collect_type_dependencies(type_id, &type_table, &mut reach.types);
+            collect_type_dependencies(type_id, &type_table, &mut analysis.types);
         }
 
         drop(type_table);
 
-        if reach.types.len() > before_len {
+        if analysis.types.len() > before_len {
             changed = true;
         }
     }
 
     // Final index refresh so downstream consumers (e.g. the retain
     // calls in `remove_unreachable_types`) see indexes matching the
-    // converged `reach.types` rather than the second-to-last snapshot.
+    // converged `analysis.types` rather than the second-to-last snapshot.
     {
         let type_table = project.type_table.borrow();
-        reach.refresh_indexes(&type_table);
+        analysis.refresh_indexes(&type_table);
     }
-
-    reach
 }
 
 /// Collect all types used in a function
@@ -2206,77 +2251,95 @@ fn collect_type_dependencies(
 }
 
 /// Remove unreachable types from the project's `TypeTable` and module definitions.
-/// This should be called after function DCE.
-pub fn remove_unreachable_types(project: &mut NirPackage) {
-    let reach = analyze_reachability(project);
-
+///
+/// `analysis` is precomputed by [`analyze_dce`] — this function only
+/// retains entries matching its precomputed indexes.
+pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis) {
     // A struct is kept if:
     // 1. Its Struct type is reachable, OR
     // 2. Any GenericInstance with its base name is reachable (e.g., Box<i32> for Box)
     // 3. Any monomorphized Struct with its base name is reachable
     project.structs.retain(|s| {
         if s.monomorph_info.is_none() {
-            reach.struct_exact
+            analysis
+                .struct_exact
                 .contains(&(s.name.clone(), s.module_source.clone()))
-                || reach.generic_instance_names.contains(s.name.as_str())
-                || reach.struct_monomorph_bases.contains(s.name.as_str())
+                || analysis.generic_instance_names.contains(s.name.as_str())
+                || analysis.struct_monomorph_bases.contains(s.name.as_str())
         } else {
-            reach.struct_monomorph_names.contains(s.name.as_str())
+            analysis.struct_monomorph_names.contains(s.name.as_str())
         }
     });
     project.variants.retain(|v| {
-        reach.variant_exact
+        analysis
+            .variant_exact
             .contains(&(v.name.clone(), v.module_source.clone()))
-            || reach.generic_instance_names.contains(v.name.as_str())
+            || analysis.generic_instance_names.contains(v.name.as_str())
     });
     project.enums.retain(|e| {
-        reach.enum_exact
+        analysis
+            .enum_exact
             .contains(&(e.name.clone(), e.module_source.clone()))
     });
 
     // Remove unreachable entries from the shared TypeTable.
     // This ensures that subsequent phases (WIR type registration, codegen) do not
     // emit types that are no longer referenced by any surviving function.
-    project.type_table.borrow_mut().retain(&reach.types);
+    project.type_table.borrow_mut().retain(&analysis.types);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Global variable DCE
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Remove unreachable global variables from the project's NIR modules.
+/// Collect every `(module_key, global_name)` pair that any reachable
+/// function reads via `GlobalVarGet`. Implementation detail of
+/// [`analyze_dce`]: extracted from the old `remove_unreachable_globals`
+/// so the global-DCE input is computed during analysis (before any
+/// pruning) and the matching mutator only retains/strips.
 ///
-/// A global is considered "used" if any surviving function references it via
-/// `GlobalVarGet`. Globals only referenced by `GlobalVarSet` (e.g., their
-/// lazy initializer in `__initialize_module`) are dead.
-///
-/// When a global is removed:
-/// 1. Its declaration is removed from `module.globals`
-/// 2. Any `GlobalVarSet` statements for it are removed from function bodies
-///    (this covers both the original `__initialize_module` and inlined copies)
-pub fn remove_unreachable_globals(project: &mut NirPackage) {
-    // Phase 1: Collect all GlobalVarGet references from surviving functions.
-    // Key: (module_source path as string, global name)
+/// `reachable_functions` is positions in `project.functions`; functions
+/// not in that set are skipped — their reads cannot keep a global
+/// alive because they'll be removed by `remove_unreachable_functions`.
+fn analyze_global_reachability(
+    project: &NirPackage,
+    reachable_functions: &IndexSet<usize>,
+) -> IndexSet<(String, String)> {
     let mut used_globals: IndexSet<(String, String)> = IndexSet::default();
-
-    for func_rc in &project.functions {
+    for (pos, func_rc) in project.functions.iter().enumerate() {
+        if !reachable_functions.contains(&pos) {
+            continue;
+        }
         let func = func_rc.borrow();
         if let Some(body) = &func.body {
             collect_global_reads_block(body, &mut used_globals);
         }
     }
+    used_globals
+}
 
-    // Phase 2: Remove unused globals
+/// Remove unreachable global variables from the project's NIR modules.
+///
+/// A global is "used" iff `used_globals` contains its
+/// `(module_key, name)`. The set is computed up front by
+/// [`analyze_global_reachability`] (driven from `analyze_dce`) so this
+/// function is pure mutation: retain live globals, then strip the
+/// dead-global `GlobalVarSet` statements from every surviving function
+/// body (covers both the original `__initialize_module` and inlined
+/// copies).
+pub fn remove_unreachable_globals(
+    project: &mut NirPackage,
+    used_globals: &IndexSet<(String, String)>,
+) {
     project.globals.retain(|global| {
         let global_module_key = global.module_source.to_path().join("::");
         used_globals.contains(&(global_module_key, global.name.clone()))
     });
 
-    // Phase 3: Remove GlobalVarSet statements for dead globals from function bodies
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = &mut func.body {
-            remove_dead_global_sets_block(body, &used_globals);
+            remove_dead_global_sets_block(body, used_globals);
         }
     }
 }

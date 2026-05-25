@@ -78,7 +78,7 @@ use copy_prop::propagate_copies;
 use cse::eliminate_common_subexprs;
 use dae::eliminate_dead_arguments;
 use dce::{
-    analyze_project, filter_bytes_literals, filter_string_literals,
+    analyze_dce, filter_bytes_literals, filter_string_literals,
     remove_unreachable_closure_functors, remove_unreachable_functions, remove_unreachable_globals,
     remove_unreachable_types,
 };
@@ -276,17 +276,17 @@ pub fn optimize(
 
 fn run_dce(project: &mut NirPackage, profiler: &dyn SpanEmitter) {
     profiler.span_start("nir/dce");
-    // Single pass per `run_dce` invocation. `remove_unreachable_globals`
-    // can rewrite function bodies (it drops `GlobalVarSet` for dead
-    // globals), which may orphan calls inside the dropped initializers,
-    // but the *final* `run_dce` after the optimizer cleans those up — the
-    // savings here aren't worth the cost of an extra full call-graph
-    // rebuild (the dominant cost of this pass).
-    let reachable_positions = analyze_project(project);
-    remove_unreachable_functions(project, &reachable_positions);
-    remove_unreachable_globals(project);
+    // Compute every reachability set up front, then apply mutations
+    // in order. `remove_unreachable_globals` rewrites function bodies
+    // (it drops `GlobalVarSet` for dead globals), which can orphan
+    // calls inside dropped initializers; the *final* `run_dce` after
+    // the optimization loop cleans those up — the savings of an extra
+    // mid-loop call-graph rebuild aren't worth its cost.
+    let analysis = analyze_dce(project);
+    remove_unreachable_functions(project, &analysis.functions);
+    remove_unreachable_globals(project, &analysis.globals);
     filter_string_literals(project);
-    remove_unreachable_types(project);
+    remove_unreachable_types(project, &analysis);
     filter_bytes_literals(project);
     remove_unreachable_closure_functors(project);
     project.rebuild_variant_indices();
