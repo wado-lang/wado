@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779714683210,
+  "lastUpdate": 1779739103251,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26017,6 +26017,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/efd1117c5ee70499f4034611d57a8e7586624d06"
         },
         "date": 1779714682735,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 443310,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3a6a182d1868549c7264c9d07aadca5eb85907f4",
+          "message": "Merge pull request #1194 from wado-lang/claude/wado-cli-quality-Ekhyh\n\nrefactor(cli): make subcommands testable in-process",
+          "timestamp": "2026-05-26T04:52:22+09:00",
+          "tree_id": "4e1f9959d4a902fb79282f87065259913b3cccda",
+          "url": "https://github.com/wado-lang/wado/commit/3a6a182d1868549c7264c9d07aadca5eb85907f4"
+        },
+        "date": 1779739102777,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
