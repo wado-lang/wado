@@ -4,7 +4,6 @@ use std::future::Future;
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
@@ -2044,7 +2043,7 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
     }
 }
 
-pub async fn run(opts: TestOptions) {
+pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let overall_start = Instant::now();
     let multi_pkg = opts.package_runs.len() > 1;
     let flags = Arc::new(opts.compile_flags());
@@ -2111,8 +2110,9 @@ pub async fn run(opts: TestOptions) {
         || grand.test_failed > 0
         || grand.todo_resolved > 0
     {
-        process::exit(1);
+        return Err(CliExit::silent_failure(1));
     }
+    Ok(())
 }
 
 #[cfg(test)]

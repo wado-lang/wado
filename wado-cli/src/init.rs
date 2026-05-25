@@ -102,27 +102,21 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<InitOptions, CliExit> {
     })
 }
 
-pub fn run(opts: InitOptions) {
+pub fn run(opts: InitOptions) -> Result<(), CliExit> {
     let manifest_path = Path::new("wado.toml");
 
     if manifest_path.exists() && !opts.force {
-        eprintln!(
-            "Error: wado.toml already exists in the current directory (use --force to overwrite)"
-        );
-        std::process::exit(1);
+        return Err(CliExit::error(
+            "wado.toml already exists in the current directory (use --force to overwrite)",
+        ));
     }
 
     let content = generate_manifest(&opts.name, opts.namespace.as_deref());
 
-    match fs::write(manifest_path, &content) {
-        Ok(()) => {
-            eprintln!("Created wado.toml");
-        }
-        Err(e) => {
-            eprintln!("Error writing wado.toml: {e}");
-            std::process::exit(1);
-        }
-    }
+    fs::write(manifest_path, &content)
+        .map_err(|e| CliExit::error(format!("writing wado.toml: {e}")))?;
+    eprintln!("Created wado.toml");
+    Ok(())
 }
 
 fn generate_manifest(name: &str, namespace: Option<&str>) -> String {

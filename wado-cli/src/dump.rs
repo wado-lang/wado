@@ -1,7 +1,6 @@
 use std::fmt::Write as FmtWrite;
 use std::fs;
 use std::path::Path;
-use std::process;
 
 use lexopt::Arg::Value;
 use wado_compiler::OptLevel;
@@ -328,7 +327,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     })
 }
 
-pub async fn run(opts: DumpOptions) {
+pub async fn run(opts: DumpOptions) -> Result<(), CliExit> {
     let multiple_files = opts.inputs.len() > 1;
 
     for input in &opts.inputs {
@@ -336,21 +335,17 @@ pub async fn run(opts: DumpOptions) {
             println!("// ========== {input} ==========");
         }
 
-        run_single(&opts, input).await;
+        run_single(&opts, input).await?;
     }
+    Ok(())
 }
 
-async fn run_single(opts: &DumpOptions, input: &str) {
+async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
     let path = Path::new(input);
 
     // Read source file
-    let source = match fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Error reading '{}': {e}", path.display());
-            process::exit(1);
-        }
-    };
+    let source = fs::read_to_string(path)
+        .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
 
     // Get base path for relative imports
     let base_path = path
@@ -362,8 +357,9 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     // Extract target world from __DATA__ section if present
     let target_world = extract_world_from_data_section(&source);
 
-    // Dump using async API with target world
-    let result = match wado_compiler::dump_with_host_and_world(
+    // Dump using async API with target world. Errors are already printed by
+    // the host via `emit_diagnostic`; signal a non-zero exit silently.
+    let result = wado_compiler::dump_with_host_and_world(
         &source,
         &host,
         Some(input),
@@ -373,13 +369,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         opts.opt_iterations,
     )
     .await
-    {
-        Ok(r) => r,
-        Err(_bail) => {
-            // Errors already printed by host via emit_diagnostic
-            process::exit(1);
-        }
-    };
+    .map_err(|_bail| CliExit::silent_failure(1))?;
 
     // Tokens section (Lexer phase)
     if opts.show_tokens {
@@ -647,6 +637,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
             println!();
         }
     }
+    Ok(())
 }
 
 /// Extract the target world from the `__DATA__` JSON section of a source file.

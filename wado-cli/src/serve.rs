@@ -3,7 +3,6 @@ use std::fmt::Write as _;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::{Pin, pin};
-use std::process;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::task::{Context, Poll};
@@ -1172,7 +1171,7 @@ fn log_connection_join_error(res: Result<(), tokio::task::JoinError>) {
     }
 }
 
-pub async fn run(opts: ServeOptions) {
+pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     let flags = CompileFlags {
         opt_level: opts.opt_level,
         log_level: opts.log_level,
@@ -1183,7 +1182,7 @@ pub async fn run(opts: ServeOptions) {
         allocator: opts.allocator,
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
-    let wasm = compile::compile(&opts.input, &flags).await;
+    let wasm = compile::compile(&opts.input, &flags).await?;
 
     let timeout = Duration::from_secs(opts.timeout_secs);
     // An explicit `--workers` is already validated against `--max-concurrency`
@@ -1203,7 +1202,7 @@ pub async fn run(opts: ServeOptions) {
         eprintln!("Profiling: forcing --workers 1");
         workers = 1;
     }
-    if let Err(e) = run_http_server(
+    run_http_server(
         wasm,
         &opts.addr,
         cranelift_opt,
@@ -1215,8 +1214,5 @@ pub async fn run(opts: ServeOptions) {
         opts.profile,
     )
     .await
-    {
-        eprintln!("Server error: {e}");
-        process::exit(1);
-    }
+    .map_err(|e| CliExit::error(format!("Server error: {e}")))
 }

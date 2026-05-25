@@ -1,7 +1,6 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
-use std::process;
 
 use lexopt::Arg::Value;
 use lexopt::Parser;
@@ -380,13 +379,22 @@ pub async fn try_compile(
     wado_compiler::compile_with_options(&source, &host, Some(filename), options).await
 }
 
-/// Compile a Wado source file and return the produced wasm bytes. Aborts
-/// the process on any failure (diagnostics already printed via the host).
-pub async fn compile(filename: &str, flags: &CompileFlags) -> Vec<u8> {
-    match try_compile(filename, flags).await {
-        Ok(result) => result.wasm,
-        Err(_) => process::exit(1),
-    }
+/// Compile a Wado source file and return the produced wasm bytes.
+///
+/// On failure, diagnostics have already been printed via the compiler host;
+/// the returned [`CliExit::silent_failure`] tells the caller to exit non-zero
+/// without printing anything extra.
+///
+/// # Errors
+///
+/// Returns [`CliExit::silent_failure`] when compilation fails. Diagnostics
+/// for the failure are emitted by the configured `CompilerHost` (see
+/// [`FilesystemCompilerHost`]).
+pub async fn compile(filename: &str, flags: &CompileFlags) -> Result<Vec<u8>, CliExit> {
+    try_compile(filename, flags)
+        .await
+        .map(|result| result.wasm)
+        .map_err(|_| CliExit::silent_failure(1))
 }
 
 /// Collect inline `with { generator: { ... } }` clauses from `entry_file`
@@ -498,29 +506,26 @@ pub fn load_nearest_manifest(
     }
 }
 
-/// Convert Wasm binary to WAT text format (folded style)
-fn wasm_to_wat(wasm: &[u8]) -> String {
+/// Convert Wasm binary to WAT text format (folded style).
+fn wasm_to_wat(wasm: &[u8]) -> Result<String, CliExit> {
     let mut config = wasmprinter::Config::new();
     config.fold_instructions(true);
     let mut wat = String::new();
     config
         .print(wasm, &mut wasmprinter::PrintFmtWrite(&mut wat))
-        .unwrap_or_else(|e| {
-            eprintln!("Error generating WAT: {e}");
-            process::exit(1);
-        });
-    wat
+        .map_err(|e| CliExit::error(format!("generating WAT: {e}")))?;
+    Ok(wat)
 }
 
-pub async fn run(opts: CompileOptions) {
+pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
     let flags = opts.flags();
-    let wasm = compile(&opts.input, &flags).await;
+    let wasm = compile(&opts.input, &flags).await?;
 
     // Handle --wat-to-stdout: output WAT to stdout and return
     if opts.wat_to_stdout {
-        let wat = wasm_to_wat(&wasm);
+        let wat = wasm_to_wat(&wasm)?;
         print!("{wat}");
-        return;
+        return Ok(());
     }
 
     // Determine format: explicit > guessed from -o extension > default (wasm)
@@ -544,27 +549,12 @@ pub async fn run(opts: CompileOptions) {
         Path::new(&opts.input).with_extension(ext)
     };
 
-    match format {
-        OutputFormat::Wasm => match fs::write(&output_path, &wasm) {
-            Ok(()) => {
-                eprintln!("Generated: {}", output_path.display());
-            }
-            Err(e) => {
-                eprintln!("Error writing output file: {e}");
-                process::exit(1);
-            }
-        },
-        OutputFormat::Wat => {
-            let wat = wasm_to_wat(&wasm);
-            match fs::write(&output_path, &wat) {
-                Ok(()) => {
-                    eprintln!("Generated: {}", output_path.display());
-                }
-                Err(e) => {
-                    eprintln!("Error writing output file: {e}");
-                    process::exit(1);
-                }
-            }
-        }
-    }
+    let bytes = match format {
+        OutputFormat::Wasm => wasm,
+        OutputFormat::Wat => wasm_to_wat(&wasm)?.into_bytes(),
+    };
+    fs::write(&output_path, &bytes)
+        .map_err(|e| CliExit::error(format!("writing output file: {e}")))?;
+    eprintln!("Generated: {}", output_path.display());
+    Ok(())
 }

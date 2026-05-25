@@ -195,7 +195,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
     })
 }
 
-pub async fn run(opts: QueryOptions) {
+pub async fn run(opts: QueryOptions) -> Result<(), CliExit> {
     match opts.kind {
         QueryKind::Diagnostics => query_adapter::run_diagnostics(&opts.input, opts.json).await,
         QueryKind::References => {
@@ -206,7 +206,7 @@ pub async fn run(opts: QueryOptions) {
                 opts.include_declaration,
                 opts.json,
             )
-            .await;
+            .await
         }
         QueryKind::DocumentHighlight => {
             query_adapter::run_document_highlight(
@@ -215,7 +215,7 @@ pub async fn run(opts: QueryOptions) {
                 opts.column.unwrap(),
                 opts.json,
             )
-            .await;
+            .await
         }
         QueryKind::Definition => {
             query_adapter::run_definition(
@@ -224,7 +224,7 @@ pub async fn run(opts: QueryOptions) {
                 opts.column.unwrap(),
                 opts.json,
             )
-            .await;
+            .await
         }
     }
 }

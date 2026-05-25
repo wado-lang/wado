@@ -7,12 +7,21 @@ use std::process;
 use lexopt::Parser;
 use wado_compiler::LogLevel;
 
-/// Represents a CLI exit (help or error) without calling `process::exit()`.
+/// Represents the outcome of a subcommand: a message to print and an exit
+/// code.
 ///
-/// Returned by `parse_args` functions to enable in-process testing.
+/// Returned by both `parse_args()` and `run()` so the only `process::exit()`
+/// call lives in `main()`. The two extreme shapes are:
+///
+/// - `error(msg)` / `error_with_usage(msg, usage)` — print a formatted error
+///   to stderr and exit non-zero.
+/// - `silent_failure(code)` — diagnostics were already printed by the
+///   subcommand (e.g., the compiler host emitted error spans to stderr);
+///   `main()` should exit non-zero without printing anything extra.
 #[derive(Debug)]
 pub struct CliExit {
-    /// The full message to display (to stderr).
+    /// The full message to display (to stderr). Empty when the subcommand
+    /// already printed its own diagnostics.
     pub message: String,
     /// Process exit code (0 for help, 1 for errors).
     pub exit_code: i32,
@@ -44,16 +53,23 @@ impl CliExit {
         }
     }
 
+    /// Create a failure exit with no message. The caller has already
+    /// printed everything the user needs to see (compiler diagnostics,
+    /// per-iteration failure lines, etc.); `main()` only needs the exit
+    /// code.
+    #[must_use]
+    pub const fn silent_failure(exit_code: i32) -> Self {
+        Self {
+            message: String::new(),
+            exit_code,
+        }
+    }
+
     /// Exit the process with the stored message and code.
     pub fn exit(&self) -> ! {
         eprint!("{}", self.message);
         process::exit(self.exit_code);
     }
-}
-
-/// Exit with an error message (for use in `run()` functions that still need `-> !`).
-pub fn exit_error(msg: &str) -> ! {
-    CliExit::error(msg).exit()
 }
 
 /// Get the next argument, returning an error on failure.

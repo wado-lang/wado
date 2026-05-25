@@ -1,6 +1,5 @@
 use std::fmt::Write as _;
 use std::io::BufWriter;
-use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -327,7 +326,7 @@ async fn run_cli_component(
     Ok(())
 }
 
-pub async fn run(opts: RunOptions) {
+pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
     // `wado run` always targets `wasi:cli/command`; pass `None` so the
     // compiler picks its default world (and bump allocator unless the
     // caller overrode it via --allocator).
@@ -341,9 +340,9 @@ pub async fn run(opts: RunOptions) {
         allocator: opts.allocator,
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
-    let wasm = compile::compile(&opts.input, &flags).await;
+    let wasm = compile::compile(&opts.input, &flags).await?;
 
-    if let Err(e) = run_cli_component(
+    run_cli_component(
         &wasm,
         cranelift_opt,
         &opts.profile,
@@ -351,8 +350,5 @@ pub async fn run(opts: RunOptions) {
         &opts.program_args,
     )
     .await
-    {
-        eprintln!("Runtime error: {e:?}");
-        process::exit(1);
-    }
+    .map_err(|e| CliExit::error(format!("Runtime error: {e:?}")))
 }

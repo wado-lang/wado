@@ -1,7 +1,6 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
-use std::process;
 use std::time::Instant;
 
 use lexopt::Arg::Value;
@@ -106,7 +105,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<FormatOptions, CliExit> 
     })
 }
 
-pub fn run(opts: FormatOptions) {
+pub fn run(opts: FormatOptions) -> Result<(), CliExit> {
     let mut any_would_reformat = false;
     let mut any_error = false;
 
@@ -160,10 +159,8 @@ pub fn run(opts: FormatOptions) {
         }
     }
 
-    if any_error {
-        process::exit(1);
+    if any_error || (opts.check && any_would_reformat) {
+        return Err(CliExit::silent_failure(1));
     }
-    if opts.check && any_would_reformat {
-        process::exit(1);
-    }
+    Ok(())
 }
