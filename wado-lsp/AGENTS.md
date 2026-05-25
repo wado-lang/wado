@@ -27,6 +27,7 @@ Language service engine for the Wado compiler toolchain.
 | `src/server/dispatch.rs`    | LSP method routing, position-encoding negotiation, and server-lifecycle enforcement                                       |
 | `src/server/rpc.rs`         | LSP wire types (params, capabilities, notifications)                                                                      |
 | `src/bin/wado-lsp.rs`       | Binary entrypoint; drives `run_stdio()` via `futures::executor::block_on`                                                 |
+| `src/test_support.rs`       | Shared in-memory `MapHost` for unit + integration tests (`#[doc(hidden)] pub`); replaces per-file `TestHost` duplication  |
 
 ### Engine
 

@@ -371,40 +371,13 @@ fn item_info(item: &Item, name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use indexmap::IndexMap;
-    use wado_compiler::CompilerHost;
+    use crate::test_support::MapHost;
     use wado_compiler::annotate::annotate_with_invocations;
-    use wado_compiler::{Diagnostic as CompilerDiagnostic, SourceError};
-
-    struct TestHost {
-        sources: IndexMap<String, Vec<u8>>,
-    }
-
-    impl TestHost {
-        fn new(path: &str, source: &str) -> Self {
-            let mut sources = IndexMap::new();
-            sources.insert(path.to_string(), source.as_bytes().to_vec());
-            Self { sources }
-        }
-    }
-
-    impl CompilerHost for TestHost {
-        async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-            self.sources
-                .get(path)
-                .cloned()
-                .ok_or_else(|| SourceError::NotFound {
-                    path: path.to_string(),
-                })
-        }
-
-        fn emit_diagnostic(&self, _diagnostic: CompilerDiagnostic) {}
-    }
 
     async fn hover_at(source: &str, line: u32, character: u32) -> Option<HoverResult> {
         let path = "/test.wado";
         let uri = format!("file://{path}");
-        let host = TestHost::new(path, source);
+        let host = MapHost::single(path, source);
         let invocations = wado_compiler::kiln::InvocationIndex::new();
         let annotated = annotate_with_invocations(source, &host, Some(path), invocations).await;
         find_hover(
@@ -565,7 +538,7 @@ mod tests {
     ) -> Option<HoverResult> {
         let path = "/test.wado";
         let uri = format!("file://{path}");
-        let host = TestHost::new(path, source);
+        let host = MapHost::single(path, source);
         let invocations = wado_compiler::kiln::InvocationIndex::new();
         let annotated = annotate_with_invocations(source, &host, Some(path), invocations).await;
         find_hover(

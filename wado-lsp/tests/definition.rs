@@ -2,47 +2,13 @@
 //! across parameters, locals, items, types, method calls, imports, effects,
 //! and file-path jumps.
 
-use indexmap::IndexMap;
-use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, SourceError};
+use wado_lsp::test_support::MapHost;
 use wado_lsp::{DefinitionResult, Engine, Position};
-
-struct TestHost {
-    sources: IndexMap<String, Vec<u8>>,
-}
-
-impl TestHost {
-    fn new(path: &str, source: &str) -> Self {
-        let mut sources = IndexMap::new();
-        sources.insert(path.to_string(), source.as_bytes().to_vec());
-        Self { sources }
-    }
-
-    fn with_files(files: &[(&str, &str)]) -> Self {
-        let mut sources = IndexMap::new();
-        for (path, source) in files {
-            sources.insert((*path).to_string(), source.as_bytes().to_vec());
-        }
-        Self { sources }
-    }
-}
-
-impl CompilerHost for TestHost {
-    async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-        if let Some(b) = self.sources.get(path) {
-            return Ok(b.clone());
-        }
-        Err(SourceError::NotFound {
-            path: path.to_string(),
-        })
-    }
-
-    fn emit_diagnostic(&self, _diagnostic: CompilerDiagnostic) {}
-}
 
 async fn def_at(source: &str, line: u32, character: u32) -> Option<DefinitionResult> {
     let path = "/test.wado";
     let uri = format!("file://{path}");
-    let host = TestHost::new(path, source);
+    let host = MapHost::single(path, source);
     let mut engine = Engine::new();
     engine.open_document(&uri, source.to_string());
     engine
@@ -57,7 +23,7 @@ async fn def_at_in(
     character: u32,
 ) -> Option<DefinitionResult> {
     let uri = format!("file://{entry}");
-    let host = TestHost::with_files(files);
+    let host = MapHost::with_files(files);
     let entry_source = files
         .iter()
         .find(|(p, _)| *p == entry)

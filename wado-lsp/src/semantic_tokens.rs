@@ -3,7 +3,7 @@ use wado_compiler::ast::{self, Expr, Item, Stmt, Type};
 use wado_compiler::lexer::Lexer;
 use wado_compiler::token::{Token, TokenKind};
 
-use crate::text::PositionEncoding;
+use crate::text::{PositionEncoding, codepoints_to_code_units, line_without_terminator};
 
 /// LSP semantic token type indices (must match `TOKEN_TYPES` order).
 pub mod token_type {
@@ -134,10 +134,7 @@ pub fn delta_encode(
     let lines: Vec<(&str, u32)> = source
         .split_inclusive('\n')
         .map(|line| {
-            let text = line
-                .strip_suffix('\n')
-                .map(|s| s.strip_suffix('\r').unwrap_or(s))
-                .unwrap_or(line);
+            let text = line_without_terminator(line);
             (text, text.chars().count() as u32)
         })
         .collect();
@@ -150,8 +147,8 @@ pub fn delta_encode(
         let (line_text, line_codepoints) =
             lines.get(token.line as usize).copied().unwrap_or(("", 0));
         let start_char =
-            codepoint_to_encoding(line_text, line_codepoints, token.start_char, encoding);
-        let end_char = codepoint_to_encoding(
+            codepoints_to_code_units(line_text, line_codepoints, token.start_char, encoding);
+        let end_char = codepoints_to_code_units(
             line_text,
             line_codepoints,
             token.start_char + token.length,
@@ -176,31 +173,6 @@ pub fn delta_encode(
         prev_start = start_char;
     }
     data
-}
-
-/// Codepoint offset → LSP code-unit offset in the requested `encoding`.
-/// `line_codepoints` is the cached codepoint count of `line`, so the
-/// saturation check avoids a second `chars().count()` pass.
-fn codepoint_to_encoding(
-    line: &str,
-    line_codepoints: u32,
-    codepoint_col: u32,
-    encoding: PositionEncoding,
-) -> u32 {
-    let codepoint_col = codepoint_col.min(line_codepoints);
-    match encoding {
-        PositionEncoding::Utf8 => line
-            .chars()
-            .take(codepoint_col as usize)
-            .map(|c| c.len_utf8() as u32)
-            .sum(),
-        PositionEncoding::Utf16 => line
-            .chars()
-            .take(codepoint_col as usize)
-            .map(|c| c.len_utf16() as u32)
-            .sum(),
-        PositionEncoding::Utf32 => codepoint_col,
-    }
 }
 
 // --- AST-based type span collection ---

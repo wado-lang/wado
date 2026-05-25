@@ -8,6 +8,8 @@ mod location;
 mod references;
 pub mod semantic_tokens;
 pub mod server;
+#[doc(hidden)]
+pub mod test_support;
 pub mod text;
 pub mod uri;
 
@@ -400,51 +402,8 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::MapHost;
     use futures::executor::block_on;
-    use indexmap::IndexMap as IndexMapAlias;
-    use wado_compiler::SourceError;
-
-    struct EmptyHost;
-    impl CompilerHost for EmptyHost {
-        async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-            Err(SourceError::NotFound {
-                path: path.to_string(),
-            })
-        }
-        fn emit_diagnostic(&self, _: CompilerDiagnostic) {}
-    }
-
-    struct MapHost {
-        sources: IndexMapAlias<String, Vec<u8>>,
-        emitted: std::sync::Mutex<Vec<CompilerDiagnostic>>,
-    }
-
-    impl MapHost {
-        fn new(entries: &[(&str, &str)]) -> Self {
-            let mut sources = IndexMapAlias::new();
-            for (path, body) in entries {
-                sources.insert((*path).to_string(), body.as_bytes().to_vec());
-            }
-            Self {
-                sources,
-                emitted: std::sync::Mutex::new(Vec::new()),
-            }
-        }
-    }
-
-    impl CompilerHost for MapHost {
-        async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-            self.sources
-                .get(path)
-                .cloned()
-                .ok_or_else(|| SourceError::NotFound {
-                    path: path.to_string(),
-                })
-        }
-        fn emit_diagnostic(&self, d: CompilerDiagnostic) {
-            self.emitted.lock().unwrap().push(d);
-        }
-    }
 
     #[test]
     fn test_open_and_close_document() {
@@ -474,7 +433,7 @@ mod tests {
         // removed.
         let mut engine = Engine::new();
         engine.open_document("file:///t.wado", "fn a() {}".to_string());
-        let host = EmptyHost;
+        let host = MapHost::empty();
         let _ = block_on(engine.snapshot("file:///t.wado", &host)).expect("snapshot");
         assert!(
             engine
@@ -508,7 +467,7 @@ mod tests {
         let mut engine = Engine::new();
         engine.open_document("file:///foo.wado", "fn a() {}".to_string());
         engine.open_document("file:///bar.wado", "fn b() {}".to_string());
-        let host = EmptyHost;
+        let host = MapHost::empty();
         let _ = block_on(engine.snapshot("file:///foo.wado", &host)).expect("foo snapshot");
         let _ = block_on(engine.snapshot("file:///bar.wado", &host)).expect("bar snapshot");
         engine.update_document("file:///bar.wado", "fn bb() {}".to_string());
@@ -531,13 +490,12 @@ mod tests {
         // side effects (logging, error counting) would otherwise vanish
         // silently when Engine::snapshot wraps the host.
         let text = "fn f() -> i32 { return \"oops\"; }";
-        let host = MapHost::new(&[("/t.wado", text)]);
+        let host = MapHost::single("/t.wado", text);
         let mut engine = Engine::new();
         engine.open_document("file:///t.wado", text.to_string());
         let _ = block_on(engine.snapshot("file:///t.wado", &host)).expect("snapshot");
-        let emitted = host.emitted.lock().unwrap();
         assert!(
-            !emitted.is_empty(),
+            !host.emitted().is_empty(),
             "inner host should have received forwarded diagnostics",
         );
     }

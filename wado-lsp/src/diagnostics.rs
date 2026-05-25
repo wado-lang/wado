@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use wado_compiler::{Code, Diagnostic as CompilerDiagnostic, Severity as CompilerSeverity};
 
-use crate::text::PositionEncoding;
+use crate::text::{PositionEncoding, codepoint_offset_to_character};
 
 /// LSP-compatible diagnostic severity. Serializes as the 1..=4 integer
 /// defined by the LSP wire format.
@@ -106,8 +106,8 @@ pub fn from_compiler_diagnostic(
 
     let (start_char, end_char) = match source {
         Some(src) => (
-            codepoint_column_to_character(src, start_line, start_codepoint, encoding),
-            codepoint_column_to_character(src, end_line, end_codepoint, encoding),
+            codepoint_offset_to_character(src, start_line, start_codepoint, encoding),
+            codepoint_offset_to_character(src, end_line, end_codepoint, encoding),
         ),
         None => (start_codepoint, end_codepoint),
     };
@@ -128,39 +128,6 @@ pub fn from_compiler_diagnostic(
         source: Some("wado".to_string()),
         message: diag.message.clone(),
     })
-}
-
-/// Resolve a 0-based codepoint column on `line` of `source` into a
-/// 0-based LSP `character` in `encoding`. Saturates to the end of the
-/// line on overflow.
-fn codepoint_column_to_character(
-    source: &str,
-    line: u32,
-    codepoint_col: u32,
-    encoding: PositionEncoding,
-) -> u32 {
-    let Some(line_text) = source.split_inclusive('\n').nth(line as usize) else {
-        return codepoint_col;
-    };
-    let line_content = line_text
-        .strip_suffix('\n')
-        .map(|s| s.strip_suffix('\r').unwrap_or(s))
-        .unwrap_or(line_text);
-    let max = line_content.chars().count() as u32;
-    let codepoint_col = codepoint_col.min(max);
-    match encoding {
-        PositionEncoding::Utf8 => line_content
-            .chars()
-            .take(codepoint_col as usize)
-            .map(|c| c.len_utf8() as u32)
-            .sum(),
-        PositionEncoding::Utf16 => line_content
-            .chars()
-            .take(codepoint_col as usize)
-            .map(|c| c.len_utf16() as u32)
-            .sum(),
-        PositionEncoding::Utf32 => codepoint_col,
-    }
 }
 
 #[cfg(test)]

@@ -12,38 +12,12 @@
 //! - Inputs that historically panicked during codegen validation now
 //!   complete cleanly because `Engine::diagnostics` stops at `annotate`.
 
-use indexmap::IndexMap;
-use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, SourceError};
+use wado_lsp::test_support::MapHost;
 use wado_lsp::{Diagnostic, Engine, Severity};
-
-struct TestHost {
-    sources: IndexMap<String, Vec<u8>>,
-}
-
-impl TestHost {
-    fn empty() -> Self {
-        Self {
-            sources: IndexMap::new(),
-        }
-    }
-}
-
-impl CompilerHost for TestHost {
-    async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-        if let Some(b) = self.sources.get(path) {
-            return Ok(b.clone());
-        }
-        Err(SourceError::NotFound {
-            path: path.to_string(),
-        })
-    }
-
-    fn emit_diagnostic(&self, _diagnostic: CompilerDiagnostic) {}
-}
 
 async fn diagnostics_for(path: &str, source: &str) -> Vec<Diagnostic> {
     let uri = format!("file://{path}");
-    let host = TestHost::empty();
+    let host = MapHost::empty();
     let mut engine = Engine::new();
     engine.open_document(&uri, source.to_string());
     engine.diagnostics(&uri, &host).await
