@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779671089312,
+  "lastUpdate": 1779672826869,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25841,6 +25841,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2beb26c1652afc2647870861b5f6fa238b20a091"
         },
         "date": 1779671089146,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9754,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17192,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 465275,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f0623a35021ead8bc35882a3a6eeca571ea4936b",
+          "message": "Merge pull request #1190 from wado-lang/claude/laughing-mendel-N611y\n\nfix(optimize): field_scalarize must not propagate post-sync state past a labeled break (#1187)",
+          "timestamp": "2026-05-25T10:27:24+09:00",
+          "tree_id": "1a111199bd8d61b0290e337bb630aead2f0a41b9",
+          "url": "https://github.com/wado-lang/wado/commit/f0623a35021ead8bc35882a3a6eeca571ea4936b"
+        },
+        "date": 1779672826439,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
