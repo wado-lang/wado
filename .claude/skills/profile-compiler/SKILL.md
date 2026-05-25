@@ -13,10 +13,10 @@ including wasmtime/cranelift). For the **guest** wasm program, use
 
 Choose based on **what you're optimising for**:
 
-| Profile | Cargo flag | Use when | Trade-off |
-| --- | --- | --- | --- |
-| `profiling` | `cargo build --profile profiling --bin wado` | Improving **benchmark scores** — release-equivalent codegen with debug info kept. Inherits `release` (thin LTO, `codegen-units=1`) and adds `debug = 2`, `strip = false`. | Slow build (LTO), but the CPU profile reflects what users actually run. |
-| `dev` | `cargo build --bin wado` | Improving **developer-iteration time** — making `cargo run -- compile/test/...` faster for compiler-hackers. Uses the in-workspace `[profile.dev.package.wado-compiler] opt-level = 1`, so the compiler itself isn't molasses while everything else stays unoptimised. | Fast build, but the absolute numbers are larger than a release run; ratios between hot paths are still actionable. |
+| Profile     | Cargo flag                                   | Use when                                                                                                                                                                                                                                                               | Trade-off                                                                                                          |
+| ----------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `profiling` | `cargo build --profile profiling --bin wado` | Improving **benchmark scores** — release-equivalent codegen with debug info kept. Inherits `release` (thin LTO, `codegen-units=1`) and adds `debug = 2`, `strip = false`.                                                                                              | Slow build (LTO), but the CPU profile reflects what users actually run.                                            |
+| `dev`       | `cargo build --bin wado`                     | Improving **developer-iteration time** — making `cargo run -- compile/test/...` faster for compiler-hackers. Uses the in-workspace `[profile.dev.package.wado-compiler] opt-level = 1`, so the compiler itself isn't molasses while everything else stays unoptimised. | Fast build, but the absolute numbers are larger than a release run; ratios between hot paths are still actionable. |
 
 If unsure: pick `profiling` for "users complain it's slow", pick `dev`
 for "rebuild → run → tweak feels slow during development." The
