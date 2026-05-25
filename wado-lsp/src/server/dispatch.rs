@@ -151,77 +151,56 @@ pub async fn dispatch<W: Write>(
             }
         }
         "textDocument/definition" => {
-            if let Some(id) = id {
-                let Some(p) = transport::decode_or_error::<TextDocumentPositionParams, _>(
-                    writer, id, params,
-                )?
-                else {
-                    return Ok(());
-                };
+            let engine = &*engine;
+            transport::typed_request(writer, id, params, async |p: TextDocumentPositionParams| {
                 let host = transport::host_for_uri(&p.text_document.uri);
-                let result = engine
+                engine
                     .definition(&p.text_document.uri, p.position, &host)
-                    .await;
-                transport::send_response(writer, id, result)?;
-            }
+                    .await
+            })
+            .await?;
         }
         "textDocument/hover" => {
-            if let Some(id) = id {
-                let Some(p) = transport::decode_or_error::<TextDocumentPositionParams, _>(
-                    writer, id, params,
-                )?
-                else {
-                    return Ok(());
-                };
+            let engine = &*engine;
+            transport::typed_request(writer, id, params, async |p: TextDocumentPositionParams| {
                 let host = transport::host_for_uri(&p.text_document.uri);
-                let result = engine.hover(&p.text_document.uri, p.position, &host).await;
-                transport::send_response(writer, id, result)?;
-            }
+                engine.hover(&p.text_document.uri, p.position, &host).await
+            })
+            .await?;
         }
         "textDocument/references" => {
-            if let Some(id) = id {
-                let Some(p) = transport::decode_or_error::<ReferenceParams, _>(writer, id, params)?
-                else {
-                    return Ok(());
-                };
+            let engine = &*engine;
+            transport::typed_request(writer, id, params, async |p: ReferenceParams| {
                 let host = transport::host_for_uri(&p.text_document.uri);
-                let refs = engine
+                engine
                     .references(
                         &p.text_document.uri,
                         p.position,
                         p.context.include_declaration,
                         &host,
                     )
-                    .await;
-                transport::send_response(writer, id, refs)?;
-            }
+                    .await
+            })
+            .await?;
         }
         "textDocument/documentHighlight" => {
-            if let Some(id) = id {
-                let Some(p) = transport::decode_or_error::<TextDocumentPositionParams, _>(
-                    writer, id, params,
-                )?
-                else {
-                    return Ok(());
-                };
+            let engine = &*engine;
+            transport::typed_request(writer, id, params, async |p: TextDocumentPositionParams| {
                 let host = transport::host_for_uri(&p.text_document.uri);
-                let highlights = engine
+                engine
                     .document_highlight(&p.text_document.uri, p.position, &host)
-                    .await;
-                transport::send_response(writer, id, highlights)?;
-            }
+                    .await
+            })
+            .await?;
         }
         "textDocument/semanticTokens/full" => {
-            if let Some(id) = id {
-                let Some(p) =
-                    transport::decode_or_error::<SemanticTokensParams, _>(writer, id, params)?
-                else {
-                    return Ok(());
-                };
-                let data = engine.semantic_tokens(&p.text_document.uri);
-                let result = SemanticTokens { data };
-                transport::send_response(writer, id, result)?;
-            }
+            let engine = &*engine;
+            transport::typed_request(writer, id, params, async |p: SemanticTokensParams| {
+                SemanticTokens {
+                    data: engine.semantic_tokens(&p.text_document.uri),
+                }
+            })
+            .await?;
         }
         "workspace/textDocumentContent" => {
             if let Some(id) = id {

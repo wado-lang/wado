@@ -18,36 +18,18 @@ use wado_compiler::annotate::Annotated;
 
 use crate::diagnostics::{Position, Range};
 use crate::location::span_to_range;
+use crate::macros::lsp_repr_u32_enum;
 use crate::text::{PositionEncoding, lsp_position_to_line_col};
 
-/// LSP `DocumentHighlightKind` values. Serializes as the 1..=3 integer
-/// defined by the LSP wire format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(into = "u32", try_from = "u32")]
-pub enum HighlightKind {
-    Text = 1,
-    Read = 2,
-    Write = 3,
-}
-
-impl From<HighlightKind> for u32 {
-    fn from(k: HighlightKind) -> Self {
-        k as Self
+lsp_repr_u32_enum!(
+    /// LSP `DocumentHighlightKind` values. Serializes as the 1..=3 integer
+    /// defined by the LSP wire format.
+    pub enum HighlightKind {
+        Text = 1,
+        Read = 2,
+        Write = 3,
     }
-}
-
-impl TryFrom<u32> for HighlightKind {
-    type Error = String;
-
-    fn try_from(n: u32) -> Result<Self, <Self as TryFrom<u32>>::Error> {
-        match n {
-            1 => Ok(Self::Text),
-            2 => Ok(Self::Read),
-            3 => Ok(Self::Write),
-            _ => Err(format!("invalid HighlightKind: {n}")),
-        }
-    }
-}
+);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocumentHighlight {

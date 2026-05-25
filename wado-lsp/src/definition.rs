@@ -15,7 +15,7 @@ use wado_compiler::name::resolve_import_with_entry;
 use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, span_to_range, symbol_uri};
+use crate::location::{module_uri, source_for_key, span_to_range, symbol_uri};
 use crate::text::{PositionEncoding, lsp_position_to_line_col};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,17 +73,9 @@ pub fn find_definition(
         Some(symbol) => symbol_uri(annotated, symbol, uri)?,
         None => module_uri(annotated, &def_key.module, uri)?,
     };
-    // Mirror references.rs: spans for defs in OTHER modules are
-    // codepoint-indexed against their own module's source, not the
-    // request document. Re-encoding against `source` would walk the
-    // wrong text and emit a drifted `character` under UTF-16/UTF-8
-    // whenever the entry document and the def module differ on the
-    // matching line. Pass `None` to preserve the compiler's codepoint
-    // column verbatim (correct under UTF-32 / ASCII).
-    let source_for_range = (def_key.module == annotated.entry_module_source).then_some(source);
     Some(DefinitionResult {
         uri: def_uri,
-        range: span_to_range(&span, source_for_range, encoding),
+        range: span_to_range(&span, source_for_key(annotated, &def_key, source), encoding),
     })
 }
 

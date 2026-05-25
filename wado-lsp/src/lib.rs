@@ -1,3 +1,5 @@
+mod macros;
+
 mod definition;
 mod diagnostics;
 mod document_highlight;
@@ -193,6 +195,29 @@ impl Engine {
         Some(snapshot)
     }
 
+    /// Compute the snapshot + document text for `uri` and hand them to
+    /// `f`. Returns `default` when either lookup misses (closed
+    /// document or load failure).
+    ///
+    /// Every position-bearing query (`definition`, `hover`, `references`,
+    /// `document_highlight`) used to inline the same `snapshot.await? +
+    /// doc_text` prologue. Centralising it here means a future change
+    /// to that prologue (e.g. caching the doc text on `Snapshot`) lands
+    /// in one place.
+    async fn with_doc_snapshot<H, F, R>(&self, uri: &str, host: &H, default: R, f: F) -> R
+    where
+        H: CompilerHost,
+        F: FnOnce(&Snapshot, &str) -> R,
+    {
+        let Some(snapshot) = self.snapshot(uri, host).await else {
+            return default;
+        };
+        let Some(doc_text) = self.documents.get(uri).map(|d| d.text.as_str()) else {
+            return default;
+        };
+        f(&snapshot, doc_text)
+    }
+
     /// Find the definition of the symbol at the given position.
     pub async fn definition<H: CompilerHost>(
         &self,
@@ -200,15 +225,16 @@ impl Engine {
         position: Position,
         host: &H,
     ) -> Option<DefinitionResult> {
-        let snapshot = self.snapshot(uri, host).await?;
-        let doc_text = self.documents.get(uri)?.text.as_str();
-        definition::find_definition(
-            &snapshot.annotated,
-            doc_text,
-            position,
-            uri,
-            self.position_encoding,
-        )
+        self.with_doc_snapshot(uri, host, None, |snapshot, doc_text| {
+            definition::find_definition(
+                &snapshot.annotated,
+                doc_text,
+                position,
+                uri,
+                self.position_encoding,
+            )
+        })
+        .await
     }
 
     /// Compute hover information for the symbol at the given position.
@@ -218,15 +244,16 @@ impl Engine {
         position: Position,
         host: &H,
     ) -> Option<HoverResult> {
-        let snapshot = self.snapshot(uri, host).await?;
-        let doc_text = self.documents.get(uri)?.text.as_str();
-        hover::find_hover(
-            &snapshot.annotated,
-            doc_text,
-            position,
-            uri,
-            self.position_encoding,
-        )
+        self.with_doc_snapshot(uri, host, None, |snapshot, doc_text| {
+            hover::find_hover(
+                &snapshot.annotated,
+                doc_text,
+                position,
+                uri,
+                self.position_encoding,
+            )
+        })
+        .await
     }
 
     /// Find every reference to the symbol named at the given position.
@@ -237,20 +264,17 @@ impl Engine {
         include_declaration: bool,
         host: &H,
     ) -> Vec<ReferenceLocation> {
-        let Some(snapshot) = self.snapshot(uri, host).await else {
-            return Vec::new();
-        };
-        let Some(doc_text) = self.documents.get(uri).map(|d| d.text.as_str()) else {
-            return Vec::new();
-        };
-        references::find_references(
-            &snapshot.annotated,
-            doc_text,
-            position,
-            uri,
-            include_declaration,
-            self.position_encoding,
-        )
+        self.with_doc_snapshot(uri, host, Vec::new(), |snapshot, doc_text| {
+            references::find_references(
+                &snapshot.annotated,
+                doc_text,
+                position,
+                uri,
+                include_declaration,
+                self.position_encoding,
+            )
+        })
+        .await
     }
 
     /// Find every occurrence of the symbol named at the given position
@@ -262,19 +286,16 @@ impl Engine {
         position: Position,
         host: &H,
     ) -> Vec<DocumentHighlight> {
-        let Some(snapshot) = self.snapshot(uri, host).await else {
-            return Vec::new();
-        };
-        let Some(doc_text) = self.documents.get(uri).map(|d| d.text.as_str()) else {
-            return Vec::new();
-        };
-        document_highlight::document_highlight(
-            &snapshot.annotated,
-            doc_text,
-            position,
-            uri,
-            self.position_encoding,
-        )
+        self.with_doc_snapshot(uri, host, Vec::new(), |snapshot, doc_text| {
+            document_highlight::document_highlight(
+                &snapshot.annotated,
+                doc_text,
+                position,
+                uri,
+                self.position_encoding,
+            )
+        })
+        .await
     }
 
     /// Resolve a `core:` / `wasi:` URI to its bundled stdlib source.

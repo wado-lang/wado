@@ -5,6 +5,7 @@
 //! wrapping runtime is still async: dispatch awaits `Engine` queries between
 //! blocking `read_message` / `send_*` calls.
 
+use std::future::Future;
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
@@ -149,6 +150,36 @@ where
             Ok(None)
         }
     }
+}
+
+/// Run a typed request: decode the JSON params into `P`, invoke
+/// `handler(p).await`, and serialize the result as a JSON-RPC response.
+///
+/// Skips the body when `id` is `None` (notification-shaped envelope on
+/// a request method), and bails after sending an `InvalidParams` error
+/// when the params don't deserialize. This shell is what every
+/// query-style handler in `dispatch.rs` used to inline by hand.
+pub async fn typed_request<P, R, W, F, Fut>(
+    writer: &mut W,
+    id: Option<&Value>,
+    params: Value,
+    handler: F,
+) -> Result<(), String>
+where
+    P: DeserializeOwned,
+    R: Serialize,
+    W: Write,
+    F: FnOnce(P) -> Fut,
+    Fut: Future<Output = R>,
+{
+    let Some(id) = id else {
+        return Ok(());
+    };
+    let Some(p) = decode_or_error::<P, _>(writer, id, params)? else {
+        return Ok(());
+    };
+    let result = handler(p).await;
+    send_response(writer, id, result)
 }
 
 /// Build a filesystem host rooted at the directory containing `uri`.

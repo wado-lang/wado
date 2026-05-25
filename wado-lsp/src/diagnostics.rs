@@ -1,38 +1,19 @@
 use serde::{Deserialize, Serialize};
 use wado_compiler::{Code, Diagnostic as CompilerDiagnostic, Severity as CompilerSeverity};
 
+use crate::macros::lsp_repr_u32_enum;
 use crate::text::{PositionEncoding, codepoint_offset_to_character};
 
-/// LSP-compatible diagnostic severity. Serializes as the 1..=4 integer
-/// defined by the LSP wire format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(into = "u32", try_from = "u32")]
-pub enum Severity {
-    Error = 1,
-    Warning = 2,
-    Information = 3,
-    Hint = 4,
-}
-
-impl From<Severity> for u32 {
-    fn from(s: Severity) -> Self {
-        s as Self
+lsp_repr_u32_enum!(
+    /// LSP-compatible diagnostic severity. Serializes as the 1..=4 integer
+    /// defined by the LSP wire format.
+    pub enum Severity {
+        Error = 1,
+        Warning = 2,
+        Information = 3,
+        Hint = 4,
     }
-}
-
-impl TryFrom<u32> for Severity {
-    type Error = String;
-
-    fn try_from(n: u32) -> Result<Self, <Self as TryFrom<u32>>::Error> {
-        match n {
-            1 => Ok(Self::Error),
-            2 => Ok(Self::Warning),
-            3 => Ok(Self::Information),
-            4 => Ok(Self::Hint),
-            _ => Err(format!("invalid Severity: {n}")),
-        }
-    }
-}
+);
 
 /// Zero-based line/column position in a text document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

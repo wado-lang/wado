@@ -8,7 +8,7 @@
 
 use wado_compiler::annotate::Annotated;
 use wado_compiler::module_source::ModuleSource;
-use wado_compiler::symbol::Symbol;
+use wado_compiler::symbol::{Symbol, SymbolKey};
 use wado_compiler::token::Span;
 
 use crate::diagnostics::Range;
@@ -93,6 +93,25 @@ pub(crate) fn symbol_uri(
     request_uri: &str,
 ) -> Option<String> {
     module_uri(annotated, &symbol.defined_at.module, request_uri)
+}
+
+/// Decide which source text (if any) to pass to [`span_to_range`] when
+/// re-encoding a span whose [`SymbolKey`] sits in `key.module`.
+///
+/// Returns `Some(source)` only when `key` points at the entry module —
+/// spans in other modules are codepoint-indexed against THEIR source,
+/// not the entry document's, so re-encoding against `source` would walk
+/// the wrong text and emit a drifted `character` under UTF-16 / UTF-8
+/// whenever the two modules disagree on the matching line. Cross-file
+/// callers pass the returned `None` straight through to
+/// `span_to_range`, which falls back to "codepoint columns as code
+/// units" (correct under UTF-32 / ASCII).
+pub(crate) fn source_for_key<'a>(
+    annotated: &Annotated,
+    key: &SymbolKey,
+    entry_source: &'a str,
+) -> Option<&'a str> {
+    (key.module == annotated.entry_module_source).then_some(entry_source)
 }
 
 /// Convert a compiler `Span` (1-based byte column) to an LSP `Range` in
