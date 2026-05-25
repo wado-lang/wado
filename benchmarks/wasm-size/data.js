@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779672826869,
+  "lastUpdate": 1779701172186,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -25885,6 +25885,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f0623a35021ead8bc35882a3a6eeca571ea4936b"
         },
         "date": 1779672826439,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9754,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17192,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 465275,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bf57b9027d10079863db27132caf5d36cd850710",
+          "message": "Merge pull request #1191 from wado-lang/claude/desugar-decomposition-final-WsuEJ\n\nrefactor(resolver): hoist Self::/T:: rewriting out of resolve_call",
+          "timestamp": "2026-05-25T18:19:29+09:00",
+          "tree_id": "2cf35a81f110fb5cf1f074ff13e12117e9ba13fc",
+          "url": "https://github.com/wado-lang/wado/commit/bf57b9027d10079863db27132caf5d36cd850710"
+        },
+        "date": 1779701171700,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
