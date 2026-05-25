@@ -31,7 +31,7 @@ use crate::hashmap::IndexSet;
 use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
-use super::util::{collect_local_gets_deep, is_side_effect_free};
+use super::util::{collect_local_gets_deep, is_side_effect_free, may_trap};
 
 pub(super) fn elide_write_only_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
@@ -91,6 +91,7 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
         // satisfies `is_side_effect_free` is genuinely dead.
         if let WirInstr::Drop(value) = instr
             && is_side_effect_free(value)
+            && !may_trap(value)
         {
             *instr = WirInstr::Nop;
             self.changed = true;

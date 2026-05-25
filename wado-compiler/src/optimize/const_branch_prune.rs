@@ -20,16 +20,42 @@ use crate::nir_package::NirPackage;
 
 use crate::nir_visitor::{
     NirMutVisitor, NirOptVisitor, NirRefVisitor, block_has_break_to, expr_has_break_to,
-    opt_walk_block, opt_walk_expr, visit_project_functions,
+    opt_walk_block, opt_walk_expr, stmt_has_break_to, visit_project_functions,
 };
 
 /// Prune constant branches and simplify trivial blocks in all functions.
+///
+/// Inside the optimizer fixpoint loop. `__tmpl:` labeled blocks are
+/// preserved so `tmpl_hoist` can anchor on them later in the same iteration.
 pub fn prune_constant_branches(project: &mut NirPackage) -> bool {
-    let mut visitor = BranchPruner;
+    let mut visitor = BranchPruner {
+        mode: PruneMode::Fixpoint,
+    };
     visit_project_functions(project, &mut visitor)
 }
 
-struct BranchPruner;
+/// Final post-fixpoint pass that flattens any `__tmpl:` wrappers
+/// `tmpl_hoist` already finished processing during the fixpoint loop.
+pub fn prune_template_block_wrappers(project: &mut NirPackage) -> bool {
+    let mut visitor = BranchPruner {
+        mode: PruneMode::PostFixpoint,
+    };
+    visit_project_functions(project, &mut visitor)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PruneMode {
+    /// Run inside the optimizer fixpoint loop — preserve `__tmpl:` blocks
+    /// for `tmpl_hoist`.
+    Fixpoint,
+    /// Final cleanup after the fixpoint converges — flatten every
+    /// tail-break-only labeled block.
+    PostFixpoint,
+}
+
+struct BranchPruner {
+    mode: PruneMode,
+}
 
 impl NirOptVisitor for BranchPruner {
     fn visit_expr(&mut self, expr: &mut NirExpr) -> bool {
@@ -38,7 +64,7 @@ impl NirOptVisitor for BranchPruner {
         // Inline leading copy bindings inside labeled blocks before pruning
         changed |= inline_labeled_block_copies(expr);
         // Then prune this expression
-        changed |= prune_expr(expr);
+        changed |= prune_expr(expr, self.mode);
         changed
     }
 
@@ -51,11 +77,38 @@ impl NirOptVisitor for BranchPruner {
     }
 }
 
+/// (C2) Recognises a `LabeledBlock { label, inner }` stmt whose only break to
+/// `label` is the trailing statement and carries no value. Such labels add no
+/// control flow over their straight-line body and the labeled wrapper can be
+/// removed by dropping the trailing `break label` and lifting the rest of
+/// `inner.stmts` into the parent stmt list.
+fn is_tail_break_only_labeled_block(stmt: &NirStmt) -> bool {
+    let NirStmtKind::LabeledBlock { label, block: inner } = &stmt.kind else {
+        return false;
+    };
+    let Some(last) = inner.stmts.last() else {
+        return false;
+    };
+    let NirStmtKind::Break {
+        label: Some(brk_label),
+        value: None,
+    } = &last.kind
+    else {
+        return false;
+    };
+    if brk_label != label {
+        return false;
+    }
+    !inner.stmts[..inner.stmts.len() - 1]
+        .iter()
+        .any(|s| stmt_has_break_to(label, s))
+}
+
 /// Simplify trivial blocks at the expression level.
 ///
 /// Constant-condition `if` folding lives in `niri` (Stage 2 of the NIR
 /// interpreter); this function deliberately does not handle that case.
-fn prune_expr(expr: &mut NirExpr) -> bool {
+fn prune_expr(expr: &mut NirExpr, mode: PruneMode) -> bool {
     let mut changed = false;
 
     // Simplify `{ expr; }` → `expr` (single-expression unlabeled block)
@@ -74,7 +127,65 @@ fn prune_expr(expr: &mut NirExpr) -> bool {
         changed = true;
     }
 
-    // Simplify `label: { break label: val; }` → `val`
+    // (C3) Simplify `label: { stmts...; break label: val; }` → `{ stmts...; val }`.
+    //
+    // When the *only* reference to `label` is the trailing `break label: val`
+    // statement, the labeled block adds no control flow over its straight-line
+    // body and can be unwrapped into a plain block whose tail expression is
+    // `val`. Subsequent `prune_expr` iterations collapse `{ val }` → `val`
+    // when the prefix becomes empty.
+    //
+    // `__tmpl` blocks are preserved: `tmpl_hoist` runs later in the optimize
+    // loop and anchors on the `__tmpl: block` shape to hoist per-iteration
+    // `Formatter` buffer initialisations out of loops. Flattening here would
+    // erase that anchor before `tmpl_hoist` gets to scan it.
+    if let NirExprKind::LabeledBlock { label, block, .. } = &expr.kind
+        && (mode == PruneMode::PostFixpoint || label != "__tmpl")
+        && let Some(last) = block.stmts.last()
+        && let NirStmtKind::Break {
+            label: Some(brk_label),
+            value: Some(brk_value),
+        } = &last.kind
+        && brk_label == label
+        && !expr_has_break_to(label, brk_value)
+        && !block.stmts[..block.stmts.len() - 1]
+            .iter()
+            .any(|s| stmt_has_break_to(label, s))
+    {
+        let NirExprKind::LabeledBlock { block, .. } =
+            std::mem::replace(&mut expr.kind, NirExprKind::Unit)
+        else {
+            unreachable!();
+        };
+        let block_span = block.span;
+        let mut stmts = block.stmts;
+        let last = stmts.pop().unwrap();
+        let NirStmt {
+            span: break_span,
+            kind,
+            ..
+        } = last;
+        let NirStmtKind::Break {
+            value: Some(value),
+            ..
+        } = kind
+        else {
+            unreachable!();
+        };
+        if stmts.is_empty() {
+            *expr = value;
+        } else {
+            stmts.push(NirStmt::new(NirStmtKind::Expr(value), break_span));
+            expr.kind = NirExprKind::Block(NirBlock::new(stmts, block_span));
+        }
+        changed = true;
+    }
+
+    // Also keep the single-stmt rule for when the labeled block has only
+    // one break stmt (no prefix). This pattern is structurally identical
+    // to C3 with an empty prefix, but the C3 rule above requires
+    // `value: Some(_)`, so this rule additionally covers the `value: None`
+    // case and any subtle path the N-stmt collapse leaves behind.
     if let NirExprKind::LabeledBlock { label, block, .. } = &expr.kind
         && block.stmts.len() == 1
         && let NirStmtKind::Break {
@@ -82,8 +193,6 @@ fn prune_expr(expr: &mut NirExpr) -> bool {
             value: brk_value,
         } = &block.stmts[0].kind
         && brk_label == label
-        // Only simplify if the break value itself doesn't contain breaks
-        // to the same label (e.g., from try-op error paths in nested expressions).
         && !brk_value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
     {
         let NirExprKind::LabeledBlock { block, .. } =
@@ -98,7 +207,6 @@ fn prune_expr(expr: &mut NirExpr) -> bool {
         if let Some(inner) = value {
             *expr = inner;
         }
-        // else: break without value → Unit is already set
         changed = true;
     }
 
@@ -116,6 +224,8 @@ fn prune_expr(expr: &mut NirExpr) -> bool {
 /// - `label: { }` (empty labeled block) → remove
 /// - `label: { stmts }` (unused label) → flatten stmts into parent
 /// - Trivial Unit / Block / unused-LabeledBlock expression stmts → flatten
+/// - Anything after a `break` / `continue` / `return` in the same stmt list
+///   is structurally dead and dropped (C1). The terminator itself stays.
 ///
 /// Constant-condition `if` statement folding (`if true { … }` →
 /// inline branch) lives in `niri::Interpreter::reduce_local_block`
@@ -132,14 +242,28 @@ fn eliminate_dead_stmts(block: &mut NirBlock) -> bool {
         ) || matches!(
             &s.kind,
             NirStmtKind::Expr(e) if matches!(&e.kind, NirExprKind::LabeledBlock { label, block, .. } if !block_has_break_to(label, block))
-        )
+        ) || is_tail_break_only_labeled_block(s)
     };
-    if !block.stmts.iter().any(dominated) {
+    let has_dead_after_terminator = block.stmts.iter().enumerate().any(|(i, s)| {
+        i + 1 < block.stmts.len()
+            && matches!(
+                &s.kind,
+                NirStmtKind::Break { .. }
+                    | NirStmtKind::Continue
+                    | NirStmtKind::Return { .. }
+            )
+    });
+    if !has_dead_after_terminator && !block.stmts.iter().any(dominated) {
         return false;
     }
 
     let old_stmts = std::mem::take(&mut block.stmts);
+    let mut terminated = false;
     for stmt in old_stmts {
+        if terminated {
+            // Drop everything after a terminator in the same stmt list.
+            continue;
+        }
         // Labeled block with unused label → flatten stmts into parent
         if let NirStmtKind::LabeledBlock {
             ref label,
@@ -150,6 +274,19 @@ fn eliminate_dead_stmts(block: &mut NirBlock) -> bool {
             let NirStmtKind::LabeledBlock { block: inner, .. } = stmt.kind else {
                 unreachable!();
             };
+            block.stmts.extend(inner.stmts);
+            continue;
+        }
+        // (C2) Labeled block whose only `break LABEL` is a value-less tail
+        // statement → drop the trailing break, flatten the rest into parent.
+        if is_tail_break_only_labeled_block(&stmt) {
+            let NirStmtKind::LabeledBlock {
+                block: mut inner, ..
+            } = stmt.kind
+            else {
+                unreachable!();
+            };
+            inner.stmts.pop();
             block.stmts.extend(inner.stmts);
             continue;
         }
@@ -183,6 +320,12 @@ fn eliminate_dead_stmts(block: &mut NirBlock) -> bool {
             };
             block.stmts.extend(inner.stmts);
             continue;
+        }
+        if matches!(
+            &stmt.kind,
+            NirStmtKind::Break { .. } | NirStmtKind::Continue | NirStmtKind::Return { .. }
+        ) {
+            terminated = true;
         }
         block.stmts.push(stmt);
     }

@@ -70,7 +70,7 @@ mod value_copy_demote;
 mod value_copy_elide;
 
 use condition_implication::eliminate_implied_conditions;
-use const_branch_prune::prune_constant_branches;
+use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::fold_constants;
 use const_global_promotion::promote_constant_globals;
 use container_sroa::scalarize_containers;
@@ -576,5 +576,14 @@ fn run_optimization_passes(
     run_pass("nir/field_scalarize", project, profiler, |p| {
         scalarize_hot_fields(p);
         true // always runs once, mark as changed for profiling visibility
+    });
+    // Final cleanup: flatten any `__tmpl:` labeled blocks the fixpoint
+    // preserved as anchors for `tmpl_hoist`. `tmpl_hoist` has finished
+    // by now (it runs inside the fixpoint loop), so the wrappers are
+    // pure overhead — peel them so codegen emits the inner straight-line
+    // body directly.
+    run_pass("nir/branch_prune_final", project, profiler, |p| {
+        prune_template_block_wrappers(p);
+        true
     });
 }

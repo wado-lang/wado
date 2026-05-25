@@ -1,0 +1,24 @@
+// Verifies (issue #1184, C1) that the WIR builder no longer appends an
+// `unreachable` opcode after a typed-block `break LABEL: V;` — the Wasm
+// validator's polymorphic-stack rule accepts the typed block's `end`
+// without the trailing `unreachable` once the prior instruction is
+// already an unconditional branch.
+
+use { println, Stdout } from "core:cli";
+
+fn template_val(n: i32) -> String {
+    return `n={n}`;
+}
+
+export fn run() with Stdout {
+    println(template_val(42));
+}
+
+__DATA__
+{
+    "stdout": "n=42\n",
+    "wir_not_expect:O2": [
+        "break __tmpl: __local_3;\n            unreachable;",
+        "break __tmpl_buf_"
+    ]
+}

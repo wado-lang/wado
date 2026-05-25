@@ -324,7 +324,20 @@ fn record_struct_lit_def(
 
 /// Unwrap a `LabeledBlock` expression to find the value from its break statement.
 /// `LABEL: { ...; break LABEL: expr; }` → `expr`
+///
+/// Also unwraps a plain `Block { ...; tail_expr }` to `tail_expr`. This shape
+/// appears after `branch_prune::prune_expr` flattens a tail-break-only labeled
+/// block into a plain stmt list with the broken value as the trailing
+/// expression statement.
 fn unwrap_labeled_block_value(expr: &NirExpr) -> &NirExpr {
+    if let NirExprKind::Block(block) = &expr.kind
+        && let Some(NirStmt {
+            kind: NirStmtKind::Expr(tail),
+            ..
+        }) = block.stmts.last()
+    {
+        return unwrap_labeled_block_value(tail);
+    }
     if let NirExprKind::LabeledBlock { block, label, .. } = &expr.kind {
         // Find the break statement that returns a value from this block
         for stmt in &block.stmts {

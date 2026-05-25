@@ -186,3 +186,58 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
         | WirInstr::Return { .. }
     )
 }
+
+/// True if `instr` (or any descendant) can trap at runtime on some inputs.
+///
+/// Used to keep `Drop(value)` instructions whose `value` is otherwise
+/// `is_side_effect_free` but would trap on certain inputs — the Wado
+/// language requires those traps to be observable even when the read
+/// value is discarded (`let _ = arr[-1]` must trap). Distinct from
+/// [`is_root_observable`] which the WIR optimizer deliberately keeps lax
+/// to enable CSE / dead-load elimination of trapping operations whose
+/// result IS used.
+pub(super) fn may_trap(instr: &WirInstr) -> bool {
+    if matches!(
+        instr,
+        // GC array reads trap on null / OOB.
+        WirInstr::ArrayGet { .. }
+        | WirInstr::ArrayGetS { .. }
+        | WirInstr::ArrayGetU { .. }
+        // GC struct reads trap on null receiver.
+        | WirInstr::StructGet { .. }
+        // Ref cast / non-null assertion trap on failure.
+        | WirInstr::RefAsNonNull(_)
+        | WirInstr::RefCast { .. }
+        // Integer divide / remainder trap on zero divisor (and signed
+        // div/rem of MIN by -1 overflows).
+        | WirInstr::I32DivS(_, _)
+        | WirInstr::I32DivU(_, _)
+        | WirInstr::I32RemS(_, _)
+        | WirInstr::I32RemU(_, _)
+        | WirInstr::I64DivS(_, _)
+        | WirInstr::I64DivU(_, _)
+        | WirInstr::I64RemS(_, _)
+        | WirInstr::I64RemU(_, _)
+        // Non-saturating float-to-int truncation traps on out-of-range
+        // values (the saturating variants — `*TruncSatF*` — don't).
+        | WirInstr::I32TruncF32S(_)
+        | WirInstr::I32TruncF32U(_)
+        | WirInstr::I32TruncF64S(_)
+        | WirInstr::I32TruncF64U(_)
+        | WirInstr::I64TruncF32S(_)
+        | WirInstr::I64TruncF32U(_)
+        | WirInstr::I64TruncF64S(_)
+        | WirInstr::I64TruncF64U(_)
+        // Explicit trap.
+        | WirInstr::Unreachable
+    ) {
+        return true;
+    }
+    let mut trap = false;
+    instr.for_each_child(&mut |child| {
+        if !trap && may_trap(child) {
+            trap = true;
+        }
+    });
+    trap
+}
