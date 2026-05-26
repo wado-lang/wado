@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779761207460,
+  "lastUpdate": 1779768739155,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26193,6 +26193,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/af4fe7b2de12fadb29041090022f7f818871343f"
         },
         "date": 1779761206958,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 443310,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2b2178253236e1d24bd7d3292513f57d472c7b99",
+          "message": "Merge pull request #1198 from wado-lang/claude/sweet-cray-f6OEV\n\nperf(kiln): resolve generators once per pipeline and cache compiled Components",
+          "timestamp": "2026-05-26T13:06:11+09:00",
+          "tree_id": "c2eb102d8ab6216d7ba48696718343b6976e1dc3",
+          "url": "https://github.com/wado-lang/wado/commit/2b2178253236e1d24bd7d3292513f57d472c7b99"
+        },
+        "date": 1779768738685,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
