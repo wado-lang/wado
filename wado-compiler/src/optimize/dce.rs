@@ -18,6 +18,7 @@ use crate::name::{
 };
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirImport, NirStmt, NirStmtKind};
 use crate::nir_package::NirPackage;
+use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Call graph: function ID -> set of called function IDs
@@ -50,6 +51,16 @@ struct FunctionAnalysis {
     /// graph by `apply_inspect_edges` after the inspectable-signature set is
     /// known.
     pending_inspects: Vec<PendingInspectEdge>,
+    /// `(module-path-joined-by-::, name)` pairs that this function reads via
+    /// `GlobalVarGet`. Globals only written to (via `GlobalVarSet`) are not
+    /// recorded here — those are dead per `remove_unreachable_globals`.
+    used_globals: IndexSet<(String, String)>,
+    /// Types directly referenced by this function (signature, locals,
+    /// expression `type_id`s, and explicit type-bearing fields like
+    /// `Cast.target_type`, `StructLiteral.struct_type`, etc.).
+    /// Transitive closure happens later in
+    /// [`populate_type_reachability`]'s Phase 2.
+    used_types: IndexSet<TypeId>,
 }
 
 /// Combined DCE analysis: which functions / globals / types are
@@ -93,34 +104,32 @@ pub struct DceAnalysis {
 /// any new types, but the explicit ordering makes the invariant
 /// observable.
 pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
+    // Single AST walk per function body: build the call graph and
+    // collect per-function used-globals / used-types in one go.
+    let mut graph = build_analysis_graph(project);
+
     let mut analysis = DceAnalysis::empty();
-    analysis.functions = analyze_function_reachability(project);
-    analysis.globals = analyze_global_reachability(project, &analysis.functions);
-    populate_type_reachability(project, &mut analysis);
+    analysis.functions = compute_function_reachability(project, &mut graph);
+    analysis.globals = compute_global_reachability(&graph, &analysis.functions);
+    populate_type_reachability(project, &graph, &mut analysis);
     analysis
 }
 
 /// Function reachability via call-graph BFS. Implementation detail of
 /// [`analyze_dce`]; not called directly anywhere else.
 ///
-/// The call graph is built in a single AST walk: edges that depend on the
-/// inspectable-signature set (the per-functor `__Closure_N^Inspect[Alt]`
-/// impls emitted from `ClosureToCanonical`) are collected as pending
-/// edges and added by `apply_inspect_edges` once the signature set is
-/// known. This avoids a second full walk of every function body.
-fn analyze_function_reachability(project: &mut NirPackage) -> IndexSet<usize> {
-    // Phase 1: build the raw call graph in a single pass.
-    let AnalysisGraph {
-        mut call_graph,
-        effect_usage,
-        pending_inspects,
-        func_positions,
-    } = build_analysis_graph(project);
-
+/// Consumes the call graph (and its pending inspect edges) built in
+/// the single AST walk of [`build_analysis_graph`]; mutates the graph
+/// by adding the gated per-functor `__Closure_N^Inspect[Alt]` edges
+/// once the inspectable-signature set is known.
+fn compute_function_reachability(
+    project: &mut NirPackage,
+    graph: &mut AnalysisGraph,
+) -> IndexSet<usize> {
     // Phase 2a: compute the provisional reachable set from the raw graph
     // (without per-functor `__Closure_N^Inspect[Alt]` edges). This is
     // what determines whether a `:?`/`:#?` call site is actually live.
-    let reachable_v1 = compute_reachable_from_entries(project, &call_graph);
+    let reachable_v1 = compute_reachable_from_entries(project, &graph.call_graph);
 
     // Phase 2b: derive the inspectable `(arity, ret)` set from the
     // reachable functions only, then add the gated inspect edges to the
@@ -129,10 +138,10 @@ fn analyze_function_reachability(project: &mut NirPackage) -> IndexSet<usize> {
     // the inspectable set is stable under this expansion — no fixpoint
     // iteration is needed.
     let inspectable = collect_inspectable_signatures_from_reachable(project, &reachable_v1);
-    apply_inspect_edges(&mut call_graph, &pending_inspects, &inspectable);
+    apply_inspect_edges(&mut graph.call_graph, &graph.pending_inspects, &inspectable);
 
     // Phase 2c: re-compute the reachable set from the augmented graph.
-    let mut reachable = compute_reachable_from_entries(project, &call_graph);
+    let mut reachable = compute_reachable_from_entries(project, &graph.call_graph);
 
     // Phase 3: extend reachable set with optimizer-induced virtual edges.
     // Optimizer passes (e.g. `nir/string_push`) may *synthesize* new calls
@@ -141,16 +150,16 @@ fn analyze_function_reachability(project: &mut NirPackage) -> IndexSet<usize> {
     // synthesis target is gone and the rewrite cannot fire. The virtual
     // edges are gated by compiler-item markers so each rule names its
     // canonical pair (`string_push_str` → `string_push_char`, etc.).
-    extend_reachable_for_optimizer_passes(project, &call_graph, &mut reachable);
+    extend_reachable_for_optimizer_passes(project, &graph.call_graph, &mut reachable);
 
     // Phase 4: resolve imports and WASI features using reachable set.
-    resolve_imports(project, &reachable, &effect_usage);
+    resolve_imports(project, &reachable, &graph.effect_usage);
 
     // Phase 5: project the reachable `FunctionId`s back to positions in
     // `project.functions`. This avoids reallocating `FunctionId`s per
     // function inside `remove_unreachable_functions` (the previous
     // implementation cloned 3-4 strings per function during retain).
-    compute_reachable_positions(&reachable, &func_positions)
+    compute_reachable_positions(&reachable, &graph.func_positions)
 }
 
 /// Map the reachable-`FunctionId` set back to positions in `project.functions`.
@@ -706,14 +715,30 @@ struct AnalysisGraph {
     effect_usage: EffectUsageMap,
     pending_inspects: PendingInspectsByCaller,
     func_positions: FuncPositions,
+    /// Per-function globals read, indexed by position in
+    /// `project.functions`. Aggregated for reachable positions by
+    /// [`compute_global_reachability`].
+    per_func_globals: Vec<IndexSet<(String, String)>>,
+    /// Per-function types directly used, indexed by position in
+    /// `project.functions`. Seeded into [`DceAnalysis::types`] by
+    /// [`populate_type_reachability`]'s Phase 1.
+    per_func_types: Vec<IndexSet<TypeId>>,
 }
 
-/// Build the call graph in a single pass over all NIR function bodies.
+/// Build the call graph **and** per-function used-globals / used-types
+/// sets in a single AST walk per function body. The downstream
+/// reachability passes (`analyze_global_reachability`,
+/// `populate_type_reachability`) then union per-function facts for the
+/// reachable subset instead of re-walking bodies — three independent
+/// walks collapsed into one.
 fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
+    let n = project.functions.len();
     let mut call_graph: CallGraph = IndexMap::default();
     let mut effect_usage: EffectUsageMap = IndexMap::default();
     let mut pending_inspects: PendingInspectsByCaller = IndexMap::default();
     let mut func_positions: FuncPositions = IndexMap::default();
+    let mut per_func_globals: Vec<IndexSet<(String, String)>> = Vec::with_capacity(n);
+    let mut per_func_types: Vec<IndexSet<TypeId>> = Vec::with_capacity(n);
 
     let type_table = &*project.type_table.borrow();
 
@@ -721,7 +746,11 @@ fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
         let func = func_rc.borrow();
         let module_source = &func.module_source;
         let func_id = function_id_for(&func);
-        let analysis = analyze_function(&func, module_source, type_table);
+
+        let mut walker = DceWalker::new(type_table, module_source);
+        walker.analyze(&func);
+        let analysis = walker.analysis;
+
         let prior = func_positions.insert(func_id.clone(), pos);
         assert!(
             prior.is_none(),
@@ -737,6 +766,8 @@ fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
         if !analysis.pending_inspects.is_empty() {
             pending_inspects.insert(func_id, analysis.pending_inspects);
         }
+        per_func_globals.push(analysis.used_globals);
+        per_func_types.push(analysis.used_types);
     }
 
     AnalysisGraph {
@@ -744,6 +775,8 @@ fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
         effect_usage,
         pending_inspects,
         func_positions,
+        per_func_globals,
+        per_func_types,
     }
 }
 
@@ -913,626 +946,559 @@ fn scan_inspect_signatures_stmt(
     s.visit_stmt(stmt);
 }
 
-/// Analyze a NIR function for callees and effect usage
-fn analyze_function(
-    func: &NirFunction,
-    current_module: &ModuleSource,
-    type_table: &TypeTable,
-) -> FunctionAnalysis {
-    let mut analysis = FunctionAnalysis::default();
-
-    if let Some(body) = &func.body {
-        analyze_block(body, current_module, type_table, &mut analysis);
-    }
-    analysis
+/// Single-walk DCE fact collector: a [`NirRefVisitor`] that collects
+/// **all** per-function facts the DCE driver needs (callees, effect calls,
+/// pending inspect edges, used globals, used types) in one traversal of a
+/// function body. Replaces three hand-rolled walkers (`analyze_block`,
+/// `collect_global_reads_block`, `collect_types_from_block`) that all
+/// rediscovered the same NIR shape independently — new `NirStmtKind` /
+/// `NirExprKind` variants now only need to be considered in the visitor
+/// trait, not in three places.
+struct DceWalker<'a> {
+    type_table: &'a TypeTable,
+    current_module: &'a ModuleSource,
+    analysis: FunctionAnalysis,
 }
 
-fn analyze_block(
-    block: &NirBlock,
-    current_module: &ModuleSource,
-    type_table: &TypeTable,
-    analysis: &mut FunctionAnalysis,
-) {
-    for stmt in &block.stmts {
-        match &stmt.kind {
-            NirStmtKind::Let { value, .. } => {
-                analyze_expr(value, current_module, type_table, analysis);
-            }
-            NirStmtKind::Expr(expr) => {
-                analyze_expr(expr, current_module, type_table, analysis);
-            }
-            NirStmtKind::Return { value } => {
-                if let Some(expr) = value {
-                    analyze_expr(expr, current_module, type_table, analysis);
-                }
-            }
-            NirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                analyze_expr(condition, current_module, type_table, analysis);
-                analyze_block(then_block, current_module, type_table, analysis);
-                if let Some(else_blk) = else_block {
-                    analyze_block(else_blk, current_module, type_table, analysis);
-                }
-            }
-            NirStmtKind::Loop { body } => {
-                analyze_block(body, current_module, type_table, analysis);
-            }
-            NirStmtKind::LabeledBlock { block, .. } => {
-                analyze_block(block, current_module, type_table, analysis);
-            }
-            NirStmtKind::Break { value, .. } => {
-                if let Some(v) = value {
-                    analyze_expr(v, current_module, type_table, analysis);
-                }
-            }
-            NirStmtKind::Continue => {}
-            NirStmtKind::LetDestructure { value, .. } => {
-                analyze_expr(value, current_module, type_table, analysis);
-            }
+impl<'a> DceWalker<'a> {
+    fn new(type_table: &'a TypeTable, current_module: &'a ModuleSource) -> Self {
+        Self {
+            type_table,
+            current_module,
+            analysis: FunctionAnalysis::default(),
         }
     }
-}
 
-fn analyze_expr(
-    expr: &NirExpr,
-    current_module: &ModuleSource,
-    type_table: &TypeTable,
-    analysis: &mut FunctionAnalysis,
-) {
-    match &expr.kind {
-        NirExprKind::Call { func, args, .. } => {
-            let original_callee_module = func.module_source.clone();
-            let func_name = func.name.clone();
-
-            if func.method_info.is_some() {
-                // Formerly StaticCall: static method call (e.g., Box::get, Uint128::from_u64).
-                // func_name contains "::" (e.g., "StructName::method" or "StructName^Trait::method").
-                let callee_id = if func.is_monomorphized() {
-                    let base_name = func
-                        .base_struct_name()
-                        .map(|base| {
-                            func_name
-                                .find("::")
-                                .map(|pos| format!("{}::{}", base, &func_name[pos + 2..]))
-                                .unwrap_or_else(|| base)
-                        })
-                        .unwrap_or_else(|| func_name.clone());
-                    FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                        func.module_source.clone(),
-                        func_name.clone(),
-                        base_name,
-                    ))
-                } else {
-                    let callee_module = original_callee_module;
-                    if let Some(sep_pos) = func_name.find("::") {
-                        let prefix = &func_name[..sep_pos];
-                        let method_name = &func_name[sep_pos + 2..];
-                        let (struct_name, trait_name): (&str, Option<&str>) =
-                            if let Some(caret_pos) = prefix.find('^') {
-                                (&prefix[..caret_pos], Some(&prefix[caret_pos + 1..]))
-                            } else {
-                                (prefix, None)
-                            };
-                        FunctionId::Method(MethodName::new(
-                            callee_module,
-                            struct_name.to_string(),
-                            trait_name.map(String::from),
-                            method_name.to_string(),
-                        ))
-                    } else {
-                        FunctionId::Free(FreeFunctionName::from_module_source(
-                            &callee_module,
-                            &func_name,
-                        ))
-                    }
-                };
-                analysis.callees.insert(callee_id);
-
-                // Detect resource method calls from WASI modules
-                let module_path = func.module_path();
-                if module_path.len() >= 2
-                    && module_path[0] == "wasi"
-                    && let Some(pos) = func_name.find("::")
-                {
-                    let resource_name = &func_name[..pos];
-                    let method_name = &func_name[pos + 2..];
-                    analysis
-                        .effect_calls
-                        .insert((resource_name.to_string(), method_name.to_string()));
-                }
-            } else {
-                // Free function call
-                debug_assert!(
-                    !func_name.contains("::") || func_name.starts_with("builtin::"),
-                    "NirExprKind::Call should not have method-style names: {func_name}"
-                );
-
-                let callee_module = original_callee_module.clone();
-                let callee_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                    &callee_module,
-                    &func_name,
-                ));
-                analysis.callees.insert(callee_id);
-
-                if let Some(interface_name) = original_callee_module.interface_name() {
-                    analysis.effect_calls.insert((interface_name, func_name));
-                }
+    /// Walk a function's signature, locals, monomorphisation type
+    /// arguments, and body. The signature/local/monomorph pre-walk
+    /// covers types not visible from the body (e.g. an unused
+    /// generic parameter type that still needs to survive WIR name
+    /// mangling).
+    fn analyze(&mut self, func: &NirFunction) {
+        for param in &func.params {
+            self.analysis.used_types.insert(param.type_id);
+        }
+        self.analysis.used_types.insert(func.return_type);
+        for local in &func.locals {
+            self.analysis.used_types.insert(local.type_id);
+        }
+        if let Some(info) = &func.monomorph_info {
+            for &ta in &info.impl_type_args {
+                self.analysis.used_types.insert(ta);
             }
-
-            for arg in args {
-                analyze_expr(&arg.expr, current_module, type_table, analysis);
+            for &ta in &info.method_type_args {
+                self.analysis.used_types.insert(ta);
             }
         }
-        NirExprKind::MethodCall {
-            receiver,
-            func,
-            args,
-            ..
-        } => {
-            // Use the func reference directly - it already has the correct mangled name
-            // and monomorph_info from lowering phase
-            let func_name = func.name.clone();
+        if let Some(body) = &func.body {
+            self.visit_block(body);
+        }
+    }
 
-            // Check if this is a monomorphized method using FunctionRef metadata
-            if func.is_monomorphized() {
-                // Monomorphized method (e.g., Array<i32>::len, Box<i32>::get)
-                // Use the func reference's information directly
+    /// Record a directly-referenced type. Transitive closure (struct
+    /// fields, variant payloads, generic dependencies) happens once,
+    /// later, in [`populate_type_reachability`]'s Phase 2 fixed-point
+    /// loop — so the per-expression walker only needs to mark the
+    /// node's own `TypeId` here.
+    fn add_type(&mut self, type_id: TypeId) {
+        self.analysis.used_types.insert(type_id);
+    }
+
+    fn record_call(&mut self, func: &crate::nir::FunctionRef) {
+        let original_callee_module = func.module_source.clone();
+        let func_name = func.name.clone();
+
+        if func.method_info.is_some() {
+            // Formerly StaticCall: static method call (e.g., Box::get, Uint128::from_u64).
+            // func_name contains "::" (e.g., "StructName::method" or "StructName^Trait::method").
+            let callee_id = if func.is_monomorphized() {
                 let base_name = func
                     .base_struct_name()
                     .map(|base| {
-                        // Extract method name from "Array<i32>::len" -> "len"
                         func_name
                             .find("::")
                             .map(|pos| format!("{}::{}", base, &func_name[pos + 2..]))
                             .unwrap_or_else(|| base)
                     })
                     .unwrap_or_else(|| func_name.clone());
-
-                // Use the func's actual module_source — monomorphized functions
-                // are placed in the module that uses them.
-                let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                FunctionId::Free(FreeFunctionName::with_monomorph_info(
                     func.module_source.clone(),
-                    func_name,
+                    func_name.clone(),
+                    base_name,
+                ))
+            } else {
+                let callee_module = original_callee_module;
+                if let Some(sep_pos) = func_name.find("::") {
+                    let prefix = &func_name[..sep_pos];
+                    let method_name = &func_name[sep_pos + 2..];
+                    let (struct_name, trait_name): (&str, Option<&str>) =
+                        if let Some(caret_pos) = prefix.find('^') {
+                            (&prefix[..caret_pos], Some(&prefix[caret_pos + 1..]))
+                        } else {
+                            (prefix, None)
+                        };
+                    FunctionId::Method(MethodName::new(
+                        callee_module,
+                        struct_name.to_string(),
+                        trait_name.map(String::from),
+                        method_name.to_string(),
+                    ))
+                } else {
+                    FunctionId::Free(FreeFunctionName::from_module_source(
+                        &callee_module,
+                        &func_name,
+                    ))
+                }
+            };
+            self.analysis.callees.insert(callee_id);
+
+            // Detect resource method calls from WASI modules
+            let module_path = func.module_path();
+            if module_path.len() >= 2
+                && module_path[0] == "wasi"
+                && let Some(pos) = func_name.find("::")
+            {
+                let resource_name = &func_name[..pos];
+                let method_name = &func_name[pos + 2..];
+                self.analysis
+                    .effect_calls
+                    .insert((resource_name.to_string(), method_name.to_string()));
+            }
+        } else {
+            // Free function call
+            debug_assert!(
+                !func_name.contains("::") || func_name.starts_with("builtin::"),
+                "NirExprKind::Call should not have method-style names: {func_name}"
+            );
+
+            let callee_module = original_callee_module.clone();
+            let callee_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                &callee_module,
+                &func_name,
+            ));
+            self.analysis.callees.insert(callee_id);
+
+            if let Some(interface_name) = original_callee_module.interface_name() {
+                self.analysis
+                    .effect_calls
+                    .insert((interface_name, func_name));
+            }
+        }
+    }
+
+    fn record_method_call(&mut self, receiver: &NirExpr, func: &crate::nir::FunctionRef) {
+        // Use the func reference directly - it already has the correct mangled name
+        // and monomorph_info from lowering phase
+        let func_name = func.name.clone();
+
+        // Check if this is a monomorphized method using FunctionRef metadata
+        if func.is_monomorphized() {
+            // Monomorphized method (e.g., Array<i32>::len, Box<i32>::get)
+            let base_name = func
+                .base_struct_name()
+                .map(|base| {
+                    func_name
+                        .find("::")
+                        .map(|pos| format!("{}::{}", base, &func_name[pos + 2..]))
+                        .unwrap_or_else(|| base)
+                })
+                .unwrap_or_else(|| func_name.clone());
+
+            // Use the func's actual module_source — monomorphized functions
+            // are placed in the module that uses them.
+            let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                func.module_source.clone(),
+                func_name,
+                base_name,
+            ));
+            self.analysis.callees.insert(callee_id);
+            return;
+        }
+
+        // Non-monomorphized method - determine target from receiver type.
+        // Strip any reference wrappers and newtypes to get the base type.
+        let mut current_type = self.type_table.get(receiver.type_id);
+        let mut newtype_info: Option<(String, ModuleSource)> = None;
+        loop {
+            match current_type {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    current_type = self.type_table.get(*inner);
+                }
+                ResolvedType::Newtype {
+                    name,
+                    module_source,
+                    base_type,
+                } => {
+                    // Remember the outermost newtype for its own trait impls
+                    if newtype_info.is_none() {
+                        newtype_info = Some((name.clone(), module_source.clone()));
+                    }
+                    current_type = self.type_table.get(*base_type);
+                }
+                _ => break,
+            }
+        }
+        let base_receiver_type = current_type.clone();
+
+        // Extract method name and trait name from method_info
+        let (method_name, trait_name) = if let Some(info) = func.method_info.clone() {
+            (info.method_name.clone(), info.trait_name)
+        } else {
+            (func_name, None)
+        };
+
+        // If the receiver was a newtype (e.g., flags type), also mark
+        // the newtype's own methods as reachable (e.g., Perms^Inspect::inspect).
+        if let Some((newtype_name, newtype_module)) = newtype_info {
+            let method_id = FunctionId::Method(MethodName::new(
+                newtype_module,
+                newtype_name,
+                trait_name.clone(),
+                method_name.clone(),
+            ));
+            self.analysis.callees.insert(method_id);
+        }
+
+        match base_receiver_type {
+            ResolvedType::Struct {
+                ref name,
+                is_monomorphized: true,
+                base_name: Some(ref base_struct),
+                ..
+            } => {
+                // Monomorphized struct method call - use FunctionId::Free
+                let mangled_func_name =
+                    MethodName::format_local(name, trait_name.as_deref(), &method_name);
+                // Build base method name using the original generic struct name
+                let base_method_name =
+                    MethodName::format_local(base_struct, trait_name.as_deref(), &method_name);
+                // Use current module — monomorphized functions live in the
+                // module that uses them.
+                let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                    self.current_module.clone(),
+                    mangled_func_name,
+                    base_method_name,
+                ));
+                self.analysis.callees.insert(callee_id);
+
+                // For internal Box<T> types (primitive boxing), the method is
+                // actually defined on the inner type (e.g., i32^Ord::cmp, not
+                // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
+                // method target as reachable.
+                if base_struct == "Box"
+                    && let Some(info) = func.method_info.clone()
+                {
+                    let original_method_id = FunctionId::Method(MethodName::new(
+                        func.module_source.clone(),
+                        info.struct_name.clone(),
+                        info.trait_name.clone(),
+                        info.method_name,
+                    ));
+                    self.analysis.callees.insert(original_method_id);
+                }
+            }
+            ResolvedType::Struct {
+                name,
+                module_source,
+                is_monomorphized: false,
+                ..
+            } => {
+                // Regular struct method call - use FunctionId::Method
+                let method_id = FunctionId::Method(MethodName::new(
+                    module_source.clone(),
+                    name,
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+
+                // Also mark reachable using the FunctionRef's module source,
+                // since trait impls may live in a different module than the type
+                // (e.g., `impl Display for String` is in format.wado, not string.wado)
+                let func_module = func.module_source.clone();
+                if func_module != module_source
+                    && let Some(info) = func.method_info.clone()
+                {
+                    let alt_method_id = FunctionId::Method(MethodName::new(
+                        func_module,
+                        info.struct_name.clone(),
+                        info.trait_name.clone(),
+                        info.method_name,
+                    ));
+                    self.analysis.callees.insert(alt_method_id);
+                }
+            }
+            ResolvedType::Primitive(prim) => {
+                // Primitive method call (e.g., i32.to_string())
+                if method_name == "to_string" {
+                    add_to_string_callee(receiver.type_id, self.type_table, &mut self.analysis);
+                }
+                // Trait and inherent methods on primitives
+                // (e.g., i32^Ord::cmp, char::is_ascii_space)
+                let prim_name = prim.as_str().to_string();
+                let method_id = FunctionId::Method(MethodName::new(
+                    ModuleSource::primitive(),
+                    prim_name,
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            ResolvedType::Unit => {
+                // Unit type () method call (e.g., ().to_string(), ().fmt(&f))
+                let method_id = FunctionId::Method(MethodName::new(
+                    ModuleSource::primitive(),
+                    TypeTable::UNIT_TYPE_NAME.to_string(),
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            ResolvedType::GenericInstance {
+                name,
+                type_args,
+                module_source,
+            } if TypeTable::is_tuple_type(&name, &module_source) => {
+                // Tuple method call (e.g., Tuple<f64,f64>^Inspect::inspect)
+                // Synthesized as non-monomorphized methods with struct_name "Tuple<f64,f64>"
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .collect();
+                let mangled_struct =
+                    mangle_generic_name(TypeTable::TUPLE_TYPE_NAME, &type_arg_names);
+                let method_id = FunctionId::Method(MethodName::new(
+                    self.current_module.clone(),
+                    mangled_struct,
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            ResolvedType::GenericInstance {
+                name,
+                type_args,
+                module_source: _,
+            } => {
+                // Generic instance method call (e.g., Box<i32>.get())
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .collect();
+                // Include trait name for trait methods (e.g., TreeMap<String,i32>^Index::index)
+                let (mangled_func_name, base_name) = if let Some(ref trait_n) = trait_name {
+                    let generic_name = mangle_generic_name(&name, &type_arg_names);
+                    let mangled = mangle_local_trait_method(&generic_name, trait_n, &method_name);
+                    let base = mangle_local_trait_method(&name, trait_n, &method_name);
+                    (mangled, base)
+                } else {
+                    let mangled = mangle_method_generic(&name, &type_arg_names, &method_name);
+                    let base = mangle_local_method(&name, &method_name);
+                    (mangled, base)
+                };
+                let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                    self.current_module.clone(),
+                    mangled_func_name,
                     base_name,
                 ));
-                analysis.callees.insert(callee_id);
-            } else {
-                // Non-monomorphized method - determine target from receiver type
-                // First strip any reference wrappers and newtypes to get the base type
-                let mut current_type = type_table.get(receiver.type_id);
-                let mut newtype_info: Option<(String, ModuleSource)> = None;
-                loop {
-                    match current_type {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                            current_type = type_table.get(*inner);
-                        }
-                        ResolvedType::Newtype {
-                            name,
-                            module_source,
-                            base_type,
-                        } => {
-                            // Remember the outermost newtype for its own trait impls
-                            if newtype_info.is_none() {
-                                newtype_info = Some((name.clone(), module_source.clone()));
-                            }
-                            current_type = type_table.get(*base_type);
-                        }
-                        _ => break,
-                    }
-                }
-                let base_receiver_type = current_type.clone();
+                self.analysis.callees.insert(callee_id);
+            }
+            ResolvedType::Enum {
+                name,
+                module_source,
+            } => {
+                // Enum method call (user-defined or auto-derived trait impls)
+                let method_id = FunctionId::Method(MethodName::new(
+                    module_source,
+                    name,
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            ResolvedType::Resource { name, .. } => {
+                // Resource instance method call (e.g., fields.has(), fields.append())
+                // Record as effect call so it's tracked in used_wasi_functions
+                self.analysis.effect_calls.insert((name, method_name));
+            }
+            ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            } => {
+                // Variant method call (e.g., Shape^Inspect::inspect)
+                let method_id = FunctionId::Method(MethodName::new(
+                    module_source,
+                    name,
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                // Function type method call (e.g., Fn<2,i32>^Inspect::inspect)
+                let type_arg_names = vec![
+                    params.len().to_string(),
+                    self.type_table.mangle_type_name(return_type),
+                ];
+                let mangled_struct = mangle_generic_name("Fn", &type_arg_names);
+                let method_id = FunctionId::Method(MethodName::new(
+                    self.current_module.clone(),
+                    mangled_struct,
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            ResolvedType::GenericResource {
+                name, type_args, ..
+            } => {
+                // Generic resource method call (e.g., Future<T>^Inspect::inspect)
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .collect();
+                let mangled_struct = mangle_generic_name(name.as_str(), &type_arg_names);
+                let method_id = FunctionId::Method(MethodName::new(
+                    self.current_module.clone(),
+                    mangled_struct,
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            _ => {}
+        }
+    }
 
-                // Extract method name and trait name from method_info
-                let (method_name, trait_name) = if let Some(info) = func.method_info.clone() {
-                    (info.method_name.clone(), info.trait_name)
-                } else {
-                    (func_name, None)
-                };
+    fn record_cm_raw_call(&mut self, local_name: &str) {
+        // CmRawCall references a lowered WASI import function.
+        // Parse the local_name (e.g., "wasi:cli/Stdout::write_via_stream")
+        // to extract the interface_name and op_name for WASI import tracking.
+        if let Some((interface_name, op_name)) = local_name.split_once("::").map(|(prefix, op)| {
+            // prefix is like "wasi:cli/Stdout" → extract "Stdout"
+            let effect = prefix.rsplit('/').next().unwrap_or(prefix);
+            (effect.to_string(), op.to_string())
+        }) {
+            self.analysis.effect_calls.insert((interface_name, op_name));
+        }
+    }
 
-                // If the receiver was a newtype (e.g., flags type), also mark
-                // the newtype's own methods as reachable (e.g., Perms^Inspect::inspect).
-                if let Some((newtype_name, newtype_module)) = newtype_info {
-                    let method_id = FunctionId::Method(MethodName::new(
-                        newtype_module,
-                        newtype_name,
-                        trait_name.clone(),
-                        method_name.clone(),
-                    ));
-                    analysis.callees.insert(method_id);
-                }
-
-                match base_receiver_type {
-                    ResolvedType::Struct {
-                        ref name,
-                        is_monomorphized: true,
-                        base_name: Some(ref base_struct),
-                        ..
-                    } => {
-                        // Monomorphized struct method call - use FunctionId::Free
-                        let mangled_func_name =
-                            MethodName::format_local(name, trait_name.as_deref(), &method_name);
-                        // Build base method name using the original generic struct name
-                        let base_method_name = MethodName::format_local(
-                            base_struct,
-                            trait_name.as_deref(),
-                            &method_name,
-                        );
-                        // Use current module — monomorphized functions live in the
-                        // module that uses them.
-                        let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                            current_module.clone(),
-                            mangled_func_name,
-                            base_method_name,
-                        ));
-                        analysis.callees.insert(callee_id);
-
-                        // For internal Box<T> types (primitive boxing), the method is
-                        // actually defined on the inner type (e.g., i32^Ord::cmp, not
-                        // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
-                        // method target as reachable.
-                        if base_struct == "Box"
-                            && let Some(info) = func.method_info.clone()
-                        {
-                            let original_method_id = FunctionId::Method(MethodName::new(
-                                func.module_source.clone(),
-                                info.struct_name.clone(),
-                                info.trait_name.clone(),
-                                info.method_name,
-                            ));
-                            analysis.callees.insert(original_method_id);
-                        }
-                    }
-                    ResolvedType::Struct {
-                        name,
-                        module_source,
-                        is_monomorphized: false,
-                        ..
-                    } => {
-                        // Regular struct method call - use FunctionId::Method
-                        let method_id = FunctionId::Method(MethodName::new(
-                            module_source.clone(),
-                            name,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-
-                        // Also mark reachable using the FunctionRef's module source,
-                        // since trait impls may live in a different module than the type
-                        // (e.g., `impl Display for String` is in format.wado, not string.wado)
-                        let func_module = func.module_source.clone();
-                        if func_module != module_source
-                            && let Some(info) = func.method_info.clone()
-                        {
-                            let alt_method_id = FunctionId::Method(MethodName::new(
-                                func_module,
-                                info.struct_name.clone(),
-                                info.trait_name.clone(),
-                                info.method_name,
-                            ));
-                            analysis.callees.insert(alt_method_id);
-                        }
-                    }
-                    ResolvedType::Primitive(prim) => {
-                        // Primitive method call (e.g., i32.to_string())
-                        if method_name == "to_string" {
-                            add_to_string_callee(receiver.type_id, type_table, analysis);
-                        }
-                        // Trait and inherent methods on primitives
-                        // (e.g., i32^Ord::cmp, char::is_ascii_space)
-                        let prim_name = prim.as_str().to_string();
-                        let method_id = FunctionId::Method(MethodName::new(
-                            ModuleSource::primitive(),
-                            prim_name,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    ResolvedType::Unit => {
-                        // Unit type () method call (e.g., ().to_string(), ().fmt(&f))
-                        let method_id = FunctionId::Method(MethodName::new(
-                            ModuleSource::primitive(),
-                            TypeTable::UNIT_TYPE_NAME.to_string(),
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    ResolvedType::GenericInstance {
-                        name,
-                        type_args,
-                        module_source,
-                    } if TypeTable::is_tuple_type(&name, &module_source) => {
-                        // Tuple method call (e.g., Tuple<f64,f64>^Inspect::inspect)
-                        // Synthesized as non-monomorphized methods with struct_name "Tuple<f64,f64>"
-                        let type_arg_names: Vec<String> = type_args
-                            .iter()
-                            .map(|t| type_table.mangle_type_name(*t))
-                            .collect();
-                        let mangled_struct =
-                            mangle_generic_name(TypeTable::TUPLE_TYPE_NAME, &type_arg_names);
-                        let method_id = FunctionId::Method(MethodName::new(
-                            current_module.clone(),
-                            mangled_struct,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    ResolvedType::GenericInstance {
-                        name,
-                        type_args,
-                        module_source: _,
-                    } => {
-                        // Generic instance method call (e.g., Box<i32>.get())
-                        let type_arg_names: Vec<String> = type_args
-                            .iter()
-                            .map(|t| type_table.mangle_type_name(*t))
-                            .collect();
-                        // Include trait name for trait methods (e.g., TreeMap<String,i32>^Index::index)
-                        let (mangled_func_name, base_name) = if let Some(ref trait_n) = trait_name {
-                            let generic_name = mangle_generic_name(&name, &type_arg_names);
-                            let mangled =
-                                mangle_local_trait_method(&generic_name, trait_n, &method_name);
-                            let base = mangle_local_trait_method(&name, trait_n, &method_name);
-                            (mangled, base)
-                        } else {
-                            let mangled =
-                                mangle_method_generic(&name, &type_arg_names, &method_name);
-                            let base = mangle_local_method(&name, &method_name);
-                            (mangled, base)
-                        };
-                        let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                            current_module.clone(),
-                            mangled_func_name,
-                            base_name,
-                        ));
-                        analysis.callees.insert(callee_id);
-                    }
-                    ResolvedType::Enum {
-                        name,
-                        module_source,
-                    } => {
-                        // Enum method call (user-defined or auto-derived trait impls)
-                        let method_id = FunctionId::Method(MethodName::new(
-                            module_source,
-                            name,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    ResolvedType::Resource { name, .. } => {
-                        // Resource instance method call (e.g., fields.has(), fields.append())
-                        // Record as effect call so it's tracked in used_wasi_functions
-                        analysis.effect_calls.insert((name, method_name));
-                    }
-                    ResolvedType::Variant {
-                        name,
-                        module_source,
-                        ..
-                    } => {
-                        // Variant method call (e.g., Shape^Inspect::inspect)
-                        let method_id = FunctionId::Method(MethodName::new(
-                            module_source,
-                            name,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    ResolvedType::Function {
-                        params,
-                        return_type,
-                        ..
-                    } => {
-                        // Function type method call (e.g., Fn<2,i32>^Inspect::inspect)
-                        let type_arg_names = vec![
-                            params.len().to_string(),
-                            type_table.mangle_type_name(return_type),
-                        ];
-                        let mangled_struct = mangle_generic_name("Fn", &type_arg_names);
-                        let method_id = FunctionId::Method(MethodName::new(
-                            current_module.clone(),
-                            mangled_struct,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    ResolvedType::GenericResource {
-                        name, type_args, ..
-                    } => {
-                        // Generic resource method call (e.g., Future<T>^Inspect::inspect)
-                        let type_arg_names: Vec<String> = type_args
-                            .iter()
-                            .map(|t| type_table.mangle_type_name(*t))
-                            .collect();
-                        let mangled_struct = mangle_generic_name(name.as_str(), &type_arg_names);
-                        let method_id = FunctionId::Method(MethodName::new(
-                            current_module.clone(),
-                            mangled_struct,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    _ => {}
-                }
-            }
-
-            analyze_expr(receiver, current_module, type_table, analysis);
-            for arg in args {
-                analyze_expr(&arg.expr, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            analyze_expr(left, current_module, type_table, analysis);
-            analyze_expr(right, current_module, type_table, analysis);
-        }
-        NirExprKind::Unary { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-        }
-        NirExprKind::Assign { target, value } => {
-            analyze_expr(target, current_module, type_table, analysis);
-            analyze_expr(value, current_module, type_table, analysis);
-        }
-        NirExprKind::Cast { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-        }
-        NirExprKind::CmRawCall { local_name, args } => {
-            // CmRawCall references a lowered WASI import function.
-            // Parse the local_name (e.g., "wasi:cli/Stdout::write_via_stream")
-            // to extract the interface_name and op_name for WASI import tracking.
-            if let Some((interface_name, op_name)) =
-                local_name.split_once("::").map(|(prefix, op)| {
-                    // prefix is like "wasi:cli/Stdout" → extract "Stdout"
-                    let effect = prefix.rsplit('/').next().unwrap_or(prefix);
-                    (effect.to_string(), op.to_string())
-                })
-            {
-                analysis.effect_calls.insert((interface_name, op_name));
-            }
-            for arg in args {
-                analyze_expr(arg, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::FieldAccess { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-        }
-        NirExprKind::Index { expr, index } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-            analyze_expr(index, current_module, type_table, analysis);
-        }
-        NirExprKind::Block(block) => {
-            analyze_block(block, current_module, type_table, analysis);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            analyze_expr(condition, current_module, type_table, analysis);
-            analyze_block(then_branch, current_module, type_table, analysis);
-            if let Some(else_blk) = else_branch {
-                analyze_block(else_blk, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::Match { expr, arms } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    analyze_expr(guard, current_module, type_table, analysis);
-                }
-                analyze_expr(&arm.body, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                analyze_expr(&field.value, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                analyze_expr(elem, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::IndirectCall { callee, args } => {
-            analyze_expr(callee, current_module, type_table, analysis);
-            for arg in args {
-                analyze_expr(arg, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::ClosureToCanonical {
-            functor,
-            functor_id,
-            target_fn_type,
-            closure_module,
-        } => {
-            analyze_expr(functor, current_module, type_table, analysis);
-            // The `__call` method is always reached via `ref.func` baked
-            // into the canonical closure struct's `func` slot.
-            let struct_name = format!(
-                "{prefix}{functor_id}",
-                prefix = crate::name::CLOSURE_STRUCT_PREFIX,
-            );
-            analysis.callees.insert(FunctionId::Method(MethodName::new(
+    fn record_closure_to_canonical(
+        &mut self,
+        functor_id: u32,
+        target_fn_type: TypeId,
+        closure_module: &ModuleSource,
+    ) {
+        // The `__call` method is always reached via `ref.func` baked
+        // into the canonical closure struct's `func` slot.
+        let struct_name = format!(
+            "{prefix}{functor_id}",
+            prefix = crate::name::CLOSURE_STRUCT_PREFIX,
+        );
+        self.analysis
+            .callees
+            .insert(FunctionId::Method(MethodName::new(
                 closure_module.clone(),
                 struct_name.clone(),
                 None,
                 crate::name::CLOSURE_CALL_METHOD.to_string(),
             )));
 
-            // The per-functor `__Closure_N^Inspect` and `^InspectAlt`
-            // impls (and their per-literal source-string constants) only
-            // need to stay alive when their corresponding `Fn<arity,
-            // ret>^Inspect[Alt]` dispatch stub is reachable — gated
-            // independently per trait method. A program that only ever
-            // uses `:?` keeps `__Closure_N^Inspect` but drops
-            // `__Closure_N^InspectAlt` and its source-string literal.
-            //
-            // The gating set is unknown during this walk (it is derived
-            // from the first reachable-set computation), so record a
-            // pending edge here and let `apply_inspect_edges` insert the
-            // real call-graph edges once the set is known.
-            if let ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } = type_table.get(*target_fn_type)
-            {
-                analysis.pending_inspects.push(PendingInspectEdge {
-                    closure_module: closure_module.clone(),
-                    struct_name,
-                    key: (params.len(), *return_type),
-                });
-            }
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                analyze_expr(payload_expr, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::LabeledBlock { block, .. } => {
-            analyze_block(block, current_module, type_table, analysis);
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            analyze_expr(value, current_module, type_table, analysis);
-        }
-        NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-        }
-        NirExprKind::VariantPayload { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
+        // The per-functor `__Closure_N^Inspect` and `^InspectAlt`
+        // impls (and their per-literal source-string constants) only
+        // need to stay alive when their corresponding `Fn<arity,
+        // ret>^Inspect[Alt]` dispatch stub is reachable — gated
+        // independently per trait method. A program that only ever
+        // uses `:?` keeps `__Closure_N^Inspect` but drops
+        // `__Closure_N^InspectAlt` and its source-string literal.
+        //
+        // The gating set is unknown during this walk (it is derived
+        // from the first reachable-set computation), so record a
+        // pending edge here and let `apply_inspect_edges` insert the
+        // real call-graph edges once the set is known.
+        if let ResolvedType::Function {
+            params,
+            return_type,
             ..
-        } => {
-            analyze_expr(scrutinee, current_module, type_table, analysis);
-            for arm in arms {
-                analyze_block(arm, current_module, type_table, analysis);
-            }
-            analyze_block(default, current_module, type_table, analysis);
+        } = self.type_table.get(target_fn_type)
+        {
+            self.analysis.pending_inspects.push(PendingInspectEdge {
+                closure_module: closure_module.clone(),
+                struct_name,
+                key: (params.len(), *return_type),
+            });
         }
-        // Leaf nodes - no calls
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+impl NirRefVisitor for DceWalker<'_> {
+    fn visit_stmt(&mut self, stmt: &NirStmt) {
+        // The `Let` binding's declared type is not visible from its `value`
+        // (the value's `type_id` is the RHS type before any coercion).
+        if let NirStmtKind::Let { type_id, .. } = &stmt.kind {
+            self.add_type(*type_id);
+        }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &NirExpr) {
+        // Every expression has a result type that needs to stay alive.
+        self.add_type(expr.type_id);
+
+        match &expr.kind {
+            NirExprKind::Call { func, .. } => self.record_call(func),
+            NirExprKind::MethodCall { receiver, func, .. } => {
+                self.record_method_call(receiver, func);
+            }
+            NirExprKind::CmRawCall { local_name, .. } => self.record_cm_raw_call(local_name),
+            NirExprKind::ClosureToCanonical {
+                functor_id,
+                target_fn_type,
+                closure_module,
+                ..
+            } => {
+                self.add_type(*target_fn_type);
+                self.record_closure_to_canonical(*functor_id, *target_fn_type, closure_module);
+            }
+            NirExprKind::GlobalVarGet { module_source, name } => {
+                self.analysis
+                    .used_globals
+                    .insert((module_source.to_path().join("::"), name.clone()));
+            }
+            NirExprKind::Cast { target_type, .. } => self.add_type(*target_type),
+            NirExprKind::StructLiteral { struct_type, .. } => self.add_type(*struct_type),
+            NirExprKind::VariantConstruct { variant_type, .. } => self.add_type(*variant_type),
+            NirExprKind::VariantPayload { payload_type, .. } => self.add_type(*payload_type),
+            _ => {}
+        }
+        // Default recursion into children — handled uniformly by the
+        // visitor trait, so a new `NirExprKind` variant only needs its
+        // sub-expression layout described once in `nir_visitor.rs`.
+        self.walk_expr(expr);
+    }
+
+    fn visit_pattern(&mut self, pattern: &crate::nir::NirPattern) {
+        use crate::nir::NirPattern;
+        match pattern {
+            NirPattern::Binding { type_id, .. } => self.add_type(*type_id),
+            NirPattern::Variant {
+                enum_type,
+                payload_type,
+                ..
+            } => {
+                self.add_type(*enum_type);
+                self.add_type(*payload_type);
+            }
+            NirPattern::Enum { enum_type, .. } => self.add_type(*enum_type),
+            NirPattern::Struct { struct_type, .. } => self.add_type(*struct_type),
+            _ => {}
+        }
+        self.walk_pattern(pattern);
     }
 }
 
@@ -1703,7 +1669,11 @@ impl DceAnalysis {
 /// (see [`analyze_dce`]). Running pre-pruning, so all DCE analysis
 /// sits in `analyze_dce` and the downstream `remove_*` functions only
 /// mutate.
-fn populate_type_reachability(project: &NirPackage, analysis: &mut DceAnalysis) {
+fn populate_type_reachability(
+    project: &NirPackage,
+    graph: &AnalysisGraph,
+    analysis: &mut DceAnalysis,
+) {
     // Always include primitive types (TypeId 0-17)
     for i in 0..18 {
         analysis.types.insert(TypeId(i));
@@ -1724,23 +1694,27 @@ fn populate_type_reachability(project: &NirPackage, analysis: &mut DceAnalysis) 
         }
     }
 
-    // Phase 1: Collect types from reachable functions and reachable globals.
-    // The `analysis.functions` filter mirrors what would otherwise be
-    // visible *after* `remove_unreachable_functions` ran — keeping the
-    // walk pre-pruning lets `analyze_dce` finish before any mutation
-    // touches the package.
+    // Phase 1: Seed `analysis.types` from per-function facts (collected
+    // by `DceWalker` during `build_analysis_graph`) and from reachable
+    // globals' initializers + closure functor types. No function-body
+    // re-walk — the per-function used-types set is already populated.
     {
         let type_table = project.type_table.borrow();
 
-        for (pos, func_rc) in project.functions.iter().enumerate() {
-            if !analysis.functions.contains(&pos) {
-                continue;
+        // Sum per-function used-types for reachable functions only.
+        for &pos in &analysis.functions {
+            if let Some(per_func) = graph.per_func_types.get(pos) {
+                for &id in per_func {
+                    analysis.types.insert(id);
+                }
             }
-            let func = func_rc.borrow();
-            collect_types_from_function(&func, &type_table, &mut analysis.types);
         }
 
-        // Collect types from reachable global variables only.
+        // Reachable globals' declared type + initializer types. At NIR
+        // level non-constant initializers have already been extracted
+        // into `__initialize_module` (see `lower::plan::globals`), so
+        // each surviving `global.initializer` here is a constant
+        // expression — DceWalker on it only walks the literal tree.
         for global in &project.globals {
             let global_key = (
                 global.module_source.to_path().join("::"),
@@ -1749,7 +1723,12 @@ fn populate_type_reachability(project: &NirPackage, analysis: &mut DceAnalysis) 
             if !analysis.globals.contains(&global_key) {
                 continue;
             }
-            collect_types_from_expr(&global.initializer, &type_table, &mut analysis.types);
+            collect_type_transitive(global.ty, &type_table, &mut analysis.types);
+            let mut walker = DceWalker::new(&type_table, &global.module_source);
+            walker.visit_expr(&global.initializer);
+            for id in walker.analysis.used_types {
+                analysis.types.insert(id);
+            }
         }
 
         // Closure functor types are collected transitively from
@@ -1887,300 +1866,6 @@ fn populate_type_reachability(project: &NirPackage, analysis: &mut DceAnalysis) 
     }
 }
 
-/// Collect all types used in a function
-fn collect_types_from_function(
-    func: &NirFunction,
-    type_table: &TypeTable,
-    reachable: &mut IndexSet<TypeId>,
-) {
-    // Collect parameter types
-    for param in &func.params {
-        collect_type_transitive(param.type_id, type_table, reachable);
-    }
-
-    // Collect return type
-    collect_type_transitive(func.return_type, type_table, reachable);
-
-    // Collect local variable types (includes types from inlined functions)
-    for local in &func.locals {
-        collect_type_transitive(local.type_id, type_table, reachable);
-    }
-
-    // Collect monomorphization type args (used by WIR for name mangling)
-    if let Some(info) = &func.monomorph_info {
-        for &ta in &info.impl_type_args {
-            collect_type_transitive(ta, type_table, reachable);
-        }
-        for &ta in &info.method_type_args {
-            collect_type_transitive(ta, type_table, reachable);
-        }
-    }
-
-    // Collect types from body
-    if let Some(body) = &func.body {
-        collect_types_from_block(body, type_table, reachable);
-    }
-}
-
-/// Collect types from a block
-fn collect_types_from_block(
-    block: &NirBlock,
-    type_table: &TypeTable,
-    reachable: &mut IndexSet<TypeId>,
-) {
-    for stmt in &block.stmts {
-        match &stmt.kind {
-            NirStmtKind::Let { value, type_id, .. } => {
-                collect_type_transitive(*type_id, type_table, reachable);
-                collect_types_from_expr(value, type_table, reachable);
-            }
-            NirStmtKind::Expr(expr) => {
-                collect_types_from_expr(expr, type_table, reachable);
-            }
-            NirStmtKind::Return { value } => {
-                if let Some(expr) = value {
-                    collect_types_from_expr(expr, type_table, reachable);
-                }
-            }
-            NirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                collect_types_from_expr(condition, type_table, reachable);
-                collect_types_from_block(then_block, type_table, reachable);
-                if let Some(else_blk) = else_block {
-                    collect_types_from_block(else_blk, type_table, reachable);
-                }
-            }
-            NirStmtKind::Loop { body } => {
-                collect_types_from_block(body, type_table, reachable);
-            }
-            NirStmtKind::LabeledBlock { block, .. } => {
-                collect_types_from_block(block, type_table, reachable);
-            }
-            NirStmtKind::Break { value, .. } => {
-                if let Some(v) = value {
-                    collect_types_from_expr(v, type_table, reachable);
-                }
-            }
-            NirStmtKind::Continue => {}
-            NirStmtKind::LetDestructure { pattern, value, .. } => {
-                collect_types_from_pattern(pattern, type_table, reachable);
-                collect_types_from_expr(value, type_table, reachable);
-            }
-        }
-    }
-}
-
-/// Collect types from an expression
-fn collect_types_from_expr(
-    expr: &NirExpr,
-    type_table: &TypeTable,
-    reachable: &mut IndexSet<TypeId>,
-) {
-    // Always collect the expression's type
-    collect_type_transitive(expr.type_id, type_table, reachable);
-
-    match &expr.kind {
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                collect_types_from_expr(&arg.expr, type_table, reachable);
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            collect_types_from_expr(receiver, type_table, reachable);
-            for arg in args {
-                collect_types_from_expr(&arg.expr, type_table, reachable);
-            }
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            collect_types_from_expr(left, type_table, reachable);
-            collect_types_from_expr(right, type_table, reachable);
-        }
-        NirExprKind::Unary { expr, .. } => {
-            collect_types_from_expr(expr, type_table, reachable);
-        }
-        NirExprKind::Assign { target, value } => {
-            collect_types_from_expr(target, type_table, reachable);
-            collect_types_from_expr(value, type_table, reachable);
-        }
-        NirExprKind::Cast { expr, target_type } => {
-            collect_types_from_expr(expr, type_table, reachable);
-            collect_type_transitive(*target_type, type_table, reachable);
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_types_from_expr(arg, type_table, reachable);
-            }
-        }
-        NirExprKind::FieldAccess { expr, .. } => {
-            collect_types_from_expr(expr, type_table, reachable);
-        }
-        NirExprKind::Index { expr, index } => {
-            collect_types_from_expr(expr, type_table, reachable);
-            collect_types_from_expr(index, type_table, reachable);
-        }
-        NirExprKind::Block(block) => {
-            collect_types_from_block(block, type_table, reachable);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_types_from_expr(condition, type_table, reachable);
-            collect_types_from_block(then_branch, type_table, reachable);
-            if let Some(else_blk) = else_branch {
-                collect_types_from_block(else_blk, type_table, reachable);
-            }
-        }
-        NirExprKind::Match { expr, arms } => {
-            collect_types_from_expr(expr, type_table, reachable);
-            for arm in arms {
-                collect_types_from_pattern(&arm.pattern, type_table, reachable);
-                if let Some(guard) = &arm.guard {
-                    collect_types_from_expr(guard, type_table, reachable);
-                }
-                collect_types_from_expr(&arm.body, type_table, reachable);
-            }
-        }
-        NirExprKind::StructLiteral {
-            struct_type,
-            fields,
-            ..
-        } => {
-            collect_type_transitive(*struct_type, type_table, reachable);
-            for field in fields {
-                collect_types_from_expr(&field.value, type_table, reachable);
-            }
-        }
-        NirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                collect_types_from_expr(elem, type_table, reachable);
-            }
-        }
-        NirExprKind::IndirectCall { callee, args } => {
-            collect_types_from_expr(callee, type_table, reachable);
-            for arg in args {
-                collect_types_from_expr(arg, type_table, reachable);
-            }
-        }
-        NirExprKind::ClosureToCanonical {
-            functor,
-            target_fn_type,
-            ..
-        } => {
-            collect_types_from_expr(functor, type_table, reachable);
-            collect_type_transitive(*target_fn_type, type_table, reachable);
-        }
-        NirExprKind::VariantConstruct {
-            variant_type,
-            payload,
-            ..
-        } => {
-            collect_type_transitive(*variant_type, type_table, reachable);
-            if let Some(payload_expr) = payload {
-                collect_types_from_expr(payload_expr, type_table, reachable);
-            }
-        }
-        NirExprKind::LabeledBlock { block, .. } => {
-            collect_types_from_block(block, type_table, reachable);
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            collect_types_from_expr(value, type_table, reachable);
-        }
-        NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
-            collect_types_from_expr(expr, type_table, reachable);
-        }
-        NirExprKind::VariantPayload {
-            expr, payload_type, ..
-        } => {
-            collect_types_from_expr(expr, type_table, reachable);
-            collect_type_transitive(*payload_type, type_table, reachable);
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_types_from_expr(scrutinee, type_table, reachable);
-            for arm in arms {
-                collect_types_from_block(arm, type_table, reachable);
-            }
-            collect_types_from_block(default, type_table, reachable);
-        }
-        // Leaf nodes
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
-    }
-}
-
-/// Collect types from a pattern
-fn collect_types_from_pattern(
-    pattern: &crate::nir::NirPattern,
-    type_table: &TypeTable,
-    reachable: &mut IndexSet<TypeId>,
-) {
-    use crate::nir::NirPattern;
-
-    match pattern {
-        NirPattern::Wildcard => {}
-        NirPattern::Binding { type_id, .. } => {
-            collect_type_transitive(*type_id, type_table, reachable);
-        }
-        NirPattern::Literal(_) | NirPattern::Range { .. } => {}
-        NirPattern::Tuple(patterns, _) => {
-            for p in patterns {
-                collect_types_from_pattern(p, type_table, reachable);
-            }
-        }
-        NirPattern::Variant {
-            enum_type,
-            bindings,
-            payload_type,
-            ..
-        } => {
-            collect_type_transitive(*enum_type, type_table, reachable);
-            collect_type_transitive(*payload_type, type_table, reachable);
-            for binding in bindings {
-                collect_types_from_pattern(binding, type_table, reachable);
-            }
-        }
-        NirPattern::Enum { enum_type, .. } => {
-            collect_type_transitive(*enum_type, type_table, reachable);
-        }
-        NirPattern::Struct {
-            struct_type,
-            fields,
-            ..
-        } => {
-            collect_type_transitive(*struct_type, type_table, reachable);
-            for field in fields {
-                collect_types_from_pattern(&field.pattern, type_table, reachable);
-            }
-        }
-        NirPattern::Or(alternatives) => {
-            for p in alternatives {
-                collect_types_from_pattern(p, type_table, reachable);
-            }
-        }
-        NirPattern::ConstantValue { expr } => {
-            collect_type_transitive(expr.type_id, type_table, reachable);
-        }
-    }
-}
-
 /// Add a type and its dependencies to the reachable set
 fn collect_type_transitive(
     type_id: TypeId,
@@ -2292,27 +1977,21 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
 // Global variable DCE
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Collect every `(module_key, global_name)` pair that any reachable
-/// function reads via `GlobalVarGet`. Implementation detail of
-/// [`analyze_dce`]: extracted from the old `remove_unreachable_globals`
-/// so the global-DCE input is computed during analysis (before any
-/// pruning) and the matching mutator only retains/strips.
-///
-/// `reachable_functions` is positions in `project.functions`; functions
-/// not in that set are skipped — their reads cannot keep a global
-/// alive because they'll be removed by `remove_unreachable_functions`.
-fn analyze_global_reachability(
-    project: &NirPackage,
+/// Union every `(module_key, global_name)` pair read by some reachable
+/// function. Reads come from the per-function index built once by
+/// [`build_analysis_graph`]'s [`DceWalker`] walk; functions not in
+/// `reachable_functions` are skipped since they'll be removed by
+/// `remove_unreachable_functions`.
+fn compute_global_reachability(
+    graph: &AnalysisGraph,
     reachable_functions: &IndexSet<usize>,
 ) -> IndexSet<(String, String)> {
     let mut used_globals: IndexSet<(String, String)> = IndexSet::default();
-    for (pos, func_rc) in project.functions.iter().enumerate() {
-        if !reachable_functions.contains(&pos) {
-            continue;
-        }
-        let func = func_rc.borrow();
-        if let Some(body) = &func.body {
-            collect_global_reads_block(body, &mut used_globals);
+    for &pos in reachable_functions {
+        if let Some(per_func) = graph.per_func_globals.get(pos) {
+            for entry in per_func {
+                used_globals.insert(entry.clone());
+            }
         }
     }
     used_globals
@@ -2341,169 +2020,6 @@ pub fn remove_unreachable_globals(
         if let Some(body) = &mut func.body {
             remove_dead_global_sets_block(body, used_globals);
         }
-    }
-}
-
-/// Collect all `GlobalVarGet` references from a block.
-fn collect_global_reads_block(block: &NirBlock, used: &mut IndexSet<(String, String)>) {
-    for stmt in &block.stmts {
-        collect_global_reads_stmt(stmt, used);
-    }
-}
-
-fn collect_global_reads_stmt(stmt: &NirStmt, used: &mut IndexSet<(String, String)>) {
-    match &stmt.kind {
-        NirStmtKind::Let { value, .. }
-        | NirStmtKind::LetDestructure { value, .. }
-        | NirStmtKind::Expr(value) => {
-            collect_global_reads_expr(value, used);
-        }
-        NirStmtKind::Return { value } => {
-            if let Some(expr) = value {
-                collect_global_reads_expr(expr, used);
-            }
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            collect_global_reads_expr(condition, used);
-            collect_global_reads_block(then_block, used);
-            if let Some(else_blk) = else_block {
-                collect_global_reads_block(else_blk, used);
-            }
-        }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            collect_global_reads_block(body, used);
-        }
-        NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                collect_global_reads_expr(v, used);
-            }
-        }
-        NirStmtKind::Continue => {}
-    }
-}
-
-fn collect_global_reads_expr(expr: &NirExpr, used: &mut IndexSet<(String, String)>) {
-    match &expr.kind {
-        NirExprKind::GlobalVarGet {
-            module_source,
-            name,
-        } => {
-            used.insert((module_source.to_path().join("::"), name.clone()));
-        }
-        // Recurse into sub-expressions — mirrors analyze_expr structure
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                collect_global_reads_expr(&arg.expr, used);
-            }
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_global_reads_expr(arg, used);
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            collect_global_reads_expr(receiver, used);
-            for arg in args {
-                collect_global_reads_expr(&arg.expr, used);
-            }
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            collect_global_reads_expr(left, used);
-            collect_global_reads_expr(right, used);
-        }
-        NirExprKind::Unary { expr: inner, .. }
-        | NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::VariantTag { expr: inner }
-        | NirExprKind::VariantTest { expr: inner, .. }
-        | NirExprKind::VariantPayload { expr: inner, .. } => {
-            collect_global_reads_expr(inner, used);
-        }
-        NirExprKind::Assign { target, value } => {
-            collect_global_reads_expr(target, used);
-            collect_global_reads_expr(value, used);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_global_reads_expr(condition, used);
-            collect_global_reads_block(then_branch, used);
-            if let Some(else_blk) = else_branch {
-                collect_global_reads_block(else_blk, used);
-            }
-        }
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
-            collect_global_reads_block(block, used);
-        }
-        NirExprKind::Index { expr, index } => {
-            collect_global_reads_expr(expr, used);
-            collect_global_reads_expr(index, used);
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_global_reads_expr(&field.value, used);
-            }
-        }
-        NirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                collect_global_reads_expr(elem, used);
-            }
-        }
-        NirExprKind::IndirectCall { callee, args } => {
-            collect_global_reads_expr(callee, used);
-            for arg in args {
-                collect_global_reads_expr(arg, used);
-            }
-        }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            collect_global_reads_expr(functor, used);
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                collect_global_reads_expr(payload_expr, used);
-            }
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            collect_global_reads_expr(value, used);
-        }
-        NirExprKind::Match { expr, arms } => {
-            collect_global_reads_expr(expr, used);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    collect_global_reads_expr(guard, used);
-                }
-                collect_global_reads_expr(&arm.body, used);
-            }
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_global_reads_expr(scrutinee, used);
-            for arm in arms {
-                collect_global_reads_block(arm, used);
-            }
-            collect_global_reads_block(default, used);
-        }
-        // Leaf nodes — no GlobalVarGet possible
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
     }
 }
 
