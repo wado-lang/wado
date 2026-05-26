@@ -31,7 +31,7 @@ The driver is `compile_after_load` in `src/lib.rs`.
 | Lex / Parse            | AST             | `lexer.rs`, `parser.rs`, `token.rs`, `syntax.rs` |
 | Bind                   | AST + bindings  | `bind.rs`                                        |
 | Loader                 | All modules     | `loader.rs`                                      |
-| Annotate               | TIR + facts     | `annotate.rs`, `analyze.rs`, `resolver/`         |
+| Annotate               | TIR + facts     | `semantics.rs`, `analyze.rs`, `resolver/`        |
 | Default-purity Check   | (validation)    | `effect_check.rs::check_default_purity`          |
 | Synthesis              | TIR (extended)  | `synthesis/`                                     |
 | Effect / Stores        | TIR (validated) | `effect_check.rs`                                |
@@ -69,9 +69,9 @@ The AST is parser-immutable from this point on. The desugar-replacement surface 
 
 ## Annotate (Analyze + Resolve + TIR Lowering)
 
-`annotate_loaded` (`annotate.rs`) is the entry point shared by LSP and batch compilation. It runs `analyze.rs` for symbol-table construction and `resolver/` for type checking; bodies are then lowered into TIR.
+`semantics_from_loaded` (`semantics.rs`) is the entry point shared by LSP and batch compilation. It runs `analyze.rs` for symbol-table construction and `resolver/` for type checking; bodies are then lowered into TIR.
 
-The result, `Annotated`, carries the TIR modules plus an `AstIndex` and a use→def map (`(ModuleSource, AstId) → SymbolKey`). This is what makes the architecture LSP-friendly: facts are attached to AST nodes without mutating them, so cross-file navigation, hover, and rename all fall out of the same data the batch compiler uses. See the [LSP](#lsp) section below.
+The result, `Semantics`, carries the TIR modules plus an `AstIndex` and a use→def map (`(ModuleSource, AstId) → SymbolKey`). This is what makes the architecture LSP-friendly: facts are attached to AST nodes without mutating them, so cross-file navigation, hover, and rename all fall out of the same data the batch compiler uses. See the [LSP](#lsp) section below.
 
 The resolver covers trait selection, generic inference, method dispatch, coercion, and effect typing. All trait calls are resolved statically — by the end of the pipeline every call targets a concrete monomorphized function. There is no runtime vtable.
 
@@ -195,11 +195,11 @@ Three registries collect declarative information from the standard library and f
 
 ## LSP
 
-The language server (`wado-lsp/`) is a thin layer on top of `wado_compiler::annotate`. The `Engine` holds open documents and answers LSP queries (diagnostics, hover, go-to-definition, references, document highlight, semantic tokens). Each query:
+The language server (`wado-lsp/`) is a thin layer on top of `wado_compiler::semantics`. The `Engine` holds open documents and answers LSP queries (diagnostics, hover, go-to-definition, references, document highlight, semantic tokens). Each query:
 
-1. Calls `annotate_with_invocations(source, host, …)` to obtain an `Annotated` snapshot.
-2. Uses `Annotated::cursor_at(module, line, col) → Cursor` to translate a (line, col) into a `SymbolKey`.
-3. Reads pre-computed facts off `Cursor` / `Annotated` (`def_key`, `def_name_span`, `references_to_def`, `is_write_target`, …).
+1. Calls `semantics_with_invocations(source, host, …)` to obtain a `Semantics` snapshot.
+2. Uses `Semantics::cursor_at(module, line, col) → Cursor` to translate a (line, col) into a `SymbolKey`.
+3. Reads pre-computed facts off `Cursor` / `Semantics` (`def_key`, `def_name_span`, `references_to_def`, `is_write_target`, …).
 
 `Engine` itself performs no I/O — every query takes an `&impl CompilerHost`, so the caller decides how imported modules are loaded. `wado-lsp` ships a `FilesystemCompilerHost`; embeddings (VS Code Wasm, browser playground) supply their own host. The `wado-compiler` crate must compile to `wasm32-unknown-unknown` to support those bundled deployments; CI enforces this. See [WEP 2026-04-18: LSP Architecture](./wep-2026-04-18-lsp-architecture.md).
 

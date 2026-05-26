@@ -8,7 +8,7 @@ use std::sync::Mutex;
 
 use indexmap::IndexMap;
 use wado_compiler::{
-    CompilerHost, Diagnostic, SourceError, annotate_with_invocations, kiln::InvocationIndex,
+    CompilerHost, Diagnostic, SourceError, kiln::InvocationIndex, semantics_with_invocations,
 };
 
 struct MapHost {
@@ -73,28 +73,28 @@ pub fn greet() {}
         "build/kiln/test-invocation/sample.wado",
     );
 
-    let annotated = block_on(annotate_with_invocations(
+    let sem = block_on(semantics_with_invocations(
         entry,
         &host,
         Some("entry.wado"),
         idx,
     ));
-    if !annotated.is_complete() {
+    if !sem.is_complete() {
         let diags = host.diagnostics.lock().unwrap().clone();
         panic!(
-            "annotate did not complete; diagnostics: {:#?}",
+            "semantics did not complete; diagnostics: {:#?}",
             diags.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
     }
 
-    let redirected = annotated
+    let redirected = sem
         .interner
         .borrow_mut()
         .redirected("build/kiln/test-invocation/sample.wado");
     assert!(
-        annotated.modules.contains_key(&redirected),
+        sem.modules.contains_key(&redirected),
         "loader should have loaded the generated entry module, got: {:?}",
-        annotated.modules.keys().collect::<Vec<_>>()
+        sem.modules.keys().collect::<Vec<_>>()
     );
 }
 
@@ -105,12 +105,12 @@ export fn run() {}
 ";
     let host = MapHost::new(&[]);
     let idx = InvocationIndex::new();
-    let annotated = block_on(annotate_with_invocations(
+    let sem = block_on(semantics_with_invocations(
         entry,
         &host,
         Some("entry.wado"),
         idx,
     ));
-    let entry_ms = annotated.interner.borrow_mut().entry_point("entry.wado");
-    assert!(annotated.modules.contains_key(&entry_ms));
+    let entry_ms = sem.interner.borrow_mut().entry_point("entry.wado");
+    assert!(sem.modules.contains_key(&entry_ms));
 }

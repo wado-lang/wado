@@ -1,14 +1,15 @@
-//! Annotate phase — the LSP-friendly analysis entry point.
+//! Semantic analysis — the shared frontend entry point.
 //!
-//! `annotate` drives the compilation pipeline up through name resolution and
-//! type resolution, then stops. The resulting [`Annotated`] bundles every
-//! semantic fact needed to answer editor queries (hover, go-to-definition,
-//! diagnostics) without paying for monomorphize / lower / codegen.
+//! [`semantics`] drives the compilation pipeline up through name resolution
+//! and type resolution (the resolver's annotate phase), then stops. The
+//! resulting [`Semantics`] bundles every semantic fact needed to answer
+//! editor queries (hover, go-to-definition, diagnostics) without paying for
+//! monomorphize / lower / codegen.
 //!
-//! The pipeline used here is the same one that `compile_with_options` runs in
-//! its early phases: lex → parse → bind → load → analyze → resolve.
-//! Everything downstream of resolve is only needed to emit Wasm bytes, so LSP
-//! skips it.
+//! The pipeline used here is the same one that `compile_with_options` runs
+//! in its early phases: lex → parse → bind → load → analyze → resolve.
+//! Everything downstream of resolve is only needed to emit Wasm bytes, so
+//! LSP-style consumers skip it.
 
 use crate::analyze::Analyzer;
 use crate::ast::{AstId, Module};
@@ -26,15 +27,14 @@ use crate::token::Span;
 
 /// A ready-to-query analysis result.
 ///
-/// `Annotated` owns every piece of semantic state produced by the analysis
+/// `Semantics` owns every piece of semantic state produced by the analysis
 /// pipeline. The AST modules are preserved verbatim (so positions,
 /// [`AstId`]s, and spans resolve against the same tree the parser saw).
 /// [`SymbolTable`] is owned; [`TypeTable`] is exposed as an immutable
-/// snapshot taken at the end of the annotate phase. LSP queries read the
-/// snapshot. The lowering pipeline consumes the shared `state` field to
-/// continue interning types into the same table without invalidating the
-/// snapshot.
-pub struct Annotated {
+/// snapshot taken at the end of resolve. LSP queries read the snapshot.
+/// The lowering pipeline consumes the shared `state` field to continue
+/// interning types into the same table without invalidating the snapshot.
+pub struct Semantics {
     pub entry_module_source: ModuleSource,
     pub modules: IndexMap<ModuleSource, Module>,
     pub symbols: SymbolTable,
@@ -46,13 +46,13 @@ pub struct Annotated {
     ///
     /// Re-entrancy: only single-threaded callers, and only one
     /// `borrow_mut` at a time. Do not hold a [`std::cell::RefMut`]
-    /// across calls into other [`Annotated`] / [`crate::Resolver`]
+    /// across calls into other [`Semantics`] / [`crate::Resolver`]
     /// methods — a nested `borrow_mut` will panic. The intended
-    /// pattern is `annotated.interner.borrow_mut().<one method call>`,
-    /// dropping the borrow at the statement boundary.
+    /// pattern is `sem.interner.borrow_mut().<one method call>`, dropping
+    /// the borrow at the statement boundary.
     pub interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
     /// Per-module structural index (name spans, write targets, span lookup).
-    /// Built once per [`Module`] in [`annotate_loaded`]. LSP queries (and
+    /// Built once per [`Module`] in [`semantics_from_loaded`]. LSP queries (and
     /// the in-tree [`name_span_of`] / [`span_of_key`] helpers) consult this
     /// instead of re-walking the AST on every request.
     pub(crate) ast_indices: IndexMap<ModuleSource, AstIndex>,
@@ -71,7 +71,7 @@ pub struct Annotated {
     /// - `(Some(_), true)` — full success.
     ///
     /// Batch compilation rejects every non-`true` case via
-    /// [`Annotated::is_complete`], so the `expect` in `compile_with_options`
+    /// [`Semantics::is_complete`], so the `expect` in `compile_with_options`
     /// is safe. LSP queries do not inspect `state` directly.
     pub(crate) state: Option<AnnotateState>,
     /// Use→def map populated by the real resolver as it walks function
@@ -82,7 +82,7 @@ pub struct Annotated {
     /// Local binding [`Symbol`] entries (let / param / closure param)
     /// emitted by the resolver alongside `references`. Keyed by the
     /// binding's defining [`SymbolKey`]; consulted by
-    /// [`Annotated::symbol_at`] when the key does not name an item-level
+    /// [`Semantics::symbol_at`] when the key does not name an item-level
     /// symbol. Empty when resolve did not run or bailed early.
     pub(crate) locals: IndexMap<SymbolKey, Symbol>,
     /// TIR modules produced by [`crate::resolver::Resolver::lower_tir_from_state`].
@@ -97,7 +97,7 @@ pub struct Annotated {
 
 /// A definition location, assembled from a [`SymbolKey`].
 ///
-/// Returned by [`Annotated::definition_of`]. The `uri` is derived from
+/// Returned by [`Semantics::definition_of`]. The `uri` is derived from
 /// `ModuleSource::diagnostic_filename` — it is present for user-authored
 /// modules (entry point, local files) and absent for stdlib / builtin
 /// sources that have no on-disk URI.
@@ -108,7 +108,7 @@ pub struct Definition {
     pub uri: Option<String>,
 }
 
-impl Annotated {
+impl Semantics {
     /// True when every analysis phase ran to completion without bailing.
     ///
     /// Batch compilation should treat `false` here as a hard error
@@ -119,13 +119,13 @@ impl Annotated {
         self.is_complete
     }
 
-    /// Construct an empty [`Annotated`] holding only the bookkeeping that
+    /// Construct an empty [`Semantics`] holding only the bookkeeping that
     /// always exists (entry module source, interner) plus per-module
     /// [`AstIndex`] entries for whatever modules the loader returned. Every
     /// downstream field is empty and [`Self::is_complete`] returns `false`.
     ///
     /// Used as the partial-result return value when an analysis phase bails
-    /// in [`annotate_loaded`].
+    /// in [`semantics_from_loaded`].
     fn partial(
         entry_module_source: ModuleSource,
         modules: IndexMap<ModuleSource, Module>,
@@ -292,20 +292,20 @@ impl Annotated {
     ) -> Option<Cursor<'_>> {
         let ast_id = self.ast_id_at(module, line, column)?;
         Some(Cursor {
-            annotated: self,
+            sem: self,
             key: SymbolKey::new(module.clone(), ast_id),
         })
     }
 }
 
-/// A positional handle into [`Annotated`].
+/// A positional handle into [`Semantics`].
 ///
 /// Captures the cursor's AST id and module so call sites can chain
 /// `def_key()`, `def_symbol()`, `references_to_def()`, etc. instead of
-/// threading the same `(annotated, module, line, col)` tuple through every
-/// query helper. Constructed via [`Annotated::cursor_at`].
+/// threading the same `(sem, module, line, col)` tuple through every
+/// query helper. Constructed via [`Semantics::cursor_at`].
 pub struct Cursor<'a> {
-    annotated: &'a Annotated,
+    sem: &'a Semantics,
     key: SymbolKey,
 }
 
@@ -325,7 +325,7 @@ impl<'a> Cursor<'a> {
     /// Source span of the AST node at the cursor, if available.
     #[must_use]
     pub fn span(&self) -> Option<Span> {
-        self.annotated.span_of_key(&self.key)
+        self.sem.span_of_key(&self.key)
     }
 
     /// `SymbolKey` of the binding the cursor names, following the use→def
@@ -334,10 +334,10 @@ impl<'a> Cursor<'a> {
     /// numeric literal).
     #[must_use]
     pub fn def_key(&self) -> Option<SymbolKey> {
-        if let Some(def) = self.annotated.referenced_symbol(&self.key) {
+        if let Some(def) = self.sem.referenced_symbol(&self.key) {
             return Some(def);
         }
-        if self.annotated.symbol_at(&self.key).is_some() {
+        if self.sem.symbol_at(&self.key).is_some() {
             return Some(self.key.clone());
         }
         None
@@ -347,7 +347,7 @@ impl<'a> Cursor<'a> {
     #[must_use]
     pub fn def_symbol(&self) -> Option<&'a Symbol> {
         let def_key = self.def_key()?;
-        self.annotated.symbol_at(&def_key)
+        self.sem.symbol_at(&def_key)
     }
 
     /// Identifier-only span of the binding the cursor names (the
@@ -357,7 +357,7 @@ impl<'a> Cursor<'a> {
     #[must_use]
     pub fn def_name_span(&self) -> Option<Span> {
         let def_key = self.def_key()?;
-        self.annotated.name_span_of(&def_key)
+        self.sem.name_span_of(&def_key)
     }
 
     /// Best span at the binding's declaration site, falling back from the
@@ -371,18 +371,18 @@ impl<'a> Cursor<'a> {
     #[must_use]
     pub fn def_span(&self) -> Option<Span> {
         let def_key = self.def_key()?;
-        self.annotated
+        self.sem
             .name_span_of(&def_key)
-            .or_else(|| self.annotated.symbol_at(&def_key).and_then(|s| s.span))
-            .or_else(|| self.annotated.span_of_key(&def_key))
+            .or_else(|| self.sem.symbol_at(&def_key).and_then(|s| s.span))
+            .or_else(|| self.sem.span_of_key(&def_key))
     }
 
     /// True iff the cursor lands on an `IdentExpr` that appears as the
     /// direct LHS of `=` or a compound assignment. Mirrors
-    /// [`Annotated::is_write_target`] for the cursor's own key.
+    /// [`Semantics::is_write_target`] for the cursor's own key.
     #[must_use]
     pub fn is_write_target(&self) -> bool {
-        self.annotated.is_write_target(&self.key)
+        self.sem.is_write_target(&self.key)
     }
 
     /// Every use-site `SymbolKey` for the binding the cursor names.
@@ -390,70 +390,70 @@ impl<'a> Cursor<'a> {
     #[must_use]
     pub fn references_to_def(&self) -> Vec<SymbolKey> {
         match self.def_key() {
-            Some(key) => self.annotated.references_to(&key),
+            Some(key) => self.sem.references_to(&key),
             None => Vec::new(),
         }
     }
 }
 
 /// Run parse → bind → load → analyze → resolve on `source` and return the
-/// resulting [`Annotated`].
+/// resulting [`Semantics`].
 ///
-/// Always returns an [`Annotated`]; on failure, [`Annotated::is_complete`]
+/// Always returns a [`Semantics`]; on failure, [`Semantics::is_complete`]
 /// is `false` and the unreachable downstream fields are empty. Diagnostics
 /// are emitted to the host's logger as the phases run.
 ///
 /// LSP queries consume the partial result as-is. Batch compilation must
-/// check [`Annotated::is_complete`] before continuing.
-pub async fn annotate<H: CompilerHost>(
+/// check [`Semantics::is_complete`] before continuing.
+pub async fn semantics<H: CompilerHost>(
     source: &str,
     host: &H,
     filename: Option<&str>,
-) -> Annotated {
-    annotate_with_invocations(source, host, filename, crate::kiln::InvocationIndex::new()).await
+) -> Semantics {
+    semantics_with_invocations(source, host, filename, crate::kiln::InvocationIndex::new()).await
 }
 
-/// Variant of [`annotate`] that seeds the loader with a Kiln
+/// Variant of [`semantics`] that seeds the loader with a Kiln
 /// [`crate::kiln::InvocationIndex`] so bare `use { X } from "<schema>"`
 /// clauses can pick up generator-produced entry modules.
-pub async fn annotate_with_invocations<H: CompilerHost>(
+pub async fn semantics_with_invocations<H: CompilerHost>(
     source: &str,
     host: &H,
     filename: Option<&str>,
     invocations: crate::kiln::InvocationIndex,
-) -> Annotated {
+) -> Semantics {
     let logger = Logger::new(host, LogLevel::default());
     if let Some(f) = filename {
         logger.set_file(f);
     }
-    annotate_with_logger_invocations(source, host, filename, &logger, invocations).await
+    semantics_with_logger_invocations(source, host, filename, &logger, invocations).await
 }
 
-async fn annotate_with_logger_invocations<H: CompilerHost>(
+async fn semantics_with_logger_invocations<H: CompilerHost>(
     source: &str,
     host: &H,
     filename: Option<&str>,
     logger: &Logger<'_, H>,
     invocations: crate::kiln::InvocationIndex,
-) -> Annotated {
+) -> Semantics {
     let module_loader =
         loader::ModuleLoader::new(host, LogLevel::default()).with_invocations(invocations);
     match module_loader.load_all(source, filename).await {
-        Ok(load_result) => annotate_loaded(load_result, logger),
+        Ok(load_result) => semantics_from_loaded(load_result, logger),
         Err(e) => {
             let _ = logger.error(e);
-            empty_annotated()
+            empty_semantics()
         }
     }
 }
 
-/// Construct an `Annotated` with no modules at all. Used when the loader
+/// Construct a `Semantics` with no modules at all. Used when the loader
 /// failed outright (e.g. parse error on the entry module): callers can
 /// still treat the returned snapshot uniformly, with every query
 /// returning the natural empty answer.
-fn empty_annotated() -> Annotated {
+fn empty_semantics() -> Semantics {
     let interner = std::rc::Rc::new(std::cell::RefCell::new(ModuleSourceInterner::new()));
-    Annotated::partial(
+    Semantics::partial(
         ModuleSource::entry_point_uninitialized(),
         IndexMap::default(),
         IndexMap::default(),
@@ -468,15 +468,15 @@ fn empty_annotated() -> Annotated {
 }
 
 /// Run analyze + resolve on a pre-loaded module set and return the resulting
-/// [`Annotated`]. Used by `compile_with_options` which loads modules once and
+/// [`Semantics`]. Used by `compile_with_options` which loads modules once and
 /// also needs to inspect the entry AST for `#![TODO]` detection.
 ///
-/// Always returns an [`Annotated`]. When a phase bails, the downstream
-/// fields are left empty and [`Annotated::is_complete`] is set to `false`.
-pub(crate) fn annotate_loaded<H: CompilerHost>(
+/// Always returns a [`Semantics`]. When a phase bails, the downstream
+/// fields are left empty and [`Semantics::is_complete`] is set to `false`.
+pub(crate) fn semantics_from_loaded<H: CompilerHost>(
     load_result: loader::LoadResult,
     logger: &Logger<'_, H>,
-) -> Annotated {
+) -> Semantics {
     // Wrap the loader's interner in `Rc<RefCell<>>` so analyze and the
     // per-module resolvers can each `borrow_mut()` it from `&self`
     // contexts. Single-threaded sharing matches the rest of the
@@ -485,7 +485,7 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
 
     // Build per-module structural indices upfront — they depend only on the
     // parsed AST, so they remain valid even if analyze/resolve bail. This
-    // keeps cursor positioning (`Annotated::ast_id_at`) working in partial
+    // keeps cursor positioning (`Semantics::ast_id_at`) working in partial
     // mode, which the LSP relies on for file-path jumps.
     let ast_indices = {
         let _span = logger.span("ast_index");
@@ -496,13 +496,13 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
         indices
     };
 
-    // Per-thread stdlib `Annotated` snapshot.  When present,
+    // Per-thread stdlib `Semantics` snapshot.  When present,
     // `annotate_modules` seeds its `TypeTable` / decl maps / registries
     // from this snapshot and `lower_tir_from_state` copies the
     // pre-lowered stdlib `TirModule`s directly into its result, skipping
     // the ~28 s of CPU otherwise duplicated across a typical `wado test`
     // run.  Returns `None` when called from inside the snapshot builder
-    // itself (re-entry guard); a fresh full annotate runs in that case.
+    // itself (re-entry guard); a fresh full pipeline runs in that case.
     let snapshot = crate::stdlib_snapshot::get_or_init_snapshot();
 
     let (symbols, analyze_ok) = {
@@ -512,7 +512,7 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
             .with_interner(interner.clone());
         // Bail is converted to `analyze_ok = false`; we still consume the
         // analyzer so partial symbol entries (whatever was recorded before
-        // the bail) survive into the returned Annotated.
+        // the bail) survive into the returned Semantics.
         let ok = analyzer
             .analyze_loaded_modules(
                 &load_result.modules,
@@ -524,7 +524,7 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
     };
 
     if !analyze_ok {
-        return Annotated::partial(
+        return Semantics::partial(
             load_result.entry_module_source,
             load_result.modules,
             ast_indices,
@@ -552,7 +552,7 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
         .ok()
     };
     let Some(state) = state else {
-        return Annotated::partial(
+        return Semantics::partial(
             load_result.entry_module_source,
             load_result.modules,
             ast_indices,
@@ -603,7 +603,7 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
     let references = std::mem::take(&mut *state.references.borrow_mut());
     let locals = std::mem::take(&mut *state.local_symbols.borrow_mut());
 
-    Annotated {
+    Semantics {
         entry_module_source: load_result.entry_module_source,
         modules: load_result.modules,
         symbols,

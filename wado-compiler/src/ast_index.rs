@@ -1,8 +1,8 @@
 //! Per-module structural index over an [`ast::Module`].
 //!
 //! `AstIndex` is built once per module right after parse/bind and stored on
-//! [`crate::annotate::Annotated`]. It collects positional facts that LSP
-//! queries and the `annotate` phase used to rediscover with bespoke recursive
+//! [`crate::semantics::Semantics`]. It collects positional facts that LSP
+//! queries and the semantics pipeline used to rediscover with bespoke recursive
 //! walkers — `name_span_in_module`, `collect_write_target_ids`, and the
 //! `span_of_ast_id` fallback in `wado-lsp/src/definition.rs`. By centralising
 //! these tables behind an [`AstVisitor`] traversal we keep extension cheap:
@@ -12,7 +12,7 @@
 //! The index is intentionally narrow. It holds *only* facts derivable from the
 //! AST itself (spans, declaration name spans, assignment write targets); the
 //! semantic facts (resolved references, types, symbols) live elsewhere on
-//! [`crate::annotate::Annotated`].
+//! [`crate::semantics::Semantics`].
 
 use crate::ast::{
     AstId, AstVisitor, Expr, Function, ImplBlock, InterfaceMethod, Item, Module, Pattern,

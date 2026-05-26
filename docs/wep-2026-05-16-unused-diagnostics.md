@@ -7,8 +7,8 @@ The Wado compiler today has no equivalent of rustc's `unused_imports`,
 imports, locals, parameters, or private functions are written but never
 consumed. The infrastructure for warnings exists (`Severity::Warning`,
 `Logger`, `CompilerHost::emit_diagnostic`), and the analysis substrate
-for the policy questions has matured — use→def edges (`Annotated::references`),
-local-binding registry (`Annotated::locals`), per-module structural
+for the policy questions has matured — use→def edges (`Semantics::references`),
+local-binding registry (`Semantics::locals`), per-module structural
 indices (`AstIndex`), and the DCE reachability pass (`optimize/dce.rs`) —
 but no pass turns those into user-facing diagnostics.
 
@@ -40,8 +40,8 @@ producing `Severity::Warning` diagnostics through the existing
 `CompilerHost`. The two layers map cleanly onto rustc's split between
 HIR-level `unused_*` lints and `dead_code` reachability:
 
-1. Annotated layer — runs immediately after `annotate_loaded`, on
-   `&Annotated`. Emits `UnusedImport`, `UnusedVariable`,
+1. Semantics layer — runs immediately after `semantics_from_loaded`, on
+   `&Semantics`. Emits `UnusedImport`, `UnusedVariable`,
    `UnusedParameter`. LSP and batch compilation share this pass for
    free.
 2. NIR + DCE layer — runs as hooks inside `optimize.rs::run_dce`, on
@@ -59,9 +59,9 @@ complete set of package-external roots for every entry-point kind
 
 | Lint              | Layer          | Code              |
 | ----------------- | -------------- | ----------------- |
-| `UnusedImport`    | Annotated      | `UnusedImport`    |
-| `UnusedVariable`  | Annotated      | `UnusedVariable`  |
-| `UnusedParameter` | Annotated      | `UnusedParameter` |
+| `UnusedImport`    | Semantics      | `UnusedImport`    |
+| `UnusedVariable`  | Semantics      | `UnusedVariable`  |
+| `UnusedParameter` | Semantics      | `UnusedParameter` |
 | `DeadFunction`    | NIR (post-DCE) | `DeadFunction`    |
 | `DeadGlobal`      | NIR (post-DCE) | `DeadGlobal`      |
 
@@ -117,7 +117,7 @@ user's build output.
 `TirFunction` / `NirFunction` and `TirGlobal` / `NirGlobal` each gain a
 `defining_ast_id: Option<AstId>` field. Together with `module_source`,
 this forms a `SymbolKey` back to the originating AST node — the
-canonical identity already used by `Annotated`, the symbol table, and
+canonical identity already used by `Semantics`, the symbol table, and
 the LSP query API. `None` marks synthesised items, which are excluded
 from `DeadFunction` / `DeadGlobal` reporting (but still subject to
 normal DCE removal).
@@ -131,10 +131,10 @@ This is the only structural change required outside the new
 
 | File                                  | Description                                                                                                                                                                                    |
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `wado-compiler/src/analyze/unused.rs` | New module hosting `check_unused` (Annotated layer), `emit_dead_function_diagnostics`, and `emit_dead_global_diagnostics` (DCE-loop hooks).                                                    |
+| `wado-compiler/src/analyze/unused.rs` | New module hosting `check_unused` (Semantics layer), `emit_dead_function_diagnostics`, and `emit_dead_global_diagnostics` (DCE-loop hooks).                                                    |
 | `wado-compiler/src/compiler_host.rs`  | Adds `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction`, `DeadGlobal` and their `Display` mappings.                                                                     |
 | `wado-compiler/src/logger.rs`         | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                                                                   |
-| `wado-compiler/src/lib.rs`            | Adds `CompilerOptions::unused_diagnostics`. Calls `check_unused` after `annotate_loaded`. The DCE-layer diagnostic emitters are invoked from `optimize.rs::run_dce`.                           |
+| `wado-compiler/src/lib.rs`            | Adds `CompilerOptions::unused_diagnostics`. Calls `check_unused` after `semantics_from_loaded`. The DCE-layer diagnostic emitters are invoked from `optimize.rs::run_dce`.                     |
 | `wado-compiler/src/tir.rs`            | `TirFunction::defining_ast_id: Option<AstId>`, `TirGlobal::defining_ast_id: Option<AstId>`.                                                                                                    |
 | `wado-compiler/src/nir.rs`            | `NirFunction::defining_ast_id: Option<AstId>`, `NirGlobal::defining_ast_id: Option<AstId>`.                                                                                                    |
 | `wado-compiler/src/optimize/dce.rs`   | Adds `pub(crate) fn unreachable_function_source_keys(&NirPackage, &IndexSet<FunctionId>) -> Vec<SymbolKey>` and `pub(crate) fn unreachable_global_source_keys(&NirPackage) -> Vec<SymbolKey>`. |
@@ -150,7 +150,7 @@ This is the only structural change required outside the new
 Walk every `UseDecl` in user-authored modules. For each `UseItem`:
 
 - `Simple { id, .. }` and `Namespace { name, .. }`: report
-  `UnusedImport` when no entry in `Annotated::references` has the
+  `UnusedImport` when no entry in `Semantics::references` has the
   item's use-site `SymbolKey` as its `use_key` and no entry resolves to
   the item's imported `def_key`.
 - `Wildcard`: skipped (side-effect imports).
@@ -167,7 +167,7 @@ single `record_reference_to_decl` call there.
 
 #### Unused variables and parameters
 
-Build a single inverted index from `Annotated::iter_references()`:
+Build a single inverted index from `Semantics::iter_references()`:
 
 ```
 use_count: IndexMap<SymbolKey, usize>
@@ -175,7 +175,7 @@ for (_use_key, def_key) in annotated.iter_references():
     *use_count.entry(def_key).or_insert(0) += 1
 ```
 
-Walk `Annotated::locals`. For each `(key, sym)` whose kind is
+Walk `Semantics::locals`. For each `(key, sym)` whose kind is
 `Variable`:
 
 - Skip if `sym.name` starts with `_`.
@@ -211,7 +211,7 @@ reachable set:
    same exclusions.
 3. The emitter inserts each new key into `reported` and calls
    `Logger::warn_at` with `Code::DeadFunction` or `Code::DeadGlobal`,
-   span from `Annotated::name_span_of(key)` (fallback to the item's
+   span from `Semantics::name_span_of(key)` (fallback to the item's
    `span`).
 
 `is_export` / `is_cm_export` items are already roots, so they will not
@@ -262,7 +262,7 @@ parse → bind → desugar → load → analyze → annotate
 
 `compile_with_options` gates both layers on
 `CompilerOptions::unused_diagnostics`. `Engine::diagnostics` (LSP)
-calls `check_unused` after `annotate_loaded` without any extra cost.
+calls `check_unused` after `semantics_from_loaded` without any extra cost.
 
 ### Migration plan
 
@@ -281,7 +281,7 @@ calls `check_unused` after `annotate_loaded` without any extra cost.
 - [ ] Synthesis sites (`synthesis/cm_binding.rs`, `synthesis/effect_dispatch.rs`, auto-derives, etc.) leave the field as `None`.
 - [ ] No behaviour change in this phase — codegen output is bit-identical.
 
-#### Phase 3 — Annotated-layer lints
+#### Phase 3 — Semantics-layer lints
 
 - [ ] Confirm `resolver` records `UseItem::Simple.id` as a use-site; patch if missing.
 - [ ] Implement `analyze::unused::check_unused` (imports, locals, params).
@@ -328,7 +328,7 @@ E2E fixtures (under `tests/fixtures/`):
 - `unused_stdlib_no_report.wado`
 
 Each carries the appropriate `stderr_contains` entries in its `__DATA__`
-block. `wado-lsp` integration tests cover the Annotated-layer lints
+block. `wado-lsp` integration tests cover the Semantics-layer lints
 through the diagnostics path.
 
 ## Consequences
@@ -338,7 +338,7 @@ through the diagnostics path.
 - Users get immediate, location-precise feedback on dead imports,
   locals, parameters, and private functions, matching the experience
   every rustc user expects.
-- LSP "greyed-out unused" works for free because the Annotated layer
+- LSP "greyed-out unused" works for free because the Semantics layer
   shares a code path between batch compilation and `Engine::diagnostics`.
 - DCE keeps doing its silent removal job; the only addition is a
   diagnostic hook in front of removal.

@@ -1,4 +1,4 @@
-//! Document highlight, powered by `wado_compiler::annotate`.
+//! Document highlight, powered by `wado_compiler::semantics`.
 //!
 //! Returns every occurrence of the symbol named at the cursor that lives
 //! inside the requested document. References to the same symbol from other
@@ -9,12 +9,12 @@
 //!   `=`, `+=`, etc.
 //! - `Read` for every other use-site.
 //!
-//! Write classification consults `Annotated::is_write_target`, which is
-//! populated by the per-module `AstIndex` during the annotate phase. The
+//! Write classification consults `Semantics::is_write_target`, which is
+//! populated by the per-module `AstIndex` during the semantics pass. The
 //! highlight pass therefore performs no AST walks of its own.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::annotate::Annotated;
+use wado_compiler::semantics::Semantics;
 
 use crate::diagnostics::{Position, Range};
 use crate::location::span_to_range;
@@ -39,16 +39,16 @@ pub struct DocumentHighlight {
 
 #[must_use]
 pub fn document_highlight(
-    annotated: &Annotated,
+    sem: &Semantics,
     source: &str,
     position: Position,
     _uri: &str,
     encoding: PositionEncoding,
 ) -> Vec<DocumentHighlight> {
-    let module = annotated.entry_module_source.clone();
+    let module = sem.entry_module_source.clone();
     let (line, col) = lsp_position_to_line_col(source, position, encoding);
 
-    let Some(cursor) = annotated.cursor_at(&module, line, col) else {
+    let Some(cursor) = sem.cursor_at(&module, line, col) else {
         return Vec::new();
     };
     let Some(def_key) = cursor.def_key() else {
@@ -58,9 +58,9 @@ pub fn document_highlight(
     let mut out = Vec::new();
 
     if def_key.module == module
-        && let Some(span) = annotated
+        && let Some(span) = sem
             .name_span_of(&def_key)
-            .or_else(|| annotated.symbol_at(&def_key).and_then(|s| s.span))
+            .or_else(|| sem.symbol_at(&def_key).and_then(|s| s.span))
     {
         out.push(DocumentHighlight {
             range: span_to_range(&span, Some(source), encoding),
@@ -72,10 +72,10 @@ pub fn document_highlight(
         if use_key.module != module {
             continue;
         }
-        let Some(span) = annotated.span_of_key(&use_key) else {
+        let Some(span) = sem.span_of_key(&use_key) else {
             continue;
         };
-        let kind = if annotated.is_write_target(&use_key) {
+        let kind = if sem.is_write_target(&use_key) {
             HighlightKind::Write
         } else {
             HighlightKind::Read
@@ -95,16 +95,16 @@ pub fn document_highlight(
 mod tests {
     use super::*;
     use crate::test_support::MapHost;
-    use wado_compiler::annotate::annotate_with_invocations;
+    use wado_compiler::semantics::semantics_with_invocations;
 
     async fn highlights_at(source: &str, line: u32, character: u32) -> Vec<DocumentHighlight> {
         let path = "/test.wado";
         let uri = format!("file://{path}");
         let host = MapHost::single(path, source);
         let invocations = wado_compiler::kiln::InvocationIndex::new();
-        let annotated = annotate_with_invocations(source, &host, Some(path), invocations).await;
+        let sem = semantics_with_invocations(source, &host, Some(path), invocations).await;
         document_highlight(
-            &annotated,
+            &sem,
             source,
             Position { line, character },
             &uri,

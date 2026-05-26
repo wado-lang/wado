@@ -19,7 +19,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use indexmap::IndexMap;
-use wado_compiler::annotate::Annotated;
+use wado_compiler::semantics::Semantics;
 use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic};
 
 pub use definition::DefinitionResult;
@@ -42,10 +42,10 @@ pub use uri::{Uri, UriScheme};
 /// ## Snapshot cache
 ///
 /// Each open document keeps a lazily-computed [`Snapshot`] bundling the
-/// `Annotated` produced by `annotate_with_invocations` and the
+/// `Semantics` produced by `semantics_with_invocations` and the
 /// `CompilerDiagnostic`s emitted during that run. Every query —
 /// diagnostics included — consumes the cache, so one document version
-/// triggers at most one annotate pass. Mutators
+/// triggers at most one semantics pass. Mutators
 /// (`update_document` / `close_document`) invalidate every document's
 /// snapshot: cross-file imports mean editing `bar.wado` may have
 /// changed what `foo.wado` resolves to, so per-document invalidation
@@ -59,11 +59,11 @@ pub struct Engine {
     position_encoding: PositionEncoding,
 }
 
-/// One annotate pass over a document. Bundles the analysis result with
+/// One semantics pass over a document. Bundles the analysis result with
 /// the diagnostics emitted during the same pass so `Engine::diagnostics`
-/// returns from cache instead of re-running annotate.
+/// returns from cache instead of re-running it.
 pub struct Snapshot {
-    pub annotated: Annotated,
+    pub sem: Semantics,
     pub diagnostics: Vec<CompilerDiagnostic>,
 }
 
@@ -75,7 +75,7 @@ struct Document {
     version: Option<i32>,
     /// Cached snapshot for the current `text`. Cleared whenever any
     /// document is updated/closed, so cross-file edits don't leave a
-    /// stale `Annotated` against changed imports.
+    /// stale `Semantics` against changed imports.
     snapshot: RefCell<Option<Rc<Snapshot>>>,
 }
 
@@ -148,7 +148,7 @@ impl Engine {
     }
 
     /// Drop every cached snapshot. Called whenever document state changes,
-    /// so a cached `Annotated` never out-lives the imported modules it
+    /// so a cached `Semantics` never out-lives the imported modules it
     /// resolved against. Cheap when nothing was cached.
     fn invalidate_all_snapshots(&mut self) {
         for (_, doc) in &mut self.documents {
@@ -165,10 +165,11 @@ impl Engine {
     /// Compute (or reuse) a [`Snapshot`] for the given document.
     ///
     /// On a cache hit returns the same `Rc` so call sites that issue
-    /// back-to-back queries on the same document version pay annotate's
-    /// cost only once. The snapshot also captures every
-    /// `CompilerDiagnostic` emitted during annotate, so `diagnostics`
-    /// can answer from the same cache without re-running annotate.
+    /// back-to-back queries on the same document version pay the
+    /// semantics pipeline's cost only once. The snapshot also captures
+    /// every `CompilerDiagnostic` emitted during that pass, so
+    /// `diagnostics` can answer from the same cache without re-running
+    /// the pipeline.
     pub async fn snapshot<H: CompilerHost>(&self, uri: &str, host: &H) -> Option<Rc<Snapshot>> {
         let doc = self.documents.get(uri)?;
         // Drop the borrow before the `await` below — the `if let`
@@ -180,7 +181,7 @@ impl Engine {
         let filename = Uri::new(uri).to_filename();
         let collecting_host = DiagnosticCollector::new(host);
         let invocations = kiln::prepare_invocations(&filename, &doc.text, &collecting_host);
-        let annotated = wado_compiler::annotate::annotate_with_invocations(
+        let sem = wado_compiler::semantics::semantics_with_invocations(
             &doc.text,
             &collecting_host,
             Some(&filename),
@@ -188,7 +189,7 @@ impl Engine {
         )
         .await;
         let snapshot = Rc::new(Snapshot {
-            annotated,
+            sem,
             diagnostics: collecting_host.take_diagnostics(),
         });
         *doc.snapshot.borrow_mut() = Some(snapshot.clone());
@@ -227,7 +228,7 @@ impl Engine {
     ) -> Option<DefinitionResult> {
         self.with_doc_snapshot(uri, host, None, |snapshot, doc_text| {
             definition::find_definition(
-                &snapshot.annotated,
+                &snapshot.sem,
                 doc_text,
                 position,
                 uri,
@@ -246,7 +247,7 @@ impl Engine {
     ) -> Option<HoverResult> {
         self.with_doc_snapshot(uri, host, None, |snapshot, doc_text| {
             hover::find_hover(
-                &snapshot.annotated,
+                &snapshot.sem,
                 doc_text,
                 position,
                 uri,
@@ -266,7 +267,7 @@ impl Engine {
     ) -> Vec<ReferenceLocation> {
         self.with_doc_snapshot(uri, host, Vec::new(), |snapshot, doc_text| {
             references::find_references(
-                &snapshot.annotated,
+                &snapshot.sem,
                 doc_text,
                 position,
                 uri,
@@ -288,7 +289,7 @@ impl Engine {
     ) -> Vec<DocumentHighlight> {
         self.with_doc_snapshot(uri, host, Vec::new(), |snapshot, doc_text| {
             document_highlight::document_highlight(
-                &snapshot.annotated,
+                &snapshot.sem,
                 doc_text,
                 position,
                 uri,
@@ -481,7 +482,7 @@ mod tests {
 
     #[test]
     fn test_update_invalidates_cross_document_snapshots() {
-        // Cross-file imports mean a cached Annotated for foo.wado may
+        // Cross-file imports mean a cached Semantics for foo.wado may
         // depend on bar.wado's text. Editing bar.wado must invalidate
         // foo.wado's cache, otherwise hover/definition return stale
         // type info indefinitely.

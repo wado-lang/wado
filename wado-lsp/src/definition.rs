@@ -1,17 +1,17 @@
-//! Go-to-definition, powered by `wado_compiler::annotate`.
+//! Go-to-definition, powered by `wado_compiler::semantics`.
 //!
 //! Resolution flow:
-//! 1. Reuse the engine's [`Annotated`] snapshot.
-//! 2. Use `Annotated::cursor_at` to find the innermost AST node at the cursor.
+//! 1. Reuse the engine's [`Semantics`] snapshot.
+//! 2. Use `Semantics::cursor_at` to find the innermost AST node at the cursor.
 //! 3. If that node is a use-site (Ident of a local), follow
-//!    `Annotated::referenced_symbol` to the binding [`SymbolKey`].
+//!    `Semantics::referenced_symbol` to the binding [`SymbolKey`].
 //! 4. Otherwise the cursor AST id itself points at a declared symbol.
 //! 5. Translate the resulting [`SymbolKey`] into a [`DefinitionResult`].
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::annotate::Annotated;
 use wado_compiler::ast::{self, AstVisitor, Item, Literal, Module};
 use wado_compiler::name::resolve_import_with_entry;
+use wado_compiler::semantics::Semantics;
 use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
@@ -30,13 +30,13 @@ pub struct DefinitionResult {
 /// their own URI (derived from the defining module's `diagnostic_filename`).
 #[must_use]
 pub fn find_definition(
-    annotated: &Annotated,
+    sem: &Semantics,
     source: &str,
     position: Position,
     uri: &str,
     encoding: PositionEncoding,
 ) -> Option<DefinitionResult> {
-    let module = annotated.entry_module_source.clone();
+    let module = sem.entry_module_source.clone();
     let (line, col) = lsp_position_to_line_col(source, position, encoding);
 
     // Priority: file-path jumps first, symbol-based resolution second.
@@ -57,11 +57,11 @@ pub fn find_definition(
     // itself), keeping file-path resolution first preserves the current
     // behaviour: jump to the file, not to whatever symbol happens to share
     // the span.
-    if let Some(result) = file_path_definition(annotated, &module, line, col, uri) {
+    if let Some(result) = file_path_definition(sem, &module, line, col, uri) {
         return Some(result);
     }
 
-    let cursor = annotated.cursor_at(&module, line, col)?;
+    let cursor = sem.cursor_at(&module, line, col)?;
     let def_key = cursor.def_key()?;
 
     // Most defs are registered as symbols (functions, types, globals, locals).
@@ -69,13 +69,13 @@ pub fn find_definition(
     // impl methods are addressable by `AstId` via `name_span_of` but are not
     // individually registered as symbols; the URI fallback handles both.
     let span = cursor.def_span()?;
-    let def_uri = match annotated.symbol_at(&def_key) {
-        Some(symbol) => symbol_uri(annotated, symbol, uri)?,
-        None => module_uri(annotated, &def_key.module, uri)?,
+    let def_uri = match sem.symbol_at(&def_key) {
+        Some(symbol) => symbol_uri(sem, symbol, uri)?,
+        None => module_uri(sem, &def_key.module, uri)?,
     };
     Some(DefinitionResult {
         uri: def_uri,
-        range: span_to_range(&span, source_for_key(annotated, &def_key, source), encoding),
+        range: span_to_range(&span, source_for_key(sem, &def_key, source), encoding),
     })
 }
 
@@ -84,21 +84,21 @@ pub fn find_definition(
 /// to the beginning of the referenced file. Returns `None` when the cursor is
 /// not on such a path.
 fn file_path_definition(
-    annotated: &Annotated,
+    sem: &Semantics,
     module: &wado_compiler::module_source::ModuleSource,
     line: usize,
     col: usize,
     request_uri: &str,
 ) -> Option<DefinitionResult> {
-    let ast_module = annotated.modules.get(module)?;
+    let ast_module = sem.modules.get(module)?;
     let path = find_file_path_at_cursor(ast_module, line, col)?;
     let target_module = resolve_import_with_entry(
-        &mut annotated.interner.borrow_mut(),
+        &mut sem.interner.borrow_mut(),
         module,
         &path,
-        Some(&annotated.entry_module_source),
+        Some(&sem.entry_module_source),
     );
-    let target_uri = module_uri(annotated, &target_module, request_uri)?;
+    let target_uri = module_uri(sem, &target_module, request_uri)?;
     Some(DefinitionResult {
         uri: target_uri,
         range: Range {

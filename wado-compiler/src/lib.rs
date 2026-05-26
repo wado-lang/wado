@@ -1,5 +1,4 @@
 pub mod analyze;
-pub mod annotate;
 pub mod ast;
 pub mod ast_index;
 pub mod bind;
@@ -32,6 +31,7 @@ pub mod optimize;
 pub mod package;
 pub mod parser;
 pub mod resolver;
+pub mod semantics;
 pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
@@ -52,7 +52,6 @@ pub mod wir_visitor;
 pub mod world_registry;
 
 pub use analyze::Analyzer;
-pub use annotate::{Annotated, Cursor, Definition, annotate, annotate_with_invocations};
 pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
 pub use compiler_host::{
@@ -62,6 +61,7 @@ pub use compiler_host::{
     Severity, SourceError,
 };
 pub use logger::{Bail, Logger};
+pub use semantics::{Cursor, Definition, Semantics, semantics, semantics_with_invocations};
 
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
@@ -330,21 +330,23 @@ fn compile_after_load<H: CompilerHost>(
         &mut load_result.modules,
     );
 
-    // Save wasm asset bytes before `annotate_loaded` consumes the
+    // Save wasm asset bytes before `semantics_from_loaded` consumes the
     // `LoadResult`. They flow through the package to codegen below.
     let wasm_assets = load_result.wasm_assets.clone();
 
     // === Phases 2 + 6a + 6b: Analyze + Annotate + Lower TIR ===
-    // `annotate` performs analyze, type resolution, and body-level TIR
-    // lowering. The resulting `Annotated` carries the `TirModule`s the batch
-    // compiler needs plus the use→def reference map LSP queries need.
+    // `semantics_from_loaded` performs analyze, type resolution, and
+    // body-level TIR lowering. The resulting `Semantics` carries the
+    // `TirModule`s the batch compiler needs plus the use→def reference
+    // map LSP queries need.
     //
-    // `annotate_loaded` always returns an `Annotated`. For batch compilation
-    // we refuse to continue when the pipeline did not fully resolve — the
-    // downstream phases assume populated `state` / `tir_modules`. Diagnostics
-    // explaining the failure have already been emitted to the host.
-    let annotated = annotate::annotate_loaded(load_result, logger);
-    if !annotated.is_complete() {
+    // `semantics_from_loaded` always returns a `Semantics`. For batch
+    // compilation we refuse to continue when the pipeline did not fully
+    // resolve — the downstream phases assume populated `state` /
+    // `tir_modules`. Diagnostics explaining the failure have already
+    // been emitted to the host.
+    let sem = semantics::semantics_from_loaded(load_result, logger);
+    if !sem.is_complete() {
         return Err(Bail);
     }
 
@@ -357,7 +359,7 @@ fn compile_after_load<H: CompilerHost>(
     // produces a valid cache key.
     let kiln_options_descriptor = if options.target_world.as_deref() == Some("core:kiln/generator")
     {
-        match kiln::extract_options_descriptor(&annotated, &annotated.entry_module_source) {
+        match kiln::extract_options_descriptor(&sem, &sem.entry_module_source) {
             Ok(d) => Some(d),
             Err(diags) => {
                 for d in diags {
@@ -370,18 +372,18 @@ fn compile_after_load<H: CompilerHost>(
         None
     };
 
-    let annotate::Annotated {
+    let semantics::Semantics {
         entry_module_source,
         symbols,
         state,
         tir_modules,
         interner,
         ..
-    } = annotated;
+    } = sem;
 
     // `is_complete()` was checked above, so the full pipeline ran and `state`
     // is populated.
-    let state = state.expect("annotate state present when is_complete");
+    let state = state.expect("resolver state present when is_complete");
 
     let package = Package::new(
         entry_module_source,
@@ -473,7 +475,7 @@ fn compile_after_load<H: CompilerHost>(
             .tir_modules
             .values()
             .next()
-            .expect("Package always has at least one TIR module after annotate");
+            .expect("Package always has at least one TIR module after semantics");
         let missing = module
             .type_table
             .borrow()

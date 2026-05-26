@@ -38,10 +38,10 @@ use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 /// Build a consume-only [`InvocationIndex`] for the entry document.
 ///
 /// `entry_filename` must match the `filename` argument that
-/// [`wado_compiler::annotate_with_invocations`] receives downstream;
+/// [`wado_compiler::semantics_with_invocations`] receives downstream;
 /// otherwise the compiler-side redirect lookup misses. `Engine::*` query
 /// methods feed the URI through `uri_to_filename` and pass that string
-/// to both this helper and the annotator.
+/// to both this helper and the semantics pipeline.
 ///
 /// Returns an empty index when the entry has no inline `with` clauses,
 /// when no enclosing `wado.toml` is found, or when the source cannot be
@@ -68,7 +68,7 @@ pub fn prepare_invocations<H: CompilerHost>(
     let invocations = match collect_inline_invocations(&modules, &descriptors, &manifest_root_str) {
         Ok(v) => v,
         // Inline-clause errors are surfaced by the regular
-        // `annotate` pass (it re-runs the same collector). We
+        // semantics pass (it re-runs the same collector). We
         // silently fall through here so we don't double-emit.
         Err(_) => return InvocationIndex::new(),
     };

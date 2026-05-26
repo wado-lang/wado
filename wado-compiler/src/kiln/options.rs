@@ -17,10 +17,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::annotate::Annotated;
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
+use crate::semantics::Semantics;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirField, TirModule, TypeId, TypeTable,
 };
@@ -121,12 +121,12 @@ pub enum CanonicalValue {
 /// `generate` function — shape-level failures all come back as
 /// [`Code::GeneratorOptionsUnsupported`] diagnostics.
 pub fn extract_options_descriptor(
-    annotated: &Annotated,
+    sem: &Semantics,
     module: &ModuleSource,
 ) -> Result<OptionsDescriptor, Vec<Diagnostic>> {
     let mut diagnostics = Vec::new();
 
-    let Some(tir_module) = annotated.tir_modules.get(module) else {
+    let Some(tir_module) = sem.tir_modules.get(module) else {
         diagnostics.push(Diagnostic {
             severity: Severity::Error,
             code: Code::GeneratorOptionsUnsupported,
@@ -179,9 +179,7 @@ pub fn extract_options_descriptor(
     for field in &options_struct.fields {
         // Diagnostic already pushed by lower_field on `None`; continue so
         // every bad field surfaces in one pass.
-        if let Some(desc_field) =
-            lower_field(field, annotated, module, &mut visiting, &mut diagnostics)
-        {
+        if let Some(desc_field) = lower_field(field, sem, module, &mut visiting, &mut diagnostics) {
             descriptor_fields.push(desc_field);
         }
     }
@@ -197,14 +195,14 @@ pub fn extract_options_descriptor(
 
 fn lower_field(
     field: &TirField,
-    annotated: &Annotated,
+    sem: &Semantics,
     module: &ModuleSource,
     visiting: &mut IndexSet<(ModuleSource, String)>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<OptionsField> {
     let ty = lower_type(
         field.type_id,
-        annotated,
+        sem,
         module,
         &field.name,
         visiting,
@@ -213,7 +211,7 @@ fn lower_field(
     let default = field
         .default_expr
         .as_deref()
-        .and_then(|e| evaluate_literal(e, &ty, &annotated.types, module, &field.name, diagnostics));
+        .and_then(|e| evaluate_literal(e, &ty, &sem.types, module, &field.name, diagnostics));
     Some(OptionsField {
         name: field.name.clone(),
         ty,
@@ -224,22 +222,15 @@ fn lower_field(
 
 fn lower_type(
     type_id: TypeId,
-    annotated: &Annotated,
+    sem: &Semantics,
     module: &ModuleSource,
     field_name: &str,
     visiting: &mut IndexSet<(ModuleSource, String)>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<OptionsType> {
-    let types = &annotated.types;
+    let types = &sem.types;
     if let Some(inner_id) = types.as_option(type_id) {
-        let inner = lower_type(
-            inner_id,
-            annotated,
-            module,
-            field_name,
-            visiting,
-            diagnostics,
-        )?;
+        let inner = lower_type(inner_id, sem, module, field_name, visiting, diagnostics)?;
         return Some(OptionsType::Option(Box::new(inner)));
     }
 
@@ -274,7 +265,7 @@ fn lower_type(
             let nested = nested_struct_descriptor(
                 name,
                 module_source,
-                annotated,
+                sem,
                 module,
                 field_name,
                 visiting,
@@ -289,14 +280,8 @@ fn lower_type(
             name,
             module_source,
         } => {
-            let variants = enum_variants(
-                name,
-                module_source,
-                annotated,
-                module,
-                field_name,
-                diagnostics,
-            )?;
+            let variants =
+                enum_variants(name, module_source, sem, module, field_name, diagnostics)?;
             Some(OptionsType::Enum {
                 name: name.clone(),
                 variants,
@@ -317,7 +302,7 @@ fn lower_type(
 fn nested_struct_descriptor(
     struct_name: &str,
     struct_module: &ModuleSource,
-    annotated: &Annotated,
+    sem: &Semantics,
     module: &ModuleSource,
     field_name: &str,
     visiting: &mut IndexSet<(ModuleSource, String)>,
@@ -334,7 +319,7 @@ fn nested_struct_descriptor(
         return None;
     }
 
-    let tir_module = if let Some(m) = annotated.tir_modules.get(struct_module) {
+    let tir_module = if let Some(m) = sem.tir_modules.get(struct_module) {
         m
     } else {
         push_unsupported(
@@ -365,7 +350,7 @@ fn nested_struct_descriptor(
     let mut nested_fields = Vec::with_capacity(nested_struct.fields.len());
     let mut any_failed = false;
     for field in &nested_struct.fields {
-        match lower_field(field, annotated, struct_module, visiting, diagnostics) {
+        match lower_field(field, sem, struct_module, visiting, diagnostics) {
             Some(f) => nested_fields.push(f),
             None => any_failed = true,
         }
@@ -384,12 +369,12 @@ fn nested_struct_descriptor(
 fn enum_variants(
     enum_name: &str,
     enum_module: &ModuleSource,
-    annotated: &Annotated,
+    sem: &Semantics,
     module: &ModuleSource,
     field_name: &str,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Vec<String>> {
-    let tir_module = if let Some(m) = annotated.tir_modules.get(enum_module) {
+    let tir_module = if let Some(m) = sem.tir_modules.get(enum_module) {
         m
     } else {
         push_unsupported(
@@ -529,6 +514,6 @@ fn push_unsupported(
 /// Access the TIR module that declared an Options struct. Exposed for the
 /// options-validation layer and the CLI provider.
 #[must_use]
-pub fn tir_module<'a>(annotated: &'a Annotated, module: &ModuleSource) -> Option<&'a TirModule> {
-    annotated.tir_modules.get(module)
+pub fn tir_module<'a>(sem: &'a Semantics, module: &ModuleSource) -> Option<&'a TirModule> {
+    sem.tir_modules.get(module)
 }
