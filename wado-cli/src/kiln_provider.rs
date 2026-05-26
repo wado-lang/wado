@@ -1,23 +1,23 @@
 //! CLI-side [`GeneratorProvider`] implementation.
 //!
-//! Resolves a [`GeneratorModule`] into component bytes and an
-//! [`OptionsDescriptor`] for the Kiln driver. v1 supports
-//! [`GeneratorModule::LocalPath`] (`module = { path = "..." }`) resolution.
-//! Spec-form generators (`module = "ns:name@ver"`) surface
-//! [`ProviderError::Unsupported`] with a clear message, matching WEP open-q
-//! #4 — registry/git module sources are deferred to a follow-up.
+//! Resolves a [`GeneratorModule`] into a [`ResolvedGenerator`] (wasm
+//! bytes + options descriptor + source-closure hash) for the Kiln
+//! driver. v1 supports [`GeneratorModule::LocalPath`] (`module = { path
+//! = "..." }`) resolution. Spec-form generators (`module =
+//! "ns:name@ver"`) surface [`ProviderError::Unsupported`] with a clear
+//! message, matching WEP open-q #4 — registry/git module sources are
+//! deferred to a follow-up.
 //!
-//! For `LocalPath`, `get_component` reads the generator source, compiles it
-//! with `target_world = "core:kiln/generator"` via the ordinary
-//! [`wado_compiler::compile_with_options`] pipeline, and caches the
-//! resulting component bytes at
-//! `build/kiln/generators/<stable-id>.wasm`.  Subsequent calls with the
-//! same source tree hash hit the cache without re-running codegen.
+//! For `LocalPath`, `resolve` reads the generator source, consults the
+//! on-disk cache at `build/kiln/{generators,metadata}/<stable-id>.*`
+//! (gated by `no_cache`), and falls back to a fresh
+//! [`wado_compiler::compile_with_options`] run on miss. The compile
+//! path always rewrites both the wasm and descriptor caches so a
+//! subsequent run sees a warm tree.
 //!
-//! `descriptor` extracts the generator's `pub struct Options` shape via
-//! `wado_compiler::kiln::extract_options_descriptor` on each call. The
-//! descriptor is tiny enough that caching it on disk was deferred in
-//! favour of simpler semantics.
+//! The driver is responsible for not calling `resolve` more than once
+//! per unique module per pipeline run — this provider holds no
+//! in-memory artifact state.
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -34,7 +34,7 @@ use wado_compiler::token::canonical_token_bytes;
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
 
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::kiln_driver::{GeneratorComponent, GeneratorProvider, ProviderError};
+use crate::kiln_driver::{GeneratorProvider, ProviderError, ResolvedGenerator};
 
 /// Directory under the project root where compiled generator
 /// components are cached: `build/kiln/generators/`. See WEP 2026-04-12
@@ -149,8 +149,7 @@ impl CliGeneratorProvider {
 
     /// Resolve a `LocalPath` generator source, returning the absolute
     /// path, raw bytes, UTF-8 source string, and stable id. Emits the
-    /// same not-found / not-UTF-8 diagnostics for both `get_component`
-    /// and `descriptor` code paths.
+    /// not-found / not-UTF-8 diagnostics surfaced by `resolve()`.
     fn read_local_source(
         &self,
         path: &wado_compiler::kiln::InvocationPath,
@@ -189,8 +188,8 @@ impl CliGeneratorProvider {
     /// Run the inner wado-compiler pipeline on the given source, then
     /// persist both caches (`build/kiln/generators/<id>.wasm` and, when
     /// the compile produces one, `build/kiln/metadata/<id>.descriptor`).
-    /// Whichever of `get_component` or `descriptor` runs the first
-    /// compile warms both, so the second call is a pure disk read.
+    /// A subsequent `resolve()` on an unchanged source closure short-
+    /// circuits at [`Self::try_read_cache`] without re-running this.
     async fn compile_local(
         &self,
         path_str: String,
@@ -582,10 +581,12 @@ fn hex32(bytes: &[u8; 32]) -> String {
 }
 
 impl GeneratorProvider for CliGeneratorProvider {
-    async fn get_component(
-        &self,
-        module: &GeneratorModule,
-    ) -> Result<GeneratorComponent, ProviderError> {
+    /// Resolve `module` to its compiled artifacts. Consults the
+    /// on-disk cache once (gated by `no_cache`), falling back to a
+    /// fresh `wado` compile on miss. No in-memory state is kept
+    /// between calls — the driver is responsible for not calling this
+    /// more than once per unique module per pipeline run.
+    async fn resolve(&self, module: &GeneratorModule) -> Result<ResolvedGenerator, ProviderError> {
         match module {
             GeneratorModule::Spec(spec) => Err(ProviderError::Unsupported {
                 message: format!(
@@ -595,74 +596,55 @@ impl GeneratorProvider for CliGeneratorProvider {
                 ),
             }),
             GeneratorModule::LocalPath(path) => {
-                let (abs, source, source_str, stable_id) = self.read_local_source(path)?;
+                let (abs, _source, source_str, stable_id) = self.read_local_source(path)?;
                 let base = abs.parent().map(Path::to_path_buf).unwrap_or_default();
-                let cache_path = self.cache_path(&stable_id);
-                // Cache hit only when (a) the WASM blob exists, (b) the
-                // sidecar listing the transitive `.wado` closure exists
-                // and re-validates against the current on-disk bytes.
-                // Without (b) an edit to a transitive import would
-                // silently reuse a stale WASM (the entry-file based
-                // `stable_id` would still match), so the kiln-output
-                // cache further down the pipeline would be checked
-                // against an old generator.
+                // On-disk cache hit only when (a) the wasm blob exists,
+                // (b) the descriptor cache (if any) exists, and (c) the
+                // sidecar listing the transitive `.wado` closure
+                // re-validates against current on-disk bytes. Without
+                // (c) an edit to a transitive import would silently
+                // reuse stale wasm (the entry-file `stable_id` would
+                // still match).
                 if !self.no_cache
-                    && cache_path.is_file()
-                    && let Some(source_hash) = self.validate_sources_sidecar(&stable_id, &base)
-                    && let Ok(bytes) = std::fs::read(&cache_path)
+                    && let Some(resolved) = self.try_read_cache(&stable_id, &base)
                 {
-                    return Ok(GeneratorComponent { bytes, source_hash });
+                    return Ok(resolved);
                 }
                 let artifacts = self
                     .compile_local(path.as_str().to_string(), abs, source_str, stable_id)
                     .await?;
-                let _ = source;
-                Ok(GeneratorComponent {
-                    bytes: artifacts.wasm,
+                Ok(ResolvedGenerator {
+                    wasm: artifacts.wasm,
+                    descriptor: artifacts.descriptor,
                     source_hash: artifacts.source_hash,
                 })
             }
         }
     }
+}
 
-    async fn descriptor(
-        &self,
-        module: &GeneratorModule,
-    ) -> Result<OptionsDescriptor, ProviderError> {
-        match module {
-            GeneratorModule::Spec(_) => Err(ProviderError::Unsupported {
-                message: "kiln: cannot introspect options for spec-form generators in v1"
-                    .to_string(),
-            }),
-            GeneratorModule::LocalPath(path) => {
-                let (abs, _source, source_str, stable_id) = self.read_local_source(path)?;
-                let base = abs.parent().map(Path::to_path_buf).unwrap_or_default();
-                let desc_path = self.descriptor_cache_path(&stable_id);
-                // Same validation rule as `get_component`: a cached
-                // descriptor is only honored when the recorded source
-                // closure still matches on disk.
-                if !self.no_cache
-                    && desc_path.is_file()
-                    && self.validate_sources_sidecar(&stable_id, &base).is_some()
-                    && let Ok(bytes) = std::fs::read(&desc_path)
-                    && let Ok(descriptor) = serde_json::from_slice::<OptionsDescriptor>(&bytes)
-                {
-                    return Ok(descriptor);
-                }
-                let artifacts = self
-                    .compile_local(path.as_str().to_string(), abs, source_str, stable_id)
-                    .await?;
-                artifacts
-                    .descriptor
-                    .ok_or_else(|| ProviderError::Unsupported {
-                        message: format!(
-                            "kiln: generator `{}` did not expose a `pub struct Options` the \
-                             compiler could describe — falling back to provisional TOML encoding",
-                            path.as_str(),
-                        ),
-                    })
-            }
+impl CliGeneratorProvider {
+    /// Read `(wasm, descriptor?, source_hash)` from the on-disk Kiln
+    /// cache for `stable_id`, returning `None` when the cache is
+    /// missing or stale. The descriptor sidecar is optional —
+    /// generators without a `pub struct Options` write only the wasm
+    /// and sources sidecar, so a missing `.descriptor` file is treated
+    /// as `descriptor: None` rather than a cache miss.
+    fn try_read_cache(&self, stable_id: &str, base: &Path) -> Option<ResolvedGenerator> {
+        let cache_path = self.cache_path(stable_id);
+        if !cache_path.is_file() {
+            return None;
         }
+        let source_hash = self.validate_sources_sidecar(stable_id, base)?;
+        let wasm = std::fs::read(&cache_path).ok()?;
+        let descriptor = std::fs::read(self.descriptor_cache_path(stable_id))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<OptionsDescriptor>(&bytes).ok());
+        Some(ResolvedGenerator {
+            wasm,
+            descriptor,
+            source_hash,
+        })
     }
 }
 
@@ -683,7 +665,7 @@ mod tests {
         let provider = CliGeneratorProvider::new(PathBuf::from("/tmp"));
         let err = runtime().block_on(async {
             provider
-                .get_component(&GeneratorModule::Spec("ns:x@1.0.0".to_string()))
+                .resolve(&GeneratorModule::Spec("ns:x@1.0.0".to_string()))
                 .await
                 .unwrap_err()
         });
@@ -700,7 +682,7 @@ mod tests {
         let provider = CliGeneratorProvider::new(PathBuf::from("/nonexistent"));
         let err = runtime().block_on(async {
             provider
-                .get_component(&GeneratorModule::LocalPath(InvocationPath::normalize(
+                .resolve(&GeneratorModule::LocalPath(InvocationPath::normalize(
                     "./does-not-exist",
                 )))
                 .await
@@ -726,9 +708,10 @@ mod tests {
     }
 
     #[test]
-    fn local_path_compiles_and_caches_component_bytes() {
+    fn local_path_compiles_and_caches_resolved_generator() {
         let tmp =
             std::env::temp_dir().join(format!("wado-kiln-provider-compile-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
 
         let generator_src = "\
@@ -755,85 +738,98 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
 
         assert_eq!(provider.compile_count(), 0);
 
-        let component = runtime()
-            .block_on(async { provider.get_component(&module).await })
+        let resolved = runtime()
+            .block_on(async { provider.resolve(&module).await })
             .unwrap_or_else(|e| panic!("compile failed: {e:?}"));
+        assert!(resolved.wasm.starts_with(b"\0asm"), "wasm magic missing");
         assert!(
-            !component.bytes.is_empty(),
-            "component bytes must be non-empty"
-        );
-        assert!(
-            component.bytes.starts_with(b"\0asm"),
-            "component must start with wasm magic"
-        );
-        assert!(
-            !component.source_hash.is_empty(),
+            !resolved.source_hash.is_empty(),
             "local generators must produce a non-empty source hash"
         );
-        assert_eq!(
-            provider.compile_count(),
-            1,
-            "first call runs the inner compiler exactly once"
-        );
-
-        // Second call should hit the on-disk cache — observed directly via
-        // `compile_count` rather than filesystem state.
-        let cache_dir = tmp.join(CACHE_DIR);
-        let entries: Vec<_> = std::fs::read_dir(&cache_dir)
-            .map(|it| it.filter_map(Result::ok).collect())
-            .unwrap_or_default();
-        let wasm_entries: Vec<_> = entries
-            .iter()
-            .filter(|e| e.path().extension().is_some_and(|ext| ext == "wasm"))
-            .collect();
-        assert_eq!(
-            wasm_entries.len(),
-            1,
-            "exactly one cached component .wasm expected"
-        );
-        // The compile-and-write path also persists a sources sidecar
-        // alongside the WASM; assert it landed so the next call's
-        // sidecar-validation path is exercised.
-        let sidecar_entries: Vec<_> = entries
-            .iter()
-            .filter(|e| e.path().to_string_lossy().ends_with(".sources.json"))
-            .collect();
-        assert_eq!(
-            sidecar_entries.len(),
-            1,
-            "exactly one cached sources sidecar expected"
-        );
-
-        let component2 = runtime()
-            .block_on(async { provider.get_component(&module).await })
-            .unwrap();
-        assert_eq!(component, component2, "cached second call must match first");
-        assert_eq!(
-            provider.compile_count(),
-            1,
-            "cache hit must not re-invoke the inner compiler"
-        );
-
-        // The first compile also populated the descriptor cache; an
-        // explicit descriptor() call must not trigger a second compile.
-        let descriptor = runtime()
-            .block_on(async { provider.descriptor(&module).await })
-            .expect("descriptor() should succeed once the compile cache is warm");
+        let descriptor = resolved
+            .descriptor
+            .as_ref()
+            .expect("Options struct present → descriptor must be Some");
         assert_eq!(descriptor.fields.len(), 1);
         assert_eq!(descriptor.fields[0].name, "verbose");
         assert_eq!(
             provider.compile_count(),
             1,
-            "descriptor cache hit after warm component cache must not re-compile"
+            "first resolve runs the inner compiler exactly once"
+        );
+
+        // The compile-and-write path persists wasm + sources sidecar
+        // (+ descriptor); assert they all landed so the next resolve
+        // exercises the on-disk cache.
+        let cache_dir = tmp.join(CACHE_DIR);
+        let entries: Vec<_> = std::fs::read_dir(&cache_dir)
+            .map(|it| it.filter_map(Result::ok).collect())
+            .unwrap_or_default();
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|e| e.path().extension().is_some_and(|ext| ext == "wasm"))
+                .count(),
+            1,
+            "exactly one cached component .wasm expected"
+        );
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|e| e.path().to_string_lossy().ends_with(".sources.json"))
+                .count(),
+            1,
+            "exactly one cached sources sidecar expected"
+        );
+        let metadata_dir = tmp.join(METADATA_DIR);
+        assert_eq!(
+            std::fs::read_dir(&metadata_dir)
+                .map(|it| it.filter_map(Result::ok).count())
+                .unwrap_or(0),
+            1,
+            "exactly one cached descriptor expected"
+        );
+
+        // Second resolve must hit the on-disk cache and skip the compile.
+        // The wasm and source-hash must match byte-for-byte; the
+        // descriptor's `span` info is intentionally not persisted
+        // through the JSON sidecar (it would drift across edits), so
+        // compare descriptor facets rather than the whole struct.
+        let resolved2 = runtime()
+            .block_on(async { provider.resolve(&module).await })
+            .unwrap();
+        assert_eq!(resolved.wasm, resolved2.wasm, "wasm must round-trip cache");
+        assert_eq!(
+            resolved.source_hash, resolved2.source_hash,
+            "source_hash must round-trip cache",
+        );
+        let descriptor2 = resolved2
+            .descriptor
+            .as_ref()
+            .expect("warm descriptor cache must rehydrate");
+        assert_eq!(descriptor.fields.len(), descriptor2.fields.len());
+        for (a, b) in descriptor.fields.iter().zip(descriptor2.fields.iter()) {
+            assert_eq!(a.name, b.name);
+            assert_eq!(a.ty, b.ty);
+            assert_eq!(a.default, b.default);
+        }
+        assert_eq!(
+            provider.compile_count(),
+            1,
+            "warm on-disk cache must not re-invoke the inner compiler"
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
-    fn descriptor_populates_metadata_cache_and_hits_on_second_call() {
+    fn resolve_after_source_edit_recompiles() {
+        // Regression: keying purely off the entry-file `stable_id`
+        // must invalidate when the source changes. Combined with the
+        // sidecar's transitive-file hash list, an edit to either the
+        // entry or a dep must trigger exactly one fresh compile.
         let tmp = std::env::temp_dir().join(format!(
-            "wado-kiln-provider-descriptor-{}",
+            "wado-kiln-provider-resolve-edit-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&tmp);
@@ -863,51 +859,29 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {\n\
         let module = GeneratorModule::LocalPath(InvocationPath::normalize("./generator.wado"));
 
         let first = runtime()
-            .block_on(async { provider.descriptor(&module).await })
-            .expect("first descriptor call");
-        assert_eq!(first.fields.len(), 2);
-        assert_eq!(first.fields[0].name, "highlight");
-        assert_eq!(first.fields[1].name, "depth");
+            .block_on(async { provider.resolve(&module).await })
+            .expect("first resolve");
+        let first_desc = first.descriptor.expect("Options struct → Some(descriptor)");
+        assert_eq!(first_desc.fields.len(), 2);
+        assert_eq!(first_desc.fields[0].name, "highlight");
+        assert_eq!(first_desc.fields[1].name, "depth");
         assert_eq!(provider.compile_count(), 1);
 
-        let metadata_dir = tmp.join(METADATA_DIR);
-        let desc_entries: Vec<_> = std::fs::read_dir(&metadata_dir)
-            .map(|it| it.filter_map(Result::ok).collect())
-            .unwrap_or_default();
-        assert_eq!(
-            desc_entries.len(),
-            1,
-            "exactly one cached descriptor expected"
-        );
+        // Second resolve, no edit: disk cache hits, no recompile.
+        let _ = runtime()
+            .block_on(async { provider.resolve(&module).await })
+            .expect("second resolve");
+        assert_eq!(provider.compile_count(), 1);
 
-        // Second call: disk cache hits, no recompile. Spans are not
-        // persisted (intentionally — they would drift across edits), so
-        // compare the persisted facets instead of full equality.
-        let second = runtime()
-            .block_on(async { provider.descriptor(&module).await })
-            .expect("second descriptor call");
-        assert_eq!(second.fields.len(), first.fields.len());
-        for (a, b) in second.fields.iter().zip(first.fields.iter()) {
-            assert_eq!(a.name, b.name);
-            assert_eq!(a.ty, b.ty);
-            assert_eq!(a.default, b.default);
-        }
-        assert_eq!(
-            provider.compile_count(),
-            1,
-            "descriptor cache hit must not re-invoke the inner compiler"
-        );
-
-        // Editing the source invalidates the stable-id and forces a
-        // fresh compile that populates a new descriptor entry.
+        // Source edit → fresh compile.
         let updated_src = generator_src.replace("pub depth: i32,\n", "pub depth: i64,\n");
         std::fs::write(&gen_path, &updated_src).unwrap();
-
         let third = runtime()
-            .block_on(async { provider.descriptor(&module).await })
-            .expect("descriptor after source edit");
-        assert_eq!(third.fields.len(), 2);
-        assert_eq!(third.fields[1].name, "depth");
+            .block_on(async { provider.resolve(&module).await })
+            .expect("resolve after source edit");
+        let third_desc = third.descriptor.expect("Options struct → Some(descriptor)");
+        assert_eq!(third_desc.fields.len(), 2);
+        assert_eq!(third_desc.fields[1].name, "depth");
         assert_eq!(
             provider.compile_count(),
             2,
