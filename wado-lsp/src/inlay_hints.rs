@@ -4,13 +4,13 @@
 //! Three kinds of hints are produced:
 //!
 //! 1. **Type hints** on `let` patterns, closure parameters, and `for x of …`
-//!    bindings that lack an explicit `: T` annotation. The inferred type
-//!    is pulled from [`Semantics::local_type_name`], populated by the
+//!    bindings that lack an explicit `: T` annotation. Tuple / struct /
+//!    variant / or-patterns recurse into their leaves so each bound
+//!    identifier hints with the resolver's inferred type for that leaf.
+//!    Types come from [`Semantics::local_type_name`], populated by the
 //!    resolver via `record_local_symbol`.
 //! 2. **Parameter-name hints** at free-function call sites. The callee's
-//!    `FunctionSymbol::params` (set up by the analyzer) drives the labels;
-//!    redundant labels (argument is a bare identifier whose name matches
-//!    the parameter) are suppressed to keep the editor noise-free.
+//!    `FunctionSymbol::params` (set up by the analyzer) drives the labels.
 //! 3. **Parameter-name hints at method / static-method call sites.** The
 //!    callee's `Function` AST node is reached by following the resolver's
 //!    use→def edge from the method-name token's `AstId` to the declaring
@@ -124,12 +124,6 @@ impl HintCollector<'_> {
         let Some(type_name) = self.ctx.sem.local_type_name(&self.key(binding_id)) else {
             return;
         };
-        // Resolver-internal sentinels surface as `unknown` / `error`; never
-        // render them — the user is better served by no hint than by a
-        // misleading one.
-        if matches!(type_name.as_str(), "unknown" | "error") {
-            return;
-        }
         self.hints.push(InlayHint {
             position: self.position_after(name_span),
             label: format!(": {type_name}"),
@@ -150,31 +144,41 @@ impl HintCollector<'_> {
         });
     }
 
-    /// Walk the `Pattern::Ident` (or `Pattern::MutIdent`) leaves of `pattern`
-    /// and emit a type hint per leaf. Other pattern shapes (tuple,
-    /// struct, variant) are skipped — destructuring patterns already
-    /// expose the structural type in source.
+    /// Emit a type hint for every `Ident` / `MutIdent` leaf reachable
+    /// from `pattern`. Tuple / struct / variant / or-patterns recurse
+    /// into their sub-patterns; the resolver records a `local_type` for
+    /// each leaf binding via `record_local_symbol`, so each leaf can
+    /// hint independently. Literal and wildcard leaves bind nothing
+    /// and have no type to surface.
     fn hint_pattern_bindings(&mut self, pattern: &Pattern) {
         match pattern {
             Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => {
                 self.push_type_hint(*id, *span);
             }
-            // Destructuring patterns: skip — the visible structure already
-            // tells the user the type. Nested simple bindings inside a
-            // tuple/struct pattern lose useful context when annotated
-            // standalone (the element-type is meaningful only against the
-            // outer shape), so we keep the rule "only annotate top-level
-            // simple bindings".
-            _ => {}
+            Pattern::Tuple(sub_patterns, _) | Pattern::Or(sub_patterns) => {
+                for p in sub_patterns {
+                    self.hint_pattern_bindings(p);
+                }
+            }
+            Pattern::Struct { fields, .. } => {
+                for field in fields {
+                    self.hint_pattern_bindings(&field.pattern);
+                }
+            }
+            Pattern::Variant { bindings, .. } => {
+                for p in bindings {
+                    self.hint_pattern_bindings(p);
+                }
+            }
+            Pattern::Range { .. } | Pattern::Literal(_) | Pattern::Wildcard => {}
         }
     }
 
     /// Hint parameters for a `CallExpr`. Resolves the callee identifier
     /// through `Semantics::referenced_symbol` and reads the parameter
-    /// names off the callee's `FunctionSymbol`. Returns silently for
-    /// callees that do not resolve to a function symbol (e.g. closures
-    /// stored in locals, method-receiver expressions, variant
-    /// constructors).
+    /// names off the callee's `FunctionSymbol` (or, for impl methods
+    /// that the analyzer does not register as symbols, the declaring
+    /// `Function` AST node).
     fn hint_call_args(&mut self, call: &ast::CallExpr) {
         let Some(param_names) = self.callee_param_names(&call.callee) else {
             return;
@@ -258,27 +262,10 @@ impl HintCollector<'_> {
     }
 
     fn emit_arg_param_hints(&mut self, param_names: &[String], args: &[Expr]) {
-        for (i, arg) in args.iter().enumerate() {
-            let Some(param_name) = param_names.get(i) else {
-                // Variadic / over-supplied call; skip the surplus rather
-                // than panicking. The resolver will flag the arity
-                // mismatch as a diagnostic on its own path.
-                break;
-            };
-            // Compiler-generated parameter names ("`_`", "`_unused`",
-            // resolver synth temporaries) provide no useful hint.
-            if param_name.is_empty() || param_name == "_" {
-                continue;
-            }
-            // Suppress the hint when the argument is a bare identifier
-            // already named after the parameter — the editor would just
-            // render `a: a`, which is pure noise.
-            if let Expr::Ident(i) = arg
-                && i.segments.is_empty()
-                && i.name == *param_name
-            {
-                continue;
-            }
+        // Align positional args with their parameter names. An arity
+        // mismatch (more args than params) terminates the loop early; the
+        // resolver flags that as a diagnostic on its own path.
+        for (param_name, arg) in param_names.iter().zip(args.iter()) {
             self.push_param_hint(param_name, arg.span());
         }
     }
@@ -532,7 +519,7 @@ mod tests {
     }
 
     #[test]
-    fn parameter_hint_suppressed_when_arg_name_matches_param() {
+    fn parameter_hint_emitted_even_when_arg_name_matches_param() {
         block_on(async {
             let src = concat!(
                 "fn add(a: i32, b: i32) -> i32 { return a + b; }\n",
@@ -549,8 +536,9 @@ mod tests {
                 .map(|(l, _)| l)
                 .collect();
             assert!(
-                param_labels.is_empty(),
-                "expected no `a:`/`b:` hints when the argument name matches; got {param_labels:?}",
+                param_labels.contains(&"a:".to_string())
+                    && param_labels.contains(&"b:".to_string()),
+                "expected `a:`/`b:` parameter hints at `add(a, b)`; got {param_labels:?}",
             );
         });
     }
@@ -699,31 +687,32 @@ mod tests {
     }
 
     #[test]
-    fn tuple_destructure_let_emits_no_top_level_hint() {
-        // Destructuring patterns already make the structure visible in
-        // source, so the hint adds noise (and would have to render a
-        // tuple-of-types which the user usually didn't ask for).
-        // Pin the "skip" behaviour — a future change must opt in
-        // explicitly rather than emit by accident.
+    fn struct_destructure_let_hints_each_field_binding() {
+        // `let { x, y } = p;` binds two locals — `x` and `y` — each
+        // with a resolver-recorded type (the struct field's type). The
+        // pattern walker recurses into the struct sub-patterns and
+        // emits a hint per leaf.
         block_on(async {
             let src = concat!(
-                "fn f() -> i32 {\n",
-                "    let pair = (1, 2);\n",
-                "    let (a, b) = pair;\n",
-                "    return a + b;\n",
+                "struct Point { x: i32, y: i32 }\n",
+                "fn f(p: Point) -> i32 {\n",
+                "    let { x, y } = p;\n",
+                "    return x + y;\n",
                 "}\n",
             );
             let hints = hints_for(src).await;
-            // The `let pair = ...` line still hints (it's a simple
-            // binding). What we forbid is a hint on the `(a, b)` pattern
-            // line itself.
-            let line_2_type_hints: Vec<_> = hints
+            // Both `x` and `y` are bound on line 2; assert at least two
+            // `: i32` type hints land there.
+            let line_2_i32: Vec<_> = hints
                 .iter()
-                .filter(|h| h.kind == InlayHintKind::Type && h.position.line == 2)
+                .filter(|h| {
+                    h.kind == InlayHintKind::Type && h.position.line == 2 && h.label == ": i32"
+                })
                 .collect();
-            assert!(
-                line_2_type_hints.is_empty(),
-                "destructure pattern must not produce a type hint; got {line_2_type_hints:?}",
+            assert_eq!(
+                line_2_i32.len(),
+                2,
+                "expected two `: i32` hints for `let {{ x, y }} = p`; got {hints:?}",
             );
         });
     }
@@ -782,11 +771,11 @@ mod tests {
     }
 
     #[test]
-    fn parameter_hint_skipped_for_compiler_generated_underscore_names() {
-        // Compiler intrinsics may carry `_`-named parameters (or empty
-        // names for purely positional slots). Surfacing `:_` next to a
-        // user-supplied argument would be confusing noise; assert we
-        // suppress it instead of leaking the placeholder.
+    fn parameter_hint_emitted_for_underscore_param_name() {
+        // `_` is the actual parameter name the user wrote on the callee
+        // (`fn discard(_: i32)`). The hint surfaces that name verbatim
+        // at the call site — pin that we forward it rather than filter
+        // anything.
         block_on(async {
             let src = concat!("fn discard(_: i32) {}\n", "fn run() { discard(7); }\n",);
             let hints = hints_for(src).await;
@@ -796,8 +785,8 @@ mod tests {
                 .map(|(l, _)| l)
                 .collect();
             assert!(
-                !param_labels.iter().any(|l| l == "_:"),
-                "underscore param must not produce a `_:` hint; got {param_labels:?}",
+                param_labels.contains(&"_:".to_string()),
+                "underscore param should still produce a `_:` hint; got {param_labels:?}",
             );
         });
     }
