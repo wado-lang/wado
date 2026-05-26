@@ -66,7 +66,7 @@ pub struct Semantics {
     ///
     /// - `(None, false)` — analyze or resolve bailed; the snapshot has
     ///   only `symbols` + `ast_indices`.
-    /// - `(Some(_), false)` — resolve completed but `lower_tir` bailed; the
+    /// - `(Some(_), false)` — annotate completed but `build_tir` bailed; the
     ///   snapshot has everything except `tir_modules` (which is empty).
     /// - `(Some(_), true)` — full success.
     ///
@@ -87,7 +87,7 @@ pub struct Semantics {
     pub(crate) locals: IndexMap<SymbolKey, Symbol>,
     /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
-    /// Empty when `lower_tir` did not run or bailed.
+    /// Empty when `build_tir` did not run or bailed.
     pub(crate) tir_modules: IndexMap<ModuleSource, TirModule>,
     /// True when every analysis phase ran to completion without bailing.
     /// Batch compilation refuses to continue when this is false; LSP queries

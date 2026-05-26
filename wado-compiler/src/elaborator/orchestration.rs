@@ -8,7 +8,7 @@
 //!   populates [`TypeTable::type_by_symbol`]/[`TypeTable::symbol_by_type`]
 //!   so LSP queries can resolve a [`SymbolKey`] to a decl-backed type
 //!   without running TIR lowering. The output is an [`AnnotateState`] that
-//!   both `lower_tir` and the LSP consume.
+//!   both `build_tir` and the LSP consume.
 //! - [`Elaborator::build_tir_from_state`] reads that state and produces one
 //!   [`TirModule`] per source module. It does not mutate the annotate
 //!   output; all new types created during lowering (anonymous structs,
@@ -126,7 +126,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Annotate phase: collect decl-level type information and intern every
     /// declaration in the shared [`TypeTable`]. Produces an [`AnnotateState`]
-    /// that downstream phases (`lower_tir`, LSP queries) consume read-mostly
+    /// that downstream phases (`build_tir`, LSP queries) consume read-mostly
     /// via `Rc`.
     pub(crate) fn annotate_modules(
         symbols: &'a SymbolTable,
