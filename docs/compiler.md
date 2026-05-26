@@ -69,7 +69,7 @@ The AST is parser-immutable from this point on. The desugar-replacement surface 
 
 ## Annotate (Analyze + Resolve + TIR Lowering)
 
-`semantics_from_loaded` (`semantics.rs`) is the entry point shared by LSP and batch compilation. It runs `analyze.rs` for symbol-table construction and `resolver/` for type checking; bodies are then lowered into TIR.
+`semantics_of` (`semantics.rs`) is the entry point shared by LSP and batch compilation. It runs `analyze.rs` for symbol-table construction and `resolver/` for type checking; bodies are then lowered into TIR.
 
 The result, `Semantics`, carries the TIR modules plus an `AstIndex` and a use→def map (`(ModuleSource, AstId) → SymbolKey`). This is what makes the architecture LSP-friendly: facts are attached to AST nodes without mutating them, so cross-file navigation, hover, and rename all fall out of the same data the batch compiler uses. See the [LSP](#lsp) section below.
 
@@ -197,7 +197,7 @@ Three registries collect declarative information from the standard library and f
 
 The language server (`wado-lsp/`) is a thin layer on top of `wado_compiler::semantics`. The `Engine` holds open documents and answers LSP queries (diagnostics, hover, go-to-definition, references, document highlight, semantic tokens). Each query:
 
-1. Calls `semantics_with_invocations(source, host, …)` to obtain a `Semantics` snapshot.
+1. Composes `parse(source)` → `load(parsed, …, invocations, …)` → `semantics_of(loaded, host, …)` to obtain a `Semantics` snapshot (kiln invocation discovery runs against the parsed entry AST between stages).
 2. Uses `Semantics::cursor_at(module, line, col) → Cursor` to translate a (line, col) into a `SymbolKey`.
 3. Reads pre-computed facts off `Cursor` / `Semantics` (`def_key`, `def_name_span`, `references_to_def`, `is_write_target`, …).
 

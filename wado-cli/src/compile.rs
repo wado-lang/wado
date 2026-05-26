@@ -450,8 +450,12 @@ pub fn collect_inline_invocations_for_entry(
     modules.insert(entry_name, parsed.ast);
     let descriptors = wado_compiler::hashmap::IndexMap::default();
     let manifest_root_str = manifest_root.to_string_lossy();
-    wado_compiler::kiln::collect_inline_invocations(&modules, &descriptors, &manifest_root_str)
-        .unwrap_or_default()
+    wado_compiler::kiln::collect_inline_invocations(
+        modules.iter().map(|(k, v)| (k.as_str(), v)),
+        &descriptors,
+        &manifest_root_str,
+    )
+    .unwrap_or_default()
 }
 
 /// Walk up from `entry_file` looking for the nearest `wado.toml`. Returns

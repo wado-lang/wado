@@ -1,6 +1,6 @@
 //! Integration tests for `Engine::diagnostics`.
 //!
-//! `Engine::diagnostics` runs only the `annotate` pipeline (parse → bind →
+//! `Engine::diagnostics` runs only the semantics pipeline (parse → bind →
 //! load → analyze → resolve), deliberately stopping before
 //! codegen. These tests pin two contracts:
 //!
@@ -10,7 +10,8 @@
 //! - User code that redefines a prelude name without opting out via
 //!   `#![no_prelude]` still surfaces the collision diagnostic.
 //! - Inputs that historically panicked during codegen validation now
-//!   complete cleanly because `Engine::diagnostics` stops at `annotate`.
+//!   complete cleanly because `Engine::diagnostics` stops at
+//!   `semantics_of`.
 
 use wado_lsp::test_support::MapHost;
 use wado_lsp::{Diagnostic, Engine, Severity};

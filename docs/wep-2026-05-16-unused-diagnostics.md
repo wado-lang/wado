@@ -40,7 +40,7 @@ producing `Severity::Warning` diagnostics through the existing
 `CompilerHost`. The two layers map cleanly onto rustc's split between
 HIR-level `unused_*` lints and `dead_code` reachability:
 
-1. Semantics layer — runs immediately after `semantics_from_loaded`, on
+1. Semantics layer — runs immediately after `semantics_of`, on
    `&Semantics`. Emits `UnusedImport`, `UnusedVariable`,
    `UnusedParameter`. LSP and batch compilation share this pass for
    free.
@@ -134,7 +134,7 @@ This is the only structural change required outside the new
 | `wado-compiler/src/analyze/unused.rs` | New module hosting `check_unused` (Semantics layer), `emit_dead_function_diagnostics`, and `emit_dead_global_diagnostics` (DCE-loop hooks).                                                    |
 | `wado-compiler/src/compiler_host.rs`  | Adds `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction`, `DeadGlobal` and their `Display` mappings.                                                                     |
 | `wado-compiler/src/logger.rs`         | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                                                                   |
-| `wado-compiler/src/lib.rs`            | Adds `CompilerOptions::unused_diagnostics`. Calls `check_unused` after `semantics_from_loaded`. The DCE-layer diagnostic emitters are invoked from `optimize.rs::run_dce`.                     |
+| `wado-compiler/src/lib.rs`            | Adds `CompilerOptions::unused_diagnostics`. Calls `check_unused` after `semantics_of`. The DCE-layer diagnostic emitters are invoked from `optimize.rs::run_dce`.                     |
 | `wado-compiler/src/tir.rs`            | `TirFunction::defining_ast_id: Option<AstId>`, `TirGlobal::defining_ast_id: Option<AstId>`.                                                                                                    |
 | `wado-compiler/src/nir.rs`            | `NirFunction::defining_ast_id: Option<AstId>`, `NirGlobal::defining_ast_id: Option<AstId>`.                                                                                                    |
 | `wado-compiler/src/optimize/dce.rs`   | Adds `pub(crate) fn unreachable_function_source_keys(&NirPackage, &IndexSet<FunctionId>) -> Vec<SymbolKey>` and `pub(crate) fn unreachable_global_source_keys(&NirPackage) -> Vec<SymbolKey>`. |
@@ -262,7 +262,7 @@ parse → bind → desugar → load → analyze → annotate
 
 `compile_with_options` gates both layers on
 `CompilerOptions::unused_diagnostics`. `Engine::diagnostics` (LSP)
-calls `check_unused` after `semantics_from_loaded` without any extra cost.
+calls `check_unused` after `semantics_of` without any extra cost.
 
 ### Migration plan
 

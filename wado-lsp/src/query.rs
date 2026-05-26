@@ -26,11 +26,19 @@ use crate::text::{PositionEncoding, lsp_position_to_line_col};
 ///
 /// Built by [`crate::Engine::with_query_ctx`] from a cached snapshot;
 /// feature functions consume it by reference.
+///
+/// Fields are `pub(crate)` so feature files can reach the underlying
+/// [`Semantics`] (and the source / URI / encoding) directly for
+/// queries that don't need a positional conversion. Positional lookups
+/// (`Position` → `Cursor`) **must** go through [`Self::cursor_at`] or
+/// [`Self::cursor_at_line_col`] so that any future invariant added to
+/// the conversion (e.g. clamping, normalisation, tracing) reaches every
+/// feature.
 pub(crate) struct QueryContext<'a> {
-    pub sem: &'a Semantics,
-    pub source: &'a str,
-    pub uri: &'a str,
-    pub encoding: PositionEncoding,
+    pub(crate) sem: &'a Semantics,
+    pub(crate) source: &'a str,
+    pub(crate) uri: &'a str,
+    pub(crate) encoding: PositionEncoding,
 }
 
 impl<'a> QueryContext<'a> {
@@ -49,6 +57,16 @@ impl<'a> QueryContext<'a> {
     /// Returns `None` when no AST node covers the position.
     pub fn cursor_at(&self, position: Position) -> Option<Cursor<'a>> {
         let (line, col) = self.line_col(position);
+        self.cursor_at_line_col(line, col)
+    }
+
+    /// Variant of [`Self::cursor_at`] that takes pre-converted compiler
+    /// `(line, col)` coordinates. Callers that need `(line, col)` for
+    /// other lookups too (e.g. file-path matchers operating on raw
+    /// `Span`s) should call [`Self::line_col`] once and share the result
+    /// with this method, instead of bypassing the wrapper by reaching
+    /// for `sem.cursor_at` directly.
+    pub fn cursor_at_line_col(&self, line: usize, col: usize) -> Option<Cursor<'a>> {
         self.sem.cursor_at(self.entry(), line, col)
     }
 

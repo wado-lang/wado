@@ -53,8 +53,8 @@ pub(crate) fn find_definition(ctx: &QueryContext, position: Position) -> Option<
         return Some(result);
     }
 
+    let cursor = ctx.cursor_at_line_col(line, col)?;
     let entry = ctx.entry();
-    let cursor = ctx.sem.cursor_at(entry, line, col)?;
     let def_key = cursor.def_key()?;
 
     // Most defs are registered as symbols (functions, types, globals, locals).

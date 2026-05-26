@@ -45,8 +45,10 @@ pub use uri::{Uri, UriScheme};
 /// ## Snapshot cache
 ///
 /// Each open document keeps a lazily-computed [`Snapshot`] bundling the
-/// `Semantics` produced by `semantics_with_invocations` and the
-/// `CompilerDiagnostic`s emitted during that run. Every query —
+/// `Semantics` produced by composing `wado_compiler::parse` →
+/// `wado_compiler::load` → `wado_compiler::semantics_of` (see
+/// [`build_semantics`]) and the `CompilerDiagnostic`s emitted during
+/// that run. Every query —
 /// diagnostics included — consumes the cache, so one document version
 /// triggers at most one semantics pass. Mutators
 /// (`update_document` / `close_document`) invalidate every document's
@@ -178,9 +180,10 @@ impl Engine {
         // Three-stage composition: parse once, derive kiln invocations
         // from the parsed entry AST, then drive load + semantics_of with
         // the shared parse result. This avoids the second lex+parse of
-        // the entry source that a bundled `semantics_with_invocations`
-        // call would do, and threads the InvocationIndex through without
-        // the LSP having to know the loader's source-based entry point.
+        // the entry source that the `wado_compiler::semantics`
+        // convenience would otherwise do, and threads the
+        // InvocationIndex through without the LSP having to know the
+        // loader's source-based entry point.
         let sem = build_semantics(&doc.text, &filename, &collecting_host).await;
         let snapshot = Rc::new(Snapshot {
             sem,
@@ -318,9 +321,10 @@ impl Engine {
     /// Compute diagnostics for the given document.
     ///
     /// Reads from the snapshot cache populated by [`Engine::snapshot`].
-    /// Annotate runs at most once per document version regardless of which
-    /// queries the client issued first. Each diagnostic's column is
-    /// re-encoded against the source whose file matches its
+    /// The semantics pipeline runs at most once per document version
+    /// regardless of which queries the client issued first. Each
+    /// diagnostic's column is re-encoded against the source whose file
+    /// matches its
     /// `span.file` — cross-file diagnostics keep the compiler's codepoint
     /// columns, the entry document is re-expressed in the negotiated
     /// position encoding.
@@ -377,7 +381,13 @@ impl<'a, H> DiagnosticCollector<'a, H> {
     }
 
     fn take_diagnostics(self) -> Vec<CompilerDiagnostic> {
-        self.diagnostics.into_inner().unwrap()
+        // Recover from poisoning: a panic inside the inner host's
+        // `emit_diagnostic` would otherwise propagate via `unwrap()`
+        // and kill every subsequent snapshot build for the rest of the
+        // process — fatal for a long-running LSP server.
+        self.diagnostics
+            .into_inner()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 
@@ -389,7 +399,12 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
     fn emit_diagnostic(&self, diagnostic: CompilerDiagnostic) {
         // Capture for the snapshot cache, then forward so the inner host's
         // own side effects (e.g. CLI stderr logging) still happen.
-        self.diagnostics.lock().unwrap().push(diagnostic.clone());
+        // Recover from a poisoned lock so a panic in a prior `inner.emit_diagnostic`
+        // call doesn't take down every subsequent capture.
+        self.diagnostics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(diagnostic.clone());
         self.inner.emit_diagnostic(diagnostic);
     }
 }
@@ -399,15 +414,16 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
 /// discovery between parse and load so the entry AST is shared instead
 /// of parsed twice.
 ///
-/// Happy-path optimization only: a parse error on the entry falls back
-/// to the `wado_compiler::semantics` convenience, which routes through
-/// the loader's source-based entry to emit a properly-formatted
-/// diagnostic. That fallback re-parses, but only on an already-failing
-/// path.
+/// Every failure path emits its diagnostic directly through `host` and
+/// returns [`Semantics::empty`], so callers see a uniformly-shaped
+/// (possibly empty) snapshot regardless of which stage bailed.
 async fn build_semantics<H: CompilerHost>(source: &str, filename: &str, host: &H) -> Semantics {
     let parsed = match wado_compiler::parse(source) {
         Ok(p) => p,
-        Err(_) => return wado_compiler::semantics(source, host, Some(filename)).await,
+        Err(e) => {
+            host.emit_diagnostic(wado_compiler::parse_failure_diagnostic(&e, Some(filename)));
+            return Semantics::empty();
+        }
     };
     let invocations = kiln::prepare_invocations(filename, &parsed.ast, host);
     match wado_compiler::load(

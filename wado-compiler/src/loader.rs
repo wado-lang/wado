@@ -958,7 +958,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             let _span = self.logger.span(&format!("parse {tentative_entry_source}"));
             self.parse_source(entry_source, &tentative_entry_source)?
         };
-        self.load_all_from_parsed_entry(entry_ast, entry_filename)
+        self.load_all_inner(entry_ast, entry_filename, tentative_entry_source)
             .await
     }
 
@@ -975,11 +975,22 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         entry_ast: Module,
         entry_filename: Option<&str>,
     ) -> Result<LoadResult, LoadError> {
-        // Resolve the tentative entry source so collected diagnostics
-        // attach to a stable `ModuleSource` even before
-        // `#![stdlib("…")]` is consulted below.
         let resolved_filename = entry_filename.unwrap_or("<stdin>");
         let tentative_entry_source = self.interner.entry_point(resolved_filename);
+        self.load_all_inner(entry_ast, entry_filename, tentative_entry_source)
+            .await
+    }
+
+    /// Shared post-parse loading: `tentative_entry_source` is the
+    /// interned `EntryPoint` [`ModuleSource`] pre-resolved by the caller,
+    /// so neither public entry point hits the interner twice.
+    async fn load_all_inner(
+        mut self,
+        entry_ast: Module,
+        entry_filename: Option<&str>,
+        tentative_entry_source: ModuleSource,
+    ) -> Result<LoadResult, LoadError> {
+        let resolved_filename = entry_filename.unwrap_or("<stdin>");
 
         let entry_module_source = parse_stdlib_identity_attribute(&mut self.interner, &entry_ast)
             .unwrap_or(tentative_entry_source);

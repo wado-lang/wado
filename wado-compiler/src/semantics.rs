@@ -52,7 +52,7 @@ pub struct Semantics {
     /// the borrow at the statement boundary.
     pub interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
     /// Per-module structural index (name spans, write targets, span lookup).
-    /// Built once per [`Module`] in [`semantics_with_logger`]. LSP queries (and
+    /// Built once per [`Module`] in [`semantics_of`]. LSP queries (and
     /// the in-tree [`name_span_of`] / [`span_of_key`] helpers) consult this
     /// instead of re-walking the AST on every request.
     pub(crate) ast_indices: IndexMap<ModuleSource, AstIndex>,
@@ -125,7 +125,7 @@ impl Semantics {
     /// downstream field is empty and [`Self::is_complete`] returns `false`.
     ///
     /// Used as the partial-result return value when an analysis phase bails
-    /// in [`semantics_with_logger`].
+    /// in [`semantics_of`].
     fn partial(
         entry_module_source: ModuleSource,
         modules: IndexMap<ModuleSource, Module>,
@@ -413,18 +413,72 @@ pub async fn semantics<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
 ) -> Semantics {
-    let logger = Logger::new(host, LogLevel::default());
-    if let Some(f) = filename {
-        logger.set_file(f);
-    }
-    let module_loader = loader::ModuleLoader::new(host, LogLevel::default())
-        .with_invocations(crate::kiln::InvocationIndex::new());
-    match module_loader.load_all(source, filename).await {
-        Ok(load_result) => semantics_with_logger(load_result, &logger),
+    let parsed = match crate::parse(source) {
+        Ok(p) => p,
         Err(e) => {
+            host.emit_diagnostic(parse_failure_diagnostic(&e, filename));
+            return Semantics::empty();
+        }
+    };
+    match crate::load(
+        parsed,
+        filename,
+        host,
+        crate::kiln::InvocationIndex::new(),
+        LogLevel::default(),
+    )
+    .await
+    {
+        Ok(loaded) => semantics_of(loaded, host, LogLevel::default()),
+        Err(e) => {
+            let logger = Logger::new(host, LogLevel::default());
+            if let Some(f) = filename {
+                logger.set_file(f);
+            }
             let _ = logger.error(e);
             Semantics::empty()
         }
+    }
+}
+
+/// Convert a lex/parse failure from [`crate::parse`] into the same
+/// [`crate::Diagnostic`] shape the loader emits for
+/// `LoadError::{LexError, ParseError}`. Keeps every route to a
+/// [`Semantics`] (the [`semantics`] convenience, LSP-side three-stage
+/// composition, batch frontend) producing the same wire diagnostic for
+/// the same input failure.
+#[must_use]
+pub fn parse_failure_diagnostic(
+    err: &crate::CompileError,
+    filename: Option<&str>,
+) -> crate::Diagnostic {
+    use crate::{Code, Diagnostic, DiagnosticSpan, Severity};
+    let (message, line, column) = match err {
+        crate::CompileError::Lexer {
+            message,
+            line,
+            column,
+            ..
+        } => (format!("lexer error: {message}"), *line, *column),
+        crate::CompileError::Parser {
+            message,
+            line,
+            column,
+            ..
+        } => (format!("parse error: {message}"), *line, *column),
+        other => (other.to_string(), 1, 1),
+    };
+    Diagnostic {
+        severity: Severity::Error,
+        code: Code::InvalidSyntax,
+        message,
+        span: filename.map(|f| DiagnosticSpan {
+            file: f.to_string(),
+            line,
+            column,
+            end_line: None,
+            end_column: None,
+        }),
     }
 }
 
@@ -433,6 +487,16 @@ impl Semantics {
     /// an upstream phase fails outright (parse error on the entry, load
     /// failure) and callers still want to treat the result uniformly —
     /// every query returns the natural empty answer.
+    ///
+    /// **Latent caveat**: `entry_module_source` is set to
+    /// [`ModuleSource::entry_point_uninitialized`], whose `PartialEq`
+    /// equates to any other [`ModuleSource::EntryPoint`] regardless of
+    /// filename. Today this is masked because `modules` is empty, so
+    /// position lookups bail before reaching helpers that compare the
+    /// entry source by equality (e.g. `module_uri`'s
+    /// `module == entry` short-circuit). Future changes that populate
+    /// partial state into an `empty()` result must not rely on that
+    /// equality producing a meaningful distinction.
     #[must_use]
     pub fn empty() -> Self {
         let interner = std::rc::Rc::new(std::cell::RefCell::new(ModuleSourceInterner::new()));

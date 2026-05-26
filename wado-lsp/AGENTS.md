@@ -31,8 +31,11 @@ Language service engine for the Wado compiler toolchain.
 
 ### Engine
 
-`Engine` owns per-document state: source text, last reported version,
-and a cached `Rc<Semantics>` produced by `semantics_with_invocations`.
+`Engine` owns per-document state: source text and a cached
+`Rc<Snapshot>` built by composing `wado_compiler::parse` →
+`wado_compiler::load` → `wado_compiler::semantics_of`, with kiln
+invocation discovery (`kiln::prepare_invocations`) interleaved between
+parse and load.
 The snapshot is built on first query and shared across back-to-back
 queries on the same document version; `update_document` /
 `close_document` invalidates it. The negotiated `PositionEncoding`

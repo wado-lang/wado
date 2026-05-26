@@ -45,7 +45,12 @@ use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 ///
 /// Takes `&Module` (the parsed entry AST) instead of source bytes so
 /// the LSP can share the parse result with the downstream load stage —
-/// see `Engine::snapshot` for the shared-parse flow.
+/// see `Engine::snapshot` for the shared-parse flow. **Contract**:
+/// `entry_ast` must derive from the same bytes the caller subsequently
+/// passes to `wado_compiler::load`; otherwise the spans this helper
+/// emits via [`Code::KilnStaleCache`] / [`Code::KilnGeneratedModified`]
+/// will point at locations that don't exist in the source the rest of
+/// the snapshot is built against.
 ///
 /// Returns an empty index when the entry has no inline `with` clauses
 /// or no enclosing `wado.toml` is found.
@@ -59,11 +64,13 @@ pub fn prepare_invocations<H: CompilerHost>(
         return InvocationIndex::new();
     };
 
-    let mut modules = wado_compiler::hashmap::IndexMap::default();
-    modules.insert(entry_filename.to_string(), entry_ast.clone());
     let descriptors = wado_compiler::hashmap::IndexMap::default();
     let manifest_root_str = manifest_root.to_string_lossy();
-    let invocations = match collect_inline_invocations(&modules, &descriptors, &manifest_root_str) {
+    let invocations = match collect_inline_invocations(
+        std::iter::once((entry_filename, entry_ast)),
+        &descriptors,
+        &manifest_root_str,
+    ) {
         Ok(v) => v,
         // Inline-clause errors are surfaced by the regular
         // semantics pass (it re-runs the same collector). We
