@@ -207,11 +207,17 @@ impl ModRef {
     /// True iff `self`'s writes (or any call inside `self`) might
     /// invalidate any of `other`'s reads.
     ///
-    /// Conservative for `calls`: a call can touch anything visible,
-    /// so it clobbers any non-empty read set. Refining this requires
-    /// per-callee effect summaries.
+    /// Call effects: callees can mutate globals, the GC heap, and
+    /// linear memory, so a call clobbers reads of those channels.
+    /// Callees CANNOT reach the caller's Wasm locals — locals live in
+    /// the calling frame and are not addressable from another
+    /// function — so a call does not clobber a `local_reads`-only
+    /// expression. Refining this further (per-callee global/heap
+    /// effect summaries) would only narrow the global/heap branches.
     pub fn may_clobber(&self, other: &ModRef) -> bool {
-        if self.calls && !other.is_read_free() {
+        if self.calls
+            && (!other.global_reads.is_empty() || other.heap.reads || other.memory.reads)
+        {
             return true;
         }
         if !self.local_writes.is_disjoint(&other.local_reads) {
@@ -227,14 +233,6 @@ impl ModRef {
             return true;
         }
         false
-    }
-
-    /// True iff `self` performs no reads of any kind.
-    fn is_read_free(&self) -> bool {
-        self.local_reads.is_empty()
-            && self.global_reads.is_empty()
-            && !self.heap.reads
-            && !self.memory.reads
     }
 
     /// Walk `instr` recursively and fold its effects into `self`.
@@ -1046,10 +1044,29 @@ mod tests {
     }
 
     #[test]
-    fn may_clobber_call_clobbers_any_read() {
+    fn may_clobber_call_clobbers_heap_read() {
+        let writer = ModRef::of(&call(vec![]));
+        let reader = ModRef::of(&struct_get(local_get("r")));
+        assert!(writer.may_clobber(&reader));
+    }
+
+    #[test]
+    fn may_clobber_call_clobbers_global_read() {
+        let writer = ModRef::of(&call(vec![]));
+        let reader = ModRef::of(&WirInstr::GlobalGet {
+            name: global_name("mod::G"),
+            result_ty: WirType::I32,
+        });
+        assert!(writer.may_clobber(&reader));
+    }
+
+    #[test]
+    fn may_clobber_call_does_not_clobber_local_only_read() {
+        // Wasm locals are private to the calling frame; callees
+        // cannot reach them, so a pure local read survives any call.
         let writer = ModRef::of(&call(vec![]));
         let reader = ModRef::of(&local_get("x"));
-        assert!(writer.may_clobber(&reader));
+        assert!(!writer.may_clobber(&reader));
     }
 
     #[test]
@@ -1100,10 +1117,22 @@ mod tests {
     }
 
     #[test]
-    fn cannot_move_past_call() {
-        let expr = ModRef::of(&local_get("x"));
+    fn cannot_move_heap_read_past_call() {
+        // A call may mutate the heap, so a heap-reading expression
+        // must not be moved past one.
+        let expr = ModRef::of(&struct_get(local_get("r")));
         let intervening = ModRef::of(&call(vec![]));
         assert!(!can_move_past(&expr, &intervening, "self"));
+    }
+
+    #[test]
+    fn can_move_local_only_read_past_call() {
+        // Locals are private to the calling frame; callees cannot
+        // touch them, so a pure local read is safe to move past a
+        // call.
+        let expr = ModRef::of(&local_get("x"));
+        let intervening = ModRef::of(&call(vec![]));
+        assert!(can_move_past(&expr, &intervening, "self"));
     }
 
     #[test]
