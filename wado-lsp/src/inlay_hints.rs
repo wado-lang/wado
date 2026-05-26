@@ -678,4 +678,256 @@ mod tests {
             );
         });
     }
+
+    #[test]
+    fn let_mut_without_annotation_emits_type_hint() {
+        // `let mut x = 1` parses as `LetStmt { is_mut: true, pattern:
+        // Ident { ... } }`. The mut keyword does not change the pattern
+        // shape, so `hint_pattern_bindings` must still match. Without
+        // this test a `MutIdent`-only matcher (or a future parser change
+        // that emits `MutIdent` here) would regress the hint silently.
+        block_on(async {
+            let src = "fn f() -> i32 {\n    let mut x = 1;\n    return x;\n}\n";
+            let hints = hints_for(src).await;
+            assert!(
+                hints
+                    .iter()
+                    .any(|h| h.label == ": i32" && h.kind == InlayHintKind::Type),
+                "expected `: i32` hint on `let mut x = 1`; got {hints:?}",
+            );
+        });
+    }
+
+    #[test]
+    fn tuple_destructure_let_emits_no_top_level_hint() {
+        // Destructuring patterns already make the structure visible in
+        // source, so the hint adds noise (and would have to render a
+        // tuple-of-types which the user usually didn't ask for).
+        // Pin the "skip" behaviour — a future change must opt in
+        // explicitly rather than emit by accident.
+        block_on(async {
+            let src = concat!(
+                "fn f() -> i32 {\n",
+                "    let pair = (1, 2);\n",
+                "    let (a, b) = pair;\n",
+                "    return a + b;\n",
+                "}\n",
+            );
+            let hints = hints_for(src).await;
+            // The `let pair = ...` line still hints (it's a simple
+            // binding). What we forbid is a hint on the `(a, b)` pattern
+            // line itself.
+            let line_2_type_hints: Vec<_> = hints
+                .iter()
+                .filter(|h| h.kind == InlayHintKind::Type && h.position.line == 2)
+                .collect();
+            assert!(
+                line_2_type_hints.is_empty(),
+                "destructure pattern must not produce a type hint; got {line_2_type_hints:?}",
+            );
+        });
+    }
+
+    #[test]
+    fn type_hint_position_is_immediately_after_name() {
+        // Concrete position assertion: `let x = 1` on column 4 (0-based)
+        // must place its `: i32` hint exactly at column 5 — right after
+        // `x`, before the surrounding space. Drift here would render the
+        // hint mid-expression, which is the cardinal LSP inlay-hint bug.
+        block_on(async {
+            let src = "fn f() -> i32 {\n    let x = 1;\n    return x;\n}\n";
+            let hints = hints_for(src).await;
+            let h = hints
+                .iter()
+                .find(|h| h.label == ": i32" && h.kind == InlayHintKind::Type)
+                .expect("expected a `: i32` hint");
+            assert_eq!(h.position.line, 1, "hint should be on line 1");
+            // The `x` identifier sits at character 8 (0-based) on
+            // `    let x = 1;` — after four spaces of indent and `let `.
+            // Its name span ends at the next character (9), which is the
+            // anchor for the hint.
+            assert_eq!(
+                h.position.character, 9,
+                "hint should anchor just past `x`; got {h:?}",
+            );
+        });
+    }
+
+    #[test]
+    fn parameter_hint_padding_right_is_set() {
+        // Parameter hints render as `name:` immediately before the
+        // argument, so they need a trailing space (`paddingRight: true`)
+        // to avoid `a:1`. Type hints don't — `: i32` already starts with
+        // its own punctuation. Pin both shapes.
+        block_on(async {
+            let src = concat!(
+                "fn add(a: i32, b: i32) -> i32 { return a + b; }\n",
+                "fn run() -> i32 { return add(1, 2); }\n",
+            );
+            let hints = hints_for(src).await;
+            for h in &hints {
+                match h.kind {
+                    InlayHintKind::Parameter => assert_eq!(
+                        h.padding_right,
+                        Some(true),
+                        "parameter hint must set paddingRight=true: {h:?}",
+                    ),
+                    InlayHintKind::Type => assert_eq!(
+                        h.padding_right, None,
+                        "type hint must not set paddingRight: {h:?}",
+                    ),
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn parameter_hint_skipped_for_compiler_generated_underscore_names() {
+        // Compiler intrinsics may carry `_`-named parameters (or empty
+        // names for purely positional slots). Surfacing `:_` next to a
+        // user-supplied argument would be confusing noise; assert we
+        // suppress it instead of leaking the placeholder.
+        block_on(async {
+            let src = concat!("fn discard(_: i32) {}\n", "fn run() { discard(7); }\n",);
+            let hints = hints_for(src).await;
+            let param_labels: Vec<_> = labels(&hints)
+                .into_iter()
+                .filter(|(_, k)| *k == InlayHintKind::Parameter)
+                .map(|(l, _)| l)
+                .collect();
+            assert!(
+                !param_labels.iter().any(|l| l == "_:"),
+                "underscore param must not produce a `_:` hint; got {param_labels:?}",
+            );
+        });
+    }
+
+    #[test]
+    fn type_hint_under_utf16_anchors_at_correct_codepoint() {
+        // Defensive: the LSP default encoding is UTF-16, where a single
+        // codepoint may be 1 or 2 code units. A non-ASCII character on
+        // a preceding line (or in a string on the same line) makes the
+        // byte / UTF-16 / codepoint columns disagree; the hint must
+        // still land at the right character index.
+        //
+        // The compiler's `Span::column` is a 1-based codepoint index
+        // and the LSP test client speaks UTF-16. Within an ASCII-only
+        // line the two coincide, so the fixture puts a multi-byte char
+        // on the cursor line via a `🦀` literal that the encoder
+        // measures differently per encoding. The `let x = 🦀;` value is
+        // never evaluated — we only care that the `: T` hint anchors
+        // immediately after `x`.
+        let src = "// 🦀🦀🦀\nfn f() -> i32 { let x = 1; return x; }\n";
+        let path = "/test.wado";
+        let uri = format!("file://{path}");
+        let host = MapHost::single(path, src);
+        let sem = futures::executor::block_on(wado_compiler::semantics(src, &host, Some(path)));
+        let ctx = QueryContext {
+            sem: &sem,
+            source: src,
+            uri: &uri,
+            encoding: PositionEncoding::Utf16,
+        };
+        let max_range = Range {
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: u32::MAX,
+                character: u32::MAX,
+            },
+        };
+        let hints = inlay_hints(&ctx, max_range);
+        let h = hints
+            .iter()
+            .find(|h| h.label == ": i32" && h.kind == InlayHintKind::Type)
+            .expect("expected a `: i32` hint on `let x = 1`");
+        // The cursor line is line 1 (0-based) — `fn f() -> i32 { let x = 1; ... }`.
+        // `fn f() -> i32 { let x` is 21 UTF-16 units; the anchor sits
+        // right after `x` at character 21.
+        assert_eq!(h.position.line, 1);
+        assert_eq!(
+            h.position.character, 21,
+            "hint anchor must use UTF-16 code units; got {h:?}",
+        );
+    }
+
+    #[test]
+    fn closure_stored_in_local_does_not_yield_param_hints_on_call() {
+        // Calling a closure via its binding (`g(1)`) routes through the
+        // resolver's local-variable path; the use→def edge points at the
+        // `let g = …` pattern, not at a function symbol. We must not
+        // accidentally try to read params off a `Variable` symbol and
+        // emit garbage hints.
+        block_on(async {
+            let src = concat!(
+                "fn f() -> i32 {\n",
+                "    let g = |x: i32| x + 1;\n",
+                "    return g(7);\n",
+                "}\n",
+            );
+            let hints = hints_for(src).await;
+            // No parameter hints anywhere — only type hints are allowed.
+            assert!(
+                hints.iter().all(|h| h.kind != InlayHintKind::Parameter),
+                "closure-via-local call must not produce parameter hints; got {hints:?}",
+            );
+        });
+    }
+
+    #[test]
+    fn cross_module_call_emits_parameter_name_hints() {
+        // Real-world flow: importing `add` from another module and
+        // calling it. Verifies the `referenced_symbol` edge survives the
+        // import indirection and that `FunctionSymbol::params` is read
+        // from the imported module's symbol entry.
+        block_on(async {
+            let other = concat!(
+                "pub fn add(a: i32, b: i32) -> i32 {\n",
+                "    return a + b;\n",
+                "}\n",
+            );
+            let entry = concat!(
+                "use { add } from \"./other.wado\";\n",
+                "fn run() -> i32 { return add(1, 2); }\n",
+            );
+            let path = "/test.wado";
+            let uri = format!("file://{path}");
+            // The host key for the imported module must match the use
+            // string verbatim — the loader uses the request path as the
+            // host's lookup key. Mirror the pattern in `def_at_in`
+            // (`tests/definition.rs`) which keys the sibling module on
+            // `./lib.wado`, not its eventual absolute path.
+            let host = MapHost::with_files(&[("./other.wado", other), (path, entry)]);
+            let sem = wado_compiler::semantics(entry, &host, Some(path)).await;
+            let ctx = QueryContext {
+                sem: &sem,
+                source: entry,
+                uri: &uri,
+                encoding: PositionEncoding::Utf16,
+            };
+            let max_range = Range {
+                start: Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: Position {
+                    line: u32::MAX,
+                    character: u32::MAX,
+                },
+            };
+            let hints = inlay_hints(&ctx, max_range);
+            let param_labels: Vec<_> = labels(&hints)
+                .into_iter()
+                .filter(|(_, k)| *k == InlayHintKind::Parameter)
+                .map(|(l, _)| l)
+                .collect();
+            assert!(
+                param_labels.contains(&"a:".to_string())
+                    && param_labels.contains(&"b:".to_string()),
+                "cross-module `add(1, 2)` should still surface `a:`/`b:`; got {param_labels:?}",
+            );
+        });
+    }
 }

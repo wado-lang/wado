@@ -40,9 +40,9 @@ pub use uri::{Uri, UriScheme};
 /// library consumers.
 ///
 /// Manages open documents and answers LSP-style queries (diagnostics, hover,
-/// definition, references, document highlight, semantic tokens). `Engine`
-/// itself performs no I/O: every query takes a `&impl CompilerHost`, so the
-/// caller decides how imported modules are loaded.
+/// definition, references, document highlight, semantic tokens, inlay
+/// hints). `Engine` itself performs no I/O: every query takes a `&impl
+/// CompilerHost`, so the caller decides how imported modules are loaded.
 ///
 /// ## Snapshot cache
 ///
