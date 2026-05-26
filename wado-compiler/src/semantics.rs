@@ -19,8 +19,8 @@ use crate::hashmap::IndexMap;
 use crate::loader;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::resolver::Resolver;
-use crate::resolver::orchestration::AnnotateState;
+use crate::elaborator::Elaborator;
+use crate::elaborator::orchestration::AnnotateState;
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
 use crate::tir::{ResolvedType, TirModule, TypeTable};
 use crate::token::Span;
@@ -46,7 +46,7 @@ pub struct Semantics {
     ///
     /// Re-entrancy: only single-threaded callers, and only one
     /// `borrow_mut` at a time. Do not hold a [`std::cell::RefMut`]
-    /// across calls into other [`Semantics`] / [`crate::Resolver`]
+    /// across calls into other [`Semantics`] / [`crate::Elaborator`]
     /// methods — a nested `borrow_mut` will panic. The intended
     /// pattern is `sem.interner.borrow_mut().<one method call>`, dropping
     /// the borrow at the statement boundary.
@@ -56,11 +56,11 @@ pub struct Semantics {
     /// the in-tree [`name_span_of`] / [`span_of_key`] helpers) consult this
     /// instead of re-walking the AST on every request.
     pub(crate) ast_indices: IndexMap<ModuleSource, AstIndex>,
-    /// Shared resolver state produced by [`Resolver::annotate_modules`].
+    /// Shared resolver state produced by [`Elaborator::annotate_modules`].
     ///
-    /// `None` when analyze or [`Resolver::annotate_modules`] bailed before
+    /// `None` when analyze or [`Elaborator::annotate_modules`] bailed before
     /// the state could be built. `Some(_)` once resolve completed — even
-    /// if a later [`Resolver::lower_tir_from_state`] bail set
+    /// if a later [`Elaborator::lower_tir_from_state`] bail set
     /// [`Self::is_complete`] to `false`. The pair `(state, is_complete)`
     /// therefore has three distinguishable states:
     ///
@@ -85,7 +85,7 @@ pub struct Semantics {
     /// [`Semantics::symbol_at`] when the key does not name an item-level
     /// symbol. Empty when resolve did not run or bailed early.
     pub(crate) locals: IndexMap<SymbolKey, Symbol>,
-    /// TIR modules produced by [`crate::resolver::Resolver::lower_tir_from_state`].
+    /// TIR modules produced by [`crate::elaborator::Elaborator::lower_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `lower_tir` did not run or bailed.
     pub(crate) tir_modules: IndexMap<ModuleSource, TirModule>,
@@ -607,7 +607,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
 
     let state = {
         let _span = logger.span("resolve/annotate");
-        Resolver::annotate_modules(
+        Elaborator::annotate_modules(
             &symbols,
             &load_result.modules,
             &load_result.entry_module_source,
@@ -644,7 +644,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // reach before bailing.
     let (tir_modules, lower_ok) = {
         let _span = logger.span("resolve/lower_tir");
-        match Resolver::lower_tir_from_state(
+        match Elaborator::lower_tir_from_state(
             &state,
             &symbols,
             &load_result.modules,

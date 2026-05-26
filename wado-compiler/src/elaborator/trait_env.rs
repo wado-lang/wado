@@ -13,7 +13,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{TypeId, TypeTable};
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::TypeError;
 use crate::symbol::SymbolTable;
 
@@ -49,7 +49,7 @@ fn pick_module_union<'a>(
 /// in both `mod_a` and `mod_b`) without their entries colliding on a
 /// single `String` slot. The defining module is intrinsic to identity for
 /// these kinds — the resolver canonicalises a use-site bare name through
-/// the symbol table ([`crate::resolver::Resolver::canonical_decl_key`])
+/// the symbol table ([`crate::elaborator::Elaborator::canonical_decl_key`])
 /// before consulting the index.
 pub(crate) type DeclKey = (ModuleSource, String);
 
@@ -398,7 +398,7 @@ impl TraitEnv {
             // Built-in primitives (`i32`, `f64`, `char`, …) have no
             // `Symbol` entry and no decl item, but they share a known
             // canonical module: `core:prelude/primitive`. Lookups via
-            // `Resolver::canonical_decl_key` use the same shortcut, so
+            // `Elaborator::canonical_decl_key` use the same shortcut, so
             // every inherent `impl <primitive> { … }` block keys into
             // the same bucket regardless of which file the impl lives in.
             if super::is_primitive_type_name(name) {
@@ -608,7 +608,7 @@ impl TraitEnv {
     /// (auto-derived `Inspect` / `Display` / `Eq`, `serde` adapters, …)
     /// that have only a bare trait name (e.g. via `compiler_items()`) and
     /// no per-module import context to canonicalise it through
-    /// `Resolver::canonical_decl_key`. When two modules declare same-
+    /// `Elaborator::canonical_decl_key`. When two modules declare same-
     /// named traits the first match is returned; the synthesis path that
     /// uses this is well-defined only for core traits whose name is
     /// project-globally unique, so the ambiguity does not matter in
@@ -645,7 +645,7 @@ impl TraitEnv {
 
     /// Find any canonical receiver [`DeclKey`] currently registered in
     /// the static-method index whose bare name matches `name`. Used as a
-    /// final fallback in [`crate::resolver::Resolver::canonical_decl_key`]
+    /// final fallback in [`crate::elaborator::Elaborator::canonical_decl_key`]
     /// for receiver names the per-module import context and symbol table
     /// can't canonicalise — most commonly the built-in primitives
     /// (`char`, `i32`, `f64`, …) which have `impl <prim> { … }` blocks in
@@ -877,8 +877,8 @@ fn check_all_orphan_rules(
 /// Mutable trait resolution context scoped to the current resolution site.
 ///
 /// Groups all state that changes when entering/leaving generic scopes
-/// (impl blocks, trait method lookups, etc). Use [`Resolver::enter_fresh_type_param_scope`]
-/// or [`Resolver::enter_inherited_type_param_scope`] to mutate this safely with RAII
+/// (impl blocks, trait method lookups, etc). Use [`Elaborator::enter_fresh_type_param_scope`]
+/// or [`Elaborator::enter_inherited_type_param_scope`] to mutate this safely with RAII
 /// restore on drop.
 #[derive(Clone, Default)]
 pub(super) struct TraitContext {
@@ -898,31 +898,31 @@ pub(super) struct TraitContext {
     pub(super) self_type: Option<TypeId>,
 }
 
-/// RAII guard that restores `Resolver::trait_ctx` to its saved value on drop.
+/// RAII guard that restores `Elaborator::trait_ctx` to its saved value on drop.
 ///
-/// Implements `Deref<Target = Resolver>` so it can be used as a transparent
+/// Implements `Deref<Target = Elaborator>` so it can be used as a transparent
 /// resolver handle inside the scope. Restoration is panic-safe: even if the
 /// scope body panics, drop still runs and the parent context is reinstated.
 ///
-/// Use [`Resolver::enter_inherited_type_param_scope`] to enter a new scope.
+/// Use [`Elaborator::enter_inherited_type_param_scope`] to enter a new scope.
 /// It preserves the current `trait_ctx` so the child scope can register new
 /// entries on top of the parent's. Callers that want a clean slate for a
 /// specific field (matching the legacy `mem::take` pattern) should clear that
 /// field on `scope.trait_ctx` after entering.
 pub(super) struct TypeParamScope<'r, 'a, H: CompilerHost> {
-    resolver: &'r mut Resolver<'a, H>,
+    resolver: &'r mut Elaborator<'a, H>,
     saved: TraitContext,
 }
 
 impl<'a, H: CompilerHost> Deref for TypeParamScope<'_, 'a, H> {
-    type Target = Resolver<'a, H>;
-    fn deref(&self) -> &Resolver<'a, H> {
+    type Target = Elaborator<'a, H>;
+    fn deref(&self) -> &Elaborator<'a, H> {
         self.resolver
     }
 }
 
 impl<'a, H: CompilerHost> DerefMut for TypeParamScope<'_, 'a, H> {
-    fn deref_mut(&mut self) -> &mut Resolver<'a, H> {
+    fn deref_mut(&mut self) -> &mut Elaborator<'a, H> {
         self.resolver
     }
 }
@@ -942,7 +942,7 @@ impl<H: CompilerHost> Drop for TypeParamScope<'_, '_, H> {
     }
 }
 
-impl<'a, H: CompilerHost> Resolver<'a, H> {
+impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Enter an inherited type-param scope. The current `trait_ctx` is cloned
     /// into the saved slot, but left in place so the inner work can register
     /// additional type params on top of what the parent already had. The
@@ -1083,7 +1083,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 }
 
-/// Extract a type name from an AST type without needing a Resolver instance.
+/// Extract a type name from an AST type without needing a Elaborator instance.
 fn get_type_name_static(ty: &ast::Type) -> String {
     match ty {
         ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),

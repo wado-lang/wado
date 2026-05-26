@@ -11,6 +11,7 @@ pub mod compiler_item;
 pub mod component_model;
 pub mod doc;
 pub mod effect_check;
+pub mod elaborator;
 pub mod flat_package;
 pub mod hashmap;
 pub mod intern;
@@ -30,7 +31,6 @@ pub mod nir_visitor;
 pub mod optimize;
 pub mod package;
 pub mod parser;
-pub mod resolver;
 pub mod semantics;
 pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
@@ -68,6 +68,7 @@ pub use semantics::{
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{EffectError, check_default_purity, check_effects, check_stores};
+pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
 pub use lexer::{LexError, Lexer};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
@@ -77,7 +78,6 @@ pub use monomorphize::monomorphize;
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
 pub use parser::{ParseError, Parser};
-pub use resolver::{Resolver, TypeError};
 pub use token::Span;
 
 use std::cell::RefCell;
@@ -756,7 +756,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // === Phase 7: Resolve all modules to TIR ===
     let resolve_output = {
         let _span = logger.span("resolve");
-        Resolver::resolve_all_modules(
+        Elaborator::resolve_all_modules(
             &symbols,
             &load_result.modules,
             load_result.entry_module_source.clone(),
@@ -773,7 +773,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // no need to keep `resolve_output` past this point.
     let (tir_modules_by_source, trait_env): (
         Option<IndexMap<ModuleSource, tir::TirModule>>,
-        Option<std::sync::Arc<crate::resolver::trait_env::TraitEnv>>,
+        Option<std::sync::Arc<crate::elaborator::trait_env::TraitEnv>>,
     ) = match resolve_output {
         Some((modules, env)) => (Some(snapshot_tir_modules(&modules)), Some(env)),
         None => (None, None),

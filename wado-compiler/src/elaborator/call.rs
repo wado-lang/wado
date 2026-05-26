@@ -11,13 +11,13 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use super::Resolver;
+use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
 use super::types::{FunctionContext, TypeError};
 
 /// View of a `ResolvedType::Function` after peeling references and
-/// fn-type newtypes. Returned by [`Resolver::as_fn_signature`].
+/// fn-type newtypes. Returned by [`Elaborator::as_fn_signature`].
 struct FnSignature {
     is_mut: bool,
     params: Vec<TypeId>,
@@ -70,7 +70,7 @@ impl CalleeIdentKind<'_> {
     }
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// If `type_id` is a function type — possibly behind references or
     /// fn-type newtypes such as `type Handler = fn(...);` — return its
     /// signature. Otherwise return `None`. Borrows the type table once.

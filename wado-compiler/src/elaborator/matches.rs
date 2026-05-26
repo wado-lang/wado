@@ -9,10 +9,10 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::tir::{TirExpr, TirExprKind, TirMatchArm, TirPattern, TypeId, TypeTable};
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::FunctionContext;
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Lower `matches` to a TIR `Match`:
     ///
     /// - No guard: `s matches { p }` → `match s { p => true, _ => false }`

@@ -2,14 +2,14 @@
 //!
 //! Resolution runs in two phases:
 //!
-//! - [`Resolver::annotate_modules`] collects decl-level type information
+//! - [`Elaborator::annotate_modules`] collects decl-level type information
 //!   (struct field maps, variant cases, flags, newtypes, resource methods)
 //!   and interns every declaration in the shared [`TypeTable`]. It also
 //!   populates [`TypeTable::type_by_symbol`]/[`TypeTable::symbol_by_type`]
 //!   so LSP queries can resolve a [`SymbolKey`] to a decl-backed type
 //!   without running TIR lowering. The output is an [`AnnotateState`] that
 //!   both `lower_tir` and the LSP consume.
-//! - [`Resolver::lower_tir_from_state`] reads that state and produces one
+//! - [`Elaborator::lower_tir_from_state`] reads that state and produces one
 //!   [`TirModule`] per source module. It does not mutate the annotate
 //!   output; all new types created during lowering (anonymous structs,
 //!   monomorphic instances) are written through the shared
@@ -37,15 +37,15 @@ use crate::symbol::{Symbol, SymbolKey, SymbolTable};
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::world_registry::WorldRegistry;
 
-use super::Resolver;
+use super::Elaborator;
 use super::trait_env::TraitEnv;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ResourceInfo,
     StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 
-/// Analysis state produced by [`Resolver::annotate_modules`] and consumed by
-/// [`Resolver::lower_tir_from_state`].
+/// Analysis state produced by [`Elaborator::annotate_modules`] and consumed by
+/// [`Elaborator::lower_tir_from_state`].
 ///
 /// All expensive maps are stored behind `Rc` so the state is cheap to share
 /// between LSP queries and the lowering pipeline without cloning the
@@ -70,7 +70,7 @@ pub(crate) struct AnnotateState {
     pub(crate) global_known_type_names: IndexSet<String>,
     pub(crate) all_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>>,
     /// Use→def map for local variables: `(module, IdentExpr.id)` →
-    /// `(module, defining AstId)`. Populated by [`Resolver::resolve_ident`]
+    /// `(module, defining AstId)`. Populated by [`Elaborator::resolve_ident`]
     /// whenever a name resolves to a local binding. Consumed by LSP
     /// `definition` / `hover` to jump to the defining pattern / parameter.
     pub(crate) references: Rc<RefCell<IndexMap<SymbolKey, SymbolKey>>>,
@@ -87,11 +87,11 @@ pub(crate) struct AnnotateState {
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
 }
 
-impl<'a, H: CompilerHost> Resolver<'a, H> {
+impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Run the full resolve pipeline: annotate, then lower to TIR.
     ///
-    /// This is a thin wrapper over [`Resolver::annotate_modules`] +
-    /// [`Resolver::lower_tir_from_state`]. Callers that want access to the
+    /// This is a thin wrapper over [`Elaborator::annotate_modules`] +
+    /// [`Elaborator::lower_tir_from_state`]. Callers that want access to the
     /// annotate output (e.g. LSP) should call the two phases separately.
     pub(crate) fn resolve_all_modules(
         symbols: &'a SymbolTable,
@@ -800,7 +800,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Lower phase: emit one [`TirModule`] per source module using the state
-    /// produced by [`Resolver::annotate_modules`]. Errors are collected in the
+    /// produced by [`Elaborator::annotate_modules`]. Errors are collected in the
     /// logger; the function returns [`Bail`] if any module failed.
     pub(crate) fn lower_tir_from_state(
         state: &AnnotateState,
@@ -954,7 +954,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
             }
 
-            let mut resolver = Resolver {
+            let mut resolver = Elaborator {
                 type_table: Rc::clone(&state.type_table),
                 symbols,
                 loaded_modules: modules,

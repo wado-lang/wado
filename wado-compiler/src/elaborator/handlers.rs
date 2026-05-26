@@ -1,4 +1,4 @@
-//! Resolver lowering for effect handler installation (`with E => h do { ... }`)
+//! Elaborator lowering for effect handler installation (`with E => h do { ... }`)
 //! and the `resume` control-flow expression.
 //!
 //! See WEP 2026-04-11 (Effect Handler) for the language semantics.
@@ -29,10 +29,10 @@ use crate::tir::{
     EffectRef, ResolvedType, TirExpr, TirExprKind, TirHandlerBinding, TypeId, TypeTable,
 };
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve `with E1 => h1, ... do { body }`.
     pub(super) fn resolve_with_handler(
         &mut self,

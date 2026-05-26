@@ -17,7 +17,7 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
@@ -380,7 +380,7 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     }
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Recursively check whether `type_id` mentions a `fn(...)` / `fn mut(...)`
     /// closure type. Used to reject closures crossing the Component Model
     /// boundary (export/import function signatures, CM-exposed record fields,

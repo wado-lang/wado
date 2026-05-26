@@ -30,7 +30,7 @@
 //!    sub-expression's [`AstId`].
 //!
 //! 2. The condition is resolved to TIR exactly once. While that
-//!    resolution is in flight, [`Resolver::resolve_expr`] consults the
+//!    resolution is in flight, [`Elaborator::resolve_expr`] consults the
 //!    [`AssertCaptureContext`] side-channel on the function context.
 //!    When the current `Expr`'s `AstId` is in the capture set, the
 //!    resolver allocates a fresh `__vK` local, emits a
@@ -56,10 +56,10 @@ use crate::tir::{
 };
 use crate::unparse::unparse_expr_simple;
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::FunctionContext;
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Desugar `assert cond[, msg];` into TIR. See the module doc for
     /// the expansion shape.
     pub(super) fn desugar_assert(
@@ -82,7 +82,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx.enter_scope();
 
         // Phase 2: resolve the unmodified AST condition to TIR with the
-        // capture hook armed. The hook (in `Resolver::resolve_expr`)
+        // capture hook armed. The hook (in `Elaborator::resolve_expr`)
         // consumes `ast_id_to_slot` to decide which sub-expressions
         // become `let __vK = …;` bindings, and appends the bindings to
         // `emitted_lets` in inner-first order.
@@ -416,7 +416,7 @@ struct Capture {
 }
 
 /// Per-assert state carried on [`FunctionContext::assert_capture_ctx`]
-/// while [`Resolver::resolve_expr`] is resolving the condition.
+/// while [`Elaborator::resolve_expr`] is resolving the condition.
 pub(super) struct AssertCaptureContext {
     /// Pre-scanned captures, indexed by slot. The resolver hook reads
     /// `name` to produce the `let __vK` binding and writes `local` once

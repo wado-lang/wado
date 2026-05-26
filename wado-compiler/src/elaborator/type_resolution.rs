@@ -6,7 +6,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::TypeError;
 use crate::symbol::SymbolKind;
 
@@ -50,7 +50,7 @@ fn substitute_type_params(ty: &Type, params: &[String], args: &[Type]) -> Type {
     }
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_type(&mut self, ty: &Type) -> TypeId {
         match ty {
             Type::Named(named) => {

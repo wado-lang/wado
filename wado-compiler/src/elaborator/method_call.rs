@@ -10,13 +10,13 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use super::Resolver;
+use super::Elaborator;
 use super::callee::StaticMethodRef;
 use super::method_lookup::MethodInferenceInput;
 use super::types::{FunctionContext, MethodInfo, TypeError};
 
-/// Inputs to [`Resolver::resolve_method_call_with`], the TIR-level method-call
-/// dispatcher. The AST-driven [`Resolver::resolve_method_call`] is a thin
+/// Inputs to [`Elaborator::resolve_method_call_with`], the TIR-level method-call
+/// dispatcher. The AST-driven [`Elaborator::resolve_method_call`] is a thin
 /// wrapper that resolves the receiver / type args / args from the
 /// [`ast::MethodCallExpr`] and forwards here; sites that synthesise method
 /// calls without a backing AST node (e.g. the for-of loop's `into_iter()` /
@@ -36,7 +36,7 @@ pub(super) struct MethodCallInput<'a> {
     pub span: Span,
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_method_call(
         &mut self,
         method_call: &ast::MethodCallExpr,
@@ -758,7 +758,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // lookup (follow newtypes to base). The canonical key disambiguates
         // two modules' same-named structs whose static methods both live in
         // the global `StaticMethodIndex`.
-        let struct_key_for_lookup: Option<crate::resolver::trait_env::DeclKey> = {
+        let struct_key_for_lookup: Option<crate::elaborator::trait_env::DeclKey> = {
             let mut current_type = target_type_id;
             loop {
                 match self.type_table.borrow().get(current_type).clone() {
@@ -1920,7 +1920,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
-        static_key_hint: Option<&crate::resolver::trait_env::DeclKey>,
+        static_key_hint: Option<&crate::elaborator::trait_env::DeclKey>,
     ) -> Vec<TypeId> {
         // Check in current module's impl blocks first (highest priority)
         let found: Option<(ast::Type, ast::Function)> =
@@ -2511,7 +2511,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // (`Counter::make`) can be found at WIR-build time — that name
         // is keyed by the *original* `Counter`, not the local alias.
         // The other lookups below still consume `struct_name` as-is and
-        // canonicalise internally via `Resolver::canonical_decl_key`.
+        // canonicalise internally via `Elaborator::canonical_decl_key`.
         let canonical_struct_name = self.canonical_decl_key(struct_name).1;
         let mangled_func_name_owned = if canonical_struct_name == struct_name {
             mangled_func_name.to_string()

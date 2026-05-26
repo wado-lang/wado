@@ -13,7 +13,7 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use super::Resolver;
+use super::Elaborator;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError};
 use super::util;
@@ -27,7 +27,7 @@ enum RefBinding {
     MutRef,
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_block(
         &mut self,
         block: &Block,

@@ -17,7 +17,7 @@ use std::sync::Arc;
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
-use crate::resolver::trait_env::TraitEnv;
+use crate::elaborator::trait_env::TraitEnv;
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,
     TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart,

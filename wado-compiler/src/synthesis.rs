@@ -22,7 +22,7 @@ pub mod traits;
 
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::resolver::trait_env::{SynthesisedImpls, TraitEnv};
+use crate::elaborator::trait_env::{SynthesisedImpls, TraitEnv};
 use crate::tir::ResolvedType;
 
 /// Run pre-monomorphize synthesis phases on the project.

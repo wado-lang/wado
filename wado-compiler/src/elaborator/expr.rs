@@ -15,13 +15,13 @@ use crate::tir::{
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 
-use super::Resolver;
+use super::Elaborator;
 use super::infer::InferCtx;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, LabeledBlockTarget, TypeError, VarRef};
 use super::util;
 
-/// Per-node decision for [`Resolver::any_in_tree`] predicate walks.
+/// Per-node decision for [`Elaborator::any_in_tree`] predicate walks.
 #[derive(Clone, Copy)]
 enum Step {
     /// Predicate matched — short-circuit and return `true`.
@@ -32,7 +32,7 @@ enum Step {
     Descend,
 }
 
-/// A probe driving [`Resolver::any_in_tree`]. Each visit is consulted
+/// A probe driving [`Elaborator::any_in_tree`]. Each visit is consulted
 /// independently for statements and expressions; an implementor can
 /// carry its own mutable state across calls (e.g. an in-scope-labels
 /// stack) so analyses needing more context than a per-node match keep
@@ -131,7 +131,7 @@ enum FuncRefInference {
     NotApplicable,
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_expr(
         &mut self,
         expr: &Expr,
@@ -3788,7 +3788,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 } else {
                     let _ = self
                         .logger
-                        .error(crate::resolver::types::TypeError::InvalidLiteral {
+                        .error(crate::elaborator::types::TypeError::InvalidLiteral {
                             message: "spread operator `..` can only be used with tuple types"
                                 .to_string(),
                             span: elem.span(),
@@ -4268,7 +4268,7 @@ impl LiteralOrdValue {
     }
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Extract a compile-time orderable value from a literal expression.
     /// Returns the value in its native representation to avoid precision loss.
     fn extract_literal_ord_value(expr: &Expr) -> Option<LiteralOrdValue> {

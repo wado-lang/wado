@@ -18,7 +18,7 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::package::Package;
-use crate::resolver::trait_env::TraitEnv;
+use crate::elaborator::trait_env::TraitEnv;
 use crate::tir::{
     CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule,
@@ -138,7 +138,7 @@ impl TraitPair {
 /// name dispatch synthesis recognises without needing the disambiguating
 /// module. The resolver path that lifts user-written
 /// `impl <Trait> for <Type>` blocks populates the module via
-/// `Resolver::canonical_decl_key` directly into the [`LocalMethodName`]
+/// `Elaborator::canonical_decl_key` directly into the [`LocalMethodName`]
 /// struct literal.
 fn trait_method_info(struct_name: &str, trait_name: &str, method: &str) -> LocalMethodName {
     LocalMethodName::new(

@@ -26,7 +26,7 @@ use super::options_check::{CanonicalOptions, validate};
 /// under `build/kiln/<synthetic_id>` unless it declares its own `output_dir`.
 pub const DEFAULT_INLINE_OUTPUT_DIR_PREFIX: &str = "build/kiln";
 
-/// Resolver-side lookup table that redirects a `use ... from "<from>"` whose
+/// Elaborator-side lookup table that redirects a `use ... from "<from>"` whose
 /// `<from>` path matches an inline Kiln invocation's primary source to the
 /// invocation's generated entry module.
 ///

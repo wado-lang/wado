@@ -56,7 +56,7 @@ use trait_env::TraitEnv;
 /// `true` if `name` denotes a built-in primitive Wado type. Primitives
 /// have inherent impl blocks in `core:prelude/primitive` but no
 /// `Symbol` entry to canonicalise through, so both
-/// [`Resolver::canonical_decl_key`] and `TraitEnv::build` consult this
+/// [`Elaborator::canonical_decl_key`] and `TraitEnv::build` consult this
 /// predicate to map a bare primitive reference to its canonical
 /// declaring module.
 pub(crate) fn is_primitive_type_name(name: &str) -> bool {
@@ -80,7 +80,7 @@ use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
 };
 
-pub struct Resolver<'a, H: CompilerHost> {
+pub struct Elaborator<'a, H: CompilerHost> {
     /// Type table (shared across all modules via Rc<RefCell>)
     type_table: Rc<RefCell<TypeTable>>,
     /// Symbol table from analyzer
@@ -199,7 +199,7 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Per-module index from function name → position in module.items for O(1) lookup.
     loaded_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>>,
     /// Use→def map for local variables. Shared via `Rc<RefCell<…>>` with
-    /// [`crate::resolver::orchestration::AnnotateState`] so LSP queries see
+    /// [`crate::elaborator::orchestration::AnnotateState`] so LSP queries see
     /// references as soon as the resolver has walked the body.
     references: Rc<RefCell<IndexMap<SymbolKey, SymbolKey>>>,
     /// Local binding [`Symbol`]s emitted alongside `references`. Populated at
@@ -212,7 +212,7 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// module-private items (see WEP 2026-04-11).
     pub(super) default_scope_module: Option<ModuleSource>,
     /// Kiln invocation redirects consulted by `use` resolution sites. Shared
-    /// by `Rc` so per-module Resolver instances can read the single
+    /// by `Rc` so per-module Elaborator instances can read the single
     /// compilation-unit-wide redirect map cheaply.
     pub(super) invocations: Rc<crate::kiln::InvocationIndex>,
     /// `ModuleSource` interner shared with the loader and downstream
@@ -222,7 +222,7 @@ pub struct Resolver<'a, H: CompilerHost> {
     pub(super) interner: Rc<RefCell<ModuleSourceInterner>>,
 }
 
-impl<'a, H: CompilerHost> Resolver<'a, H> {
+impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub fn new(
         symbols: &'a SymbolTable,
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
@@ -1352,12 +1352,12 @@ pub fn resolve_module<H: CompilerHost>(
     let type_table = std::cell::RefCell::new(crate::tir::TypeTable::new());
     let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
     let empty_included = IndexMap::default();
-    let mut resolver = Resolver::new(
+    let mut elaborator = Elaborator::new(
         symbols,
         loaded_modules,
         &builtin_registry,
         logger,
         &empty_included,
     );
-    resolver.resolve_module(module, module_source)
+    elaborator.resolve_module(module, module_source)
 }

@@ -10,11 +10,11 @@ use crate::module_source::ModuleSource;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
-use super::Resolver;
+use super::Elaborator;
 use super::callee::CalleeRef;
 use super::types::{MethodInfo, ResolvedTraitMethod, TraitMethodMatch, TypeError};
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Find a trait declaration by name across all modules.
     /// Returns the trait's methods (cloned) if found.
     pub(super) fn find_trait_decl_methods(&self, trait_name: &str) -> Option<Vec<ast::Function>> {

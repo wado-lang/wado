@@ -330,7 +330,7 @@ pub struct LocalMethodName {
     pub base_trait_name: Option<String>,
     /// Canonical declaring module of the trait this method implements.
     /// Populated by the resolver via
-    /// [`crate::resolver::Resolver::canonical_decl_key`] when constructing
+    /// [`crate::elaborator::Elaborator::canonical_decl_key`] when constructing
     /// the method from an `impl <Trait> for <Type>` block. Left `None` for
     /// synthesis-derived auto-impls (Inspect / Display / Eq / Ord / From
     /// / `serde` adapters, …) because those impls target prelude / core
@@ -339,8 +339,8 @@ pub struct LocalMethodName {
     /// disambiguating module.
     ///
     /// When `Some`, paired with `base_trait_name` it forms the canonical
-    /// `(module, name)` key into [`crate::resolver::trait_env::EffectDeclIndex`]
-    /// and [`crate::resolver::trait_env::ResourceDeclIndex`]. Two modules
+    /// `(module, name)` key into [`crate::elaborator::trait_env::EffectDeclIndex`]
+    /// and [`crate::elaborator::trait_env::ResourceDeclIndex`]. Two modules
     /// can each declare `pub interface Logger`; without this field the
     /// dispatch builder would collapse both impls onto whichever Logger
     /// landed first in the bare-name lookup table.
@@ -463,7 +463,7 @@ impl LocalMethodName {
     /// Attach the canonical declaring module of `base_trait_name`. Used by
     /// the resolver path that lifts an `impl <Trait> for <Type>` block into
     /// TIR: the trait reference is canonicalised through
-    /// [`crate::resolver::Resolver::canonical_decl_key`] and then threaded
+    /// [`crate::elaborator::Elaborator::canonical_decl_key`] and then threaded
     /// into the per-method `LocalMethodName` so dispatch synthesis can
     /// distinguish two modules' same-named effects / resources.
     #[must_use]

@@ -837,7 +837,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             // Namespace import: register all pub symbols from
                             // source module by their bare names. The resolver
                             // canonicalizes `<ns>::<member>` to `<member>` at
-                            // lookup time (see `Resolver::strip_ns_prefix`),
+                            // lookup time (see `Elaborator::strip_ns_prefix`),
                             // so a symbol registered under its bare name is
                             // reachable both as `member` and as `ns::member`.
                             let symbols: Vec<(String, SymbolKey)> = self

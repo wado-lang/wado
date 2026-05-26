@@ -12,7 +12,7 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use super::Resolver;
+use super::Elaborator;
 use super::infer::InferCtx;
 use super::types::{
     ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
@@ -28,7 +28,7 @@ enum ImplBlockRef {
     CurrentModule(usize),
 }
 
-/// Inputs for [`Resolver::infer_method_type_args`].
+/// Inputs for [`Elaborator::infer_method_type_args`].
 ///
 /// Groups everything the caller has already resolved about the method
 /// (signature fields in `TypeParam`-based form, impl-level offset) with the
@@ -64,7 +64,7 @@ pub(super) struct MethodInferenceInput<'a> {
     pub span: Span,
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Get a reference to the `ImplBlock` from an `ImplBlockRef`.
     fn get_impl_block<'b>(&'b self, r: &ImplBlockRef) -> &'b ast::ImplBlock {
         match r {

@@ -2125,7 +2125,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
 /// site (e.g. `"Stream<u8>"`, or `"Counter"` for non-generic effects).
 /// Used to build the user-impl method's mangled name
 /// `<Handler>^<E><args>::<op>` — must match what
-/// `Resolver::resolve_method` registered, since the resolver mangles
+/// `Elaborator::resolve_method` registered, since the resolver mangles
 /// `trait_type` via `get_type_name_full` (preserving the type args for
 /// distinct-instantiation symbol names).
 fn build_handler_op_closure(
@@ -2174,7 +2174,7 @@ fn build_handler_op_closure(
         handler_type,
         span,
     );
-    // The user impl method was registered by `Resolver::resolve_method`
+    // The user impl method was registered by `Elaborator::resolve_method`
     // under the full mangled trait name (`Stream<u8>` rather than the
     // bare base `Stream`); use the same form here so the synthesised
     // method-call resolves against the right symbol.
@@ -2942,7 +2942,7 @@ struct HandlerImplInfo {
 ///
 /// The handler-method's [`crate::name::LocalMethodName`] carries
 /// `base_trait_module` populated by the resolver via
-/// [`crate::resolver::Resolver::canonical_decl_key`] whenever the impl
+/// [`crate::elaborator::Elaborator::canonical_decl_key`] whenever the impl
 /// targets a user-declared trait / effect / resource; the routine
 /// consults `effect_index` for membership using that canonical pair —
 /// impl methods whose trait does not match any effect / resource
@@ -2970,7 +2970,7 @@ fn build_handler_impl_index(
                 continue;
             };
             let Some(effect_module) = method_info.base_trait_module.as_ref() else {
-                // Resolver did not record a declaring module — only the
+                // Elaborator did not record a declaring module — only the
                 // synthesis-derived auto-impl path leaves this `None`,
                 // and those never target effects / resources.
                 continue;

@@ -2386,7 +2386,7 @@ impl CallArg {
 /// `()` is private to this module so no code outside `tir` can build one —
 /// this makes direct struct-literal construction of `TirExprKind::MethodCall`
 /// impossible and channels every resolver-side emission through the
-/// single checkpoint maintained in `Resolver::build_tir_method_call`,
+/// single checkpoint maintained in `Elaborator::build_tir_method_call`,
 /// which in turn guarantees arguments were typechecked against the
 /// callee's declared parameter types.
 ///
@@ -2401,8 +2401,8 @@ impl TirExprKind {
     /// Sole constructor of [`TirExprKind::MethodCall`].
     ///
     /// Callers are expected to have typechecked `args` against the callee's
-    /// declared parameter types before reaching here.  Resolver-side
-    /// constructions flow through `Resolver::build_tir_method_call`;
+    /// declared parameter types before reaching here.  Elaborator-side
+    /// constructions flow through `Elaborator::build_tir_method_call`;
     /// post-resolve rewriters thread already-checked TIR through this
     /// function too so the variant's `invariant` field stays coherent.
     pub(crate) fn method_call(
@@ -2946,7 +2946,7 @@ impl TirBlock {
 ///   `Never`.
 ///
 /// Used by the resolver, to type `let x = { /* block */ }` (the call
-/// lives on `Resolver` for historical reasons but delegates here) and
+/// lives on `Elaborator` for historical reasons but delegates here) and
 /// to type the `if let` → `Let` + `Match` lowering's arms.
 pub fn block_result_type(block: &TirBlock) -> TypeId {
     block
