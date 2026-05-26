@@ -222,27 +222,14 @@ impl Semantics {
         Some(self.types.get(type_id))
     }
 
-    /// Inferred [`ResolvedType`] for a local binding identified by `key`
-    /// (a let pattern's `AstId`, a function/closure parameter's `AstId`,
-    /// or a `for x of …` element binding's `AstId`).
+    /// Renderable name of the inferred type for a local binding (a let
+    /// pattern's `AstId`, a function/closure parameter's `AstId`, or a
+    /// `for x of …` element binding's `AstId`). Suitable for inlay-hint
+    /// display.
     ///
-    /// Returns `None` when:
-    /// - `key` does not name a local binding (e.g. it refers to an item),
-    /// - the resolver bailed before reaching the binding's body, or
-    /// - the binding was synthesised by the resolver and never received an
-    ///   `AstId` (`record_local_symbol` is the gatekeeper here, so this
-    ///   case does not arise in practice).
-    ///
-    /// LSP inlay hints consume this to render the inferred type on `let`
-    /// bindings and closure parameters that the user did not annotate.
-    #[must_use]
-    pub fn local_type(&self, key: &SymbolKey) -> Option<&ResolvedType> {
-        let type_id = self.local_types.get(key).copied()?;
-        Some(self.types.get(type_id))
-    }
-
-    /// Renderable name of a local binding's inferred type, suitable for
-    /// inlay-hint display. Returns `None` when [`Self::local_type`] would.
+    /// Returns `None` when `key` does not name a local binding (e.g. it
+    /// refers to an item), or when the resolver bailed before reaching
+    /// the binding's body.
     #[must_use]
     pub fn local_type_name(&self, key: &SymbolKey) -> Option<String> {
         let type_id = self.local_types.get(key).copied()?;

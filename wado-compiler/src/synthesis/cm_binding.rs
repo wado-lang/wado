@@ -289,16 +289,19 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                     }
 
                     // Validate return-type compatibility with the world. The
-                    // export-adapter synthesisers only know three return shapes
-                    // — async (handled by `task return`), `Result<_, _>`, and
-                    // unit — so any other concrete user return type for a
-                    // world export that expects a `Result<_, _>` falls
-                    // through to the general adapter, which would otherwise
-                    // emit a `task-return(disc, ...user_value)` call whose
-                    // arity does not match what the runtime declares. That
-                    // shows up as an opaque "values remaining on stack"
-                    // wasm-validation panic at codegen. Catch the mismatch
-                    // here with a readable diagnostic instead.
+                    // dispatch below routes a `Result<_, _>`-returning world
+                    // export to dedicated adapters for the async, Result, and
+                    // `()` user return shapes; any other user return type
+                    // falls through to `synthesize_general_export_binding`,
+                    // which lowers the user's return value directly into the
+                    // world's task-return slots. When the world expects only
+                    // a discriminant (`Result<(), ()>`, the wasi:cli/command
+                    // shape) but the user supplies, say, `i32`, the general
+                    // adapter emits an extra flat value beyond what the
+                    // runtime declares for task-return — surfacing as an
+                    // opaque "values remaining on stack" wasm-validation
+                    // panic at codegen. Catch the mismatch here with a
+                    // readable diagnostic instead.
                     {
                         let user_func = user_func_rc.borrow();
                         let tt = entry_type_table.borrow();

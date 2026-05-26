@@ -24,7 +24,7 @@
 
 use serde::{Deserialize, Serialize};
 use wado_compiler::ast::{
-    self, AstVisitor, Block, ClosureParam, Expr, ForOfStmt, Function, Item, LetStmt, Pattern, Stmt,
+    self, AstVisitor, ClosureParam, Expr, ForOfStmt, Function, Item, LetStmt, Pattern, Stmt,
 };
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::symbol::{SymbolKey, SymbolKind};
@@ -286,9 +286,13 @@ fn filter_non_self_param_names(func: &Function) -> Vec<String> {
 
 /// Find the `Function` AST node whose `id` matches `target`, scanning
 /// every `Item::Impl` / `Item::Trait` / top-level `Item::Function` in
-/// `items`. Returns `None` when no match exists — synthesised methods
-/// (e.g. `Iterator::next` synthesised for `for-of`) carry no source
-/// `AstId` and therefore fall here.
+/// `items`. Effect-interface and resource methods live on
+/// `Item::Interface` / `Item::Resource` (whose method shape is
+/// `InterfaceMethod`, not `Function`) but the analyzer already
+/// registers them as `SymbolKind::Function` entries — callers consult
+/// the symbol table for those and only fall back to this helper for
+/// impl methods on user-defined structs / traits, which the analyzer
+/// does not register as symbols.
 fn find_method_by_ast_id(items: &[Item], target: ast::AstId) -> Option<&Function> {
     for item in items {
         match item {
@@ -311,6 +315,14 @@ fn find_method_by_ast_id(items: &[Item], target: ast::AstId) -> Option<&Function
         }
     }
     None
+}
+
+impl HintCollector<'_> {
+    fn hint_closure_param(&mut self, p: &ClosureParam) {
+        if p.ty.is_none() {
+            self.push_type_hint(p.id, p.name_span);
+        }
+    }
 }
 
 impl AstVisitor for HintCollector<'_> {
@@ -365,18 +377,6 @@ impl AstVisitor for HintCollector<'_> {
                 ast::walk_expr(self, expr);
             }
             _ => ast::walk_expr(self, expr),
-        }
-    }
-
-    fn visit_block(&mut self, block: &Block) {
-        ast::walk_block(self, block);
-    }
-}
-
-impl HintCollector<'_> {
-    fn hint_closure_param(&mut self, p: &ClosureParam) {
-        if p.ty.is_none() {
-            self.push_type_hint(p.id, p.name_span);
         }
     }
 }
