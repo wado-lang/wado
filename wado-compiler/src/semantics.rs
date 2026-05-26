@@ -245,6 +245,40 @@ impl Semantics {
         if uri.is_empty() { None } else { Some(uri) }
     }
 
+    /// AST [`Function`](crate::ast::Function) node declaring `key`. Covers
+    /// top-level free functions and methods inside `Item::Impl` /
+    /// `Item::Trait` blocks, all of which share the `Function` AST shape.
+    /// Interface and resource methods carry a different AST shape
+    /// (`InterfaceMethod`) and are reached through the symbol table
+    /// instead — this accessor returns `None` for them.
+    ///
+    /// Resolution is O(1): the per-module [`AstIndex`] stores each
+    /// function's `(item_idx, [method_idx])` address, so no AST scan
+    /// happens at query time.
+    #[must_use]
+    pub fn function_at(&self, key: &SymbolKey) -> Option<&crate::ast::Function> {
+        use crate::ast_index::FunctionLocation;
+        let module = self.modules.get(&key.module)?;
+        let location = self
+            .ast_indices
+            .get(&key.module)?
+            .function_location(key.ast_id)?;
+        match location {
+            FunctionLocation::Free { item_idx } => match module.items.get(item_idx)? {
+                crate::ast::Item::Function(f) => Some(f),
+                _ => None,
+            },
+            FunctionLocation::Method {
+                item_idx,
+                method_idx,
+            } => match module.items.get(item_idx)? {
+                crate::ast::Item::Impl(b) => b.methods.get(method_idx),
+                crate::ast::Item::Trait(t) => t.methods.get(method_idx),
+                _ => None,
+            },
+        }
+    }
+
     /// Definition location of the symbol identified by `key`.
     ///
     /// Resolves the key to its [`Symbol`], then packages the declaring module,

@@ -24,7 +24,7 @@
 
 use serde::{Deserialize, Serialize};
 use wado_compiler::ast::{
-    self, AstVisitor, ClosureParam, Expr, ForOfStmt, Function, Item, LetStmt, Pattern, Stmt,
+    self, AstVisitor, ClosureParam, Expr, ForOfStmt, Function, LetStmt, Pattern, Stmt,
 };
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::symbol::{SymbolKey, SymbolKind};
@@ -194,9 +194,10 @@ impl HintCollector<'_> {
     ///    effect method, resource method). [`FunctionSymbol::params`]
     ///    carries the names.
     /// 2. The use→def edge points at an impl method's `AstId`, which the
-    ///    analyzer does not register as a symbol. The owning module's
-    ///    `Item::Impl` list carries the `Function` AST node directly; we
-    ///    read its params from there (self params filtered out).
+    ///    analyzer does not register as a symbol. `Semantics::function_at`
+    ///    looks the `Function` AST node up through the per-module
+    ///    [`AstIndex`] in O(1); we read its params from there (self
+    ///    params filtered out).
     fn callee_param_names(&self, callee: &Expr) -> Option<Vec<String>> {
         let ident = match callee {
             Expr::Ident(i) => i,
@@ -218,19 +219,16 @@ impl HintCollector<'_> {
         {
             return Some(f.params.clone());
         }
-        // Impl methods are not present in the symbol table — fall back
-        // to the AST in the def_key's module.
-        let def_module = self.ctx.sem.modules.get(&def_key.module)?;
-        let func = find_method_by_ast_id(&def_module.items, def_key.ast_id)?;
+        let func = self.ctx.sem.function_at(&def_key)?;
         Some(filter_non_self_param_names(func))
     }
 
     /// Hint parameters for a `MethodCallExpr` (`receiver.method(args)`).
     ///
     /// Impl methods are not present in the symbol table, so the use→def
-    /// edge points at an `AstId` whose declaring module's `Item::Impl`
-    /// list carries the `Function` AST node. Walk that list to find the
-    /// method by `AstId`, then read its `Function::params`.
+    /// edge points at the declaring `Function`'s `AstId`. The per-module
+    /// [`AstIndex`] indexes that mapping so `Semantics::function_at`
+    /// resolves it in O(1).
     fn hint_method_call_args(&mut self, call: &ast::MethodCallExpr) {
         let Some(param_names) = self.method_param_names(call.method_id) else {
             return;
@@ -256,8 +254,7 @@ impl HintCollector<'_> {
             .ctx
             .sem
             .referenced_symbol(&self.key(method_id_at_call))?;
-        let def_module = self.ctx.sem.modules.get(&def_key.module)?;
-        let func = find_method_by_ast_id(&def_module.items, def_key.ast_id)?;
+        let func = self.ctx.sem.function_at(&def_key)?;
         Some(filter_non_self_param_names(func))
     }
 
@@ -267,6 +264,12 @@ impl HintCollector<'_> {
         // resolver flags that as a diagnostic on its own path.
         for (param_name, arg) in param_names.iter().zip(args.iter()) {
             self.push_param_hint(param_name, arg.span());
+        }
+    }
+
+    fn hint_closure_param(&mut self, p: &ClosureParam) {
+        if p.ty.is_none() {
+            self.push_type_hint(p.id, p.name_span);
         }
     }
 }
@@ -282,47 +285,6 @@ fn filter_non_self_param_names(func: &Function) -> Vec<String> {
         .filter(|p| matches!(p.self_kind, ast::SelfKind::None))
         .map(|p| p.name.clone())
         .collect()
-}
-
-/// Find the `Function` AST node whose `id` matches `target`, scanning
-/// every `Item::Impl` / `Item::Trait` / top-level `Item::Function` in
-/// `items`. Effect-interface and resource methods live on
-/// `Item::Interface` / `Item::Resource` (whose method shape is
-/// `InterfaceMethod`, not `Function`) but the analyzer already
-/// registers them as `SymbolKind::Function` entries — callers consult
-/// the symbol table for those and only fall back to this helper for
-/// impl methods on user-defined structs / traits, which the analyzer
-/// does not register as symbols.
-fn find_method_by_ast_id(items: &[Item], target: ast::AstId) -> Option<&Function> {
-    for item in items {
-        match item {
-            Item::Function(f) if f.id == target => return Some(f),
-            Item::Impl(imp) => {
-                for m in &imp.methods {
-                    if m.id == target {
-                        return Some(m);
-                    }
-                }
-            }
-            Item::Trait(t) => {
-                for m in &t.methods {
-                    if m.id == target {
-                        return Some(m);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    None
-}
-
-impl HintCollector<'_> {
-    fn hint_closure_param(&mut self, p: &ClosureParam) {
-        if p.ty.is_none() {
-            self.push_type_hint(p.id, p.name_span);
-        }
-    }
 }
 
 impl AstVisitor for HintCollector<'_> {

@@ -21,6 +21,19 @@ use crate::ast::{
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
 
+/// Address of a `Function` AST node within its declaring module's
+/// `items` list. Stored on [`AstIndex`] so consumers can recover the
+/// `&Function` for a given declaring `AstId` in O(1) instead of
+/// rescanning every item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FunctionLocation {
+    /// `module.items[item_idx]` is `Item::Function`.
+    Free { item_idx: usize },
+    /// `module.items[item_idx]` is `Item::Impl(b)` or `Item::Trait(t)`;
+    /// the function is `b.methods[method_idx]` / `t.methods[method_idx]`.
+    Method { item_idx: usize, method_idx: usize },
+}
+
 /// Structural facts about an [`ast::Module`].
 #[derive(Debug, Default, Clone)]
 pub struct AstIndex {
@@ -47,6 +60,14 @@ pub struct AstIndex {
     /// `obj` is *not* a write target. This matches the document-highlight
     /// classification: writes to the binding itself, not through a path.
     write_targets: IndexSet<AstId>,
+    /// Address of every `Function`-shaped declaration in the module,
+    /// keyed by the function's own `AstId`. Covers top-level free
+    /// functions and methods inside `Item::Impl` / `Item::Trait` (both
+    /// of which carry `methods: Vec<Function>`). Interface and resource
+    /// methods carry the `InterfaceMethod` shape and live elsewhere; the
+    /// analyzer registers them as `SymbolKind::Function` entries, so
+    /// consumers reach them through the symbol table rather than here.
+    function_locations: IndexMap<AstId, FunctionLocation>,
 }
 
 impl AstIndex {
@@ -59,6 +80,7 @@ impl AstIndex {
         for item in &module.items {
             builder.visit_item(item);
         }
+        record_function_locations(&mut builder.index, &module.items);
         builder.index
     }
 
@@ -80,6 +102,13 @@ impl AstIndex {
     #[must_use]
     pub fn is_write_target(&self, id: AstId) -> bool {
         self.write_targets.contains(&id)
+    }
+
+    /// Address of the `Function` AST node whose declaring `AstId` is `id`,
+    /// or `None` if `id` does not name an indexed function. Crate-private:
+    /// `Semantics::function_at` is the entry point external consumers use.
+    pub(crate) fn function_location(&self, id: AstId) -> Option<FunctionLocation> {
+        self.function_locations.get(&id).copied()
     }
 
     /// `AstId` of the smallest id-bearing AST node whose span contains the
@@ -278,6 +307,49 @@ fn record_item_name_spans(index: &mut AstIndex, item: &Item) {
         }
         Item::Impl(imp) => record_impl_name_spans(index, imp),
         Item::Use(_) | Item::World(_) | Item::Test(_) | Item::TupleTypeDecl(_) => {}
+    }
+}
+
+/// Record every `Function`-shaped declaration's `(item_idx, [method_idx])`
+/// address into `index.function_locations`. Run as a single linear pass
+/// over the module's items after the `AstVisitor` walk so consumers can
+/// project an `AstId` back to its declaring `&Function` in O(1).
+fn record_function_locations(index: &mut AstIndex, items: &[Item]) {
+    for (item_idx, item) in items.iter().enumerate() {
+        match item {
+            Item::Function(f) => {
+                index
+                    .function_locations
+                    .insert(f.id, FunctionLocation::Free { item_idx });
+            }
+            Item::Impl(b) => {
+                for (method_idx, method) in b.methods.iter().enumerate() {
+                    index.function_locations.insert(
+                        method.id,
+                        FunctionLocation::Method {
+                            item_idx,
+                            method_idx,
+                        },
+                    );
+                }
+            }
+            Item::Trait(t) => {
+                for (method_idx, method) in t.methods.iter().enumerate() {
+                    index.function_locations.insert(
+                        method.id,
+                        FunctionLocation::Method {
+                            item_idx,
+                            method_idx,
+                        },
+                    );
+                }
+            }
+            // Interface and resource declarations carry `InterfaceMethod`
+            // entries, not `Function` — the analyzer registers those as
+            // symbol-table entries, and consumers route through the symbol
+            // table for them.
+            _ => {}
+        }
     }
 }
 
@@ -727,6 +799,99 @@ mod tests {
                 index.span_of(arm.id),
                 Some(arm.span),
                 "arm id must be indexed with the arm's full span",
+            );
+        }
+    }
+
+    #[test]
+    fn function_location_indexes_free_function() {
+        let module = parse("fn run() -> i32 { return 1; }\n");
+        let index = AstIndex::build(&module);
+        let func = match &module.items[0] {
+            Item::Function(f) => f,
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            index.function_location(func.id),
+            Some(FunctionLocation::Free { item_idx: 0 }),
+        );
+    }
+
+    #[test]
+    fn function_location_indexes_impl_methods() {
+        let module = parse(concat!(
+            "struct Point { x: i32, y: i32 }\n",
+            "impl Point {\n",
+            "    fn origin() -> Point { return Point { x: 0, y: 0 }; }\n",
+            "    fn sum(&self) -> i32 { return self.x + self.y; }\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        let imp = match &module.items[1] {
+            Item::Impl(i) => i,
+            _ => unreachable!(),
+        };
+        for (method_idx, method) in imp.methods.iter().enumerate() {
+            assert_eq!(
+                index.function_location(method.id),
+                Some(FunctionLocation::Method {
+                    item_idx: 1,
+                    method_idx,
+                }),
+                "method `{}` should index to its impl-block address",
+                method.name,
+            );
+        }
+    }
+
+    #[test]
+    fn function_location_indexes_trait_methods() {
+        let module = parse(concat!(
+            "trait Greet {\n",
+            "    fn greet(&self) -> String;\n",
+            "    fn farewell(&self) -> String;\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        let t = match &module.items[0] {
+            Item::Trait(t) => t,
+            _ => unreachable!(),
+        };
+        for (method_idx, method) in t.methods.iter().enumerate() {
+            assert_eq!(
+                index.function_location(method.id),
+                Some(FunctionLocation::Method {
+                    item_idx: 0,
+                    method_idx,
+                }),
+                "trait method `{}` should index to its trait-block address",
+                method.name,
+            );
+        }
+    }
+
+    /// Interface methods carry `InterfaceMethod` rather than `Function`,
+    /// so the function-location index intentionally skips them. The
+    /// analyzer registers interface methods as `SymbolKind::Function`
+    /// entries; consumers use the symbol table for those.
+    #[test]
+    fn function_location_skips_interface_methods() {
+        let module = parse(concat!(
+            "interface Stdout {\n",
+            "    fn write(s: String);\n",
+            "}\n",
+        ));
+        let index = AstIndex::build(&module);
+        let iface = match &module.items[0] {
+            Item::Interface(i) => i,
+            _ => unreachable!(),
+        };
+        for method in &iface.methods {
+            assert_eq!(
+                index.function_location(method.id),
+                None,
+                "interface method `{}` should not be in the function-location index",
+                method.name,
             );
         }
     }
