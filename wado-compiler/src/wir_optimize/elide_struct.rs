@@ -469,23 +469,14 @@ fn elide_adjacent_in_body(body: &mut [WirInstr], stats: &IndexMap<String, LocalS
     for instr in body.iter_mut() {
         changed |= elide_adjacent_in_nested(instr, stats);
     }
-    // Skip `Nop` placeholders (left by earlier elision passes) when locating
-    // the next sibling so `LocalSet; nop; nop; use` is treated identically to
-    // `LocalSet; use`.
     let mut i = 0;
     while i < body.len() {
-        if let Some(j) = next_non_nop(body, i + 1)
-            && try_elide_adjacent_pair(body, i, j, stats)
-        {
+        if try_elide_at(body, i, stats) {
             changed = true;
         }
         i += 1;
     }
     changed
-}
-
-fn next_non_nop(body: &[WirInstr], from: usize) -> Option<usize> {
-    (from..body.len()).find(|&k| !matches!(body[k], WirInstr::Nop))
 }
 
 fn elide_adjacent_in_nested(instr: &mut WirInstr, stats: &IndexMap<String, LocalStats>) -> bool {
@@ -520,40 +511,77 @@ fn elide_adjacent_in_nested(instr: &mut WirInstr, stats: &IndexMap<String, Local
     changed
 }
 
-/// Try to elide `body[i]` (`LocalSet` of single-field `StructNew`) by substituting
-/// the sole field initializer into `body[j]` (the next non-Nop sibling) at the
-/// `StructGet` position. Returns `true` on success.
-fn try_elide_adjacent_pair(
-    body: &mut [WirInstr],
-    i: usize,
-    j: usize,
+/// Identifies and validates a single-field `StructNew` candidate at
+/// position `i`. On success returns the candidate's local name and the
+/// sole field name read at the use site, both extracted from `stats`.
+fn describe_candidate(
+    instr: &WirInstr,
     stats: &IndexMap<String, LocalStats>,
-) -> bool {
-    let name = match &body[i] {
-        WirInstr::LocalSet { name, value } if matches!(value.as_ref(), WirInstr::StructNew { fields, .. } if fields.len() == 1) => {
+) -> Option<(String, String)> {
+    let name = match instr {
+        WirInstr::LocalSet { name, value }
+            if matches!(value.as_ref(), WirInstr::StructNew { fields, .. } if fields.len() == 1) =>
+        {
             name.clone()
         }
-        _ => return false,
+        _ => return None,
     };
-    let Some(s) = stats.get(&name) else {
-        return false;
-    };
+    let s = stats.get(&name)?;
     if s.defs != 1 || s.structget_uses != 1 || s.total_localgets != 1 {
-        return false;
+        return None;
     }
     if s.field_uses.len() != 1 {
-        return false;
+        return None;
     }
     let field_name = s.field_uses.keys().next().unwrap().clone();
-    if !use_is_leftmost(&body[j], &name, &field_name) {
-        return false;
+    Some((name, field_name))
+}
+
+/// Scan forward from `from` looking for the leftmost-evaluated use of
+/// `name.field_name`. The scan skips `Nop` placeholders left by
+/// earlier elision passes so `LocalSet; nop; nop; use` is treated
+/// identically to `LocalSet; use`. Any other sibling stops the scan
+/// (i.e., the use must be the next non-`Nop` sibling).
+///
+/// Returns the use's position, or `None` if no use is reachable in the
+/// current body without crossing an unrelated sibling.
+fn find_use_site(
+    body: &[WirInstr],
+    from: usize,
+    name: &str,
+    field_name: &str,
+) -> Option<usize> {
+    let mut k = from;
+    while k < body.len() {
+        match &body[k] {
+            WirInstr::Nop => {
+                k += 1;
+            }
+            stmt if use_is_leftmost(stmt, name, field_name) => {
+                return Some(k);
+            }
+            _ => return None,
+        }
     }
+    None
+}
+
+/// Try to elide `body[i]` (a `LocalSet` of a single-field `StructNew`)
+/// by substituting the sole field initializer into the next reachable
+/// use site at the `StructGet` position. Returns `true` on success.
+fn try_elide_at(body: &mut [WirInstr], i: usize, stats: &IndexMap<String, LocalStats>) -> bool {
+    let Some((name, field_name)) = describe_candidate(&body[i], stats) else {
+        return false;
+    };
+    let Some(j) = find_use_site(body, i + 1, &name, &field_name) else {
+        return false;
+    };
     let inner = match std::mem::replace(&mut body[i], WirInstr::Nop) {
         WirInstr::LocalSet { value, .. } => match *value {
             WirInstr::StructNew { mut fields, .. } => fields.remove(0),
-            _ => unreachable!("guarded by name match above"),
+            _ => unreachable!("guarded by describe_candidate"),
         },
-        _ => unreachable!("guarded by name match above"),
+        _ => unreachable!("guarded by describe_candidate"),
     };
     substitute_first_use(&mut body[j], &name, &field_name, inner);
     true
