@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779788638099,
+  "lastUpdate": 1779789074149,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26281,6 +26281,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bc4a4dfbcd339c716cfd2b7b26d765a2e4ecf8d4"
         },
         "date": 1779788637615,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 443310,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cadfa53056feb552ecd2e82a72354c2c752dec6b",
+          "message": "Merge pull request #1200 from wado-lang/claude/wado-lsp-annotate-wiOgE\n\nrefactor(wado-lsp): rename annotate → semantics and unify compiler frontend as composable stages",
+          "timestamp": "2026-05-26T18:42:24+09:00",
+          "tree_id": "2673b85211a75e9ce1d2e4919f9fe09c2361ed0f",
+          "url": "https://github.com/wado-lang/wado/commit/cadfa53056feb552ecd2e82a72354c2c752dec6b"
+        },
+        "date": 1779789073654,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
