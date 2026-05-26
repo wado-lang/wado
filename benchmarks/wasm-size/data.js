@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779743472218,
+  "lastUpdate": 1779761207460,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26149,6 +26149,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/457a4e1eaf3b24d233e1c5866997a5aa0609b465"
         },
         "date": 1779743471746,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 443310,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "af4fe7b2de12fadb29041090022f7f818871343f",
+          "message": "Merge pull request #1197 from wado-lang/claude/wado-compiler-perf-gzSvA\n\nrefactor(dce): unify reachability into one analyze-then-mutate pass",
+          "timestamp": "2026-05-26T11:00:39+09:00",
+          "tree_id": "ed00532383205ce8a9bd26b2639b6f5c3b5996e8",
+          "url": "https://github.com/wado-lang/wado/commit/af4fe7b2de12fadb29041090022f7f818871343f"
+        },
+        "date": 1779761206958,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
