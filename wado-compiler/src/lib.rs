@@ -969,6 +969,28 @@ pub struct ParseResult {
     pub trivia: comment::TriviaMap,
 }
 
+/// Resolve every transitive import of `parsed` and return the loaded
+/// module set.
+///
+/// Stage 2 of the compiler frontend: pair this with [`parse`] for stage 1
+/// and [`semantics::semantics_of`] for stage 3 (analyze + resolve). The
+/// convenience [`semantics::semantics`] wraps all three for callers that
+/// don't need to inspect the parsed entry between stages.
+///
+/// `invocations` redirects bare `use { … } from "<schema>"` clauses to
+/// kiln-generated entry modules. Pass [`kiln::InvocationIndex::new`] when
+/// the caller has no kiln pipeline to advertise.
+pub async fn load<H: CompilerHost>(
+    parsed: ParseResult,
+    filename: Option<&str>,
+    host: &H,
+    invocations: kiln::InvocationIndex,
+    log_level: LogLevel,
+) -> Result<LoadResult, LoadError> {
+    let loader = loader::ModuleLoader::new(host, log_level).with_invocations(invocations);
+    loader.load_all_from_parsed_entry(parsed.ast, filename).await
+}
+
 /// Parse a Wado source file into AST and trivia map.
 /// This is a lightweight operation that only lexes and parses.
 pub fn parse(source: &str) -> Result<ParseResult, CompileError> {

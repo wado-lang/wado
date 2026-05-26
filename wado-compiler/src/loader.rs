@@ -952,20 +952,34 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         entry_source: &str,
         entry_filename: Option<&str>,
     ) -> Result<LoadResult, LoadError> {
-        // Parse and bind entry module
-        // Use "<stdin>" as synthetic filename when no filename is provided (e.g., REPL, embedded code)
         let resolved_filename = entry_filename.unwrap_or("<stdin>");
         let tentative_entry_source = self.interner.entry_point(resolved_filename);
-
-        // Parse first; the parser only needs `module_source` for error
-        // reporting, so a tentative `EntryPoint` is fine. After parsing we
-        // consult `#![stdlib("…")]` to decide the entry's canonical
-        // identity — see `Module::stdlib_identity` for why bundled
-        // stdlib sources self-declare.
         let entry_ast = {
             let _span = self.logger.span(&format!("parse {tentative_entry_source}"));
             self.parse_source(entry_source, &tentative_entry_source)?
         };
+        self.load_all_from_parsed_entry(entry_ast, entry_filename)
+            .await
+    }
+
+    /// Variant of [`Self::load_all`] that takes a pre-parsed entry module
+    /// instead of source bytes, so callers that already have an AST (LSP,
+    /// kiln-aware drivers that inspect the entry before loading) don't pay
+    /// for a second lex+parse of the entry.
+    ///
+    /// Equivalent to `load_all(source, filename)` after the entry parse;
+    /// the public free function [`crate::load`] wraps this for the common
+    /// "parse once, then load" flow.
+    pub async fn load_all_from_parsed_entry(
+        mut self,
+        entry_ast: Module,
+        entry_filename: Option<&str>,
+    ) -> Result<LoadResult, LoadError> {
+        // Resolve the tentative entry source so collected diagnostics
+        // attach to a stable `ModuleSource` even before
+        // `#![stdlib("…")]` is consulted below.
+        let resolved_filename = entry_filename.unwrap_or("<stdin>");
+        let tentative_entry_source = self.interner.entry_point(resolved_filename);
 
         let entry_module_source = parse_stdlib_identity_attribute(&mut self.interner, &entry_ast)
             .unwrap_or(tentative_entry_source);
