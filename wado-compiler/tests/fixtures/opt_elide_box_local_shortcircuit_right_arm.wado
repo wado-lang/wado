@@ -1,0 +1,54 @@
+// Regression test: `elide_box_local`'s leftmost walker must treat the
+// right operand of `&&` / `||` as CONDITIONALLY evaluated, not as an
+// unconditional sibling of the left. Allowing a candidate's
+// FieldAccess to anchor in the right operand silently relocates the
+// candidate's side-effecting inner expression past the short-circuit
+// gate, so the side effect can be skipped after elision when the left
+// operand short-circuits — but it always executes before elision.
+//
+// Setup:
+//   global mut counter
+//   touch(): increments counter, returns 7
+//   let boxed = Box { v: touch() };   // counter -> 1, boxed.v = 7
+//   let cond = false;
+//   let result = cond && boxed.v == 7; // false; boxed.v evaluated only in
+//                                      // the right operand
+//
+// Before elision: counter is unconditionally bumped to 1 at the `let
+// boxed = ...` line; `boxed.v` in the right operand is just a local
+// read (no side effect), short-circuited away.
+//
+// Buggy elision (treating Binary children as unconditional siblings)
+// substitutes the inner `touch()` call into the right operand:
+//   let cond = false;
+//   let result = cond && touch() == 7;
+// With `cond` false the `&&` short-circuits, `touch()` never runs, and
+// counter remains 0.
+
+use { Stdout, println } from "core:cli";
+
+global mut counter: i32 = 0;
+
+#[inline("never")]
+fn touch() -> i32 {
+    counter = counter + 1;
+    return 7;
+}
+
+struct Box {
+    v: i32,
+}
+
+export fn run() with Stdout {
+    let boxed = Box { v: touch() };
+    let cond = false;
+    let result = cond && boxed.v == 7;
+    assert counter == 1;
+    assert result == false;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

@@ -53,16 +53,19 @@ mod cse;
 mod dae;
 pub mod dce;
 mod drve;
+mod elide_box_local;
 mod elide_local;
 mod field_scalarize;
 mod inline;
 mod labeled_block_fusion;
 mod licm;
 mod match_to_switch;
+mod mod_ref;
 mod multi_value_return;
 mod ref_elim;
 mod select_lowering;
 mod sroa;
+mod sroa_param;
 mod store_load_forward;
 mod string_push;
 mod tmpl_hoist;
@@ -83,6 +86,7 @@ use dce::{
     remove_unreachable_types,
 };
 use drve::eliminate_dead_return_values;
+use elide_box_local::elide_adjacent_box_locals;
 use elide_local::elide_write_only_locals;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
@@ -91,6 +95,7 @@ use licm::apply_licm;
 use match_to_switch::match_to_switch;
 use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
+use sroa_param::sroa_single_field_parameters;
 use store_load_forward::forward_stores_to_loads;
 use string_push::simplify_short_push_str;
 use tmpl_hoist::hoist_template_buffers;
@@ -519,7 +524,20 @@ fn run_optimization_passes(
         // leaving short-string formatting paths (e.g. `fpfmt.wado`'s
         // `buf.push_str("0.")`) paying full per-call allocation cost.
         step!("nir/string_push", simplify_short_push_str);
+        // Single-field parameter SROA: rewrite functions whose parameter type
+        // is `&S` for a single-field struct (`Box<T>` being the canonical
+        // case) to take the inner scalar directly. Runs before `nir/inline`
+        // so the inliner sees post-SROA signatures and can propagate the
+        // scalar through call chains. NIR analog of WIR's `sroa_param`; see
+        // `optimize/sroa_param.rs`.
+        step!("nir/sroa_param", sroa_single_field_parameters);
         step!("nir/inline", |p| inline_functions(p, threshold));
+        // Adjacent-use Box-local elision. After `sroa_param` reshapes
+        // `Box<T>` parameters into scalars and `inline` propagates the
+        // resulting `FieldAccess(Local(x), "value")` shape into call
+        // sites, this pass collapses the surrounding `let x = Box{value:
+        // inner}; … x.value …` shells. See `optimize/elide_box_local.rs`.
+        step!("nir/elide_box_local", elide_adjacent_box_locals);
         step!("nir/labeled_block_fusion", fuse_labeled_blocks);
         step!("nir/ref_elim", eliminate_unnecessary_refs);
         step!("nir/sroa", scalar_replace_aggregates);

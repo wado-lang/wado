@@ -341,37 +341,37 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(82)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(83)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(83)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(84)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(84)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(85)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(85)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(86)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(86)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(87)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(87)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(88)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(88)
 
-type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(89)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(89)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_proxy.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(90)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(90)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(91)
+type "functype//wado-compiler/tests/fixtures/http_client_send_proxy.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(91)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(92)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(92)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(93)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(93)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(94)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(94)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(95)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(95)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(96)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(96)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(97)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(97)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(98)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(98)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -544,6 +544,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_proxy.wado/handle"(request) wi
     let __pattern_temp_1: ref "tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let f_171: ref "core:prelude/format.wado//Formatter";
     let f_176: ref "core:prelude/format.wado//Formatter";
+    let self_179: u16;
     let s: ref "core:prelude/string.wado//String";
     headers = "wado-compiler/tests/fixtures/http_client_send_proxy.wado/__cm_binding__Fields_new"();
     let __pair_temp_1: i64;
@@ -587,7 +588,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_proxy.wado/handle"(request) wi
     if __cond == 0 {
         "core:internal/panic"(__local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(142), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_12, 104); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 110); "core:prelude/string.wado/String::push"(__local_12, 100); "core:prelude/string.wado/String::push"(__local_12, 108); "core:prelude/string.wado/String::push"(__local_12, 101); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_client_send_proxy.wado"), used: 56 }); "core:prelude/string.wado/String::push"(__local_12, 58); __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 }; f_171 = __local_13; "core:prelude/primitive.wado/i32::fmt_decimal"(33, f_171); "core:prelude/string.wado/String::push"(__local_12, 58); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected upstream status 200"), used: 28 }); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: status == 200
-"), used: 26 }); "core:prelude/string.wado/String::push"(__local_12, 115); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 117); "core:prelude/string.wado/String::push"(__local_12, 115); "core:prelude/string.wado/String::push"(__local_12, 58); "core:prelude/string.wado/String::push"(__local_12, 32); __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 }; f_176 = __local_13; "core:prelude/primitive.wado/i32::fmt_decimal"(status & 65535, f_176); s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as StatusCode"), used: 14 }; "core:prelude/string.wado/String::push_str"(f_176.buf, s); "core:prelude/string.wado/String::push"(__local_12, 10); __local_12);
+"), used: 26 }); "core:prelude/string.wado/String::push"(__local_12, 115); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 117); "core:prelude/string.wado/String::push"(__local_12, 115); "core:prelude/string.wado/String::push"(__local_12, 58); "core:prelude/string.wado/String::push"(__local_12, 32); __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 }; f_176 = __local_13; self_179 = status & 65535; "core:prelude/primitive.wado/i32::fmt_decimal"(self_179, f_176); s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as StatusCode"), used: 14 }; "core:prelude/string.wado/String::push_str"(f_176.buf, s); "core:prelude/string.wado/String::push"(__local_12, 10); __local_12);
         unreachable;
     }
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: upstream };
@@ -1531,11 +1532,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let offset: i32;
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
-    abs_val = (if is_negative -> i64 {
-        0_i64 - builtin::i64_extend_i32_s(self);
-    } else {
-        builtin::i64_extend_i32_s(self);
-    });
+    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
@@ -1616,14 +1613,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b160: block {
-        l161: loop {
+    b159: block {
+        l160: loop {
             if i >= n {
-                break b160;
+                break b159;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l161;
+            continue l160;
         };
     };
 }
@@ -1716,16 +1713,16 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/t
     if handle_1 != 0 {
         ws_3 = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle_1, ws_3);
-        b181: block {
-            l182: loop {
+        b180: block {
+            l181: loop {
                 let event_mv_code: i32;
                 let event_mv_handle: i32;
                 let event_mv_payload: u32;
                 multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if event_mv_payload == 2 {
-                    break b181;
+                    break b180;
                 }
-                continue l182;
+                continue l181;
             };
         };
         "wasi/subtask-drop"(handle_1);

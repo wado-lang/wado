@@ -65,29 +65,29 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(23)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(24)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(25)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(26)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(26)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(27)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(27)
 
-type "functype//wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/Scanner::peek" = fn(ref "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado//Scanner") -> i32;  // TypeId(28)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(28)
 
-type "functype//wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/Scanner::skip_spaces" = fn(ref "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado//Scanner");  // TypeId(29)
+type "functype//wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/Scanner::peek" = fn(ref "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado//Scanner") -> i32;  // TypeId(29)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(30)
+type "functype//wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/Scanner::skip_spaces" = fn(ref "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado//Scanner");  // TypeId(30)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(31)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(31)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(32)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(33)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(34)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(35)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -107,6 +107,7 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/run"() with 
     let count: i32;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
+    let self_10: i32;
     s = struct.new "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado//Scanner" { data: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("  a  b  c  "), used: 11 }, pos: 0 };
     count = 0;
     b0: block {
@@ -122,7 +123,7 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/run"() with 
             continue l1;
         };
     };
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(count, __local_3); __local_2);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 }; self_10 = count; "core:prelude/primitive.wado/i32::fmt_decimal"(self_10, __local_3); __local_2);
 }
 
 fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -264,11 +265,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let offset: i32;
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
-    abs_val = (if is_negative -> i64 {
-        0_i64 - builtin::i64_extend_i32_s(self);
-    } else {
-        builtin::i64_extend_i32_s(self);
-    });
+    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
@@ -363,10 +360,10 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/Scanner::ski
     _licm_used_6 = _licm_data_5.used;
     _licm_repr_7 = _licm_data_5.repr;
     __hfs_pos_8 = self.pos;
-    b27: block {
-        l28: loop {
+    b26: block {
+        l27: loop {
             if __hfs_pos_8 >= _licm_used_6 {
-                break b27;
+                break b26;
             }
             index = __hfs_pos_8;
             b = builtin::array_get_u8(_licm_repr_7, index);
@@ -376,7 +373,7 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/Scanner::ski
                 return;
             }
             self.pos = __hfs_pos_8;
-            continue l28;
+            continue l27;
         };
     };
 }
@@ -386,14 +383,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b31: block {
-        l32: loop {
+    b30: block {
+        l31: loop {
             if i >= n {
-                break b31;
+                break b30;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l32;
+            continue l31;
         };
     };
 }

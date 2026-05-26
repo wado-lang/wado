@@ -27,7 +27,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
 
 type "functype//wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__cm_export____test_0_fn_mut_through_a_call_result_root_is_allowed" = fn();  // TypeId(7)
 
-type "functype//wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__Closure_2::__call" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(8)
+type "functype//wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado//__Closure_2");  // TypeId(8)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -43,13 +43,13 @@ fn "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__cm_ex
 }
 
 fn "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__Closure_2::__call"(self) {
-    self.value = self.value + 1;
+    self.__capture_0.value = self.__capture_0.value + 1;
 }
 
 fn "closure/wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__closure_wrapper_0"(__env) {
     let __typed_env: ref "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado//__Closure_2";
     __typed_env = ref.cast "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado//__Closure_2"(__env);
-    "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__Closure_2::__call"(__typed_env.__capture_0);
+    "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__Closure_2::__call"(__typed_env);
 }
 
 export fn "wado-compiler/tests/fixtures/closure_mut_binding_temporary_root.wado/__cm_export____test_0_fn_mut_through_a_call_result_root_is_allowed" as "__test_0_fn_mut_through_a_call_result_root_is_allowed"

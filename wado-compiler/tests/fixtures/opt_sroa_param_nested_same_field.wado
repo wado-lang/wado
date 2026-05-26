@@ -1,0 +1,48 @@
+// Regression test: NIR `sroa_param`'s `ParamReadRewriter` must NOT
+// over-strip nested same-named single-field wrappers.
+//
+// Setup: two single-field structs that happen to share the field name
+// `value`. A function takes `&Wrap` and reads `b.value.value`. The outer
+// `.value` is the FieldAccess on `Wrap` (which sroa_param is eligible to
+// strip); the inner `.value` is the FieldAccess on `WrapInner` (which is
+// out of scope for this candidate — `WrapInner` is the inner type, not
+// the wrapper being unwrapped).
+//
+// The bug: the rewriter walked post-order, so the inner FieldAccess was
+// rewritten to bare `Local(b)` first; the outer FieldAccess then matched
+// `(Local(b), "value")` again and was also stripped, leaving a body that
+// returns `b` (typed `WrapInner`) as i32 — a Wasm type-validation
+// failure at codegen.
+//
+// After the fix: the outer FieldAccess on the inner WrapInner value is
+// preserved (it's an access on a different struct's field, not on the
+// candidate `b` of type Wrap), so the rewritten body is
+// `return b.value;` where `b` is now typed `WrapInner`.
+
+use { Stdout, println } from "core:cli";
+
+struct WrapInner {
+    value: i32,
+}
+
+struct Wrap {
+    value: WrapInner,
+}
+
+#[inline("never")]
+fn read_through(b: &Wrap) -> i32 {
+    return b.value.value;
+}
+
+export fn run() with Stdout {
+    let inner = WrapInner { value: 42 };
+    let outer = Wrap { value: inner };
+    let n = read_through(&outer);
+    assert n == 42;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

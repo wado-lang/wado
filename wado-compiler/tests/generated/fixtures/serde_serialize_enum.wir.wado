@@ -59,15 +59,15 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(24)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref "wado-compiler/tests/fixtures/serde_serialize_enum.wado//JsonSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref null "wado-compiler/tests/fixtures/serde_serialize_enum.wado//SerializeError";  // TypeId(25)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
+type "functype//wado-compiler/tests/fixtures/serde_serialize_enum.wado/Color^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer>" = fn("wado-compiler/tests/fixtures/serde_serialize_enum.wado//enum:Color", ref "wado-compiler/tests/fixtures/serde_serialize_enum.wado//JsonSerializer") -> ref null "wado-compiler/tests/fixtures/serde_serialize_enum.wado//SerializeError";  // TypeId(26)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(27)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref null "wado-compiler/tests/fixtures/serde_serialize_enum.wado//SerializeError";  // TypeId(28)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
-type "functype//wado-compiler/tests/fixtures/serde_serialize_enum.wado/Color^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer>" = fn("wado-compiler/tests/fixtures/serde_serialize_enum.wado//enum:Color", ref "core:prelude/string.wado//String") -> ref null "wado-compiler/tests/fixtures/serde_serialize_enum.wado//SerializeError";  // TypeId(29)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(29)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -88,11 +88,11 @@ fn "wado-compiler/tests/fixtures/serde_serialize_enum.wado/run"() with Stdout {
     let c2: "wado-compiler/tests/fixtures/serde_serialize_enum.wado//enum:Color";
     ser = struct.new "wado-compiler/tests/fixtures/serde_serialize_enum.wado//JsonSerializer" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     c = 0;
-    drop("wado-compiler/tests/fixtures/serde_serialize_enum.wado/Color^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer>"(c, ser.buf));
+    drop("wado-compiler/tests/fixtures/serde_serialize_enum.wado/Color^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer>"(c, ser));
     "core:cli/println"(ser.buf);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     c2 = 2;
-    drop("wado-compiler/tests/fixtures/serde_serialize_enum.wado/Color^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer>"(c2, ser.buf));
+    drop("wado-compiler/tests/fixtures/serde_serialize_enum.wado/Color^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer>"(c2, ser));
     "core:cli/println"(ser.buf);
 }
 
@@ -245,7 +245,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 
 fn "wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"(self, type_name, variant_name, disc) {
     let __local_4: ref "core:prelude/string.wado//String";
-    "core:prelude/string.wado/String::push_str"(self, __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_4, 34); "core:prelude/string.wado/String::push_str"(__local_4, variant_name); "core:prelude/string.wado/String::push"(__local_4, 34); __local_4);
+    "core:prelude/string.wado/String::push_str"(self.buf, __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_4, 34); "core:prelude/string.wado/String::push_str"(__local_4, variant_name); "core:prelude/string.wado/String::push"(__local_4, 34); __local_4);
     return ref.null none;
 }
 

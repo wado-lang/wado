@@ -107,29 +107,29 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref built
 
 type "functype//./sub/cross_module_variant_iter_helper.wado/make_tree" = fn() -> ref "./sub/cross_module_variant_iter_helper.wado//Choice";  // TypeId(33)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(34)
+type "functype//./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>" = fn(ref "./sub/cross_module_variant_iter_helper.wado//Counter", ref "./sub/cross_module_variant_iter_helper.wado//Choice");  // TypeId(34)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(36)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(36)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(37)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(38)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(38)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(39)
 
-type "functype//core:prelude/array.wado/ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice>") -> ref null "core:prelude/types.wado//Box<Choice>";  // TypeId(40)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(40)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(41)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
+type "functype//core:prelude/array.wado/ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayRefIter<./sub/cross_module_variant_iter_helper.wado/Choice>") -> ref null "core:prelude/types.wado//Box<Choice>";  // TypeId(42)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(44)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(44)
 
-type "functype//./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>" = fn(ref "./sub/cross_module_variant_iter_helper.wado//Counter", ref "./sub/cross_module_variant_iter_helper.wado//Choice");  // TypeId(45)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(45)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -145,7 +145,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/cross_module_variant_iter.wado/run"() {
-    let tree: ref "core:prelude/types.wado//Box<Choice>";
     let result: i32;
     let __cond: bool;
     let __local_4: ref "core:prelude/string.wado//String";
@@ -155,9 +154,10 @@ fn "wado-compiler/tests/fixtures/cross_module_variant_iter.wado/run"() {
     let counter: ref "./sub/cross_module_variant_iter_helper.wado//Counter";
     let f_14: ref "core:prelude/format.wado//Formatter";
     let f_25: ref "core:prelude/format.wado//Formatter";
-    tree = struct.new "core:prelude/types.wado//Box<Choice>" { value: ref.as_non_null("./sub/cross_module_variant_iter_helper.wado/make_tree"()) };
+    let __sroa_tree_value: ref "./sub/cross_module_variant_iter_helper.wado//Choice";
+    __sroa_tree_value = "./sub/cross_module_variant_iter_helper.wado/make_tree"();
     counter = struct.new "./sub/cross_module_variant_iter_helper.wado//Counter" { total: 0 };
-    "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>"(counter, tree.value);
+    "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>"(counter, __sroa_tree_value);
     result = counter.total;
     __cond = result == 30;
     if __cond == 0 {
@@ -351,11 +351,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let offset: i32;
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
-    abs_val = (if is_negative -> i64 {
-        0_i64 - builtin::i64_extend_i32_s(self);
-    } else {
-        builtin::i64_extend_i32_s(self);
-    });
+    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
@@ -436,14 +432,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b27: block {
-        l28: loop {
+    b26: block {
+        l27: loop {
             if i >= n {
-                break b27;
+                break b26;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l28;
+            continue l27;
         };
     };
 }
