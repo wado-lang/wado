@@ -22,6 +22,7 @@ Language service engine for the Wado compiler toolchain.
 | `src/references.rs`         | Find-references via `Cursor::references_to_def`                                                                           |
 | `src/document_highlight.rs` | Document highlight; Read/Write classification consults `Semantics::is_write_target`                                       |
 | `src/location.rs`           | URI / span helpers for translating compiler `ModuleSource` to LSP URIs                                                    |
+| `src/query.rs`              | `QueryContext`: per-query bundle (`&Semantics` + source + URI + encoding) consumed by every position-bearing feature      |
 | `src/server.rs`             | `run_stdio()`: blocking stdin/stdout loop feeding the async dispatcher                                                    |
 | `src/server/transport.rs`   | Content-Length framing + typed JSON-RPC send/receive helpers                                                              |
 | `src/server/dispatch.rs`    | LSP method routing, position-encoding negotiation, and server-lifecycle enforcement                                       |
@@ -48,13 +49,24 @@ keyed by document text, not by host identity.
 
 ### Partial-result `Semantics`
 
-`wado_compiler::semantics` always returns a `Semantics` — even when an
+The compiler frontend always produces a `Semantics` — even when an
 analysis phase bails. LSP queries operate on whatever partial state
 the phases produced (e.g. hover still works on a well-formed function
 even when another function has a type error). Batch compilation
 checks `Semantics::is_complete()` and aborts on partial results;
 LSP-side queries simply degrade to "no answer" for fields the bailed
 phase would have populated.
+
+When a stage fails outright — entry lex/parse error, or loader bail
+on a missing/broken import — `build_semantics` (`src/lib.rs`) emits
+the failure diagnostic via the host and returns
+[`Semantics::empty`]. Every position-bearing query consequently
+returns `None` / `[]` for that snapshot; semantic-token highlighting
+still works because `semantic_tokens::compute` falls back to
+lexer-only classification when `parse` fails. The current behaviour
+is pinned by `tests/parse_error.rs`. A future error-recovering parser
+should let the position queries resolve in regions outside the
+syntax error; until then, the fail-fast degradation is intentional.
 
 ### Position encoding
 
