@@ -197,47 +197,34 @@ a new term.
 
 ### Module layout
 
+The top-level split inside `wado-compiler/src/elaborator/` follows
+the concerns named in the Decision. One file per concern at this
+level; internal splits emerge during migration as each file grows.
+
 ```
+wado-compiler/src/elaborator.rs    # umbrella
 wado-compiler/src/elaborator/
-├── mod.rs
-├── tysys/        # TypeSystem and pure type-system operations
-│   ├── mod.rs
-│   ├── coerce.rs
-│   ├── infer.rs
-│   ├── typecheck.rs
-│   ├── traits.rs
-│   └── methods.rs
-├── sem/          # ModuleSemantics and its sub-structs
-│   ├── mod.rs
+├── tysys.rs       # TypeSystem and its operations
+├── sem.rs         # ModuleSemantics (re-exports its sub-structs)
+├── sem/
 │   ├── bindings.rs
 │   ├── imports.rs
 │   ├── types.rs
 │   └── decls.rs
-├── annotate/     # annotate_decls + annotate_bodies
-│   ├── mod.rs
-│   ├── decls.rs
-│   ├── module.rs
-│   ├── item.rs
-│   ├── expr.rs
-│   ├── stmt.rs
-│   ├── call.rs
-│   ├── method.rs
-│   ├── closure.rs
-│   ├── handlers.rs
-│   └── desugar.rs
-├── liveness.rs   # cross-module reachability
-└── reify/        # AST + ModuleSemantics → TirModule
-    ├── mod.rs
-    ├── module.rs
-    ├── item.rs
-    ├── expr.rs
-    └── stmt.rs
+├── annotate.rs    # annotate_decls + annotate_bodies entry
+├── liveness.rs    # cross-module reachability
+└── reify.rs       # AST + ModuleSemantics → TirModule
 ```
 
-The current `elaborator.rs` and its 24 sibling modules are dissolved
-into this layout. The membership criterion for each file is its
-sub-struct or phase responsibility; no file collects "miscellaneous
-elaborator helpers."
+The four sub-structs of `ModuleSemantics` each get their own file
+because the membership rule (Decision §`ModuleSemantics`) is
+file-scoped. Everything else stays as a single file until the
+concern visibly demands subdivision; the current 24-module sprawl
+under `elaborator/` is the failure mode to avoid.
+
+The crate uses the no-`mod.rs` convention (a `foo.rs` next to a
+`foo/` directory), matching the existing `elaborator.rs` +
+`elaborator/` layout.
 
 ### TypeSystem surface
 
