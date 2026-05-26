@@ -1,28 +1,28 @@
-//! Tests for the LSP-friendly `annotate` entry point.
+//! Tests for the LSP-friendly `semantics` entry point.
 
 #![allow(unused_crate_dependencies)]
 
 mod common;
 
 use common::InMemoryHost;
-use wado_compiler::annotate;
 use wado_compiler::module_source::ModuleSource;
+use wado_compiler::semantics::{Semantics, semantics};
 use wado_compiler::symbol::{SymbolKey, SymbolKind};
 
 #[test]
-fn annotate_newtype_records_aliased_type() {
+fn semantics_newtype_records_aliased_type() {
     let source = r"
 type Meters = f64;
 type Pair = [i32, i32];
 type Maybe = Option<i32>;
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
-    let entry = annotated.interner.borrow_mut().entry_point("entry.wado");
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
 
     let expect_aliased = |name: &str, expected: &str| {
-        let sym = annotated
+        let sym = sem
             .symbols
             .lookup_in_module(&entry, name)
             .unwrap_or_else(|| panic!("{name} symbol should be defined"));
@@ -42,7 +42,7 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
 }
 
 #[test]
-fn annotate_indexes_struct_decl_by_symbol_key() {
+fn semantics_indexes_struct_decl_by_symbol_key() {
     let source = r"
 struct Point { x: i32, y: i32 }
 
@@ -51,11 +51,11 @@ export fn run() {
 }
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
-    let entry = annotated.interner.borrow_mut().entry_point("entry.wado");
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
 
-    let point_symbol = annotated
+    let point_symbol = sem
         .symbols
         .lookup_in_module(&entry, "Point")
         .expect("Point symbol should be defined in entry module");
@@ -63,18 +63,18 @@ export fn run() {
 
     let key = SymbolKey::new(entry.clone(), point_symbol.defined_at.ast_id);
 
-    let ty = annotated
+    let ty = sem
         .type_at(&key)
         .expect("type_at(Point) should return a decl-backed ResolvedType");
     // The type exists; verifying the identity round-trip is enough — walking
     // back through `symbols_of_type` to the same `SymbolKey`.
-    let type_id = annotated.types.type_of_symbol(&key).unwrap();
-    let walked = annotated.types.symbol_of_type(type_id).unwrap();
+    let type_id = sem.types.type_of_symbol(&key).unwrap();
+    let walked = sem.types.symbol_of_type(type_id).unwrap();
     assert_eq!(walked.module, key.module);
     assert_eq!(walked.ast_id, key.ast_id);
 
     // The AST node behind the key is an innermost symbol-bearing node.
-    let def = annotated
+    let def = sem
         .definition_of(&key)
         .expect("definition_of should resolve");
     assert_eq!(def.module, entry);
@@ -84,19 +84,19 @@ export fn run() {
 }
 
 #[test]
-fn annotate_resolves_position_to_ast_id() {
+fn semantics_resolves_position_to_ast_id() {
     let source = "export fn run() {}\n";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
-    let entry = annotated.interner.borrow_mut().entry_point("entry.wado");
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
 
     // Column 12 is inside "run" on line 1.
-    let id = annotated
+    let id = sem
         .ast_id_at(&entry, 1, 12)
         .expect("position inside `run` should resolve to an AstId");
 
-    let run_symbol = annotated
+    let run_symbol = sem
         .symbols
         .lookup_in_module(&entry, "run")
         .expect("run symbol should be defined");
@@ -105,13 +105,13 @@ fn annotate_resolves_position_to_ast_id() {
 
 /// Verify that calls into stdlib resolve via the same `referenced_symbol`
 /// edge whether or not the stdlib snapshot cache served the stdlib
-/// module.  The annotate pipeline seeds `state.references` from the
+/// module.  The semantics pipeline seeds `state.references` from the
 /// snapshot's drained `references` map and the per-compile resolver
 /// walks the entry module's body to add the user-side use→def edges on
 /// top — both halves are needed for the cross-module jump-to-def to
 /// work.
 #[test]
-fn annotate_resolves_stdlib_call_to_stdlib_def() {
+fn semantics_resolves_stdlib_call_to_stdlib_def() {
     let source = r#"
 use { println, Stdout } from "core:cli";
 
@@ -120,19 +120,19 @@ export fn run() with Stdout {
 }
 "#;
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
-    let entry = annotated.interner.borrow_mut().entry_point("entry.wado");
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
 
     // The `println` call site lives on line 5 ("    println(...)") at the
     // start of `println`.  Column 5 is the first character of the
     // identifier.
-    let call_id = annotated
+    let call_id = sem
         .ast_id_at(&entry, 5, 5)
         .expect("position inside `println` call should resolve to an AstId");
     let call_key = SymbolKey::new(entry, call_id);
 
-    let def_key = annotated
+    let def_key = sem
         .referenced_symbol(&call_key)
         .expect("`println` call site must record a use→def edge to the stdlib decl");
     // The defining symbol lives in a stdlib module — either `core:cli`
@@ -146,18 +146,18 @@ export fn run() with Stdout {
         def_key.module,
     );
 
-    let def_symbol = annotated
+    let def_symbol = sem
         .symbol_at(&def_key)
         .expect("stdlib def must resolve to a Symbol via `symbol_at`");
     assert_eq!(def_symbol.name, "println");
 }
 
-/// Verify that the snapshot's locals don't leak into per-compile `Annotated::symbol_at`
+/// Verify that the snapshot's locals don't leak into per-compile `Semantics::symbol_at`
 /// lookups — the seeded `local_symbols` map only contributes stdlib-internal
 /// keys, and resolving a user-defined `let` must hit the per-compile entry,
 /// not anything carried over from the snapshot's empty entry source.
 #[test]
-fn annotate_resolves_user_let_binding_independently_of_snapshot() {
+fn semantics_resolves_user_let_binding_independently_of_snapshot() {
     let source = r"
 export fn run() {
     let x = 1;
@@ -165,17 +165,17 @@ export fn run() {
 }
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado")));
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
-    let entry = annotated.interner.borrow_mut().entry_point("entry.wado");
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
 
     // `let _y = x;` is on line 4.  Column 14 lands on the identifier `x`.
-    let use_id = annotated
+    let use_id = sem
         .ast_id_at(&entry, 4, 14)
         .expect("position inside `x` use should resolve to an AstId");
     let use_key = SymbolKey::new(entry.clone(), use_id);
 
-    let def_key = annotated
+    let def_key = sem
         .referenced_symbol(&use_key)
         .expect("`x` use site must record a use→def edge to the let binding");
     assert_eq!(
@@ -183,7 +183,7 @@ export fn run() {
         "user let binding must resolve to the per-compile entry, got {:?}",
         def_key.module,
     );
-    let def_symbol = annotated
+    let def_symbol = sem
         .symbol_at(&def_key)
         .expect("user let binding must resolve via `symbol_at` (locals table)");
     assert_eq!(def_symbol.name, "x");
@@ -195,7 +195,7 @@ export fn run() {
 /// mean the seeded `references` map drifts when a stdlib module is
 /// served from the snapshot rather than freshly resolved.
 #[test]
-fn annotate_references_are_stable_across_cached_compiles() {
+fn semantics_references_are_stable_across_cached_compiles() {
     let source = r#"
 use { println, Stdout } from "core:cli";
 
@@ -211,7 +211,7 @@ export fn run() with Stdout {
     // the resolved `SymbolKey` and the underlying `Symbol::name`, since
     // a stale snapshot could in principle yield a different key with
     // the same name.
-    let resolve_println_def = |a: &wado_compiler::annotate::Annotated| -> (SymbolKey, String) {
+    let resolve_println_def = |a: &Semantics| -> (SymbolKey, String) {
         let entry = a.interner.borrow_mut().entry_point("entry.wado");
         // Line 6: `    println(msg);` — column 5 lands on `println`.
         let call_id = a
@@ -229,10 +229,10 @@ export fn run() with Stdout {
         (def_key, name)
     };
 
-    let a1 = block_on(annotate(source, &host, Some("entry.wado")));
+    let a1 = block_on(semantics(source, &host, Some("entry.wado")));
     let r1 = resolve_println_def(&a1);
 
-    let a2 = block_on(annotate(source, &host, Some("entry.wado")));
+    let a2 = block_on(semantics(source, &host, Some("entry.wado")));
     let r2 = resolve_println_def(&a2);
 
     assert_eq!(

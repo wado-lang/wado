@@ -1,8 +1,8 @@
-//! Per-thread snapshot of the stdlib closure's post-`annotate_loaded`
+//! Per-thread snapshot of the stdlib closure's post-`semantics_with_logger`
 //! state.
 //!
 //! Every `compile_with_options` invocation that targets non-stdlib user
-//! code re-runs the loader → analyze → annotate → `lower_tir` pipeline
+//! code re-runs the loader → analyze → resolve → `lower_tir` pipeline
 //! over the same stdlib AST closure (`core:prelude` and its transitive
 //! imports plus `core:libm.wat`). Measurements on
 //! `package-gale` (257 compiles, see WEP comments in
@@ -10,7 +10,7 @@
 //! `resolve/lower_tir` at ~112 ms — adding up to ~28 s of CPU duplicated
 //! across one `wado test` run.
 //!
-//! [`get_or_init_snapshot`] returns a thread-local [`Annotated`] that
+//! [`get_or_init_snapshot`] returns a thread-local [`Semantics`] that
 //! has been driven through the same pipeline on a synthetic empty
 //! entry source, so the loader's implicit-modules pass produces the
 //! exact same closure as a real compile. Per-compile consumers can
@@ -21,9 +21,9 @@
 //!
 //! ## Why thread-local
 //!
-//! [`Annotated`] holds `Rc<RefCell<…>>` for the type table and
+//! [`Semantics`] holds `Rc<RefCell<…>>` for the type table and
 //! per-function bodies, so it is `!Send + !Sync`. A process-global
-//! `OnceLock<Annotated>` would not type-check. The thread-local
+//! `OnceLock<Semantics>` would not type-check. The thread-local
 //! `OnceCell` strategy matches how `wado test` schedules compile work
 //! (one current-thread tokio runtime per blocking worker thread, with
 //! the same worker thread typically handling many sequential compiles
@@ -46,7 +46,6 @@ use std::pin::pin;
 use std::rc::Rc;
 use std::task::{Context, Poll, Waker};
 
-use crate::annotate::{Annotated, annotate_loaded};
 use crate::compiler_host::{
     CompilerHost, Diagnostic, GeneratorRequest, GeneratorResponse, GeneratorRunnerError, LogLevel,
     SourceError,
@@ -55,35 +54,36 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::ModuleLoader;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
+use crate::semantics::{Semantics, semantics_with_logger};
 use crate::tir::{TirFunction, TirModule, TypeTable};
 
 thread_local! {
-    static SNAPSHOT: OnceCell<Rc<Annotated>> = const { OnceCell::new() };
+    static SNAPSHOT: OnceCell<Rc<Semantics>> = const { OnceCell::new() };
     /// Re-entry guard for [`get_or_init_snapshot`].  Set to `true`
     /// while [`build_snapshot`] is running.  The synthetic snapshot
-    /// build calls through `annotate_loaded` (which itself looks up
+    /// build calls through `semantics_with_logger` (which itself looks up
     /// the snapshot) so we must report "no snapshot yet" to the inner
     /// invocation rather than try to enter the `OnceCell` initialiser
     /// recursively — `OnceCell::get_or_init` panics on re-entry.
     static BUILDING: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Return the current thread's stdlib [`Annotated`] snapshot.
+/// Return the current thread's stdlib [`Semantics`] snapshot.
 ///
 /// On first call the snapshot is built by driving the full loader +
-/// [`annotate_loaded`] pipeline over an empty entry source. Returns
+/// [`semantics_with_logger`] pipeline over an empty entry source. Returns
 /// [`None`] if the current call is itself running underneath
 /// [`build_snapshot`] — that is the call path the snapshot builder
-/// takes through `annotate_loaded`, and trying to satisfy it from the
+/// takes through `semantics_with_logger`, and trying to satisfy it from the
 /// (still-being-built) cache would re-enter the `OnceCell` initialiser.
 ///
 /// # Panics
 ///
-/// Panics if the stdlib closure fails to load or annotate.  The stdlib
+/// Panics if the stdlib closure fails to load or analyze.  The stdlib
 /// is shipped with the compiler and must always compile cleanly; a
 /// failure here indicates a build-time inconsistency in the stdlib
 /// itself, which is a non-recoverable bug.
-pub(crate) fn get_or_init_snapshot() -> Option<Rc<Annotated>> {
+pub(crate) fn get_or_init_snapshot() -> Option<Rc<Semantics>> {
     if BUILDING.with(Cell::get) {
         return None;
     }
@@ -109,7 +109,7 @@ pub(crate) fn get_or_init_snapshot() -> Option<Rc<Annotated>> {
 }
 
 /// Build the current thread's snapshot now, ahead of the first
-/// `annotate_loaded` call.  Intended for parallel batch drivers (e.g.
+/// `semantics_with_logger` call.  Intended for parallel batch drivers (e.g.
 /// `wado test`) to amortise the ~120 ms snapshot build across worker
 /// threads before any compile work is scheduled, instead of paying
 /// the cost on each worker's first compile.
@@ -120,11 +120,11 @@ pub fn prewarm() {
     let _ = get_or_init_snapshot();
 }
 
-/// Drive the full loader + `annotate_loaded` pipeline on an empty
+/// Drive the full loader + `semantics_with_logger` pipeline on an empty
 /// entry source.  The loader's implicit-modules pass pulls in
 /// `core:prelude` and its transitive closure, matching the stdlib
 /// subset every real compile loads.
-fn build_snapshot() -> Annotated {
+fn build_snapshot() -> Semantics {
     let host = SnapshotHost;
     let logger = Logger::new(&host, LogLevel::Warn);
 
@@ -144,17 +144,17 @@ fn build_snapshot() -> Annotated {
     })
     .expect("stdlib snapshot loader should succeed");
 
-    let annotated = annotate_loaded(load_result, &logger);
+    let sem = semantics_with_logger(load_result, &logger);
     assert!(
-        annotated.is_complete(),
-        "stdlib snapshot should annotate cleanly",
+        sem.is_complete(),
+        "stdlib snapshot should compute semantics cleanly",
     );
-    annotated
+    sem
 }
 
 /// Drive a future to completion under the assumption that it never
 /// truly suspends.  Used to obtain a synchronous result from the
-/// loader/annotate pipeline without introducing an async-runtime
+/// loader/semantics pipeline without introducing an async-runtime
 /// dependency in `wado-compiler` (which would break the crate's
 /// `wasm32-unknown-unknown` build).
 ///
@@ -180,7 +180,7 @@ fn poll_to_completion<F: Future>(fut: F) -> F::Output {
 /// stdlib modules served from `cached_stdlib()` plus the `core:libm.wat`
 /// Wasm asset module. Returns the subset of `snap.tir_modules` whose
 /// keys match.
-pub(crate) fn stdlib_sources(snap: &Annotated) -> IndexSet<ModuleSource> {
+pub(crate) fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
     snap.tir_modules
         .keys()
         .filter(|ms| {

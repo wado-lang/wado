@@ -1928,7 +1928,7 @@ async fn run_one_package(
 /// blocking-pool worker threads in parallel, ahead of any compile work.
 ///
 /// Each worker would otherwise build the snapshot lazily on its first
-/// `annotate_loaded` call (~120 ms), serialising the cost behind that
+/// `semantics_of` call (~120 ms), serialising the cost behind that
 /// task.  A `std::sync::Barrier` keeps every prewarm task running
 /// simultaneously so tokio's blocking pool allocates `parallelism`
 /// distinct threads; those same threads are then reused for the

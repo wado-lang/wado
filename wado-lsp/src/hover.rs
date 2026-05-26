@@ -1,6 +1,6 @@
-//! Hover information, powered by `wado_compiler::annotate`.
+//! Hover information, powered by `wado_compiler::semantics`.
 //!
-//! Rendering strategy: `Annotated::cursor_at` places a `Cursor` on the
+//! Rendering strategy: `Semantics::cursor_at` places a `Cursor` on the
 //! innermost AST node at the request position; `Cursor::def_symbol` chases
 //! the use→def edge and returns the binding's `Symbol` (or `None` if the
 //! cursor isn't on a recognised name). Locals render as `let` / param
@@ -8,14 +8,14 @@
 //! `wado_compiler::unparse`.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::annotate::Annotated;
 use wado_compiler::ast::{self, AstId, Expr, Item, Module, Stmt};
+use wado_compiler::semantics::Semantics;
 use wado_compiler::symbol::{Symbol, SymbolKey, SymbolKind};
 use wado_compiler::unparse;
 
 use crate::diagnostics::{Position, Range};
 use crate::location::span_to_range;
-use crate::text::{PositionEncoding, lsp_position_to_line_col};
+use crate::query::QueryContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HoverResult {
@@ -38,23 +38,12 @@ pub enum MarkupKind {
 }
 
 #[must_use]
-pub fn find_hover(
-    annotated: &Annotated,
-    source: &str,
-    position: Position,
-    _uri: &str,
-    encoding: PositionEncoding,
-) -> Option<HoverResult> {
-    let module = annotated.entry_module_source.clone();
-    let (line, col) = lsp_position_to_line_col(source, position, encoding);
-
-    let cursor = annotated.cursor_at(&module, line, col)?;
+pub(crate) fn find_hover(ctx: &QueryContext, position: Position) -> Option<HoverResult> {
+    let cursor = ctx.cursor_at(position)?;
     let symbol = cursor.def_symbol()?;
     let signature = match &symbol.kind {
-        SymbolKind::Variable(_) => {
-            render_local_binding(annotated, &symbol.defined_at, &symbol.name)?
-        }
-        _ => render_item_signature(annotated, symbol)?,
+        SymbolKind::Variable(_) => render_local_binding(ctx.sem, &symbol.defined_at, &symbol.name)?,
+        _ => render_item_signature(ctx.sem, symbol)?,
     };
 
     let cursor_span = cursor.span()?;
@@ -63,13 +52,13 @@ pub fn find_hover(
             kind: MarkupKind::Markdown,
             value: format!("```wado\n{signature}\n```"),
         },
-        range: Some(span_to_range(&cursor_span, Some(source), encoding)),
+        range: Some(span_to_range(&cursor_span, Some(ctx.source), ctx.encoding)),
     })
 }
 
 /// Render a signature for the given item-level symbol.
-fn render_item_signature(annotated: &Annotated, symbol: &Symbol) -> Option<String> {
-    let module = annotated.modules.get(&symbol.defined_at.module)?;
+fn render_item_signature(sem: &Semantics, symbol: &Symbol) -> Option<String> {
+    let module = sem.modules.get(&symbol.defined_at.module)?;
     for item in &module.items {
         if let Some(rendered) = item_info(item, &symbol.name) {
             return Some(rendered);
@@ -79,8 +68,8 @@ fn render_item_signature(annotated: &Annotated, symbol: &Symbol) -> Option<Strin
 }
 
 /// Render a hover line for a local binding (`let x: T` / `fn f(x: T)`).
-fn render_local_binding(annotated: &Annotated, def_key: &SymbolKey, name: &str) -> Option<String> {
-    let module = annotated.modules.get(&def_key.module)?;
+fn render_local_binding(sem: &Semantics, def_key: &SymbolKey, name: &str) -> Option<String> {
+    let module = sem.modules.get(&def_key.module)?;
     render_local_in_module(module, def_key.ast_id, name)
 }
 
@@ -372,21 +361,10 @@ fn item_info(item: &Item, name: &str) -> Option<String> {
 mod tests {
     use super::*;
     use crate::test_support::MapHost;
-    use wado_compiler::annotate::annotate_with_invocations;
+    use crate::text::PositionEncoding;
 
     async fn hover_at(source: &str, line: u32, character: u32) -> Option<HoverResult> {
-        let path = "/test.wado";
-        let uri = format!("file://{path}");
-        let host = MapHost::single(path, source);
-        let invocations = wado_compiler::kiln::InvocationIndex::new();
-        let annotated = annotate_with_invocations(source, &host, Some(path), invocations).await;
-        find_hover(
-            &annotated,
-            source,
-            Position { line, character },
-            &uri,
-            PositionEncoding::Utf16,
-        )
+        hover_at_with_encoding(source, line, character, PositionEncoding::Utf16).await
     }
 
     #[test]
@@ -539,15 +517,14 @@ mod tests {
         let path = "/test.wado";
         let uri = format!("file://{path}");
         let host = MapHost::single(path, source);
-        let invocations = wado_compiler::kiln::InvocationIndex::new();
-        let annotated = annotate_with_invocations(source, &host, Some(path), invocations).await;
-        find_hover(
-            &annotated,
+        let sem = wado_compiler::semantics(source, &host, Some(path)).await;
+        let ctx = QueryContext {
+            sem: &sem,
             source,
-            Position { line, character },
-            &uri,
+            uri: &uri,
             encoding,
-        )
+        };
+        find_hover(&ctx, Position { line, character })
     }
 
     #[test]

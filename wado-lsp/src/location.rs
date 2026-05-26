@@ -6,7 +6,6 @@
 //! `ModuleSource → URI` helpers that read the compiler's per-module
 //! metadata.
 
-use wado_compiler::annotate::Annotated;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::symbol::{Symbol, SymbolKey};
 use wado_compiler::token::Span;
@@ -20,11 +19,11 @@ use crate::uri::Uri;
 /// `request_uri` provides the base directory used to anchor `./relative.wado`
 /// imports. Returns the request URI itself when the module is the entry point.
 pub(crate) fn module_uri(
-    annotated: &Annotated,
+    entry: &ModuleSource,
     module: &ModuleSource,
     request_uri: &str,
 ) -> Option<String> {
-    if module == &annotated.entry_module_source {
+    if module == entry {
         return Some(request_uri.to_string());
     }
     match module {
@@ -88,11 +87,11 @@ fn resolve_local_uri(module_path: &str, request_uri: &str) -> String {
 
 /// URI of the module defining `symbol`, relative to the requesting document.
 pub(crate) fn symbol_uri(
-    annotated: &Annotated,
+    entry: &ModuleSource,
     symbol: &Symbol,
     request_uri: &str,
 ) -> Option<String> {
-    module_uri(annotated, &symbol.defined_at.module, request_uri)
+    module_uri(entry, &symbol.defined_at.module, request_uri)
 }
 
 /// Decide which source text (if any) to pass to [`span_to_range`] when
@@ -107,11 +106,11 @@ pub(crate) fn symbol_uri(
 /// `span_to_range`, which falls back to "codepoint columns as code
 /// units" (correct under UTF-32 / ASCII).
 pub(crate) fn source_for_key<'a>(
-    annotated: &Annotated,
+    entry: &ModuleSource,
     key: &SymbolKey,
     entry_source: &'a str,
 ) -> Option<&'a str> {
-    (key.module == annotated.entry_module_source).then_some(entry_source)
+    (&key.module == entry).then_some(entry_source)
 }
 
 /// Convert a compiler `Span` (1-based byte column) to an LSP `Range` in

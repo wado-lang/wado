@@ -135,7 +135,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         logger: &'a Logger<'a, H>,
         invocations: crate::kiln::InvocationIndex,
         interner: Rc<RefCell<ModuleSourceInterner>>,
-        snapshot: Option<&crate::annotate::Annotated>,
+        snapshot: Option<&crate::semantics::Semantics>,
     ) -> Result<AnnotateState, Bail> {
         let invocations = Rc::new(invocations);
         // Set of stdlib module sources covered by the snapshot.  When non-empty,
@@ -809,7 +809,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         entry_module_source: ModuleSource,
         logger: &'a Logger<'a, H>,
         included_files: &'a IndexMap<[String; 2], Vec<u8>>,
-        snapshot: Option<&crate::annotate::Annotated>,
+        snapshot: Option<&crate::semantics::Semantics>,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::default();
         // Per-rehydration memo: maps each cached function `Rc`'s pointer

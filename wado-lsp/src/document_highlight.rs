@@ -1,4 +1,4 @@
-//! Document highlight, powered by `wado_compiler::annotate`.
+//! Document highlight, powered by `wado_compiler::semantics`.
 //!
 //! Returns every occurrence of the symbol named at the cursor that lives
 //! inside the requested document. References to the same symbol from other
@@ -9,17 +9,16 @@
 //!   `=`, `+=`, etc.
 //! - `Read` for every other use-site.
 //!
-//! Write classification consults `Annotated::is_write_target`, which is
-//! populated by the per-module `AstIndex` during the annotate phase. The
+//! Write classification consults `Semantics::is_write_target`, which is
+//! populated by the per-module `AstIndex` during the semantics pass. The
 //! highlight pass therefore performs no AST walks of its own.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::annotate::Annotated;
 
 use crate::diagnostics::{Position, Range};
 use crate::location::span_to_range;
 use crate::macros::lsp_repr_u32_enum;
-use crate::text::{PositionEncoding, lsp_position_to_line_col};
+use crate::query::QueryContext;
 
 lsp_repr_u32_enum!(
     /// LSP `DocumentHighlightKind` values. Serializes as the 1..=3 integer
@@ -38,17 +37,9 @@ pub struct DocumentHighlight {
 }
 
 #[must_use]
-pub fn document_highlight(
-    annotated: &Annotated,
-    source: &str,
-    position: Position,
-    _uri: &str,
-    encoding: PositionEncoding,
-) -> Vec<DocumentHighlight> {
-    let module = annotated.entry_module_source.clone();
-    let (line, col) = lsp_position_to_line_col(source, position, encoding);
-
-    let Some(cursor) = annotated.cursor_at(&module, line, col) else {
+pub(crate) fn document_highlight(ctx: &QueryContext, position: Position) -> Vec<DocumentHighlight> {
+    let entry = ctx.entry();
+    let Some(cursor) = ctx.cursor_at(position) else {
         return Vec::new();
     };
     let Some(def_key) = cursor.def_key() else {
@@ -57,31 +48,32 @@ pub fn document_highlight(
 
     let mut out = Vec::new();
 
-    if def_key.module == module
-        && let Some(span) = annotated
+    if &def_key.module == entry
+        && let Some(span) = ctx
+            .sem
             .name_span_of(&def_key)
-            .or_else(|| annotated.symbol_at(&def_key).and_then(|s| s.span))
+            .or_else(|| ctx.sem.symbol_at(&def_key).and_then(|s| s.span))
     {
         out.push(DocumentHighlight {
-            range: span_to_range(&span, Some(source), encoding),
+            range: span_to_range(&span, Some(ctx.source), ctx.encoding),
             kind: HighlightKind::Write,
         });
     }
 
     for use_key in cursor.references_to_def() {
-        if use_key.module != module {
+        if &use_key.module != entry {
             continue;
         }
-        let Some(span) = annotated.span_of_key(&use_key) else {
+        let Some(span) = ctx.sem.span_of_key(&use_key) else {
             continue;
         };
-        let kind = if annotated.is_write_target(&use_key) {
+        let kind = if ctx.sem.is_write_target(&use_key) {
             HighlightKind::Write
         } else {
             HighlightKind::Read
         };
         out.push(DocumentHighlight {
-            range: span_to_range(&span, Some(source), encoding),
+            range: span_to_range(&span, Some(ctx.source), ctx.encoding),
             kind,
         });
     }
@@ -95,21 +87,20 @@ pub fn document_highlight(
 mod tests {
     use super::*;
     use crate::test_support::MapHost;
-    use wado_compiler::annotate::annotate_with_invocations;
+    use crate::text::PositionEncoding;
 
     async fn highlights_at(source: &str, line: u32, character: u32) -> Vec<DocumentHighlight> {
         let path = "/test.wado";
         let uri = format!("file://{path}");
         let host = MapHost::single(path, source);
-        let invocations = wado_compiler::kiln::InvocationIndex::new();
-        let annotated = annotate_with_invocations(source, &host, Some(path), invocations).await;
-        document_highlight(
-            &annotated,
+        let sem = wado_compiler::semantics(source, &host, Some(path)).await;
+        let ctx = QueryContext {
+            sem: &sem,
             source,
-            Position { line, character },
-            &uri,
-            PositionEncoding::Utf16,
-        )
+            uri: &uri,
+            encoding: PositionEncoding::Utf16,
+        };
+        document_highlight(&ctx, Position { line, character })
     }
 
     fn summarize(refs: &[DocumentHighlight]) -> Vec<(u32, u32, HighlightKind)> {

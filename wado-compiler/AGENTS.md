@@ -148,21 +148,21 @@ Pipeline:
 parse → bind → load → analyze → annotate → lower_tir → monomorphize → lower → optimize → codegen
 ```
 
-- `annotate` is AST-preserving type resolution; returns `Annotated` (see `src/annotate.rs`). Used by both LSP and batch compilation. The desugar-replacement surface rewrites (`x += y`, `while`, C-style `for`, `for x of expr`, `assert`, `matches`, comparison chain) are TIR-direct: the resolver builds TIR from the parsed AST without producing synthetic AST nodes for them, so the parsed AST stays parser-shaped end to end. For the for-of iterator path the `.into_iter()` / `.next()` dispatches go through `Resolver::resolve_method_call_with` (the TIR-level entry point to method dispatch) with `method_id: None`, so the synthetic helper calls leave no use→def edge against the `for` keyword. `Self::method` / `T::method` static-call rewriting resolves the prefix to its concrete type name (`CalleeIdentKind` in `resolver/call.rs`) before any parameter-type lookup or argument resolution, so the rewrite stays internal to `resolve_call` and never builds a synthetic `CallExpr`.
-- `lower_tir` emits TIR from `&Annotated`; used only by batch compilation.
+- `annotate` is AST-preserving type resolution; the bundle is returned as `Semantics` (see `src/semantics.rs`). Used by both LSP and batch compilation. The desugar-replacement surface rewrites (`x += y`, `while`, C-style `for`, `for x of expr`, `assert`, `matches`, comparison chain) are TIR-direct: the resolver builds TIR from the parsed AST without producing synthetic AST nodes for them, so the parsed AST stays parser-shaped end to end. For the for-of iterator path the `.into_iter()` / `.next()` dispatches go through `Resolver::resolve_method_call_with` (the TIR-level entry point to method dispatch) with `method_id: None`, so the synthetic helper calls leave no use→def edge against the `for` keyword. `Self::method` / `T::method` static-call rewriting resolves the prefix to its concrete type name (`CalleeIdentKind` in `resolver/call.rs`) before any parameter-type lookup or argument resolution, so the rewrite stays internal to `resolve_call` and never builds a synthetic `CallExpr`.
+- `lower_tir` emits TIR from `&Semantics`; used only by batch compilation.
 - `(ModuleSource, AstId)` (`SymbolKey`) is the canonical identity for every semantic entity that originates in source. `AstId` is dense over `Block` / `Stmt` / `Expr` / `Pattern` / `Type` / `Item` / `Decl`, so every source position resolves to a key via `Module::ast_id_at`. Builtins live in `ModuleSource::Builtin` with their own dense ID range.
 - AST is the source of truth: `annotate` attaches facts, never mutates or moves AST nodes. Decl-backed `ResolvedType` variants and `Symbol` both carry `defined_at: SymbolKey`.
-- Use→def edges are recorded by the real resolver as it performs name resolution (`resolve_ident`, `resolve_call`, …). `Annotated::referenced_symbol` is the single source of truth; there is no separate lexical re-scan. `annotate_loaded` always drives `lower_tir` so the edges exist for both LSP and batch compilation.
-- Structural facts that derive purely from the AST (per-`AstId` spans, declaration name spans, assignment write targets, position-to-`AstId` lookup) live on a per-module `AstIndex` (`src/ast_index.rs`), built once during `annotate_loaded`. Powers `Annotated::ast_id_at` / `span_of_key` / `name_span_of` / `is_write_target` without AST re-walks.
-- LSP queries entry through `Annotated::cursor_at(module, line, col) -> Cursor`, which exposes `def_key` / `def_symbol` / `def_name_span` / `def_span` / `references_to_def` / `is_write_target` / `span` / `key` / `module`. Each LSP feature is a thin pass over those query methods.
+- Use→def edges are recorded by the real resolver as it performs name resolution (`resolve_ident`, `resolve_call`, …). `Semantics::referenced_symbol` is the single source of truth; there is no separate lexical re-scan. `semantics_of` always drives `lower_tir` so the edges exist for both LSP and batch compilation.
+- Structural facts that derive purely from the AST (per-`AstId` spans, declaration name spans, assignment write targets, position-to-`AstId` lookup) live on a per-module `AstIndex` (`src/ast_index.rs`), built once during `semantics_of`. Powers `Semantics::ast_id_at` / `span_of_key` / `name_span_of` / `is_write_target` without AST re-walks.
+- LSP queries entry through `Semantics::cursor_at(module, line, col) -> Cursor`, which exposes `def_key` / `def_symbol` / `def_name_span` / `def_span` / `references_to_def` / `is_write_target` / `span` / `key` / `module`. Each LSP feature is a thin pass over those query methods.
 - The `codegen.rs` principle still holds: codegen consumes `Package` without knowledge of earlier phases.
 
 Entry points:
 
-- `wado_compiler::annotate(source, host, filename) -> Annotated` — LSP path; skips `monomorphize` / `lower` / `optimize` / `codegen`.
-- `wado_compiler::compile_with_options(...)` — batch path; calls `annotate_loaded` + `lower_tir` + `Package::new`, so registries build once.
+- `wado_compiler::semantics(source, host, filename) -> Semantics` — LSP path; skips `monomorphize` / `lower` / `optimize` / `codegen`.
+- `wado_compiler::compile_with_options(...)` — batch path; calls `semantics_of` + `lower_tir` + `Package::new`, so registries build once.
 
-`Engine::{definition, hover, diagnostics}` all go through `annotate` — cross-file navigation falls out for free because `Annotated` already contains every transitively-loaded module.
+`Engine::{definition, hover, diagnostics}` all go through `semantics` — cross-file navigation falls out for free because `Semantics` already contains every transitively-loaded module.
 
 ### Next
 

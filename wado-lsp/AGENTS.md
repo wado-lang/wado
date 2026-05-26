@@ -11,7 +11,7 @@ Language service engine for the Wado compiler toolchain.
 
 | File                        | Role                                                                                                                      |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `src/lib.rs`                | `Engine` struct: document state + per-document `Annotated` snapshot cache + query dispatch                                |
+| `src/lib.rs`                | `Engine` struct: document state + per-document `Semantics` snapshot cache + query dispatch                                |
 | `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                                           |
 | `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting  |
 | `src/text.rs`               | `PositionEncoding` and LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion                               |
@@ -20,8 +20,9 @@ Language service engine for the Wado compiler toolchain.
 | `src/definition.rs`         | Go-to-definition via `Cursor::{def_key, def_span}` and a file-path matcher for `use`/`#include` paths                     |
 | `src/hover.rs`              | Hover info; `Cursor::def_symbol` selects the binding, locals render from the AST node, items via `wado_compiler::unparse` |
 | `src/references.rs`         | Find-references via `Cursor::references_to_def`                                                                           |
-| `src/document_highlight.rs` | Document highlight; Read/Write classification consults `Annotated::is_write_target`                                       |
+| `src/document_highlight.rs` | Document highlight; Read/Write classification consults `Semantics::is_write_target`                                       |
 | `src/location.rs`           | URI / span helpers for translating compiler `ModuleSource` to LSP URIs                                                    |
+| `src/query.rs`              | `QueryContext`: per-query bundle (`&Semantics` + source + URI + encoding) consumed by every position-bearing feature      |
 | `src/server.rs`             | `run_stdio()`: blocking stdin/stdout loop feeding the async dispatcher                                                    |
 | `src/server/transport.rs`   | Content-Length framing + typed JSON-RPC send/receive helpers                                                              |
 | `src/server/dispatch.rs`    | LSP method routing, position-encoding negotiation, and server-lifecycle enforcement                                       |
@@ -31,8 +32,11 @@ Language service engine for the Wado compiler toolchain.
 
 ### Engine
 
-`Engine` owns per-document state: source text, last reported version,
-and a cached `Rc<Annotated>` produced by `annotate_with_invocations`.
+`Engine` owns per-document state: source text and a cached
+`Rc<Snapshot>` built by composing `wado_compiler::parse` →
+`wado_compiler::load` → `wado_compiler::semantics_of`, with kiln
+invocation discovery (`kiln::prepare_invocations`) interleaved between
+parse and load.
 The snapshot is built on first query and shared across back-to-back
 queries on the same document version; `update_document` /
 `close_document` invalidates it. The negotiated `PositionEncoding`
@@ -43,15 +47,26 @@ imported modules are loaded. Pass the same host across queries to
 keep cross-file resolution consistent; the snapshot cache itself is
 keyed by document text, not by host identity.
 
-### Partial-result `Annotated`
+### Partial-result `Semantics`
 
-`wado_compiler::annotate` always returns an `Annotated` — even when an
+The compiler frontend always produces a `Semantics` — even when an
 analysis phase bails. LSP queries operate on whatever partial state
 the phases produced (e.g. hover still works on a well-formed function
 even when another function has a type error). Batch compilation
-checks `Annotated::is_complete()` and aborts on partial results;
+checks `Semantics::is_complete()` and aborts on partial results;
 LSP-side queries simply degrade to "no answer" for fields the bailed
 phase would have populated.
+
+When a stage fails outright — entry lex/parse error, or loader bail
+on a missing/broken import — `build_semantics` (`src/lib.rs`) emits
+the failure diagnostic via the host and returns
+[`Semantics::empty`]. Every position-bearing query consequently
+returns `None` / `[]` for that snapshot; semantic-token highlighting
+still works because `semantic_tokens::compute` falls back to
+lexer-only classification when `parse` fails. The current behaviour
+is pinned by `tests/parse_error.rs`. A future error-recovering parser
+should let the position queries resolve in regions outside the
+syntax error; until then, the fail-fast degradation is intentional.
 
 ### Position encoding
 

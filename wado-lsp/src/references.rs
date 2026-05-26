@@ -1,20 +1,19 @@
-//! Find-references, powered by `wado_compiler::annotate`.
+//! Find-references, powered by `wado_compiler::semantics`.
 //!
 //! Resolution flow mirrors `definition.rs`:
-//! 1. Run `annotate` to produce a fully-resolved snapshot.
+//! 1. Run `semantics` to produce a fully-resolved snapshot.
 //! 2. Resolve the cursor to a defining [`SymbolKey`].
-//! 3. Walk `Annotated::iter_references` and collect every use-site whose
+//! 3. Walk `Semantics::iter_references` and collect every use-site whose
 //!    target equals the def key.
 //! 4. Translate each use-site into a [`ReferenceLocation`].
 //! 5. Optionally prepend the defining occurrence itself.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::annotate::Annotated;
 use wado_compiler::symbol::SymbolKey;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, source_for_key, span_to_range, symbol_uri};
-use crate::text::{PositionEncoding, lsp_position_to_line_col};
+use crate::location::{module_uri, span_to_range, symbol_uri};
+use crate::query::QueryContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReferenceLocation {
@@ -22,24 +21,18 @@ pub struct ReferenceLocation {
     pub range: Range,
 }
 
-/// Find every reference to the symbol named at `position` in `source`.
+/// Find every reference to the symbol named at `position` in `ctx.source`.
 ///
 /// When `include_declaration` is true, the defining occurrence (the
 /// identifier at the symbol's declaration site) is included in the result.
 /// The result is deduplicated and sorted by `(uri, range.start)`.
 #[must_use]
-pub fn find_references(
-    annotated: &Annotated,
-    source: &str,
+pub(crate) fn find_references(
+    ctx: &QueryContext,
     position: Position,
-    uri: &str,
     include_declaration: bool,
-    encoding: PositionEncoding,
 ) -> Vec<ReferenceLocation> {
-    let module = annotated.entry_module_source.clone();
-    let (line, col) = lsp_position_to_line_col(source, position, encoding);
-
-    let Some(cursor) = annotated.cursor_at(&module, line, col) else {
+    let Some(cursor) = ctx.cursor_at(position) else {
         return Vec::new();
     };
     let Some(def_key) = cursor.def_key() else {
@@ -47,13 +40,11 @@ pub fn find_references(
     };
 
     let mut out = Vec::new();
-    if include_declaration
-        && let Some(loc) = declaration_location(annotated, &def_key, uri, source, encoding)
-    {
+    if include_declaration && let Some(loc) = declaration_location(ctx, &def_key) {
         out.push(loc);
     }
     for use_key in cursor.references_to_def() {
-        if let Some(loc) = use_site_location(annotated, &use_key, uri, source, encoding) {
+        if let Some(loc) = use_site_location(ctx, &use_key) {
             out.push(loc);
         }
     }
@@ -69,33 +60,27 @@ pub fn find_references(
 }
 
 pub(crate) fn declaration_location(
-    annotated: &Annotated,
+    ctx: &QueryContext,
     def_key: &SymbolKey,
-    request_uri: &str,
-    source: &str,
-    encoding: PositionEncoding,
 ) -> Option<ReferenceLocation> {
-    let symbol = annotated.symbol_at(def_key)?;
-    let span = annotated.name_span_of(def_key).or(symbol.span)?;
-    let uri = symbol_uri(annotated, symbol, request_uri)?;
+    let symbol = ctx.sem.symbol_at(def_key)?;
+    let span = ctx.sem.name_span_of(def_key).or(symbol.span)?;
+    let uri = symbol_uri(ctx.entry(), symbol, ctx.uri)?;
     Some(ReferenceLocation {
         uri,
-        range: span_to_range(&span, source_for_key(annotated, def_key, source), encoding),
+        range: span_to_range(&span, ctx.source_for_key(def_key), ctx.encoding),
     })
 }
 
 pub(crate) fn use_site_location(
-    annotated: &Annotated,
+    ctx: &QueryContext,
     use_key: &SymbolKey,
-    request_uri: &str,
-    source: &str,
-    encoding: PositionEncoding,
 ) -> Option<ReferenceLocation> {
-    let span = annotated.span_of_key(use_key)?;
-    let uri = module_uri(annotated, &use_key.module, request_uri)?;
+    let span = ctx.sem.span_of_key(use_key)?;
+    let uri = module_uri(ctx.entry(), &use_key.module, ctx.uri)?;
     Some(ReferenceLocation {
         uri,
-        range: span_to_range(&span, source_for_key(annotated, use_key, source), encoding),
+        range: span_to_range(&span, ctx.source_for_key(use_key), ctx.encoding),
     })
 }
 
@@ -103,7 +88,7 @@ pub(crate) fn use_site_location(
 mod tests {
     use super::*;
     use crate::test_support::MapHost;
-    use wado_compiler::annotate::annotate_with_invocations;
+    use crate::text::PositionEncoding;
 
     async fn refs_at(
         source: &str,
@@ -114,16 +99,14 @@ mod tests {
         let path = "/test.wado";
         let uri = format!("file://{path}");
         let host = MapHost::single(path, source);
-        let invocations = wado_compiler::kiln::InvocationIndex::new();
-        let annotated = annotate_with_invocations(source, &host, Some(path), invocations).await;
-        find_references(
-            &annotated,
+        let sem = wado_compiler::semantics(source, &host, Some(path)).await;
+        let ctx = QueryContext {
+            sem: &sem,
             source,
-            Position { line, character },
-            &uri,
-            include_declaration,
-            PositionEncoding::Utf16,
-        )
+            uri: &uri,
+            encoding: PositionEncoding::Utf16,
+        };
+        find_references(&ctx, Position { line, character }, include_declaration)
     }
 
     fn ranges(refs: &[ReferenceLocation]) -> Vec<(u32, u32, u32, u32)> {
