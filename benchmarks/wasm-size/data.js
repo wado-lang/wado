@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779834012592,
+  "lastUpdate": 1779837626560,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26413,6 +26413,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5a426d04dcbaeba0a0d047fb1f510817c2fe2a6d"
         },
         "date": 1779834012119,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 443310,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "74abce6365f597c303880d83c75db5f46f67ddc8",
+          "message": "Merge pull request #1203 from wado-lang/claude/elaborator-refactoring-2tYDY\n\ndocs(wep): elaborator re-architecture + align unused-diagnostics",
+          "timestamp": "2026-05-27T08:14:14+09:00",
+          "tree_id": "e491154a0123fb8b94a82d9f2d1c522f6e056b26",
+          "url": "https://github.com/wado-lang/wado/commit/74abce6365f597c303880d83c75db5f46f67ddc8"
+        },
+        "date": 1779837626263,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
