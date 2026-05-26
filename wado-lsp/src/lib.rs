@@ -62,17 +62,17 @@ pub struct Engine {
 /// One semantics pass over a document. Bundles the analysis result with
 /// the diagnostics emitted during the same pass so `Engine::diagnostics`
 /// returns from cache instead of re-running it.
-pub struct Snapshot {
-    pub sem: Semantics,
-    pub diagnostics: Vec<CompilerDiagnostic>,
+///
+/// Internal to the crate: external consumers reach the underlying
+/// `Semantics` through the typed query methods on [`Engine`] (`definition`,
+/// `hover`, …) rather than the raw bundle.
+pub(crate) struct Snapshot {
+    pub(crate) sem: Semantics,
+    pub(crate) diagnostics: Vec<CompilerDiagnostic>,
 }
 
 struct Document {
     text: String,
-    /// Last `version` reported by the client (`didOpen` / `didChange`).
-    /// Tracked for future incremental sync; not currently consumed.
-    #[allow(dead_code)]
-    version: Option<i32>,
     /// Cached snapshot for the current `text`. Cleared whenever any
     /// document is updated/closed, so cross-file edits don't leave a
     /// stale `Semantics` against changed imports.
@@ -80,17 +80,15 @@ struct Document {
 }
 
 impl Document {
-    fn new(text: String, version: Option<i32>) -> Self {
+    fn new(text: String) -> Self {
         Self {
             text,
-            version,
             snapshot: RefCell::new(None),
         }
     }
 
-    fn replace_text(&mut self, text: String, version: Option<i32>) {
+    fn replace_text(&mut self, text: String) {
         self.text = text;
-        self.version = version;
         self.snapshot.get_mut().take();
     }
 }
@@ -118,26 +116,16 @@ impl Engine {
     }
 
     pub fn open_document(&mut self, uri: &str, text: String) {
-        self.open_document_versioned(uri, text, None);
-    }
-
-    pub fn open_document_versioned(&mut self, uri: &str, text: String, version: Option<i32>) {
         self.invalidate_all_snapshots();
-        self.documents
-            .insert(uri.to_string(), Document::new(text, version));
+        self.documents.insert(uri.to_string(), Document::new(text));
     }
 
     pub fn update_document(&mut self, uri: &str, text: String) {
-        self.update_document_versioned(uri, text, None);
-    }
-
-    pub fn update_document_versioned(&mut self, uri: &str, text: String, version: Option<i32>) {
         self.invalidate_all_snapshots();
         match self.documents.get_mut(uri) {
-            Some(doc) => doc.replace_text(text, version),
+            Some(doc) => doc.replace_text(text),
             None => {
-                self.documents
-                    .insert(uri.to_string(), Document::new(text, version));
+                self.documents.insert(uri.to_string(), Document::new(text));
             }
         }
     }
@@ -170,7 +158,11 @@ impl Engine {
     /// every `CompilerDiagnostic` emitted during that pass, so
     /// `diagnostics` can answer from the same cache without re-running
     /// the pipeline.
-    pub async fn snapshot<H: CompilerHost>(&self, uri: &str, host: &H) -> Option<Rc<Snapshot>> {
+    pub(crate) async fn snapshot<H: CompilerHost>(
+        &self,
+        uri: &str,
+        host: &H,
+    ) -> Option<Rc<Snapshot>> {
         let doc = self.documents.get(uri)?;
         // Drop the borrow before the `await` below — the `if let`
         // scrutinee is a temporary that goes out of scope at the end of

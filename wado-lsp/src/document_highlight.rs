@@ -45,10 +45,10 @@ pub fn document_highlight(
     _uri: &str,
     encoding: PositionEncoding,
 ) -> Vec<DocumentHighlight> {
-    let module = sem.entry_module_source.clone();
+    let entry = &sem.entry_module_source;
     let (line, col) = lsp_position_to_line_col(source, position, encoding);
 
-    let Some(cursor) = sem.cursor_at(&module, line, col) else {
+    let Some(cursor) = sem.cursor_at(entry, line, col) else {
         return Vec::new();
     };
     let Some(def_key) = cursor.def_key() else {
@@ -57,7 +57,7 @@ pub fn document_highlight(
 
     let mut out = Vec::new();
 
-    if def_key.module == module
+    if &def_key.module == entry
         && let Some(span) = sem
             .name_span_of(&def_key)
             .or_else(|| sem.symbol_at(&def_key).and_then(|s| s.span))
@@ -69,7 +69,7 @@ pub fn document_highlight(
     }
 
     for use_key in cursor.references_to_def() {
-        if use_key.module != module {
+        if &use_key.module != entry {
             continue;
         }
         let Some(span) = sem.span_of_key(&use_key) else {

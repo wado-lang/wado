@@ -36,7 +36,7 @@ pub fn find_definition(
     uri: &str,
     encoding: PositionEncoding,
 ) -> Option<DefinitionResult> {
-    let module = sem.entry_module_source.clone();
+    let entry = &sem.entry_module_source;
     let (line, col) = lsp_position_to_line_col(source, position, encoding);
 
     // Priority: file-path jumps first, symbol-based resolution second.
@@ -57,11 +57,11 @@ pub fn find_definition(
     // itself), keeping file-path resolution first preserves the current
     // behaviour: jump to the file, not to whatever symbol happens to share
     // the span.
-    if let Some(result) = file_path_definition(sem, &module, line, col, uri) {
+    if let Some(result) = file_path_definition(sem, entry, line, col, uri) {
         return Some(result);
     }
 
-    let cursor = sem.cursor_at(&module, line, col)?;
+    let cursor = sem.cursor_at(entry, line, col)?;
     let def_key = cursor.def_key()?;
 
     // Most defs are registered as symbols (functions, types, globals, locals).
@@ -70,12 +70,12 @@ pub fn find_definition(
     // individually registered as symbols; the URI fallback handles both.
     let span = cursor.def_span()?;
     let def_uri = match sem.symbol_at(&def_key) {
-        Some(symbol) => symbol_uri(sem, symbol, uri)?,
-        None => module_uri(sem, &def_key.module, uri)?,
+        Some(symbol) => symbol_uri(entry, symbol, uri)?,
+        None => module_uri(entry, &def_key.module, uri)?,
     };
     Some(DefinitionResult {
         uri: def_uri,
-        range: span_to_range(&span, source_for_key(sem, &def_key, source), encoding),
+        range: span_to_range(&span, source_for_key(entry, &def_key, source), encoding),
     })
 }
 
@@ -85,20 +85,16 @@ pub fn find_definition(
 /// not on such a path.
 fn file_path_definition(
     sem: &Semantics,
-    module: &wado_compiler::module_source::ModuleSource,
+    entry: &wado_compiler::module_source::ModuleSource,
     line: usize,
     col: usize,
     request_uri: &str,
 ) -> Option<DefinitionResult> {
-    let ast_module = sem.modules.get(module)?;
+    let ast_module = sem.modules.get(entry)?;
     let path = find_file_path_at_cursor(ast_module, line, col)?;
-    let target_module = resolve_import_with_entry(
-        &mut sem.interner.borrow_mut(),
-        module,
-        &path,
-        Some(&sem.entry_module_source),
-    );
-    let target_uri = module_uri(sem, &target_module, request_uri)?;
+    let target_module =
+        resolve_import_with_entry(&mut sem.interner.borrow_mut(), entry, &path, Some(entry));
+    let target_uri = module_uri(entry, &target_module, request_uri)?;
     Some(DefinitionResult {
         uri: target_uri,
         range: Range {

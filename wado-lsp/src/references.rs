@@ -36,10 +36,10 @@ pub fn find_references(
     include_declaration: bool,
     encoding: PositionEncoding,
 ) -> Vec<ReferenceLocation> {
-    let module = sem.entry_module_source.clone();
+    let entry = &sem.entry_module_source;
     let (line, col) = lsp_position_to_line_col(source, position, encoding);
 
-    let Some(cursor) = sem.cursor_at(&module, line, col) else {
+    let Some(cursor) = sem.cursor_at(entry, line, col) else {
         return Vec::new();
     };
     let Some(def_key) = cursor.def_key() else {
@@ -75,12 +75,13 @@ pub(crate) fn declaration_location(
     source: &str,
     encoding: PositionEncoding,
 ) -> Option<ReferenceLocation> {
+    let entry = &sem.entry_module_source;
     let symbol = sem.symbol_at(def_key)?;
     let span = sem.name_span_of(def_key).or(symbol.span)?;
-    let uri = symbol_uri(sem, symbol, request_uri)?;
+    let uri = symbol_uri(entry, symbol, request_uri)?;
     Some(ReferenceLocation {
         uri,
-        range: span_to_range(&span, source_for_key(sem, def_key, source), encoding),
+        range: span_to_range(&span, source_for_key(entry, def_key, source), encoding),
     })
 }
 
@@ -91,11 +92,12 @@ pub(crate) fn use_site_location(
     source: &str,
     encoding: PositionEncoding,
 ) -> Option<ReferenceLocation> {
+    let entry = &sem.entry_module_source;
     let span = sem.span_of_key(use_key)?;
-    let uri = module_uri(sem, &use_key.module, request_uri)?;
+    let uri = module_uri(entry, &use_key.module, request_uri)?;
     Some(ReferenceLocation {
         uri,
-        range: span_to_range(&span, source_for_key(sem, use_key, source), encoding),
+        range: span_to_range(&span, source_for_key(entry, use_key, source), encoding),
     })
 }
 

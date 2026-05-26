@@ -45,10 +45,10 @@ pub fn find_hover(
     _uri: &str,
     encoding: PositionEncoding,
 ) -> Option<HoverResult> {
-    let module = sem.entry_module_source.clone();
+    let entry = &sem.entry_module_source;
     let (line, col) = lsp_position_to_line_col(source, position, encoding);
 
-    let cursor = sem.cursor_at(&module, line, col)?;
+    let cursor = sem.cursor_at(entry, line, col)?;
     let symbol = cursor.def_symbol()?;
     let signature = match &symbol.kind {
         SymbolKind::Variable(_) => render_local_binding(sem, &symbol.defined_at, &symbol.name)?,
