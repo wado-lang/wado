@@ -31,7 +31,7 @@ The driver is `compile_after_load` in `src/lib.rs`.
 | Lex / Parse            | AST             | `lexer.rs`, `parser.rs`, `token.rs`, `syntax.rs` |
 | Bind                   | AST + bindings  | `bind.rs`                                        |
 | Loader                 | All modules     | `loader.rs`                                      |
-| Annotate               | TIR + facts     | `semantics.rs`, `analyze.rs`, `elaborator/`        |
+| Annotate               | TIR + facts     | `semantics.rs`, `analyze.rs`, `elaborator/`      |
 | Default-purity Check   | (validation)    | `effect_check.rs::check_default_purity`          |
 | Synthesis              | TIR (extended)  | `synthesis/`                                     |
 | Effect / Stores        | TIR (validated) | `effect_check.rs`                                |

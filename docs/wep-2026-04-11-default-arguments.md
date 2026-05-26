@@ -447,7 +447,7 @@ let resp = Fetch::fetch(url, init).read();
 | Effect system    | Default expressions must be pure (no effects)       |
 | Traits           | Only trait definition specifies defaults            |
 | Function types   | Defaults erased — arity fixed                       |
-| Closures         | Defaults rejected — parsed but error in elaborator    |
+| Closures         | Defaults rejected — parsed but error in elaborator  |
 | `export fn` (CM) | Defaults rejected — arity must match WIT signature  |
 | Default trait    | Auto-derived for all-defaulted structs              |
 | Serde            | `#[serde(default)]` uses field default value        |
