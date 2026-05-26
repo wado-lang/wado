@@ -755,8 +755,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
 
     // === Phase 7: Resolve all modules to TIR ===
     let resolve_output = {
-        let _span = logger.span("resolve");
-        Elaborator::resolve_all_modules(
+        let _span = logger.span("elaborate");
+        Elaborator::elaborate_all_modules(
             &symbols,
             &load_result.modules,
             load_result.entry_module_source.clone(),

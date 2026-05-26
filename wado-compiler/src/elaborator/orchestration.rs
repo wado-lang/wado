@@ -9,7 +9,7 @@
 //!   so LSP queries can resolve a [`SymbolKey`] to a decl-backed type
 //!   without running TIR lowering. The output is an [`AnnotateState`] that
 //!   both `lower_tir` and the LSP consume.
-//! - [`Elaborator::lower_tir_from_state`] reads that state and produces one
+//! - [`Elaborator::build_tir_from_state`] reads that state and produces one
 //!   [`TirModule`] per source module. It does not mutate the annotate
 //!   output; all new types created during lowering (anonymous structs,
 //!   monomorphic instances) are written through the shared
@@ -45,7 +45,7 @@ use super::types::{
 };
 
 /// Analysis state produced by [`Elaborator::annotate_modules`] and consumed by
-/// [`Elaborator::lower_tir_from_state`].
+/// [`Elaborator::build_tir_from_state`].
 ///
 /// All expensive maps are stored behind `Rc` so the state is cheap to share
 /// between LSP queries and the lowering pipeline without cloning the
@@ -91,9 +91,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Run the full resolve pipeline: annotate, then lower to TIR.
     ///
     /// This is a thin wrapper over [`Elaborator::annotate_modules`] +
-    /// [`Elaborator::lower_tir_from_state`]. Callers that want access to the
+    /// [`Elaborator::build_tir_from_state`]. Callers that want access to the
     /// annotate output (e.g. LSP) should call the two phases separately.
-    pub(crate) fn resolve_all_modules(
+    pub(crate) fn elaborate_all_modules(
         symbols: &'a SymbolTable,
         modules: &'a IndexMap<ModuleSource, Module>,
         entry_module_source: ModuleSource,
@@ -112,7 +112,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             None,
         )?;
         let trait_env = state.trait_env.clone();
-        let tir_modules = Self::lower_tir_from_state(
+        let tir_modules = Self::build_tir_from_state(
             &state,
             symbols,
             modules,
@@ -621,11 +621,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             Self::topological_sort_modules(modules, &all_struct_fields, &type_table.borrow());
 
         let (wasi_registry, world_registry) = {
-            let _span = logger.span("resolve/wasi_registry");
+            let _span = logger.span("elaborate/wasi_registry");
             WasiRegistry::build_from_stdlib()
         };
         let builtin_registry = {
-            let _span = logger.span("resolve/builtin_registry");
+            let _span = logger.span("elaborate/builtin_registry");
             let mut registry = if let Some(snap_state) = snapshot_state {
                 // The snapshot's registry is bound to the snapshot's
                 // `TypeTable`, whose entries we cloned into `type_table`
@@ -652,7 +652,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // lookups by type name instead of scanning all items in all modules per method call.
         // Also runs orphan rule checking; violations are emitted as errors.
         let (trait_env, orphan_violations) = {
-            let _span = logger.span("resolve/trait_env");
+            let _span = logger.span("elaborate/trait_env");
             super::trait_env::TraitEnv::build(modules, symbols)
         };
         for violation in orphan_violations {
@@ -802,7 +802,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Lower phase: emit one [`TirModule`] per source module using the state
     /// produced by [`Elaborator::annotate_modules`]. Errors are collected in the
     /// logger; the function returns [`Bail`] if any module failed.
-    pub(crate) fn lower_tir_from_state(
+    pub(crate) fn build_tir_from_state(
         state: &AnnotateState,
         symbols: &'a SymbolTable,
         modules: &'a IndexMap<ModuleSource, Module>,
@@ -830,7 +830,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // or run the full body-level resolve pass (user code).  Errors
         // are emitted to the logger; we keep going so one broken module
         // doesn't mask others.
-        let _span = logger.span("resolve/modules");
+        let _span = logger.span("elaborate/modules");
         for module_source in &state.sorted_sources {
             // Cache hit: deep-clone the cached `TirModule` into the
             // per-compile shared type table.  Only `Core` / `Wasi` /

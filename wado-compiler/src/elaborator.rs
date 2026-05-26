@@ -905,13 +905,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // First pass: collect type definitions
         {
-            let _span = self.logger.span("resolve/collect_types");
+            let _span = self.logger.span("elaborate/collect_types");
             self.collect_types(module);
         }
 
         // Second pass: collect function signatures (for call resolution)
         {
-            let _span = self.logger.span("resolve/collect_sigs");
+            let _span = self.logger.span("elaborate/collect_sigs");
             self.collect_function_signatures(module);
         }
 
@@ -993,7 +993,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         // Third pass: resolve functions
-        let _resolve_funcs_span = self.logger.span("resolve/resolve_funcs");
+        let _resolve_funcs_span = self.logger.span("elaborate/resolve_funcs");
         let mut tir_module = TirModule::new(module_source);
 
         // Pre-populate the generic-function inference caches for every

@@ -60,7 +60,7 @@ pub struct Semantics {
     ///
     /// `None` when analyze or [`Elaborator::annotate_modules`] bailed before
     /// the state could be built. `Some(_)` once resolve completed — even
-    /// if a later [`Elaborator::lower_tir_from_state`] bail set
+    /// if a later [`Elaborator::build_tir_from_state`] bail set
     /// [`Self::is_complete`] to `false`. The pair `(state, is_complete)`
     /// therefore has three distinguishable states:
     ///
@@ -75,7 +75,7 @@ pub struct Semantics {
     /// is safe. LSP queries do not inspect `state` directly.
     pub(crate) state: Option<AnnotateState>,
     /// Use→def map populated by the real resolver as it walks function
-    /// bodies in `lower_tir_from_state`. Maps `(module, IdentExpr.id)` to
+    /// bodies in `build_tir_from_state`. Maps `(module, IdentExpr.id)` to
     /// the binding's defining `SymbolKey`. Empty when resolve did not run
     /// or bailed before recording any edges.
     pub(crate) references: IndexMap<SymbolKey, SymbolKey>,
@@ -85,7 +85,7 @@ pub struct Semantics {
     /// [`Semantics::symbol_at`] when the key does not name an item-level
     /// symbol. Empty when resolve did not run or bailed early.
     pub(crate) locals: IndexMap<SymbolKey, Symbol>,
-    /// TIR modules produced by [`crate::elaborator::Elaborator::lower_tir_from_state`].
+    /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `lower_tir` did not run or bailed.
     pub(crate) tir_modules: IndexMap<ModuleSource, TirModule>,
@@ -565,7 +565,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
 
     // Per-thread stdlib `Semantics` snapshot.  When present,
     // `annotate_modules` seeds its `TypeTable` / decl maps / registries
-    // from this snapshot and `lower_tir_from_state` copies the
+    // from this snapshot and `build_tir_from_state` copies the
     // pre-lowered stdlib `TirModule`s directly into its result, skipping
     // the ~28 s of CPU otherwise duplicated across a typical `wado test`
     // run.  Returns `None` when called from inside the snapshot builder
@@ -606,7 +606,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     }
 
     let state = {
-        let _span = logger.span("resolve/annotate");
+        let _span = logger.span("elaborate/annotate");
         Elaborator::annotate_modules(
             &symbols,
             &load_result.modules,
@@ -643,8 +643,8 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // can answer cursor queries against whatever bodies the resolver did
     // reach before bailing.
     let (tir_modules, lower_ok) = {
-        let _span = logger.span("resolve/lower_tir");
-        match Elaborator::lower_tir_from_state(
+        let _span = logger.span("elaborate/build_tir");
+        match Elaborator::build_tir_from_state(
             &state,
             &symbols,
             &load_result.modules,

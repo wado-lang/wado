@@ -255,7 +255,7 @@ impl SynthesisedImpls {
 impl TraitEnv {
     /// Build trait indices from all loaded modules.
     ///
-    /// Called once in `resolve_all_modules` before per-module resolution begins.
+    /// Called once in `elaborate_all_modules` before per-module resolution begins.
     /// The indices enable O(1) trait lookup by type/trait name instead of scanning all modules.
     /// Also performs orphan rule checking for impl blocks in local (user) modules.
     ///
