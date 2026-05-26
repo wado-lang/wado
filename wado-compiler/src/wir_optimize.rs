@@ -37,6 +37,7 @@ mod dce;
 mod elide_local;
 mod elide_struct;
 mod init_guard;
+mod mod_ref;
 mod nullable_ref;
 mod peephole;
 mod sroa_param;

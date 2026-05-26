@@ -17,6 +17,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage, WirTypeDef};
 use crate::wir_visitor::WirMutVisitor;
 
+use super::mod_ref::{ModRef, can_move_past};
 use super::util::is_root_observable;
 
 #[derive(Default)]
@@ -403,19 +404,28 @@ impl WirMutVisitor for FlattenSeqAssignments {
 }
 
 /// Whole-module pass: elide single-field struct locals where the only use is
-/// the immediately-following sibling instruction and the use site is the
-/// leftmost-evaluated descendant of that instruction.
+/// reachable from the def via a sequence of intervening sibling instructions
+/// whose [`ModRef`] summary is compatible with re-evaluating the inner field
+/// initializer at the use site.
 ///
 /// Unlike [`elide_single_field_struct_locals`], this pass does NOT require the
-/// inner field initializer to be re-evaluation safe (`is_pure_for_elision`).
-/// Instead, adjacency + leftmost-evaluation ensures that no intervening side
-/// effect can mutate state that the inner expression depends on.
+/// inner field initializer to be re-evaluation safe in the unconditional sense
+/// (`is_pure_for_elision`). Instead, [`super::mod_ref::can_move_past`]
+/// witnesses the safety on a per-intervening-statement basis: each sibling
+/// between def and use must avoid clobbering any local / global / heap /
+/// memory location the inner reads, must transfer control linearly (no
+/// `Br` / `Return` / `If` / `Loop`), must not call into user code, and must
+/// not introduce a trap that races with one in the inner.
 ///
 /// Targets the very common `Box<T>` pattern produced by boxing+inlining:
 /// ```text
 /// self_N = struct.new "Box<char>" { value: <heap-reading block> };
-/// break label: f(self_N.value) == g(...);
+/// f_M    = __local_K;                                              // intervening copy
+/// "u64::fmt_decimal"(self_N.value, f_M);                           // leftmost use
 /// ```
+/// The pure-local copy between def and use was the historical blocker for
+/// the rewrite (skipping over `Nop` only). The may-alias check now lets it
+/// slide.
 pub(super) fn elide_adjacent_single_use_struct_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
         let Some(body) = &mut func.body else {
@@ -469,23 +479,14 @@ fn elide_adjacent_in_body(body: &mut [WirInstr], stats: &IndexMap<String, LocalS
     for instr in body.iter_mut() {
         changed |= elide_adjacent_in_nested(instr, stats);
     }
-    // Skip `Nop` placeholders (left by earlier elision passes) when locating
-    // the next sibling so `LocalSet; nop; nop; use` is treated identically to
-    // `LocalSet; use`.
     let mut i = 0;
     while i < body.len() {
-        if let Some(j) = next_non_nop(body, i + 1)
-            && try_elide_adjacent_pair(body, i, j, stats)
-        {
+        if try_elide_at(body, i, stats) {
             changed = true;
         }
         i += 1;
     }
     changed
-}
-
-fn next_non_nop(body: &[WirInstr], from: usize) -> Option<usize> {
-    (from..body.len()).find(|&k| !matches!(body[k], WirInstr::Nop))
 }
 
 fn elide_adjacent_in_nested(instr: &mut WirInstr, stats: &IndexMap<String, LocalStats>) -> bool {
@@ -520,40 +521,92 @@ fn elide_adjacent_in_nested(instr: &mut WirInstr, stats: &IndexMap<String, Local
     changed
 }
 
-/// Try to elide `body[i]` (`LocalSet` of single-field `StructNew`) by substituting
-/// the sole field initializer into `body[j]` (the next non-Nop sibling) at the
-/// `StructGet` position. Returns `true` on success.
-fn try_elide_adjacent_pair(
-    body: &mut [WirInstr],
-    i: usize,
-    j: usize,
+/// Identifies and validates a single-field `StructNew` candidate at
+/// position `i`. On success returns the candidate's local name, the
+/// sole field name read at the use site, and a [`ModRef`] summary of
+/// the inner field initializer — the latter is used by
+/// [`find_use_site`] to decide whether intervening siblings can be
+/// safely skipped on the way to the use.
+fn describe_candidate(
+    instr: &WirInstr,
     stats: &IndexMap<String, LocalStats>,
-) -> bool {
-    let name = match &body[i] {
-        WirInstr::LocalSet { name, value } if matches!(value.as_ref(), WirInstr::StructNew { fields, .. } if fields.len() == 1) => {
-            name.clone()
-        }
-        _ => return false,
+) -> Option<(String, String, ModRef)> {
+    let (name, inner) = match instr {
+        WirInstr::LocalSet { name, value } => match value.as_ref() {
+            WirInstr::StructNew { fields, .. } if fields.len() == 1 => (name.clone(), &fields[0]),
+            _ => return None,
+        },
+        _ => return None,
     };
-    let Some(s) = stats.get(&name) else {
-        return false;
-    };
+    let s = stats.get(&name)?;
     if s.defs != 1 || s.structget_uses != 1 || s.total_localgets != 1 {
-        return false;
+        return None;
     }
     if s.field_uses.len() != 1 {
-        return false;
+        return None;
     }
     let field_name = s.field_uses.keys().next().unwrap().clone();
-    if !use_is_leftmost(&body[j], &name, &field_name) {
-        return false;
+    let inner_mr = ModRef::of(inner);
+    Some((name, field_name, inner_mr))
+}
+
+/// Scan forward from `from` looking for the leftmost-evaluated use of
+/// `name.field_name`. The scan skips over both
+///
+/// 1. `Nop` placeholders left by earlier elision passes — so
+///    `LocalSet; nop; nop; use` is treated identically to
+///    `LocalSet; use`; and
+/// 2. arbitrary intervening siblings whose [`ModRef`] summary is
+///    compatible with re-evaluating `inner_mr` at the use position
+///    (see [`can_move_past`] for the soundness conditions).
+///
+/// Returns the use's position, or `None` if the scan hits a sibling
+/// that fails the may-alias / control-flow check before finding the
+/// use, or if no use exists in this body.
+fn find_use_site(
+    body: &[WirInstr],
+    from: usize,
+    name: &str,
+    field_name: &str,
+    inner_mr: &ModRef,
+) -> Option<usize> {
+    let mut k = from;
+    while k < body.len() {
+        match &body[k] {
+            WirInstr::Nop => {
+                k += 1;
+            }
+            stmt if use_is_leftmost(stmt, name, field_name) => {
+                return Some(k);
+            }
+            stmt => {
+                let int_mr = ModRef::of(stmt);
+                if !can_move_past(inner_mr, &int_mr, name) {
+                    return None;
+                }
+                k += 1;
+            }
+        }
     }
+    None
+}
+
+/// Try to elide `body[i]` (a `LocalSet` of a single-field `StructNew`)
+/// by substituting the sole field initializer into the next reachable
+/// use site at the `StructGet` position. Returns `true` on success.
+fn try_elide_at(body: &mut [WirInstr], i: usize, stats: &IndexMap<String, LocalStats>) -> bool {
+    let Some((name, field_name, inner_mr)) = describe_candidate(&body[i], stats) else {
+        return false;
+    };
+    let Some(j) = find_use_site(body, i + 1, &name, &field_name, &inner_mr) else {
+        return false;
+    };
     let inner = match std::mem::replace(&mut body[i], WirInstr::Nop) {
         WirInstr::LocalSet { value, .. } => match *value {
             WirInstr::StructNew { mut fields, .. } => fields.remove(0),
-            _ => unreachable!("guarded by name match above"),
+            _ => unreachable!("guarded by describe_candidate"),
         },
-        _ => unreachable!("guarded by name match above"),
+        _ => unreachable!("guarded by describe_candidate"),
     };
     substitute_first_use(&mut body[j], &name, &field_name, inner);
     true

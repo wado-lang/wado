@@ -1,0 +1,46 @@
+// Test: D1 — adjacent-use single-field struct local elision tolerates an
+// intervening unrelated local-to-local copy between the candidate def and
+// the use site.
+//
+// When a callee whose receiver is a value-typed reference (`&self: &R`)
+// formats two of its fields with `{r.x} {r.y}` template-string syntax,
+// boxing+inlining of `u64::fmt_decimal` lowers each formatted value into a
+// `LocalSet (StructNew "Box<u64>" { value: <StructGet> })` paired with a
+// fresh `&mut Formatter` parameter alias. The alias is a pure local copy:
+//
+//     self_N = struct.new "Box<u64>" { value: r.field };
+//     f_M    = __local_K;                                              // intervening copy
+//     u64::fmt_decimal(self_N.value, f_M);                             // leftmost use
+//
+// The historical pass skipped only `Nop` placeholders, so the
+// `f_M = __local_K;` blocked the rewrite and `Box<u64>` survived. The
+// relaxed pass consults `ModRef::can_move_past` and, finding the
+// intervening copy is `Control::Linear`, neither reads `self_N` nor
+// writes anything `r.field` depends on, performs the substitution.
+
+use { println, Stdout } from "core:cli";
+
+struct R {
+    total: u64,
+    sum: u64,
+}
+
+// Defined as a separate function so the `&R` parameter survives SROA
+// — otherwise the struct fields collapse to plain locals and the Box
+// pattern doesn't appear in the first place.
+fn dump(r: &R) with Stdout {
+    println(`{r.total} {r.sum}`);
+}
+
+export fn run() with Stdout {
+    let r = R { total: 100, sum: 200 };
+    dump(&r);
+}
+
+__DATA__
+{
+    "stdout": "100 200\n",
+    "wir_not_expect:O2": [
+        "struct.new \"core:prelude/types.wado//Box<u64>\""
+    ]
+}

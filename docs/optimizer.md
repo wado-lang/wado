@@ -314,7 +314,7 @@ Substitutes `StructGet(LocalGet(x), field)` with the inner value when `x` is def
 Two complementary variants run in sequence:
 
 - Re-evaluation-safe elision (`elide_single_field_struct_locals`) — substitutes when the inner field initializer is referentially transparent (no heap reads, no calls, no allocations). Safe regardless of how far apart def and use are.
-- Adjacent-use elision (`elide_adjacent_single_use_struct_locals`) — relaxes the purity check by relying on adjacency instead. Fires when the local has exactly one def + one use, the use is the immediately-following sibling instruction (skipping intervening `Nop`s), and the use is the leftmost-evaluated descendant of that instruction. Recovers the very common `Box<T>` boxing+inlining pattern (e.g. `Box<char> { value: <heap-reading block> }` followed by `.value`) where the inner reads heap state but no intervening operation could mutate it.
+- Adjacent-use elision (`elide_adjacent_single_use_struct_locals`) — relaxes the purity check by relying on a may-alias check between def and use instead. Fires when the local has exactly one def + one use, the use is the leftmost-evaluated descendant of some reachable sibling instruction, and every sibling between def and use either is a `Nop` placeholder or has a `ModRef` summary compatible with re-evaluating the inner field initializer at the use position (linear control transfer, no read of the candidate, no clobber of any local / global / heap / memory location the inner reads, and no trap that races with one in the inner; see `wir_optimize/mod_ref.rs`). Recovers the very common `Box<T>` boxing+inlining pattern (e.g. `Box<char> { value: <heap-reading block> }` followed by `.value`) plus FTS-shape patterns with an intervening `f_M = __local_K;` pure local copy. E2E: [opt_elide_adjacent_struct_local.wado](../wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado), [opt_elide_adjacent_struct_local_intervening_copy.wado](../wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local_intervening_copy.wado).
 
 ### Phase 3: Data Flow
 
@@ -343,6 +343,10 @@ DAE and DRVE live at NIR (`optimize::dae`, `optimize::drve`) alongside `inline` 
 ### Phase 7: Global Cleanup
 
 Trivial init-guard removal — removes compiler-generated module-initialization guard blocks when no actual initialization remains.
+
+### Shared facilities
+
+- Per-instruction mod/ref summary (`wir_optimize/mod_ref.rs`) — `ModRef::of(instr)` returns a conservative `(local_reads, local_writes, global_reads, global_writes, heap, memory, control, calls, allocates, may_trap)` summary of a `WirInstr` and its sub-tree. Passes consume it through three predicates: `is_re_evaluation_safe` (can the expression be moved to a later program point?), `may_clobber` (could `self`'s writes invalidate `other`'s reads?), and the `can_move_past` convenience (the common "skip an intervening statement while erasing a candidate local" check used by Phase 2's adjacent-use elision). Unrelated to Wado's algebraic-effect / `with`-clause machinery in `effect_check.rs`; the name follows the LLVM `ModRefInfo` / GCC `mod`/`ref` convention from classical compiler optimization. Granularity is intentionally coarse for now (single read/write bits per heap and memory channel, "calls clobber everything"); refining the internal representation does not require call-site churn because passes never inspect it directly.
 
 ### Phase 8: Final DCE and Compaction
 
