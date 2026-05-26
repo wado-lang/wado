@@ -43,7 +43,7 @@ use crate::nir::{
     NirBlock, NirExpr, NirExprKind, NirFunction, NirPattern, NirStmt, NirStmtKind, NirUnaryOp,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::NirRefVisitor;
+use crate::nir_visitor::{NirMutVisitor, NirOptVisitor, NirRefVisitor, opt_walk_block};
 use crate::token::Span;
 
 use super::mod_ref::{ModRef, can_move_past};
@@ -73,8 +73,12 @@ fn elide_in_function(func: &mut NirFunction) -> bool {
 
     let body = func.body.as_mut().unwrap();
     let stats = collect_local_stats(body);
+    let mut elider = Elider {
+        stats: &stats,
+        blacklist: &blacklist,
+    };
     let mut changed = false;
-    while elide_in_block(body, &stats, &blacklist) {
+    while elider.visit_block(body) {
         changed = true;
     }
     changed
@@ -191,205 +195,27 @@ fn record_pattern_defs(pat: &NirPattern, stats: &mut IndexMap<u32, LocalStats>) 
 // Elision driver
 // -----------------------------------------------------------------------
 
-fn elide_in_block(
-    block: &mut NirBlock,
-    stats: &IndexMap<u32, LocalStats>,
-    blacklist: &IndexSet<u32>,
-) -> bool {
-    let mut changed = false;
-
-    // Recurse into nested blocks first so inner-scope candidates get a
-    // chance to fire before we scan this block's siblings.
-    for stmt in &mut block.stmts {
-        changed |= elide_in_nested_stmt(stmt, stats, blacklist);
-    }
-
-    let mut i = 0;
-    while i < block.stmts.len() {
-        if try_elide_at(&mut block.stmts, i, stats, blacklist) {
-            changed = true;
-        }
-        i += 1;
-    }
-
-    changed
+/// Drives the elision pass via [`NirOptVisitor`]. The default `visit_expr` /
+/// `visit_stmt` recursion handles all the boilerplate descent into nested
+/// blocks; the only override is `visit_block`, which adds a sibling-window
+/// scan AFTER its children have run (so inner-scope candidates fire before
+/// we try outer-scope ones).
+struct Elider<'a> {
+    stats: &'a IndexMap<u32, LocalStats>,
+    blacklist: &'a IndexSet<u32>,
 }
 
-fn elide_in_nested_stmt(
-    stmt: &mut NirStmt,
-    stats: &IndexMap<u32, LocalStats>,
-    blacklist: &IndexSet<u32>,
-) -> bool {
-    let mut changed = false;
-    match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } => {
-            changed |= elide_in_nested_expr(value, stats, blacklist);
-        }
-        NirStmtKind::LetDestructure { value, .. } => {
-            changed |= elide_in_nested_expr(value, stats, blacklist);
-        }
-        NirStmtKind::Expr(e) => {
-            changed |= elide_in_nested_expr(e, stats, blacklist);
-        }
-        NirStmtKind::Return { value: Some(v) } => {
-            changed |= elide_in_nested_expr(v, stats, blacklist);
-        }
-        NirStmtKind::Break { value: Some(v), .. } => {
-            changed |= elide_in_nested_expr(v, stats, blacklist);
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            changed |= elide_in_nested_expr(condition, stats, blacklist);
-            changed |= elide_in_block(then_block, stats, blacklist);
-            if let Some(eb) = else_block {
-                changed |= elide_in_block(eb, stats, blacklist);
+impl NirOptVisitor for Elider<'_> {
+    fn visit_block(&mut self, block: &mut NirBlock) -> bool {
+        let mut changed = opt_walk_block(self, block);
+        let mut i = 0;
+        while i < block.stmts.len() {
+            if try_elide_at(&mut block.stmts, i, self.stats, self.blacklist) {
+                changed = true;
             }
+            i += 1;
         }
-        NirStmtKind::Loop { body } => {
-            changed |= elide_in_block(body, stats, blacklist);
-        }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            changed |= elide_in_block(block, stats, blacklist);
-        }
-        NirStmtKind::Return { value: None }
-        | NirStmtKind::Break { value: None, .. }
-        | NirStmtKind::Continue => {}
-    }
-    changed
-}
-
-fn elide_in_nested_expr(
-    expr: &mut NirExpr,
-    stats: &IndexMap<u32, LocalStats>,
-    blacklist: &IndexSet<u32>,
-) -> bool {
-    let mut changed = false;
-    match &mut expr.kind {
-        NirExprKind::Block(block) => {
-            changed |= elide_in_block(block, stats, blacklist);
-        }
-        NirExprKind::LabeledBlock { block, .. } => {
-            changed |= elide_in_block(block, stats, blacklist);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            changed |= elide_in_nested_expr(condition, stats, blacklist);
-            changed |= elide_in_block(then_branch, stats, blacklist);
-            if let Some(eb) = else_branch {
-                changed |= elide_in_block(eb, stats, blacklist);
-            }
-        }
-        NirExprKind::Match { expr: scrut, arms } => {
-            changed |= elide_in_nested_expr(scrut, stats, blacklist);
-            for arm in arms {
-                if let Some(g) = &mut arm.guard {
-                    changed |= elide_in_nested_expr(g, stats, blacklist);
-                }
-                changed |= elide_in_nested_expr(&mut arm.body, stats, blacklist);
-            }
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            changed |= elide_in_nested_expr(scrutinee, stats, blacklist);
-            for arm in arms {
-                changed |= elide_in_block(arm, stats, blacklist);
-            }
-            changed |= elide_in_block(default, stats, blacklist);
-        }
-        _ => {
-            recurse_expr_children(expr, &mut |child| {
-                changed |= elide_in_nested_expr(child, stats, blacklist);
-            });
-        }
-    }
-    changed
-}
-
-fn recurse_expr_children<F: FnMut(&mut NirExpr)>(expr: &mut NirExpr, f: &mut F) {
-    match &mut expr.kind {
-        NirExprKind::Binary { left, right, .. } => {
-            f(left);
-            f(right);
-        }
-        NirExprKind::Unary { expr: inner, .. } => f(inner),
-        NirExprKind::Cast { expr: inner, .. } => f(inner),
-        NirExprKind::Assign { target, value } => {
-            f(target);
-            f(value);
-        }
-        NirExprKind::GlobalVarSet { value, .. } => f(value),
-        NirExprKind::Call { args, .. } => {
-            for a in args {
-                f(&mut a.expr);
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            f(receiver);
-            for a in args {
-                f(&mut a.expr);
-            }
-        }
-        NirExprKind::IndirectCall { callee, args } => {
-            f(callee);
-            for a in args {
-                f(a);
-            }
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            for a in args {
-                f(a);
-            }
-        }
-        NirExprKind::FieldAccess { expr: inner, .. } => f(inner),
-        NirExprKind::Index { expr: inner, index } => {
-            f(inner);
-            f(index);
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for fld in fields {
-                f(&mut fld.value);
-            }
-        }
-        NirExprKind::TupleLiteral { elements } => {
-            for e in elements {
-                f(e);
-            }
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                f(p);
-            }
-        }
-        NirExprKind::ClosureToCanonical { functor, .. } => f(functor),
-        NirExprKind::VariantTag { expr: inner }
-        | NirExprKind::VariantTest { expr: inner, .. }
-        | NirExprKind::VariantPayload { expr: inner, .. } => f(inner),
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. }
-        | NirExprKind::Block(_)
-        | NirExprKind::LabeledBlock { .. }
-        | NirExprKind::If { .. }
-        | NirExprKind::Match { .. }
-        | NirExprKind::Switch { .. } => {}
+        changed
     }
 }
 
@@ -693,52 +519,49 @@ fn walk_children_observable<'a>(
 // Substitution at use site
 // -----------------------------------------------------------------------
 
+/// Replaces the first `FieldAccess(Local(candidate), field_name)` reached
+/// in eval order with the saved `replacement` (consumed at most once).
+/// Drives the traversal via [`NirMutVisitor`]: each `visit_expr` either
+/// performs the replacement (consuming `slot`) or recurses through
+/// `walk_expr`, which already enumerates children in evaluation order.
+/// Once `slot` is `None` the visitor short-circuits.
+struct Substituter<'a> {
+    candidate: u32,
+    field_name: &'a str,
+    slot: Option<NirExpr>,
+}
+
+impl NirMutVisitor for Substituter<'_> {
+    fn visit_expr(&mut self, expr: &mut NirExpr) {
+        if self.slot.is_none() {
+            return;
+        }
+        if let NirExprKind::FieldAccess {
+            expr: inner,
+            field_name: fname,
+            ..
+        } = &expr.kind
+            && fname == self.field_name
+            && let NirExprKind::Local { index, .. } = &inner.kind
+            && *index == self.candidate
+        {
+            *expr = self.slot.take().unwrap();
+            return;
+        }
+        self.walk_expr(expr);
+    }
+}
+
 fn substitute_first_use(
     stmt: &mut NirStmt,
     candidate: u32,
     field_name: &str,
     replacement: NirExpr,
 ) {
-    let mut slot = Some(replacement);
-    sub_in_stmt(stmt, candidate, field_name, &mut slot);
-}
-
-fn sub_in_stmt(stmt: &mut NirStmt, candidate: u32, field_name: &str, slot: &mut Option<NirExpr>) {
-    if slot.is_none() {
-        return;
-    }
-    match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } => sub_in_expr(value, candidate, field_name, slot),
-        NirStmtKind::LetDestructure { value, .. } => {
-            sub_in_expr(value, candidate, field_name, slot)
-        }
-        NirStmtKind::Expr(e) => sub_in_expr(e, candidate, field_name, slot),
-        NirStmtKind::Return { value: Some(v) } | NirStmtKind::Break { value: Some(v), .. } => {
-            sub_in_expr(v, candidate, field_name, slot)
-        }
-        _ => {}
-    }
-}
-
-fn sub_in_expr(expr: &mut NirExpr, candidate: u32, field_name: &str, slot: &mut Option<NirExpr>) {
-    if slot.is_none() {
-        return;
-    }
-    if let NirExprKind::FieldAccess {
-        expr: inner,
-        field_name: fname,
-        ..
-    } = &expr.kind
-        && fname == field_name
-        && let NirExprKind::Local { index, .. } = &inner.kind
-        && *index == candidate
-    {
-        *expr = slot.take().unwrap();
-        return;
-    }
-    recurse_expr_children(expr, &mut |child| {
-        if slot.is_some() {
-            sub_in_expr(child, candidate, field_name, slot);
-        }
-    });
+    let mut sub = Substituter {
+        candidate,
+        field_name,
+        slot: Some(replacement),
+    };
+    sub.visit_stmt(stmt);
 }
