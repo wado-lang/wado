@@ -124,7 +124,7 @@ fn run(
     inline: Vec<Invocation>,
 ) -> PipelineOutcome {
     runtime()
-        .block_on(async { run_pipeline(manifest, root, host, provider, inline).await })
+        .block_on(async { run_pipeline(manifest, root, host, provider, inline, false).await })
         .unwrap()
 }
 
@@ -421,7 +421,9 @@ fn pipeline_invocations_feed_compiler_options_for_use_redirect() {
     let provider = StubProvider::new(b"component-bytes".to_vec());
 
     let outcome = runtime()
-        .block_on(async { run_pipeline(&m, tmp.path(), &host, &provider, vec![inline_inv]).await })
+        .block_on(async {
+            run_pipeline(&m, tmp.path(), &host, &provider, vec![inline_inv], false).await
+        })
         .unwrap();
 
     assert!(!outcome.invocations.is_empty());
@@ -470,7 +472,9 @@ fn inline_invocation_populates_invocation_index_for_redirect() {
     let provider = StubProvider::new(b"component-bytes".to_vec());
 
     let outcome = runtime()
-        .block_on(async { run_pipeline(&m, tmp.path(), &host, &provider, vec![inline_inv]).await })
+        .block_on(async {
+            run_pipeline(&m, tmp.path(), &host, &provider, vec![inline_inv], false).await
+        })
         .unwrap();
 
     assert_eq!(outcome.executed.len(), 1, "inline should have executed");

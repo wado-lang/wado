@@ -27,12 +27,14 @@ pub struct RunOptions {
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
     pub allocator: Option<String>,
+    pub no_cache: bool,
 }
 
 #[derive(Clone, Copy)]
 enum Opt {
     Dir,
     NoDir,
+    NoCache,
     OptLevel,
     InlineThreshold,
     OptIterations,
@@ -46,6 +48,7 @@ impl Opt {
     const ALL: &[Self] = &[
         Self::Dir,
         Self::NoDir,
+        Self::NoCache,
         Self::OptLevel,
         Self::InlineThreshold,
         Self::OptIterations,
@@ -66,6 +69,7 @@ impl Opt {
                 desc: "Preopen directory for WASI filesystem access\nUse --dir host::guest to specify different guest path\nOverrides the default of preopening the current directory",
             },
             Self::NoDir => args::NO_DIR_SPEC,
+            Self::NoCache => args::NO_CACHE_SPEC,
             Self::OptLevel => args::OPT_LEVEL_SPEC,
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
@@ -178,6 +182,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
     let mut allocator: Option<String> = None;
+    let mut no_cache = false;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -187,6 +192,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
                     explicit_dirs = true;
                 }
                 Opt::NoDir => no_dir = true,
+                Opt::NoCache => no_cache = true,
                 Opt::OptLevel => opt_level = compile::parse_opt_level_arg(&mut parser)?,
                 Opt::InlineThreshold => {
                     inline_threshold = Some(args::parse_inline_threshold_arg(
@@ -237,6 +243,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
         inline_threshold,
         opt_iterations,
         allocator,
+        no_cache,
     })
 }
 
@@ -320,6 +327,7 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
         inline_threshold: opts.inline_threshold,
         opt_iterations: opts.opt_iterations,
         allocator: opts.allocator,
+        no_cache: opts.no_cache,
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
     let wasm = compile::compile(&opts.input, &flags).await?;

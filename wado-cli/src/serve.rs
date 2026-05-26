@@ -72,6 +72,7 @@ pub struct ServeOptions {
     pub recycle_requests: u64,
     pub max_concurrency: usize,
     pub profile: ProfileMode,
+    pub no_cache: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -88,6 +89,7 @@ enum Opt {
     RecycleRequests,
     MaxConcurrency,
     Profile,
+    NoCache,
     Help,
 }
 
@@ -140,6 +142,7 @@ impl Opt {
         Self::RecycleRequests,
         Self::MaxConcurrency,
         Self::Profile,
+        Self::NoCache,
         Self::Help,
     ];
 
@@ -167,6 +170,7 @@ impl Opt {
             Self::RecycleRequests => RECYCLE_REQUESTS_SPEC,
             Self::MaxConcurrency => MAX_CONCURRENCY_SPEC,
             Self::Profile => PROFILE_SPEC,
+            Self::NoCache => args::NO_CACHE_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -232,6 +236,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut recycle_requests: u64 = DEFAULT_RECYCLE_REQUESTS;
     let mut max_concurrency: usize = DEFAULT_MAX_CONCURRENCY;
     let mut profile = ProfileMode::None;
+    let mut no_cache = false;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -283,6 +288,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                         ));
                     }
                 }
+                Opt::NoCache => no_cache = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -318,6 +324,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         recycle_requests,
         max_concurrency,
         profile,
+        no_cache,
     })
 }
 
@@ -1149,6 +1156,7 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
         inline_threshold: opts.inline_threshold,
         opt_iterations: opts.opt_iterations,
         allocator: opts.allocator,
+        no_cache: opts.no_cache,
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
     let wasm = compile::compile(&opts.input, &flags).await?;
