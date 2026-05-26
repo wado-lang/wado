@@ -381,7 +381,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let is_mut =
                     let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
                 let local_index = ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
-                self.record_local_symbol(*id, name, *name_span, is_mut);
+                self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
                 {
                     let mut closure_candidate = ast_value;
                     while let ast::Expr::Unary(u) = closure_candidate {
@@ -500,7 +500,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let is_mut =
                     let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
                 let local_index = ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
-                self.record_local_symbol(*id, name, *name_span, is_mut);
+                self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
                 // Unit placeholder: WIR builder sees unit type → skips LocalSet.
                 // The local is pre-declared and Wasm zero-initializes it.
                 let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
@@ -753,7 +753,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     RefBinding::None => type_id,
                 };
                 let local_index = ctx.add_local(name.clone(), binding_type, pat_mut, Some(*id));
-                self.record_local_symbol(*id, name, *name_span, pat_mut);
+                self.record_local_symbol(*id, name, *name_span, pat_mut, binding_type);
                 TirPattern::Binding {
                     name: name.clone(),
                     local_index,
@@ -1319,7 +1319,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     RefBinding::None => scrutinee_type,
                 };
                 let index = ctx.add_local(name.clone(), binding_type, is_mut, Some(*id));
-                self.record_local_symbol(*id, name, *name_span, is_mut);
+                self.record_local_symbol(*id, name, *name_span, is_mut, binding_type);
                 TirPattern::Binding {
                     name: name.clone(),
                     local_index: index,
@@ -2241,7 +2241,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx.enter_scope();
         let binding_local = ctx.add_local(binding_name.clone(), binding_type, is_mut, binding_id);
         if let (Some(id), Some(name_span)) = (binding_id, binding_name_span) {
-            self.record_local_symbol(id, &binding_name, name_span, is_mut);
+            self.record_local_symbol(id, &binding_name, name_span, is_mut, binding_type);
         }
 
         // For destructured bindings (e.g., [a, b]), add the sub-bindings and
@@ -2263,7 +2263,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let elem_type: TypeId =
                         inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
                     let local_idx = ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
-                    self.record_local_symbol(*id, name, *name_span, is_mut);
+                    self.record_local_symbol(*id, name, *name_span, is_mut, elem_type);
                     let field_access = TirExpr::new(
                         TirExprKind::FieldAccess {
                             expr: Box::new(TirExpr::new(
@@ -2439,7 +2439,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let is_mut =
                             for_of.is_mut || matches!(&for_of.binding, Pattern::MutIdent { .. });
                         let local_index = ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
-                        self.record_local_symbol(*id, name, *name_span, is_mut);
+                        self.record_local_symbol(*id, name, *name_span, is_mut, elem_type);
                         block_stmts.push(TirStmt::new(
                             TirStmtKind::Let {
                                 name: name.clone(),

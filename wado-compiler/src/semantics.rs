@@ -22,7 +22,7 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::resolver::Resolver;
 use crate::resolver::orchestration::AnnotateState;
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
-use crate::tir::{ResolvedType, TirModule, TypeTable};
+use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
 
 /// A ready-to-query analysis result.
@@ -85,6 +85,13 @@ pub struct Semantics {
     /// [`Semantics::symbol_at`] when the key does not name an item-level
     /// symbol. Empty when resolve did not run or bailed early.
     pub(crate) locals: IndexMap<SymbolKey, Symbol>,
+    /// Inferred [`TypeId`] for each local binding (let / param / closure
+    /// param), keyed by the binding's defining [`SymbolKey`]. Populated
+    /// alongside [`Self::locals`] from the resolver. Consumed by LSP
+    /// inlay-hint queries via [`Semantics::local_type`] to render the
+    /// inferred type on bindings without explicit annotation. Empty when
+    /// resolve did not run or bailed before recording any bindings.
+    pub local_types: IndexMap<SymbolKey, TypeId>,
     /// TIR modules produced by [`crate::resolver::Resolver::lower_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `lower_tir` did not run or bailed.
@@ -136,6 +143,7 @@ impl Semantics {
         state: Option<AnnotateState>,
         references: IndexMap<SymbolKey, SymbolKey>,
         locals: IndexMap<SymbolKey, Symbol>,
+        local_types: IndexMap<SymbolKey, TypeId>,
         tir_modules: IndexMap<ModuleSource, TirModule>,
     ) -> Self {
         Self {
@@ -148,6 +156,7 @@ impl Semantics {
             state,
             references,
             locals,
+            local_types,
             tir_modules,
             is_complete: false,
         }
@@ -211,6 +220,33 @@ impl Semantics {
     pub fn type_at(&self, key: &SymbolKey) -> Option<&ResolvedType> {
         let type_id = self.types.type_of_symbol(key)?;
         Some(self.types.get(type_id))
+    }
+
+    /// Inferred [`ResolvedType`] for a local binding identified by `key`
+    /// (a let pattern's `AstId`, a function/closure parameter's `AstId`,
+    /// or a `for x of …` element binding's `AstId`).
+    ///
+    /// Returns `None` when:
+    /// - `key` does not name a local binding (e.g. it refers to an item),
+    /// - the resolver bailed before reaching the binding's body, or
+    /// - the binding was synthesised by the resolver and never received an
+    ///   `AstId` (`record_local_symbol` is the gatekeeper here, so this
+    ///   case does not arise in practice).
+    ///
+    /// LSP inlay hints consume this to render the inferred type on `let`
+    /// bindings and closure parameters that the user did not annotate.
+    #[must_use]
+    pub fn local_type(&self, key: &SymbolKey) -> Option<&ResolvedType> {
+        let type_id = self.local_types.get(key).copied()?;
+        Some(self.types.get(type_id))
+    }
+
+    /// Renderable name of a local binding's inferred type, suitable for
+    /// inlay-hint display. Returns `None` when [`Self::local_type`] would.
+    #[must_use]
+    pub fn local_type_name(&self, key: &SymbolKey) -> Option<String> {
+        let type_id = self.local_types.get(key).copied()?;
+        Some(self.types.type_name(type_id))
     }
 
     /// URI (filename) of a module, when the module has one.
@@ -511,6 +547,7 @@ impl Semantics {
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
         )
     }
 }
@@ -602,6 +639,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
         );
     }
 
@@ -627,6 +665,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             TypeTable::new(),
             interner,
             None,
+            IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
@@ -669,6 +708,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // `RefCell` borrows.
     let references = std::mem::take(&mut *state.references.borrow_mut());
     let locals = std::mem::take(&mut *state.local_symbols.borrow_mut());
+    let local_types = std::mem::take(&mut *state.local_types.borrow_mut());
 
     Semantics {
         entry_module_source: load_result.entry_module_source,
@@ -680,6 +720,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         state: Some(state),
         references,
         locals,
+        local_types,
         tir_modules,
         is_complete: lower_ok,
     }

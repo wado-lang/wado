@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::Position;
+use crate::{Position, Range};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextDocumentIdentifier {
@@ -80,6 +80,13 @@ pub struct ReferenceContext {
 #[serde(rename_all = "camelCase")]
 pub struct SemanticTokensParams {
     pub text_document: TextDocumentIdentifier,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InlayHintParams {
+    pub text_document: TextDocumentIdentifier,
+    pub range: Range,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,6 +175,8 @@ pub struct ServerCapabilities {
     pub document_highlight_provider: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_tokens_provider: Option<SemanticTokensOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inlay_hint_provider: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workspace: Option<WorkspaceServerCapabilities>,
 }

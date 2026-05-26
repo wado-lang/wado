@@ -37,7 +37,7 @@ fn uri() -> String {
     format!("file://{PATH}")
 }
 
-async fn engine_with_broken_source() -> (Engine, MapHost) {
+fn engine_with_broken_source() -> (Engine, MapHost) {
     let mut engine = Engine::new();
     engine.open_document(&uri(), BROKEN_SOURCE.to_string());
     let host = MapHost::single(PATH, BROKEN_SOURCE);
@@ -56,7 +56,7 @@ fn errors(diags: &[Diagnostic]) -> Vec<&Diagnostic> {
 #[test]
 fn parse_error_emits_one_diagnostic_attributed_to_entry() {
     futures::executor::block_on(async {
-        let (engine, host) = engine_with_broken_source().await;
+        let (engine, host) = engine_with_broken_source();
         let diags = engine.diagnostics(&uri(), &host).await;
         let errs = errors(&diags);
         assert_eq!(
@@ -85,7 +85,7 @@ fn parse_error_emits_one_diagnostic_attributed_to_entry() {
 #[test]
 fn position_queries_return_empty_on_parse_error() {
     futures::executor::block_on(async {
-        let (engine, host) = engine_with_broken_source().await;
+        let (engine, host) = engine_with_broken_source();
         let pos = Position {
             line: 1,
             character: 8,

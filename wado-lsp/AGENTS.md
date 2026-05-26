@@ -19,6 +19,7 @@ Language service engine for the Wado compiler toolchain.
 | `src/semantic_tokens.rs`    | Semantic token computation (lexer + AST classification). Re-encodes start/length at delta-encode time.                    |
 | `src/definition.rs`         | Go-to-definition via `Cursor::{def_key, def_span}` and a file-path matcher for `use`/`#include` paths                     |
 | `src/hover.rs`              | Hover info; `Cursor::def_symbol` selects the binding, locals render from the AST node, items via `wado_compiler::unparse` |
+| `src/inlay_hints.rs`        | Inlay hints: inferred-type hints on `let` / closure / `for-of` bindings, plus parameter-name hints at call sites          |
 | `src/references.rs`         | Find-references via `Cursor::references_to_def`                                                                           |
 | `src/document_highlight.rs` | Document highlight; Read/Write classification consults `Semantics::is_write_target`                                       |
 | `src/location.rs`           | URI / span helpers for translating compiler `ModuleSource` to LSP URIs                                                    |
@@ -145,7 +146,7 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 - [ ] `textDocument/signatureHelp`
 - [ ] `textDocument/documentLink`
 - [ ] `textDocument/codeLens`
-- [ ] `textDocument/inlayHint`
+- [x] `textDocument/inlayHint`
 - [ ] `textDocument/inlineValue`
 - [ ] `textDocument/moniker`
 

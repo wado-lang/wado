@@ -206,6 +206,12 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// every `ctx.add_local(...)` call that carries a user-visible defining
     /// `AstId`. Shared via `Rc<RefCell<…>>` with `AnnotateState`.
     local_symbols: Rc<RefCell<IndexMap<SymbolKey, Symbol>>>,
+    /// Resolved [`TypeId`] for each local binding, keyed by the binding's
+    /// defining [`SymbolKey`]. Populated alongside `local_symbols` at every
+    /// `record_local_symbol` call. Shared via `Rc<RefCell<…>>` with
+    /// `AnnotateState` and ultimately drained into `Semantics::local_types`
+    /// for LSP inlay-hint consumption.
+    local_types: Rc<RefCell<IndexMap<SymbolKey, TypeId>>>,
     /// When resolving a default-expression AST at a call site, fall back to
     /// looking up unresolved identifiers in this module's global scope. This
     /// preserves the callee's lexical scope for defaults that reference
@@ -285,6 +291,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             loaded_module_func_indices: IndexMap::default(),
             references: Rc::new(RefCell::new(IndexMap::default())),
             local_symbols: Rc::new(RefCell::new(IndexMap::default())),
+            local_types: Rc::new(RefCell::new(IndexMap::default())),
             default_scope_module: None,
             invocations: Rc::new(crate::kiln::InvocationIndex::new()),
             interner: Rc::new(RefCell::new(ModuleSourceInterner::new())),
@@ -550,15 +557,17 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         None
     }
 
-    /// Record a local binding's [`Symbol`] so that LSP hover on a use site can
-    /// retrieve the defining name / mutability. Called at each site where a
-    /// user-visible local is introduced.
+    /// Record a local binding's [`Symbol`] and resolved [`TypeId`] so that
+    /// LSP hover on a use site can retrieve the defining name / mutability
+    /// and inlay hints can surface the inferred type. Called at each site
+    /// where a user-visible local is introduced.
     pub(super) fn record_local_symbol(
         &self,
         def_id: crate::ast::AstId,
         name: &str,
         span: crate::token::Span,
         is_mut: bool,
+        type_id: TypeId,
     ) {
         let key = SymbolKey::new(self.current_module_source.clone(), def_id);
         let symbol = Symbol {
@@ -570,7 +579,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             defined_at: key.clone(),
             span: Some(span),
         };
-        self.local_symbols.borrow_mut().insert(key, symbol);
+        self.local_symbols.borrow_mut().insert(key.clone(), symbol);
+        self.local_types.borrow_mut().insert(key, type_id);
     }
 
     /// Build a function-name → index map for a module's items.

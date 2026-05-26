@@ -8,11 +8,11 @@ use serde_json::Value;
 use crate::Engine;
 use crate::server::rpc::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-    InitializeParams, InitializeResult, JsonRpcRequest, PublishDiagnosticsParams, ReferenceParams,
-    SemanticTokens, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
-    ServerCapabilities, ServerInfo, TextDocumentContentOptions, TextDocumentContentParams,
-    TextDocumentContentResult, TextDocumentPositionParams, TextDocumentSyncOptions,
-    WorkspaceServerCapabilities, error_codes, text_document_sync_kind,
+    InitializeParams, InitializeResult, InlayHintParams, JsonRpcRequest, PublishDiagnosticsParams,
+    ReferenceParams, SemanticTokens, SemanticTokensLegend, SemanticTokensOptions,
+    SemanticTokensParams, ServerCapabilities, ServerInfo, TextDocumentContentOptions,
+    TextDocumentContentParams, TextDocumentContentResult, TextDocumentPositionParams,
+    TextDocumentSyncOptions, WorkspaceServerCapabilities, error_codes, text_document_sync_kind,
 };
 use crate::server::transport;
 use crate::text::PositionEncoding;
@@ -110,6 +110,7 @@ pub async fn dispatch<W: Write>(
                             },
                             full: true,
                         }),
+                        inlay_hint_provider: Some(true),
                         workspace: Some(WorkspaceServerCapabilities {
                             text_document_content: Some(TextDocumentContentOptions {
                                 schemes: STDLIB_SCHEMES,
@@ -199,6 +200,16 @@ pub async fn dispatch<W: Write>(
                 SemanticTokens {
                     data: engine.semantic_tokens(&p.text_document.uri),
                 }
+            })
+            .await?;
+        }
+        "textDocument/inlayHint" => {
+            let engine = &*engine;
+            transport::typed_request(writer, id, params, async |p: InlayHintParams| {
+                let host = transport::host_for_uri(&p.text_document.uri);
+                engine
+                    .inlay_hints(&p.text_document.uri, p.range, &host)
+                    .await
             })
             .await?;
         }

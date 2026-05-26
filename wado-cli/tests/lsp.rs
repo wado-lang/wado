@@ -283,6 +283,11 @@ fn lsp_initialize_returns_capabilities() {
     assert!(schemes.contains(&"core"));
     assert!(schemes.contains(&"wasi"));
 
+    assert_eq!(
+        caps["inlayHintProvider"], true,
+        "server should advertise inlayHintProvider",
+    );
+
     let info = &resp["result"]["serverInfo"];
     assert_eq!(info["name"], "wado-lsp");
 
@@ -733,6 +738,67 @@ fn lsp_initialize_advertises_all_providers() {
     );
     let mods = st["legend"]["tokenModifiers"].as_array().unwrap();
     assert!(mods.contains(&json!("declaration")), "got: {mods:?}");
+    assert_eq!(caps["inlayHintProvider"], true);
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_inlay_hint_returns_type_and_parameter_hints() {
+    // End-to-end wire test: open a document, request inlay hints, and
+    // verify the JSON-RPC response carries the expected `Type` (let-binding)
+    // and `Parameter` (call-site) hints.
+    let mut session = LspSession::start();
+    session.initialize();
+    let uri = "file:///inlay_test.wado";
+    let text = concat!(
+        "fn add(a: i32, b: i32) -> i32 { return a + b; }\n",
+        "fn run() -> i32 {\n",
+        "    let total = add(1, 2);\n",
+        "    return total;\n",
+        "}\n",
+    );
+    session.send_notification(
+        "textDocument/didOpen",
+        json!({
+            "textDocument": {
+                "uri": uri,
+                "languageId": "wado",
+                "version": 1,
+                "text": text,
+            }
+        }),
+    );
+    // Drain the diagnostics notification that `didOpen` triggers.
+    let _ = session.read_message();
+    let id = session.send_request(
+        "textDocument/inlayHint",
+        json!({
+            "textDocument": { "uri": uri },
+            "range": {
+                "start": { "line": 0, "character": 0 },
+                "end": { "line": 999, "character": 0 },
+            },
+        }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    let hints = resp["result"]
+        .as_array()
+        .expect("result must be an InlayHint[]");
+    let labels: Vec<&str> = hints.iter().filter_map(|h| h["label"].as_str()).collect();
+    assert!(
+        labels.contains(&": i32"),
+        "expected `: i32` type hint for `let total = ...`; got {labels:?}",
+    );
+    assert!(
+        labels.contains(&"a:") && labels.contains(&"b:"),
+        "expected `a:`/`b:` parameter hints; got {labels:?}",
+    );
+    // Each hint kind is the wire integer (Type=1, Parameter=2).
+    for hint in hints {
+        let kind = hint["kind"].as_u64().expect("kind must be a uint");
+        assert!(kind == 1 || kind == 2, "unexpected kind: {hint}");
+    }
     assert_eq!(session.shutdown_and_exit(), 0);
 }
 
