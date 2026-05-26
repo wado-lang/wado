@@ -1102,7 +1102,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Box::new(resolved)
             });
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
-            scope.record_local_symbol(param.id, &param.name, param.name_span, param.is_mut);
+            scope.record_local_symbol(
+                param.id,
+                &param.name,
+                param.name_span,
+                param.is_mut,
+                type_id,
+            );
             params.push(TirParam {
                 name: param.name.clone(),
                 type_id,
@@ -1669,7 +1675,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Box::new(resolved)
             });
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
-            scope.record_local_symbol(param.id, &param.name, param.name_span, param.is_mut);
+            scope.record_local_symbol(
+                param.id,
+                &param.name,
+                param.name_span,
+                param.is_mut,
+                type_id,
+            );
             params.push(TirParam {
                 name: param.name.clone(),
                 type_id,

@@ -288,6 +288,55 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                         }
                     }
 
+                    // Validate return-type compatibility with the world. The
+                    // dispatch below routes a `Result<_, _>`-returning world
+                    // export to dedicated adapters for the async, Result, and
+                    // `()` user return shapes; any other user return type
+                    // falls through to `synthesize_general_export_binding`,
+                    // which lowers the user's return value directly into the
+                    // world's task-return slots. When the world expects only
+                    // a discriminant (`Result<(), ()>`, the wasi:cli/command
+                    // shape) but the user supplies, say, `i32`, the general
+                    // adapter emits an extra flat value beyond what the
+                    // runtime declares for task-return — surfacing as an
+                    // opaque "values remaining on stack" wasm-validation
+                    // panic at codegen. Catch the mismatch here with a
+                    // readable diagnostic instead.
+                    {
+                        let user_func = user_func_rc.borrow();
+                        let tt = entry_type_table.borrow();
+                        let user_is_unit =
+                            matches!(tt.get(user_func.return_type), ResolvedType::Unit);
+                        let result_name = tt
+                            .compiler_items()
+                            .variant_name(crate::compiler_item::CompilerItem::Result)
+                            .to_string();
+                        let user_is_result = matches!(
+                            tt.get(user_func.return_type),
+                            ResolvedType::GenericInstance { name, .. } if *name == result_name
+                        );
+                        let world_expects_result = matches!(
+                            &export.return_type,
+                            Some(crate::ast::Type::Generic(g)) if g.name == result_name
+                        );
+                        if world_expects_result
+                            && !user_func.is_async
+                            && !user_is_unit
+                            && !user_is_result
+                        {
+                            let user_return_name = tt.type_name(user_func.return_type);
+                            drop(tt);
+                            return Err(format!(
+                                "export function `{}` has return type `{user_return_name}`, \
+                                 but the world expects a `{result_name}<_, _>` (or unit, \
+                                 which is automatically wrapped as `{result_name}<(), _>`). \
+                                 Change the signature to return a `{result_name}` or remove \
+                                 the explicit return type.",
+                                export.name
+                            ));
+                        }
+                    }
+
                     // Check if user function is `export async fn`
                     let is_async_export = {
                         let user_func = user_func_rc.borrow();

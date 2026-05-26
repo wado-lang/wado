@@ -5,6 +5,7 @@ mod diagnostics;
 mod document_highlight;
 pub mod host;
 mod hover;
+mod inlay_hints;
 pub mod kiln;
 mod location;
 mod query;
@@ -30,6 +31,7 @@ pub use diagnostics::{Diagnostic, Position, Range, Severity};
 pub use document_highlight::{DocumentHighlight, HighlightKind};
 pub use host::FilesystemCompilerHost;
 pub use hover::{HoverResult, MarkupContent, MarkupKind};
+pub use inlay_hints::{InlayHint, InlayHintKind};
 pub use references::ReferenceLocation;
 pub use text::PositionEncoding;
 pub use uri::{Uri, UriScheme};
@@ -38,9 +40,9 @@ pub use uri::{Uri, UriScheme};
 /// library consumers.
 ///
 /// Manages open documents and answers LSP-style queries (diagnostics, hover,
-/// definition, references, document highlight, semantic tokens). `Engine`
-/// itself performs no I/O: every query takes a `&impl CompilerHost`, so the
-/// caller decides how imported modules are loaded.
+/// definition, references, document highlight, semantic tokens, inlay
+/// hints). `Engine` itself performs no I/O: every query takes a `&impl
+/// CompilerHost`, so the caller decides how imported modules are loaded.
 ///
 /// ## Snapshot cache
 ///
@@ -271,6 +273,24 @@ impl Engine {
     ) -> Vec<DocumentHighlight> {
         self.with_query_ctx(uri, host, Vec::new(), |ctx| {
             document_highlight::document_highlight(ctx, position)
+        })
+        .await
+    }
+
+    /// Compute inlay hints in the requested `range` of the document.
+    ///
+    /// Returns inferred-type hints for `let` / closure / `for-of` bindings
+    /// that lack an explicit annotation, plus parameter-name hints for
+    /// free-function and method call sites. Hints anchored outside the
+    /// requested `range` are filtered out.
+    pub async fn inlay_hints<H: CompilerHost>(
+        &self,
+        uri: &str,
+        range: Range,
+        host: &H,
+    ) -> Vec<InlayHint> {
+        self.with_query_ctx(uri, host, Vec::new(), |ctx| {
+            inlay_hints::inlay_hints(ctx, range)
         })
         .await
     }

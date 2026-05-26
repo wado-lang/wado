@@ -22,7 +22,7 @@ use crate::loader;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
-use crate::tir::{ResolvedType, TirModule, TypeTable};
+use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
 
 /// A ready-to-query analysis result.
@@ -85,6 +85,13 @@ pub struct Semantics {
     /// [`Semantics::symbol_at`] when the key does not name an item-level
     /// symbol. Empty when resolve did not run or bailed early.
     pub(crate) locals: IndexMap<SymbolKey, Symbol>,
+    /// Inferred [`TypeId`] for each local binding (let / param / closure
+    /// param), keyed by the binding's defining [`SymbolKey`]. Populated
+    /// alongside [`Self::locals`] from the elaborator. Consumed by LSP
+    /// inlay-hint queries via [`Semantics::local_type_name`] to render
+    /// the inferred type on bindings without explicit annotation. Empty
+    /// when resolve did not run or bailed before recording any bindings.
+    pub local_types: IndexMap<SymbolKey, TypeId>,
     /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `build_tir` did not run or bailed.
@@ -136,6 +143,7 @@ impl Semantics {
         state: Option<AnnotateState>,
         references: IndexMap<SymbolKey, SymbolKey>,
         locals: IndexMap<SymbolKey, Symbol>,
+        local_types: IndexMap<SymbolKey, TypeId>,
         tir_modules: IndexMap<ModuleSource, TirModule>,
     ) -> Self {
         Self {
@@ -148,6 +156,7 @@ impl Semantics {
             state,
             references,
             locals,
+            local_types,
             tir_modules,
             is_complete: false,
         }
@@ -213,6 +222,20 @@ impl Semantics {
         Some(self.types.get(type_id))
     }
 
+    /// Renderable name of the inferred type for a local binding (a let
+    /// pattern's `AstId`, a function/closure parameter's `AstId`, or a
+    /// `for x of …` element binding's `AstId`). Suitable for inlay-hint
+    /// display.
+    ///
+    /// Returns `None` when `key` does not name a local binding (e.g. it
+    /// refers to an item), or when the elaborator bailed before reaching
+    /// the binding's body.
+    #[must_use]
+    pub fn local_type_name(&self, key: &SymbolKey) -> Option<String> {
+        let type_id = self.local_types.get(key).copied()?;
+        Some(self.types.type_name(type_id))
+    }
+
     /// URI (filename) of a module, when the module has one.
     ///
     /// Built-in and stdlib modules have no on-disk URI and return `None`.
@@ -220,6 +243,40 @@ impl Semantics {
     pub fn uri_of(&self, module: &ModuleSource) -> Option<String> {
         let uri = module.diagnostic_filename();
         if uri.is_empty() { None } else { Some(uri) }
+    }
+
+    /// AST [`Function`](crate::ast::Function) node declaring `key`. Covers
+    /// top-level free functions and methods inside `Item::Impl` /
+    /// `Item::Trait` blocks, all of which share the `Function` AST shape.
+    /// Interface and resource methods carry a different AST shape
+    /// (`InterfaceMethod`) and are reached through the symbol table
+    /// instead — this accessor returns `None` for them.
+    ///
+    /// Resolution is O(1): the per-module [`AstIndex`] stores each
+    /// function's `(item_idx, [method_idx])` address, so no AST scan
+    /// happens at query time.
+    #[must_use]
+    pub fn function_at(&self, key: &SymbolKey) -> Option<&crate::ast::Function> {
+        use crate::ast_index::FunctionLocation;
+        let module = self.modules.get(&key.module)?;
+        let location = self
+            .ast_indices
+            .get(&key.module)?
+            .function_location(key.ast_id)?;
+        match location {
+            FunctionLocation::Free { item_idx } => match module.items.get(item_idx)? {
+                crate::ast::Item::Function(f) => Some(f),
+                _ => None,
+            },
+            FunctionLocation::Method {
+                item_idx,
+                method_idx,
+            } => match module.items.get(item_idx)? {
+                crate::ast::Item::Impl(b) => b.methods.get(method_idx),
+                crate::ast::Item::Trait(t) => t.methods.get(method_idx),
+                _ => None,
+            },
+        }
     }
 
     /// Definition location of the symbol identified by `key`.
@@ -511,6 +568,7 @@ impl Semantics {
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
         )
     }
 }
@@ -602,6 +660,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
         );
     }
 
@@ -627,6 +686,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             TypeTable::new(),
             interner,
             None,
+            IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
@@ -669,6 +729,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // `RefCell` borrows.
     let references = std::mem::take(&mut *state.references.borrow_mut());
     let locals = std::mem::take(&mut *state.local_symbols.borrow_mut());
+    let local_types = std::mem::take(&mut *state.local_types.borrow_mut());
 
     Semantics {
         entry_module_source: load_result.entry_module_source,
@@ -680,6 +741,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         state: Some(state),
         references,
         locals,
+        local_types,
         tir_modules,
         is_complete: lower_ok,
     }

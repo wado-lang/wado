@@ -78,6 +78,13 @@ pub(crate) struct AnnotateState {
     /// parameters). Keyed by the binding's defining [`SymbolKey`]. Populated
     /// alongside [`Self::references`] as the elaborator walks function bodies.
     pub(crate) local_symbols: Rc<RefCell<IndexMap<SymbolKey, Symbol>>>,
+    /// Resolved [`TypeId`] for each local binding, keyed by the binding's
+    /// defining [`SymbolKey`]. Populated alongside [`Self::local_symbols`]
+    /// at every `record_local_symbol` call. Consumed by LSP inlay hints so
+    /// `let x = 1` can render the inferred `: i32` annotation without
+    /// reaching into TIR (which is `pub(crate)` and mixes resolver-synth
+    /// temporaries into the local namespace).
+    pub(crate) local_types: Rc<RefCell<IndexMap<SymbolKey, TypeId>>>,
     /// Kiln invocation redirects consulted by `resolve_import` call sites
     /// when walking `use` declarations. Populated from [`crate::loader::LoadResult`].
     pub(crate) invocations: Rc<crate::kiln::InvocationIndex>,
@@ -775,6 +782,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let local_symbols = Rc::new(RefCell::new(
             snapshot.map(|s| s.locals.clone()).unwrap_or_default(),
         ));
+        let local_types = Rc::new(RefCell::new(
+            snapshot.map(|s| s.local_types.clone()).unwrap_or_default(),
+        ));
 
         Ok(AnnotateState {
             type_table,
@@ -794,6 +804,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             all_module_func_indices,
             references,
             local_symbols,
+            local_types,
             invocations,
             interner,
         })
@@ -1006,6 +1017,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 loaded_module_func_indices: state.all_module_func_indices.clone(),
                 references: Rc::clone(&state.references),
                 local_symbols: Rc::clone(&state.local_symbols),
+                local_types: Rc::clone(&state.local_types),
                 default_scope_module: None,
                 invocations: Rc::clone(&state.invocations),
                 interner: Rc::clone(&state.interner),
