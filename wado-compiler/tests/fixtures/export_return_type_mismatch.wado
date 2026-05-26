@@ -1,0 +1,18 @@
+// Test: export function return type must match world declaration.
+//
+// The Command world's `run()` is declared `async run() -> result<_, _>` in
+// the bundled `wasi:cli` WIT. A non-async return of `i32` cannot satisfy
+// that contract.
+//
+// Regression test: this previously ICE'd at codegen.rs with
+//   "WIR pipeline generated invalid core Wasm module
+//    Validation error: type mismatch: values remaining on stack at end of block"
+// because the synthesis adapter generated invalid lifting code for the
+// signature mismatch instead of erroring out cleanly.
+
+export fn run() -> i32 {
+    return 42;
+}
+
+__DATA__
+{"compile_error": "export function `run` has return type `i32`, but the world expects"}
