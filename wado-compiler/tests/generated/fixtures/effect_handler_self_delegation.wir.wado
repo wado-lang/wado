@@ -98,29 +98,29 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(34)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(35)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(36)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(37)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(38)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(38)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(39)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(39)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(40)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(40)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(41)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
+type "functype//wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//__Closure_2") -> i32;  // TypeId(42)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
+type "functype//wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__Closure_3::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//__Closure_3") -> i32;  // TypeId(43)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(44)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(44)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//BaseCounter") -> i32;  // TypeId(45)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__Closure_3::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//OffsetCounter") -> i32;  // TypeId(46)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(46)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -153,6 +153,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/run"() with
     let __d_Counter_13: ref "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//__Dispatch_Counter";
     let f_18: ref "core:prelude/format.wado//Formatter";
     let f_23: ref "core:prelude/format.wado//Formatter";
+    let self_30: i32;
     base = struct.new "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//BaseCounter" { value: 0 };
     offset = struct.new "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//OffsetCounter" { offset: 1000 };
     __save_Counter_12 = global:__effect_Counter;
@@ -166,7 +167,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/run"() with
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 }; f_18 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(a, f_18); "core:prelude/string.wado/String::push"(__local_4, 44); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 }; f_23 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(b, f_23); __local_4);
     global:__effect_Counter = __save_Counter_9;
     global:__effect_Counter = __save_Counter_12;
-    "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_6, 102); "core:prelude/string.wado/String::push"(__local_6, 105); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 108); "core:prelude/string.wado/String::push"(__local_6, 61); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 }; "core:prelude/primitive.wado/i32::fmt_decimal"(base.value, __local_7); __local_6);
+    "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_6, 102); "core:prelude/string.wado/String::push"(__local_6, 105); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 108); "core:prelude/string.wado/String::push"(__local_6, 61); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 }; self_30 = base.value; "core:prelude/primitive.wado/i32::fmt_decimal"(self_30, __local_7); __local_6);
 }
 
 fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__effect_dispatch__Counter__next"() {
@@ -363,11 +364,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let offset: i32;
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
-    abs_val = (if is_negative -> i64 {
-        0_i64 - builtin::i64_extend_i32_s(self);
-    } else {
-        builtin::i64_extend_i32_s(self);
-    });
+    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
@@ -448,14 +445,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b25: block {
-        l26: loop {
+    b24: block {
+        l25: loop {
             if i >= n {
-                break b25;
+                break b24;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l26;
+            continue l25;
         };
     };
 }
@@ -541,24 +538,26 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 }
 
 fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__Closure_2::__call"(self) {
-    return self.value = self.value + 1, self.value;
+    let self_1: ref "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//BaseCounter";
+    return self_1 = self.__capture_0, self_1.value = self_1.value + 1, self_1.value;
 }
 
 fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__Closure_3::__call"(self) {
+    let self_1: ref "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//OffsetCounter";
     let outer: i32;
-    return outer = "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__effect_dispatch__Counter__next"(), outer + self.offset;
+    return self_1 = self.__capture_0, outer = "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__effect_dispatch__Counter__next"(), outer + self_1.offset;
 }
 
 fn "closure/wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__closure_wrapper_0"(__env) {
     let __typed_env: ref "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//__Closure_2";
     __typed_env = ref.cast "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//__Closure_2"(__env);
-    return "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__Closure_2::__call"(__typed_env.__capture_0);
+    return "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__Closure_2::__call"(__typed_env);
 }
 
 fn "closure/wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__closure_wrapper_1"(__env) {
     let __typed_env: ref "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//__Closure_3";
     __typed_env = ref.cast "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado//__Closure_3"(__env);
-    return "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__Closure_3::__call"(__typed_env.__capture_0);
+    return "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__Closure_3::__call"(__typed_env);
 }
 
 export fn "wado-compiler/tests/fixtures/effect_handler_self_delegation.wado/__cm_export__run" as "run"

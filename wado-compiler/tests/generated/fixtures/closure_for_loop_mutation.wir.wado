@@ -120,35 +120,35 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(40)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(41)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(41)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(42)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(42)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(43)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(43)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(44)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(44)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(45)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(45)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(46)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(46)
 
-type "functype//wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_4::__call" = fn(ref "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado//__Closure_4");  // TypeId(47)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(47)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
+type "functype//wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado//__Closure_2");  // TypeId(48)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
+type "functype//wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_3::__call" = fn(ref "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado//__Closure_3", i32);  // TypeId(49)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(50)
+type "functype//wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_4::__call" = fn(ref "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado//__Closure_4");  // TypeId(50)
 
-type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(51)
+type "functype//wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_5::__call" = fn(ref "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado//__Closure_5");  // TypeId(51)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(52)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_2::__call" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(53)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(53)
 
-type "functype//wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_3::__call" = fn(ref "core:prelude/types.wado//Box<i32>", i32);  // TypeId(54)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(54)
 
-type "functype//wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_5::__call" = fn(ref "core:prelude/types.wado//Box<i32>");  // TypeId(55)
+type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(55)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -419,11 +419,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let offset: i32;
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
-    abs_val = (if is_negative -> i64 {
-        0_i64 - builtin::i64_extend_i32_s(self);
-    } else {
-        builtin::i64_extend_i32_s(self);
-    });
+    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
@@ -504,14 +500,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b26: block {
-        l27: loop {
+    b25: block {
+        l26: loop {
             if i >= n {
-                break b26;
+                break b25;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l27;
+            continue l26;
         };
     };
 }
@@ -609,14 +605,14 @@ fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
 fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_2::__call"(self) {
     let i: i32;
     i = 0;
-    b47: block {
-        l48: loop {
+    b46: block {
+        l47: loop {
             if i >= 3 {
-                break b47;
+                break b46;
             }
-            self.value = self.value + 1;
+            self.__capture_0.value = self.__capture_0.value + 1;
             i = i + 1;
-            continue l48;
+            continue l47;
         };
     };
 }
@@ -624,14 +620,14 @@ fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_2::__c
 fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_3::__call"(self, limit) {
     let n: i32;
     n = 0;
-    b50: block {
-        l51: loop {
+    b49: block {
+        l50: loop {
             if n >= limit {
-                break b50;
+                break b49;
             }
-            self.value = self.value + n;
+            self.__capture_0.value = self.__capture_0.value + n;
             n = n + 1;
-            continue l51;
+            continue l50;
         };
     };
 }
@@ -639,35 +635,35 @@ fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_3::__c
 fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_4::__call"(self) {
     let __iter_0: ref "core:prelude/array.wado//ArrayIter<i32>";
     __iter_0 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: self.__capture_0.repr, used: self.__capture_0.used, index: 0 };
-    b53: block {
-        l54: loop {
+    b52: block {
+        l53: loop {
             let __sroa___match_3_discriminant: i32;
             let __sroa___match_3_payload_0: i32;
             multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_0);
             if __sroa___match_3_discriminant == 0 {
                 self.__capture_1.value = self.__capture_1.value + __sroa___match_3_payload_0;
             } else {
-                break b53;
+                break b52;
             }
-            continue l54;
+            continue l53;
         };
     };
 }
 
 fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_5::__call"(self) {
-    self.value = self.value + 5;
+    self.__capture_0.value = self.__capture_0.value + 5;
 }
 
 fn "closure/wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__closure_wrapper_0"(__env) {
     let __typed_env: ref "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado//__Closure_2";
     __typed_env = ref.cast "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado//__Closure_2"(__env);
-    "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_2::__call"(__typed_env.__capture_0);
+    "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_2::__call"(__typed_env);
 }
 
 fn "closure/wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__closure_wrapper_1"(__env, __p0) {
     let __typed_env: ref "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado//__Closure_3";
     __typed_env = ref.cast "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado//__Closure_3"(__env);
-    "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_3::__call"(__typed_env.__capture_0, __p0);
+    "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_3::__call"(__typed_env, __p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__closure_wrapper_2"(__env) {
@@ -679,7 +675,7 @@ fn "closure/wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__closur
 fn "closure/wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__closure_wrapper_3"(__env) {
     let __typed_env: ref "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado//__Closure_5";
     __typed_env = ref.cast "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado//__Closure_5"(__env);
-    "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_5::__call"(__typed_env.__capture_0);
+    "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_5::__call"(__typed_env);
 }
 
 export fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__cm_export____test_0_mutation_inside_c_style_for" as "__test_0_mutation_inside_c_style_for"

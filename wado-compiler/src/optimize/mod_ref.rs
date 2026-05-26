@@ -163,7 +163,7 @@ pub(super) struct ModRef {
 
 /// True iff `break label;` (or bare `break;` when `label` is `None`)
 /// would be caught by the innermost enclosing loop / labeled block
-/// recorded in `scope`. Used to decide whether the break's NonLocal
+/// recorded in `scope`. Used to decide whether the break's `NonLocal`
 /// contribution must propagate past the surrounding construct.
 fn break_is_captured(label: Option<&str>, scope: &AccumScope) -> bool {
     match label {
@@ -175,7 +175,7 @@ fn break_is_captured(label: Option<&str>, scope: &AccumScope) -> bool {
 /// Transient state threaded through accumulate_* during a single
 /// `of_expr` / `of_stmt` invocation, used to distinguish
 /// loop-internal `break;` / `continue;` (captured by the enclosing
-/// loop, so their NonLocal contribution must stay inside) from those
+/// loop, so their `NonLocal` contribution must stay inside) from those
 /// that actually escape (`return`, label-targeted `break L` to an
 /// unenclosed `L`).
 #[derive(Default)]
@@ -183,7 +183,7 @@ struct AccumScope {
     /// Number of `Loop` / `LabeledBlock` bodies currently being
     /// accumulated. A bare `break;` / `continue;` resolves to the
     /// innermost such enclosure, so when `loop_depth > 0` their
-    /// NonLocal does not leak past the surrounding construct.
+    /// `NonLocal` does not leak past the surrounding construct.
     loop_depth: u32,
     /// Labels of `LabeledBlock`s currently on the accumulation stack.
     /// `break L;` whose `L` is in this set is captured here.

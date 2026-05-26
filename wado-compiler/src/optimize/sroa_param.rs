@@ -24,7 +24,7 @@
 //!
 //! 1. wrapped in `FieldAccess { expr: Local(idx), field_name }` (the scalar
 //!    read the caller will see post-rewrite), or
-//! 2. an argument at a Call / MethodCall position whose callee is ALSO a
+//! 2. an argument at a Call / `MethodCall` position whose callee is ALSO a
 //!    SROA candidate at the same position (the param flows through chained
 //!    helpers untouched).
 //!

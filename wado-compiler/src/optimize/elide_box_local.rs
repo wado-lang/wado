@@ -439,11 +439,12 @@ fn walk_expr_for_leftmost(expr: &NirExpr, candidate: u32, field_name: &str) -> L
                 match walk_expr_for_leftmost(left, candidate, field_name) {
                     LeftmostWalk::Found => LeftmostWalk::Found,
                     LeftmostWalk::Blocked => LeftmostWalk::Blocked,
-                    LeftmostWalk::Pure => match walk_expr_for_leftmost(right, candidate, field_name)
-                    {
-                        LeftmostWalk::Pure => LeftmostWalk::Pure,
-                        _ => LeftmostWalk::Blocked,
-                    },
+                    LeftmostWalk::Pure => {
+                        match walk_expr_for_leftmost(right, candidate, field_name) {
+                            LeftmostWalk::Pure => LeftmostWalk::Pure,
+                            _ => LeftmostWalk::Blocked,
+                        }
+                    }
                 }
             }
             // `Div` / `Mod` may trap on a zero divisor; the operation
@@ -787,11 +788,7 @@ mod tests {
     /// Use site `(x as i32) + boxed.v` — `Cast` may trap, observable.
     #[test]
     fn walker_blocks_when_cast_precedes_field() {
-        let expr = binary(
-            NirBinaryOp::Add,
-            cast(local(2), ty()),
-            field(local(7), "v"),
-        );
+        let expr = binary(NirBinaryOp::Add, cast(local(2), ty()), field(local(7), "v"));
         assert!(matches!(
             walk_expr_for_leftmost(&expr, 7, "v"),
             LeftmostWalk::Blocked
@@ -828,7 +825,7 @@ mod tests {
     }
 
     /// Use site `boxed.v + arr[idx]` — observable on RIGHT side
-    /// only. Walker still returns Found at the leftmost FieldAccess
+    /// only. Walker still returns Found at the leftmost `FieldAccess`
     /// (left operand), since the observable Index runs AFTER the
     /// substituted inner expression.
     #[test]
@@ -844,7 +841,7 @@ mod tests {
         ));
     }
 
-    /// Use site `Cast(boxed.v)` — FieldAccess inside an observable
+    /// Use site `Cast(boxed.v)` — `FieldAccess` inside an observable
     /// op. Substitution is safe because the observable op runs
     /// AFTER the substituted inner.
     #[test]
