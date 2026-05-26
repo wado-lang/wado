@@ -702,56 +702,37 @@ fn validate_rel_output_path(p: &str) -> Result<PathBuf, ExecuteError> {
     Ok(candidate.to_path_buf())
 }
 
-/// Generator artifacts produced by [`GeneratorProvider::resolve`].
-///
-/// One `ResolvedGenerator` is produced per unique [`GeneratorModule`]
-/// per pipeline run; downstream phases ([`typed_encode_options`], the
-/// per-invocation `execute` loop) receive a reference to this struct
-/// rather than calling back into the provider. The driver therefore
-/// reads the on-disk Kiln cache at most once per module, regardless of
-/// how many invocations share the module.
+/// Generator artifacts produced once per unique [`GeneratorModule`]
+/// per pipeline run, by [`GeneratorProvider::resolve`]. Every
+/// downstream phase reads from the resolved bundle rather than
+/// re-asking the provider, so on-disk cache reads happen at most once
+/// per module per run.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedGenerator {
-    /// Component model `.wasm` bytes ready for `run_generator`.
     pub wasm: Vec<u8>,
-    /// Generator's `pub struct Options` shape, when the compile
-    /// produced one. `None` means the generator did not expose a
-    /// describable `Options` (or the provider could not introspect),
-    /// and [`typed_encode_options`] falls back to provisional TOML
-    /// encoding for that invocation.
+    /// `None` when the generator has no `pub struct Options` (or the
+    /// provider can't introspect it); [`typed_encode_options`] then
+    /// falls back to the provisional TOML encoding.
     pub descriptor: Option<OptionsDescriptor>,
-    /// Hex-encoded SHA-256 of the generator's source closure (entry
-    /// `.wado` plus every transitively imported `.wado`). Empty when
-    /// the provider could not compute one (e.g. the spec-form path on
-    /// providers that have not implemented source-distribution
-    /// hashing). An empty string is recorded verbatim in the metadata
-    /// and matches another empty string only — the driver therefore
-    /// keeps caching consistent for generators that can never produce
-    /// a hash, while still invalidating once one is produced.
+    /// Hex SHA-256 of the generator's transitive `.wado` closure. The
+    /// empty string is a valid value (providers that can't compute
+    /// one) and is recorded verbatim — so two such generators never
+    /// share a kiln-output cache entry by accident.
     pub source_hash: String,
 }
 
 /// Resolves a generator module to its artifacts (component wasm,
 /// typed options descriptor, source-closure hash).
 ///
-/// The trait is deliberately a single method: the driver calls it once
-/// per unique module per pipeline run and holds the result for the
-/// remainder of the pipeline. Implementations are free to populate the
-/// fields via a build-from-source pass, a registry fetch, or a
-/// pre-baked artifact bundle — the driver does not care.
-///
-/// Two concrete providers exist today:
-///
-/// - A production `CliGeneratorProvider` that compiles generators with
-///   the inner `wado` pipeline and caches the artifacts under
-///   `build/kiln/generators/…`.
-/// - Test stubs that return pre-built bytes.
+/// The trait is deliberately a single method: [`run_pipeline`] calls
+/// it once per unique module up-front (see [`resolve_modules`]) and
+/// hands the same `ResolvedGenerator` to every downstream phase, so
+/// implementations don't need their own in-memory cache layer.
 pub trait GeneratorProvider {
     /// Resolve `module` to its [`ResolvedGenerator`]. Implementations
-    /// should consult any on-disk cache they own, falling back to a
-    /// fresh build only on miss; the driver itself does not cache
-    /// across calls — it relies on the per-pipeline `HashMap` populated
-    /// upfront to dedup work within a single run.
+    /// own whatever on-disk cache they read; nothing above this layer
+    /// dedups, so a second call for the same module will redo all the
+    /// work this method does.
     fn resolve(
         &self,
         module: &GeneratorModule,
@@ -906,25 +887,18 @@ impl<H: CompilerHost> Drop for KilnSpan<'_, H> {
     }
 }
 
-/// Run the full Kiln pipeline for the given inline invocations: plan →
-/// per-invocation cache check → execute on miss → reconcile stale outputs →
-/// persist lockfile.
-///
-/// `provider` resolves generator module bytes on demand. `host` is the
-/// compiler host used to load input files and (inside `execute`) to invoke
-/// the runner.
-///
-/// On success, the manifest's `wado.lock` is updated in place to persist
-/// the current `[[generator-cache]]` entries. The lockfile is re-serialized
-/// via [`wado_manifest::LockFile::to_toml`], so non-Kiln sections round-trip
-/// through the manifest-crate writer — byte-identity is not guaranteed.
+/// Run the full Kiln pipeline for the given inline invocations: resolve
+/// every unique generator once, plan → per-invocation cache check →
+/// execute on miss → reconcile stale outputs.
 ///
 /// Returns an empty outcome when `inline_invocations` is empty.
 ///
-/// When `no_cache` is `true`, the per-invocation sidecar metadata is
-/// ignored (every invocation falls through to the run branch) and the
-/// generator wasm itself is recompiled from source. Writes still happen
-/// so a subsequent cache-enabled run is warm again.
+/// `no_cache` only bypasses on-disk caches — the per-invocation
+/// `<primary>.kiln.json` and the per-generator `build/kiln/` artifacts.
+/// In-process artifact sharing (the upfront resolve map, the host-side
+/// compiled `Component` cache) is unaffected: it would be wrong to
+/// recompile or re-instantiate the same wasm twice within a single
+/// pipeline run regardless of how on-disk caching is configured.
 ///
 /// # Errors
 /// See [`PipelineError`].
@@ -951,10 +925,6 @@ where
         return Ok(PipelineOutcome::default());
     }
 
-    // Resolve every unique generator module exactly once; downstream
-    // phases read from this map rather than calling back into the
-    // provider. This is what guarantees the on-disk Kiln cache is
-    // consulted at most once per generator per pipeline run.
     let resolved = resolve_modules(&planned.plan.order, provider, host).await;
 
     {
@@ -992,9 +962,6 @@ where
         let options_hash =
             wado_compiler::kiln::hash_options_canonical(&invocation.options_canonical);
 
-        // Pull this module's resolution result out of the upfront map.
-        // Cloning the inner `Result` is cheap: `Arc::clone` on the Ok
-        // side, message-clone on the Err side.
         let component_result: Result<Arc<ResolvedGenerator>, ProviderError> =
             lookup_resolved(&resolved, &invocation.module);
 
@@ -1315,16 +1282,16 @@ fn emit_stale_warning<H: CompilerHost>(host: &H, invocation: &str) {
     });
 }
 
-/// Resolve every unique [`GeneratorModule`] in `order` exactly once,
-/// emitting one `kiln/resolve/<id>` span per call so the per-generator
-/// disk/compile cost shows up in `--log-level debug` traces. Resolution
-/// errors are kept in the returned map (rather than bubbled up) because
-/// the per-invocation loop is the one that decides whether to fail the
-/// pipeline, emit a stale-cache warning, or skip option validation —
-/// behavior that is per-invocation, not per-module.
+/// Resolve every unique [`GeneratorModule`] in `order` exactly once.
 ///
-/// Linear scan over a `Vec` is fine: the unique-module count is O(1)
-/// in practice (typically a single generator per project).
+/// Resolution errors are folded into the returned map rather than
+/// bubbled up: whether a per-module failure aborts the pipeline,
+/// degrades to a stale-cache warning, or just skips option validation
+/// is a per-invocation policy decision that lives in the run loop.
+///
+/// `Vec` not `HashMap`: the unique-module count is O(1) in practice
+/// (typically a single generator per project) and `GeneratorModule`
+/// isn't `Hash`.
 async fn resolve_modules<H, P>(
     order: &[Invocation],
     provider: &P,
@@ -1353,10 +1320,9 @@ where
 }
 
 /// Project the resolved-modules map into a per-invocation result. The
-/// `Err` arm is cloned so different invocations sharing the same broken
-/// module each get an independent error to fold into their own outcome
-/// (the wrapped messages are small `String`s — clones are essentially
-/// free).
+/// `Err` arm is cloned (rather than referenced) so each invocation
+/// sharing a broken module can fold an owned error into its own
+/// outcome independently.
 fn lookup_resolved(
     resolved: &[(
         GeneratorModule,
@@ -1374,27 +1340,18 @@ fn lookup_resolved(
         .expect("resolve_modules populates every module referenced by the plan")
 }
 
-/// Re-encode each invocation's `options_canonical` bytes using the typed
-/// pipeline from [`wado_compiler::kiln::encode_options_canonical`] when
-/// the resolved generator exposed a descriptor. Falls back silently to
-/// the provisional bytes already produced by [`lower`] when:
+/// Re-encode each invocation's `options_canonical` against the typed
+/// descriptor when one is available, falling back silently to the
+/// provisional bytes [`lower`] produced when no descriptor exists
+/// (`descriptor: None`) or the module failed to resolve at all
+/// (`Err` — the run loop will handle the failure as a per-invocation
+/// stale-cache warning or pipeline error).
 ///
-/// - the invocation is anonymous (inline `use ... with`) — M5 clauses already
-///   encode via the typed path when they are built, so this code path skips
-///   them;
-/// - the generator did not expose a `pub struct Options` (e.g. consume-only
-///   generator) — the resolved entry's `descriptor` is `None`;
-/// - the resolution itself failed (e.g. spec-form module, source not found)
-///   — the resolution result is `Err`. The per-invocation loop is where
-///   that error becomes either a pipeline failure or a stale-cache warning,
-///   so this function just skips the invocation silently.
-///
-/// Validation failures (unknown / missing / type-mismatched fields) surface
-/// as error diagnostics on `host`; the provisional bytes remain in place so
-/// downstream layers still see a consistent invocation. The caller's next
-/// step — `run_and_build_entry` — will fail fast when the generator rejects
-/// the options blob, so the user sees both the compiler-side validation
-/// error and the generator-side trap in the same run.
+/// Validation failures (unknown / missing / type-mismatched fields)
+/// surface as error diagnostics on `host`; the provisional bytes stay
+/// in place so downstream phases still see a consistent invocation
+/// and the generator-side trap surfaces in the same run as the
+/// compiler-side complaint.
 fn typed_encode_options<H: CompilerHost>(
     manifest: &Manifest,
     invocations: &mut [Invocation],

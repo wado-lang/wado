@@ -46,26 +46,16 @@ pub const CACHE_DIR: &str = "build/kiln/generators";
 /// `build/kiln/metadata/`. Reserved for the descriptor-cache follow-up.
 pub const METADATA_DIR: &str = "build/kiln/metadata";
 
-/// CLI-side generator provider.
-///
-/// Holds the project-root directory so it can resolve `LocalPath` modules
-/// relative to the manifest. The `compile_count` counter records how many
-/// times the provider has fallen through to an actual generator-package
-/// compile (vs. a cache hit); tests use it to assert that the on-disk
-/// `build/kiln/generators/<stable-id>.wasm` cache is honored without
-/// relying on filesystem-level mtime observation.
 #[derive(Debug, Clone)]
 pub struct CliGeneratorProvider {
     manifest_root: PathBuf,
     compile_count: Arc<AtomicUsize>,
     /// When true, skip reads from the on-disk generator cache. Writes
-    /// still happen, so a follow-up cache-enabled run is warm again.
+    /// still happen so the next non-bypass run sees a warm tree.
     no_cache: bool,
 }
 
 impl CliGeneratorProvider {
-    /// Construct a provider rooted at `manifest_root` — typically the
-    /// directory containing `wado.toml`.
     #[must_use]
     pub fn new(manifest_root: PathBuf) -> Self {
         Self {
@@ -75,18 +65,16 @@ impl CliGeneratorProvider {
         }
     }
 
-    /// Toggle the cache-bypass mode; see [`CompileFlags::no_cache`].
     #[must_use]
     pub fn with_no_cache(mut self, no_cache: bool) -> Self {
         self.no_cache = no_cache;
         self
     }
 
-    /// Number of times this provider has run the inner wado-compiler
-    /// pipeline. Cache hits do not contribute. The counter is shared
-    /// across `Clone`s of the provider (backed by `Arc<AtomicUsize>`)
-    /// so callers that keep multiple handles still observe the same
-    /// total.
+    /// Number of times the inner wado-compiler pipeline has actually
+    /// run (cache hits do not contribute). Shared across `Clone`s of
+    /// the provider so test code with multiple handles still observes
+    /// a single total.
     #[must_use]
     pub fn compile_count(&self) -> usize {
         self.compile_count.load(Ordering::SeqCst)
@@ -114,18 +102,13 @@ impl CliGeneratorProvider {
             .join(format!("{stable_id}.sources.json"))
     }
 
-    /// Re-validate the cached generator artefacts at `stable_id` against
-    /// the on-disk sources captured by the previous compile. Returns the
-    /// freshly recomputed `combined_hash` when every listed source file
-    /// still matches its recorded hash; returns `None` when the sidecar
-    /// is missing, malformed, version-mismatched, or any source file has
-    /// drifted (or vanished). Callers must treat `None` as a cache miss
-    /// and recompile.
-    ///
-    /// The combined hash is recomputed from the validated entries rather
-    /// than trusted verbatim from the sidecar, so a hand-edited sidecar
-    /// cannot pin metadata to a value that disagrees with its own
-    /// `sources` list.
+    /// Re-validate the cached generator artefacts at `stable_id`
+    /// against the on-disk sources captured by the previous compile,
+    /// returning the freshly recomputed `combined_hash` on success and
+    /// `None` (= treat as cache miss) on any drift. The hash is
+    /// recomputed from the validated entries rather than trusted
+    /// verbatim from the sidecar, so a hand-edited sidecar cannot pin
+    /// metadata to a value that disagrees with its own `sources` list.
     fn validate_sources_sidecar(&self, stable_id: &str, base: &Path) -> Option<String> {
         let sidecar_path = self.sources_sidecar_path(stable_id);
         let bytes = std::fs::read(&sidecar_path).ok()?;
@@ -147,9 +130,6 @@ impl CliGeneratorProvider {
         Some(combined_sources_hash(&validated))
     }
 
-    /// Resolve a `LocalPath` generator source, returning the absolute
-    /// path, raw bytes, UTF-8 source string, and stable id. Emits the
-    /// not-found / not-UTF-8 diagnostics surfaced by `resolve()`.
     fn read_local_source(
         &self,
         path: &wado_compiler::kiln::InvocationPath,
@@ -185,11 +165,11 @@ impl CliGeneratorProvider {
         Ok((abs, source, source_str, stable_id))
     }
 
-    /// Run the inner wado-compiler pipeline on the given source, then
-    /// persist both caches (`build/kiln/generators/<id>.wasm` and, when
-    /// the compile produces one, `build/kiln/metadata/<id>.descriptor`).
-    /// A subsequent `resolve()` on an unchanged source closure short-
-    /// circuits at [`Self::try_read_cache`] without re-running this.
+    /// Run the inner wado-compiler pipeline on the given source and
+    /// persist both on-disk artefacts (`<id>.wasm` and, when the
+    /// compile produces one, `<id>.descriptor`) plus the sources
+    /// sidecar that [`Self::try_read_cache`] needs for freshness
+    /// checks on later runs.
     async fn compile_local(
         &self,
         path_str: String,
@@ -338,35 +318,25 @@ fn make_relative_sources(base: &Path, raw: Vec<(String, [u8; 32])>) -> Vec<(Stri
         .collect()
 }
 
-/// Both artefacts produced by a single invocation of the inner compiler
-/// on a kiln generator package: the component bytes, the extracted
-/// `Options` descriptor (when extraction succeeded), and the combined
-/// hash of every `.wado` source the compiler loaded along the way.
-/// `source_hash` is filled by `compile_local` after the inner pipeline
-/// returns; it is the hex digest stored in `Metadata::generator_source_hash`.
+/// Provider-internal twin of [`ResolvedGenerator`]. Kept distinct so
+/// `compile_local` can fill `source_hash` after the inner pipeline
+/// returns (the recording host's `loaded` queue isn't drained until
+/// then), without exposing a half-built value to the trait surface.
 struct CompileArtifacts {
     wasm: Vec<u8>,
     descriptor: Option<OptionsDescriptor>,
     source_hash: String,
 }
 
-/// Compute the stable id for a local generator source file.
+/// Compute the stable id (per WEP 2026-04-12 §"`build/kiln/` directory
+/// layout"): first 16 hex chars of `SHA-256(path || entry-content)`.
 ///
-/// Key inputs (per WEP 2026-04-12 §"`build/kiln/` directory layout"):
-/// - normalized project-relative path
-/// - SHA-256 of the entry file's bytes
-///
-/// Note: the stable id intentionally hashes only the entry file. It is
-/// the cache *lookup* key, not the cache *freshness* key — `compile_local`
-/// writes a `<stable_id>.sources.json` sidecar listing every transitively
-/// imported `.wado` (path + hash) and `validate_sources_sidecar` rejects
-/// the cached WASM whenever any of those files drifts on disk. Without
-/// the sidecar, an edit to e.g. `parser_gen.wado` (a dep of the entry
-/// `generator.wado`) would silently reuse stale bytes.
-///
-/// Returns the first 16 hex chars of the digest, enough to distinguish
-/// typical generator files without bloating `build/kiln/generators/`
-/// directory listings.
+/// Intentionally hashes only the entry file — it is the cache *lookup*
+/// key, not the freshness key. Freshness comes from
+/// [`CliGeneratorProvider::validate_sources_sidecar`], which rehashes
+/// every transitively imported `.wado`. Without that sidecar an edit
+/// to a dep (e.g. `parser_gen.wado` behind a `generator.wado` entry)
+/// would silently keep returning stale wasm.
 fn stable_id_for_local(path_str: &str, content: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"kiln-generator-v1\n");
@@ -382,20 +352,17 @@ fn stable_id_for_local(path_str: &str, content: &[u8]) -> String {
     out
 }
 
-/// A thin `CompilerHost` wrapper that discards diagnostics emitted by
-/// the host — we want to swallow generator-compile diagnostics so they
-/// don't mix with the consuming project's own compile output. The
-/// provider surfaces a single `ProviderError::Compile` instead.
+/// `CompilerHost` wrapper used by `compile_local` for two reasons:
 ///
-/// Also records every `load_source` call into `loaded` (path + content
-/// hash) so the provider can persist the generator's transitive load
-/// closure into a sidecar file and invalidate the WASM cache when any
-/// of those files drifts on disk. "Load closure" is the right framing
-/// here: `CompilerHost::load_source` carries both `.wado` modules and
-/// raw assets pulled in via `#include_bytes`, so an edit to either kind
-/// of file drops the WASM cache. The recording is best-effort: a
-/// duplicate `load_source` for the same path appends a duplicate
-/// entry, which the dedup step in `compile_local` collapses.
+/// 1. Swallow generator-compile diagnostics (info/debug) so the
+///    consuming project's stderr isn't flooded with nested compile
+///    output; the provider surfaces a single `ProviderError` instead.
+/// 2. Record every `load_source` call into `loaded` (path + content
+///    hash) so the transitive *load closure* — `.wado` modules **and**
+///    raw assets pulled via `#include_bytes` — is persisted into the
+///    sidecar, letting an edit to either kind invalidate the wasm
+///    cache. The recording is best-effort: duplicate paths from the
+///    compiler are collapsed by the dedup step in `compile_local`.
 struct SilentHost {
     inner: FilesystemCompilerHost,
     loaded: Arc<Mutex<Vec<(String, [u8; 32])>>>,
@@ -581,11 +548,6 @@ fn hex32(bytes: &[u8; 32]) -> String {
 }
 
 impl GeneratorProvider for CliGeneratorProvider {
-    /// Resolve `module` to its compiled artifacts. Consults the
-    /// on-disk cache once (gated by `no_cache`), falling back to a
-    /// fresh `wado` compile on miss. No in-memory state is kept
-    /// between calls — the driver is responsible for not calling this
-    /// more than once per unique module per pipeline run.
     async fn resolve(&self, module: &GeneratorModule) -> Result<ResolvedGenerator, ProviderError> {
         match module {
             GeneratorModule::Spec(spec) => Err(ProviderError::Unsupported {
@@ -598,13 +560,6 @@ impl GeneratorProvider for CliGeneratorProvider {
             GeneratorModule::LocalPath(path) => {
                 let (abs, _source, source_str, stable_id) = self.read_local_source(path)?;
                 let base = abs.parent().map(Path::to_path_buf).unwrap_or_default();
-                // On-disk cache hit only when (a) the wasm blob exists,
-                // (b) the descriptor cache (if any) exists, and (c) the
-                // sidecar listing the transitive `.wado` closure
-                // re-validates against current on-disk bytes. Without
-                // (c) an edit to a transitive import would silently
-                // reuse stale wasm (the entry-file `stable_id` would
-                // still match).
                 if !self.no_cache
                     && let Some(resolved) = self.try_read_cache(&stable_id, &base)
                 {
@@ -624,12 +579,10 @@ impl GeneratorProvider for CliGeneratorProvider {
 }
 
 impl CliGeneratorProvider {
-    /// Read `(wasm, descriptor?, source_hash)` from the on-disk Kiln
-    /// cache for `stable_id`, returning `None` when the cache is
-    /// missing or stale. The descriptor sidecar is optional —
-    /// generators without a `pub struct Options` write only the wasm
-    /// and sources sidecar, so a missing `.descriptor` file is treated
-    /// as `descriptor: None` rather than a cache miss.
+    /// Returns `None` on any cache miss or staleness — the caller
+    /// recompiles. The descriptor sidecar is *optional* (generators
+    /// without `pub struct Options` never write one), so its absence
+    /// is `descriptor: None`, not a miss.
     fn try_read_cache(&self, stable_id: &str, base: &Path) -> Option<ResolvedGenerator> {
         let cache_path = self.cache_path(stable_id);
         if !cache_path.is_file() {

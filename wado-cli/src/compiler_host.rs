@@ -21,18 +21,15 @@ pub struct FilesystemCompilerHost {
     log_level: LogLevel,
     start_time: Instant,
     kiln_engine: OnceLock<wasmtime::Engine>,
-    /// Cache of compiled wasmtime [`Component`]s, keyed by SHA-256 of
-    /// the generator wasm bytes. Building a [`Component`] from a 432KB
-    /// generator wasm runs cranelift AOT for ~7s; many kiln invocations
-    /// in a single pipeline run typically share the same generator
-    /// (and therefore the same bytes), so a per-host cache turns N×AOT
-    /// into 1×AOT + (N-1) lookups. Lives only for the lifetime of this
-    /// host — no on-disk `.cwasm` is written, so there is no
-    /// trust-the-disk attack surface from caching.
+    /// In-memory only: when N invocations in one pipeline run share a
+    /// generator they share the same wasm bytes, so caching the
+    /// `Component` (which is internally `Arc`) turns N×cranelift-AOT
+    /// into 1×AOT + (N-1) cheap clones. Not persisted to disk —
+    /// caching a serialized `.cwasm` would expose a trust-the-disk
+    /// code-injection vector that this in-memory cache does not.
     kiln_components: Mutex<Vec<([u8; 32], wasmtime::component::Component)>>,
-    /// Number of times [`compile_component`] has actually been invoked
-    /// (i.e. cache misses). Tests use this to assert that the cache
-    /// dedups across `run_generator` calls.
+    /// Cache misses on `kiln_components`. Tests assert against this
+    /// rather than wall-clock timing.
     kiln_component_compile_count: AtomicUsize,
 }
 
@@ -76,22 +73,16 @@ impl FilesystemCompilerHost {
         }
     }
 
-    /// Number of times this host has actually run cranelift AOT on a
-    /// generator wasm (i.e. cache misses for `kiln_components`). Cache
-    /// hits do not contribute. Used by tests to assert that
-    /// `run_generator` shares compiled components across invocations.
     #[must_use]
     pub fn kiln_component_compile_count(&self) -> usize {
         self.kiln_component_compile_count.load(Ordering::SeqCst)
     }
 
-    /// Look up the compiled wasmtime [`Component`] for `wasm` (keyed by
-    /// SHA-256), building it on miss and caching the result. The build
-    /// path holds a brief Mutex on the cache, races for the same key
-    /// will each compile once but the latter overwrites the former in
-    /// the map — the result is equivalent so the wasted work is just a
-    /// duplicated compile on the (rare) racing path. Wasmtime's
-    /// `Component` is internally Arc, so cache hits are cheap clones.
+    /// Concurrent callers with the same key may each compile once and
+    /// overwrite each other in the map — that's wasted but correct
+    /// (the resulting `Component`s are equivalent). Holding the Mutex
+    /// across the multi-second cranelift call would serialize unrelated
+    /// generators, which is the worse tradeoff.
     fn get_or_compile_kiln_component(
         &self,
         engine: &wasmtime::Engine,

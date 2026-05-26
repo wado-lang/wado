@@ -113,14 +113,10 @@ fn lift_error(e: kiln_types::Error) -> GeneratorError {
     }
 }
 
-/// Build a wasmtime [`Component`] from raw bytes. This is the
-/// cranelift-AOT step (~7s on a 432KB generator) and is intended to be
-/// cached by the host across invocations that share the same bytes.
-///
-/// # Errors
-///
-/// Surfaces a [`GeneratorRunnerError::Host`] when wasmtime rejects the
-/// wasm (malformed module, unsupported feature, …).
+/// Build a wasmtime [`Component`] from raw bytes. Cranelift-AOT
+/// dominates here (~7s on a 432KB generator), so the host caches the
+/// result across invocations that share the same bytes — see
+/// [`crate::compiler_host::FilesystemCompilerHost`].
 pub fn compile_component(
     engine: &Engine,
     component_wasm: &[u8],
@@ -130,11 +126,10 @@ pub fn compile_component(
 }
 
 /// Instantiate a pre-built [`Component`] against the
-/// `core:kiln/generator` world, call its exported `generate`, and
-/// return the response plus the list of every file the generator read
-/// via `host::read-file`. Use [`compile_component`] to build the
-/// `Component` once; calling this with a fresh `Component` on every
-/// invocation forfeits the AOT-caching win.
+/// `core:kiln/generator` world, invoke `generate`, and return the
+/// response plus the files the generator read via `host::read-file`.
+/// Always pass a [`Component`] obtained from the host's cache rather
+/// than building one inline — see [`compile_component`].
 pub async fn run_generator<H: CompilerHost + 'static>(
     engine: &Engine,
     host: Arc<H>,
