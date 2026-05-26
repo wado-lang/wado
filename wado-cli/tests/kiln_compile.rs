@@ -16,9 +16,11 @@
 
 use std::path::PathBuf;
 
+use wado_cli::compiler_host::FilesystemCompilerHost;
 use wado_cli::kiln_driver::{GeneratorProvider, ProviderError};
 use wado_cli::kiln_provider::{CACHE_DIR, CliGeneratorProvider};
 use wado_compiler::kiln::{GeneratorModule, InvocationPath};
+use wado_compiler::{CompilerHost, GeneratorInputFile, GeneratorRequest, LogLevel};
 
 mod common;
 use common::runtime;
@@ -586,6 +588,85 @@ fn spec_module_surfaces_unsupported() {
         }
         _ => panic!("expected ProviderError::Unsupported, got {err:?}"),
     }
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// Many kiln invocations in a real project share a single generator
+/// (one `parser_gen` package, N grammars). Each call into
+/// `CompilerHost::run_generator` used to rebuild the wasmtime
+/// `Component` from scratch — i.e. ~7s of cranelift AOT per grammar
+/// for a 432KB generator. The host now caches compiled `Component`s
+/// by wasm-bytes SHA-256, so the second `run_generator` for the same
+/// bytes must not re-invoke cranelift.
+#[test]
+fn host_caches_compiled_component_across_run_generator_calls() {
+    let tmp = unique_tmp("kiln-compile-component-cache");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let gen_path = tmp.join("my_generator.wado");
+    std::fs::write(&gen_path, MINIMAL_GENERATOR).unwrap();
+
+    // Reuse the existing provider plumbing to get a real, runnable
+    // generator wasm — that's what exercises the cranelift path on
+    // first call.
+    let provider = CliGeneratorProvider::new(tmp.clone());
+    let module = GeneratorModule::LocalPath(InvocationPath::normalize("./my_generator.wado"));
+    let resolved = runtime()
+        .block_on(async { provider.resolve(&module).await })
+        .expect("generator compiles");
+
+    let host = FilesystemCompilerHost::with_log_level(tmp.clone(), LogLevel::Off);
+    assert_eq!(host.kiln_component_compile_count(), 0);
+
+    let request = || GeneratorRequest {
+        primary: GeneratorInputFile {
+            path: "schema.proto".to_string(),
+            content: "syntax = \"proto3\";".to_string(),
+        },
+        inputs: vec![],
+        options: r#"{"verbose": false}"#.to_string(),
+    };
+
+    // First call: cranelift AOT runs, count goes to 1.
+    runtime()
+        .block_on(async { host.run_generator(&resolved.wasm, request()).await })
+        .expect("first generator run");
+    assert_eq!(host.kiln_component_compile_count(), 1);
+
+    // Second call with the same bytes: cache must hit, count stays at 1.
+    runtime()
+        .block_on(async { host.run_generator(&resolved.wasm, request()).await })
+        .expect("second generator run");
+    assert_eq!(
+        host.kiln_component_compile_count(),
+        1,
+        "shared wasm bytes must reuse the cached Component"
+    );
+
+    // Different bytes (a structurally distinct generator) → cache
+    // miss, count goes to 2. Use the v2-adapter shape so the wasm
+    // body genuinely differs rather than being byte-identical after
+    // dead-code elimination on a no-op edit.
+    let alt_path = tmp.join("alt_generator.wado");
+    std::fs::write(&alt_path, ADAPTER_GENERATOR).unwrap();
+    let alt_module = GeneratorModule::LocalPath(InvocationPath::normalize("./alt_generator.wado"));
+    let alt = runtime()
+        .block_on(async { provider.resolve(&alt_module).await })
+        .expect("alt generator compiles");
+    assert_ne!(
+        resolved.wasm, alt.wasm,
+        "distinct generators must produce distinct wasm"
+    );
+    runtime()
+        .block_on(async { host.run_generator(&alt.wasm, request()).await })
+        .expect("alt generator run");
+    assert_eq!(
+        host.kiln_component_compile_count(),
+        2,
+        "distinct wasm bytes must trigger a fresh component compile"
+    );
 
     let _ = std::fs::remove_dir_all(&tmp);
 }

@@ -3,7 +3,8 @@
 //! timestamps, log-level filtering, and stderr printing.
 
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 use wado_compiler::{
@@ -20,6 +21,19 @@ pub struct FilesystemCompilerHost {
     log_level: LogLevel,
     start_time: Instant,
     kiln_engine: OnceLock<wasmtime::Engine>,
+    /// Cache of compiled wasmtime [`Component`]s, keyed by SHA-256 of
+    /// the generator wasm bytes. Building a [`Component`] from a 432KB
+    /// generator wasm runs cranelift AOT for ~7s; many kiln invocations
+    /// in a single pipeline run typically share the same generator
+    /// (and therefore the same bytes), so a per-host cache turns N×AOT
+    /// into 1×AOT + (N-1) lookups. Lives only for the lifetime of this
+    /// host — no on-disk `.cwasm` is written, so there is no
+    /// trust-the-disk attack surface from caching.
+    kiln_components: Mutex<Vec<([u8; 32], wasmtime::component::Component)>>,
+    /// Number of times [`compile_component`] has actually been invoked
+    /// (i.e. cache misses). Tests use this to assert that the cache
+    /// dedups across `run_generator` calls.
+    kiln_component_compile_count: AtomicUsize,
 }
 
 impl FilesystemCompilerHost {
@@ -31,6 +45,8 @@ impl FilesystemCompilerHost {
             log_level: LogLevel::Info,
             start_time: Instant::now(),
             kiln_engine: OnceLock::new(),
+            kiln_components: Mutex::new(Vec::new()),
+            kiln_component_compile_count: AtomicUsize::new(0),
         }
     }
 
@@ -42,6 +58,8 @@ impl FilesystemCompilerHost {
             log_level: LogLevel::Off,
             start_time: Instant::now(),
             kiln_engine: OnceLock::new(),
+            kiln_components: Mutex::new(Vec::new()),
+            kiln_component_compile_count: AtomicUsize::new(0),
         }
     }
 
@@ -53,7 +71,49 @@ impl FilesystemCompilerHost {
             log_level,
             start_time: Instant::now(),
             kiln_engine: OnceLock::new(),
+            kiln_components: Mutex::new(Vec::new()),
+            kiln_component_compile_count: AtomicUsize::new(0),
         }
+    }
+
+    /// Number of times this host has actually run cranelift AOT on a
+    /// generator wasm (i.e. cache misses for `kiln_components`). Cache
+    /// hits do not contribute. Used by tests to assert that
+    /// `run_generator` shares compiled components across invocations.
+    #[must_use]
+    pub fn kiln_component_compile_count(&self) -> usize {
+        self.kiln_component_compile_count.load(Ordering::SeqCst)
+    }
+
+    /// Look up the compiled wasmtime [`Component`] for `wasm` (keyed by
+    /// SHA-256), building it on miss and caching the result. The build
+    /// path holds a brief Mutex on the cache, races for the same key
+    /// will each compile once but the latter overwrites the former in
+    /// the map — the result is equivalent so the wasted work is just a
+    /// duplicated compile on the (rare) racing path. Wasmtime's
+    /// `Component` is internally Arc, so cache hits are cheap clones.
+    fn get_or_compile_kiln_component(
+        &self,
+        engine: &wasmtime::Engine,
+        wasm: &[u8],
+    ) -> Result<wasmtime::component::Component, GeneratorRunnerError> {
+        let key = wado_compiler::kiln::content_hash(wasm);
+        if let Ok(guard) = self.kiln_components.lock()
+            && let Some((_, component)) = guard.iter().find(|(k, _)| k == &key)
+        {
+            return Ok(component.clone());
+        }
+        let component = kiln_runtime::compile_component(engine, wasm)?;
+        self.kiln_component_compile_count
+            .fetch_add(1, Ordering::SeqCst);
+        if let Ok(mut guard) = self.kiln_components.lock() {
+            if let Some(slot) = guard.iter_mut().find(|(k, _)| k == &key) {
+                slot.1 = component.clone();
+            } else {
+                guard.push((key, component.clone()));
+            }
+        }
+        Ok(component)
     }
 
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
@@ -154,10 +214,11 @@ impl CompilerHost for FilesystemCompilerHost {
                 .expect("kiln_engine was set above or by a racing caller")
                 .clone()
         };
+        let component = self.get_or_compile_kiln_component(&engine, component_wasm)?;
         kiln_runtime::run_generator(
             &engine,
             self.inner.clone(),
-            component_wasm,
+            &component,
             request,
             KilnRunPolicy::default(),
         )
