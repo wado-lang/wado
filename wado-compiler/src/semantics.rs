@@ -85,20 +85,14 @@ pub struct Semantics {
     /// [`Semantics::symbol_at`] when the key does not name an item-level
     /// symbol. Empty when resolve did not run or bailed early.
     pub(crate) locals: IndexMap<SymbolKey, Symbol>,
-<<<<<<< HEAD
     /// Inferred [`TypeId`] for each local binding (let / param / closure
     /// param), keyed by the binding's defining [`SymbolKey`]. Populated
-    /// alongside [`Self::locals`] from the resolver. Consumed by LSP
-    /// inlay-hint queries via [`Semantics::local_type`] to render the
-    /// inferred type on bindings without explicit annotation. Empty when
-    /// resolve did not run or bailed before recording any bindings.
+    /// alongside [`Self::locals`] from the elaborator. Consumed by LSP
+    /// inlay-hint queries via [`Semantics::local_type_name`] to render
+    /// the inferred type on bindings without explicit annotation. Empty
+    /// when resolve did not run or bailed before recording any bindings.
     pub local_types: IndexMap<SymbolKey, TypeId>,
-    /// TIR modules produced by [`crate::resolver::Resolver::lower_tir_from_state`].
-||||||| cadfa530
-    /// TIR modules produced by [`crate::resolver::Resolver::lower_tir_from_state`].
-=======
     /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
->>>>>>> origin/main
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `build_tir` did not run or bailed.
     pub(crate) tir_modules: IndexMap<ModuleSource, TirModule>,
@@ -234,7 +228,7 @@ impl Semantics {
     /// display.
     ///
     /// Returns `None` when `key` does not name a local binding (e.g. it
-    /// refers to an item), or when the resolver bailed before reaching
+    /// refers to an item), or when the elaborator bailed before reaching
     /// the binding's body.
     #[must_use]
     pub fn local_type_name(&self, key: &SymbolKey) -> Option<String> {

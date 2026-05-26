@@ -6,13 +6,13 @@
 //! 1. **Type hints** on `let` patterns, closure parameters, and `for x of …`
 //!    bindings that lack an explicit `: T` annotation. Tuple / struct /
 //!    variant / or-patterns recurse into their leaves so each bound
-//!    identifier hints with the resolver's inferred type for that leaf.
+//!    identifier hints with the elaborator's inferred type for that leaf.
 //!    Types come from [`Semantics::local_type_name`], populated by the
-//!    resolver via `record_local_symbol`.
+//!    elaborator via `record_local_symbol`.
 //! 2. **Parameter-name hints** at free-function call sites. The callee's
 //!    `FunctionSymbol::params` (set up by the analyzer) drives the labels.
 //! 3. **Parameter-name hints at method / static-method call sites.** The
-//!    callee's `Function` AST node is reached by following the resolver's
+//!    callee's `Function` AST node is reached by following the elaborator's
 //!    use→def edge from the method-name token's `AstId` to the declaring
 //!    impl method, then reading `Function::params` directly from the AST.
 //!    Impl methods are not registered in the symbol table, so the AST is
@@ -117,9 +117,9 @@ impl HintCollector<'_> {
     }
 
     /// Emit a `: T` hint anchored at the end of `name_span` for a binding
-    /// identified by `binding_id`. No-op when the resolver did not record a
+    /// identified by `binding_id`. No-op when the elaborator did not record a
     /// type for `binding_id` (e.g. the binding sits inside a function whose
-    /// body the resolver bailed on).
+    /// body the elaborator bailed on).
     fn push_type_hint(&mut self, binding_id: ast::AstId, name_span: Span) {
         let Some(type_name) = self.ctx.sem.local_type_name(&self.key(binding_id)) else {
             return;
@@ -146,7 +146,7 @@ impl HintCollector<'_> {
 
     /// Emit a type hint for every `Ident` / `MutIdent` leaf reachable
     /// from `pattern`. Tuple / struct / variant / or-patterns recurse
-    /// into their sub-patterns; the resolver records a `local_type` for
+    /// into their sub-patterns; the elaborator records a `local_type` for
     /// each leaf binding via `record_local_symbol`, so each leaf can
     /// hint independently. Literal and wildcard leaves bind nothing
     /// and have no type to surface.
@@ -237,7 +237,7 @@ impl HintCollector<'_> {
     }
 
     /// Hint parameters for a `StaticMethodCallExpr` (`Type::method(args)`).
-    /// Same resolution as `hint_method_call_args` — the resolver records
+    /// Same resolution as `hint_method_call_args` — the elaborator records
     /// the same use→def edge for both call shapes.
     fn hint_static_method_call_args(&mut self, call: &ast::StaticMethodCallExpr) {
         let Some(param_names) = self.method_param_names(call.method_id) else {
@@ -261,7 +261,7 @@ impl HintCollector<'_> {
     fn emit_arg_param_hints(&mut self, param_names: &[String], args: &[Expr]) {
         // Align positional args with their parameter names. An arity
         // mismatch (more args than params) terminates the loop early; the
-        // resolver flags that as a diagnostic on its own path.
+        // elaborator flags that as a diagnostic on its own path.
         for (param_name, arg) in param_names.iter().zip(args.iter()) {
             self.push_param_hint(param_name, arg.span());
         }
@@ -651,7 +651,7 @@ mod tests {
     #[test]
     fn struct_destructure_let_hints_each_field_binding() {
         // `let { x, y } = p;` binds two locals — `x` and `y` — each
-        // with a resolver-recorded type (the struct field's type). The
+        // with a elaborator-recorded type (the struct field's type). The
         // pattern walker recurses into the struct sub-patterns and
         // emits a hint per leaf.
         block_on(async {
@@ -807,7 +807,7 @@ mod tests {
     #[test]
     fn closure_stored_in_local_does_not_yield_param_hints_on_call() {
         // Calling a closure via its binding (`g(1)`) routes through the
-        // resolver's local-variable path; the use→def edge points at the
+        // elaborator's local-variable path; the use→def edge points at the
         // `let g = …` pattern, not at a function symbol. We must not
         // accidentally try to read params off a `Variable` symbol and
         // emit garbage hints.
