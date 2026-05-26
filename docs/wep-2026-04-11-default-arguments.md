@@ -179,7 +179,7 @@ Closures cannot declare default parameters. Closures are first-class values whos
 let greet = |name: String, greeting: String = "Hello"| `{greeting}, {name}!`;
 ```
 
-The parser still accepts the `= expr` syntax for closure parameters so that recovery is uniform with named functions, but the resolver rejects it with an error that points at the default expression. Use a wrapper function with defaults instead:
+The parser still accepts the `= expr` syntax for closure parameters so that recovery is uniform with named functions, but the elaborator rejects it with an error that points at the default expression. Use a wrapper function with defaults instead:
 
 ```wado
 fn greet(name: String, greeting: String = "Hello") -> String {
@@ -447,7 +447,7 @@ let resp = Fetch::fetch(url, init).read();
 | Effect system    | Default expressions must be pure (no effects)       |
 | Traits           | Only trait definition specifies defaults            |
 | Function types   | Defaults erased — arity fixed                       |
-| Closures         | Defaults rejected — parsed but error in resolver    |
+| Closures         | Defaults rejected — parsed but error in elaborator    |
 | `export fn` (CM) | Defaults rejected — arity must match WIT signature  |
 | Default trait    | Auto-derived for all-defaulted structs              |
 | Serde            | `#[serde(default)]` uses field default value        |
@@ -460,7 +460,7 @@ let resp = Fetch::fetch(url, init).read();
 
 ## Implementation Roadmap
 
-- [x] Parameter and struct-field defaults end-to-end (AST / parser / resolver / TIR / trait propagation / purity check). Covered by the `default_arg_*` and `default_field_*` fixtures in `wado-compiler/tests/fixtures/`.
+- [x] Parameter and struct-field defaults end-to-end (AST / parser / elaborator / TIR / trait propagation / purity check). Covered by the `default_arg_*` and `default_field_*` fixtures in `wado-compiler/tests/fixtures/`.
 - [x] Auto-derive `Default` for all-defaulted non-generic structs. Generic structs are a follow-up.
 - [ ] `wado-from-idl`: emit `= default` instead of `Option<T>` for WebIDL parameters with IDL defaults, and map WebIDL dictionaries to structs with field defaults. Blocked on WebIDL support in `wado-from-idl` itself (currently WIT-only).
 

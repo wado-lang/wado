@@ -330,8 +330,8 @@ Status: the implementation followed the alternative path — `check_assignable` 
 
 Tasks:
 
-- [x] `check_assignable` enforces `fn <: fn mut` directly (`resolver/typecheck.rs`)
-- [x] `register_generic_params` resolves `<F: fn(...)>` to the bound's function type (`resolver/trait_env.rs`)
+- [x] `check_assignable` enforces `fn <: fn mut` directly (`elaborator/typecheck.rs`)
+- [x] `register_generic_params` resolves `<F: fn(...)>` to the bound's function type (`elaborator/trait_env.rs`)
 - [ ] Optional follow-up: re-introduce the stdlib `Fn` / `FnMut` traits with `Effects = []` default and supertrait inheritance for user-defined callable types (deferred — not needed for closure literals)
 
 ### Phase 3: Type-system split
@@ -341,16 +341,16 @@ Add an `is_mut` flag to `ResolvedType::Function`. Implement `fn <: fn mut` sub-t
 Tasks:
 
 - [x] Add `is_mut: bool` to `ResolvedType::Function` (`tir.rs`)
-- [x] Sub-typing rule in `check_assignable` (`resolver/typecheck.rs`)
+- [x] Sub-typing rule in `check_assignable` (`elaborator/typecheck.rs`)
 - [x] Update `make_function` / TIR creation sites; type stringification (`tir.rs::type_name`, `unparse.rs`)
 
 ### Phase 4: Auto-capture by reference
 
-In the resolver, walk the closure body and classify each captured binding as `&T` (read-only) or `&mut T` (mutating). Tag the closure type as `fn` or `fn mut` based on whether any capture is mutating. Retire the existing `&mut || ...` desugar.
+In the elaborator, walk the closure body and classify each captured binding as `&T` (read-only) or `&mut T` (mutating). Tag the closure type as `fn` or `fn mut` based on whether any capture is mutating. Retire the existing `&mut || ...` desugar.
 
 Tasks:
 
-- [x] Walk closure body in `resolve_closure` to classify outer-name usage; emit the `&mut __ref_*` ref desugar inline (`resolver/closure.rs`)
+- [x] Walk closure body in `resolve_closure` to classify outer-name usage; emit the `&mut __ref_*` ref desugar inline (`elaborator/closure.rs`)
 - [x] Tag closure type `is_mut = any(capture.is_mut)`
 - [x] Retire `&mut || ...` source form. The special-case dispatch to `resolve_mutable_closure` is gone, and `resolve_mutable_closure` itself is deleted. The syntax now falls through to the ordinary unary path, where the natural type / binding error covers it (e.g. `&mut <closure value>` produces `&mut fn mut(...)` which then trips the regular type-mismatch / `mut`-binding checks downstream). A dedicated `AmpMutClosureSyntaxRetired` diagnostic was prototyped and dropped: no Wado users exist yet, so a migration window is unnecessary.
 - [x] Migrate fixtures `closure_2.wado`, `closure_3.wado` away from `&mut ||`
@@ -361,7 +361,7 @@ In `IndirectCall` / `MethodCall` resolution, require the callee binding to be `l
 
 Tasks:
 
-- [x] In `IndirectCall` construction (`resolver/call.rs`), check whether the local holding the callee was bound `let mut`; emit `ClosureMutBindingRequired` if not and the callee is `fn mut`
+- [x] In `IndirectCall` construction (`elaborator/call.rs`), check whether the local holding the callee was bound `let mut`; emit `ClosureMutBindingRequired` if not and the callee is `fn mut`
 - [x] Same check applies to function parameters via the same code path (`mut f:` makes the param a `mut` local)
 - [x] Compile-error fixtures (`closure_mut_binding_required_error.wado`, `closure_mut_param_required_error.wado`)
 
@@ -383,7 +383,7 @@ Tasks:
 
 - [x] Convert `lib/core/prelude/traits.wado` iterator methods to `fn mut(...)`: `map`, `filter`, `fold`, `find`, `any`, `all`, `position`, `reduce`
 - [x] Add `for_each` method
-- [ ] Update return types from named adapter structs (`IterMap<Self, U>` etc.) to `Iterator<Item = ...>` where the adapter type does not need to be user-named (deferred — requires the resolver to elaborate the trait-object-style return type, out of scope for this PR)
+- [ ] Update return types from named adapter structs (`IterMap<Self, U>` etc.) to `Iterator<Item = ...>` where the adapter type does not need to be user-named (deferred — requires the elaborator to elaborate the trait-object-style return type, out of scope for this PR)
 - [x] Migrate other bare-`fn(...)` stdlib references where the closure should be `fn mut`: `String::find_char`, `Array::sort_by` / `sorted_by`, `Benchmark::run`, serde `lookup` (`serde.wado`, `json.wado`, `router.wado`)
 - [ ] Add `<effect E>` effect-polymorphism to iterator methods (deferred — closure literals already inherit caller effects, so this is additive convenience rather than a correctness fix)
 
@@ -393,7 +393,7 @@ Compile-error fixtures for any closure-typed component crossing the Component Mo
 
 Tasks:
 
-- [x] Reject exporting a function with a closure-typed parameter or return type, including closures buried inside refs / arrays / generic containers (`resolver/item.rs::type_contains_closure`)
+- [x] Reject exporting a function with a closure-typed parameter or return type, including closures buried inside refs / arrays / generic containers (`elaborator/item.rs::type_contains_closure`)
 - [x] Reject importing a function (`#[canonical(...)]` / `#[cm(...)]` declaration with no body) carrying a closure type in any signature position
 - [x] Reject closure-typed fields in CM-exported record types — `type_contains_closure` recurses through named-struct fields via `lookup_struct_fields`. Variant payloads currently route through generic-arg containers, so the same check fires for them
 - [x] Fixtures: export-param, export-return, struct-field, and import side rejection cases

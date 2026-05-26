@@ -19,7 +19,7 @@ This WEP defines the output format, the user-facing name, and the compiler imple
 
 The feature is called **inspect** throughout:
 
-- `builtin::inspect(expr, &mut f)` — the compiler marker in the resolver
+- `builtin::inspect(expr, &mut f)` — the compiler marker in the elaborator
 - `{expr:?}` — template string syntax (inspect specifier)
 - `{expr:#?}` — alternate (pretty-print) inspect with indented multi-line output
 
@@ -82,7 +82,7 @@ Inspect output follows Wado literal syntax where possible:
 
 Inspect is implemented without adding a new TIR expression kind. Instead:
 
-1. **Resolver phase**: When the resolver encounters `{expr:?}` or falls back to inspect for `{expr}`, it emits a `StaticCall` to `builtin::inspect(expr, &mut f)`. This acts as a **marker** — the function doesn't exist as real code.
+1. **Elaborator phase**: When the elaborator encounters `{expr:?}` or falls back to inspect for `{expr}`, it emits a `StaticCall` to `builtin::inspect(expr, &mut f)`. This acts as a **marker** — the function doesn't exist as real code.
 
 2. **Synthesize phase** (`synthesize_inspect`): A new pass runs after TIR resolution and before CM binding synthesis. It scans the TIR for `builtin::inspect` calls and replaces each one with synthesized TIR that writes the formatted output to the Formatter. The synthesized code uses the same TIR nodes as hand-written Wado code (method calls, match expressions, struct field access, etc.).
 
@@ -202,7 +202,7 @@ fn synthesize_inspect_for_type(T, expr, f_ref) -> Vec<TirStmt>:
             self.vtable.inspect_alt(env, f) // {x:#?}
 ```
 
-#### Resolver Changes
+#### Elaborator Changes
 
 In `resolve_template_string`, when `trait_name` would be `"Display"` but the type has no Display impl (the current fallback path), or when the format spec is `?`:
 
@@ -374,7 +374,7 @@ The core `synthesize_inspect` phase and the full pipeline integration are implem
 ### Additional Fixes
 
 - **Resource hex format**: Changed from decimal (`TypeName#N`) to hex (`TypeName#0xHH`) using `LowerHex::fmt` instead of `Display::fmt`, matching the WEP specification.
-- **`#[hidden]` field support**: Added `is_hidden` flag to `TirField`, propagated through resolver, monomorphizer, and lowerer. `synthesize_inspect` and `find_struct_fields` filter hidden fields.
+- **`#[hidden]` field support**: Added `is_hidden` flag to `TirField`, propagated through elaborator, monomorphizer, and lowerer. `synthesize_inspect` and `find_struct_fields` filter hidden fields.
 - **Generic struct inspect**: Added `ResolvedType::GenericInstance` handling in `synth_body`, using `SubstitutionContext` to resolve type parameters to concrete types for field access.
 - **Unit type `()` codegen fix**: Fixed invalid Wasm generation when `()` appears as a function parameter or local variable. Unit-type params are now filtered out during WIR function registration, and unit-type locals/assignments/reads emit `Nop` instead of invalid `local.get`/`local.set`. Unit-type arguments are also filtered from call sites.
 

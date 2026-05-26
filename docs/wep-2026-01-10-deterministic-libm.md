@@ -228,7 +228,7 @@ fn calculate_orbit(angle: f64, radius: f64) -> [f64, f64] {
 The `builtin:libm` import source is a **compiler-internal namespace** that resolves to the embedded `libm.wasm`:
 
 ```rust
-// wado-compiler/src/resolver.rs
+// wado-compiler/src/elaborator.rs
 match import_source {
     "builtin:libm" => {
         // Load embedded libm.wasm from binary

@@ -110,15 +110,15 @@ Value-only `for let v of values` works the same way without the `i` binding.
 
 ### Where Expansion Happens
 
-Expansion occurs in the **resolver during monomorphization**, not in the desugar phase. This is because the concrete tuple type is only known after type parameter substitution.
+Expansion occurs in the **elaborator during monomorphization**, not in the desugar phase. This is because the concrete tuple type is only known after type parameter substitution.
 
 Flow:
 
 1. A generic function `fn tag<Values>(strings: CookedStrings, values: Values)` is defined
 2. At a call site, `Values` is instantiated to a concrete tuple type (e.g., `[i32, String]`)
-3. The resolver monomorphizes the function body with `Values = [i32, String]`
-4. During monomorphization, the resolver encounters `for let [i, v] of values.enumerate()`
-5. `values` has concrete type `[i32, String]` -> the resolver unrolls the loop
+3. The elaborator monomorphizes the function body with `Values = [i32, String]`
+4. During monomorphization, the elaborator encounters `for let [i, v] of values.enumerate()`
+5. `values` has concrete type `[i32, String]` -> the elaborator unrolls the loop
 6. Each unrolled body is resolved independently with the appropriate element type
 
 ### Type Checking Model
@@ -221,7 +221,7 @@ note: tuple type determined here
 
 ## Implementation Plan
 
-- [ ] Detect `for let v of <tuple>` and `for let [i, v] of <tuple>.enumerate()` patterns in the resolver
+- [ ] Detect `for let v of <tuple>` and `for let [i, v] of <tuple>.enumerate()` patterns in the elaborator
 - [ ] Implement loop unrolling during monomorphization
 - [ ] Type-check each unrolled block independently
 - [ ] Emit compile errors for `break`/`continue` inside tuple enumeration
@@ -242,7 +242,7 @@ note: tuple type determined here
 ### Negative
 
 - Adopts C++ template model for type checking (monomorphization-time errors)
-- Adds complexity to the resolver's monomorphization logic
+- Adds complexity to the elaborator's monomorphization logic
 - `.enumerate()` as a pseudo-method is a novel concept that may surprise users
 - Error messages require careful engineering to be useful
 
