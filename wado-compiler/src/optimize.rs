@@ -53,12 +53,14 @@ mod cse;
 mod dae;
 pub mod dce;
 mod drve;
+mod elide_box_local;
 mod elide_local;
 mod field_scalarize;
 mod inline;
 mod labeled_block_fusion;
 mod licm;
 mod match_to_switch;
+mod mod_ref;
 mod multi_value_return;
 mod ref_elim;
 mod select_lowering;
@@ -84,6 +86,7 @@ use dce::{
     remove_unreachable_types,
 };
 use drve::eliminate_dead_return_values;
+use elide_box_local::elide_adjacent_box_locals;
 use elide_local::elide_write_only_locals;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
@@ -529,6 +532,12 @@ fn run_optimization_passes(
         // `optimize/sroa_param.rs`.
         step!("nir/sroa_param", sroa_single_field_parameters);
         step!("nir/inline", |p| inline_functions(p, threshold));
+        // Adjacent-use Box-local elision. After `sroa_param` reshapes
+        // `Box<T>` parameters into scalars and `inline` propagates the
+        // resulting `FieldAccess(Local(x), "value")` shape into call
+        // sites, this pass collapses the surrounding `let x = Box{value:
+        // inner}; … x.value …` shells. See `optimize/elide_box_local.rs`.
+        step!("nir/elide_box_local", elide_adjacent_box_locals);
         step!("nir/labeled_block_fusion", fuse_labeled_blocks);
         step!("nir/ref_elim", eliminate_unnecessary_refs);
         step!("nir/sroa", scalar_replace_aggregates);

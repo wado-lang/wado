@@ -45,9 +45,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{
-    CallArg, FunctionKind, NirBlock, NirExpr, NirExprKind, NirFunction, NirUnaryOp,
-};
+use crate::nir::{CallArg, FunctionKind, NirBlock, NirExpr, NirExprKind, NirFunction, NirUnaryOp};
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::{NirMutVisitor, NirRefVisitor};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -415,10 +413,7 @@ impl NirMutVisitor for ParamReadRewriter<'_> {
 // Phase 3b: call-site rewrite
 // -----------------------------------------------------------------------
 
-fn rewrite_call_sites(
-    project: &mut NirPackage,
-    candidates: &IndexMap<(FnKey, usize), SroaInfo>,
-) {
+fn rewrite_call_sites(project: &mut NirPackage, candidates: &IndexMap<(FnKey, usize), SroaInfo>) {
     // (callee_key, param_idx) → SroaInfo, regrouped by callee for cheap
     // lookup inside the visitor.
     let mut sroa_positions: IndexMap<FnKey, IndexMap<usize, SroaInfo>> = IndexMap::default();
