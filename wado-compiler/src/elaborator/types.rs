@@ -1,4 +1,4 @@
-//! Type definitions used across the resolver phase.
+//! Type definitions used across the elaborator phase.
 
 use std::cell::RefCell;
 
@@ -1069,7 +1069,7 @@ pub(super) struct LocalVar {
     #[allow(dead_code)] // For future mutability checking
     pub(super) is_mut: bool,
     /// `AstId` of the node that introduced this binding (pattern, parameter,
-    /// closure parameter). `None` for resolver-synthesized temporaries whose
+    /// closure parameter). `None` for elaborator-synthesized temporaries whose
     /// names cannot be referenced from source (e.g., `__qm_v`, `__b`).
     ///
     /// Used by [`Elaborator`] to record `use → def` edges when an `IdentExpr`
@@ -1298,9 +1298,9 @@ impl FunctionContext {
     /// Add a local variable to the current scope.
     ///
     /// `defining_ast_id` identifies the source AST node that introduced this
-    /// binding and is used by the resolver to record `use → def` edges. Pass
+    /// binding and is used by the elaborator to record `use → def` edges. Pass
     /// `Some(id)` for user-visible bindings (let patterns, parameters, closure
-    /// parameters); pass `None` for resolver-synthesized temporaries whose
+    /// parameters); pass `None` for elaborator-synthesized temporaries whose
     /// names cannot appear in source (e.g., `__qm_v`, `__b`).
     pub(super) fn add_local(
         &mut self,

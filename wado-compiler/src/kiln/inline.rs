@@ -82,7 +82,7 @@ impl InvocationIndex {
     }
 
     /// Returns `true` when no invocations have been recorded. Consumers
-    /// (e.g. the resolver) can short-circuit the redirect check.
+    /// (e.g. the elaborator) can short-circuit the redirect check.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
@@ -334,7 +334,7 @@ fn lower_inline(
 ///   loader does for the `from` slot two lines above.
 /// - `<ns>:<name>[@<ver>]` — registry / stdlib namespace identifier.
 ///   Stored verbatim as a [`GeneratorModule::Spec`] string until the
-///   build-dependency resolver lands.
+///   build-dependency elaborator lands.
 ///
 /// A bare relative name without `./` is rejected with a hint to add the
 /// prefix — the same diagnostic regular `use` clauses produce.
@@ -362,7 +362,7 @@ fn lower_module_specifier(
     }
     // Namespaced specifier (`ns:name@ver`, `core:foo`, `wasi:foo`, …).
     // The compiler does not interpret the body here — the build-dep
-    // resolver / provider does.
+    // elaborator / provider does.
     if let Some(colon) = spec.find(':')
         && colon > 0
         && spec[..colon]

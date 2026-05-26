@@ -653,7 +653,7 @@ impl<'a> NirUnparser<'a> {
                 args,
                 ..
             } => {
-                // The resolver wraps `self` receivers in `&`/`&mut` automatically;
+                // The elaborator wraps `self` receivers in `&`/`&mut` automatically;
                 // strip that wrapper so the rendering reflects the source value.
                 let actual_receiver = match &receiver.kind {
                     NirExprKind::Unary {
@@ -741,7 +741,7 @@ impl<'a> NirUnparser<'a> {
                 ..
             } => {
                 // Functor structs are rendered as `&Name { ... }` to mirror the
-                // reference type that the resolver attached.
+                // reference type that the elaborator attached.
                 if matches!(
                     self.type_table.get(expr.type_id),
                     crate::tir::ResolvedType::Ref(_)

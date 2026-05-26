@@ -697,7 +697,7 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
     }
 
     // Check if source has #![TODO] to determine panic recovery strategy.
-    // For test world: individual tests are already marked #[TODO] by the resolver,
+    // For test world: individual tests are already marked #[TODO] by the elaborator,
     // so no special handling is needed here.
     // For CLI/HTTP worlds: runtime failures in #![TODO] modules need catch_unwind.
     let is_todo_module = match wado_compiler::parse(source) {
@@ -712,7 +712,7 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
         }));
         match test_result {
             Ok(()) if spec.test_world.is_some() => {
-                // Test world: every test is marked `test-todo-*` by the resolver.
+                // Test world: every test is marked `test-todo-*` by the elaborator.
                 // Reaching Ok means each one trapped as expected — pending, not resolved.
             }
             Ok(()) => {

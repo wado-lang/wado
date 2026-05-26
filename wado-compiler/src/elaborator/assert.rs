@@ -33,14 +33,14 @@
 //!    resolution is in flight, [`Elaborator::resolve_expr`] consults the
 //!    [`AssertCaptureContext`] side-channel on the function context.
 //!    When the current `Expr`'s `AstId` is in the capture set, the
-//!    resolver allocates a fresh `__vK` local, emits a
+//!    elaborator allocates a fresh `__vK` local, emits a
 //!    `TirStmt::Let { value: <recursively resolved expr>, ... }`,
 //!    and returns `Local(__vK)` in place of the resolved sub-expression.
 //!    The `in_progress` guard prevents the hook from re-firing on the
 //!    same node during the recursive resolution.
 //!
 //! Because the hook fires on AST identity, not on TIR shape, the
-//! resolver-synthesised wrappers (auto-ref via
+//! elaborator-synthesised wrappers (auto-ref via
 //! `adjust_receiver_for_self_kind`, literal coercions, reflexive
 //! `T::from(T_val)` collapse, …) need no special handling: the wrappers
 //! live *inside* the resolved TIR that becomes the captured `let __vK =
@@ -253,7 +253,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // The condition reaches `desugar_assert` unmodified, so its
         // printout reads in the user's words (`s matches { p }`,
-        // `a < b < c`, …) rather than the resolver-internal expansion.
+        // `a < b < c`, …) rather than the elaborator-internal expansion.
         let condition_source = unparse_expr_simple(&assert_stmt.condition);
         parts.push(TirTemplatePart::Literal(format!(
             "\ncondition: {condition_source}\n"
@@ -405,7 +405,7 @@ struct Capture {
     name: String,
     /// Source text of the original sub-expression, used in the failure message.
     source: String,
-    /// `true` once the resolver hook has fired for this slot. Slots that
+    /// `true` once the elaborator hook has fired for this slot. Slots that
     /// stay `false` had their AST node evaporate during resolution
     /// (e.g. reflexive `T::from(T_val)` returns its argument directly,
     /// so the outer `Call` is never resolved as a node and
@@ -418,11 +418,11 @@ struct Capture {
 /// Per-assert state carried on [`FunctionContext::assert_capture_ctx`]
 /// while [`Elaborator::resolve_expr`] is resolving the condition.
 pub(super) struct AssertCaptureContext {
-    /// Pre-scanned captures, indexed by slot. The resolver hook reads
+    /// Pre-scanned captures, indexed by slot. The elaborator hook reads
     /// `name` to produce the `let __vK` binding and writes `local` once
     /// the slot is realised.
     slots: Vec<Capture>,
-    /// AST node identity → slot index. The resolver hook consults this
+    /// AST node identity → slot index. The elaborator hook consults this
     /// at every `resolve_expr` entry.
     ast_id_to_slot: IndexMap<AstId, usize>,
     /// `AstId`s currently being recursively resolved by the hook. Stops
@@ -449,7 +449,7 @@ impl AssertCaptureContext {
 
 /// Read-only AST scanner: decides which sub-expressions of the assert
 /// condition deserve a `__vK` capture and records each capture's
-/// originating [`AstId`] so the resolver hook in `resolve_expr` can find
+/// originating [`AstId`] so the elaborator hook in `resolve_expr` can find
 /// it.
 ///
 /// One slot per capturable `Expr` — no source-text deduplication. Two
@@ -491,7 +491,7 @@ impl CaptureScanner {
     }
 
     /// Add a capture; the sub-expression's `AstId` is recorded so the
-    /// resolver hook can match it.
+    /// elaborator hook can match it.
     fn add(&mut self, source: String, ast_id: AstId) {
         let idx = self.slots.len();
         let name = format!("__v{idx}");

@@ -800,7 +800,7 @@ impl<'a> Lexer<'a> {
 
         let text = &self.input[start..self.pos];
 
-        // Return string representation; type is determined by context in resolver
+        // Return string representation; type is determined by context in elaborator
         Ok(TokenKind::NumberLit(text.to_string()))
     }
 
@@ -834,7 +834,7 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        // Include "0x" prefix in repr; actual parsing happens in resolver
+        // Include "0x" prefix in repr; actual parsing happens in elaborator
         let repr = self.input[start..self.pos].to_string();
         Ok(TokenKind::NumberLit(repr))
     }
@@ -869,7 +869,7 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        // Include "0b" prefix in repr; actual parsing happens in resolver
+        // Include "0b" prefix in repr; actual parsing happens in elaborator
         let repr = self.input[start..self.pos].to_string();
         Ok(TokenKind::NumberLit(repr))
     }
@@ -904,7 +904,7 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        // Include "0o" prefix in repr; actual parsing happens in resolver
+        // Include "0o" prefix in repr; actual parsing happens in elaborator
         let repr = self.input[start..self.pos].to_string();
         Ok(TokenKind::NumberLit(repr))
     }
@@ -1046,7 +1046,7 @@ impl<'a> Lexer<'a> {
                             }
                         }
                         _ => {
-                            // Unknown escape — preserve as-is, let resolver report the error
+                            // Unknown escape — preserve as-is, let elaborator report the error
                             if let Some(c) = self.peek_char() {
                                 current_literal.push(c);
                                 self.advance();

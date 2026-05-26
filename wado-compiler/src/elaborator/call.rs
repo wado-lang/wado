@@ -1136,7 +1136,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Handle user-defined effect operations (e.g., `Counter::next` where
         // `effect Counter { fn next() -> i32; }` is declared in the project).
-        // The resolver routes these through `CalleeRef::local_namespace`,
+        // The elaborator routes these through `CalleeRef::local_namespace`,
         // which produces `ModuleSource::Local { path: "Counter" }` — also
         // matched by `is_effect_like()`. Without this lookup the call would
         // fall through to the default `Unit` return type and the dispatch
@@ -1193,7 +1193,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope.trait_ctx.type_params.clear();
                 scope.register_generic_params(&type_params, 0);
 
-                // Swap the resolver's "current module" perspective onto the
+                // Swap the elaborator's "current module" perspective onto the
                 // callee for the duration of `resolve_type`. Locals are cleared
                 // because they only ever describe the active resolution, not
                 // the callee's pre-existing definitions.
@@ -1323,7 +1323,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return newtype_id;
                     }
                     // Otherwise, try to resolve via WASI registry's newtypes.
-                    // Scoped to `wasi:` to keep this resolver path WASI-only.
+                    // Scoped to `wasi:` to keep this elaborator path WASI-only.
                     let aliased = self
                         .wasi_registry
                         .find_wasi_newtype_source(&named.name)
@@ -1702,7 +1702,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// To make the caller's supplied value visible to the default expression,
     /// we textually substitute param-name [`Expr::Ident`] occurrences inside
     /// the default's cloned AST with the corresponding argument's AST before
-    /// resolving it. The resolver then type-checks the result against the
+    /// resolving it. The elaborator then type-checks the result against the
     /// declared parameter type.
     ///
     /// Appends newly-synthesized arguments to `args`. Leaves `args` unchanged

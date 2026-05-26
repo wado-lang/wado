@@ -7,7 +7,7 @@
 //! synthesises (`Default`, `From`, `Serialize`), or methods it lowers
 //! into calls (`String::push_str`, `Array::push`). Each item is bound
 //! to its resolution by a `#[compiler_item("...")]` attribute on the
-//! Wado-side declaration; the resolver populates the
+//! Wado-side declaration; the elaborator populates the
 //! [`CompilerItems`] registry during the annotate phase and downstream
 //! passes look symbols up through the registry instead of by string
 //! name.
@@ -24,7 +24,7 @@
 //! [`CompilerItem::from_attr_name`].
 //!
 //! Scope: `#[compiler_item("...")]` is only meaningful inside
-//! `core::*` modules. The resolver rejects the attribute on user code.
+//! `core::*` modules. The elaborator rejects the attribute on user code.
 
 use std::fmt;
 
@@ -518,7 +518,7 @@ impl CompilerItem {
     }
 
     /// The kind of declaration this item must be attached to. Used by
-    /// the resolver to reject misuse like
+    /// the elaborator to reject misuse like
     /// `#[compiler_item("option")]` on a trait.
     pub fn expected_kind(self) -> CompilerItemKind {
         match self {
@@ -597,7 +597,7 @@ impl fmt::Display for CompilerItem {
 
 /// The category of declaration a [`CompilerItem`] is attached to.
 ///
-/// Kept separate from [`CompilerItem`] so the resolver can validate
+/// Kept separate from [`CompilerItem`] so the elaborator can validate
 /// the attribute placement (e.g. `Option` must be on a `variant`,
 /// `Default` must be on a `trait`) and so the registry can offer
 /// kind-specific accessors.
@@ -681,7 +681,7 @@ pub enum Resolved {
         module_source: ModuleSource,
         name: String,
         /// Primary method name for **single-method** traits, captured
-        /// automatically by the resolver when registering the trait's
+        /// automatically by the elaborator when registering the trait's
         /// `#[compiler_item("...")]` annotation. `None` for
         /// multi-method traits (`Serializer`, `Deserializer`, …).
         ///
@@ -700,7 +700,7 @@ pub enum Resolved {
         /// source-side names of its trait bounds (e.g. for
         /// `type SeqSerializer: SerializeSeq;` the entry is
         /// `TraitAssocType { name: "SeqSerializer", bound_names: ["SerializeSeq"] }`).
-        /// Auto-captured by the resolver when registering the trait's
+        /// Auto-captured by the elaborator when registering the trait's
         /// `#[compiler_item("...")]` annotation; empty for traits
         /// without associated types.
         ///
@@ -787,7 +787,7 @@ impl Resolved {
 
 /// Registry that binds each [`CompilerItem`] to a [`Resolved`].
 ///
-/// Populated by the resolver during the annotate phase as it walks
+/// Populated by the elaborator during the annotate phase as it walks
 /// stdlib modules and discovers `#[compiler_item("...")]` attributes.
 /// Downstream passes (lower, synthesis, optimize, codegen) read from
 /// the registry instead of hard-coding stdlib paths.
@@ -854,7 +854,7 @@ impl CompilerItems {
     /// or if the slot is already filled with a different resolution.
     ///
     /// Re-registering the same `Resolved` value is a no-op — this
-    /// matches existing resolver behaviour where the same module may
+    /// matches existing elaborator behaviour where the same module may
     /// be visited multiple times during the annotate pass.
     pub fn register(
         &mut self,
@@ -1131,7 +1131,7 @@ impl CompilerItems {
     }
 
     /// List every required-but-missing [`CompilerItem`] for the given
-    /// `world`. The resolver calls this after `annotate_modules` so an
+    /// `world`. The elaborator calls this after `annotate_modules` so an
     /// unregistered prelude item (or world-specific item for the
     /// active world) fails the compile with a clear diagnostic
     /// instead of an ICE deep inside synthesis.
@@ -1154,7 +1154,7 @@ fn kind_mismatch_ice(item: CompilerItem, expected_variant: &str, got: &Resolved)
     )
 }
 
-/// Errors returned from [`CompilerItems::register`]. The resolver
+/// Errors returned from [`CompilerItems::register`]. The elaborator
 /// converts these into user-facing diagnostics (or compiler ICEs
 /// when the violation is in stdlib code).
 #[derive(Clone, Debug)]
@@ -1206,12 +1206,12 @@ impl fmt::Display for RegisterError {
 /// attribute list.
 ///
 /// Returns the matched [`CompilerItem`] values in encounter order,
-/// plus a [`Vec`] of *unrecognised* argument strings so the resolver
+/// plus a [`Vec`] of *unrecognised* argument strings so the elaborator
 /// can emit a diagnostic without losing the original spelling.
 ///
 /// In valid stdlib code, a single declaration carries at most one
 /// `#[compiler_item("...")]` attribute. Multiple matches are not
-/// rejected here; the resolver decides whether to fold the bits
+/// rejected here; the elaborator decides whether to fold the bits
 /// (legacy behaviour from the original `comp_feature` mechanism) or flag duplicates.
 pub fn parse_compiler_item_attrs(
     attrs: &[crate::ast::Attribute],

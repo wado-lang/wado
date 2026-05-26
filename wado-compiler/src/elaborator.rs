@@ -1,6 +1,6 @@
 //! Type resolution phase for Wado
 //!
-//! The type resolver:
+//! The type elaborator:
 //! 1. Takes the parsed AST and symbol table from the analyzer
 //! 2. Performs type inference and type checking
 //! 3. Produces the Typed Intermediate Representation (TIR)
@@ -101,12 +101,12 @@ pub struct Elaborator<'a, H: CompilerHost> {
     all_flags_cases: Rc<IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>>,
     all_resource_types: Rc<IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>>,
     /// Per-module import context (consumed by [`TypeLookup`]). Built once per
-    /// module from `use` declarations; replaces the 7 flat maps the resolver
+    /// module from `use` declarations; replaces the 7 flat maps the elaborator
     /// used to clone for each module.
     imported_type_sources: IndexMap<String, ModuleSource>,
     import_original_names: IndexMap<String, String>,
     /// Locally discovered additions to the type tables. Anonymous structs
-    /// (synthesized from struct literals) and the resolver's own walk of
+    /// (synthesized from struct literals) and the elaborator's own walk of
     /// `module.items` insert here so [`TypeLookup`] can find them at the
     /// highest priority. Always empty unless the current module has a
     /// reason to override / extend the shared tables.
@@ -172,7 +172,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// These are inlined at every use site during resolution.
     associated_constants: IndexMap<String, (ast::Type, ast::Expr)>,
     /// Immutable trait knowledge base: impl indices, trait declarations, and blanket impls.
-    /// Built once and shared across all module resolvers via `Arc`.
+    /// Built once and shared across all module elaborators via `Arc`.
     trait_env: Arc<TraitEnv>,
     /// Pre-loaded file contents for `#include_str` / `#include_bytes`.
     /// Key: `[module_source_display, raw_path]`, value: raw bytes.
@@ -200,7 +200,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     loaded_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>>,
     /// Use→def map for local variables. Shared via `Rc<RefCell<…>>` with
     /// [`crate::elaborator::orchestration::AnnotateState`] so LSP queries see
-    /// references as soon as the resolver has walked the body.
+    /// references as soon as the elaborator has walked the body.
     references: Rc<RefCell<IndexMap<SymbolKey, SymbolKey>>>,
     /// Local binding [`Symbol`]s emitted alongside `references`. Populated at
     /// every `ctx.add_local(...)` call that carries a user-visible defining
@@ -216,7 +216,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// compilation-unit-wide redirect map cheaply.
     pub(super) invocations: Rc<crate::kiln::InvocationIndex>,
     /// `ModuleSource` interner shared with the loader and downstream
-    /// phases. Wrapped in `Rc<RefCell<>>` so per-module resolver
+    /// phases. Wrapped in `Rc<RefCell<>>` so per-module elaborator
     /// instances can `borrow_mut()` it from `&self` contexts (e.g.
     /// `record_use_specifier_references`).
     pub(super) interner: Rc<RefCell<ModuleSourceInterner>>,
@@ -291,7 +291,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Construct a [`TypeLookup`] view over the resolver's current import
+    /// Construct a [`TypeLookup`] view over the elaborator's current import
     /// context and shared `all_*` tables. Use this for any type-name
     /// resolution; never reach into `all_*` directly.
     pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
@@ -318,7 +318,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Canonicalize a `<ns>::<member>` reference (single `::`, prefix is a
     /// namespace import alias) to the bare `<member>` form. Returns `None`
     /// when the name isn't of that shape — including multi-segment cases like
-    /// `<ns>::<Type>::<case>`, which the resolver routes through dedicated
+    /// `<ns>::<Type>::<case>`, which the elaborator routes through dedicated
     /// namespace paths (see `resolve_ident` / `resolve_call`).
     ///
     /// The AST keeps the user-written `ns::member` so LSP cursors land on it
@@ -370,7 +370,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.lookup_variant_case(name).is_some()
     }
 
-    /// Run `body` with the resolver's "current module" perspective swapped to
+    /// Run `body` with the elaborator's "current module" perspective swapped to
     /// `module_source` and the supplied import context. Locals are cleared
     /// because they describe in-progress resolution, not the target module's
     /// pre-existing definitions; they are restored on return.

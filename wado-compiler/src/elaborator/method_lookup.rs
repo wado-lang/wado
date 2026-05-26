@@ -1293,7 +1293,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// This intentionally does **not** re-resolve the method's AST: doing so
     /// in a fresh scope would emit spurious errors for references like
-    /// `Self::Item` that depend on assoc-type bindings the outer resolver
+    /// `Self::Item` that depend on assoc-type bindings the outer elaborator
     /// context has but that `infer_method_type_args` cannot easily
     /// reconstruct.
     ///
@@ -1843,9 +1843,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `impl ... for &mut Container<T>`), the name match above only
             // checks `"&"` / `"&mut"` because `get_type_name` collapses
             // every reference to that literal — by design, since many
-            // resolver paths use the literal as a key. Without an
+            // elaborator paths use the literal as a key. Without an
             // additional inner-type check, EVERY ref impl in scope would
-            // appear to match any `&T` receiver, and the resolver would
+            // appear to match any `&T` receiver, and the elaborator would
             // commit to whichever one happened to land first in
             // `impl_refs`. That is exactly how `&TreeSet<String>` ended
             // up wired to `impl<T> IntoIterator for &Array<T>`, which
@@ -1919,7 +1919,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             //
             // Resolve the impl's receiver type in the impl's own module
             // context and compare against the receiver type id; the
-            // resolver intern table guarantees each module's `Data`
+            // elaborator intern table guarantees each module's `Data`
             // resolves to a distinct `TypeId`. Skip the filter for impls
             // whose receiver is intentionally widely-applicable (blanket
             // impls, generic impls, ref-shape impls) — those already have
@@ -3170,7 +3170,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return type_id;
                 }
                 // `Self` is the single cross-site substitution key: both this
-                // mapping-based resolver and `resolve_type` (via
+                // mapping-based elaborator and `resolve_type` (via
                 // `resolve_named_type`) read it from `trait_ctx.self_type`.
                 // Previously `find_arithmetic_trait_impl` eagerly inserted
                 // "Self" into the mapping and `find_trait_method_for_type`
@@ -3511,10 +3511,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ))
     }
 
-    /// Sole resolver-side constructor of [`TirExprKind::MethodCall`].
+    /// Sole elaborator-side constructor of [`TirExprKind::MethodCall`].
     ///
     /// Centralizing construction here establishes a single audit point for
-    /// the invariant "every resolver-emitted method call has been
+    /// the invariant "every elaborator-emitted method call has been
     /// typechecked against the callee's declared parameter types before
     /// it flows into TIR".  Typecheck is the caller's responsibility —
     /// the helper exists so that any future machine-enforced invariant

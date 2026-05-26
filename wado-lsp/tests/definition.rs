@@ -234,7 +234,7 @@ fn for_of_binding_definition() {
 #[test]
 fn for_of_keyword_does_not_resolve_to_synthetic_iter() {
     // Cursor on the `for` keyword of `for let item of items { ... }` must
-    // never resolve to the resolver's synthetic `__iter_N` local. The user
+    // never resolve to the elaborator's synthetic `__iter_N` local. The user
     // never typed that name; surfacing it in jump-to-def / hover leaks
     // compiler internals into the editor.
     futures::executor::block_on(async {

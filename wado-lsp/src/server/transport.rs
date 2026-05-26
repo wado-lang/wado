@@ -186,7 +186,7 @@ where
 ///
 /// For non-`file:` URIs (`core:`, `wasi:`, `kiln:`, …) there is no
 /// meaningful workspace root — the LSP server falls back to the current
-/// working directory so a host instance always exists for the resolver
+/// working directory so a host instance always exists for the elaborator
 /// pipeline to consult. Resolving relative imports off such URIs is a
 /// no-op in practice because the underlying schemes never carry
 /// relative-import use sites.

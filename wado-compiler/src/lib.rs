@@ -191,7 +191,7 @@ pub struct CompilerOptions {
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
 ///
 /// This is the main compilation entry point. It runs the full compilation pipeline:
-/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> `tir_to_wir`
+/// lexer -> parser -> binder -> loader -> analyzer -> elaborator -> lower -> optimize -> `tir_to_wir`
 ///
 /// # Arguments
 /// * `source` - The entry module source code
@@ -221,7 +221,7 @@ pub async fn compile_with_host<H: CompilerHost>(
 /// Compile Wado source code with full options.
 ///
 /// This is the main compilation entry point with all options. It runs the full compilation pipeline:
-/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> `tir_to_wir`
+/// lexer -> parser -> binder -> loader -> analyzer -> elaborator -> lower -> optimize -> `tir_to_wir`
 ///
 /// # Arguments
 /// * `source` - The entry module source code
@@ -311,7 +311,7 @@ fn compile_after_load<H: CompilerHost>(
     }
 
     // === Phase 1b: Kiln `impl Deserialize for Options;` auto-injection ===
-    // Ensures the resolver sees an impl record for `Options: Deserialize`
+    // Ensures the elaborator sees an impl record for `Options: Deserialize`
     // so `bind_request::<Options>(raw)` typechecks without the user having
     // to write `impl Deserialize for Options;` by hand. Idempotent.
     kiln::import_check::inject_deserialize_impl(
@@ -385,7 +385,7 @@ fn compile_after_load<H: CompilerHost>(
 
     // `is_complete()` was checked above, so the full pipeline ran and `state`
     // is populated.
-    let state = state.expect("resolver state present when is_complete");
+    let state = state.expect("elaborator state present when is_complete");
 
     let package = Package::new(
         entry_module_source,
@@ -467,7 +467,7 @@ fn compile_after_load<H: CompilerHost>(
     }
 
     // Validate that every required `CompilerItem` was registered by the
-    // resolver. A missing required item is a stdlib bug — every Wado-side
+    // elaborator. A missing required item is a stdlib bug — every Wado-side
     // declaration that anchors a compiler item must carry the matching
     // `#[compiler_item("...")]` attribute. Surfacing it here means the
     // failure happens at compile time with a clear message, not at the

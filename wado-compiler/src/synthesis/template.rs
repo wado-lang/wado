@@ -15,9 +15,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::compiler_item::{CompilerItem, CompilerItems};
+use crate::elaborator::trait_env::TraitEnv;
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
-use crate::elaborator::trait_env::TraitEnv;
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,
     TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart,
@@ -1175,7 +1175,7 @@ fn trait_impl_module(
         _ => None,
     };
 
-    // Preferred path: consult the resolver's `TraitEnv`, which knows where
+    // Preferred path: consult the elaborator's `TraitEnv`, which knows where
     // every user-written `impl Trait for Type` block lives. This handles
     // cross-module impls like `impl Display for String` (defined in
     // `core:prelude/format`, not the module that declares `String`).

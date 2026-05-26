@@ -58,7 +58,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Resolve both operands of a binary op, applying the standard
     /// bidirectional numeric-literal coercion. Shared between
-    /// [`Self::resolve_binary`] and resolver-internal callers like
+    /// [`Self::resolve_binary`] and elaborator-internal callers like
     /// [`Self::desugar_comparison_chain`].
     ///
     /// For primitive numeric types: coerce the literal to the other operand's type.
@@ -117,7 +117,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Build a binary-op `TirExpr` given pre-resolved operands.
     ///
     /// Shared between [`Self::resolve_binary`] (the user-AST entry point)
-    /// and resolver-internal callers like
+    /// and elaborator-internal callers like
     /// [`Self::desugar_comparison_chain`] / [`Self::resolve_compound_assign`]
     /// that have already resolved both sides into TIR. Handles ref-equality,
     /// trait dispatch for non-primitive comparison / arithmetic / shift,

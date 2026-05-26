@@ -163,7 +163,7 @@ impl CallArg {
 /// through [`NirExprKind::method_call`], the sole constructor.  The inner
 /// `()` is private to this module so no code outside `tir` can build one —
 /// this makes direct struct-literal construction of `NirExprKind::MethodCall`
-/// impossible and channels every resolver-side emission through the
+/// impossible and channels every elaborator-side emission through the
 /// single checkpoint maintained in `Elaborator::build_tir_method_call`,
 /// which in turn guarantees arguments were typechecked against the
 /// callee's declared parameter types.
@@ -738,7 +738,7 @@ pub struct NirFunction {
     /// Per-local metadata — `name`, `type_id`, `is_mut` — indexed by Wasm
     /// local index. Entries `0..params.len()` shadow the corresponding
     /// `params[i]` (for uniform absolute indexing); body let-bindings and
-    /// resolver/optimizer-allocated temporaries occupy `params.len()..`.
+    /// elaborator/optimizer-allocated temporaries occupy `params.len()..`.
     /// `local_count == locals.len()` post-resolve; passes that grow the
     /// local set must keep the two in sync.
     pub locals: Vec<NirLocal>,
@@ -957,7 +957,7 @@ impl NirFunction {
 /// local environment.
 ///
 /// `FunctionContext::add_local` records every local — source-level
-/// parameters, `let` bindings, destructure bindings, and resolver-generated
+/// parameters, `let` bindings, destructure bindings, and elaborator-generated
 /// temporaries — as a `NirLocal`. The single source of truth for the local
 /// namespace is `FunctionContext::locals: Vec<NirLocal>`; from there it is
 /// projected onto:
@@ -971,7 +971,7 @@ impl NirFunction {
 #[derive(Debug, Clone)]
 pub struct NirLocal {
     /// Source-level name of the binding (or a synthesised `__name` for
-    /// resolver-generated temporaries that have no surface syntax).
+    /// elaborator-generated temporaries that have no surface syntax).
     pub name: String,
     pub type_id: TypeId,
     pub is_mut: bool,
@@ -997,7 +997,7 @@ pub struct NirParam {
     pub local_index: u32,
     pub is_mut: bool,
     /// Resolved default expression for trailing parameters with `= expr`.
-    /// Used by the resolver to synthesize arguments at call sites.
+    /// Used by the elaborator to synthesize arguments at call sites.
     pub default_expr: Option<Box<NirExpr>>,
     pub span: Span,
 }
@@ -1031,7 +1031,7 @@ pub struct NirField {
     /// `#[serde(default)]` — use default value when field is missing during deserialization.
     pub serde_default: bool,
     /// Resolved default expression for `struct S { x: T = expr }`.
-    /// Inserted by the resolver when the field is omitted in a struct literal.
+    /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<NirExpr>>,
 }
 
@@ -1333,7 +1333,7 @@ pub struct NirModule {
     pub resources: Vec<NirResource>,
     pub traits: Vec<NirTrait>,
     pub impls: Vec<NirImpl>,
-    /// `impl Trait for Type;` — synthesis requests (populated by resolver, consumed by synthesis)
+    /// `impl Trait for Type;` — synthesis requests (populated by elaborator, consumed by synthesis)
     pub synthesis_requests: Vec<SynthesisRequest>,
     /// Test declarations with their metadata
     pub tests: Vec<NirTest>,

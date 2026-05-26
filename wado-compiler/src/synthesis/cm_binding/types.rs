@@ -128,7 +128,7 @@ pub struct LiftContext<'a> {
     /// `ModuleSource` interner shared with the package; used by
     /// `module_source_for_cm_interface` to canonicalise the module
     /// identity of synthesised types (e.g. `wasi:http/types`,
-    /// `core:kiln/types.wado`) so they match the resolver's registered
+    /// `core:kiln/types.wado`) so they match the elaborator's registered
     /// `StructName`s ptr-eq.
     ///
     /// Re-entrancy: the lift call chain may `borrow_mut()` this cell;
@@ -313,7 +313,7 @@ pub(super) fn wasi_interface_suffix(source_interface: &str) -> String {
 }
 
 /// Resolve a CM source interface (e.g. `wasi:filesystem/types@0.3.0`,
-/// `core:kiln/types@0.1.0`) to the `ModuleSource` the resolver uses when
+/// `core:kiln/types@0.1.0`) to the `ModuleSource` the elaborator uses when
 /// registering its types. Keeps the lift path's fabricated `TypeId`s
 /// matching the `StructName`s under which the WIR types pass registered
 /// them (see `wir_build::types::register_struct`).

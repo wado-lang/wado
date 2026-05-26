@@ -329,7 +329,7 @@ pub struct LocalMethodName {
     /// dispatch.
     pub base_trait_name: Option<String>,
     /// Canonical declaring module of the trait this method implements.
-    /// Populated by the resolver via
+    /// Populated by the elaborator via
     /// [`crate::elaborator::Elaborator::canonical_decl_key`] when constructing
     /// the method from an `impl <Trait> for <Type>` block. Left `None` for
     /// synthesis-derived auto-impls (Inspect / Display / Eq / Ord / From
@@ -398,7 +398,7 @@ impl LocalMethodName {
     /// `trait_name` may be either the bare base form (`"Display"`) or a
     /// pre-mangled form (`"Stream<u8>"`); `base_trait_name` is derived by
     /// truncating at the first `<`. `base_trait_module` is left `None` and
-    /// callers that have the canonical declaring module (resolver path)
+    /// callers that have the canonical declaring module (elaborator path)
     /// should populate it via [`Self::with_base_trait_module`]; synthesis-
     /// derived auto-impls leave it `None` because dispatch synthesis
     /// identifies them by name alone.
@@ -461,7 +461,7 @@ impl LocalMethodName {
     }
 
     /// Attach the canonical declaring module of `base_trait_name`. Used by
-    /// the resolver path that lifts an `impl <Trait> for <Type>` block into
+    /// the elaborator path that lifts an `impl <Trait> for <Type>` block into
     /// TIR: the trait reference is canonicalised through
     /// [`crate::elaborator::Elaborator::canonical_decl_key`] and then threaded
     /// into the per-method `LocalMethodName` so dispatch synthesis can

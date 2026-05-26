@@ -1087,7 +1087,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     /// current scope, it is silently skipped. This is necessary because the parser
     /// no longer uses case to distinguish variant case names from variable bindings,
     /// so duplicate bare names like `[Null, Null]` in a match pattern are valid
-    /// (the resolver disambiguates them using type information).
+    /// (the elaborator disambiguates them using type information).
     fn bind_pattern(&mut self, pattern: &crate::ast::Pattern, span: Span) -> Result<(), Bail> {
         match pattern {
             crate::ast::Pattern::Ident { name, .. } => {

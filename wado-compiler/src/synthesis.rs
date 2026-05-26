@@ -20,9 +20,9 @@ pub mod serde_synth;
 pub mod template;
 pub mod traits;
 
+use crate::elaborator::trait_env::{SynthesisedImpls, TraitEnv};
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::elaborator::trait_env::{SynthesisedImpls, TraitEnv};
 use crate::tir::ResolvedType;
 
 /// Run pre-monomorphize synthesis phases on the project.

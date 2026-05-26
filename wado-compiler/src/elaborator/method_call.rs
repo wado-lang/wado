@@ -1958,7 +1958,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .cloned()
             .unwrap_or_else(|| self.canonical_decl_key(struct_name));
         // Carry the impl's defining module out of the index alongside
-        // the AST so the per-param resolver can swap into its perspective —
+        // the AST so the per-param elaborator can swap into its perspective —
         // a static method's signature references types the impl module
         // imports, not the caller's.
         let indexed: Option<(ModuleSource, ast::Type, ast::Function)> = if let Some(methods) =

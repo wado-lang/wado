@@ -76,13 +76,13 @@ pub(crate) struct AnnotateState {
     pub(crate) references: Rc<RefCell<IndexMap<SymbolKey, SymbolKey>>>,
     /// Locally-defined [`Symbol`]s (let bindings, parameters, closure
     /// parameters). Keyed by the binding's defining [`SymbolKey`]. Populated
-    /// alongside [`Self::references`] as the resolver walks function bodies.
+    /// alongside [`Self::references`] as the elaborator walks function bodies.
     pub(crate) local_symbols: Rc<RefCell<IndexMap<SymbolKey, Symbol>>>,
     /// Kiln invocation redirects consulted by `resolve_import` call sites
     /// when walking `use` declarations. Populated from [`crate::loader::LoadResult`].
     pub(crate) invocations: Rc<crate::kiln::InvocationIndex>,
     /// `ModuleSource` interner shared across phases. `Rc<RefCell<>>` so
-    /// `&self` resolver methods can `borrow_mut()` it when constructing
+    /// `&self` elaborator methods can `borrow_mut()` it when constructing
     /// new module sources during name resolution.
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
 }
@@ -665,7 +665,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // second pass (e.g., user module is sorted before prelude modules).
         Self::register_all_generic_assoc_type_defs(modules, &type_table, &stdlib_set);
 
-        // Wrap all_* maps in Rc for cheap sharing across per-module resolvers
+        // Wrap all_* maps in Rc for cheap sharing across per-module elaborators
         let all_newtypes = Rc::new(all_newtypes);
         let all_struct_fields = Rc::new(all_struct_fields);
         let all_variant_cases = Rc::new(all_variant_cases);
@@ -954,7 +954,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
 
-            let mut resolver = Elaborator {
+            let mut elaborator = Elaborator {
                 type_table: Rc::clone(&state.type_table),
                 symbols,
                 loaded_modules: modules,
@@ -1018,7 +1018,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
             // Errors are emitted to the logger; if resolve_module returns Bail,
             // we continue to resolve remaining modules to collect more errors
-            if let Ok(tir_module) = resolver.resolve_module(module, module_source.clone()) {
+            if let Ok(tir_module) = elaborator.resolve_module(module, module_source.clone()) {
                 result.insert(module_source.clone(), tir_module);
             }
         }
@@ -1083,14 +1083,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Populate `TypeTable::type_by_symbol` / `symbol_by_type` by walking every
-    /// type-declaring symbol and looking up the `TypeId` the resolver created
+    /// type-declaring symbol and looking up the `TypeId` the elaborator created
     /// for it.
     ///
     /// This runs as a post-pass over the whole symbol table rather than being
     /// instrumented at each `make_struct` / `make_enum` / ... call site: the
-    /// decl-creation sites are spread across resolver/module.rs,
-    /// `resolver/type_resolution.rs`, resolver/orchestration.rs, resolver/call.rs,
-    /// and resolver/expr.rs, and threading a `SymbolKey` through every one of
+    /// decl-creation sites are spread across elaborator/module.rs,
+    /// `elaborator/type_resolution.rs`, elaborator/orchestration.rs, elaborator/call.rs,
+    /// and elaborator/expr.rs, and threading a `SymbolKey` through every one of
     /// them would churn ~40 call sites. The symbol-table walk is O(symbols) and
     /// touches only declarations, so the cost is negligible.
     fn register_symbol_key_type_indices(
@@ -1163,7 +1163,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Resolve an optional AST return type using the source module's type context.
     ///
-    /// Temporarily swaps the resolver's "current module" perspective to
+    /// Temporarily swaps the elaborator's "current module" perspective to
     /// `module_source` so that same-named types from different modules are
     /// resolved correctly. The shared `all_*` tables stay intact; only the
     /// import context (and locals) is swapped.
@@ -2200,7 +2200,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             ast::Expr::WithHandler(with_handler) => {
                 // The LHS of `E = h` in a `with` clause is an effect
-                // name, not a type name. The real resolver validates it
+                // name, not a type name. The real elaborator validates it
                 // against the effect declaration index in
                 // `resolve_with_handler`; here we only walk the handler
                 // expression and the body for type-name references.
@@ -2333,9 +2333,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Static version of `resolve_type` for use before the resolver is fully
+    /// Static version of `resolve_type` for use before the elaborator is fully
     /// constructed. Reads type info via [`TypeLookup`] — the same path the
-    /// fully-constructed resolver uses, so name resolution stays in one place.
+    /// fully-constructed elaborator uses, so name resolution stays in one place.
     pub(super) fn resolve_type_static(
         ty: &Type,
         type_table: &mut TypeTable,

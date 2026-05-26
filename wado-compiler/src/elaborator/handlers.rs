@@ -52,7 +52,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let resolved = self.resolve_handler_binding(binding, ctx, &mut next_bundle_group);
             // A bundled binding may expand to multiple `TirHandlerBinding`s
             // (one per effect the handler type implements). They are
-            // appended in the order the resolver enumerated them, which
+            // appended in the order the elaborator enumerated them, which
             // means they install in that order — earlier ones become the
             // outer handlers and later ones become inner.
             bindings.extend(resolved);
@@ -475,8 +475,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 /// Short label for a [`ResolvedType`] variant, used in diagnostic
-/// messages emitted by the bundled-handler resolver. Only covers the
-/// shapes the resolver rejects; the supported shapes return their own
+/// messages emitted by the bundled-handler elaborator. Only covers the
+/// shapes the elaborator rejects; the supported shapes return their own
 /// canonical names via `TypeTable::type_name`.
 fn describe_resolved_type_kind(ty: &ResolvedType) -> String {
     match ty {

@@ -1,7 +1,7 @@
 //! Unified type-argument inference engine for generic functions, methods,
 //! structs, and variants.
 //!
-//! The resolver has historically carried several near-duplicate inference
+//! The elaborator has historically carried several near-duplicate inference
 //! routines — one each for function calls, static-method calls, struct
 //! literals, variant constructors, and instance method calls — plus a
 //! weaker re-inference pass in the monomorphizer. Each copy made slightly

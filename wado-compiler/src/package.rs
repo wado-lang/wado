@@ -6,9 +6,9 @@
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
+use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::elaborator::trait_env::TraitEnv;
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
 use crate::world_registry::{self, WorldRegistry};
@@ -29,7 +29,7 @@ pub struct Package {
     pub symbols: SymbolTable,
     /// Project-wide trait knowledge built once during the resolve phase.
     /// Synthesis, monomorphize, and friends consult this instead of
-    /// re-scanning all modules. Held by `Arc` because the resolver also
+    /// re-scanning all modules. Held by `Arc` because the elaborator also
     /// keeps a reference (LSP queries reuse the same indices).
     pub(crate) trait_env: Arc<TraitEnv>,
     /// Implicitly imported modules (e.g., core:prelude)
@@ -69,7 +69,7 @@ pub struct Package {
     /// Keyed by canonical namespace string (matches `namespace` in
     /// `#[canonical("wasm:<path>", "<export>")]` attributes). Consumed by
     /// the codegen `embed_imported_wasm_modules` pass and (in a follow-up)
-    /// by the resolver, which synthesises Wado declarations from each
+    /// by the elaborator, which synthesises Wado declarations from each
     /// asset's exports.
     pub wasm_assets: IndexMap<String, crate::loader::WasmAsset>,
 
@@ -85,7 +85,7 @@ pub struct Package {
         crate::synthesis::effect_dispatch::DispatchPlan,
     >,
 
-    /// `ModuleSource` interner shared with the resolver. Synthesis
+    /// `ModuleSource` interner shared with the elaborator. Synthesis
     /// passes (`cm_binding`, `effect_dispatch`) borrow this when they
     /// need to construct fresh `ModuleSource` values for synthesised
     /// items. Dropped at the `Package → FlatPackage` boundary —

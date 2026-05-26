@@ -15,10 +15,10 @@ use std::rc::Rc;
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexSet;
 
+use crate::elaborator::trait_env::TraitEnv;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::package::Package;
-use crate::elaborator::trait_env::TraitEnv;
 use crate::tir::{
     CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule,
@@ -136,7 +136,7 @@ impl TraitPair {
 /// auto-deriving an impl for a project-globally-unique core trait
 /// (Inspect / Display / Eq / Ord / From / `serde` adapters, …) whose
 /// name dispatch synthesis recognises without needing the disambiguating
-/// module. The resolver path that lifts user-written
+/// module. The elaborator path that lifts user-written
 /// `impl <Trait> for <Type>` blocks populates the module via
 /// `Elaborator::canonical_decl_key` directly into the [`LocalMethodName`]
 /// struct literal.

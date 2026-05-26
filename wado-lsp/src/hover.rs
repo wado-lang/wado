@@ -458,7 +458,7 @@ mod tests {
     #[test]
     fn for_of_keyword_no_synthetic_iter_hover() {
         // The cursor on the `for` keyword of `for x of items { ... }` must
-        // never surface the resolver's synthetic `__iter_N` local. A hover
+        // never surface the elaborator's synthetic `__iter_N` local. A hover
         // here should return None (the cursor lands between recognised
         // names) or, at most, surface the user's loop variable — never
         // a `let __iter_N` line that exposes compiler internals.
@@ -572,7 +572,7 @@ mod tests {
     fn hover_on_well_formed_part_survives_unrelated_error() {
         // Partial-result behaviour: a type-error elsewhere in the file must
         // not blank out hover on the unrelated, well-formed function. The
-        // resolver bails on the bad body, but the LSP should still surface
+        // elaborator bails on the bad body, but the LSP should still surface
         // signatures for whatever was successfully resolved before/around it.
         futures::executor::block_on(async {
             let source = concat!(

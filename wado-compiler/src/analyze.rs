@@ -534,7 +534,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Test(_) => {
-                    // Test declarations are handled in the resolver, not in the symbol table.
+                    // Test declarations are handled in the elaborator, not in the symbol table.
                     // Tests are converted to functions with generated names.
                 }
 
@@ -835,7 +835,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         }
                         UseItem::Namespace { .. } => {
                             // Namespace import: register all pub symbols from
-                            // source module by their bare names. The resolver
+                            // source module by their bare names. The elaborator
                             // canonicalizes `<ns>::<member>` to `<member>` at
                             // lookup time (see `Elaborator::strip_ns_prefix`),
                             // so a symbol registered under its bare name is

@@ -63,7 +63,7 @@ pub enum TokenKind {
     TemplateStringLit(Vec<TemplateTokenPart>), // Structured template string parts
     /// Char literal: raw source text between the quotes (escape sequences not interpreted).
     CharLit(String),
-    NumberLit(String), // String representation only, type determined by context in resolver
+    NumberLit(String), // String representation only, type determined by context in elaborator
     True,
     False,
     Null,

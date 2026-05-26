@@ -54,7 +54,7 @@ trait TreeProbe {
 /// safe because the walk only proceeds forward through the body — a
 /// `break <label>` further along that mentions an earlier inner label
 /// would be a use of an already-defined label, and one that mentions a
-/// later inner label is invalid Wado source rejected by the resolver
+/// later inner label is invalid Wado source rejected by the elaborator
 /// before this analysis runs.
 #[derive(Default)]
 struct LoopEscape {
@@ -143,7 +143,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // extracted into `let __vK = <resolved>;` bindings and replaced
         // with `Local(__vK)`. Common case (no assert in flight): a
         // single `Option` discriminant check, so the cost on the hot
-        // path is negligible. See `resolver/assert.rs` for the design.
+        // path is negligible. See `elaborator/assert.rs` for the design.
         if let Some(cap_ctx) = ctx.assert_capture_ctx.as_ref() {
             let ast_id = expr.id();
             if let Some(slot_idx) = cap_ctx.slot_for(ast_id) {
@@ -2018,7 +2018,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // span, which the user will see as a single
                         // grouped error in editor diagnostics. We
                         // don't downgrade `type_id` here — the
-                        // resolver-recorded diagnostic will abort
+                        // elaborator-recorded diagnostic will abort
                         // compilation before WIR build runs, so the
                         // result-typed `if` with no else never
                         // reaches `wasmparser`.
@@ -2163,7 +2163,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Reject arms whose body type disagrees with the match's overall
         // result type. Skipped when `type_id == Unit`: that means the
-        // match sits in statement position (see `resolver::resolve_stmt`
+        // match sits in statement position (see `elaborator::resolve_stmt`
         // for `Stmt::Match`, which pins `expected_type = Some(Unit)`),
         // and the WIR builder's `translate_match` already drops each
         // arm body's value via `WirInstr::Drop`. In every other context
@@ -3786,13 +3786,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         elem_types.push(et);
                     }
                 } else {
-                    let _ = self
-                        .logger
-                        .error(crate::elaborator::types::TypeError::InvalidLiteral {
-                            message: "spread operator `..` can only be used with tuple types"
-                                .to_string(),
-                            span: elem.span(),
-                        });
+                    let _ =
+                        self.logger
+                            .error(crate::elaborator::types::TypeError::InvalidLiteral {
+                                message: "spread operator `..` can only be used with tuple types"
+                                    .to_string(),
+                                span: elem.span(),
+                            });
                     elem_types.push(spread_expr.type_id);
                     elements.push(spread_expr);
                 }

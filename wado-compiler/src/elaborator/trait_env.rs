@@ -48,7 +48,7 @@ fn pick_module_union<'a>(
 /// can host declarations with the same bare name (`pub interface Logger`
 /// in both `mod_a` and `mod_b`) without their entries colliding on a
 /// single `String` slot. The defining module is intrinsic to identity for
-/// these kinds — the resolver canonicalises a use-site bare name through
+/// these kinds — the elaborator canonicalises a use-site bare name through
 /// the symbol table ([`crate::elaborator::Elaborator::canonical_decl_key`])
 /// before consulting the index.
 pub(crate) type DeclKey = (ModuleSource, String);
@@ -58,7 +58,7 @@ pub(crate) type DeclKey = (ModuleSource, String);
 ///
 /// Keyed by the bare receiver type name on purpose: the lookup iterates the
 /// candidate `Vec` and disambiguates each entry via its `(ModuleSource,
-/// item_idx)` payload plus the resolver's per-call type-id comparison, so
+/// item_idx)` payload plus the elaborator's per-call type-id comparison, so
 /// two `struct Widget` declarations in different modules share one bucket
 /// without ambiguity.
 pub(super) type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, usize)>>;
@@ -70,7 +70,7 @@ pub(super) type TraitDeclIndex = IndexMap<DeclKey, (ModuleSource, usize)>;
 /// Pre-built index: `(declaring module, effect name)` → (`ModuleSource`, item
 /// index) for effect declarations. Effects are first-class citizens distinct
 /// from traits and have their own impl form (`impl Effect for Type`)
-/// interpreted as installable handlers, so the resolver and dispatch
+/// interpreted as installable handlers, so the elaborator and dispatch
 /// synthesis need to distinguish them quickly.
 pub(super) type EffectDeclIndex = IndexMap<DeclKey, (ModuleSource, usize)>;
 
@@ -80,7 +80,7 @@ pub(super) type EffectDeclIndex = IndexMap<DeclKey, (ModuleSource, usize)>;
 /// 2026-04-11): both kinds of declaration carry a list of operations that
 /// user handler implementations satisfy and that the dispatch-synthesis
 /// pass routes through wrappers. Indexed separately from effects so the
-/// resolver can keep diagnostics ("not an effect", "not a resource")
+/// elaborator can keep diagnostics ("not an effect", "not a resource")
 /// truthful and so the dispatch synthesis can know not to declare the
 /// resource on its wrapper's `effects` list (resources are not effects).
 pub(super) type ResourceDeclIndex = IndexMap<DeclKey, (ModuleSource, usize)>;
@@ -129,7 +129,7 @@ pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), Vec<ModuleSour
 ///
 /// Contains pre-built indices for fast lookup of trait implementations,
 /// trait declarations, and blanket impls. Built once before resolution
-/// begins and shared (via `Arc`) across all module resolvers.
+/// begins and shared (via `Arc`) across all module elaborators.
 /// `TraitEnv` is *intentionally* not `Clone`. After `build()` returns, the
 /// only legitimate way to mutate the env is `extend_with_synthesised`,
 /// which moves out of an `Arc` whose strong count must be 1. Forbidding
@@ -539,7 +539,7 @@ impl TraitEnv {
     /// When the same simple type name is implemented in multiple modules
     /// (e.g. two `struct Widget` blocks, each auto-derived to `Widget^Inspect`
     /// in its own module), `type_module` disambiguates by preferring an
-    /// entry whose module matches the hint. This mirrors how the resolver's
+    /// entry whose module matches the hint. This mirrors how the elaborator's
     /// `find_trait_impl_for_type_with_args` iterates [`TraitImplIndex`] and
     /// checks each candidate impl individually instead of collapsing on the
     /// `(name, trait)` key.
@@ -901,7 +901,7 @@ pub(super) struct TraitContext {
 /// RAII guard that restores `Elaborator::trait_ctx` to its saved value on drop.
 ///
 /// Implements `Deref<Target = Elaborator>` so it can be used as a transparent
-/// resolver handle inside the scope. Restoration is panic-safe: even if the
+/// elaborator handle inside the scope. Restoration is panic-safe: even if the
 /// scope body panics, drop still runs and the parent context is reinstated.
 ///
 /// Use [`Elaborator::enter_inherited_type_param_scope`] to enter a new scope.
@@ -910,20 +910,20 @@ pub(super) struct TraitContext {
 /// specific field (matching the legacy `mem::take` pattern) should clear that
 /// field on `scope.trait_ctx` after entering.
 pub(super) struct TypeParamScope<'r, 'a, H: CompilerHost> {
-    resolver: &'r mut Elaborator<'a, H>,
+    elaborator: &'r mut Elaborator<'a, H>,
     saved: TraitContext,
 }
 
 impl<'a, H: CompilerHost> Deref for TypeParamScope<'_, 'a, H> {
     type Target = Elaborator<'a, H>;
     fn deref(&self) -> &Elaborator<'a, H> {
-        self.resolver
+        self.elaborator
     }
 }
 
 impl<'a, H: CompilerHost> DerefMut for TypeParamScope<'_, 'a, H> {
     fn deref_mut(&mut self) -> &mut Elaborator<'a, H> {
-        self.resolver
+        self.elaborator
     }
 }
 
@@ -938,7 +938,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
 impl<H: CompilerHost> Drop for TypeParamScope<'_, '_, H> {
     fn drop(&mut self) {
-        self.resolver.trait_ctx = std::mem::take(&mut self.saved);
+        self.elaborator.trait_ctx = std::mem::take(&mut self.saved);
     }
 }
 
@@ -956,7 +956,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn enter_inherited_type_param_scope(&mut self) -> TypeParamScope<'_, 'a, H> {
         let saved = self.trait_ctx.clone();
         TypeParamScope {
-            resolver: self,
+            elaborator: self,
             saved,
         }
     }
