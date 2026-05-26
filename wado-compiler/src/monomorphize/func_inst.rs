@@ -5,10 +5,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
-use crate::resolver::trait_env::TraitEnv;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern,
@@ -856,7 +856,7 @@ impl Monomorphizer {
 
                 // Tuple variadic impl: receiver is a built-in tuple type, method
                 // is on `"Tuple"` (e.g., `Tuple^Eq::eq` from the variadic
-                // `impl<..T: Eq> Eq for [..T]`). The resolver already creates
+                // `impl<..T: Eq> Eq for [..T]`). The elaborator already creates
                 // monomorph_info with the generic name and impl_type_args (the
                 // concrete tuple element types).
                 //
@@ -951,7 +951,7 @@ impl Monomorphizer {
                 }
             }
             // Bare function reference with pinned type args (turbofish or
-            // inferred). The resolver already typed the FuncRef as
+            // inferred). The elaborator already typed the FuncRef as
             // `fn(...)` after substitution; we only need to queue the
             // matching instantiation so the call site below the
             // closure-forwarder lands in a real monomorphized function.
@@ -1349,7 +1349,7 @@ impl Monomorphizer {
                             // has impl-level type params AND the callee's struct matches
                             // the outer impl's struct (e.g., we're inside
                             // `impl<K,V> TreeMap<K,V>` and calling `TreeMap::new()`).
-                            // The resolver didn't annotate the bare struct reference with
+                            // The elaborator didn't annotate the bare struct reference with
                             // type args, so we derive them from the outer substitution's
                             // impl-level entries.
                             let mut sorted_entries: Vec<_> = substitution.iter().collect();
@@ -2481,7 +2481,7 @@ impl Monomorphizer {
     /// Expand a `VariadicForOf` TIR node into concrete unrolled blocks.
     ///
     /// After type substitution resolves `TypePack` to a concrete tuple, this generates
-    /// the same structure as the resolver's `resolve_tuple_for_of`.
+    /// the same structure as the elaborator's `resolve_tuple_for_of`.
     fn expand_variadic_for_of(
         &self,
         stmt: &mut TirStmt,
@@ -3827,7 +3827,7 @@ fn try_lower_comparison(
         } => {
             if TypeTable::is_tuple_type(name, module_source) {
                 // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
-                // and already lowered to method calls by the resolver.
+                // and already lowered to method calls by the elaborator.
                 return None;
             }
             // Use the qualified type-arg mangle so the call sites

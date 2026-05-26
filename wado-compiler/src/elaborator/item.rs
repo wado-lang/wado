@@ -17,7 +17,7 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
@@ -179,7 +179,7 @@ pub(super) fn register_enum_compiler_item<H: CompilerHost>(
 
 /// Register a trait declaration's `#[compiler_item(...)]` annotation, if any.
 ///
-/// `methods` is the trait's full method list; the resolver inspects it
+/// `methods` is the trait's full method list; the elaborator inspects it
 /// to cache the single-method trait's primary method name into the
 /// registry (see [`Resolved::Trait::method_name`]). For multi-method
 /// traits the cache stays `None` and downstream consumers that need a
@@ -380,7 +380,7 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     }
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Recursively check whether `type_id` mentions a `fn(...)` / `fn mut(...)`
     /// closure type. Used to reject closures crossing the Component Model
     /// boundary (export/import function signatures, CM-exposed record fields,
@@ -418,7 +418,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.type_contains_closure_inner(type_table, *base_type, visited)
             }
             crate::tir::ResolvedType::Struct { name, .. } => {
-                // Recurse into the struct's field types via the resolver's
+                // Recurse into the struct's field types via the elaborator's
                 // pre-built field registry. Self-recursive structs are
                 // protected by `visited`.
                 let field_types: Vec<TypeId> = self
@@ -617,7 +617,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                     // No `Self` in scope (effect decls) — drop the
                     // receiver as before; effect operations don't take
-                    // receivers and the resolver should already have
+                    // receivers and the elaborator should already have
                     // diagnosed `&self` in an `effect` decl elsewhere.
                     _ => continue,
                 };
@@ -650,7 +650,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Extract `#[cm("...")]` attribute payload, if any, so the
             // dispatch synthesis can map raw resource call sites back
             // to the right per-monomorphisation wrapper. Mirrors the
-            // resolver's existing per-call extraction in
+            // elaborator's existing per-call extraction in
             // `lookup_resource_static_cm`: takes the bare attribute
             // string without splitting on `#`. None for effect ops
             // and for resource methods that lack the attribute.

@@ -1,4 +1,4 @@
-//! Utility functions for the resolver phase.
+//! Utility functions for the elaborator phase.
 
 use crate::ast::{BinaryOp, UnaryOp};
 use crate::tir::{PrimitiveType, ResolvedType, TirBinaryOp, TirUnaryOp, TypeId, TypeTable};

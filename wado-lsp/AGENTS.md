@@ -194,7 +194,7 @@ to a specific LSP request kind. Each item identifies the symptom and the
 concrete code location involved.
 
 - [ ] **Jump-to-def for non-`Simple` `UseItem` variants.**
-      `Resolver::record_use_specifier_references` (`wado-compiler/src/resolver.rs`)
+      `Elaborator::record_use_specifier_references` (`wado-compiler/src/elaborator.rs`)
       skips `UseItem::{EffectFunctions, Namespace}`. Give `UseItemSimple`
       (effect functions) and `UseItem::Namespace` their own `AstId` + name
       `Span` in `wado-compiler/src/ast.rs` so cursor-on-name works for:

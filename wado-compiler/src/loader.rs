@@ -270,11 +270,11 @@ pub struct LoadResult {
     /// synthesis.
     pub wasm_assets: IndexMap<String, WasmAsset>,
     /// Kiln invocation redirects propagated from the loader so later phases
-    /// (analyze, resolver) can also rewrite `use ... from "<schema>"`
+    /// (analyze, elaborator) can also rewrite `use ... from "<schema>"`
     /// clauses consistently.
     pub invocations: crate::kiln::InvocationIndex,
     /// `ModuleSource` interner created during loading. Downstream phases
-    /// (analyze / resolver / synthesis / monomorphize) borrow this to
+    /// (analyze / elaborator / synthesis / monomorphize) borrow this to
     /// canonicalize any `ModuleSource` they construct so that ptr-eq
     /// remains a valid identity check across phases.
     pub interner: ModuleSourceInterner,
@@ -477,7 +477,7 @@ fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -
 
 /// Walk a core wasm module: validate Phase 1 constraints (no `start`,
 /// ≤1 memory, only `env.memory` may be imported) and extract the
-/// signatures of every function export so the resolver can synthesise
+/// signatures of every function export so the elaborator can synthesise
 /// Wado declarations from them.
 ///
 /// Returns the list of function-export signatures in declaration order.
@@ -1146,7 +1146,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ///
     /// Phase 1 only supports the wildcard form (`use _ from "..."`); named
     /// imports are rejected with a pointed diagnostic so users get a clear
-    /// message instead of a downstream resolver failure.
+    /// message instead of a downstream elaborator failure.
     async fn handle_wasm_import(
         &mut self,
         from_module_source: &ModuleSource,
@@ -1532,7 +1532,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 pairs.insert([ms_str.clone(), raw_path.clone()]);
             }
         }
-        // Format the entry module source once so the per-include resolver
+        // Format the entry module source once so the per-include elaborator
         // can compare against it without allocating per call.
         let entry_module_source = self.entry_module_source.as_ref().map(ToString::to_string);
         let mut included = IndexMap::default();
@@ -1709,7 +1709,7 @@ mod resolve_include_path_tests {
     fn non_relative_arg_passes_through() {
         let entry = "./main.wado";
         // `core:foo` etc. (no leading `./` / `../`) are not relative and the
-        // resolver must not touch them.
+        // elaborator must not touch them.
         let resolved = resolve(Some(entry), entry, "/abs/data.txt");
         assert_eq!(resolved, "/abs/data.txt");
     }

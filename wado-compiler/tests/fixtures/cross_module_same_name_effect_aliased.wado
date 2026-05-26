@@ -1,5 +1,5 @@
 // Two modules declare `pub interface Logger`; the parent module imports
-// each via a *renaming* `use { Logger as LoggerA }` form. The resolver
+// each via a *renaming* `use { Logger as LoggerA }` form. The elaborator
 // must canonicalise the alias back to the original declaration name
 // (`Logger`) when computing the decl-index key, otherwise the
 // canonical key becomes `(decl_module, "LoggerA")` which doesn't exist
@@ -21,7 +21,7 @@ use {
 test "cross-module same-name aliased effects" {
     // Both functions are reachable as values, which forces type-level
     // resolution of `LoggerA` and `LoggerB` aliases through the
-    // resolver's effect path.
+    // elaborator's effect path.
     let _g = greet;
     let _r = raise;
     assert true;

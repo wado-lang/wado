@@ -13,7 +13,7 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use super::Resolver;
+use super::Elaborator;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError};
 use super::util;
@@ -27,7 +27,7 @@ enum RefBinding {
     MutRef,
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_block(
         &mut self,
         block: &Block,
@@ -453,7 +453,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // pattern (rather than a bare `TirStmtKind::Expr(value)`) so
                 // that the surrounding block's type inference does not treat
                 // the discarded expression as a trailing block-value
-                // (`Expr::Block` resolver picks up trailing `TirStmtKind::Expr`
+                // (`Expr::Block` elaborator picks up trailing `TirStmtKind::Expr`
                 // as the block's type).
                 TirStmt::new(
                     TirStmtKind::LetDestructure {
@@ -2979,7 +2979,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// }
     /// ```
     ///
-    /// The outer `{ … }` is a fresh resolver scope so `init`'s bindings stay
+    /// The outer `{ … }` is a fresh elaborator scope so `init`'s bindings stay
     /// local to the for. `B` is wrapped in `__for_N_body` so that naked
     /// `continue` (which would otherwise skip the `update`) is rerouted via
     /// [`Self::resolve_continue`] to `break __for_N_body`, letting control

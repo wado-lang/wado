@@ -1290,7 +1290,7 @@ impl FunctionTranslator<'_, '_> {
     /// 1. **Box wrap.** When the binding's local is a `Ref` to a
     ///    different struct than the source produces (the
     ///    address-taken boxing pass promoted a `T` local to `Box<T>`,
-    ///    or the resolver typed a variant-generic site as
+    ///    or the elaborator typed a variant-generic site as
     ///    `Box<primitive>`), wrap the source in `StructNew { box_tid,
     ///    fields: [source] }` so the source value lands in the Box's
     ///    payload field. Also covers the primitive-into-Box case

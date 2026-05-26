@@ -1,6 +1,6 @@
 //! Type resolution phase for Wado
 //!
-//! The type resolver:
+//! The type elaborator:
 //! 1. Takes the parsed AST and symbol table from the analyzer
 //! 2. Performs type inference and type checking
 //! 3. Produces the Typed Intermediate Representation (TIR)
@@ -56,7 +56,7 @@ use trait_env::TraitEnv;
 /// `true` if `name` denotes a built-in primitive Wado type. Primitives
 /// have inherent impl blocks in `core:prelude/primitive` but no
 /// `Symbol` entry to canonicalise through, so both
-/// [`Resolver::canonical_decl_key`] and `TraitEnv::build` consult this
+/// [`Elaborator::canonical_decl_key`] and `TraitEnv::build` consult this
 /// predicate to map a bare primitive reference to its canonical
 /// declaring module.
 pub(crate) fn is_primitive_type_name(name: &str) -> bool {
@@ -80,7 +80,7 @@ use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
 };
 
-pub struct Resolver<'a, H: CompilerHost> {
+pub struct Elaborator<'a, H: CompilerHost> {
     /// Type table (shared across all modules via Rc<RefCell>)
     type_table: Rc<RefCell<TypeTable>>,
     /// Symbol table from analyzer
@@ -101,12 +101,12 @@ pub struct Resolver<'a, H: CompilerHost> {
     all_flags_cases: Rc<IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>>,
     all_resource_types: Rc<IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>>,
     /// Per-module import context (consumed by [`TypeLookup`]). Built once per
-    /// module from `use` declarations; replaces the 7 flat maps the resolver
+    /// module from `use` declarations; replaces the 7 flat maps the elaborator
     /// used to clone for each module.
     imported_type_sources: IndexMap<String, ModuleSource>,
     import_original_names: IndexMap<String, String>,
     /// Locally discovered additions to the type tables. Anonymous structs
-    /// (synthesized from struct literals) and the resolver's own walk of
+    /// (synthesized from struct literals) and the elaborator's own walk of
     /// `module.items` insert here so [`TypeLookup`] can find them at the
     /// highest priority. Always empty unless the current module has a
     /// reason to override / extend the shared tables.
@@ -172,7 +172,7 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// These are inlined at every use site during resolution.
     associated_constants: IndexMap<String, (ast::Type, ast::Expr)>,
     /// Immutable trait knowledge base: impl indices, trait declarations, and blanket impls.
-    /// Built once and shared across all module resolvers via `Arc`.
+    /// Built once and shared across all module elaborators via `Arc`.
     trait_env: Arc<TraitEnv>,
     /// Pre-loaded file contents for `#include_str` / `#include_bytes`.
     /// Key: `[module_source_display, raw_path]`, value: raw bytes.
@@ -199,8 +199,8 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Per-module index from function name → position in module.items for O(1) lookup.
     loaded_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>>,
     /// Use→def map for local variables. Shared via `Rc<RefCell<…>>` with
-    /// [`crate::resolver::orchestration::AnnotateState`] so LSP queries see
-    /// references as soon as the resolver has walked the body.
+    /// [`crate::elaborator::orchestration::AnnotateState`] so LSP queries see
+    /// references as soon as the elaborator has walked the body.
     references: Rc<RefCell<IndexMap<SymbolKey, SymbolKey>>>,
     /// Local binding [`Symbol`]s emitted alongside `references`. Populated at
     /// every `ctx.add_local(...)` call that carries a user-visible defining
@@ -218,17 +218,17 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// module-private items (see WEP 2026-04-11).
     pub(super) default_scope_module: Option<ModuleSource>,
     /// Kiln invocation redirects consulted by `use` resolution sites. Shared
-    /// by `Rc` so per-module Resolver instances can read the single
+    /// by `Rc` so per-module Elaborator instances can read the single
     /// compilation-unit-wide redirect map cheaply.
     pub(super) invocations: Rc<crate::kiln::InvocationIndex>,
     /// `ModuleSource` interner shared with the loader and downstream
-    /// phases. Wrapped in `Rc<RefCell<>>` so per-module resolver
+    /// phases. Wrapped in `Rc<RefCell<>>` so per-module elaborator
     /// instances can `borrow_mut()` it from `&self` contexts (e.g.
     /// `record_use_specifier_references`).
     pub(super) interner: Rc<RefCell<ModuleSourceInterner>>,
 }
 
-impl<'a, H: CompilerHost> Resolver<'a, H> {
+impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub fn new(
         symbols: &'a SymbolTable,
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
@@ -298,7 +298,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
     }
 
-    /// Construct a [`TypeLookup`] view over the resolver's current import
+    /// Construct a [`TypeLookup`] view over the elaborator's current import
     /// context and shared `all_*` tables. Use this for any type-name
     /// resolution; never reach into `all_*` directly.
     pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
@@ -325,7 +325,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// Canonicalize a `<ns>::<member>` reference (single `::`, prefix is a
     /// namespace import alias) to the bare `<member>` form. Returns `None`
     /// when the name isn't of that shape — including multi-segment cases like
-    /// `<ns>::<Type>::<case>`, which the resolver routes through dedicated
+    /// `<ns>::<Type>::<case>`, which the elaborator routes through dedicated
     /// namespace paths (see `resolve_ident` / `resolve_call`).
     ///
     /// The AST keeps the user-written `ns::member` so LSP cursors land on it
@@ -377,7 +377,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         self.lookup_variant_case(name).is_some()
     }
 
-    /// Run `body` with the resolver's "current module" perspective swapped to
+    /// Run `body` with the elaborator's "current module" perspective swapped to
     /// `module_source` and the supplied import context. Locals are cleared
     /// because they describe in-progress resolution, not the target module's
     /// pre-existing definitions; they are restored on return.
@@ -915,13 +915,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // First pass: collect type definitions
         {
-            let _span = self.logger.span("resolve/collect_types");
+            let _span = self.logger.span("elaborate/collect_types");
             self.collect_types(module);
         }
 
         // Second pass: collect function signatures (for call resolution)
         {
-            let _span = self.logger.span("resolve/collect_sigs");
+            let _span = self.logger.span("elaborate/collect_sigs");
             self.collect_function_signatures(module);
         }
 
@@ -1003,7 +1003,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Third pass: resolve functions
-        let _resolve_funcs_span = self.logger.span("resolve/resolve_funcs");
+        let _resolve_funcs_span = self.logger.span("elaborate/resolve_funcs");
         let mut tir_module = TirModule::new(module_source);
 
         // Pre-populate the generic-function inference caches for every
@@ -1362,12 +1362,12 @@ pub fn resolve_module<H: CompilerHost>(
     let type_table = std::cell::RefCell::new(crate::tir::TypeTable::new());
     let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
     let empty_included = IndexMap::default();
-    let mut resolver = Resolver::new(
+    let mut elaborator = Elaborator::new(
         symbols,
         loaded_modules,
         &builtin_registry,
         logger,
         &empty_included,
     );
-    resolver.resolve_module(module, module_source)
+    elaborator.resolve_module(module, module_source)
 }

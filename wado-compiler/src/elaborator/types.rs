@@ -1,4 +1,4 @@
-//! Type definitions used across the resolver phase.
+//! Type definitions used across the elaborator phase.
 
 use std::cell::RefCell;
 
@@ -1069,10 +1069,10 @@ pub(super) struct LocalVar {
     #[allow(dead_code)] // For future mutability checking
     pub(super) is_mut: bool,
     /// `AstId` of the node that introduced this binding (pattern, parameter,
-    /// closure parameter). `None` for resolver-synthesized temporaries whose
+    /// closure parameter). `None` for elaborator-synthesized temporaries whose
     /// names cannot be referenced from source (e.g., `__qm_v`, `__b`).
     ///
-    /// Used by [`Resolver`] to record `use → def` edges when an `IdentExpr`
+    /// Used by [`Elaborator`] to record `use → def` edges when an `IdentExpr`
     /// resolves to this local, so that LSP can translate a cursor position
     /// into the defining [`SymbolKey`].
     pub(super) defining_ast_id: Option<AstId>,
@@ -1106,11 +1106,11 @@ pub(super) struct MethodInfo {
     /// Method-level type parameter `TypeId`s in declaration order (excluding effect params).
     ///
     /// Populated only by lookups that also set up method-level type params in their
-    /// resolution scope — currently [`Resolver::find_method_in_trait_bounds`] for
+    /// resolution scope — currently [`Elaborator::find_method_in_trait_bounds`] for
     /// `T::method()` style calls through a type parameter bound. Other producers
     /// leave it empty because their call sites have no method-level inference to
     /// perform (either the method is non-generic, or its type args come from a
-    /// separate method-AST lookup such as [`Resolver::infer_method_type_args`]).
+    /// separate method-AST lookup such as [`Elaborator::infer_method_type_args`]).
     pub(super) method_type_param_ids: Vec<TypeId>,
 }
 
@@ -1192,8 +1192,8 @@ pub(super) struct FunctionContext {
     /// a C-style for body.
     pub(super) for_continue_labels: Vec<String>,
     /// Power-assert capture side-channel. `Some` only while
-    /// [`Resolver::desugar_assert`] is resolving an assert condition;
-    /// the [`Resolver::resolve_expr`] entry consults it to extract
+    /// [`Elaborator::desugar_assert`] is resolving an assert condition;
+    /// the [`Elaborator::resolve_expr`] entry consults it to extract
     /// scanner-flagged sub-expressions into `let __vK = …;` bindings
     /// as they are resolved. Outside an assert this is always `None`,
     /// so the hook is a single `Option` discriminant check on the hot
@@ -1298,9 +1298,9 @@ impl FunctionContext {
     /// Add a local variable to the current scope.
     ///
     /// `defining_ast_id` identifies the source AST node that introduced this
-    /// binding and is used by the resolver to record `use → def` edges. Pass
+    /// binding and is used by the elaborator to record `use → def` edges. Pass
     /// `Some(id)` for user-visible bindings (let patterns, parameters, closure
-    /// parameters); pass `None` for resolver-synthesized temporaries whose
+    /// parameters); pass `None` for elaborator-synthesized temporaries whose
     /// names cannot appear in source (e.g., `__qm_v`, `__b`).
     pub(super) fn add_local(
         &mut self,
@@ -1500,7 +1500,7 @@ pub(super) struct TraitMethodMatch {
 ///   3. Imports of the current module (with `use { Foo as Bar }` aliasing).
 ///   4. Any module that defines the name (legacy fallback for prelude-style visibility).
 ///
-/// Constructed cheaply at each call site from the `Resolver`'s context. All
+/// Constructed cheaply at each call site from the `Elaborator`'s context. All
 /// fields are borrowed; no heap allocation.
 pub(crate) struct TypeLookup<'a> {
     pub(crate) current_module_source: &'a ModuleSource,
@@ -1669,15 +1669,15 @@ pub(super) struct ArithmeticTraitInfo {
 
 /// Complete, Self-substituted description of a trait method lookup.
 ///
-/// Produced by [`Resolver::resolve_trait_method_for_op`][rtq] and consumed
-/// by [`Resolver::build_trait_op_method_call_on_resolved`][bop]. Having a
+/// Produced by [`Elaborator::resolve_trait_method_for_op`][rtq] and consumed
+/// by [`Elaborator::build_trait_op_method_call_on_resolved`][bop]. Having a
 /// single, always-populated data type for trait-method dispatch eliminates
 /// the `param_types: vec![]` anti-pattern that previously caused codegen
 /// ICEs when operator dispatch built `TirExprKind::MethodCall` without any
 /// argument-type check.
 ///
-/// [rtq]: crate::resolver::Resolver::resolve_trait_method_for_op
-/// [bop]: crate::resolver::Resolver::build_trait_op_method_call_on_resolved
+/// [rtq]: crate::elaborator::Elaborator::resolve_trait_method_for_op
+/// [bop]: crate::elaborator::Elaborator::build_trait_op_method_call_on_resolved
 pub(super) struct ResolvedTraitMethod {
     /// Trait name (e.g., "Eq", "Ord", "Add", "Shl", "Neg", "`BitNot`").
     pub(super) trait_name: String,

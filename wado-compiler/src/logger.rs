@@ -11,7 +11,7 @@
 //! # Architecture
 //!
 //! ```text
-//! Phase (Analyzer, Resolver, ...) → Logger → CompilerHost → CLI/IDE/LSP
+//! Phase (Analyzer, Elaborator, ...) → Logger → CompilerHost → CLI/IDE/LSP
 //!                                     ↑
 //!                              error counting + bail
 //! ```

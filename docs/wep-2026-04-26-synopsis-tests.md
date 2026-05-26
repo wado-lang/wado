@@ -212,7 +212,7 @@ synopsis. The body the reader sees is the whole synopsis.
 
 - `wado-compiler/src/parser.rs`: register `synopsis` as a recognised test
   attribute.
-- `wado-compiler/src/resolver/item.rs`, `wado-compiler/src/tir.rs`: record the
+- `wado-compiler/src/elaborator/item.rs`, `wado-compiler/src/tir.rs`: record the
   attribute on `TirTest` (e.g. `is_synopsis: bool`) so `wado doc` can locate
   synopsis bodies. The test runner itself does not branch on this flag.
 - `wado-cli/src/test.rs`: change discovery glob to `**/*.wado`; honour the
@@ -239,7 +239,7 @@ synopsis. The body the reader sees is the whole synopsis.
 ## TODOs
 
 - [ ] Add `synopsis` to the recognised test-attribute set in the parser.
-- [ ] Record `is_synopsis` on `TirTest` (resolver + TIR), accessible to
+- [ ] Record `is_synopsis` on `TirTest` (elaborator + TIR), accessible to
       `wado doc`.
 - [ ] Change `wado test` file discovery to `**/*.wado`.
 - [ ] Render `## Synopsis` sections in `wado doc` (markdown, simple, json).

@@ -215,7 +215,7 @@ scalar / payload-free matching today without committing to a heap-aware
       arm, or an `Or` containing one), rewrite the whole match to
       that literal. Without the exhaustiveness gate the rewrite
       would drop the lowering's implicit `Unreachable` fallback
-      trap — Wado's resolver checks exhaustiveness for
+      trap — Wado's elaborator checks exhaustiveness for
       `bool` / `enum` / `variant` / range-covered `int` but skips
       `struct` / `string` / `tuple`, so the gate is load-bearing.
 - [x] `match_lattice` applies the same exhaustiveness gate before

@@ -590,7 +590,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                         // Prefer the already-registered TypeId so the WIR
                         // `struct_type_map` lookup hits — the
                         // `find_struct_by_name` index is populated when
-                        // the resolver first processed the struct decl,
+                        // the elaborator first processed the struct decl,
                         // and `target_type_id` may arrive as a reference
                         // wrapper or an unregistered intern.
                         let stid = tt

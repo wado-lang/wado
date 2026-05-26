@@ -1138,12 +1138,12 @@ impl WasiRegistry {
                             .collect();
 
                         // Keep original return type for newtype semantics
-                        // The resolver will handle Mark -> newtype mapping.
+                        // The elaborator will handle Mark -> newtype mapping.
                         //
                         // For `async fn foo(...) -> AsyncCall<T>` CM imports,
                         // strip the `AsyncCall<T>` wrapper at registration so
                         // the stored return type is the CM-ABI `T`. The
-                        // resolver re-wraps it as `AsyncCall<T>` when
+                        // elaborator re-wraps it as `AsyncCall<T>` when
                         // answering Wado-level type queries (so user code
                         // sees the new API), and the CM binding synthesiser
                         // also re-wraps when constructing its adapter.

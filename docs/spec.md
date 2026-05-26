@@ -1917,7 +1917,7 @@ make_rect(10.0);  // → make_rect(10.0, 10.0)
 
 - `self` cannot have a default.
 - Function types do not carry default information; assigning a function with defaults to a `fn(...)` type erases them, and every call site of that variable must supply every argument.
-- Closures cannot declare defaults: a closure value's arity must match its `fn(...)` type. The parser accepts `= expr` on closure parameters for recovery only and the resolver rejects it.
+- Closures cannot declare defaults: a closure value's arity must match its `fn(...)` type. The parser accepts `= expr` on closure parameters for recovery only and the elaborator rejects it.
 - `export fn` cannot declare defaults — exported functions appear in the component's WIT signature where every parameter is required by the CM ABI. Split into a private helper plus a thin `export fn` wrapper if defaults are needed.
 - Trait methods may declare defaults only in the trait definition; implementations receive every parameter and cannot add, remove, or change defaults. Direct `impl Type { ... }` methods (not part of any trait) may declare defaults freely.
 
@@ -4478,7 +4478,7 @@ Marks a stdlib declaration as the resolution for a compiler-recognized item. The
 
 Examples: `#[compiler_item("option")]` on `variant Option`, `#[compiler_item("option_some")]` on the `Some` case, `#[compiler_item("display")]` on the `Display` trait, `#[compiler_item("string_push_str")]` on the `String::push_str` method.
 
-The attribute is only valid inside `core::*` modules; the resolver rejects it on user code.
+The attribute is only valid inside `core::*` modules; the elaborator rejects it on user code.
 
 #### `#[cm("namespace:pkg/interface@version")]` / `#[cm_params(...)]`
 

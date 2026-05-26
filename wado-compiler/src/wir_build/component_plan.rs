@@ -290,7 +290,7 @@ fn resolve_cm_export_type(ty: &Type, wasi_registry: &WasiRegistry) -> CmExportTy
 ///
 /// Test names may contain consecutive underscores when non-alphanumeric characters
 /// (like parentheses) in the original test string are each replaced with `_` by the
-/// resolver. A naive `replace('_', '-')` would produce consecutive dashes which
+/// elaborator. A naive `replace('_', '-')` would produce consecutive dashes which
 /// violate the kebab-case requirement of the Component Model.
 fn sanitize_kebab_export_name(function_name: &str) -> String {
     let raw = function_name.trim_start_matches('_').replace('_', "-");

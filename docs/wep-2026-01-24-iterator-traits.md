@@ -642,7 +642,7 @@ fn into_iter(&self) -> Self::Iter;
 
 This is a parser limitation, not a fundamental design issue.
 
-#### Resolver: Generic Associated Types in Return Position
+#### Elaborator: Generic Associated Types in Return Position
 
 When a generic struct `Foo<T>` implements a trait with `type Item = T`, and a trait method returns `Option<Self::Item>`, the type resolution fails. This affects all iterator implementations:
 

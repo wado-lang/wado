@@ -8,7 +8,7 @@
 //! # Pointer-identity interning
 //!
 //! `ModuleSource` is used pervasively as an `IndexMap` key during
-//! monomorphization and resolver lookups. To make `clone` / `eq` /
+//! monomorphization and elaborator lookups. To make `clone` / `eq` /
 //! `hash` all O(1), every string field is canonicalised into an
 //! `Arc<str>` shared via [`ModuleSourceInterner`], which wraps the
 //! generic [`StringInterner`] from [`crate::intern`].
@@ -449,7 +449,7 @@ impl ModuleSource {
 
         /// Synthetic `<entry>` placeholder used by `from_path(&[])`.
         pub fn entry_point_synthetic() = EntryPoint { filename: ENTRY_FILENAME_ENTRY },
-        /// `<uninitialized>` sentinel for resolver bootstrap.
+        /// `<uninitialized>` sentinel for elaborator bootstrap.
         pub fn entry_point_uninitialized() = EntryPoint { filename: ENTRY_FILENAME_UNINITIALIZED },
         /// `<stdin>` placeholder.
         pub fn entry_point_stdin() = EntryPoint { filename: ENTRY_FILENAME_STDIN },

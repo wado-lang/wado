@@ -51,7 +51,7 @@ use types::{cm_val_type_to_type_id, compute_export_flat_return_types};
 /// Build a `(module_source, name)` set for every effect/resource declared in
 /// the loaded TIR modules. The CM binding synthesizer uses this to attach the
 /// owning effect to each generated binding using the same `module_source` the
-/// resolver assigns to user-written `with E` clauses.
+/// elaborator assigns to user-written `with E` clauses.
 ///
 /// Keying by `(module_source, name)` (rather than name alone) prevents
 /// collisions when two modules declare an effect or resource with the same
@@ -137,7 +137,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
         // Map effect/resource name → defining module source. Used to attach the
         // canonical owner as an effect on each generated binding so the
         // checker's `(module_source, name)` identity matches user-written
-        // `with E` clauses (which the resolver also canonicalises to the
+        // `with E` clauses (which the elaborator also canonicalises to the
         // defining module).
         let owner_sources = effect_owner_module_sources(&project.tir_modules);
         let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
@@ -514,7 +514,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     }
 
     // Strip remaining TaskReturn from all modules.
-    // `task return` is only valid inside `async fn` (checked by resolver).
+    // `task return` is only valid inside `async fn` (checked by elaborator).
     // Step 5 expands TaskReturn into CM calls for async exports that match the
     // target world. Any remaining async fn (unmatched exports, imported modules)
     // will be DCE'd — strip their TaskReturn stmts so they don't reach monomorphize.
@@ -576,7 +576,7 @@ mod tests {
     /// items against the relevant prelude modules so `make_option` /
     /// `make_result` and the type-identity reads inside `lift` /
     /// `cm_binding` succeed in unit tests. Production resolution wires
-    /// these up when the stdlib resolver visits `core:prelude`.
+    /// these up when the stdlib elaborator visits `core:prelude`.
     fn register_option_result_for_tests(tt: &mut TypeTable) {
         use crate::compiler_item::{CompilerItem, Resolved};
         let _ = tt.compiler_items_mut().register(
@@ -658,7 +658,7 @@ mod tests {
         fn new() -> Self {
             // Register the Option/Result compiler-items so `make_option` /
             // `make_result` succeed during unit-test lifts. Production
-            // gets these registered when the stdlib resolver visits
+            // gets these registered when the stdlib elaborator visits
             // `core:prelude`.
             let mut tt = TypeTable::new();
             register_option_result_for_tests(&mut tt);

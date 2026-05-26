@@ -1,6 +1,6 @@
 //! Numeric literal coercion and type coercion.
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
 use crate::ast::{self, Expr, Literal, UnaryOp};
@@ -13,7 +13,7 @@ use crate::tir::{
     TirStmtKind, TypeId, TypeTable,
 };
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn try_coerce_numeric_literal(
         &mut self,
         expr: &Expr,
