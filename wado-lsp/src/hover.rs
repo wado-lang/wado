@@ -15,7 +15,7 @@ use wado_compiler::unparse;
 
 use crate::diagnostics::{Position, Range};
 use crate::location::span_to_range;
-use crate::text::{PositionEncoding, lsp_position_to_line_col};
+use crate::query::QueryContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HoverResult {
@@ -38,21 +38,12 @@ pub enum MarkupKind {
 }
 
 #[must_use]
-pub fn find_hover(
-    sem: &Semantics,
-    source: &str,
-    position: Position,
-    _uri: &str,
-    encoding: PositionEncoding,
-) -> Option<HoverResult> {
-    let entry = &sem.entry_module_source;
-    let (line, col) = lsp_position_to_line_col(source, position, encoding);
-
-    let cursor = sem.cursor_at(entry, line, col)?;
+pub(crate) fn find_hover(ctx: &QueryContext, position: Position) -> Option<HoverResult> {
+    let cursor = ctx.cursor_at(position)?;
     let symbol = cursor.def_symbol()?;
     let signature = match &symbol.kind {
-        SymbolKind::Variable(_) => render_local_binding(sem, &symbol.defined_at, &symbol.name)?,
-        _ => render_item_signature(sem, symbol)?,
+        SymbolKind::Variable(_) => render_local_binding(ctx.sem, &symbol.defined_at, &symbol.name)?,
+        _ => render_item_signature(ctx.sem, symbol)?,
     };
 
     let cursor_span = cursor.span()?;
@@ -61,7 +52,7 @@ pub fn find_hover(
             kind: MarkupKind::Markdown,
             value: format!("```wado\n{signature}\n```"),
         },
-        range: Some(span_to_range(&cursor_span, Some(source), encoding)),
+        range: Some(span_to_range(&cursor_span, Some(ctx.source), ctx.encoding)),
     })
 }
 
@@ -370,21 +361,11 @@ fn item_info(item: &Item, name: &str) -> Option<String> {
 mod tests {
     use super::*;
     use crate::test_support::MapHost;
+    use crate::text::PositionEncoding;
     use wado_compiler::semantics::semantics_with_invocations;
 
     async fn hover_at(source: &str, line: u32, character: u32) -> Option<HoverResult> {
-        let path = "/test.wado";
-        let uri = format!("file://{path}");
-        let host = MapHost::single(path, source);
-        let invocations = wado_compiler::kiln::InvocationIndex::new();
-        let sem = semantics_with_invocations(source, &host, Some(path), invocations).await;
-        find_hover(
-            &sem,
-            source,
-            Position { line, character },
-            &uri,
-            PositionEncoding::Utf16,
-        )
+        hover_at_with_encoding(source, line, character, PositionEncoding::Utf16).await
     }
 
     #[test]
@@ -539,7 +520,13 @@ mod tests {
         let host = MapHost::single(path, source);
         let invocations = wado_compiler::kiln::InvocationIndex::new();
         let sem = semantics_with_invocations(source, &host, Some(path), invocations).await;
-        find_hover(&sem, source, Position { line, character }, &uri, encoding)
+        let ctx = QueryContext {
+            sem: &sem,
+            source,
+            uri: &uri,
+            encoding,
+        };
+        find_hover(&ctx, Position { line, character })
     }
 
     #[test]

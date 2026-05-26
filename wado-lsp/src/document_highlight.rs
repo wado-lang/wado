@@ -14,12 +14,11 @@
 //! highlight pass therefore performs no AST walks of its own.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::semantics::Semantics;
 
 use crate::diagnostics::{Position, Range};
 use crate::location::span_to_range;
 use crate::macros::lsp_repr_u32_enum;
-use crate::text::{PositionEncoding, lsp_position_to_line_col};
+use crate::query::QueryContext;
 
 lsp_repr_u32_enum!(
     /// LSP `DocumentHighlightKind` values. Serializes as the 1..=3 integer
@@ -38,17 +37,9 @@ pub struct DocumentHighlight {
 }
 
 #[must_use]
-pub fn document_highlight(
-    sem: &Semantics,
-    source: &str,
-    position: Position,
-    _uri: &str,
-    encoding: PositionEncoding,
-) -> Vec<DocumentHighlight> {
-    let entry = &sem.entry_module_source;
-    let (line, col) = lsp_position_to_line_col(source, position, encoding);
-
-    let Some(cursor) = sem.cursor_at(entry, line, col) else {
+pub(crate) fn document_highlight(ctx: &QueryContext, position: Position) -> Vec<DocumentHighlight> {
+    let entry = ctx.entry();
+    let Some(cursor) = ctx.cursor_at(position) else {
         return Vec::new();
     };
     let Some(def_key) = cursor.def_key() else {
@@ -58,12 +49,13 @@ pub fn document_highlight(
     let mut out = Vec::new();
 
     if &def_key.module == entry
-        && let Some(span) = sem
+        && let Some(span) = ctx
+            .sem
             .name_span_of(&def_key)
-            .or_else(|| sem.symbol_at(&def_key).and_then(|s| s.span))
+            .or_else(|| ctx.sem.symbol_at(&def_key).and_then(|s| s.span))
     {
         out.push(DocumentHighlight {
-            range: span_to_range(&span, Some(source), encoding),
+            range: span_to_range(&span, Some(ctx.source), ctx.encoding),
             kind: HighlightKind::Write,
         });
     }
@@ -72,16 +64,16 @@ pub fn document_highlight(
         if &use_key.module != entry {
             continue;
         }
-        let Some(span) = sem.span_of_key(&use_key) else {
+        let Some(span) = ctx.sem.span_of_key(&use_key) else {
             continue;
         };
-        let kind = if sem.is_write_target(&use_key) {
+        let kind = if ctx.sem.is_write_target(&use_key) {
             HighlightKind::Write
         } else {
             HighlightKind::Read
         };
         out.push(DocumentHighlight {
-            range: span_to_range(&span, Some(source), encoding),
+            range: span_to_range(&span, Some(ctx.source), ctx.encoding),
             kind,
         });
     }
@@ -95,6 +87,7 @@ pub fn document_highlight(
 mod tests {
     use super::*;
     use crate::test_support::MapHost;
+    use crate::text::PositionEncoding;
     use wado_compiler::semantics::semantics_with_invocations;
 
     async fn highlights_at(source: &str, line: u32, character: u32) -> Vec<DocumentHighlight> {
@@ -103,13 +96,13 @@ mod tests {
         let host = MapHost::single(path, source);
         let invocations = wado_compiler::kiln::InvocationIndex::new();
         let sem = semantics_with_invocations(source, &host, Some(path), invocations).await;
-        document_highlight(
-            &sem,
+        let ctx = QueryContext {
+            sem: &sem,
             source,
-            Position { line, character },
-            &uri,
-            PositionEncoding::Utf16,
-        )
+            uri: &uri,
+            encoding: PositionEncoding::Utf16,
+        };
+        document_highlight(&ctx, Position { line, character })
     }
 
     fn summarize(refs: &[DocumentHighlight]) -> Vec<(u32, u32, HighlightKind)> {

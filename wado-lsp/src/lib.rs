@@ -7,6 +7,7 @@ pub mod host;
 mod hover;
 pub mod kiln;
 mod location;
+mod query;
 mod references;
 pub mod semantic_tokens;
 pub mod server;
@@ -21,6 +22,8 @@ use std::rc::Rc;
 use indexmap::IndexMap;
 use wado_compiler::semantics::Semantics;
 use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic};
+
+use crate::query::QueryContext;
 
 pub use definition::DefinitionResult;
 pub use diagnostics::{Diagnostic, Position, Range, Severity};
@@ -188,19 +191,19 @@ impl Engine {
         Some(snapshot)
     }
 
-    /// Compute the snapshot + document text for `uri` and hand them to
-    /// `f`. Returns `default` when either lookup misses (closed
-    /// document or load failure).
+    /// Build a [`QueryContext`] for the given document and hand it to
+    /// `f`. Returns `default` when the document is closed or its
+    /// semantics snapshot cannot be computed.
     ///
-    /// Every position-bearing query (`definition`, `hover`, `references`,
-    /// `document_highlight`) used to inline the same `snapshot.await? +
-    /// doc_text` prologue. Centralising it here means a future change
-    /// to that prologue (e.g. caching the doc text on `Snapshot`) lands
-    /// in one place.
-    async fn with_doc_snapshot<H, F, R>(&self, uri: &str, host: &H, default: R, f: F) -> R
+    /// Every position-bearing query — `definition`, `hover`, `references`,
+    /// `document_highlight` — goes through here. The shared closure body
+    /// keeps the snapshot cache lookup and `QueryContext` construction
+    /// in one place; feature functions take a single `&QueryContext`
+    /// instead of threading the five inputs by hand.
+    async fn with_query_ctx<H, F, R>(&self, uri: &str, host: &H, default: R, f: F) -> R
     where
         H: CompilerHost,
-        F: FnOnce(&Snapshot, &str) -> R,
+        F: FnOnce(&QueryContext<'_>) -> R,
     {
         let Some(snapshot) = self.snapshot(uri, host).await else {
             return default;
@@ -208,7 +211,13 @@ impl Engine {
         let Some(doc_text) = self.documents.get(uri).map(|d| d.text.as_str()) else {
             return default;
         };
-        f(&snapshot, doc_text)
+        let ctx = QueryContext {
+            sem: &snapshot.sem,
+            source: doc_text,
+            uri,
+            encoding: self.position_encoding,
+        };
+        f(&ctx)
     }
 
     /// Find the definition of the symbol at the given position.
@@ -218,14 +227,8 @@ impl Engine {
         position: Position,
         host: &H,
     ) -> Option<DefinitionResult> {
-        self.with_doc_snapshot(uri, host, None, |snapshot, doc_text| {
-            definition::find_definition(
-                &snapshot.sem,
-                doc_text,
-                position,
-                uri,
-                self.position_encoding,
-            )
+        self.with_query_ctx(uri, host, None, |ctx| {
+            definition::find_definition(ctx, position)
         })
         .await
     }
@@ -237,16 +240,8 @@ impl Engine {
         position: Position,
         host: &H,
     ) -> Option<HoverResult> {
-        self.with_doc_snapshot(uri, host, None, |snapshot, doc_text| {
-            hover::find_hover(
-                &snapshot.sem,
-                doc_text,
-                position,
-                uri,
-                self.position_encoding,
-            )
-        })
-        .await
+        self.with_query_ctx(uri, host, None, |ctx| hover::find_hover(ctx, position))
+            .await
     }
 
     /// Find every reference to the symbol named at the given position.
@@ -257,15 +252,8 @@ impl Engine {
         include_declaration: bool,
         host: &H,
     ) -> Vec<ReferenceLocation> {
-        self.with_doc_snapshot(uri, host, Vec::new(), |snapshot, doc_text| {
-            references::find_references(
-                &snapshot.sem,
-                doc_text,
-                position,
-                uri,
-                include_declaration,
-                self.position_encoding,
-            )
+        self.with_query_ctx(uri, host, Vec::new(), |ctx| {
+            references::find_references(ctx, position, include_declaration)
         })
         .await
     }
@@ -279,14 +267,8 @@ impl Engine {
         position: Position,
         host: &H,
     ) -> Vec<DocumentHighlight> {
-        self.with_doc_snapshot(uri, host, Vec::new(), |snapshot, doc_text| {
-            document_highlight::document_highlight(
-                &snapshot.sem,
-                doc_text,
-                position,
-                uri,
-                self.position_encoding,
-            )
+        self.with_query_ctx(uri, host, Vec::new(), |ctx| {
+            document_highlight::document_highlight(ctx, position)
         })
         .await
     }

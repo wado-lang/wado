@@ -11,12 +11,11 @@
 use serde::{Deserialize, Serialize};
 use wado_compiler::ast::{self, AstVisitor, Item, Literal, Module};
 use wado_compiler::name::resolve_import_with_entry;
-use wado_compiler::semantics::Semantics;
 use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, source_for_key, span_to_range, symbol_uri};
-use crate::text::{PositionEncoding, lsp_position_to_line_col};
+use crate::location::{module_uri, span_to_range, symbol_uri};
+use crate::query::QueryContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DefinitionResult {
@@ -29,15 +28,8 @@ pub struct DefinitionResult {
 /// `uri` is the URI of the document being edited; cross-file results carry
 /// their own URI (derived from the defining module's `diagnostic_filename`).
 #[must_use]
-pub fn find_definition(
-    sem: &Semantics,
-    source: &str,
-    position: Position,
-    uri: &str,
-    encoding: PositionEncoding,
-) -> Option<DefinitionResult> {
-    let entry = &sem.entry_module_source;
-    let (line, col) = lsp_position_to_line_col(source, position, encoding);
+pub(crate) fn find_definition(ctx: &QueryContext, position: Position) -> Option<DefinitionResult> {
+    let (line, col) = ctx.line_col(position);
 
     // Priority: file-path jumps first, symbol-based resolution second.
     //
@@ -57,11 +49,12 @@ pub fn find_definition(
     // itself), keeping file-path resolution first preserves the current
     // behaviour: jump to the file, not to whatever symbol happens to share
     // the span.
-    if let Some(result) = file_path_definition(sem, entry, line, col, uri) {
+    if let Some(result) = file_path_definition(ctx, line, col) {
         return Some(result);
     }
 
-    let cursor = sem.cursor_at(entry, line, col)?;
+    let entry = ctx.entry();
+    let cursor = ctx.sem.cursor_at(entry, line, col)?;
     let def_key = cursor.def_key()?;
 
     // Most defs are registered as symbols (functions, types, globals, locals).
@@ -69,13 +62,13 @@ pub fn find_definition(
     // impl methods are addressable by `AstId` via `name_span_of` but are not
     // individually registered as symbols; the URI fallback handles both.
     let span = cursor.def_span()?;
-    let def_uri = match sem.symbol_at(&def_key) {
-        Some(symbol) => symbol_uri(entry, symbol, uri)?,
-        None => module_uri(entry, &def_key.module, uri)?,
+    let def_uri = match ctx.sem.symbol_at(&def_key) {
+        Some(symbol) => symbol_uri(entry, symbol, ctx.uri)?,
+        None => module_uri(entry, &def_key.module, ctx.uri)?,
     };
     Some(DefinitionResult {
         uri: def_uri,
-        range: span_to_range(&span, source_for_key(entry, &def_key, source), encoding),
+        range: span_to_range(&span, ctx.source_for_key(&def_key), ctx.encoding),
     })
 }
 
@@ -83,18 +76,17 @@ pub fn find_definition(
 /// source string or a `#include_str("./x")` / `#include_bytes("./x")` path)
 /// to the beginning of the referenced file. Returns `None` when the cursor is
 /// not on such a path.
-fn file_path_definition(
-    sem: &Semantics,
-    entry: &wado_compiler::module_source::ModuleSource,
-    line: usize,
-    col: usize,
-    request_uri: &str,
-) -> Option<DefinitionResult> {
-    let ast_module = sem.modules.get(entry)?;
+fn file_path_definition(ctx: &QueryContext, line: usize, col: usize) -> Option<DefinitionResult> {
+    let entry = ctx.entry();
+    let ast_module = ctx.sem.modules.get(entry)?;
     let path = find_file_path_at_cursor(ast_module, line, col)?;
-    let target_module =
-        resolve_import_with_entry(&mut sem.interner.borrow_mut(), entry, &path, Some(entry));
-    let target_uri = module_uri(entry, &target_module, request_uri)?;
+    let target_module = resolve_import_with_entry(
+        &mut ctx.sem.interner.borrow_mut(),
+        entry,
+        &path,
+        Some(entry),
+    );
+    let target_uri = module_uri(entry, &target_module, ctx.uri)?;
     Some(DefinitionResult {
         uri: target_uri,
         range: Range {
