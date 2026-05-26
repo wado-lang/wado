@@ -1436,7 +1436,10 @@ impl NirRefVisitor for DceWalker<'_> {
                 self.add_type(*target_fn_type);
                 self.record_closure_to_canonical(*functor_id, *target_fn_type, closure_module);
             }
-            NirExprKind::GlobalVarGet { module_source, name } => {
+            NirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => {
                 self.analysis
                     .used_globals
                     .insert((module_source.to_path().join("::"), name.clone()));
@@ -1739,12 +1742,12 @@ fn populate_type_reachability(
         // sharing its base name is reachable.
         for tir_struct in &project.structs {
             let struct_reachable = if tir_struct.monomorph_info.is_none() {
-                analysis.struct_exact.contains(&(
-                    tir_struct.name.clone(),
-                    tir_struct.module_source.clone(),
-                )) || analysis
-                    .generic_instance_names
-                    .contains(tir_struct.name.as_str())
+                analysis
+                    .struct_exact
+                    .contains(&(tir_struct.name.clone(), tir_struct.module_source.clone()))
+                    || analysis
+                        .generic_instance_names
+                        .contains(tir_struct.name.as_str())
                     || analysis
                         .struct_monomorph_bases
                         .contains(tir_struct.name.as_str())
