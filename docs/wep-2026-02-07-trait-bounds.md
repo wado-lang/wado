@@ -10,7 +10,7 @@ More importantly, there is no way to express conditional method availability. Fo
 
 ### 1. Enforce Function/Method Trait Bounds at Call Sites
 
-When a generic function or method with trait bounds is called, the resolver checks that each concrete type argument satisfies all declared bounds.
+When a generic function or method with trait bounds is called, the elaborator checks that each concrete type argument satisfies all declared bounds.
 
 ```wado
 fn max<T: Ord>(a: T, b: T) -> T {
@@ -92,7 +92,7 @@ The following are out of scope (future work):
 
 ## Implementation Strategy
 
-### Resolver Changes
+### Elaborator Changes
 
 1. In `resolve_call` / `resolve_method_call`: after resolving type arguments, check each type argument against its declared bounds using the existing `type_implements_trait`.
 

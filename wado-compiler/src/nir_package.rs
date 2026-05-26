@@ -106,7 +106,7 @@ pub struct NirPackage {
     /// here by [`crate::monomorphize::monomorphize`], which adds the
     /// instantiation layer once it has materialised the concrete
     /// trait-method instances.
-    pub trait_env: std::sync::Arc<crate::resolver::trait_env::TraitEnv>,
+    pub trait_env: std::sync::Arc<crate::elaborator::trait_env::TraitEnv>,
 }
 
 impl NirPackage {

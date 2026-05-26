@@ -5,7 +5,7 @@
 //!
 //! With the raw-string AST design, `Literal::Number`, `Literal::String`, and
 //! `Literal::Char` all carry raw source text. Escape interpretation happens in
-//! the resolver, not here.
+//! the elaborator, not here.
 
 use wado_compiler::{Lexer, Parser};
 
@@ -203,7 +203,7 @@ fn test_float_with_separator() {
 }
 
 // String literal tests check the *raw* text stored between the quotes.
-// Escape interpretation (e.g. `\n` → newline) happens in the resolver.
+// Escape interpretation (e.g. `\n` → newline) happens in the elaborator.
 
 #[test]
 fn test_string_empty() {
@@ -441,7 +441,7 @@ fn test_string_unterminated() {
 #[test]
 fn test_string_unknown_escape_stored_as_raw() {
     // With the raw-string design, unknown escapes like `\x` are stored verbatim at the
-    // AST level. Validation happens in the resolver.
+    // AST level. Validation happens in the elaborator.
     let module = parse_expr(r#""invalid\x""#).expect("parse should succeed at AST level");
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
@@ -479,7 +479,7 @@ fn test_char_escape_newline() {
 
 #[test]
 fn test_char_unicode() {
-    // '\u0041' — raw text is `\u0041`; the resolver interprets it as 'A'
+    // '\u0041' — raw text is `\u0041`; the elaborator interprets it as 'A'
     let module = parse_expr(r"'\u0041'").expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
     match lit {

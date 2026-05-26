@@ -16,8 +16,8 @@
 //! `i128::from_i64(v)` / `u128::from_u64(v)`. Values outside that
 //! range are emitted as `i128::from_pair(lo, hi)` /
 //! `u128::from_pair(lo, hi)` so the full 128 bits round-trip — same
-//! split the resolver uses for source-level literals (see
-//! `resolver::util::unpack_i128`, `resolver::call::build_from_pair_call`).
+//! split the elaborator uses for source-level literals (see
+//! `elaborator::util::unpack_i128`, `elaborator::call::build_from_pair_call`).
 //!
 //! The struct, module source, and method names are all resolved
 //! through the `CompilerItem` registry so a stdlib rename of `i128`,

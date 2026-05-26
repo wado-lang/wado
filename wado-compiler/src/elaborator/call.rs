@@ -11,13 +11,13 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use super::Resolver;
+use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
 use super::types::{FunctionContext, TypeError};
 
 /// View of a `ResolvedType::Function` after peeling references and
-/// fn-type newtypes. Returned by [`Resolver::as_fn_signature`].
+/// fn-type newtypes. Returned by [`Elaborator::as_fn_signature`].
 struct FnSignature {
     is_mut: bool,
     params: Vec<TypeId>,
@@ -70,7 +70,7 @@ impl CalleeIdentKind<'_> {
     }
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// If `type_id` is a function type — possibly behind references or
     /// fn-type newtypes such as `type Handler = fn(...);` — return its
     /// signature. Otherwise return `None`. Borrows the type table once.
@@ -1136,7 +1136,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Handle user-defined effect operations (e.g., `Counter::next` where
         // `effect Counter { fn next() -> i32; }` is declared in the project).
-        // The resolver routes these through `CalleeRef::local_namespace`,
+        // The elaborator routes these through `CalleeRef::local_namespace`,
         // which produces `ModuleSource::Local { path: "Counter" }` — also
         // matched by `is_effect_like()`. Without this lookup the call would
         // fall through to the default `Unit` return type and the dispatch
@@ -1193,7 +1193,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 scope.trait_ctx.type_params.clear();
                 scope.register_generic_params(&type_params, 0);
 
-                // Swap the resolver's "current module" perspective onto the
+                // Swap the elaborator's "current module" perspective onto the
                 // callee for the duration of `resolve_type`. Locals are cleared
                 // because they only ever describe the active resolution, not
                 // the callee's pre-existing definitions.
@@ -1323,7 +1323,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         return newtype_id;
                     }
                     // Otherwise, try to resolve via WASI registry's newtypes.
-                    // Scoped to `wasi:` to keep this resolver path WASI-only.
+                    // Scoped to `wasi:` to keep this elaborator path WASI-only.
                     let aliased = self
                         .wasi_registry
                         .find_wasi_newtype_source(&named.name)
@@ -1702,7 +1702,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// To make the caller's supplied value visible to the default expression,
     /// we textually substitute param-name [`Expr::Ident`] occurrences inside
     /// the default's cloned AST with the corresponding argument's AST before
-    /// resolving it. The resolver then type-checks the result against the
+    /// resolving it. The elaborator then type-checks the result against the
     /// declared parameter type.
     ///
     /// Appends newly-synthesized arguments to `args`. Leaves `args` unchanged

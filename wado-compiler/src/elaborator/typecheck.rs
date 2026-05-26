@@ -7,7 +7,7 @@ use crate::compiler_host::CompilerHost;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::TypeError;
 
 /// Result of checking whether `actual` is assignable to `expected`.
@@ -218,7 +218,7 @@ fn unwrap_ref(type_id: TypeId, type_table: &TypeTable) -> (TypeId, bool) {
     }
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Check type mismatch and emit error if incompatible.
     pub(super) fn typecheck(&mut self, actual: TypeId, expected: TypeId, span: Span) {
         let type_table = self.type_table.borrow();

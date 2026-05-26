@@ -2,11 +2,11 @@
 // have then / else branches that agree on a single type. A
 // divergent branch in expression position would silently
 // miscompile — the `(if (result X) ...)` instruction's other
-// branch would push the wrong type — so the resolver rejects it.
+// branch would push the wrong type — so the elaborator rejects it.
 //
 // In statement position the same code is accepted because each
 // branch's value gets dropped at the WIR stmt level; see
-// `resolver::resolve_if_stmt`, which deliberately resolves the
+// `elaborator::resolve_if_stmt`, which deliberately resolves the
 // branches with `expected_type=None` and never feeds the value
 // into a wasm result.
 

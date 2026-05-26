@@ -10,16 +10,16 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::util;
 
 /// The right-hand side of an assignment passed to
-/// [`Resolver::assign_to_target`]. Either an AST expression (the
-/// regular [`Resolver::resolve_assign`] path) or an already-resolved
-/// TIR value (the [`Resolver::resolve_compound_assign`] path, where the
+/// [`Elaborator::assign_to_target`]. Either an AST expression (the
+/// regular [`Elaborator::resolve_assign`] path) or an already-resolved
+/// TIR value (the [`Elaborator::resolve_compound_assign`] path, where the
 /// RHS is `target op rhs` computed via
-/// [`Resolver::build_binary_op_tir`]).
+/// [`Elaborator::build_binary_op_tir`]).
 ///
 /// The `Resolved` payload is boxed because `TirExpr` is ~460 bytes; an
 /// unboxed variant would balloon every `AssignValue<'_>` (including
@@ -39,7 +39,7 @@ impl AssignValue<'_> {
     }
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_binary(
         &mut self,
         binary: &ast::BinaryExpr,
@@ -58,7 +58,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Resolve both operands of a binary op, applying the standard
     /// bidirectional numeric-literal coercion. Shared between
-    /// [`Self::resolve_binary`] and resolver-internal callers like
+    /// [`Self::resolve_binary`] and elaborator-internal callers like
     /// [`Self::desugar_comparison_chain`].
     ///
     /// For primitive numeric types: coerce the literal to the other operand's type.
@@ -117,7 +117,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Build a binary-op `TirExpr` given pre-resolved operands.
     ///
     /// Shared between [`Self::resolve_binary`] (the user-AST entry point)
-    /// and resolver-internal callers like
+    /// and elaborator-internal callers like
     /// [`Self::desugar_comparison_chain`] / [`Self::resolve_compound_assign`]
     /// that have already resolved both sides into TIR. Handles ref-equality,
     /// trait dispatch for non-primitive comparison / arithmetic / shift,
@@ -1442,7 +1442,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // For each argument, decide whether the trait parameter is by
         // reference, compute the logical expected value type for the arg,
-        // and delegate to `Resolver::typecheck` — the same helper that
+        // and delegate to `Elaborator::typecheck` — the same helper that
         // `resolve_method_call` uses at its own argument-typecheck tail.
         //
         // Using the shared primitive means operator dispatch and direct

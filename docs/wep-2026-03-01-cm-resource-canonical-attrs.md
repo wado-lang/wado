@@ -401,7 +401,7 @@ types.wado (single source of truth)
   }
          │
          ▼
-  Resolver (method_lookup.rs)
+  Elaborator (method_lookup.rs)
   resource method with #[canonical] attr
   → MethodInfo { canonical_name: Some("stream-read") }
          │
@@ -439,7 +439,7 @@ pub struct MethodInfo {
 }
 ```
 
-Populated by the resolver when resolving a resource method that has a `#[canonical]`
+Populated by the elaborator when resolving a resource method that has a `#[canonical]`
 attribute. This is the bridge between resource declarations and WIR synthesis.
 
 #### 2. Unified Canonical Method Dispatch
@@ -546,7 +546,7 @@ It does NOT handle:
 
 The special cases for `Stream::new()` and `Future::new()` that synthesize
 `"stream_create_pair"` / `"future_create_pair"` calls are removed. Instead,
-the resolver finds the `new` method on the resource declaration, sees its
+the elaborator finds the `new` method on the resource declaration, sees its
 `#[canonical("stream-new")]` attribute, and passes it through as a normal
 method call with `canonical_name` set in `MethodInfo`.
 

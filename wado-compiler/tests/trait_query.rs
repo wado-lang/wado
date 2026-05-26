@@ -1,8 +1,8 @@
 //! Behavioral unit tests for the trait-query subsystem in
-//! `src/resolver/trait_query.rs`.
+//! `src/elaborator/trait_query.rs`.
 //!
 //! These tests exercise `resolve_trait_method_for_op` and
-//! `try_auto_derived_method_match` indirectly, through the resolver's
+//! `try_auto_derived_method_match` indirectly, through the elaborator's
 //! public `compile_source` entry point, to lock in the invariants the
 //! subsystem is responsible for:
 //!

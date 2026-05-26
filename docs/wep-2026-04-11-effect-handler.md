@@ -4,14 +4,14 @@ Status: Stable
 
 ## Implementation Status
 
-The full dispatch protocol — front-end, resolver/effect-check, synthesis pass,
+The full dispatch protocol — front-end, elaborator/effect-check, synthesis pass,
 codegen — is shipping. Detailed development history is in the git log; this
 section records only the current state.
 
 - [x] Front-end: `with E => h do { ... }`, `resume value`, and `..` rest in
       `impl Effect for Type`.
-- [x] Resolver / effect-check: `TirExprKind::WithHandler` and
-      `TirExprKind::Resume` carry the structure through TIR. The resolver
+- [x] Elaborator / effect-check: `TirExprKind::WithHandler` and
+      `TirExprKind::Resume` carry the structure through TIR. The elaborator
       validates effect-decl reference, handler-impls-effect relationship,
       and `resume`-only-in-handler-method. Effect-check skips handled
       effects from caller requirements while walking the body.
@@ -44,7 +44,7 @@ section records only the current state.
       `effect_handler_break_label_cross.wado`,
       `effect_handler_continue_cross.wado`,
       `effect_handler_inner_break.wado` (negative).
-- [x] Bundled handlers (`with &mut h do`, `with h do`). The resolver
+- [x] Bundled handlers (`with &mut h do`, `with h do`). The elaborator
       expands a bundled binding into one `TirHandlerBinding` per effect
       that the handler's type implements. Bindings install in source
       order; a later binding wins when the same effect appears twice on

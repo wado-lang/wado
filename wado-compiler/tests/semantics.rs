@@ -106,7 +106,7 @@ fn semantics_resolves_position_to_ast_id() {
 /// Verify that calls into stdlib resolve via the same `referenced_symbol`
 /// edge whether or not the stdlib snapshot cache served the stdlib
 /// module.  The semantics pipeline seeds `state.references` from the
-/// snapshot's drained `references` map and the per-compile resolver
+/// snapshot's drained `references` map and the per-compile elaborator
 /// walks the entry module's body to add the user-side use→def edges on
 /// top — both halves are needed for the cross-module jump-to-def to
 /// work.

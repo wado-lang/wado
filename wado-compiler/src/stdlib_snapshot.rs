@@ -2,12 +2,12 @@
 //! state.
 //!
 //! Every `compile_with_options` invocation that targets non-stdlib user
-//! code re-runs the loader → analyze → resolve → `lower_tir` pipeline
+//! code re-runs the loader → analyze → elaborate (annotate + `build_tir`) pipeline
 //! over the same stdlib AST closure (`core:prelude` and its transitive
 //! imports plus `core:libm.wat`). Measurements on
 //! `package-gale` (257 compiles, see WEP comments in
 //! `wado-cli/src/test.rs`) put the per-compile stdlib portion of
-//! `resolve/lower_tir` at ~112 ms — adding up to ~28 s of CPU duplicated
+//! `elaborate/build_tir` at ~112 ms — adding up to ~28 s of CPU duplicated
 //! across one `wado test` run.
 //!
 //! [`get_or_init_snapshot`] returns a thread-local [`Semantics`] that
@@ -16,7 +16,7 @@
 //! exact same closure as a real compile. Per-compile consumers can
 //! clone the snapshot's [`TypeTable`], decl maps, [`BuiltinRegistry`],
 //! [`TraitEnv`] and pre-lowered [`TirModule`]s as the seed for their
-//! own [`AnnotateState`] / `resolve/lower_tir` work and run those
+//! own [`AnnotateState`] / `elaborate/build_tir` work and run those
 //! passes only over the user modules that come on top.
 //!
 //! ## Why thread-local

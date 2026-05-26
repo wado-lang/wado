@@ -1362,7 +1362,7 @@ fn reduce_local_leaves_if_mixed_bool_int_arms_alone() {
         block_with_tail_expr(bool_lit(true)),
         Some(block_with_tail_expr(int_lit(0, TypeTable::I32, "0"))),
         // Type intentionally mismatched between if-expr and arms — a
-        // resolver-level invariant, but we want the rule to stay silent
+        // elaborator-level invariant, but we want the rule to stay silent
         // regardless.
         TypeTable::BOOL,
     );
@@ -1939,7 +1939,7 @@ fn char_literal_reduces_to_const() {
 
 #[test]
 fn char_arithmetic_is_unreducible() {
-    // char does not implement Add — the resolver rejects it, but if a
+    // char does not implement Add — the elaborator rejects it, but if a
     // synthesized node ever reaches niri it must not fold.
     let e = binary(
         NirBinaryOp::Add,
@@ -3030,7 +3030,7 @@ fn match_const_scrut_with_only_or_pattern_arms_picks_first() {
 // `match` exhaustiveness gate
 //
 // Without an unguarded catch-all the lowering inserts an `Unreachable`
-// fallback for unmatched scrutinee values. Wado's resolver enforces
+// fallback for unmatched scrutinee values. Wado's elaborator enforces
 // match exhaustiveness for `bool` / `enum` / `variant` / range-covered
 // `int`, but explicitly skips it for `struct` / `string` / `tuple` / …
 // The engine must not collapse a non-exhaustive match to a literal
@@ -3263,7 +3263,7 @@ fn make_pure_fn(
 }
 
 /// Build a `Call` expression targeting `func` with the given args.
-/// Mirrors what the resolver emits for a free function call.
+/// Mirrors what the elaborator emits for a free function call.
 fn call_expr(func: &NirFunction, args: Vec<NirExpr>) -> NirExpr {
     let func_ref = FunctionRef {
         module_source: func.module_source.clone(),

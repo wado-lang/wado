@@ -68,7 +68,7 @@ pub trait KeyValueLiteral {
 }
 
 // Blanket: any type that builds itself satisfies KeyValueLiteral automatically.
-// (Requires associated type projection on type params — T::Value — in the resolver.)
+// (Requires associated type projection on type params — T::Value — in the elaborator.)
 impl<T: KeyValueLiteralBuilder<Output = T>> KeyValueLiteral for T {
     type Value = T::Value;
     type Builder = T;
@@ -365,7 +365,7 @@ is deferred: it requires an `Into<E>` conversion per element.
    `T: KeyValueLiteral` bound automatically.
 2. **Blanket impl works**: the `impl<T: KeyValueLiteralBuilder<Output = T>> KeyValueLiteral for T`
    blanket compiles and is active. Associated type projection on type params (`T::Value`)
-   is supported by the resolver.
+   is supported by the elaborator.
 3. **Immutable output types**: the two-trait split makes them first-class without complicating
    the simple path
 4. **Capacity hint**: `new_literal(capacity)` allows pre-allocation; the compiler always

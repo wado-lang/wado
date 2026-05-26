@@ -187,7 +187,7 @@ impl Module {
     /// per-module range.  Use this when post-parse synthesis injects a
     /// new AST node into [`Self::items`] and the node needs a
     /// [`SymbolKey`](crate::symbol::SymbolKey)-compatible id (for
-    /// example an `Item::Impl` that the resolver walks).  The returned
+    /// example an `Item::Impl` that the elaborator walks).  The returned
     /// id is guaranteed not to collide with any parser-allocated id.
     ///
     /// Prefer this over [`AstId::fresh`] for nodes that enter a module
@@ -1422,7 +1422,7 @@ pub struct Function {
     pub return_type: Option<Type>,
     pub effects: Vec<String>,
     /// Parallel to `effects`: `(AstId, Span)` of each effect-name identifier as
-    /// it appeared in the `with` clause. Used by the resolver to record
+    /// it appeared in the `with` clause. Used by the elaborator to record
     /// use->def references for LSP jump-to-def.
     pub effect_ids: Vec<(AstId, Span)>,
     /// Parameters declared in `stores[param1, param2]` — the function may store these references.
@@ -2437,7 +2437,7 @@ pub enum Pattern {
         /// `AstId` of the variant-name identifier in the pattern. Used to
         /// record use→def references for LSP navigation (cursor on `Some`
         /// inside a match arm jumps to the case's declaration site).
-        /// `None` for resolver-synthesized patterns that do not originate in
+        /// `None` for elaborator-synthesized patterns that do not originate in
         /// source (e.g., None-coercion from `null`).
         name_id: Option<AstId>,
         /// Span of the variant-name identifier (not the whole pattern).
@@ -2577,7 +2577,7 @@ pub struct NamedType {
     /// The defining source interface for this name reference, populated
     /// during stdlib bootstrap and user-code resolution so that registry
     /// lookups are unambiguous. `None` means the reference has not been
-    /// resolved yet (e.g. freshly parsed user code before the resolver
+    /// resolved yet (e.g. freshly parsed user code before the elaborator
     /// runs, or a bare primitive/generic parameter). Format matches the
     /// `#[cm("...")]` prefix, e.g. `"wasi:filesystem/types@0.3.0-rc-..."`
     /// or `"core:kiln/types@0.1.0"`.
@@ -2587,7 +2587,7 @@ pub struct NamedType {
 impl NamedType {
     /// Construct a `NamedType` with no resolved source interface. The source
     /// is populated later during stdlib registration (for stdlib types) or by
-    /// the resolver (for user-code references into imported symbols).
+    /// the elaborator (for user-code references into imported symbols).
     pub fn new(id: AstId, name: String, span: Span) -> Self {
         Self {
             id,
@@ -2628,7 +2628,7 @@ pub struct FunctionType {
     pub return_type: Type,
     pub effects: Vec<String>,
     /// Parallel to `effects`: `(AstId, Span)` of each effect-name identifier as
-    /// it appeared in source. Used by the resolver to record use->def
+    /// it appeared in source. Used by the elaborator to record use->def
     /// references for LSP jump-to-def. Empty when constructed by the compiler
     /// (synthesized function types from monomorphization, etc.).
     pub effect_ids: Vec<(AstId, Span)>,
@@ -2692,14 +2692,14 @@ pub struct AssocTypeBound {
 /// `fn(...)` / `fn mut(...)` closure-type bound: `<F: fn(i32) -> i32>` —
 /// surface syntax for the internal `Fn` / `FnMut` traits; the parsed function
 /// signature is recorded in `fn_signature` and the bound's `name` is set to
-/// `"Fn"` or `"FnMut"` for diagnostic and resolver routing.
+/// `"Fn"` or `"FnMut"` for diagnostic and elaborator routing.
 #[derive(Debug, Clone)]
 pub struct TraitBound {
     pub name: String,
     pub assoc_types: Vec<AssocTypeBound>,
     pub span: Span,
     /// Set when the bound was written as `fn(...)` / `fn mut(...)` in source.
-    /// Carries the parsed closure signature so the resolver can constrain the
+    /// Carries the parsed closure signature so the elaborator can constrain the
     /// generic parameter to that exact function type at use sites.
     pub fn_signature: Option<Box<FunctionType>>,
 }

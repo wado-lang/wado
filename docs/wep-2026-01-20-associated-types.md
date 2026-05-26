@@ -59,12 +59,12 @@ pub struct AssociatedTypeBinding {
 }
 ```
 
-### Resolver Changes
+### Elaborator Changes
 
-The resolver tracks current associated type bindings:
+The elaborator tracks current associated type bindings:
 
 ```rust
-struct Resolver {
+struct Elaborator {
     // ... other fields
     current_associated_type_bindings: HashMap<String, TypeId>,
 }
@@ -103,7 +103,7 @@ trait Container {
 
 - [x] Parser: `type Name;` in traits, `type Name = Type;` in impl blocks
 - [x] AST: `AssociatedTypeDecl`, `AssociatedTypeBinding`
-- [x] Resolver: `Self::TypeName` resolution
+- [x] Elaborator: `Self::TypeName` resolution
 - [x] Desugar: Pass-through of associated types
 - [x] Unparse: Output associated types
 - [ ] Trait bounds on associated types

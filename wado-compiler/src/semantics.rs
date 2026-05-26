@@ -1,7 +1,7 @@
 //! Semantic analysis — the shared frontend entry point.
 //!
 //! [`semantics`] drives the compilation pipeline up through name resolution
-//! and type resolution (the resolver's annotate phase), then stops. The
+//! and type resolution (the elaborator's annotate phase), then stops. The
 //! resulting [`Semantics`] bundles every semantic fact needed to answer
 //! editor queries (hover, go-to-definition, diagnostics) without paying for
 //! monomorphize / lower / codegen.
@@ -15,12 +15,12 @@ use crate::analyze::Analyzer;
 use crate::ast::{AstId, Module};
 use crate::ast_index::AstIndex;
 use crate::compiler_host::{CompilerHost, LogLevel};
+use crate::elaborator::Elaborator;
+use crate::elaborator::orchestration::AnnotateState;
 use crate::hashmap::IndexMap;
 use crate::loader;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::resolver::Resolver;
-use crate::resolver::orchestration::AnnotateState;
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
 use crate::tir::{ResolvedType, TirModule, TypeTable};
 use crate::token::Span;
@@ -46,7 +46,7 @@ pub struct Semantics {
     ///
     /// Re-entrancy: only single-threaded callers, and only one
     /// `borrow_mut` at a time. Do not hold a [`std::cell::RefMut`]
-    /// across calls into other [`Semantics`] / [`crate::Resolver`]
+    /// across calls into other [`Semantics`] / [`crate::Elaborator`]
     /// methods — a nested `borrow_mut` will panic. The intended
     /// pattern is `sem.interner.borrow_mut().<one method call>`, dropping
     /// the borrow at the statement boundary.
@@ -56,17 +56,17 @@ pub struct Semantics {
     /// the in-tree [`name_span_of`] / [`span_of_key`] helpers) consult this
     /// instead of re-walking the AST on every request.
     pub(crate) ast_indices: IndexMap<ModuleSource, AstIndex>,
-    /// Shared resolver state produced by [`Resolver::annotate_modules`].
+    /// Shared elaborator state produced by [`Elaborator::annotate_modules`].
     ///
-    /// `None` when analyze or [`Resolver::annotate_modules`] bailed before
+    /// `None` when analyze or [`Elaborator::annotate_modules`] bailed before
     /// the state could be built. `Some(_)` once resolve completed — even
-    /// if a later [`Resolver::lower_tir_from_state`] bail set
+    /// if a later [`Elaborator::build_tir_from_state`] bail set
     /// [`Self::is_complete`] to `false`. The pair `(state, is_complete)`
     /// therefore has three distinguishable states:
     ///
     /// - `(None, false)` — analyze or resolve bailed; the snapshot has
     ///   only `symbols` + `ast_indices`.
-    /// - `(Some(_), false)` — resolve completed but `lower_tir` bailed; the
+    /// - `(Some(_), false)` — annotate completed but `build_tir` bailed; the
     ///   snapshot has everything except `tir_modules` (which is empty).
     /// - `(Some(_), true)` — full success.
     ///
@@ -74,20 +74,20 @@ pub struct Semantics {
     /// [`Semantics::is_complete`], so the `expect` in `compile_with_options`
     /// is safe. LSP queries do not inspect `state` directly.
     pub(crate) state: Option<AnnotateState>,
-    /// Use→def map populated by the real resolver as it walks function
-    /// bodies in `lower_tir_from_state`. Maps `(module, IdentExpr.id)` to
+    /// Use→def map populated by the real elaborator as it walks function
+    /// bodies in `build_tir_from_state`. Maps `(module, IdentExpr.id)` to
     /// the binding's defining `SymbolKey`. Empty when resolve did not run
     /// or bailed before recording any edges.
     pub(crate) references: IndexMap<SymbolKey, SymbolKey>,
     /// Local binding [`Symbol`] entries (let / param / closure param)
-    /// emitted by the resolver alongside `references`. Keyed by the
+    /// emitted by the elaborator alongside `references`. Keyed by the
     /// binding's defining [`SymbolKey`]; consulted by
     /// [`Semantics::symbol_at`] when the key does not name an item-level
     /// symbol. Empty when resolve did not run or bailed early.
     pub(crate) locals: IndexMap<SymbolKey, Symbol>,
-    /// TIR modules produced by [`crate::resolver::Resolver::lower_tir_from_state`].
+    /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
-    /// Empty when `lower_tir` did not run or bailed.
+    /// Empty when `build_tir` did not run or bailed.
     pub(crate) tir_modules: IndexMap<ModuleSource, TirModule>,
     /// True when every analysis phase ran to completion without bailing.
     /// Batch compilation refuses to continue when this is false; LSP queries
@@ -545,7 +545,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     logger: &Logger<'_, H>,
 ) -> Semantics {
     // Wrap the loader's interner in `Rc<RefCell<>>` so analyze and the
-    // per-module resolvers can each `borrow_mut()` it from `&self`
+    // per-module elaborators can each `borrow_mut()` it from `&self`
     // contexts. Single-threaded sharing matches the rest of the
     // compiler's `Rc<RefCell<TypeTable>>` plumbing.
     let interner = std::rc::Rc::new(std::cell::RefCell::new(load_result.interner));
@@ -565,7 +565,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
 
     // Per-thread stdlib `Semantics` snapshot.  When present,
     // `annotate_modules` seeds its `TypeTable` / decl maps / registries
-    // from this snapshot and `lower_tir_from_state` copies the
+    // from this snapshot and `build_tir_from_state` copies the
     // pre-lowered stdlib `TirModule`s directly into its result, skipping
     // the ~28 s of CPU otherwise duplicated across a typical `wado test`
     // run.  Returns `None` when called from inside the snapshot builder
@@ -606,8 +606,8 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     }
 
     let state = {
-        let _span = logger.span("resolve/annotate");
-        Resolver::annotate_modules(
+        let _span = logger.span("elaborate/annotate");
+        Elaborator::annotate_modules(
             &symbols,
             &load_result.modules,
             &load_result.entry_module_source,
@@ -634,17 +634,17 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     };
 
     // Run the full body-level resolve pass so `state.references` and
-    // `state.local_symbols` are populated by the real resolver. This is the
+    // `state.local_symbols` are populated by the real elaborator. This is the
     // single source of truth for use→def edges — LSP and batch compilation
-    // both consume what the resolver recorded here, with no separate lexical
+    // both consume what the elaborator recorded here, with no separate lexical
     // re-scan to drift out of sync.
     //
     // On Bail we still drain the partial reference / local maps so the LSP
-    // can answer cursor queries against whatever bodies the resolver did
+    // can answer cursor queries against whatever bodies the elaborator did
     // reach before bailing.
     let (tir_modules, lower_ok) = {
-        let _span = logger.span("resolve/lower_tir");
-        match Resolver::lower_tir_from_state(
+        let _span = logger.span("elaborate/build_tir");
+        match Elaborator::build_tir_from_state(
             &state,
             &symbols,
             &load_result.modules,
@@ -664,7 +664,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // `state.type_table`.
     let types = state.type_table.borrow().clone();
 
-    // Drain the resolver's shared reference / local maps into owned IndexMaps
+    // Drain the elaborator's shared reference / local maps into owned IndexMaps
     // so LSP queries can hand out `&Symbol` references without juggling
     // `RefCell` borrows.
     let references = std::mem::take(&mut *state.references.borrow_mut());

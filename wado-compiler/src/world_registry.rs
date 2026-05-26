@@ -257,7 +257,7 @@ impl WorldRegistry {
     /// registered without that export); this happens when the referenced
     /// interface declaration is not yet known.
     ///
-    /// `lookup_interface_import` is the analogous resolver for `import Foo;`
+    /// `lookup_interface_import` is the analogous elaborator for `import Foo;`
     /// and only needs to surface the CM FQ (the methods are tree-shaken from
     /// usage). Returning `None` leaves `cm_interface_fq` unfilled.
     ///

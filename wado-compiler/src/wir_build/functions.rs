@@ -624,7 +624,7 @@ fn translate_global_init(
             op: crate::nir::NirUnaryOp::Neg,
             expr: inner,
         } => {
-            // Negation of constant (normally folded by resolver, but handle for robustness)
+            // Negation of constant (normally folded by elaborator, but handle for robustness)
             let inner_wir = translate_global_init(inner, type_table);
             match inner_wir {
                 WirInstr::I32Const(v) => WirInstr::I32Const(v.wrapping_neg()),
@@ -651,7 +651,7 @@ fn build_mangled_name(tir_func: &NirFunction, _module_source: &ModuleSource) -> 
     // monomorphizer set it to the canonical mangled name produced by
     // `function_instantiation_name` / `method_instantiation_name`. The
     // string-typed `method_info.method_type_args` field is populated by
-    // resolver/monomorphizer call sites that historically used
+    // elaborator/monomorphizer call sites that historically used
     // `mangle_type_name` (unqualified for `Variant`/`Newtype`/etc.); calling
     // `method_info.to_mangled_name()` on a monomorphized function would
     // therefore drop the module qualification that the call-rewrite path

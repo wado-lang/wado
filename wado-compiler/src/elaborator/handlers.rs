@@ -1,4 +1,4 @@
-//! Resolver lowering for effect handler installation (`with E => h do { ... }`)
+//! Elaborator lowering for effect handler installation (`with E => h do { ... }`)
 //! and the `resume` control-flow expression.
 //!
 //! See WEP 2026-04-11 (Effect Handler) for the language semantics.
@@ -29,10 +29,10 @@ use crate::tir::{
     EffectRef, ResolvedType, TirExpr, TirExprKind, TirHandlerBinding, TypeId, TypeTable,
 };
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve `with E1 => h1, ... do { body }`.
     pub(super) fn resolve_with_handler(
         &mut self,
@@ -52,7 +52,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let resolved = self.resolve_handler_binding(binding, ctx, &mut next_bundle_group);
             // A bundled binding may expand to multiple `TirHandlerBinding`s
             // (one per effect the handler type implements). They are
-            // appended in the order the resolver enumerated them, which
+            // appended in the order the elaborator enumerated them, which
             // means they install in that order — earlier ones become the
             // outer handlers and later ones become inner.
             bindings.extend(resolved);
@@ -475,8 +475,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
 }
 
 /// Short label for a [`ResolvedType`] variant, used in diagnostic
-/// messages emitted by the bundled-handler resolver. Only covers the
-/// shapes the resolver rejects; the supported shapes return their own
+/// messages emitted by the bundled-handler elaborator. Only covers the
+/// shapes the elaborator rejects; the supported shapes return their own
 /// canonical names via `TypeTable::type_name`.
 fn describe_resolved_type_kind(ty: &ResolvedType) -> String {
     match ty {

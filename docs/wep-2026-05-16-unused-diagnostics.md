@@ -161,7 +161,7 @@ If every item in a single `UseDecl` is unused, emit one diagnostic at
 `UseDecl.span`; otherwise emit per-item diagnostics at
 `AstIndex::name_span_of(item.id)`.
 
-Prerequisite check: confirm `resolver` records `UseItem::Simple.id` as
+Prerequisite check: confirm `elaborator` records `UseItem::Simple.id` as
 a use-site in `references` during use-decl resolution. If not, add the
 single `record_reference_to_decl` call there.
 
@@ -234,7 +234,7 @@ parse → bind → desugar → load → analyze → annotate
                                   (imports, locals, params)
                                             │
                                             ▼
-                              lower_tir → monomorphize
+                              build_tir → monomorphize
                                   → lower → optimize
                                             │
                                             ▼
@@ -276,14 +276,14 @@ calls `check_unused` after `semantics_of` without any extra cost.
 #### Phase 2 — `defining_ast_id` propagation
 
 - [ ] Add `TirFunction::defining_ast_id: Option<AstId>` and `TirGlobal::defining_ast_id: Option<AstId>`; default to `None`.
-- [ ] Set `Some(function.id)` / `Some(global.id)` at every source-authored construction site (in `resolver`).
+- [ ] Set `Some(function.id)` / `Some(global.id)` at every source-authored construction site (in `elaborator`).
 - [ ] Add `NirFunction::defining_ast_id` and `NirGlobal::defining_ast_id`; propagate from TIR through `link`, `monomorphize`, `erase`, `lower`. Monomorphisation clones inherit the original `defining_ast_id`.
 - [ ] Synthesis sites (`synthesis/cm_binding.rs`, `synthesis/effect_dispatch.rs`, auto-derives, etc.) leave the field as `None`.
 - [ ] No behaviour change in this phase — codegen output is bit-identical.
 
 #### Phase 3 — Semantics-layer lints
 
-- [ ] Confirm `resolver` records `UseItem::Simple.id` as a use-site; patch if missing.
+- [ ] Confirm `elaborator` records `UseItem::Simple.id` as a use-site; patch if missing.
 - [ ] Implement `analyze::unused::check_unused` (imports, locals, params).
 - [ ] Wire into `lib.rs::compile_with_options` and `wado-lsp::Engine::diagnostics`.
 - [ ] Add fixtures under `tests/fixtures/unused_*.wado`; touch `tests/e2e.rs`.
@@ -352,7 +352,7 @@ through the diagnostics path.
   (`Option<AstId>` is a `u32` + niche).
 - Every TIR construction site for a source-authored function or
   global gains one line to thread the AST id through. The change is
-  mechanical but touches several files (`resolver/item.rs`, closure
+  mechanical but touches several files (`elaborator/item.rs`, closure
   construction, global lowering).
 - `optimize.rs::run_dce` gains a `reported: IndexSet<SymbolKey>` set
   threaded through its fixed-point loop. No structural change to the

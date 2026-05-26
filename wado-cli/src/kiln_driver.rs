@@ -778,7 +778,7 @@ pub struct PipelineOutcome {
     /// and skips lockfile / output-directory writes so committed artifacts
     /// are preserved.
     pub stale: Vec<String>,
-    /// Redirect index for the resolver: `(decl_file, from)` → entry path.
+    /// Redirect index for the elaborator: `(decl_file, from)` → entry path.
     /// Populated from every invocation (cached, executed, or stale) so the
     /// compiler can redirect `use { X } from "<schema>"` to the generated
     /// entry module. Empty when no invocations ran.
@@ -1135,7 +1135,7 @@ pub struct CheckOutcome {
     pub checked: Vec<String>,
     pub stale: Vec<String>,
     pub missing: Vec<String>,
-    /// Redirect index for the resolver, populated identically to
+    /// Redirect index for the elaborator, populated identically to
     /// [`PipelineOutcome::invocations`] so the downstream compile can
     /// resolve `use { ... } from "<schema>"` even though `check_pipeline`
     /// did not write outputs to disk.

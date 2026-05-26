@@ -717,7 +717,7 @@ fn build_dispatch_wrapper_function(
     // we still emit the placeholder for consistency.
     // Routing key is `op.cm_name`:
     //   * resource ops always carry a `#[cm("...")]` attribute (the
-    //     resolver records its payload on `TirEffectOp.cm_name`), and
+    //     elaborator records its payload on `TirEffectOp.cm_name`), and
     //     `is_resource` is set when the dispatch instantiation comes from
     //     a `pub resource ...` decl rather than a `pub effect ...` decl;
     //   * WASI effect ops always carry `#[cm("...")]` too (every WASI
@@ -986,7 +986,7 @@ fn build_resource_fallback_call(
     // (e.g. label "Stream<u8>" → ["u8"]). The label encodes the
     // instantiation; the LocalMethodName carries it both as
     // `struct_name = "Stream<u8>"` (full mangled) and
-    // `base_struct_name = "Stream"` (bare), mirroring the resolver
+    // `base_struct_name = "Stream"` (bare), mirroring the elaborator
     // convention so cm_binding sees a familiar shape.
     let _ = type_table;
     let mangled_method_name = format!("{label}::{}", op.name);
@@ -1001,7 +1001,7 @@ fn build_resource_fallback_call(
     // translator (e.g. `cm_future_payload_from_monomorph` for
     // `future-new`) reads these to pick the right payload-parameterised
     // canonical import (`future-new:s32` vs the trailers default). The
-    // resolver attaches `monomorph_info` for the same reason on real
+    // elaborator attaches `monomorph_info` for the same reason on real
     // user calls; the wrapper fallback must do the same so its
     // post-cm_binding shape is indistinguishable from a hand-written
     // `Future::<i32>::new()` call site.
@@ -1501,7 +1501,7 @@ impl crate::tir_visitor::TirRefVisitor for MaxLocalIndex {
 ///
 /// Bindings whose effect is unresolved (`EffectRef::Param`) or whose
 /// handler type doesn't match any synthesised plan are skipped (a
-/// no-op for that binding) — the resolver / effect-check should have
+/// no-op for that binding) — the elaborator / effect-check should have
 /// caught such cases earlier.
 fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCtx) {
     let span = expr.span;
@@ -1532,7 +1532,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             Some(EffectRef::Param { name }) => panic!(
                 "effect-dispatch synthesis received an unresolved \
                  `EffectRef::Param {{ name: {name:?} }}` in a `with` \
-                 binding — the resolver should have substituted it \
+                 binding — the elaborator should have substituted it \
                  with a concrete effect before this pass runs"
             ),
             None => panic!(
@@ -1569,7 +1569,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 "effect-dispatch synthesis: no `impl {interface_name} for \
                  {handler_type_name}` (type args = {trait_type_args:?}) \
                  registered in the impl index for effect module \
-                 {effect_module:?} — the resolver should have rejected \
+                 {effect_module:?} — the elaborator should have rejected \
                  the `with {interface_name} => h do` binding if no matching \
                  impl exists"
             )
@@ -2125,7 +2125,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
 /// site (e.g. `"Stream<u8>"`, or `"Counter"` for non-generic effects).
 /// Used to build the user-impl method's mangled name
 /// `<Handler>^<E><args>::<op>` — must match what
-/// `Resolver::resolve_method` registered, since the resolver mangles
+/// `Elaborator::resolve_method` registered, since the elaborator mangles
 /// `trait_type` via `get_type_name_full` (preserving the type args for
 /// distinct-instantiation symbol names).
 fn build_handler_op_closure(
@@ -2174,7 +2174,7 @@ fn build_handler_op_closure(
         handler_type,
         span,
     );
-    // The user impl method was registered by `Resolver::resolve_method`
+    // The user impl method was registered by `Elaborator::resolve_method`
     // under the full mangled trait name (`Stream<u8>` rather than the
     // bare base `Stream`); use the same form here so the synthesised
     // method-call resolves against the right symbol.
@@ -2290,14 +2290,14 @@ fn build_trap_closure(
 
 /// Rewrite every effect-operation call site so it routes through a
 /// dispatch wrapper. Runs **before** `cm_binding`, so the call shapes
-/// it recognises are the pre-cm_binding forms the resolver emits:
+/// it recognises are the pre-cm_binding forms the elaborator emits:
 ///
 /// 1. **User-effect shape** — `Call` whose `func.module_source` is
 ///    `ModuleSource::Local { path: "<E>" }` and `func.name` is the
-///    bare op name. Produced by the resolver for `Effect::op(...)`.
+///    bare op name. Produced by the elaborator for `Effect::op(...)`.
 /// 2. **Resource `cm_name` shape** — `Call` (static) or `MethodCall`
 ///    (instance) whose `func.method_info.cm_name` is `Some(...)`.
-///    Produced by the resolver for `R::op(args)` /
+///    Produced by the elaborator for `R::op(args)` /
 ///    `receiver.op(args)` on a resource declaration.
 ///
 /// Calls inside `__effect_dispatch__*` wrappers are left alone — they
@@ -2358,7 +2358,7 @@ fn rewrite_call_sites_to_wrappers(
                 }
                 // Resource ops without `cm_name` aren't reachable from
                 // user-side calls (no canonical attribute → no
-                // resolver-side `cm_name` tag), so skip them.
+                // elaborator-side `cm_name` tag), so skip them.
             } else {
                 // Effect op: route via the `Local { path }` user-effect
                 // call shape regardless of whether the op carries a CM
@@ -2929,7 +2929,7 @@ struct HandlerImplInfo {
     /// Per-method return type from the impl. Lets the lowering patch up
     /// the result type of a synthesised `MethodCall` even when the
     /// original `Counter::next()` `Call` came in with `Unit` (the
-    /// resolver doesn't know the operation's return type for
+    /// elaborator doesn't know the operation's return type for
     /// user-defined effects without a CM binding).
     methods: IndexMap<String, TypeId>,
     /// Handler struct's type name (the `T` in `impl Effect for T`).
@@ -2941,8 +2941,8 @@ struct HandlerImplInfo {
 /// build a canonical `HandlerImplKey -> HandlerImplInfo` map.
 ///
 /// The handler-method's [`crate::name::LocalMethodName`] carries
-/// `base_trait_module` populated by the resolver via
-/// [`crate::resolver::Resolver::canonical_decl_key`] whenever the impl
+/// `base_trait_module` populated by the elaborator via
+/// [`crate::elaborator::Elaborator::canonical_decl_key`] whenever the impl
 /// targets a user-declared trait / effect / resource; the routine
 /// consults `effect_index` for membership using that canonical pair —
 /// impl methods whose trait does not match any effect / resource
@@ -2970,7 +2970,7 @@ fn build_handler_impl_index(
                 continue;
             };
             let Some(effect_module) = method_info.base_trait_module.as_ref() else {
-                // Resolver did not record a declaring module — only the
+                // Elaborator did not record a declaring module — only the
                 // synthesis-derived auto-impl path leaves this `None`,
                 // and those never target effects / resources.
                 continue;
@@ -3017,13 +3017,13 @@ fn deref_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
 /// shape with effect impl methods (see WEP 2026-04-11: resources
 /// participate in the same dispatch protocol).
 ///
-/// The resolver flattens impl-block methods into `TirModule.functions`
+/// The elaborator flattens impl-block methods into `TirModule.functions`
 /// and tags each with `method_info: { struct_name, trait_name, ... }`.
 /// We use the `trait_name` to recognise handler methods.
 fn lower_resume_in_handler_methods(project: &mut Package) {
     // Collect bare names of every effect and resource declaration so we
     // can recognise candidate impl blocks. A name collision between an
-    // effect/resource and a regular trait would already be a resolver
+    // effect/resource and a regular trait would already be a elaborator
     // error.
     let mut handler_names: IndexSet<String> = IndexSet::default();
     for module in project.tir_modules.values() {
@@ -3084,7 +3084,7 @@ fn rewrite_resume_in_stmt(stmt: &mut TirStmt) {
         stmt.kind = TirStmtKind::Return { value: Some(value) };
         return;
     }
-    // `return resume value;` (which the resolver synthesises when a
+    // `return resume value;` (which the elaborator synthesises when a
     // method body's tail expression is `resume`, because the
     // missing-return rewriter sees `Resume { value }` in expression
     // position and wraps it in `Return { value: Some(Resume { ... }) }`)

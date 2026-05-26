@@ -9,7 +9,7 @@ use crate::tir::{
     TirUnaryOp, TypeId, TypeTable,
 };
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use crate::hashmap::IndexMap;
 
@@ -20,7 +20,7 @@ use crate::hashmap::IndexMap;
 /// against the expected return type so e.g. struct-literal bodies elaborate
 /// correctly. The closure's *effect* set is left as an empty list rather
 /// than copied from the hint — let-statement resolution in
-/// `resolver/stmt.rs` handles function-type assignability structurally, so
+/// `elaborator/stmt.rs` handles function-type assignability structurally, so
 /// the closure expression and the let annotation can carry different
 /// `effects` lists without a spurious `TypeMismatch`.
 struct ExpectedFn {
@@ -33,7 +33,7 @@ struct ExpectedFn {
     declared_effects: Option<Vec<EffectRef>>,
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     fn extract_expected_fn(&self, expected_type: Option<TypeId>) -> Option<ExpectedFn> {
         let tid = expected_type?;
         let tt = self.type_table.borrow();
@@ -109,7 +109,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 }
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Reject default parameter values on closures. Parser accepts the syntax
     /// for uniform recovery, but defaults cannot survive the fn-type erasure
     /// closures undergo, so they're rejected here.

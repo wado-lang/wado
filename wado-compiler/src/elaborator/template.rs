@@ -9,10 +9,10 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::tir::{TemplateFormatSpec, TirExpr, TirExprKind, TirTemplatePart};
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::FunctionContext;
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_template_string(
         &mut self,
         template: &ast::TemplateStringExpr,

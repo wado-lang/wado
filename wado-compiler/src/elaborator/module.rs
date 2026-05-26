@@ -4,14 +4,14 @@ use crate::ast::{self, Item, Module, Type};
 use crate::compiler_host::CompilerHost;
 use crate::tir::{TypeId, TypeTable};
 
-use super::Resolver;
+use super::Elaborator;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, StructFieldInfo,
     VariantCaseData, VariantInfo,
 };
 use crate::name::MethodName;
 
-impl<H: CompilerHost> Resolver<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn collect_types(&mut self, module: &Module) {
         // First, collect types from loaded modules (so aliases like Instant = u64 are available)
         for (module_source, loaded_module) in self.loaded_modules {

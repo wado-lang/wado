@@ -41,7 +41,7 @@
 //!   - f32 ↔ f64 (rounding on demote, exact on promote)
 //!   - bool → int / float (true ↦ 1 / 1.0, false ↦ 0 / 0.0)
 //!   - char → int (codepoint, then truncated to target width)
-//!   - u8 → char (the only int → char form the resolver permits)
+//!   - u8 → char (the only int → char form the elaborator permits)
 //! - Local variables: immutable `let` bindings whose RHS reduces to a
 //!   constant flow into the env and are read back as that constant at
 //!   each use site. `let mut` and post-assign locals stay `NonConst`.
@@ -254,7 +254,7 @@ impl Value {
     /// for the bignum primitives `i128` / `u128` (intentionally
     /// out-of-scope for niri folding), and for any literal whose
     /// `type_id` doesn't resolve to a primitive (defensive — the
-    /// resolver shouldn't produce these).
+    /// elaborator shouldn't produce these).
     ///
     /// Used by the const-fold visitor to turn struct-field literals
     /// (`StructLiteral { f: 5, … }`) and direct field stores
@@ -1061,7 +1061,7 @@ impl<'a> Interpreter<'a> {
                 // `if cond { true } else { false }` → `cond`. Unwrap
                 // the box and replace `expr.kind` with the condition's.
                 // `expr.type_id` stays as the if-expression's bool type,
-                // which equals `condition.type_id` (the resolver always
+                // which equals `condition.type_id` (the elaborator always
                 // types an `if` condition as bool).
                 let inner = *condition;
                 expr.kind = inner.kind;
@@ -1184,7 +1184,7 @@ impl<'a> Interpreter<'a> {
         // The match must be provably exhaustive — otherwise an unmatched
         // scrutinee value would trap (the lowering inserts an
         // Unreachable fallback), and rewriting the whole expression to
-        // a literal would silently drop that trap. Wado's resolver
+        // a literal would silently drop that trap. Wado's elaborator
         // skips exhaustiveness checks for some scrutinee types
         // (struct, string, tuple, …); without an unguarded catch-all
         // we cannot prove the fallback is unreachable.
@@ -1454,7 +1454,7 @@ impl<'a> Interpreter<'a> {
                 (NirLiteralPattern::Bool(p), Value::Bool(v)) => bool_to_match(p == v),
                 (NirLiteralPattern::Char(p), Value::Char(v)) => bool_to_match(p == v),
                 // Type mismatch between pattern and value: definite No.
-                // (The resolver should already reject ill-typed
+                // (The elaborator should already reject ill-typed
                 // patterns; if one slips through, returning No is safe
                 // since the arm cannot fire at runtime either.)
                 (
@@ -1583,7 +1583,7 @@ impl<'a> Interpreter<'a> {
                 // fall through the same path. `eval_cast` decides which
                 // (source, target) pairs are foldable; unsupported pairs
                 // (e.g. casts targeting i128/v128, or a target the
-                // resolver should already have rejected) return `None`
+                // elaborator should already have rejected) return `None`
                 // and surface as `NonConst` rather than fabricating a
                 // bogus payload.
                 match self.expr_to_lattice(inner) {
@@ -1687,7 +1687,7 @@ impl<'a> Interpreter<'a> {
             }
         }
 
-        // Param/arg arity must agree. The resolver enforces this, but
+        // Param/arg arity must agree. The elaborator enforces this, but
         // an arity mismatch here would silently bind the wrong locals.
         if bound.len() != callee.params.len() {
             return Lattice::Unevaluated;
@@ -1804,7 +1804,7 @@ fn bool_to_match(b: bool) -> PatternMatch {
 
 /// Conservatively decide whether a `match`'s arm set is exhaustive
 /// — i.e. whether the lowering's implicit `Unreachable` fallback is
-/// provably dead. Mirrors the resolver's [`is_catch_all_pattern`]
+/// provably dead. Mirrors the elaborator's [`is_catch_all_pattern`]
 /// rule: at least one unguarded `Wildcard` / `Binding` arm (or an
 /// `Or` pattern containing one) is sufficient. Variant-set / range-set
 /// coverage proofs are deferred until niri models those pattern shapes
@@ -2186,7 +2186,7 @@ fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
 /// that to [`Lattice::NonConst`] so the runtime cast still happens, no
 /// bogus value gets folded in.
 ///
-/// The supported set mirrors what the resolver permits in source:
+/// The supported set mirrors what the elaborator permits in source:
 ///
 /// - `Int` source ↦ Int (already supported), Float, Char (only when
 ///   source is `U8` per [`expr.rs`]'s `u8 as char` carve-out).
@@ -2213,7 +2213,7 @@ fn eval_cast(source: Value, target: PrimitiveType) -> Option<Value> {
             prim: target,
         }),
         Value::Int { value, prim } if float_target => Some(int_to_float(value, prim, target)),
-        // Only `u8 as char` is permitted by the resolver; every u8 is a
+        // Only `u8 as char` is permitted by the elaborator; every u8 is a
         // valid Unicode scalar, so `char::from(u8)` is total.
         Value::Int {
             value,

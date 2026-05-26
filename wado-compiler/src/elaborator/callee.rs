@@ -2,7 +2,7 @@
 //!
 //! `CalleeRef` and `StaticMethodRef` bundle the `(module, name)` pairs that
 //! identify a free function or a static method. Historically these were
-//! threaded through the resolver as separate `&ModuleSource` + `&str`
+//! threaded through the elaborator as separate `&ModuleSource` + `&str`
 //! parameters, which allowed the defining-module name and the caller-visible
 //! alias to drift apart (see the bug where cross-module aliased generic calls
 //! without turbofish failed: `lookup_generic_func_for_inference` re-looked up
@@ -53,7 +53,7 @@ impl CalleeRef {
 
     /// A callee reached through a namespace-qualified call `Prefix::name`
     /// where `Prefix` is a module path (e.g. `Stdout::write`). The
-    /// `prefix` is interned through the resolver's
+    /// `prefix` is interned through the elaborator's
     /// [`crate::module_source::ModuleSourceInterner`] and wrapped in a
     /// `ModuleSource::Local`.
     pub fn local_namespace(

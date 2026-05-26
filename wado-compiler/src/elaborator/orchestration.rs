@@ -2,14 +2,14 @@
 //!
 //! Resolution runs in two phases:
 //!
-//! - [`Resolver::annotate_modules`] collects decl-level type information
+//! - [`Elaborator::annotate_modules`] collects decl-level type information
 //!   (struct field maps, variant cases, flags, newtypes, resource methods)
 //!   and interns every declaration in the shared [`TypeTable`]. It also
 //!   populates [`TypeTable::type_by_symbol`]/[`TypeTable::symbol_by_type`]
 //!   so LSP queries can resolve a [`SymbolKey`] to a decl-backed type
 //!   without running TIR lowering. The output is an [`AnnotateState`] that
-//!   both `lower_tir` and the LSP consume.
-//! - [`Resolver::lower_tir_from_state`] reads that state and produces one
+//!   both `build_tir` and the LSP consume.
+//! - [`Elaborator::build_tir_from_state`] reads that state and produces one
 //!   [`TirModule`] per source module. It does not mutate the annotate
 //!   output; all new types created during lowering (anonymous structs,
 //!   monomorphic instances) are written through the shared
@@ -37,15 +37,15 @@ use crate::symbol::{Symbol, SymbolKey, SymbolTable};
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::world_registry::WorldRegistry;
 
-use super::Resolver;
+use super::Elaborator;
 use super::trait_env::TraitEnv;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ResourceInfo,
     StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 
-/// Analysis state produced by [`Resolver::annotate_modules`] and consumed by
-/// [`Resolver::lower_tir_from_state`].
+/// Analysis state produced by [`Elaborator::annotate_modules`] and consumed by
+/// [`Elaborator::build_tir_from_state`].
 ///
 /// All expensive maps are stored behind `Rc` so the state is cheap to share
 /// between LSP queries and the lowering pipeline without cloning the
@@ -70,30 +70,30 @@ pub(crate) struct AnnotateState {
     pub(crate) global_known_type_names: IndexSet<String>,
     pub(crate) all_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>>,
     /// Use→def map for local variables: `(module, IdentExpr.id)` →
-    /// `(module, defining AstId)`. Populated by [`Resolver::resolve_ident`]
+    /// `(module, defining AstId)`. Populated by [`Elaborator::resolve_ident`]
     /// whenever a name resolves to a local binding. Consumed by LSP
     /// `definition` / `hover` to jump to the defining pattern / parameter.
     pub(crate) references: Rc<RefCell<IndexMap<SymbolKey, SymbolKey>>>,
     /// Locally-defined [`Symbol`]s (let bindings, parameters, closure
     /// parameters). Keyed by the binding's defining [`SymbolKey`]. Populated
-    /// alongside [`Self::references`] as the resolver walks function bodies.
+    /// alongside [`Self::references`] as the elaborator walks function bodies.
     pub(crate) local_symbols: Rc<RefCell<IndexMap<SymbolKey, Symbol>>>,
     /// Kiln invocation redirects consulted by `resolve_import` call sites
     /// when walking `use` declarations. Populated from [`crate::loader::LoadResult`].
     pub(crate) invocations: Rc<crate::kiln::InvocationIndex>,
     /// `ModuleSource` interner shared across phases. `Rc<RefCell<>>` so
-    /// `&self` resolver methods can `borrow_mut()` it when constructing
+    /// `&self` elaborator methods can `borrow_mut()` it when constructing
     /// new module sources during name resolution.
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
 }
 
-impl<'a, H: CompilerHost> Resolver<'a, H> {
+impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Run the full resolve pipeline: annotate, then lower to TIR.
     ///
-    /// This is a thin wrapper over [`Resolver::annotate_modules`] +
-    /// [`Resolver::lower_tir_from_state`]. Callers that want access to the
+    /// This is a thin wrapper over [`Elaborator::annotate_modules`] +
+    /// [`Elaborator::build_tir_from_state`]. Callers that want access to the
     /// annotate output (e.g. LSP) should call the two phases separately.
-    pub(crate) fn resolve_all_modules(
+    pub(crate) fn elaborate_all_modules(
         symbols: &'a SymbolTable,
         modules: &'a IndexMap<ModuleSource, Module>,
         entry_module_source: ModuleSource,
@@ -112,7 +112,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             None,
         )?;
         let trait_env = state.trait_env.clone();
-        let tir_modules = Self::lower_tir_from_state(
+        let tir_modules = Self::build_tir_from_state(
             &state,
             symbols,
             modules,
@@ -126,7 +126,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Annotate phase: collect decl-level type information and intern every
     /// declaration in the shared [`TypeTable`]. Produces an [`AnnotateState`]
-    /// that downstream phases (`lower_tir`, LSP queries) consume read-mostly
+    /// that downstream phases (`build_tir`, LSP queries) consume read-mostly
     /// via `Rc`.
     pub(crate) fn annotate_modules(
         symbols: &'a SymbolTable,
@@ -621,11 +621,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             Self::topological_sort_modules(modules, &all_struct_fields, &type_table.borrow());
 
         let (wasi_registry, world_registry) = {
-            let _span = logger.span("resolve/wasi_registry");
+            let _span = logger.span("elaborate/wasi_registry");
             WasiRegistry::build_from_stdlib()
         };
         let builtin_registry = {
-            let _span = logger.span("resolve/builtin_registry");
+            let _span = logger.span("elaborate/builtin_registry");
             let mut registry = if let Some(snap_state) = snapshot_state {
                 // The snapshot's registry is bound to the snapshot's
                 // `TypeTable`, whose entries we cloned into `type_table`
@@ -652,7 +652,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // lookups by type name instead of scanning all items in all modules per method call.
         // Also runs orphan rule checking; violations are emitted as errors.
         let (trait_env, orphan_violations) = {
-            let _span = logger.span("resolve/trait_env");
+            let _span = logger.span("elaborate/trait_env");
             super::trait_env::TraitEnv::build(modules, symbols)
         };
         for violation in orphan_violations {
@@ -665,7 +665,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // second pass (e.g., user module is sorted before prelude modules).
         Self::register_all_generic_assoc_type_defs(modules, &type_table, &stdlib_set);
 
-        // Wrap all_* maps in Rc for cheap sharing across per-module resolvers
+        // Wrap all_* maps in Rc for cheap sharing across per-module elaborators
         let all_newtypes = Rc::new(all_newtypes);
         let all_struct_fields = Rc::new(all_struct_fields);
         let all_variant_cases = Rc::new(all_variant_cases);
@@ -800,9 +800,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Lower phase: emit one [`TirModule`] per source module using the state
-    /// produced by [`Resolver::annotate_modules`]. Errors are collected in the
+    /// produced by [`Elaborator::annotate_modules`]. Errors are collected in the
     /// logger; the function returns [`Bail`] if any module failed.
-    pub(crate) fn lower_tir_from_state(
+    pub(crate) fn build_tir_from_state(
         state: &AnnotateState,
         symbols: &'a SymbolTable,
         modules: &'a IndexMap<ModuleSource, Module>,
@@ -830,7 +830,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // or run the full body-level resolve pass (user code).  Errors
         // are emitted to the logger; we keep going so one broken module
         // doesn't mask others.
-        let _span = logger.span("resolve/modules");
+        let _span = logger.span("elaborate/modules");
         for module_source in &state.sorted_sources {
             // Cache hit: deep-clone the cached `TirModule` into the
             // per-compile shared type table.  Only `Core` / `Wasi` /
@@ -954,7 +954,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
             }
 
-            let mut resolver = Resolver {
+            let mut elaborator = Elaborator {
                 type_table: Rc::clone(&state.type_table),
                 symbols,
                 loaded_modules: modules,
@@ -1018,7 +1018,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
             // Errors are emitted to the logger; if resolve_module returns Bail,
             // we continue to resolve remaining modules to collect more errors
-            if let Ok(tir_module) = resolver.resolve_module(module, module_source.clone()) {
+            if let Ok(tir_module) = elaborator.resolve_module(module, module_source.clone()) {
                 result.insert(module_source.clone(), tir_module);
             }
         }
@@ -1083,14 +1083,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Populate `TypeTable::type_by_symbol` / `symbol_by_type` by walking every
-    /// type-declaring symbol and looking up the `TypeId` the resolver created
+    /// type-declaring symbol and looking up the `TypeId` the elaborator created
     /// for it.
     ///
     /// This runs as a post-pass over the whole symbol table rather than being
     /// instrumented at each `make_struct` / `make_enum` / ... call site: the
-    /// decl-creation sites are spread across resolver/module.rs,
-    /// `resolver/type_resolution.rs`, resolver/orchestration.rs, resolver/call.rs,
-    /// and resolver/expr.rs, and threading a `SymbolKey` through every one of
+    /// decl-creation sites are spread across elaborator/module.rs,
+    /// `elaborator/type_resolution.rs`, elaborator/orchestration.rs, elaborator/call.rs,
+    /// and elaborator/expr.rs, and threading a `SymbolKey` through every one of
     /// them would churn ~40 call sites. The symbol-table walk is O(symbols) and
     /// touches only declarations, so the cost is negligible.
     fn register_symbol_key_type_indices(
@@ -1163,7 +1163,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Resolve an optional AST return type using the source module's type context.
     ///
-    /// Temporarily swaps the resolver's "current module" perspective to
+    /// Temporarily swaps the elaborator's "current module" perspective to
     /// `module_source` so that same-named types from different modules are
     /// resolved correctly. The shared `all_*` tables stay intact; only the
     /// import context (and locals) is swapped.
@@ -2200,7 +2200,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
             ast::Expr::WithHandler(with_handler) => {
                 // The LHS of `E = h` in a `with` clause is an effect
-                // name, not a type name. The real resolver validates it
+                // name, not a type name. The real elaborator validates it
                 // against the effect declaration index in
                 // `resolve_with_handler`; here we only walk the handler
                 // expression and the body for type-name references.
@@ -2333,9 +2333,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
     }
 
-    /// Static version of `resolve_type` for use before the resolver is fully
+    /// Static version of `resolve_type` for use before the elaborator is fully
     /// constructed. Reads type info via [`TypeLookup`] — the same path the
-    /// fully-constructed resolver uses, so name resolution stays in one place.
+    /// fully-constructed elaborator uses, so name resolution stays in one place.
     pub(super) fn resolve_type_static(
         ty: &Type,
         type_table: &mut TypeTable,
