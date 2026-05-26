@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779768739155,
+  "lastUpdate": 1779788638099,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26237,6 +26237,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2b2178253236e1d24bd7d3292513f57d472c7b99"
         },
         "date": 1779768738685,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 443310,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bc4a4dfbcd339c716cfd2b7b26d765a2e4ecf8d4",
+          "message": "Merge pull request #1199 from wado-lang/claude/elide-struct-locals-feasibility-8pyf5\n\nperf(wir-optimize): D1 from #1184 — skip safe intervening stmts in adjacent struct elision",
+          "timestamp": "2026-05-26T18:37:15+09:00",
+          "tree_id": "f9bdf0acdf2d909d2013ca96f00dbd326ae2578e",
+          "url": "https://github.com/wado-lang/wado/commit/bc4a4dfbcd339c716cfd2b7b26d765a2e4ecf8d4"
+        },
+        "date": 1779788637615,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
