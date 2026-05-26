@@ -1,0 +1,54 @@
+// Regression test: `elide_box_local::can_move_past` must check
+// `may_clobber` in BOTH directions (Bernstein conditions). The original
+// implementation only asked "does the intervening clobber the
+// expression's reads?" and not the symmetric question "do the
+// expression's writes (via a call) clobber the intervening's reads?".
+//
+// Setup:
+// - `incr()` writes the global `counter` and returns its post-increment
+//   value. The candidate `boxed = Box { v: incr() }` is a single-use
+//   single-field StructLiteral, so elide_box_local is otherwise
+//   eligible.
+// - The intervening `let snapshot = counter;` READS the same global.
+// - The use site combines `boxed.v` with `snapshot`.
+//
+// Before elision (correct):
+//   let boxed = Box { v: incr() };   // counter becomes 1, boxed.v = 1
+//   let snapshot = counter;          // reads counter (1)
+//   let result = boxed.v + snapshot; // 1 + 1 = 2
+//
+// After the BUGGY elision (move expr past intervening with one-sided
+// check) the side-effecting `incr()` is relocated past the read:
+//   let snapshot = counter;          // reads counter (0)
+//   let result = incr() + snapshot;  // counter becomes 1, 1 + 0 = 1
+//
+// The fix must observe that `expr_mr` (which contains a Call) clobbers
+// `int_mr`'s `global_reads = {counter}` — the move is unsound and
+// must be rejected.
+
+use { Stdout, println } from "core:cli";
+
+global mut counter: i32 = 0;
+
+#[inline("never")]
+fn incr() -> i32 {
+    counter = counter + 1;
+    return counter;
+}
+
+struct Box {
+    v: i32,
+}
+
+export fn run() with Stdout {
+    let boxed = Box { v: incr() };
+    let snapshot = counter;
+    let result = boxed.v + snapshot;
+    assert result == 2;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

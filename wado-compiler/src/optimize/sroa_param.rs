@@ -131,6 +131,21 @@ fn collect_and_validate(project: &NirPackage) -> IndexMap<(FnKey, usize), SroaIn
             if func.stores_aliased_locals.contains(&param.local_index) {
                 continue;
             }
+            // The function's `stores[...]` clause declares that the
+            // listed reference parameters are persisted past the
+            // call. SROA-ing such a parameter from `&S` to its inner
+            // scalar drops the reference identity the contract is
+            // built on (storing `&local` keeps the caller's location
+            // alive; storing a `T` value cannot). Pin the param even
+            // when `body_uses_param_safely` would otherwise accept
+            // it — the analysis defends against escape via bare
+            // `Local` uses, but the `stores` contract is satisfied
+            // by an indirect persistence (e.g. forwarding `&p` to a
+            // callee that itself stores it) that the use checker
+            // intentionally treats as a "soft" call-arg use.
+            if func.stores.iter().any(|s| s == &param.name) {
+                continue;
+            }
             let Some(info) = candidate_info_for(param.type_id, &type_table, &single_field) else {
                 continue;
             };
@@ -194,12 +209,44 @@ fn candidate_info_for(
     };
     let key = (struct_name, struct_module);
     let (field_name, inner_type_id) = single_field.get(&key)?.clone();
+    // Reject inner field types with no Wasm representation: replacing
+    // the wrapper parameter with `Unit` would yield a signature whose
+    // arity disagrees with surviving non-SROA call sites (the WIR
+    // builder filters Unit out of the Wasm result/params list), and
+    // would otherwise propagate `Unit` into a slot the inliner / WIR
+    // builder treat as a runtime value.
+    if !is_sroa_eligible_inner_type(inner_type_id, type_table) {
+        return None;
+    }
     Some(SroaInfo {
         struct_key: key,
         struct_type_id,
         inner_type_id,
         field_name,
     })
+}
+
+fn is_sroa_eligible_inner_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    // Mirrors `wir_optimize/sroa_variant_return::is_eligible_field_type`
+    // intent at NIR. Unit has no Wasm representation; replacing a
+    // wrapper struct with a Unit-typed parameter strips the
+    // corresponding arg slot and would mis-match against any surviving
+    // call site that keeps the original signature. Never has no
+    // run-time presence either.
+    if type_id == crate::tir::TypeTable::UNIT || type_id == crate::tir::TypeTable::NEVER {
+        return false;
+    }
+    // Abstract heap refs (e.g. `ref null any`) carry no precise
+    // structural type, so the call-site `FieldAccess` extraction would
+    // have no field to look up. Be defensive against these.
+    if matches!(type_table.get(type_id), ResolvedType::Function { .. }) {
+        // Function values are nullable references but the inner extraction
+        // works through `FieldAccess` only when the wrapper struct has a
+        // function-typed field by name. The single_field index already
+        // recorded the field name, so a Function field is acceptable.
+        // (Kept as a no-op branch for symmetry with future refinements.)
+    }
+    true
 }
 
 fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, ModuleSource)> {
@@ -378,7 +425,11 @@ struct ParamReadRewriter<'a> {
 
 impl NirMutVisitor for ParamReadRewriter<'_> {
     fn visit_expr(&mut self, expr: &mut NirExpr) {
-        self.walk_expr(expr);
+        // Pre-order: decide on the current expr based on its ORIGINAL shape
+        // before any child rewrite reshapes it. A post-order walk would
+        // rewrite an inner `FieldAccess(Local(b), F)` to `Local(b)` first,
+        // and an outer `FieldAccess(_, F)` would then re-match the same
+        // candidate even though it's a field access on a different struct.
         let should_replace = if let NirExprKind::FieldAccess {
             expr: inner,
             field_name,
@@ -403,9 +454,12 @@ impl NirMutVisitor for ParamReadRewriter<'_> {
             };
             // Move the inner Local out (with its name) and use the outer
             // expr's type_id (which is the inner field's type — the new
-            // scalar param type).
+            // scalar param type). The replacement is a bare Local; nothing
+            // more to walk.
             *expr = NirExpr::new(inner.kind, expr.type_id, expr.span);
+            return;
         }
+        self.walk_expr(expr);
     }
 }
 
@@ -490,60 +544,81 @@ impl NirMutVisitor for CallArgRewriter<'_> {
             NirExprKind::MethodCall { func, .. } => {
                 let key: FnKey = (func.module_source.clone(), func.name.clone());
                 if let Some(positions) = self.sroa_positions.get(&key).cloned() {
-                    // Take ownership of the MethodCall so we can rewrite
-                    // it (potentially into a plain `Call`).
-                    let kind = std::mem::replace(&mut expr.kind, NirExprKind::Unit);
-                    let NirExprKind::MethodCall {
-                        receiver,
-                        func,
-                        type_args,
-                        mut args,
-                        ..
-                    } = kind
-                    else {
-                        unreachable!();
-                    };
-                    let mut new_receiver = *receiver;
-                    if let Some(info) = positions.get(&0) {
-                        rewrite_arg(
-                            &mut new_receiver,
-                            info,
-                            self.scalar_param_struct,
-                            self.type_table,
-                        );
-                    }
-                    for (pi, info) in &positions {
-                        if *pi == 0 {
-                            continue;
-                        }
-                        let arg_idx = *pi - 1;
-                        if arg_idx < args.len() {
+                    let receiver_rewritten = positions.contains_key(&0);
+                    if receiver_rewritten {
+                        // Receiver position is SROA'd, so its static type
+                        // changes from `&Wrapper` to the inner scalar.
+                        // NIR DCE dispatches non-monomorphized methods by
+                        // the receiver's type — keeping the call as a
+                        // `MethodCall` would have DCE look up
+                        // `Wrapper::get` on `i32`. Re-emit as a `Call`
+                        // with the receiver shifted into `args[0]` so
+                        // the lookup goes through (module, name).
+                        let kind = std::mem::replace(&mut expr.kind, NirExprKind::Unit);
+                        let NirExprKind::MethodCall {
+                            receiver,
+                            func,
+                            type_args,
+                            mut args,
+                            ..
+                        } = kind
+                        else {
+                            unreachable!();
+                        };
+                        let mut new_receiver = *receiver;
+                        if let Some(info) = positions.get(&0) {
                             rewrite_arg(
-                                &mut args[arg_idx].expr,
+                                &mut new_receiver,
                                 info,
                                 self.scalar_param_struct,
                                 self.type_table,
                             );
                         }
+                        for (pi, info) in &positions {
+                            if *pi == 0 {
+                                continue;
+                            }
+                            let arg_idx = *pi - 1;
+                            if arg_idx < args.len() {
+                                rewrite_arg(
+                                    &mut args[arg_idx].expr,
+                                    info,
+                                    self.scalar_param_struct,
+                                    self.type_table,
+                                );
+                            }
+                        }
+                        let mut new_args = Vec::with_capacity(args.len() + 1);
+                        new_args.push(CallArg::new(new_receiver, false));
+                        new_args.extend(args);
+                        expr.kind = NirExprKind::Call {
+                            func,
+                            type_args,
+                            args: new_args,
+                        };
+                    } else {
+                        // Only non-receiver params are SROA'd; the
+                        // receiver's static type is unchanged so DCE /
+                        // the inliner can still dispatch by type. Keep
+                        // the `MethodCall` and rewrite only the affected
+                        // args in place.
+                        let NirExprKind::MethodCall { args, .. } = &mut expr.kind else {
+                            unreachable!();
+                        };
+                        for (pi, info) in &positions {
+                            // Position 0 is the receiver, args[i] corresponds
+                            // to position i+1 in the callee's param list.
+                            let arg_idx = pi.saturating_sub(1);
+                            if *pi >= 1 && arg_idx < args.len() {
+                                rewrite_arg(
+                                    &mut args[arg_idx].expr,
+                                    info,
+                                    self.scalar_param_struct,
+                                    self.type_table,
+                                );
+                            }
+                        }
                     }
-                    // Convert MethodCall → Call. NIR DCE dispatches
-                    // non-monomorphized methods by the receiver's type;
-                    // since the receiver was just rewritten to a scalar
-                    // (or to a `FieldAccess` whose type is the inner
-                    // scalar), keeping the call as a `MethodCall` would
-                    // confuse DCE into looking up `Wrapper::get` on
-                    // `i32`. Re-emitting as a `Call` with the receiver
-                    // shifted into args[0] makes the lookup go through
-                    // name + module, which still resolves to the
-                    // SROA'd callee.
-                    let mut new_args = Vec::with_capacity(args.len() + 1);
-                    new_args.push(CallArg::new(new_receiver, false));
-                    new_args.extend(args);
-                    expr.kind = NirExprKind::Call {
-                        func,
-                        type_args,
-                        args: new_args,
-                    };
                 }
             }
             _ => {}

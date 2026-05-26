@@ -40,7 +40,8 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{
-    NirBlock, NirExpr, NirExprKind, NirFunction, NirPattern, NirStmt, NirStmtKind, NirUnaryOp,
+    NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirPattern, NirStmt, NirStmtKind,
+    NirUnaryOp,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::{NirMutVisitor, NirOptVisitor, NirRefVisitor, opt_walk_block};
@@ -288,7 +289,12 @@ fn take_candidate_inner(stmt: &mut NirStmt) -> NirExpr {
 }
 
 fn unit_expr(span: Span) -> NirExpr {
-    NirExpr::new(NirExprKind::Unit, crate::tir::TypeId(0), span)
+    // The placeholder must carry the actual Unit type so downstream passes
+    // (`infer_stmts_result_type`, `branch_prune`, `wir_build::translate_stmt`'s
+    // `Drop` wrap heuristic) recognise it as a void expression. `TypeId(0)`
+    // is `I8` (`tir.rs:529`) — using it would tag the Unit placeholder as
+    // an i8 value and tempt downstream code to emit a stray `drop`.
+    NirExpr::new(NirExprKind::Unit, crate::tir::TypeTable::UNIT, span)
 }
 
 fn find_use_site(
@@ -421,22 +427,72 @@ fn walk_expr_for_leftmost(expr: &NirExpr, candidate: u32, field_name: &str) -> L
             walk_children_observable(args.iter(), candidate, field_name)
         }
 
-        NirExprKind::Binary { left, right, .. } => walk_children_pure(
-            [left.as_ref(), right.as_ref()].into_iter(),
-            candidate,
-            field_name,
-        ),
-        NirExprKind::Unary { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
-            walk_expr_for_leftmost(inner, candidate, field_name)
+        NirExprKind::Binary { left, right, op } => match op {
+            // `&&` and `||` short-circuit: the right operand is
+            // evaluated only when the left operand permits, so a
+            // candidate use anchored in the right operand would
+            // execute conditionally after substitution while the
+            // original `let` ran unconditionally. Treat the right
+            // operand the same way as an `if` branch — a Found there
+            // must block elision, not anchor it.
+            NirBinaryOp::And | NirBinaryOp::Or => {
+                match walk_expr_for_leftmost(left, candidate, field_name) {
+                    LeftmostWalk::Found => LeftmostWalk::Found,
+                    LeftmostWalk::Blocked => LeftmostWalk::Blocked,
+                    LeftmostWalk::Pure => match walk_expr_for_leftmost(right, candidate, field_name)
+                    {
+                        LeftmostWalk::Pure => LeftmostWalk::Pure,
+                        _ => LeftmostWalk::Blocked,
+                    },
+                }
+            }
+            // `Div` / `Mod` may trap on a zero divisor; the operation
+            // itself is observable, so a Pure subtree below it does
+            // not make the surrounding context Pure.
+            NirBinaryOp::Div | NirBinaryOp::Mod => observable_propagate(walk_children_pure(
+                [left.as_ref(), right.as_ref()].into_iter(),
+                candidate,
+                field_name,
+            )),
+            _ => walk_children_pure(
+                [left.as_ref(), right.as_ref()].into_iter(),
+                candidate,
+                field_name,
+            ),
+        },
+        NirExprKind::Unary { expr: inner, op } => match op {
+            // Deref may trap on a null receiver; the op itself is
+            // observable.
+            NirUnaryOp::Deref => {
+                observable_propagate(walk_expr_for_leftmost(inner, candidate, field_name))
+            }
+            // Arithmetic / logical / address-taking unaries are pure.
+            NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot => {
+                walk_expr_for_leftmost(inner, candidate, field_name)
+            }
+            NirUnaryOp::Ref | NirUnaryOp::MutRef => {
+                walk_expr_for_leftmost(inner, candidate, field_name)
+            }
+        },
+        // `as` lowers to `ref.cast` / numeric narrowing — both may trap.
+        NirExprKind::Cast { expr: inner, .. } => {
+            observable_propagate(walk_expr_for_leftmost(inner, candidate, field_name))
         }
+        // FieldAccess on a non-candidate receiver: a fresh `struct.get`
+        // on a possibly-null reference, so the op itself may trap. A
+        // Found in the receiver still anchors at the receiver position
+        // (the FieldAccess applies AFTER the substituted inner), but
+        // a Pure receiver does NOT make this subtree Pure.
         NirExprKind::FieldAccess { expr: inner, .. } => {
-            walk_expr_for_leftmost(inner, candidate, field_name)
+            observable_propagate(walk_expr_for_leftmost(inner, candidate, field_name))
         }
-        NirExprKind::Index { expr: inner, index } => walk_children_pure(
+        // `Array<T>::index_value`-shaped Index may trap on a null base
+        // and on OOB; the op itself is observable.
+        NirExprKind::Index { expr: inner, index } => observable_propagate(walk_children_pure(
             [inner.as_ref(), index.as_ref()].into_iter(),
             candidate,
             field_name,
-        ),
+        )),
         NirExprKind::StructLiteral { fields, .. } => {
             walk_children_pure(fields.iter().map(|f| &f.value), candidate, field_name)
         }
@@ -450,10 +506,13 @@ fn walk_expr_for_leftmost(expr: &NirExpr, candidate: u32, field_name: &str) -> L
         NirExprKind::ClosureToCanonical { functor, .. } => {
             walk_expr_for_leftmost(functor, candidate, field_name)
         }
+        // `VariantTag` / `VariantTest` / `VariantPayload` all read the
+        // discriminant or payload via `ref.cast` + `struct.get` on a
+        // possibly-null receiver; each may trap.
         NirExprKind::VariantTag { expr: inner }
         | NirExprKind::VariantTest { expr: inner, .. }
         | NirExprKind::VariantPayload { expr: inner, .. } => {
-            walk_expr_for_leftmost(inner, candidate, field_name)
+            observable_propagate(walk_expr_for_leftmost(inner, candidate, field_name))
         }
 
         NirExprKind::Local { .. }
@@ -504,6 +563,20 @@ fn walk_children_pure<'a>(
     LeftmostWalk::Pure
 }
 
+/// Wrap a child walk result so that an *observable-itself* operation
+/// (one that may trap, read the heap, or otherwise have a side effect
+/// independent of its children) does not let a Pure subtree make the
+/// surrounding context appear Pure. A `Found` child is still
+/// propagated unchanged — the substitution happens INSIDE the
+/// observable op, so the op's own effect fires AFTER the substituted
+/// inner expression, same as before elision.
+fn observable_propagate(child: LeftmostWalk) -> LeftmostWalk {
+    match child {
+        LeftmostWalk::Found => LeftmostWalk::Found,
+        LeftmostWalk::Pure | LeftmostWalk::Blocked => LeftmostWalk::Blocked,
+    }
+}
+
 fn walk_children_observable<'a>(
     children: impl Iterator<Item = &'a NirExpr>,
     candidate: u32,
@@ -545,7 +618,17 @@ impl NirMutVisitor for Substituter<'_> {
             && let NirExprKind::Local { index, .. } = &inner.kind
             && *index == self.candidate
         {
-            *expr = self.slot.take().unwrap();
+            // Preserve the outer FieldAccess's `type_id` and `span`.
+            // The candidate's inner expression and the field access
+            // share the same declared type, but the field-access node
+            // is the one downstream passes have type-resolved against
+            // (post-monomorphization type registries are keyed by the
+            // node's `type_id`). Replacing the whole `NirExpr` would
+            // swap in the slot's `type_id`, which is structurally
+            // equal but identity-distinct from the field-access type
+            // and can drift through generic specialization.
+            let slot = self.slot.take().unwrap();
+            *expr = NirExpr::new(slot.kind, expr.type_id, expr.span);
             return;
         }
         self.walk_expr(expr);
@@ -564,4 +647,224 @@ fn substitute_first_use(
         slot: Some(replacement),
     };
     sub.visit_stmt(stmt);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::nir::{NirBinaryOp, NirUnaryOp};
+    use crate::tir::TypeId;
+    use crate::token::Span;
+
+    fn ty() -> TypeId {
+        TypeId(0)
+    }
+    fn sp() -> Span {
+        Span::default()
+    }
+    fn local(index: u32) -> NirExpr {
+        NirExpr::new(
+            NirExprKind::Local {
+                index,
+                name: format!("__l{index}"),
+            },
+            ty(),
+            sp(),
+        )
+    }
+    fn int(v: i64) -> NirExpr {
+        NirExpr::new(
+            NirExprKind::IntLiteral {
+                value: v as u64,
+                repr: v.to_string(),
+            },
+            ty(),
+            sp(),
+        )
+    }
+    fn field(receiver: NirExpr, name: &str) -> NirExpr {
+        NirExpr::new(
+            NirExprKind::FieldAccess {
+                expr: Box::new(receiver),
+                field_index: 0,
+                field_name: name.to_string(),
+            },
+            ty(),
+            sp(),
+        )
+    }
+    fn index(arr: NirExpr, idx: NirExpr) -> NirExpr {
+        NirExpr::new(
+            NirExprKind::Index {
+                expr: Box::new(arr),
+                index: Box::new(idx),
+            },
+            ty(),
+            sp(),
+        )
+    }
+    fn binary(op: NirBinaryOp, lhs: NirExpr, rhs: NirExpr) -> NirExpr {
+        NirExpr::new(
+            NirExprKind::Binary {
+                left: Box::new(lhs),
+                right: Box::new(rhs),
+                op,
+            },
+            ty(),
+            sp(),
+        )
+    }
+    fn unary(op: NirUnaryOp, e: NirExpr) -> NirExpr {
+        NirExpr::new(
+            NirExprKind::Unary {
+                op,
+                expr: Box::new(e),
+            },
+            ty(),
+            sp(),
+        )
+    }
+    fn cast(e: NirExpr, target: TypeId) -> NirExpr {
+        NirExpr::new(
+            NirExprKind::Cast {
+                expr: Box::new(e),
+                target_type: target,
+            },
+            ty(),
+            sp(),
+        )
+    }
+
+    /// Use site `boxed.v + 0` — FieldAccess(Local(7), "v") is the LEFT
+    /// operand of `+`, the leftmost evaluated subexpression. Walker
+    /// must return Found.
+    #[test]
+    fn walker_finds_left_field_access() {
+        let expr = binary(NirBinaryOp::Add, field(local(7), "v"), int(0));
+        assert!(matches!(
+            walk_expr_for_leftmost(&expr, 7, "v"),
+            LeftmostWalk::Found
+        ));
+    }
+
+    /// Use site `arr[idx] + boxed.v` — `arr[idx]` is observable
+    /// (may trap on OOB / null), so a Pure result from its children
+    /// must NOT make the surrounding context Pure. The walker has to
+    /// return Blocked, not Found, because substituting the inner
+    /// expression at boxed.v's position would reorder the
+    /// candidate's effects AFTER `arr[idx]`'s heap read and possible
+    /// trap. Regression for the "trap relocation / observable
+    /// pass-through" finding.
+    #[test]
+    fn walker_blocks_when_observable_index_precedes_field() {
+        let expr = binary(
+            NirBinaryOp::Add,
+            index(local(1), local(2)),
+            field(local(7), "v"),
+        );
+        assert!(matches!(
+            walk_expr_for_leftmost(&expr, 7, "v"),
+            LeftmostWalk::Blocked
+        ));
+    }
+
+    /// Use site `(other.f) + boxed.v` — non-target `FieldAccess` may
+    /// trap on a null receiver, so its Pure-children must not paint
+    /// the surrounding context Pure.
+    #[test]
+    fn walker_blocks_when_non_target_field_precedes_field() {
+        let expr = binary(
+            NirBinaryOp::Add,
+            field(local(2), "other"),
+            field(local(7), "v"),
+        );
+        assert!(matches!(
+            walk_expr_for_leftmost(&expr, 7, "v"),
+            LeftmostWalk::Blocked
+        ));
+    }
+
+    /// Use site `(x as i32) + boxed.v` — `Cast` may trap, observable.
+    #[test]
+    fn walker_blocks_when_cast_precedes_field() {
+        let expr = binary(
+            NirBinaryOp::Add,
+            cast(local(2), ty()),
+            field(local(7), "v"),
+        );
+        assert!(matches!(
+            walk_expr_for_leftmost(&expr, 7, "v"),
+            LeftmostWalk::Blocked
+        ));
+    }
+
+    /// Use site `*p + boxed.v` — `Unary::Deref` may trap, observable.
+    #[test]
+    fn walker_blocks_when_deref_precedes_field() {
+        let expr = binary(
+            NirBinaryOp::Add,
+            unary(NirUnaryOp::Deref, local(2)),
+            field(local(7), "v"),
+        );
+        assert!(matches!(
+            walk_expr_for_leftmost(&expr, 7, "v"),
+            LeftmostWalk::Blocked
+        ));
+    }
+
+    /// Use site `(a / b) + boxed.v` — `Binary::Div` may trap on zero
+    /// divisor, observable.
+    #[test]
+    fn walker_blocks_when_div_precedes_field() {
+        let expr = binary(
+            NirBinaryOp::Add,
+            binary(NirBinaryOp::Div, local(1), local(2)),
+            field(local(7), "v"),
+        );
+        assert!(matches!(
+            walk_expr_for_leftmost(&expr, 7, "v"),
+            LeftmostWalk::Blocked
+        ));
+    }
+
+    /// Use site `boxed.v + arr[idx]` — observable on RIGHT side
+    /// only. Walker still returns Found at the leftmost FieldAccess
+    /// (left operand), since the observable Index runs AFTER the
+    /// substituted inner expression.
+    #[test]
+    fn walker_allows_observable_after_field() {
+        let expr = binary(
+            NirBinaryOp::Add,
+            field(local(7), "v"),
+            index(local(1), local(2)),
+        );
+        assert!(matches!(
+            walk_expr_for_leftmost(&expr, 7, "v"),
+            LeftmostWalk::Found
+        ));
+    }
+
+    /// Use site `Cast(boxed.v)` — FieldAccess inside an observable
+    /// op. Substitution is safe because the observable op runs
+    /// AFTER the substituted inner.
+    #[test]
+    fn walker_finds_when_field_is_inside_observable() {
+        let expr = cast(field(local(7), "v"), ty());
+        assert!(matches!(
+            walk_expr_for_leftmost(&expr, 7, "v"),
+            LeftmostWalk::Found
+        ));
+    }
+
+    /// Use site `cond && boxed.v` — the right operand of `&&` is
+    /// conditionally evaluated; a Found in the right side must
+    /// Block, not anchor.
+    #[test]
+    fn walker_blocks_field_in_right_of_and() {
+        let expr = binary(NirBinaryOp::And, local(2), field(local(7), "v"));
+        assert!(matches!(
+            walk_expr_for_leftmost(&expr, 7, "v"),
+            LeftmostWalk::Blocked
+        ));
+    }
 }

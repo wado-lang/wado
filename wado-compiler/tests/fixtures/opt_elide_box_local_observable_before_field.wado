@@ -1,0 +1,53 @@
+// Regression test: `elide_box_local`'s leftmost walker must not treat
+// a trap-/heap-read-capable subexpression as Pure passthrough. The
+// walker decides where the candidate's inner expression will be
+// substituted; if it claims "Found at boxed.v" but another observable
+// operation (`Index`, non-target `FieldAccess`, `Cast`, variant
+// projection, `Deref`, `Div`/`Mod`) is evaluated FIRST in the use
+// site, the candidate's side-effecting inner expression is relocated
+// past that observable operation and its writes are reordered with
+// observable reads.
+//
+// Setup:
+//   global mut idx;            // observable state
+//   step():                    // increments idx, returns 42
+//   let arr = [10, 20, 30];
+//   let boxed = Box { v: step() };  // idx -> 2, boxed.v = 42
+//   let n = arr[idx] + boxed.v;     // arr[idx=2]=30, n=30+42=72
+//
+// Before elision: step() runs at the `let boxed = ...` line, leaving
+// idx==2 and boxed.v==42; the binary's left operand reads arr[2]==30.
+//
+// Buggy elision (walker treats `arr[idx]` as Pure passthrough)
+// substitutes the call into the right operand and the binary now
+// evaluates left first:
+//   let n = arr[idx] + step();
+//   // arr[idx=1]==20, then step() bumps idx to 2 and returns 42
+//   // n = 20 + 42 = 62, not 72
+
+use { Stdout, println } from "core:cli";
+
+global mut idx: i32 = 1;
+
+#[inline("never")]
+fn step() -> i32 {
+    idx = idx + 1;
+    return 42;
+}
+
+struct Box {
+    v: i32,
+}
+
+export fn run() with Stdout {
+    let arr: Array<i32> = [10, 20, 30];
+    let boxed = Box { v: step() };
+    let n = arr[idx] + boxed.v;
+    assert n == 72;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}
