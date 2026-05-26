@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779789074149,
+  "lastUpdate": 1779816526144,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26325,6 +26325,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cadfa53056feb552ecd2e82a72354c2c752dec6b"
         },
         "date": 1779789073654,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 443310,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "69212c5a09f805427582cb7ea387a0d937321b4e",
+          "message": "Merge pull request #1201 from wado-lang/claude/resolve-phase-cleanup-RbzWa\n\nrefactor(elaborator): rename resolver phase to elaborator",
+          "timestamp": "2026-05-27T02:22:47+09:00",
+          "tree_id": "5b2d5c56f15b4e018929d0224d01ae18c6a2eb5f",
+          "url": "https://github.com/wado-lang/wado/commit/69212c5a09f805427582cb7ea387a0d937321b4e"
+        },
+        "date": 1779816525675,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
