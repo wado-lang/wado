@@ -35,22 +35,24 @@ The optimizer runs after lowering and before Wasm emission. `optimize.rs` orches
    3. Value-Copy Elision
    4. Value-Copy Demotion
    5. Short `push_str` Simplification
-   6. Function Inlining
-   7. LabeledBlock Fusion
-   8. Reference Elimination
-   9. SROA
-   10. Copy Propagation
-   11. Dead Argument Elimination
-   12. Dead Return Value Elimination
-   13. Write-Only Local Elimination
-   14. Common Subexpression Elimination
-   15. Store-to-Load Forwarding
-   16. Constant Folding
-   17. Constant Global Promotion
-   18. Constant Branch Pruning
-   19. Loop-Invariant Code Motion
-   20. Condition Implication
-   21. Template String Buffer Hoisting
+   6. Single-Field Parameter SROA
+   7. Function Inlining
+   8. Adjacent-Use Box-Local Elision
+   9. LabeledBlock Fusion
+   10. Reference Elimination
+   11. SROA
+   12. Copy Propagation
+   13. Dead Argument Elimination
+   14. Dead Return Value Elimination
+   15. Write-Only Local Elimination
+   16. Common Subexpression Elimination
+   17. Store-to-Load Forwarding
+   18. Constant Folding
+   19. Constant Global Promotion
+   20. Constant Branch Pruning
+   21. Loop-Invariant Code Motion
+   22. Condition Implication
+   23. Template String Buffer Hoisting
 3. Hot Field Scalarization — runs once after the loop converges.
 4. Final DCE — clean up code made dead by optimizations.
 5. Select Lowering — post-optimization rewrite (all levels).
@@ -66,6 +68,16 @@ All NIR passes live in `wado-compiler/src/optimize/`. The optimizer module-level
 Replaces small pure-function calls with their body, sized by an expression-count threshold. Eligible callees are pure, non-recursive, non-generic, take/return no references, are not from the core library, and fit under the threshold. `#[inline]` multiplies the threshold 5×, `#[inline(always)]` forces, `#[inline(never)]` blocks.
 
 E2E: [opt_inline.wado](../wado-compiler/tests/fixtures/opt_inline.wado), [opt_inline_backtrack_miscompile.wado](../wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado).
+
+### Single-Field Parameter SROA (`sroa_param.rs`)
+
+Rewrites internal functions whose parameter type is `&S` / `&mut S` for some single-field struct `S` (with `Box<T>` from `&primitive` auto-boxing the canonical case) to take the inner scalar `T` directly. At call sites, the corresponding `StructLiteral S { field: val }` allocation is replaced with `val`, eliminating heap traffic. Runs immediately before `inline` so the rewritten signature propagates through the rest of the fix-point loop.
+
+Pins exports, CM bridges, dispatch wrappers, trait methods, allocator entry points, closure-functor `__call` methods, and `$value_copy$T<id>` helpers — all carry ABI / alias contracts the rewrite must not disturb. Validates each candidate's body to reject param writes (direct `Local` write, `Local.field = …`, `Local[i] = …`, `*Local = …`) and forwards through chained Call / MethodCall positions that are themselves SROA candidates. When the SROA'd parameter is the receiver of a MethodCall, the call is converted to a plain Call so that NIR DCE — which dispatches non-monomorphized MethodCalls by receiver type — still finds the rewritten callee. The receiver / arg's auto-ref wrapper (`&local` / `&mut local` synthesised by the lower phase) is peeled before the FieldAccess wrap, otherwise the inliner's type-driven param binding would emit `let self: T = &x.field;`. NIR analog of the legacy `wir_optimize/sroa_param.rs`.
+
+### Adjacent-Use Box-Local Elision (`elide_box_local.rs`)
+
+Targets the common `Box<T>` pattern produced by `lower::translate::wrap_in_box` once `sroa_param` strips the receiver / arg side down to a scalar: `let x = Box{value: inner}; … x.value …`. When `x` is defined exactly once and read exactly once via `FieldAccess { Local(x), field_name }`, this pass substitutes the single-field initializer at the use site and drops the `Let`. Soundness is witnessed by `mod_ref::can_move_past` on every intervening sibling statement (linear control transfer, no read of the candidate, no clobber of any local / global / heap / memory location the inner reads, no trap that races with one in the inner). The identity-escape gate consults `NirFunction::address_taken_locals` and `stores_aliased_locals`. NIR analog of the retired WIR-level `elide_adjacent_single_use_struct_locals` — at NIR the substituted expressions feed back into the same fix-point loop where `copy_prop` / `const_fold` / `dce` can fold them further. E2E: [opt_elide_adjacent_struct_local.wado](../wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado), [opt_elide_adjacent_struct_local_intervening_copy.wado](../wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local_intervening_copy.wado).
 
 ### Value-Copy Elision (`value_copy_elide.rs`)
 
@@ -305,7 +317,8 @@ E2E: [pattern_match_exhaustive_variant_last_arm.wado](../wado-compiler/tests/fix
 - Nullable ref optimization — rewrites type-level representations for nullable references.
 - Pre-SROA copy propagation — inlines trivial `alias = source` so SROA can see direct variant access (RefTest/RefCast on source).
 - Variant-return SROA — rewrites functions returning a small variant (`(i32 disc, payload_0, ...)` lowering, total arity 2–4) to use Wasm multi-value returns, eliminating the boundary GC allocation. Tuple- and user-struct-return ABIs are decided by the NIR-level `optimize::multi_value_return` classifier; this pass handles only the variant case, whose layout (shared-vs-per-case payload offsets) is WIR-specific.
-- Single-field parameter SROA — rewrites `ref null S` parameters (single-field struct) to take the scalar field directly. Primary trigger is `Box<T>` from template string interpolation. E2E: [opt_sroa_box_parameter.wado](../wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado), [opt_sroa_single_field.wado](../wado-compiler/tests/fixtures/opt_sroa_single_field.wado).
+
+Single-field parameter SROA used to live here; it moved to NIR (`optimize::sroa_param`) so the rewritten signature feeds the rest of the NIR fix-point loop (inline / copy_prop / dce / cse / const_fold) instead of running once after WIR build. E2E (still valid): [opt_sroa_box_parameter.wado](../wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado), [opt_sroa_single_field.wado](../wado-compiler/tests/fixtures/opt_sroa_single_field.wado).
 
 ### Phase 2: Single-Field Struct Local Elimination (Round 1)
 
@@ -313,8 +326,7 @@ Substitutes `StructGet(LocalGet(x), field)` with the inner value when `x` is def
 
 Two complementary variants run in sequence:
 
-- Re-evaluation-safe elision (`elide_single_field_struct_locals`) — substitutes when the inner field initializer is referentially transparent (no heap reads, no calls, no allocations). Safe regardless of how far apart def and use are.
-- Adjacent-use elision (`elide_adjacent_single_use_struct_locals`) — relaxes the purity check by relying on a may-alias check between def and use instead. Fires when the local has exactly one def + one use, the use is the leftmost-evaluated descendant of some reachable sibling instruction, and every sibling between def and use either is a `Nop` placeholder or has a `ModRef` summary compatible with re-evaluating the inner field initializer at the use position (linear control transfer, no read of the candidate, no clobber of any local / global / heap / memory location the inner reads, and no trap that races with one in the inner; see `wir_optimize/mod_ref.rs`). Recovers the very common `Box<T>` boxing+inlining pattern (e.g. `Box<char> { value: <heap-reading block> }` followed by `.value`) plus FTS-shape patterns with an intervening `f_M = __local_K;` pure local copy. E2E: [opt_elide_adjacent_struct_local.wado](../wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado), [opt_elide_adjacent_struct_local_intervening_copy.wado](../wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local_intervening_copy.wado).
+- Re-evaluation-safe elision (`elide_single_field_struct_locals`) — substitutes when the inner field initializer is referentially transparent (no heap reads, no calls, no allocations). Safe regardless of how far apart def and use are. The relaxed adjacent-use variant that used to follow this pass moved to NIR (`optimize::elide_box_local`); see the NIR section below.
 
 ### Phase 3: Data Flow
 
@@ -346,7 +358,7 @@ Trivial init-guard removal — removes compiler-generated module-initialization 
 
 ### Shared facilities
 
-- Per-instruction mod/ref summary (`wir_optimize/mod_ref.rs`) — `ModRef::of(instr)` returns a conservative `(local_reads, local_writes, global_reads, global_writes, heap, memory, control, calls, allocates, may_trap)` summary of a `WirInstr` and its sub-tree. Passes consume it through three predicates: `is_re_evaluation_safe` (can the expression be moved to a later program point?), `may_clobber` (could `self`'s writes invalidate `other`'s reads?), and the `can_move_past` convenience (the common "skip an intervening statement while erasing a candidate local" check used by Phase 2's adjacent-use elision). Unrelated to Wado's algebraic-effect / `with`-clause machinery in `effect_check.rs`; the name follows the LLVM `ModRefInfo` / GCC `mod`/`ref` convention from classical compiler optimization. Granularity is intentionally coarse for now (single read/write bits per heap and memory channel, "calls clobber everything"); refining the internal representation does not require call-site churn because passes never inspect it directly.
+- Per-expression mod/ref summary (`optimize/mod_ref.rs`) — `ModRef::of_expr(...)` / `ModRef::of_stmt(...)` returns a conservative `(local_reads, local_writes, global_reads, global_writes, heap, memory, control, calls, allocates, may_trap)` summary of a `NirExpr` or `NirStmt` and its sub-tree. Passes consume it through three predicates: `is_re_evaluation_safe` (can the expression be moved to a later program point?), `may_clobber` (could `self`'s writes invalidate `other`'s reads?), and the `can_move_past` convenience (the common "skip an intervening statement while erasing a candidate local" check used by `elide_box_local`). Wasm-semantics-accurate on calls: callees cannot reach the caller's Wasm locals, so a call clobbers only `global_reads` / `heap.reads` / `memory.reads`. Unrelated to Wado's algebraic-effect / `with`-clause machinery in `effect_check.rs`; the name follows the LLVM `ModRefInfo` / GCC `mod`/`ref` convention from classical compiler optimization. Granularity is intentionally coarse for now (single read/write bits per heap and memory channel, "calls clobber everything-but-locals"); refining the internal representation does not require call-site churn because passes never inspect it directly. The WIR-level predecessor lived at `wir_optimize/mod_ref.rs` and was retired when its sole consumer (`elide_adjacent_single_use_struct_locals`) moved to NIR.
 
 ### Phase 8: Final DCE and Compaction
 
