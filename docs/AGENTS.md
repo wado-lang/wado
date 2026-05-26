@@ -112,3 +112,4 @@ It may include TODOs on WIP.
 - [String API — checked / unchecked / internal Discipline](./wep-2026-05-16-string-checked-unchecked-discipline.md)
 - [Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md)
 - [Resource Ownership and a Resource-Scoped Borrow Checker](./wep-2026-05-21-resource-ownership.md)
+- [Elaborator Re-architecture — TypeSystem / Annotate / Reify](./wep-2026-05-26-elaborator-rearchitecture.md)

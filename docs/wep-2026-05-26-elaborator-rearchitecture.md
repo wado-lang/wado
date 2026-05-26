@@ -98,7 +98,7 @@ take only type IDs and names: coercion, inference, type checking,
 trait impl lookup, method lookup. It does not know about
 `Module`, `AstId`, or `ModuleSource`-keyed per-module state.
 
-The name is honest: this object *is* the type system, not a "type
+The name is honest: this object _is_ the type system, not a "type
 context." The naming criterion — "would a new field belong in the
 type system itself?" — gates membership and prevents drift back into
 God-Object behaviour.
@@ -417,7 +417,7 @@ migration; see Trade-offs.
   during or after migration must justify its sub-struct. Reviews
   reject "just put it on `ModuleSemantics` directly."
 - **The `annotate` / `reify` split leaks during migration.**
-  Mitigation: stage 4 introduces the annotation storage *before*
+  Mitigation: stage 4 introduces the annotation storage _before_
   stage 5 splits the walk. Any annotation reify needs but
   `annotate` does not record is a stage-4 omission, surfaced as a
   panic in stage 5.
