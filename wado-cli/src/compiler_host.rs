@@ -3,7 +3,8 @@
 //! timestamps, log-level filtering, and stderr printing.
 
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 use wado_compiler::{
@@ -20,6 +21,16 @@ pub struct FilesystemCompilerHost {
     log_level: LogLevel,
     start_time: Instant,
     kiln_engine: OnceLock<wasmtime::Engine>,
+    /// In-memory only: when N invocations in one pipeline run share a
+    /// generator they share the same wasm bytes, so caching the
+    /// `Component` (which is internally `Arc`) turns N×cranelift-AOT
+    /// into 1×AOT + (N-1) cheap clones. Not persisted to disk —
+    /// caching a serialized `.cwasm` would expose a trust-the-disk
+    /// code-injection vector that this in-memory cache does not.
+    kiln_components: Mutex<Vec<([u8; 32], wasmtime::component::Component)>>,
+    /// Cache misses on `kiln_components`. Tests assert against this
+    /// rather than wall-clock timing.
+    kiln_component_compile_count: AtomicUsize,
 }
 
 impl FilesystemCompilerHost {
@@ -31,6 +42,8 @@ impl FilesystemCompilerHost {
             log_level: LogLevel::Info,
             start_time: Instant::now(),
             kiln_engine: OnceLock::new(),
+            kiln_components: Mutex::new(Vec::new()),
+            kiln_component_compile_count: AtomicUsize::new(0),
         }
     }
 
@@ -42,6 +55,8 @@ impl FilesystemCompilerHost {
             log_level: LogLevel::Off,
             start_time: Instant::now(),
             kiln_engine: OnceLock::new(),
+            kiln_components: Mutex::new(Vec::new()),
+            kiln_component_compile_count: AtomicUsize::new(0),
         }
     }
 
@@ -53,7 +68,43 @@ impl FilesystemCompilerHost {
             log_level,
             start_time: Instant::now(),
             kiln_engine: OnceLock::new(),
+            kiln_components: Mutex::new(Vec::new()),
+            kiln_component_compile_count: AtomicUsize::new(0),
         }
+    }
+
+    #[must_use]
+    pub fn kiln_component_compile_count(&self) -> usize {
+        self.kiln_component_compile_count.load(Ordering::SeqCst)
+    }
+
+    /// Concurrent callers with the same key may each compile once and
+    /// overwrite each other in the map — that's wasted but correct
+    /// (the resulting `Component`s are equivalent). Holding the Mutex
+    /// across the multi-second cranelift call would serialize unrelated
+    /// generators, which is the worse tradeoff.
+    fn get_or_compile_kiln_component(
+        &self,
+        engine: &wasmtime::Engine,
+        wasm: &[u8],
+    ) -> Result<wasmtime::component::Component, GeneratorRunnerError> {
+        let key = wado_compiler::kiln::content_hash(wasm);
+        if let Ok(guard) = self.kiln_components.lock()
+            && let Some((_, component)) = guard.iter().find(|(k, _)| k == &key)
+        {
+            return Ok(component.clone());
+        }
+        let component = kiln_runtime::compile_component(engine, wasm)?;
+        self.kiln_component_compile_count
+            .fetch_add(1, Ordering::SeqCst);
+        if let Ok(mut guard) = self.kiln_components.lock() {
+            if let Some(slot) = guard.iter_mut().find(|(k, _)| k == &key) {
+                slot.1 = component.clone();
+            } else {
+                guard.push((key, component.clone()));
+            }
+        }
+        Ok(component)
     }
 
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
@@ -154,10 +205,11 @@ impl CompilerHost for FilesystemCompilerHost {
                 .expect("kiln_engine was set above or by a racing caller")
                 .clone()
         };
+        let component = self.get_or_compile_kiln_component(&engine, component_wasm)?;
         kiln_runtime::run_generator(
             &engine,
             self.inner.clone(),
-            component_wasm,
+            &component,
             request,
             KilnRunPolicy::default(),
         )

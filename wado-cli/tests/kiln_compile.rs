@@ -1,4 +1,4 @@
-//! End-to-end test for `CliGeneratorProvider::get_component` — compiles a
+//! End-to-end test for `CliGeneratorProvider::resolve` — compiles a
 //! synthetic single-file Kiln generator through the real wado-compiler
 //! pipeline and verifies:
 //!
@@ -16,9 +16,11 @@
 
 use std::path::PathBuf;
 
+use wado_cli::compiler_host::FilesystemCompilerHost;
 use wado_cli::kiln_driver::{GeneratorProvider, ProviderError};
 use wado_cli::kiln_provider::{CACHE_DIR, CliGeneratorProvider};
 use wado_compiler::kiln::{GeneratorModule, InvocationPath};
+use wado_compiler::{CompilerHost, GeneratorInputFile, GeneratorRequest, LogLevel};
 
 mod common;
 use common::runtime;
@@ -82,13 +84,13 @@ fn first_run_compiles_second_run_hits_cache() {
     );
 
     let first = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("first compile should succeed");
     assert!(
-        first.bytes.starts_with(b"\0asm"),
+        first.wasm.starts_with(b"\0asm"),
         "component must start with wasm magic"
     );
-    assert!(first.bytes.len() > 100, "component must be non-trivial");
+    assert!(first.wasm.len() > 100, "component must be non-trivial");
     assert_eq!(
         provider.compile_count(),
         1,
@@ -124,9 +126,19 @@ fn first_run_compiles_second_run_hits_cache() {
     // No sleep needed — `compile_count` is the direct observation
     // point, not filesystem mtime.
     let second = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("second compile should succeed from cache");
-    assert_eq!(first, second, "cache hit must return identical bytes");
+    // Wasm bytes and source hash must round-trip. Descriptor `span`
+    // info is intentionally not persisted through the JSON sidecar, so
+    // descriptor equality is checked field-by-field where it matters.
+    assert_eq!(
+        first.wasm, second.wasm,
+        "cache hit must return identical wasm"
+    );
+    assert_eq!(
+        first.source_hash, second.source_hash,
+        "cache hit must return identical source hash",
+    );
     assert_eq!(
         provider.compile_count(),
         1,
@@ -149,7 +161,7 @@ fn source_edit_invalidates_cache() {
     let module = GeneratorModule::LocalPath(InvocationPath::normalize("./my_generator.wado"));
 
     let first = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("first compile should succeed");
     assert_eq!(provider.compile_count(), 1);
 
@@ -160,7 +172,7 @@ fn source_edit_invalidates_cache() {
     std::fs::write(&gen_path, edited).unwrap();
 
     let second = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("second compile after edit should succeed");
     assert_eq!(
         provider.compile_count(),
@@ -172,7 +184,7 @@ fn source_edit_invalidates_cache() {
     // verify it produced something on second compile, but don't require
     // bytewise divergence.
     assert!(
-        !second.bytes.is_empty() && second.bytes.starts_with(b"\0asm"),
+        !second.wasm.is_empty() && second.wasm.starts_with(b"\0asm"),
         "second compile should produce valid component bytes"
     );
     let _ = first;
@@ -192,14 +204,14 @@ fn adapter_generator_compiles_like_raw_request_generator() {
     let module = GeneratorModule::LocalPath(InvocationPath::normalize("./adapter_generator.wado"));
 
     let component = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("adapter-form generator must compile");
     assert!(
-        component.bytes.starts_with(b"\0asm"),
+        component.wasm.starts_with(b"\0asm"),
         "adapter generator must produce a valid wasm component"
     );
     assert!(
-        component.bytes.len() > 100,
+        component.wasm.len() > 100,
         "adapter generator must produce a non-trivial component"
     );
 
@@ -211,7 +223,7 @@ fn missing_local_path_surfaces_internal() {
     let provider = CliGeneratorProvider::new(PathBuf::from("/nonexistent-wado-kiln-root"));
     let module = GeneratorModule::LocalPath(InvocationPath::normalize("./nowhere.wado"));
     let err = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect_err("missing path should fail");
     match err {
         ProviderError::Internal { message } => {
@@ -275,14 +287,14 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
     let module = GeneratorModule::LocalPath(InvocationPath::normalize("./entry.wado"));
 
     let _first = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("first compile should succeed");
     assert_eq!(provider.compile_count(), 1);
 
     // Cache hit on the entry file alone — the entry's SHA-256 is
     // unchanged, so the v1 stable-id keeps pointing at the same WASM.
     let _second = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("second compile should succeed");
     assert_eq!(
         provider.compile_count(),
@@ -302,7 +314,7 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
     .unwrap();
 
     let _third = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("third compile should succeed");
     assert_eq!(
         provider.compile_count(),
@@ -313,7 +325,7 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
     // After the rebuild the new sidecar should reflect the latest
     // helper hash, so a fourth call hits cache cleanly.
     let _fourth = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("fourth compile should succeed");
     assert_eq!(
         provider.compile_count(),
@@ -363,7 +375,7 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
 
     // Run 1: cold cache.
     let first = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("first compile should succeed");
     assert_eq!(provider.compile_count(), 1);
     assert!(
@@ -377,7 +389,7 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
 
     // Run 2: same source bytes, fresh compile.
     let second = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("second compile should succeed");
     assert_eq!(
         provider.compile_count(),
@@ -436,7 +448,7 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
     let module = GeneratorModule::LocalPath(InvocationPath::normalize("./entry.wado"));
 
     let baseline = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("baseline compile should succeed");
 
     // Edit only the docstring. Comment-only/whitespace-only edits in
@@ -448,7 +460,7 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
     )
     .unwrap();
     let after_doc = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("post-doc-edit compile should succeed");
     assert_eq!(
         baseline.source_hash, after_doc.source_hash,
@@ -462,7 +474,7 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
     )
     .unwrap();
     let after_format = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("post-format compile should succeed");
     assert_eq!(
         baseline.source_hash, after_format.source_hash,
@@ -476,7 +488,7 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
     )
     .unwrap();
     let after_semantic = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("post-semantic-edit compile should succeed");
     assert_ne!(
         baseline.source_hash, after_semantic.source_hash,
@@ -527,14 +539,14 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
 
     // Step 1: compile at "HEAD" — capture the baseline hash.
     let head = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("HEAD compile should succeed");
     let baseline = head.source_hash;
 
     // Step 2: edit the transitive helper to a different body.
     std::fs::write(&helper_path, "pub fn answer() -> i32 { return 99; }\n").unwrap();
     let edited = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("edited compile should succeed");
     assert_ne!(
         edited.source_hash, baseline,
@@ -545,7 +557,7 @@ export fn generate(raw: RawRequest) -> Result<Response, Error> {
     // Step 3: revert the helper to its original byte content.
     std::fs::write(&helper_path, helper_original).unwrap();
     let reverted = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect("post-revert compile should succeed");
     assert_eq!(
         reverted.source_hash, baseline,
@@ -565,7 +577,7 @@ fn spec_module_surfaces_unsupported() {
     let provider = CliGeneratorProvider::new(tmp.clone());
     let module = GeneratorModule::Spec("example:proto-codegen@1.2.3".to_string());
     let err = runtime()
-        .block_on(async { provider.get_component(&module).await })
+        .block_on(async { provider.resolve(&module).await })
         .expect_err("spec module should fail until registry support lands");
     match err {
         ProviderError::Unsupported { message } => {
@@ -576,6 +588,85 @@ fn spec_module_surfaces_unsupported() {
         }
         _ => panic!("expected ProviderError::Unsupported, got {err:?}"),
     }
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// Many kiln invocations in a real project share a single generator
+/// (one `parser_gen` package, N grammars). Each call into
+/// `CompilerHost::run_generator` used to rebuild the wasmtime
+/// `Component` from scratch — i.e. ~7s of cranelift AOT per grammar
+/// for a 432KB generator. The host now caches compiled `Component`s
+/// by wasm-bytes SHA-256, so the second `run_generator` for the same
+/// bytes must not re-invoke cranelift.
+#[test]
+fn host_caches_compiled_component_across_run_generator_calls() {
+    let tmp = unique_tmp("kiln-compile-component-cache");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let gen_path = tmp.join("my_generator.wado");
+    std::fs::write(&gen_path, MINIMAL_GENERATOR).unwrap();
+
+    // Reuse the existing provider plumbing to get a real, runnable
+    // generator wasm — that's what exercises the cranelift path on
+    // first call.
+    let provider = CliGeneratorProvider::new(tmp.clone());
+    let module = GeneratorModule::LocalPath(InvocationPath::normalize("./my_generator.wado"));
+    let resolved = runtime()
+        .block_on(async { provider.resolve(&module).await })
+        .expect("generator compiles");
+
+    let host = FilesystemCompilerHost::with_log_level(tmp.clone(), LogLevel::Off);
+    assert_eq!(host.kiln_component_compile_count(), 0);
+
+    let request = || GeneratorRequest {
+        primary: GeneratorInputFile {
+            path: "schema.proto".to_string(),
+            content: "syntax = \"proto3\";".to_string(),
+        },
+        inputs: vec![],
+        options: r#"{"verbose": false}"#.to_string(),
+    };
+
+    // First call: cranelift AOT runs, count goes to 1.
+    runtime()
+        .block_on(async { host.run_generator(&resolved.wasm, request()).await })
+        .expect("first generator run");
+    assert_eq!(host.kiln_component_compile_count(), 1);
+
+    // Second call with the same bytes: cache must hit, count stays at 1.
+    runtime()
+        .block_on(async { host.run_generator(&resolved.wasm, request()).await })
+        .expect("second generator run");
+    assert_eq!(
+        host.kiln_component_compile_count(),
+        1,
+        "shared wasm bytes must reuse the cached Component"
+    );
+
+    // Different bytes (a structurally distinct generator) → cache
+    // miss, count goes to 2. Use the v2-adapter shape so the wasm
+    // body genuinely differs rather than being byte-identical after
+    // dead-code elimination on a no-op edit.
+    let alt_path = tmp.join("alt_generator.wado");
+    std::fs::write(&alt_path, ADAPTER_GENERATOR).unwrap();
+    let alt_module = GeneratorModule::LocalPath(InvocationPath::normalize("./alt_generator.wado"));
+    let alt = runtime()
+        .block_on(async { provider.resolve(&alt_module).await })
+        .expect("alt generator compiles");
+    assert_ne!(
+        resolved.wasm, alt.wasm,
+        "distinct generators must produce distinct wasm"
+    );
+    runtime()
+        .block_on(async { host.run_generator(&alt.wasm, request()).await })
+        .expect("alt generator run");
+    assert_eq!(
+        host.kiln_component_compile_count(),
+        2,
+        "distinct wasm bytes must trigger a fresh component compile"
+    );
 
     let _ = std::fs::remove_dir_all(&tmp);
 }

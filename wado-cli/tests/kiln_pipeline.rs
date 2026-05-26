@@ -10,7 +10,7 @@ use std::sync::Mutex;
 
 use indexmap::IndexMap;
 use wado_cli::kiln_driver::{
-    GeneratorComponent, GeneratorProvider, PipelineOutcome, ProviderError, run_pipeline,
+    GeneratorProvider, PipelineOutcome, ProviderError, ResolvedGenerator, run_pipeline,
 };
 use wado_cli::kiln_metadata;
 use wado_compiler::compiler_host::{
@@ -38,13 +38,11 @@ impl StubProvider {
 }
 
 impl GeneratorProvider for StubProvider {
-    async fn get_component(
-        &self,
-        _: &GeneratorModule,
-    ) -> Result<GeneratorComponent, ProviderError> {
+    async fn resolve(&self, _: &GeneratorModule) -> Result<ResolvedGenerator, ProviderError> {
         *self.calls.lock().unwrap() += 1;
-        Ok(GeneratorComponent {
-            bytes: self.bytes.clone(),
+        Ok(ResolvedGenerator {
+            wasm: self.bytes.clone(),
+            descriptor: None,
             // Tests share a single fixed byte stream across calls; an
             // empty source hash matches the legacy behaviour where the
             // metadata's `generator_source_hash` was likewise empty.
@@ -237,10 +235,10 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
     let outcome2 = run(&m, tmp.path(), &host2, &provider2, invs);
     assert_eq!(outcome2.cached.len(), 2);
     assert!(outcome2.executed.is_empty());
-    // alpha and beta declare distinct `GeneratorModule` values, so each
-    // is fetched once through the driver's per-pipeline module cache.
-    // The pre-fetch is what feeds `cache_matches` the current
-    // `source_hash`; the cache itself never had to recompile, hence no
+    // alpha and beta declare distinct `GeneratorModule` values, so the
+    // upfront `resolve_modules` step asks the provider once per module.
+    // The resolution feeds `cache_matches` the current `source_hash`;
+    // the on-disk Kiln cache itself never had to recompile, hence no
     // entry in `executed`. (See
     // `shared_module_across_invocations_calls_provider_once` for the
     // case where a single module covers both invocations.)
@@ -498,16 +496,17 @@ fn inline_invocation_populates_invocation_index_for_redirect() {
 
 #[test]
 fn shared_module_across_invocations_calls_provider_once() {
-    // The pipeline caches the provider's `get_component` result by
-    // `GeneratorModule`. Two invocations targeting the same module
-    // should resolve to a single provider call — the second invocation
-    // reuses the already-fetched component (and its source hash).
+    // The pipeline calls `provider.resolve` once per unique
+    // `GeneratorModule` upfront via `resolve_modules`, then hands the
+    // resolved artifacts to every invocation that shares the module.
+    // Two invocations targeting the same module must therefore trigger
+    // exactly one provider call.
     let tmp = tempfile::tempdir().unwrap();
     let m = empty_manifest();
 
     // Two invocations sharing the same `Spec` module. (Spec doesn't
-    // resolve through `CliGeneratorProvider` in v1, but the driver-level
-    // cache is module-keyed and target-agnostic, so the test is valid.)
+    // resolve through `CliGeneratorProvider` in v1, but the dedup is
+    // module-keyed and target-agnostic, so the test is valid.)
     let shared_module = GeneratorModule::Spec("ns:proto@1.0.0".to_string());
     let inv_a = invocation(
         "entry.wado",
