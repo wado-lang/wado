@@ -8,8 +8,33 @@ use std::sync::Mutex;
 
 use indexmap::IndexMap;
 use wado_compiler::{
-    CompilerHost, Diagnostic, SourceError, kiln::InvocationIndex, semantics_with_invocations,
+    CompilerHost, Diagnostic, LogLevel, Semantics, SourceError, kiln::InvocationIndex, load, parse,
+    semantics_of,
 };
+
+/// Run the three-stage frontend (parse → load → `semantics_of`) with the
+/// given kiln invocation index. Test-local helper that mirrors the
+/// shape of `Engine::snapshot`'s build path.
+fn build_with_invocations(
+    source: &str,
+    filename: &str,
+    host: &impl CompilerHost,
+    invocations: InvocationIndex,
+) -> Semantics {
+    block_on(async {
+        let parsed = parse(source).expect("entry source should parse");
+        let loaded = load(
+            parsed,
+            Some(filename),
+            host,
+            invocations,
+            LogLevel::default(),
+        )
+        .await
+        .expect("loader should succeed in this fixture");
+        semantics_of(loaded, host, LogLevel::default())
+    })
+}
 
 struct MapHost {
     sources: IndexMap<String, String>,
@@ -73,12 +98,7 @@ pub fn greet() {}
         "build/kiln/test-invocation/sample.wado",
     );
 
-    let sem = block_on(semantics_with_invocations(
-        entry,
-        &host,
-        Some("entry.wado"),
-        idx,
-    ));
+    let sem = build_with_invocations(entry, "entry.wado", &host, idx);
     if !sem.is_complete() {
         let diags = host.diagnostics.lock().unwrap().clone();
         panic!(
@@ -105,12 +125,7 @@ export fn run() {}
 ";
     let host = MapHost::new(&[]);
     let idx = InvocationIndex::new();
-    let sem = block_on(semantics_with_invocations(
-        entry,
-        &host,
-        Some("entry.wado"),
-        idx,
-    ));
+    let sem = build_with_invocations(entry, "entry.wado", &host, idx);
     let entry_ms = sem.interner.borrow_mut().entry_point("entry.wado");
     assert!(sem.modules.contains_key(&entry_ms));
 }

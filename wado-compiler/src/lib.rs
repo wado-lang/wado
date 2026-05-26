@@ -61,9 +61,7 @@ pub use compiler_host::{
     Severity, SourceError,
 };
 pub use logger::{Bail, Logger};
-pub use semantics::{
-    Cursor, Definition, Semantics, semantics, semantics_of, semantics_with_invocations,
-};
+pub use semantics::{Cursor, Definition, Semantics, semantics, semantics_of};
 
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;

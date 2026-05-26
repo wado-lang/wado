@@ -21,7 +21,7 @@ use std::rc::Rc;
 
 use indexmap::IndexMap;
 use wado_compiler::semantics::Semantics;
-use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic};
+use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, LogLevel};
 
 use crate::query::QueryContext;
 
@@ -175,14 +175,13 @@ impl Engine {
         }
         let filename = Uri::new(uri).to_filename();
         let collecting_host = DiagnosticCollector::new(host);
-        let invocations = kiln::prepare_invocations(&filename, &doc.text, &collecting_host);
-        let sem = wado_compiler::semantics::semantics_with_invocations(
-            &doc.text,
-            &collecting_host,
-            Some(&filename),
-            invocations,
-        )
-        .await;
+        // Three-stage composition: parse once, derive kiln invocations
+        // from the parsed entry AST, then drive load + semantics_of with
+        // the shared parse result. This avoids the second lex+parse of
+        // the entry source that a bundled `semantics_with_invocations`
+        // call would do, and threads the InvocationIndex through without
+        // the LSP having to know the loader's source-based entry point.
+        let sem = build_semantics(&doc.text, &filename, &collecting_host).await;
         let snapshot = Rc::new(Snapshot {
             sem,
             diagnostics: collecting_host.take_diagnostics(),
@@ -392,6 +391,39 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         // own side effects (e.g. CLI stderr logging) still happen.
         self.diagnostics.lock().unwrap().push(diagnostic.clone());
         self.inner.emit_diagnostic(diagnostic);
+    }
+}
+
+/// Drive the compiler frontend's three stages — `parse`, `load`,
+/// `semantics_of` — over `source`, interleaving kiln invocation
+/// discovery between parse and load so the entry AST is shared instead
+/// of parsed twice.
+///
+/// Happy-path optimization only: a parse error on the entry falls back
+/// to the `wado_compiler::semantics` convenience, which routes through
+/// the loader's source-based entry to emit a properly-formatted
+/// diagnostic. That fallback re-parses, but only on an already-failing
+/// path.
+async fn build_semantics<H: CompilerHost>(source: &str, filename: &str, host: &H) -> Semantics {
+    let parsed = match wado_compiler::parse(source) {
+        Ok(p) => p,
+        Err(_) => return wado_compiler::semantics(source, host, Some(filename)).await,
+    };
+    let invocations = kiln::prepare_invocations(filename, &parsed.ast, host);
+    match wado_compiler::load(
+        parsed,
+        Some(filename),
+        host,
+        invocations,
+        LogLevel::default(),
+    )
+    .await
+    {
+        Ok(loaded) => wado_compiler::semantics_of(loaded, host, LogLevel::default()),
+        Err(e) => {
+            host.emit_diagnostic(e.into());
+            Semantics::empty()
+        }
     }
 }
 

@@ -362,7 +362,6 @@ mod tests {
     use super::*;
     use crate::test_support::MapHost;
     use crate::text::PositionEncoding;
-    use wado_compiler::semantics::semantics_with_invocations;
 
     async fn hover_at(source: &str, line: u32, character: u32) -> Option<HoverResult> {
         hover_at_with_encoding(source, line, character, PositionEncoding::Utf16).await
@@ -518,8 +517,7 @@ mod tests {
         let path = "/test.wado";
         let uri = format!("file://{path}");
         let host = MapHost::single(path, source);
-        let invocations = wado_compiler::kiln::InvocationIndex::new();
-        let sem = semantics_with_invocations(source, &host, Some(path), invocations).await;
+        let sem = wado_compiler::semantics(source, &host, Some(path)).await;
         let ctx = QueryContext {
             sem: &sem,
             source,

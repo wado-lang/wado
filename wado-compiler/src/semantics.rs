@@ -396,75 +396,59 @@ impl<'a> Cursor<'a> {
     }
 }
 
-/// Run parse → bind → load → analyze → resolve on `source` and return the
-/// resulting [`Semantics`].
+/// Convenience: run the full compiler frontend (parse → load →
+/// `semantics_of`) over `source` with no kiln invocations and default
+/// log level.
 ///
-/// Always returns a [`Semantics`]; on failure, [`Semantics::is_complete`]
-/// is `false` and the unreachable downstream fields are empty. Diagnostics
-/// are emitted to the host's logger as the phases run.
+/// Callers that need to inspect the parsed entry between stages (LSP,
+/// kiln-aware drivers) compose the three primitives directly. Callers
+/// that need a custom log level or kiln redirects do the same.
 ///
-/// LSP queries consume the partial result as-is. Batch compilation must
-/// check [`Semantics::is_complete`] before continuing.
+/// Always returns a [`Semantics`]; on lex/parse/load failure
+/// [`Semantics::is_complete`] is `false` and the unreachable downstream
+/// fields are empty. Diagnostics are emitted through `host` as the
+/// phases run.
 pub async fn semantics<H: CompilerHost>(
     source: &str,
     host: &H,
     filename: Option<&str>,
 ) -> Semantics {
-    semantics_with_invocations(source, host, filename, crate::kiln::InvocationIndex::new()).await
-}
-
-/// Variant of [`semantics`] that seeds the loader with a Kiln
-/// [`crate::kiln::InvocationIndex`] so bare `use { X } from "<schema>"`
-/// clauses can pick up generator-produced entry modules.
-pub async fn semantics_with_invocations<H: CompilerHost>(
-    source: &str,
-    host: &H,
-    filename: Option<&str>,
-    invocations: crate::kiln::InvocationIndex,
-) -> Semantics {
     let logger = Logger::new(host, LogLevel::default());
     if let Some(f) = filename {
         logger.set_file(f);
     }
-    semantics_with_logger_invocations(source, host, filename, &logger, invocations).await
-}
-
-async fn semantics_with_logger_invocations<H: CompilerHost>(
-    source: &str,
-    host: &H,
-    filename: Option<&str>,
-    logger: &Logger<'_, H>,
-    invocations: crate::kiln::InvocationIndex,
-) -> Semantics {
-    let module_loader =
-        loader::ModuleLoader::new(host, LogLevel::default()).with_invocations(invocations);
+    let module_loader = loader::ModuleLoader::new(host, LogLevel::default())
+        .with_invocations(crate::kiln::InvocationIndex::new());
     match module_loader.load_all(source, filename).await {
-        Ok(load_result) => semantics_with_logger(load_result, logger),
+        Ok(load_result) => semantics_with_logger(load_result, &logger),
         Err(e) => {
             let _ = logger.error(e);
-            empty_semantics()
+            Semantics::empty()
         }
     }
 }
 
-/// Construct a `Semantics` with no modules at all. Used when the loader
-/// failed outright (e.g. parse error on the entry module): callers can
-/// still treat the returned snapshot uniformly, with every query
-/// returning the natural empty answer.
-fn empty_semantics() -> Semantics {
-    let interner = std::rc::Rc::new(std::cell::RefCell::new(ModuleSourceInterner::new()));
-    Semantics::partial(
-        ModuleSource::entry_point_uninitialized(),
-        IndexMap::default(),
-        IndexMap::default(),
-        SymbolTable::new(),
-        TypeTable::new(),
-        interner,
-        None,
-        IndexMap::default(),
-        IndexMap::default(),
-        IndexMap::default(),
-    )
+impl Semantics {
+    /// Construct an empty [`Semantics`] with no modules at all. Used when
+    /// an upstream phase fails outright (parse error on the entry, load
+    /// failure) and callers still want to treat the result uniformly —
+    /// every query returns the natural empty answer.
+    #[must_use]
+    pub fn empty() -> Self {
+        let interner = std::rc::Rc::new(std::cell::RefCell::new(ModuleSourceInterner::new()));
+        Semantics::partial(
+            ModuleSource::entry_point_uninitialized(),
+            IndexMap::default(),
+            IndexMap::default(),
+            SymbolTable::new(),
+            TypeTable::new(),
+            interner,
+            None,
+            IndexMap::default(),
+            IndexMap::default(),
+            IndexMap::default(),
+        )
+    }
 }
 
 /// Stage 3 of the compiler frontend: run analyze + resolve on a pre-loaded

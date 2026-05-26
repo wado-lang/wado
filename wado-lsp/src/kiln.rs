@@ -37,19 +37,21 @@ use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 
 /// Build a consume-only [`InvocationIndex`] for the entry document.
 ///
-/// `entry_filename` must match the `filename` argument that
-/// [`wado_compiler::semantics_with_invocations`] receives downstream;
-/// otherwise the compiler-side redirect lookup misses. `Engine::*` query
-/// methods feed the URI through `uri_to_filename` and pass that string
-/// to both this helper and the semantics pipeline.
+/// `entry_filename` must match the `filename` argument the semantics
+/// pipeline receives downstream; otherwise the compiler-side redirect
+/// lookup misses. `Engine::*` query methods feed the URI through
+/// `uri_to_filename` and pass that string to both this helper and the
+/// downstream `wado_compiler::load` call.
 ///
-/// Returns an empty index when the entry has no inline `with` clauses,
-/// when no enclosing `wado.toml` is found, or when the source cannot be
-/// parsed (the regular compile pass surfaces the parse error
-/// downstream — we don't need to report it twice).
+/// Takes `&Module` (the parsed entry AST) instead of source bytes so
+/// the LSP can share the parse result with the downstream load stage —
+/// see `Engine::snapshot` for the shared-parse flow.
+///
+/// Returns an empty index when the entry has no inline `with` clauses
+/// or no enclosing `wado.toml` is found.
 pub fn prepare_invocations<H: CompilerHost>(
     entry_filename: &str,
-    source: &str,
+    entry_ast: &Module,
     host: &H,
 ) -> InvocationIndex {
     let entry_path = Path::new(entry_filename);
@@ -57,12 +59,8 @@ pub fn prepare_invocations<H: CompilerHost>(
         return InvocationIndex::new();
     };
 
-    let Ok(parsed) = wado_compiler::parse(source) else {
-        return InvocationIndex::new();
-    };
-
     let mut modules = wado_compiler::hashmap::IndexMap::default();
-    modules.insert(entry_filename.to_string(), parsed.ast);
+    modules.insert(entry_filename.to_string(), entry_ast.clone());
     let descriptors = wado_compiler::hashmap::IndexMap::default();
     let manifest_root_str = manifest_root.to_string_lossy();
     let invocations = match collect_inline_invocations(&modules, &descriptors, &manifest_root_str) {
@@ -73,9 +71,6 @@ pub fn prepare_invocations<H: CompilerHost>(
         Err(_) => return InvocationIndex::new(),
     };
 
-    let entry_module = modules
-        .get(entry_filename)
-        .expect("entry module was just inserted");
     let mut index = InvocationIndex::new();
     for invocation in &invocations {
         let invocation_id = &invocation.decl_site.synthetic_id;
@@ -87,12 +82,12 @@ pub fn prepare_invocations<H: CompilerHost>(
                     &entry_uri,
                 );
                 for path in &modified {
-                    let span = use_decl_span_for(entry_module, &invocation.from, entry_filename);
+                    let span = use_decl_span_for(entry_ast, &invocation.from, entry_filename);
                     emit_modified(host, invocation_id, path, span);
                 }
             }
             Err(reason) => {
-                let span = use_decl_span_for(entry_module, &invocation.from, entry_filename);
+                let span = use_decl_span_for(entry_ast, &invocation.from, entry_filename);
                 emit_stale(host, invocation_id, &reason, span);
             }
         }
