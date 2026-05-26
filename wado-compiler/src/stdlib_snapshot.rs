@@ -1,4 +1,4 @@
-//! Per-thread snapshot of the stdlib closure's post-`semantics_from_loaded`
+//! Per-thread snapshot of the stdlib closure's post-`semantics_with_logger`
 //! state.
 //!
 //! Every `compile_with_options` invocation that targets non-stdlib user
@@ -54,14 +54,14 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::ModuleLoader;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
-use crate::semantics::{Semantics, semantics_from_loaded};
+use crate::semantics::{Semantics, semantics_with_logger};
 use crate::tir::{TirFunction, TirModule, TypeTable};
 
 thread_local! {
     static SNAPSHOT: OnceCell<Rc<Semantics>> = const { OnceCell::new() };
     /// Re-entry guard for [`get_or_init_snapshot`].  Set to `true`
     /// while [`build_snapshot`] is running.  The synthetic snapshot
-    /// build calls through `semantics_from_loaded` (which itself looks up
+    /// build calls through `semantics_with_logger` (which itself looks up
     /// the snapshot) so we must report "no snapshot yet" to the inner
     /// invocation rather than try to enter the `OnceCell` initialiser
     /// recursively — `OnceCell::get_or_init` panics on re-entry.
@@ -71,10 +71,10 @@ thread_local! {
 /// Return the current thread's stdlib [`Semantics`] snapshot.
 ///
 /// On first call the snapshot is built by driving the full loader +
-/// [`semantics_from_loaded`] pipeline over an empty entry source. Returns
+/// [`semantics_with_logger`] pipeline over an empty entry source. Returns
 /// [`None`] if the current call is itself running underneath
 /// [`build_snapshot`] — that is the call path the snapshot builder
-/// takes through `semantics_from_loaded`, and trying to satisfy it from the
+/// takes through `semantics_with_logger`, and trying to satisfy it from the
 /// (still-being-built) cache would re-enter the `OnceCell` initialiser.
 ///
 /// # Panics
@@ -109,7 +109,7 @@ pub(crate) fn get_or_init_snapshot() -> Option<Rc<Semantics>> {
 }
 
 /// Build the current thread's snapshot now, ahead of the first
-/// `semantics_from_loaded` call.  Intended for parallel batch drivers (e.g.
+/// `semantics_with_logger` call.  Intended for parallel batch drivers (e.g.
 /// `wado test`) to amortise the ~120 ms snapshot build across worker
 /// threads before any compile work is scheduled, instead of paying
 /// the cost on each worker's first compile.
@@ -120,7 +120,7 @@ pub fn prewarm() {
     let _ = get_or_init_snapshot();
 }
 
-/// Drive the full loader + `semantics_from_loaded` pipeline on an empty
+/// Drive the full loader + `semantics_with_logger` pipeline on an empty
 /// entry source.  The loader's implicit-modules pass pulls in
 /// `core:prelude` and its transitive closure, matching the stdlib
 /// subset every real compile loads.
@@ -144,7 +144,7 @@ fn build_snapshot() -> Semantics {
     })
     .expect("stdlib snapshot loader should succeed");
 
-    let sem = semantics_from_loaded(load_result, &logger);
+    let sem = semantics_with_logger(load_result, &logger);
     assert!(
         sem.is_complete(),
         "stdlib snapshot should compute semantics cleanly",

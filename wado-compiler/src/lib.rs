@@ -61,7 +61,9 @@ pub use compiler_host::{
     Severity, SourceError,
 };
 pub use logger::{Bail, Logger};
-pub use semantics::{Cursor, Definition, Semantics, semantics, semantics_with_invocations};
+pub use semantics::{
+    Cursor, Definition, Semantics, semantics, semantics_of, semantics_with_invocations,
+};
 
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
@@ -330,22 +332,22 @@ fn compile_after_load<H: CompilerHost>(
         &mut load_result.modules,
     );
 
-    // Save wasm asset bytes before `semantics_from_loaded` consumes the
+    // Save wasm asset bytes before `semantics_with_logger` consumes the
     // `LoadResult`. They flow through the package to codegen below.
     let wasm_assets = load_result.wasm_assets.clone();
 
     // === Phases 2 + 6a + 6b: Analyze + Annotate + Lower TIR ===
-    // `semantics_from_loaded` performs analyze, type resolution, and
+    // `semantics_with_logger` performs analyze, type resolution, and
     // body-level TIR lowering. The resulting `Semantics` carries the
     // `TirModule`s the batch compiler needs plus the use→def reference
     // map LSP queries need.
     //
-    // `semantics_from_loaded` always returns a `Semantics`. For batch
+    // `semantics_with_logger` always returns a `Semantics`. For batch
     // compilation we refuse to continue when the pipeline did not fully
     // resolve — the downstream phases assume populated `state` /
     // `tir_modules`. Diagnostics explaining the failure have already
     // been emitted to the host.
-    let sem = semantics::semantics_from_loaded(load_result, logger);
+    let sem = semantics::semantics_with_logger(load_result, logger);
     if !sem.is_complete() {
         return Err(Bail);
     }
@@ -988,7 +990,9 @@ pub async fn load<H: CompilerHost>(
     log_level: LogLevel,
 ) -> Result<LoadResult, LoadError> {
     let loader = loader::ModuleLoader::new(host, log_level).with_invocations(invocations);
-    loader.load_all_from_parsed_entry(parsed.ast, filename).await
+    loader
+        .load_all_from_parsed_entry(parsed.ast, filename)
+        .await
 }
 
 /// Parse a Wado source file into AST and trivia map.

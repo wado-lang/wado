@@ -52,7 +52,7 @@ pub struct Semantics {
     /// the borrow at the statement boundary.
     pub interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
     /// Per-module structural index (name spans, write targets, span lookup).
-    /// Built once per [`Module`] in [`semantics_from_loaded`]. LSP queries (and
+    /// Built once per [`Module`] in [`semantics_with_logger`]. LSP queries (and
     /// the in-tree [`name_span_of`] / [`span_of_key`] helpers) consult this
     /// instead of re-walking the AST on every request.
     pub(crate) ast_indices: IndexMap<ModuleSource, AstIndex>,
@@ -125,7 +125,7 @@ impl Semantics {
     /// downstream field is empty and [`Self::is_complete`] returns `false`.
     ///
     /// Used as the partial-result return value when an analysis phase bails
-    /// in [`semantics_from_loaded`].
+    /// in [`semantics_with_logger`].
     fn partial(
         entry_module_source: ModuleSource,
         modules: IndexMap<ModuleSource, Module>,
@@ -439,7 +439,7 @@ async fn semantics_with_logger_invocations<H: CompilerHost>(
     let module_loader =
         loader::ModuleLoader::new(host, LogLevel::default()).with_invocations(invocations);
     match module_loader.load_all(source, filename).await {
-        Ok(load_result) => semantics_from_loaded(load_result, logger),
+        Ok(load_result) => semantics_with_logger(load_result, logger),
         Err(e) => {
             let _ = logger.error(e);
             empty_semantics()
@@ -467,13 +467,32 @@ fn empty_semantics() -> Semantics {
     )
 }
 
-/// Run analyze + resolve on a pre-loaded module set and return the resulting
-/// [`Semantics`]. Used by `compile_with_options` which loads modules once and
-/// also needs to inspect the entry AST for `#![TODO]` detection.
+/// Stage 3 of the compiler frontend: run analyze + resolve on a pre-loaded
+/// module set and return the resulting [`Semantics`].
 ///
-/// Always returns a [`Semantics`]. When a phase bails, the downstream
-/// fields are left empty and [`Semantics::is_complete`] is set to `false`.
-pub(crate) fn semantics_from_loaded<H: CompilerHost>(
+/// Pair with [`crate::parse`] (stage 1) and [`crate::load`] (stage 2). The
+/// convenience [`semantics`] wraps all three for callers that don't need
+/// to inspect the parsed entry between stages.
+///
+/// Always returns a [`Semantics`]; on phase bail, downstream fields are
+/// empty and [`Semantics::is_complete`] returns `false`.
+pub fn semantics_of<H: CompilerHost>(
+    loaded: loader::LoadResult,
+    host: &H,
+    log_level: LogLevel,
+) -> Semantics {
+    let logger = Logger::new(host, log_level);
+    let entry_filename = loaded.entry_module_source.diagnostic_filename();
+    if !entry_filename.is_empty() {
+        logger.set_file(&entry_filename);
+    }
+    semantics_with_logger(loaded, &logger)
+}
+
+/// Logger-sharing variant. Internal: lets callers that already maintain a
+/// `Logger` for the full compile pipeline nest analyze/resolve trace
+/// spans under the same root.
+pub(crate) fn semantics_with_logger<H: CompilerHost>(
     load_result: loader::LoadResult,
     logger: &Logger<'_, H>,
 ) -> Semantics {
