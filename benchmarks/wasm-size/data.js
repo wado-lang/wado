@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779816526144,
+  "lastUpdate": 1779834012592,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26369,6 +26369,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/69212c5a09f805427582cb7ea387a0d937321b4e"
         },
         "date": 1779816525675,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 443310,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5a426d04dcbaeba0a0d047fb1f510817c2fe2a6d",
+          "message": "Merge pull request #1202 from wado-lang/claude/wado-lsp-type-hints-b2g3b\n\nfeat(lsp): textDocument/inlayHint with type and parameter-name hints",
+          "timestamp": "2026-05-27T07:14:02+09:00",
+          "tree_id": "9a6a7cdce2961ef34be2af0cdc573b771a822cab",
+          "url": "https://github.com/wado-lang/wado/commit/5a426d04dcbaeba0a0d047fb1f510817c2fe2a6d"
+        },
+        "date": 1779834012119,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
