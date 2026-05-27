@@ -628,7 +628,10 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // the ~28 s of CPU otherwise duplicated across a typical `wado test`
     // run.  Returns `None` when called from inside the snapshot builder
     // itself (re-entry guard); a fresh full pipeline runs in that case.
-    let snapshot = crate::stdlib_snapshot::get_or_init_snapshot();
+    let snapshot = {
+        let _span = logger.span("stdlib_snapshot");
+        crate::stdlib_snapshot::get_or_init_snapshot()
+    };
 
     let (symbols, analyze_ok) = {
         let _span = logger.span("analyze");
