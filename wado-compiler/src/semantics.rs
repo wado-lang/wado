@@ -722,7 +722,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // Take an immutable snapshot of the type table at the end of lowering.
     // LSP queries read this snapshot; any further lowering (none today) would
     // continue interning into the shared `Rc<RefCell<TypeTable>>` held by
-    // `state.type_table`.
+    // `state.tysys.type_table`.
     let types = state.tysys.type_table.borrow().clone();
 
     // Drain the elaborator's shared reference / local maps into owned IndexMaps

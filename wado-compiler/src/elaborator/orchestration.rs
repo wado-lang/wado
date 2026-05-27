@@ -664,7 +664,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // loader-synthesised wasm-asset modules so calls into a
             // wat/wasm asset's exports lower through the same TirImport
             // path as `core:builtin` declarations.  Stdlib wasm assets
-            // (e.g. `core:libm.wat`) are already in `snap.state.builtin_registry`.
+            // (e.g. `core:libm.wat`) are already in
+            // `snapshot.state.tysys.builtin_registry`.
             for (ms, module) in modules {
                 if matches!(ms, ModuleSource::Wasm { .. }) && !stdlib_set.contains(ms) {
                     registry.register_wasm_module(module, &type_table);
@@ -701,7 +702,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let all_generic_newtypes = Rc::new(all_generic_newtypes);
 
         // Pre-compute the global known type names cache once (shared across all modules)
-        let global_known_type_names = {
+        let known_type_names_cache = {
             let mut cache = IndexSet::default();
             for m in all_struct_fields.values() {
                 for name in m.keys() {
@@ -743,7 +744,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // At this point all type names from all modules are known, so any unrecognized
         // Named type is truly undefined. This catches undefined types that would silently
         // become UNKNOWN in static pre-resolution.
-        // Resource type names are kept separate from global_known_type_names because
+        // Resource type names are kept separate from known_type_names_cache because
         // adding them would break is_known_type_name() used in impl block type parameter
         // inference (e.g., `impl Request { ... }` would stop recognizing Request's methods).
         let resource_type_names: IndexSet<String> = all_resource_types
@@ -752,14 +753,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect();
         Self::validate_type_definitions(
             modules,
-            &global_known_type_names,
+            &known_type_names_cache,
             &resource_type_names,
             logger,
             &stdlib_set,
         )?;
 
         // Pre-build function name → index maps for all loaded modules (O(1) lookup)
-        let all_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>> = {
+        let loaded_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>> = {
             let mut indices: IndexMap<ModuleSource, IndexMap<String, usize>> = snapshot_state
                 .map(|s| (*s.tysys.loaded_module_func_indices).clone())
                 .unwrap_or_default();
@@ -818,8 +819,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             wasi_registry,
             builtin_registry: Rc::new(builtin_registry),
             included_files,
-            known_type_names_cache: Rc::new(global_known_type_names),
-            loaded_module_func_indices: Rc::new(all_module_func_indices),
+            known_type_names_cache: Rc::new(known_type_names_cache),
+            loaded_module_func_indices: Rc::new(loaded_module_func_indices),
         };
         Ok(AnnotateState {
             tysys,
@@ -1003,10 +1004,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 imported_functions,
                 namespace_imports,
                 logger,
-                current_module_source: ModuleSource::entry_point_uninitialized(), // Set in resolve_module
+                current_module_source: ModuleSource::entry_point_uninitialized(), // Set in Elaborator::resolve_module
                 entry_module_source: entry_module_source.clone(),
-                current_module_items: &[], // Set in resolve_module
-                effect_sources: IndexMap::default(), // Populated per-module in resolve_module
+                current_module_items: &[], // Set in Elaborator::resolve_module
+                effect_sources: IndexMap::default(), // Populated per-module in Elaborator::resolve_module
                 current_effect_params: IndexSet::default(),
                 current_effect_param_decls: IndexMap::default(),
                 trait_ctx: super::trait_env::TraitContext::default(),
