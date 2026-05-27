@@ -161,7 +161,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 let expected = expected_elem_types.get(i).copied();
                                 let resolved = self.resolve_expr(elem, ctx, expected);
                                 if let Some(expected_type) = expected {
-                                    self.tysys.typecheck(self.logger, resolved.type_id, expected_type, elem.span());
+                                    self.tysys.typecheck(
+                                        self.logger,
+                                        resolved.type_id,
+                                        expected_type,
+                                        elem.span(),
+                                    );
                                 }
                                 resolved
                             })
@@ -743,11 +748,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let pat_mut = is_mut || matches!(pattern, ast::Pattern::MutIdent { .. });
                 let binding_type = match ref_binding {
                     RefBinding::Ref => self
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .intern(ResolvedType::Ref(type_id)),
                     RefBinding::MutRef => self
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .intern(ResolvedType::MutRef(type_id)),
                     RefBinding::None => type_id,
@@ -953,7 +960,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check return value type matches function return type
         if let Some(value) = &value {
-            self.tysys.typecheck_return(self.logger, value.type_id, return_type, ret_stmt.span);
+            self.tysys
+                .typecheck_return(self.logger, value.type_id, return_type, ret_stmt.span);
         }
 
         TirStmt::new(TirStmtKind::Return { value }, ret_stmt.span)
@@ -1309,11 +1317,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let is_mut = matches!(pattern, Pattern::MutIdent { .. });
                 let binding_type = match ref_binding {
                     RefBinding::Ref => self
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .intern(ResolvedType::Ref(scrutinee_type)),
                     RefBinding::MutRef => self
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .intern(ResolvedType::MutRef(scrutinee_type)),
                     RefBinding::None => scrutinee_type,
@@ -1491,11 +1501,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     let binding_type = match ref_binding {
                         RefBinding::Ref => self
-                            .tysys.type_table
+                            .tysys
+                            .type_table
                             .borrow_mut()
                             .intern(ResolvedType::Ref(scrutinee_type)),
                         RefBinding::MutRef => self
-                            .tysys.type_table
+                            .tysys
+                            .type_table
                             .borrow_mut()
                             .intern(ResolvedType::MutRef(scrutinee_type)),
                         RefBinding::None => scrutinee_type,
@@ -1885,7 +1897,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }?;
         let variant_info = self.lookup_variant_case(&variant_name)?;
         let none_case_name = self
-            .tysys.type_table
+            .tysys
+            .type_table
             .borrow()
             .compiler_items()
             .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
@@ -2249,7 +2262,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut destruct_stmts = Vec::new();
         if is_destructured && let crate::ast::Pattern::Tuple(tp, _) = &for_of.binding {
             let inner_elems = self
-                .tysys.type_table
+                .tysys
+                .type_table
                 .borrow()
                 .as_tuple(binding_type)
                 .unwrap_or_else(|| vec![binding_type]);
@@ -2396,7 +2410,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span,
                 );
                 let enum_tuple_type = self
-                    .tysys.type_table
+                    .tysys
+                    .type_table
                     .borrow_mut()
                     .make_tuple(vec![i32_type, elem_type]);
                 let enum_tuple = TirExpr::new(
@@ -2648,7 +2663,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Some` token has no source position, so giving it one would be
         // misleading.
         let some_case_name = self
-            .tysys.type_table
+            .tysys
+            .type_table
             .borrow()
             .compiler_items()
             .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)

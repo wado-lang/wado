@@ -392,8 +392,8 @@ fn compile_after_load<H: CompilerHost>(
     // on `Arc::try_unwrap` succeeding to swap layers in place; a stray
     // clone here would force a deep `TraitEnv` clone instead.
     let tysys = state.tysys;
-    let builtin_registry = std::rc::Rc::try_unwrap(tysys.builtin_registry)
-        .unwrap_or_else(|rc| (*rc).clone());
+    let builtin_registry =
+        std::rc::Rc::try_unwrap(tysys.builtin_registry).unwrap_or_else(|rc| (*rc).clone());
     let package = Package::new(
         entry_module_source,
         tir_modules,

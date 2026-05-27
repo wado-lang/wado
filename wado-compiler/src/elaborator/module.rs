@@ -109,7 +109,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .enumerate()
                         .map(|(i, param)| {
                             scope
-                                .tysys.type_table
+                                .tysys
+                                .type_table
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), i as u32)
                         })
@@ -283,7 +284,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Item::Flags(flags_decl) => {
                     // Create a distinct Flags type (not a newtype over u32)
                     let flags_type = self
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .make_flags(flags_decl.name.clone(), self.current_module_source.clone());
                     // Add to newtypes so it can be used as a type name
@@ -369,12 +371,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         let type_id = if param.is_pack {
                             scope
-                                .tysys.type_table
+                                .tysys
+                                .type_table
                                 .borrow_mut()
                                 .make_type_pack(param.name.clone(), actual_idx)
                         } else {
                             scope
-                                .tysys.type_table
+                                .tysys
+                                .type_table
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), actual_idx)
                         };
@@ -414,7 +418,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 {
                                     let index = (offset + i) as u32;
                                     let type_id = scope
-                                        .tysys.type_table
+                                        .tysys
+                                        .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), index);
                                     scope
@@ -482,7 +487,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for (i, param) in method.type_params.iter().enumerate() {
                             let idx = (offset + i) as u32;
                             let type_id = scope
-                                .tysys.type_table
+                                .tysys
+                                .type_table
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), idx);
                             scope

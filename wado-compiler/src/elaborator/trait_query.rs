@@ -550,12 +550,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             self_type_param_name.as_deref(),
                             &assoc_decl.bounds,
                         );
-                        scope.tysys.type_table.borrow_mut().make_assoc_type_projection(
-                            self_type_id,
-                            assoc_decl.name.clone(),
-                            bound_names,
-                            atb,
-                        )
+                        scope
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_assoc_type_projection(
+                                self_type_id,
+                                assoc_decl.name.clone(),
+                                bound_names,
+                                atb,
+                            )
                     });
                     scope
                         .trait_ctx
@@ -572,7 +576,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut method_type_param_ids: Vec<TypeId> = Vec::new();
                 for (index, param) in method.type_params.iter().enumerate() {
                     let type_id = scope
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .make_type_param(param.name.clone(), index as u32);
                     scope
@@ -880,9 +885,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Resolve and register each associated type in this substituted context
             for binding in &info.assoc_types {
                 let resolved_id = scope.resolve_type(&binding.ty);
-                if !scope.tysys.type_table.borrow().contains_type_param(resolved_id) {
+                if !scope
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_type_param(resolved_id)
+                {
                     scope
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
@@ -953,9 +964,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Resolve and register each associated type
             for binding in &info.assoc_types {
                 let resolved_id = scope.resolve_type(&binding.ty);
-                if !scope.tysys.type_table.borrow().contains_type_param(resolved_id) {
+                if !scope
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_type_param(resolved_id)
+                {
                     scope
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
@@ -1124,7 +1141,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let return_type = if is_eq {
                 TypeTable::BOOL
             } else if is_ord {
-                self.tysys.type_table
+                self.tysys
+                    .type_table
                     .borrow_mut()
                     .make_compiler_enum(CompilerItem::Ordering)
             } else {
@@ -1134,13 +1152,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (info.trait_name, info.self_kind, param_types, return_type)
         } else if (is_eq || is_ord) && self.type_implements_trait(lookup_type_id, trait_name) {
             let ref_self_ty = self
-                .tysys.type_table
+                .tysys
+                .type_table
                 .borrow_mut()
                 .intern(ResolvedType::Ref(lookup_type_id));
             let return_type = if is_eq {
                 TypeTable::BOOL
             } else {
-                self.tysys.type_table
+                self.tysys
+                    .type_table
                     .borrow_mut()
                     .make_compiler_enum(CompilerItem::Ordering)
             };
@@ -1228,14 +1248,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let ref_self_ty = self
-            .tysys.type_table
+            .tysys
+            .type_table
             .borrow_mut()
             .intern(ResolvedType::Ref(base_type_id));
         let is_eq_match = trait_name == eq_name;
         let return_type = if is_eq_match {
             TypeTable::BOOL
         } else {
-            self.tysys.type_table
+            self.tysys
+                .type_table
                 .borrow_mut()
                 .make_compiler_enum(CompilerItem::Ordering)
         };

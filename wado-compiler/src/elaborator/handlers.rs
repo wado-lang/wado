@@ -142,7 +142,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // import graph a second time via `canonical_decl_key`.
                     let key = (module_source.clone(), name.clone());
                     let is_known_effect = self.tysys.trait_env.effect_decl_index.contains_key(&key);
-                    let is_known_resource = self.tysys.trait_env.resource_decl_index.contains_key(&key);
+                    let is_known_resource =
+                        self.tysys.trait_env.resource_decl_index.contains_key(&key);
                     if !is_known_effect && !is_known_resource {
                         let _ = self.logger.error(TypeError::NotAnEffect {
                             name: name.clone(),
@@ -389,12 +390,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // a same-named effect / resource.
             let canonical_key = self.canonical_decl_key(&base_trait_name);
             let decl_module = self
-                .tysys.trait_env
+                .tysys
+                .trait_env
                 .effect_decl_index
                 .get(&canonical_key)
                 .map(|(m, _)| m.clone())
                 .or_else(|| {
-                    self.tysys.trait_env
+                    self.tysys
+                        .trait_env
                         .resource_decl_index
                         .get(&canonical_key)
                         .map(|(m, _)| m.clone())
@@ -461,7 +464,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let value = self.resolve_expr(&resume.value, ctx, expected);
 
         if ctx.in_handler_method {
-            self.tysys.typecheck(self.logger, value.type_id, ctx.return_type, resume.span);
+            self.tysys
+                .typecheck(self.logger, value.type_id, ctx.return_type, resume.span);
         }
 
         TirExpr::new(

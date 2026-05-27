@@ -994,7 +994,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             let (type_id, consumed_index) = if tp.is_pack {
                 (
-                    self.tysys.type_table
+                    self.tysys
+                        .type_table
                         .borrow_mut()
                         .make_type_pack(tp.name.clone(), idx),
                     true,
@@ -1003,7 +1004,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 (self.resolve_type(&ast::Type::Function(sig.clone())), false)
             } else {
                 (
-                    self.tysys.type_table
+                    self.tysys
+                        .type_table
                         .borrow_mut()
                         .make_type_param(tp.name.clone(), idx),
                     true,

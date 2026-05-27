@@ -395,7 +395,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Null literal → Option<T>
         if let Expr::Literal(lit) = expr
             && matches!(&lit.value, Literal::Null)
-            && self.tysys.type_table.borrow().as_option(target_type).is_some()
+            && self
+                .tysys
+                .type_table
+                .borrow()
+                .as_option(target_type)
+                .is_some()
         {
             return Some(TirExpr::new(TirExprKind::Null, target_type, lit.span));
         }
@@ -407,9 +412,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) || matches!(expr, Expr::TemplateString(_));
 
         if is_string_or_template {
-            let base_id = self.tysys.type_table.borrow().get_ultimate_base_type(target_type);
+            let base_id = self
+                .tysys
+                .type_table
+                .borrow()
+                .get_ultimate_base_type(target_type);
             let string_struct_name = self
-                .tysys.type_table
+                .tysys
+                .type_table
                 .borrow()
                 .compiler_items()
                 .struct_name(crate::compiler_item::CompilerItem::String)
@@ -429,7 +439,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // unwrapped base fn type (so unannotated params are inferred from the
         // expected signature) and retag the result with the newtype id.
         if matches!(expr, Expr::Closure(_)) {
-            let base_id = self.tysys.type_table.borrow().get_ultimate_base_type(target_type);
+            let base_id = self
+                .tysys
+                .type_table
+                .borrow()
+                .get_ultimate_base_type(target_type);
             let is_fn_newtype = matches!(
                 self.tysys.type_table.borrow().get(base_id),
                 ResolvedType::Function { .. }
@@ -523,7 +537,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // current-module fallback — if neither resolves, the builder
         // has no callable `new_literal` and that's a synthesis bug.
         let impl_module_source = self
-            .tysys.trait_env
+            .tysys
+            .trait_env
             .impl_module_for(
                 &builder_name_for_lookup,
                 &trait_name,
@@ -541,7 +556,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let span = expr.span();
         let string_type = self
-            .tysys.type_table
+            .tysys
+            .type_table
             .borrow_mut()
             .make_compiler_struct(crate::compiler_item::CompilerItem::String);
         let i32_type = TypeTable::I32;
@@ -823,7 +839,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|info| (info, false))
             .or_else(|| {
                 // For newtypes, try the base type's SequenceLiteral impl
-                let base_type = self.tysys.type_table.borrow().get_newtype_base(target_type)?;
+                let base_type = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .get_newtype_base(target_type)?;
                 let base_name = self.struct_name_for_type(base_type)?;
                 self.find_sequence_literal_trait_impl(&base_name, base_type)
                     .map(|info| (info, true))
@@ -938,7 +958,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if elem_expr.type_id != element_type
                 && elem_expr.type_id != TypeTable::UNKNOWN
                 && element_type != TypeTable::UNKNOWN
-                && !self.tysys.type_table.borrow().contains_type_param(element_type)
+                && !self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_type_param(element_type)
             {
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: format!(

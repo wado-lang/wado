@@ -45,7 +45,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // pre-refactor path routed through `resolve_match_expr`'s
                 // `check_assignable` loop, which caught this; do the
                 // equivalent explicit check here.
-                self.tysys.typecheck(self.logger, body.type_id, TypeTable::BOOL, guard.span());
+                self.tysys
+                    .typecheck(self.logger, body.type_id, TypeTable::BOOL, guard.span());
                 body
             }
             None => bool_literal(true, m.span),

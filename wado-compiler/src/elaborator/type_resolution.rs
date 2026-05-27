@@ -103,7 +103,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::TypePackSpread(name, span) => {
                 // Look up the type pack parameter
                 if let Some((index, _type_id)) = self.trait_ctx.type_params.get(name) {
-                    self.tysys.type_table
+                    self.tysys
+                        .type_table
                         .borrow_mut()
                         .make_type_pack(name.clone(), *index)
                 } else {
@@ -142,11 +143,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // type from the TypeTable directly. This handles cases like blanket impl resolution
             // where we temporarily bind e.g. I = StrUtf8ByteIter (concrete struct), and
             // I::Item should resolve to u8 via (StrUtf8ByteIter, "Item") → u8.
-            let param_is_concrete = !self.tysys.type_table.borrow().contains_type_param(param_type_id);
+            let param_is_concrete = !self
+                .tysys
+                .type_table
+                .borrow()
+                .contains_type_param(param_type_id);
             if param_is_concrete {
                 // First try pre-registered concrete associated type resolution.
                 if let Some(resolved) = self
-                    .tysys.type_table
+                    .tysys
+                    .type_table
                     .borrow()
                     .resolve_assoc_type(param_type_id, &namespaced.name)
                 {
@@ -157,7 +163,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // is generic — resolve_assoc_type won't find a pre-registered entry, but
                 // resolve_generic_assoc_type can derive i32 from ("ArrayIter", "Item") → TypeParam(0).
                 if let Some(resolved) = self
-                    .tysys.type_table
+                    .tysys
+                    .type_table
                     .borrow()
                     .resolve_generic_assoc_type(param_type_id, &namespaced.name)
                 {
@@ -184,12 +191,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let assoc_type_bindings =
                 self.compute_assoc_type_bindings(&namespaced.namespace.clone(), &assoc_bounds);
 
-            return self.tysys.type_table.borrow_mut().make_assoc_type_projection(
-                param_type_id,
-                namespaced.name.clone(),
-                bound_names,
-                assoc_type_bindings,
-            );
+            return self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_assoc_type_projection(
+                    param_type_id,
+                    namespaced.name.clone(),
+                    bound_names,
+                    assoc_type_bindings,
+                );
         }
 
         if namespaced.namespace.as_str() == "builtin" {
@@ -203,7 +214,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return TypeTable::ERROR;
                 }
                 let element_type = self.resolve_type(&namespaced.args[0]);
-                self.tysys.type_table
+                self.tysys
+                    .type_table
                     .borrow_mut()
                     .make_builtin_array(element_type)
             } else {
@@ -327,7 +339,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.tysys.type_table.borrow_mut().make_stream_writable(elem)
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_stream_writable(elem)
             }
             "Future" => {
                 let elem = args
@@ -341,7 +356,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.tysys.type_table.borrow_mut().make_future_writable(elem)
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_future_writable(elem)
             }
             _ => {
                 // Check if it's a user-defined generic struct

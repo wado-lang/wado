@@ -38,11 +38,11 @@ use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::trait_env::TraitEnv;
-use super::tysys::TypeSystem;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ResourceInfo,
     StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
+use super::tysys::TypeSystem;
 
 /// Analysis state produced by [`Elaborator::annotate_modules`] and consumed by
 /// [`Elaborator::build_tir_from_state`].

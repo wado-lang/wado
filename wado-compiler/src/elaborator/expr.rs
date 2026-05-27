@@ -395,7 +395,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (TirExprKind::StringLiteral(value), string_type)
             }
             Literal::Null => {
-                let option_unknown = self.tysys.type_table.borrow_mut().make_option(TypeTable::UNKNOWN);
+                let option_unknown = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_option(TypeTable::UNKNOWN);
                 (TirExprKind::Null, option_unknown)
             }
             Literal::Unit => (TirExprKind::Unit, TypeTable::UNIT),
@@ -649,7 +653,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 // Use canonical name (not import alias) for consistent TypeId interning
                 let enum_type = self
-                    .tysys.type_table
+                    .tysys
+                    .type_table
                     .borrow_mut()
                     .make_enum(enum_info.name.clone(), enum_info.module_source);
 
@@ -695,7 +700,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // canonical name in the source module, so we can read directly
                 // from the shared `all_*` table without any per-module cache.
                 let ns_variant = self
-                    .tysys.all_variant_cases
+                    .tysys
+                    .all_variant_cases
                     .get(&ns_source)
                     .and_then(|m| m.get(type_name))
                     .cloned();
@@ -752,7 +758,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Check enum cases
                 let ns_enum = self
-                    .tysys.all_enum_cases
+                    .tysys
+                    .all_enum_cases
                     .get(&ns_source)
                     .and_then(|m| m.get(type_name))
                     .cloned();
@@ -761,7 +768,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     self.record_namespaced_case(ident, &enum_info.module_source, case_data.ast_id);
                     let enum_type = self
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .make_enum(enum_info.name.clone(), enum_info.module_source);
                     return TirExpr::new(
@@ -777,7 +785,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Check flags members
                 let ns_flags = self
-                    .tysys.all_flags_cases
+                    .tysys
+                    .all_flags_cases
                     .get(&ns_source)
                     .and_then(|m| m.get(type_name))
                     .cloned();
@@ -1517,7 +1526,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .enumerate()
             .map(|(i, &t)| (i as u32, t))
             .collect();
-        self.tysys.type_table
+        self.tysys
+            .type_table
             .borrow_mut()
             .substitute_type_params(type_id, &substitution)
     }
@@ -1545,7 +1555,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if new_elem == elem {
                     type_id
                 } else {
-                    self.tysys.type_table
+                    self.tysys
+                        .type_table
                         .borrow_mut()
                         .intern(ResolvedType::BuiltinArray(new_elem))
                 }
@@ -1674,7 +1685,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => None,
             };
             if let Some(expected) = derefed_index_type {
-                self.tysys.typecheck(self.logger, index_type, expected, index.index.span());
+                self.tysys
+                    .typecheck(self.logger, index_type, expected, index.index.span());
             }
 
             // First, try Index trait (returns reference)
@@ -1697,7 +1709,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // The method returns &Output, so the type is Ref(output_type)
                 let ref_output_type = self
-                    .tysys.type_table
+                    .tysys
+                    .type_table
                     .borrow_mut()
                     .make_ref(trait_info.output_type);
 
@@ -2733,8 +2746,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Validate char casts: prohibit integer/float -> char (use char::from_u32 instead)
         // Exception: u8 -> char is always valid (0..255 are valid Unicode scalar values)
-        let source_base = self.tysys.type_table.borrow().get_ultimate_base_type(source_type);
-        let target_base = self.tysys.type_table.borrow().get_ultimate_base_type(target_type);
+        let source_base = self
+            .tysys
+            .type_table
+            .borrow()
+            .get_ultimate_base_type(source_type);
+        let target_base = self
+            .tysys
+            .type_table
+            .borrow()
+            .get_ultimate_base_type(target_type);
         if target_base == TypeTable::CHAR
             && source_base != TypeTable::CHAR
             && source_base != TypeTable::U8
@@ -3305,7 +3326,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some((_, expected_type_id)) =
                     struct_field_types.iter().find(|(n, _)| n == &field.name)
                 {
-                    self.tysys.typecheck(self.logger, value.type_id, *expected_type_id, field.value.span());
+                    self.tysys.typecheck(
+                        self.logger,
+                        value.type_id,
+                        *expected_type_id,
+                        field.value.span(),
+                    );
                 }
 
                 let decl_idx = struct_field_types
@@ -3340,7 +3366,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
                 if let Some(default_expr) = default_ast {
                     let resolved = self.resolve_expr(&default_expr, ctx, Some(*expected_type_id));
-                    self.tysys.typecheck(self.logger, resolved.type_id, *expected_type_id, struct_lit.span);
+                    self.tysys.typecheck(
+                        self.logger,
+                        resolved.type_id,
+                        *expected_type_id,
+                        struct_lit.span,
+                    );
                     fields.push(TirStructField {
                         name: expected_name.clone(),
                         value: resolved,
@@ -3476,7 +3507,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (struct_type, mangled_name, fields)
         } else {
             let struct_type = self
-                .tysys.type_table
+                .tysys
+                .type_table
                 .borrow_mut()
                 .make_struct(struct_name.clone(), struct_module_source);
             (struct_type, struct_name, fields)
@@ -3525,7 +3557,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check if this anonymous struct type already exists (structural equivalence)
         if let Some(existing_type) = self
-            .tysys.type_table
+            .tysys
+            .type_table
             .borrow()
             .find_struct_type(&anon_name, &module_source)
         {
@@ -3542,7 +3575,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Register the new anonymous struct type
         let struct_type = self
-            .tysys.type_table
+            .tysys
+            .type_table
             .borrow_mut()
             .make_struct(anon_name.clone(), module_source.clone());
 
@@ -3629,7 +3663,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return vec![];
         }
 
-        let mut infer = InferCtx::new(&self.tysys.type_table, struct_info.type_param_type_ids.clone());
+        let mut infer = InferCtx::new(
+            &self.tysys.type_table,
+            struct_info.type_param_type_ids.clone(),
+        );
 
         for (struct_field, (_, expected_field_type, _)) in
             fields.iter().zip(struct_info.fields.iter())
@@ -3714,7 +3751,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Expr::Spread(inner, _span) = elem {
                 let spread_expr = self.resolve_expr(inner, ctx, None);
                 let contains_pack = self.type_contains_pack(spread_expr.type_id);
-                let spread_type = self.tysys.type_table.borrow().get(spread_expr.type_id).clone();
+                let spread_type = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .get(spread_expr.type_id)
+                    .clone();
                 if contains_pack {
                     // Check if the expression's type IS a TypePack directly.
                     // If so, this is a type pack expansion (e.g., [..T::method()])
@@ -4201,7 +4243,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Find the module that provides `impl From<FromType> for TargetType`.
     fn find_from_impl_module(&self, target_name: &str, from_name: &str) -> ModuleSource {
         let from_trait_name = self
-            .tysys.type_table
+            .tysys
+            .type_table
             .borrow()
             .compiler_items()
             .trait_name(crate::compiler_item::CompilerItem::From)
@@ -4363,7 +4406,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check that the element type implements Ord
         let ord_trait_name = self
-            .tysys.type_table
+            .tysys
+            .type_table
             .borrow()
             .compiler_items()
             .trait_name(crate::compiler_item::CompilerItem::Ord)
@@ -4404,7 +4448,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (struct_name, module_source, fields) = match range.kind {
             RangeKind::Exclusive => {
                 let ms = self
-                    .tysys.type_table
+                    .tysys
+                    .type_table
                     .borrow()
                     .compiler_items()
                     .struct_module(crate::compiler_item::CompilerItem::RangeExclusive)
@@ -4426,7 +4471,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             RangeKind::Inclusive => {
                 let ms = self
-                    .tysys.type_table
+                    .tysys
+                    .type_table
                     .borrow()
                     .compiler_items()
                     .struct_module(crate::compiler_item::CompilerItem::RangeInclusive)

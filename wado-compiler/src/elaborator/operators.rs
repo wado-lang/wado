@@ -247,7 +247,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Handle Eq trait (== and !=)
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
                     let eq_trait_name = self
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow()
                         .compiler_items()
                         .trait_name(CompilerItem::Eq)
@@ -294,7 +295,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) {
                     let ord_trait_name = self
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow()
                         .compiler_items()
                         .trait_name(CompilerItem::Ord)
@@ -353,7 +355,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.find_method_in_trait_bounds(&bound_names, "eq", left.type_id)
                 {
                     let eq_trait_name = self
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow()
                         .compiler_items()
                         .trait_name(CompilerItem::Eq)
@@ -392,7 +395,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.find_method_in_trait_bounds(&bound_names, "cmp", left.type_id)
                 {
                     let ord_trait_name = self
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow()
                         .compiler_items()
                         .trait_name(CompilerItem::Ord)
@@ -843,10 +847,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if unary.op == UnaryOp::MutRef && matches!(&expr.kind, TirExprKind::FieldAccess { .. }) {
             let field_type = self.tysys.type_table.borrow().get(expr.type_id).clone();
             let base_type = self
-                .tysys.type_table
+                .tysys
+                .type_table
                 .borrow()
                 .get(
-                    self.tysys.type_table
+                    self.tysys
+                        .type_table
                         .borrow()
                         .get_ultimate_base_type(expr.type_id),
                 )
@@ -970,7 +976,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let type_id = match unary.op {
             UnaryOp::Not => TypeTable::BOOL,
             UnaryOp::Ref => self.tysys.type_table.borrow_mut().make_ref(expr.type_id),
-            UnaryOp::MutRef => self.tysys.type_table.borrow_mut().make_mut_ref(expr.type_id),
+            UnaryOp::MutRef => self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_mut_ref(expr.type_id),
             UnaryOp::Deref => {
                 let outer = self.tysys.type_table.borrow().get(expr.type_id).clone();
                 match outer {
@@ -1073,7 +1083,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         _ => None,
                     };
                     if let Some(expected) = derefed_index_type {
-                        self.tysys.typecheck(self.logger, index_type, expected, index_expr.index.span());
+                        self.tysys.typecheck(
+                            self.logger,
+                            index_type,
+                            expected,
+                            index_expr.index.span(),
+                        );
                     }
 
                     let assign_info = self
@@ -1096,7 +1111,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         };
 
                         // Check: reject &T/&mut T assigned where non-ref expected
-                        self.tysys.typecheck(self.logger, value_tir.type_id, trait_info.input_type, value_span);
+                        self.tysys.typecheck(
+                            self.logger,
+                            value_tir.type_id,
+                            trait_info.input_type,
+                            value_span,
+                        );
 
                         let receiver = self.adjust_receiver_for_self_kind(
                             indexed_expr,
@@ -1148,7 +1168,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Reject &T assigned where non-ref T expected
-        self.tysys.typecheck(self.logger, value_tir.type_id, target.type_id, value_span);
+        self.tysys
+            .typecheck(self.logger, value_tir.type_id, target.type_id, value_span);
 
         // Handle assignment to global variables
         if let TirExprKind::GlobalVarGet {
@@ -1464,7 +1485,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // For concrete parameter types (e.g. `rhs: u32` on
             // `Shl::shl`) the expected type is the parameter type itself.
             let expected = if wrap { receiver.type_id } else { param_ty };
-            self.tysys.typecheck(self.logger, arg.type_id, expected, span);
+            self.tysys
+                .typecheck(self.logger, arg.type_id, expected, span);
             wrap_flags.push(wrap);
         }
 
@@ -1477,7 +1499,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(arg, wrap)| {
                 let arg_expr = if wrap {
                     let arg_ref_type = self
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .intern(ResolvedType::Ref(arg.type_id));
                     TirExpr::new(
@@ -1529,7 +1552,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `<=`  → `cmp != Greater`, `>=` → `cmp != Less`.
     fn ord_bool_from_cmp(&mut self, cmp_call: TirExpr, op: BinaryOp, span: Span) -> TirExpr {
         let ordering_type_id = self
-            .tysys.type_table
+            .tysys
+            .type_table
             .borrow_mut()
             .make_compiler_enum(CompilerItem::Ordering);
         // Look up Ordering's `Less` / `Greater` cases through the

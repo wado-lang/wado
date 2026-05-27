@@ -132,10 +132,7 @@ impl TypeSystem {
     /// transparent. For traits that don't yet have a `CompilerItem`
     /// anchor (`Add`, `Sub`, …, `Ord`), the canonical stdlib name is
     /// returned as a literal.
-    pub(crate) fn operator_trait_method(
-        &self,
-        op: &BinaryOp,
-    ) -> Option<(String, &'static str)> {
+    pub(crate) fn operator_trait_method(&self, op: &BinaryOp) -> Option<(String, &'static str)> {
         match op {
             BinaryOp::Add => Some(("Add".to_string(), "add")),
             BinaryOp::Sub => Some(("Sub".to_string(), "sub")),

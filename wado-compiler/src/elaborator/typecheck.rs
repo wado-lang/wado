@@ -8,8 +8,8 @@ use crate::logger::Logger;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
-use super::tysys::TypeSystem;
 use super::types::TypeError;
+use super::tysys::TypeSystem;
 
 /// Result of checking whether `actual` is assignable to `expected`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

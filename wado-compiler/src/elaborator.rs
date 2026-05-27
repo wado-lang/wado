@@ -650,7 +650,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .get(name)
             .filter(|info| info.module_source == *module_source)
             .or_else(|| {
-                self.tysys.all_struct_fields
+                self.tysys
+                    .all_struct_fields
                     .get(module_source)
                     .and_then(|m| m.get(name))
             })
@@ -1076,11 +1077,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                         if !self.trait_ctx.type_params.contains_key(&param.name) {
                             let type_id = if param.is_pack {
-                                self.tysys.type_table
+                                self.tysys
+                                    .type_table
                                     .borrow_mut()
                                     .make_type_pack(param.name.clone(), actual_idx)
                             } else {
-                                self.tysys.type_table
+                                self.tysys
+                                    .type_table
                                     .borrow_mut()
                                     .make_type_param(param.name.clone(), actual_idx)
                             };
@@ -1113,7 +1116,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     && !self.tysys.is_known_type_name(name)
                                 {
                                     let type_id = self
-                                        .tysys.type_table
+                                        .tysys
+                                        .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), i as u32);
                                     self.trait_ctx
@@ -1155,8 +1159,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if impl_block.trait_type.is_some() {
                         // Resolve the target type for registering associated type resolutions
                         let target_type_id = self.resolve_type(&impl_block.ty);
-                        let is_concrete =
-                            !self.tysys.type_table.borrow().contains_type_param(target_type_id);
+                        let is_concrete = !self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .contains_type_param(target_type_id);
 
                         for binding in &impl_block.associated_types {
                             let type_id = self.resolve_type(&binding.ty);
@@ -1167,15 +1174,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             // Register in TypeTable for substitution resolution
                             // Only for concrete types (not generic impls like impl<T> Trait for Array<T>)
                             if is_concrete {
-                                self.tysys.type_table.borrow_mut().register_assoc_type_resolution(
-                                    target_type_id,
-                                    binding.name.clone(),
-                                    type_id,
-                                );
+                                self.tysys
+                                    .type_table
+                                    .borrow_mut()
+                                    .register_assoc_type_resolution(
+                                        target_type_id,
+                                        binding.name.clone(),
+                                        type_id,
+                                    );
                             } else {
                                 // For generic impls, register the definition so the monomorphizer
                                 // can resolve associated types for GenericInstance types.
-                                self.tysys.type_table
+                                self.tysys
+                                    .type_table
                                     .borrow_mut()
                                     .register_generic_assoc_type_def(
                                         struct_name.clone(),

@@ -162,7 +162,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         declared
     }
 
-
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
     pub(super) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.tysys.type_table.borrow().get(type_id) {
@@ -186,7 +185,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         (name.to_string(), type_id)
     }
-
 
     /// Find the rhs parameter type for an operator trait on a struct type.
     /// Used to determine what type a literal rhs should be coerced to.
@@ -223,7 +221,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_arithmetic_trait_impl(&struct_name, rhs_type_id, &trait_name, method_name)?;
         Some(rhs_type_id)
     }
-
 
     /// Check if a qualified name `struct_name::method_name` is a static method
     pub(super) fn get_ultimate_base_struct_name(&self, type_id: TypeId) -> String {
@@ -447,7 +444,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for col in 0..arity {
                             let col_types: Vec<TypeId> =
                                 inner_arities.iter().map(|row| row[col]).collect();
-                            let col_tuple = self.tysys.type_table.borrow_mut().make_tuple(col_types);
+                            let col_tuple =
+                                self.tysys.type_table.borrow_mut().make_tuple(col_types);
                             transposed.push(col_tuple);
                         }
                         let return_type = self.tysys.type_table.borrow_mut().make_tuple(transposed);
@@ -619,12 +617,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     // These get TypeParam types that will be substituted at call sites
                                     for (i, type_param) in method.type_params.iter().enumerate() {
                                         let index = impl_offset + i as u32;
-                                        let type_param_id = scope.tysys.type_table.borrow_mut().intern(
-                                            ResolvedType::TypeParam {
-                                                name: type_param.name.clone(),
-                                                index,
-                                            },
-                                        );
+                                        let type_param_id =
+                                            scope.tysys.type_table.borrow_mut().intern(
+                                                ResolvedType::TypeParam {
+                                                    name: type_param.name.clone(),
+                                                    index,
+                                                },
+                                            );
                                         scope.trait_ctx.type_params.insert(
                                             type_param.name.clone(),
                                             (index, type_param_id),
@@ -750,12 +749,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     // These get TypeParam types that will be substituted at call sites
                                     for (i, type_param) in method.type_params.iter().enumerate() {
                                         let index = impl_offset + i as u32;
-                                        let type_param_id = scope.tysys.type_table.borrow_mut().intern(
-                                            ResolvedType::TypeParam {
-                                                name: type_param.name.clone(),
-                                                index,
-                                            },
-                                        );
+                                        let type_param_id =
+                                            scope.tysys.type_table.borrow_mut().intern(
+                                                ResolvedType::TypeParam {
+                                                    name: type_param.name.clone(),
+                                                    index,
+                                                },
+                                            );
                                         scope.trait_ctx.type_params.insert(
                                             type_param.name.clone(),
                                             (index, type_param_id),
@@ -1055,7 +1055,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             && !scope.trait_ctx.type_params.contains_key(&named.name)
                         {
                             let type_id = scope
-                                .tysys.type_table
+                                .tysys
+                                .type_table
                                 .borrow_mut()
                                 .make_type_param(named.name.clone(), i as u32);
                             scope
@@ -1106,7 +1107,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let (type_id, consumed_index) = if tp.is_pack {
                         (
                             scope
-                                .tysys.type_table
+                                .tysys
+                                .type_table
                                 .borrow_mut()
                                 .make_type_pack(tp.name.clone(), idx),
                             true,
@@ -1116,7 +1118,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         (
                             scope
-                                .tysys.type_table
+                                .tysys
+                                .type_table
                                 .borrow_mut()
                                 .make_type_param(tp.name.clone(), idx),
                             true,
@@ -1182,7 +1185,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if new_inner == inner {
                     type_id
                 } else {
-                    self.tysys.type_table
+                    self.tysys
+                        .type_table
                         .borrow_mut()
                         .intern(ResolvedType::Ref(new_inner))
                 }
@@ -1192,7 +1196,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if new_inner == inner {
                     type_id
                 } else {
-                    self.tysys.type_table
+                    self.tysys
+                        .type_table
                         .borrow_mut()
                         .intern(ResolvedType::MutRef(new_inner))
                 }
@@ -1211,7 +1216,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if new_args == type_args {
                     type_id
                 } else {
-                    self.tysys.type_table
+                    self.tysys
+                        .type_table
                         .borrow_mut()
                         .intern(ResolvedType::GenericInstance {
                             name,
@@ -1600,7 +1606,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The receiver is already &T, so we need to add an extra reference layer.
             return match self_kind {
                 ast::SelfKind::Ref => {
-                    let ref_type = self.tysys.type_table.borrow_mut().make_ref(receiver.type_id);
+                    let ref_type = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_ref(receiver.type_id);
                     TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::Ref,
@@ -1611,7 +1621,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                 }
                 ast::SelfKind::MutRef => {
-                    let mut_ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(receiver.type_id);
+                    let mut_ref_type = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_mut_ref(receiver.type_id);
                     TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::MutRef,
@@ -1645,7 +1659,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     _ => {
                         // Value T, need to add &
-                        let ref_type = self.tysys.type_table.borrow_mut().make_ref(receiver.type_id);
+                        let ref_type = self
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_ref(receiver.type_id);
                         TirExpr::new(
                             TirExprKind::Unary {
                                 op: TirUnaryOp::Ref,
@@ -1664,7 +1682,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver
                 } else {
                     // Value T, need to add &mut
-                    let mut_ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(receiver.type_id);
+                    let mut_ref_type = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_mut_ref(receiver.type_id);
                     TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::MutRef,
@@ -2042,7 +2064,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // For variadic pack params (..T in impl<..T> Trait for [..T]),
                 // map the pack to a TypePack so that the method body can reference it.
                 if let Some((pack_name, pack_idx)) = &variadic_pack_entry {
-                    let pack_type = scope.tysys.type_table.borrow_mut().make_tuple(type_args.to_vec());
+                    let pack_type = scope
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_tuple(type_args.to_vec());
                     scope
                         .trait_ctx
                         .type_params
@@ -2062,7 +2088,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .insert(name.clone(), (0, recv_id));
                 } else {
                     let type_id = scope
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .make_type_param(name.clone(), 0);
                     scope
@@ -2141,7 +2168,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let index = impl_offset + i as u32;
                     let type_param_id =
                         scope
-                            .tysys.type_table
+                            .tysys
+                            .type_table
                             .borrow_mut()
                             .intern(ResolvedType::TypeParam {
                                 name: type_param.name.clone(),
@@ -2273,14 +2301,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             let impl_offset = scope.trait_ctx.type_params.len() as u32;
                             for (i, type_param) in default_method.type_params.iter().enumerate() {
                                 let index = impl_offset + i as u32;
-                                let type_param_id =
-                                    scope
-                                        .tysys.type_table
-                                        .borrow_mut()
-                                        .intern(ResolvedType::TypeParam {
-                                            name: type_param.name.clone(),
-                                            index,
-                                        });
+                                let type_param_id = scope.tysys.type_table.borrow_mut().intern(
+                                    ResolvedType::TypeParam {
+                                        name: type_param.name.clone(),
+                                        index,
+                                    },
+                                );
                                 scope
                                     .trait_ctx
                                     .type_params
@@ -3157,7 +3183,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .map(|info| info.module_source.clone())
                         })
                         .unwrap_or_else(|| self.current_module_source.clone());
-                    self.tysys.type_table
+                    self.tysys
+                        .type_table
                         .borrow_mut()
                         .intern(ResolvedType::GenericInstance {
                             name: base_name.clone(),
@@ -3256,7 +3283,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check if this is an Array type (Arrays use optimized direct access, not traits)
         let is_array = self
-            .tysys.type_table
+            .tysys
+            .type_table
             .borrow()
             .as_array(container_expr.type_id)
             .is_some();
@@ -3292,34 +3320,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => output_type,
         };
 
-        let (output_struct_name, output_module_source, output_type_args) =
-            match self.tysys.type_table.borrow().get(output_base_type_id).clone() {
-                ResolvedType::Struct {
-                    name,
-                    module_source,
-                    ..
-                } => (name, module_source, None),
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                } => (
-                    name,
-                    module_source,
-                    if type_args.is_empty() {
-                        None
-                    } else {
-                        Some(type_args)
-                    },
-                ),
-                _ => (
-                    self.tysys.type_table
-                        .borrow()
-                        .mangle_type_name(output_base_type_id),
-                    self.current_module_source.clone(),
-                    None,
-                ),
-            };
+        let (output_struct_name, output_module_source, output_type_args) = match self
+            .tysys
+            .type_table
+            .borrow()
+            .get(output_base_type_id)
+            .clone()
+        {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => (name, module_source, None),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => (
+                name,
+                module_source,
+                if type_args.is_empty() {
+                    None
+                } else {
+                    Some(type_args)
+                },
+            ),
+            _ => (
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .mangle_type_name(output_base_type_id),
+                self.current_module_source.clone(),
+                None,
+            ),
+        };
 
         // Look up method info to check if it needs &mut self
         let mut method_info = self.lookup_method_info(output_type, &method_call.method);
@@ -3372,7 +3406,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // IndexMut returns &mut Output
         let mut_ref_output_type = self
-            .tysys.type_table
+            .tysys
+            .type_table
             .borrow_mut()
             .make_mut_ref(index_mut_info.output_type);
 

@@ -472,7 +472,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             let default_expr = field.default.as_ref().map(|default_ast| {
                 let resolved = scope.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
-                scope.tysys.typecheck(scope.logger, resolved.type_id, type_id, default_ast.span());
+                scope
+                    .tysys
+                    .typecheck(scope.logger, resolved.type_id, type_id, default_ast.span());
                 Box::new(resolved)
             });
             // A field with a declared default is implicitly non-required at
@@ -580,17 +582,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .expect("type param registered by register_generic_params")
                     })
                     .collect();
-                scope
-                    .tysys.type_table
-                    .borrow_mut()
-                    .intern(crate::tir::ResolvedType::GenericResource {
+                scope.tysys.type_table.borrow_mut().intern(
+                    crate::tir::ResolvedType::GenericResource {
                         name: name.to_string(),
                         module_source: module,
                         type_args: type_arg_ids,
-                    })
+                    },
+                )
             } else {
                 scope
-                    .tysys.type_table
+                    .tysys
+                    .type_table
                     .borrow_mut()
                     .make_resource(name.to_string(), module)
             }
@@ -611,7 +613,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // in the AST (`SelfKind` has no `Self_` variant),
                     // so the match is exhaustive over the resource
                     // case.
-                    (SelfKind::Ref, Some(self_t)) => scope.tysys.type_table.borrow_mut().make_ref(self_t),
+                    (SelfKind::Ref, Some(self_t)) => {
+                        scope.tysys.type_table.borrow_mut().make_ref(self_t)
+                    }
                     (SelfKind::MutRef, Some(self_t)) => {
                         scope.tysys.type_table.borrow_mut().make_mut_ref(self_t)
                     }
@@ -708,7 +712,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let initializer = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
         // Type check: initializer type must match declared type.
-        self.tysys.typecheck(self.logger, initializer.type_id, ty, global_decl.initializer.span());
+        self.tysys.typecheck(
+            self.logger,
+            initializer.type_id,
+            ty,
+            global_decl.initializer.span(),
+        );
 
         Some(TirGlobal {
             name: global_decl.name.clone(),
@@ -1098,7 +1107,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 }
                 let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
-                scope.tysys.typecheck(scope.logger, resolved.type_id, type_id, default_ast.span());
+                scope
+                    .tysys
+                    .typecheck(scope.logger, resolved.type_id, type_id, default_ast.span());
                 Box::new(resolved)
             });
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
@@ -1362,7 +1373,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let name = &named.name;
                     if !scope.trait_ctx.type_params.contains_key(name) {
                         let type_id = scope
-                            .tysys.type_table
+                            .tysys
+                            .type_table
                             .borrow_mut()
                             .make_type_param(name.clone(), i as u32);
                         scope
@@ -1387,7 +1399,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // now living in the saved (parent) scope.
             if let Some(&(idx, _)) = scope.saved().type_params.get(&named.name) {
                 let type_id = scope
-                    .tysys.type_table
+                    .tysys
+                    .type_table
                     .borrow_mut()
                     .make_type_param(named.name.clone(), idx);
                 scope
@@ -1416,7 +1429,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(&(idx, _)) = scope.saved().type_params.get(&named.name)
             {
                 let type_id = scope
-                    .tysys.type_table
+                    .tysys
+                    .type_table
                     .borrow_mut()
                     .make_type_param(named.name.clone(), idx);
                 scope
@@ -1446,7 +1460,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && let Some(&(idx, _)) = scope.saved().type_params.get(name)
                 {
                     let type_id = scope
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .make_type_pack(name.clone(), idx);
                     scope
@@ -1526,7 +1541,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let (type_id, consumed_index) = if param.is_pack {
                 (
                     scope
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .make_type_pack(param.name.clone(), idx),
                     true,
@@ -1536,7 +1552,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 (
                     scope
-                        .tysys.type_table
+                        .tysys
+                        .type_table
                         .borrow_mut()
                         .make_type_param(param.name.clone(), idx),
                     true,
@@ -1626,11 +1643,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // named effects / resources don't get a false negative here.
             let canonical_key = scope.canonical_decl_key(name);
             if scope
-                .tysys.trait_env
+                .tysys
+                .trait_env
                 .effect_decl_index
                 .contains_key(&canonical_key)
                 || scope
-                    .tysys.trait_env
+                    .tysys
+                    .trait_env
                     .resource_decl_index
                     .contains_key(&canonical_key)
             {
@@ -1671,7 +1690,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let default_expr = param.default.as_ref().map(|default_ast| {
                 let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
-                scope.tysys.typecheck(scope.logger, resolved.type_id, type_id, default_ast.span());
+                scope
+                    .tysys
+                    .typecheck(scope.logger, resolved.type_id, type_id, default_ast.span());
                 Box::new(resolved)
             });
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
