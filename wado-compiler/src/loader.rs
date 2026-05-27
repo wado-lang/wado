@@ -822,9 +822,13 @@ mod tests {
     }
 }
 
-/// Cached AST modules for all stdlib modules (core + WASI).
+/// Per-module lazy cache for stdlib AST.
 ///
-/// Each module is parsed and bound exactly once per process.
+/// Each module is parsed and bound at most once per process. The slot
+/// table (path → slot) is built eagerly on first access — that walk is
+/// just `HashMap` inserts of empty [`OnceLock`]s, no parsing — and then
+/// each module's actual parse runs only when [`cached_stdlib_module`]
+/// is called for that import path.
 ///
 /// Keyed by the canonical display form (`"core:foo"`, `"wasi:bar/baz.wado"`)
 /// rather than by `ModuleSource` value. The cache is process-global, but
@@ -833,29 +837,47 @@ mod tests {
 /// content-addressed and avoids forcing the cache to share an interner
 /// with every loader. See [`stdlib_cache_key`] for how callers compute
 /// the lookup string from a `ModuleSource`.
-fn cached_stdlib() -> &'static IndexMap<String, Module> {
+struct StdlibSlot {
+    source: &'static str,
+    module: std::sync::OnceLock<Module>,
+}
+
+type StdlibSlotMap = std::collections::HashMap<&'static str, StdlibSlot, FxBuildHasher>;
+
+fn stdlib_slots() -> &'static StdlibSlotMap {
     use std::sync::OnceLock;
 
-    static CACHE: OnceLock<IndexMap<String, Module>> = OnceLock::new();
-    CACHE.get_or_init(|| {
-        let total_count = stdlib::ALL_CORE_MODULES.len() + stdlib::ALL_WASI_MODULES.len();
-        let mut cache = IndexMap::with_capacity_and_hasher(total_count, FxBuildHasher);
-
-        for &(import_path, source) in stdlib::ALL_CORE_MODULES
+    static SLOTS: OnceLock<StdlibSlotMap> = OnceLock::new();
+    SLOTS.get_or_init(|| {
+        let total = stdlib::ALL_CORE_MODULES.len() + stdlib::ALL_WASI_MODULES.len();
+        let mut slots: StdlibSlotMap =
+            std::collections::HashMap::with_capacity_and_hasher(total, FxBuildHasher);
+        for &(path, source) in stdlib::ALL_CORE_MODULES
             .iter()
             .chain(stdlib::ALL_WASI_MODULES.iter())
         {
-            cache.insert(
-                import_path.to_string(),
-                parse_bind_stdlib(import_path, source),
+            slots.insert(
+                path,
+                StdlibSlot {
+                    source,
+                    module: OnceLock::new(),
+                },
             );
         }
-
-        cache
+        slots
     })
 }
 
-/// Compute the cache key string used by [`cached_stdlib`] for a
+/// Return the cached AST for a stdlib module, parsing it on first access.
+fn cached_stdlib_module(import_path: &str) -> Option<&'static Module> {
+    let (key, slot) = stdlib_slots().get_key_value(import_path)?;
+    Some(
+        slot.module
+            .get_or_init(|| parse_bind_stdlib(key, slot.source)),
+    )
+}
+
+/// Compute the cache key string used by [`cached_stdlib_module`] for a
 /// `ModuleSource`. Returns `None` for variants that the stdlib cache
 /// never holds (Local / Remote / `EntryPoint` / Redirected / Wasm).
 fn stdlib_cache_key(ms: &ModuleSource) -> Option<String> {
@@ -1021,10 +1043,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.logger.span_end(&format!("load {entry_name}"));
 
         // Load all dependencies iteratively
-        let core_cache = {
-            let _span = self.logger.span("stdlib_cache_init");
-            cached_stdlib()
-        };
         while let Some((from_module_source, module_source)) = pending.pop_front() {
             // Skip if already loaded
             if self.loaded.contains_key(&module_source) {
@@ -1041,7 +1059,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             let mod_name = module_source.to_string();
 
             // Use cached parsed module for core stdlib
-            if let Some(cached) = stdlib_cache_key(&module_source).and_then(|k| core_cache.get(&k))
+            if let Some(cached) =
+                stdlib_cache_key(&module_source).and_then(|k| cached_stdlib_module(&k))
             {
                 let span_name = format!("load {mod_name} (cached)");
                 self.logger.span_start(&span_name);
@@ -1248,8 +1267,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
     /// Load implicit modules required by the compiler
     fn load_implicit_modules(&mut self) -> Result<(), LoadError> {
-        let cache = cached_stdlib();
-
         let implicit_module_sources = [
             ModuleSource::builtin(),
             ModuleSource::string(),
@@ -1263,7 +1280,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 continue;
             }
 
-            if let Some(cached) = stdlib_cache_key(&module_source).and_then(|k| cache.get(&k)) {
+            if let Some(cached) =
+                stdlib_cache_key(&module_source).and_then(|k| cached_stdlib_module(&k))
+            {
                 // Load transitive dependencies from cache
                 let mut pending = VecDeque::new();
                 let mut wasm_imports = Vec::new();
@@ -1278,7 +1297,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     if self.loaded.contains_key(&dep_ms) {
                         continue;
                     }
-                    if let Some(dep_cached) = stdlib_cache_key(&dep_ms).and_then(|k| cache.get(&k))
+                    if let Some(dep_cached) =
+                        stdlib_cache_key(&dep_ms).and_then(|k| cached_stdlib_module(&k))
                     {
                         let _ = self.collect_imports(
                             dep_cached,

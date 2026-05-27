@@ -131,7 +131,7 @@ fn build_snapshot() -> Semantics {
     // `wado-compiler` has no async runtime dependency (it must compile
     // to `wasm32-unknown-unknown`, see crate-level `CLAUDE.md`).  The
     // loader future is driven by hand with a no-op waker: every `await`
-    // inside it bottoms out either at a `cached_stdlib()` lookup or at
+    // inside it bottoms out either at a `cached_stdlib_module()` lookup or at
     // `SnapshotHost::load_source` (which returns immediately), so a
     // single poll completes the whole pipeline.  No actual suspension
     // can occur — if `Poll::Pending` ever surfaces it means an
@@ -177,7 +177,7 @@ fn poll_to_completion<F: Future>(fut: F) -> F::Output {
 ///
 /// Only modules with names that are stable across compiles in the same
 /// process can be served from the cache — that is exactly the set of
-/// stdlib modules served from `cached_stdlib()` plus the `core:libm.wat`
+/// stdlib modules served from `cached_stdlib_module()` plus the `core:libm.wat`
 /// Wasm asset module. Returns the subset of `snap.tir_modules` whose
 /// keys match.
 pub(crate) fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
@@ -244,14 +244,14 @@ fn clone_fn_rc(
 
 /// In-memory [`CompilerHost`] used solely for building the stdlib
 /// snapshot.  The entry source is empty and every transitively-loaded
-/// module is a stdlib module served from `cached_stdlib()`, so
+/// module is a stdlib module served from `cached_stdlib_module()`, so
 /// `load_source` is unreachable in steady state.
 struct SnapshotHost;
 
 impl CompilerHost for SnapshotHost {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
         // The snapshot's closure is the stdlib only; the loader resolves
-        // those via `cached_stdlib()` without touching this method. A
+        // those via `cached_stdlib_module()` without touching this method. A
         // call here would mean the loader tried to pull in a non-stdlib
         // module, which is a regression we want surfaced clearly.
         Err(SourceError::NotFound {

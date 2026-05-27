@@ -116,7 +116,7 @@ pub const WASI_TLS_WORLDS: &str = include_str!("../lib/wasi/tls/worlds.wado");
 /// Each entry is `(import_path, source)` where `import_path` matches
 /// what users write in `from "core:..."` expressions. This is the
 /// single source of truth for the set of core stdlib modules: the
-/// loader's `cached_stdlib`, `get_stdlib_module`, and the
+/// loader's `cached_stdlib_module`, `get_stdlib_module`, and the
 /// `ModuleSourceInterner` well-known arc set all derive from it.
 pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
     ("core:allocator", CORE_ALLOCATOR),
