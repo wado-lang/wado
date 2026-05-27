@@ -836,6 +836,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 };
                 sem.types.local_types.insert(key.clone(), *type_id);
             }
+            for (key, type_id) in &snap.expression_types {
+                let Some(sem) = module_semantics.get_mut(&key.module) else {
+                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+                    continue;
+                };
+                sem.types.expression_types.insert(key.ast_id, *type_id);
+            }
         }
 
         let tysys = TypeSystem {

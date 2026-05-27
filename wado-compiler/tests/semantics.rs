@@ -241,3 +241,48 @@ export fn run() with Stdout {
     );
     assert_eq!(r1.1, "println");
 }
+
+/// Stage 4 of the elaborator re-architecture WEP: every expression
+/// visited by the body walk must leave its resolved [`TypeId`] in
+/// [`Semantics::expression_types`], keyed by the expression's
+/// `(module, AstId)`. Verify a few representative sub-expressions
+/// (literal, binary op, identifier) all land in the map.
+#[test]
+fn semantics_records_expression_type_per_ast_id() {
+    let source = r"
+export fn run() {
+    let x = 1 + 2;
+    let _y = x;
+}
+";
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+
+    // Line 3: "    let x = 1 + 2;"
+    //          12345678901234567890
+    //                       ^c13  ^c17
+    // Column 13 lands on the `1` literal; column 17 lands on the `2`
+    // literal; the surrounding `1 + 2` binary covers both, so an id
+    // resolved between them should also have an annotation.
+    let one_id = sem
+        .ast_id_at(&entry, 3, 13)
+        .expect("position on `1` literal should resolve to an AstId");
+    let one_key = SymbolKey::new(entry.clone(), one_id);
+    let one_ty = sem
+        .expression_type(&one_key)
+        .expect("the `1` literal must record an expression type");
+    assert_eq!(sem.types.type_name(one_ty), "i32");
+
+    // Line 4: "    let _y = x;"
+    //                     ^c14
+    let x_use_id = sem
+        .ast_id_at(&entry, 4, 14)
+        .expect("position on `x` use should resolve to an AstId");
+    let x_use_key = SymbolKey::new(entry, x_use_id);
+    let x_ty = sem
+        .expression_type(&x_use_key)
+        .expect("the `x` use site must record an expression type");
+    assert_eq!(sem.types.type_name(x_ty), "i32");
+}

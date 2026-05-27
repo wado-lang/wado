@@ -15,12 +15,13 @@
 //! return types, generic-parameter tables) belong on
 //! [`super::decls::ModuleDecls`].
 //!
-//! Stage 3 of [`wep-2026-05-26-elaborator-rearchitecture.md`] populates
-//! `local_types` (the only field that exists on
-//! [`super::super::Elaborator`] today and feeds LSP inlay hints). The
-//! per-expression `TypeId` map, dispatch targets, coercion choices, and
-//! desugar-kind annotations land in Stage 4.
+//! Stage 3 of [`wep-2026-05-26-elaborator-rearchitecture.md`] populated
+//! `local_types`; Stage 4 adds `expression_types` (per-`AstId` resolved
+//! type for every expression visited by the body walk). Method-dispatch
+//! targets, coercion choices, and desugar-kind annotations land as
+//! follow-up commits inside Stage 4.
 
+use crate::ast::AstId;
 use crate::hashmap::IndexMap;
 use crate::symbol::SymbolKey;
 use crate::tir::TypeId;
@@ -35,4 +36,13 @@ pub(crate) struct TypeAnnotations {
     /// [`crate::semantics::Semantics::local_type_name`] so `let x = 1` can
     /// render the inferred `: i32` annotation without reaching into TIR.
     pub(crate) local_types: IndexMap<SymbolKey, TypeId>,
+    /// Resolved [`TypeId`] for every expression visited by
+    /// [`super::super::Elaborator::resolve_expr`], keyed by the
+    /// expression's [`AstId`]. Populated unconditionally at the end of the
+    /// resolver wrapper so every sub-expression — including operands of
+    /// binary ops, call arguments, and block trailing values — leaves an
+    /// entry. The future `reify` pass (Stage 5) reads this map to set
+    /// `TirExpr::type_id` without re-running type inference; LSP hover
+    /// may also consult it directly.
+    pub(crate) expression_types: IndexMap<AstId, TypeId>,
 }

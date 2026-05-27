@@ -92,6 +92,14 @@ pub struct Semantics {
     /// the inferred type on bindings without explicit annotation. Empty
     /// when resolve did not run or bailed before recording any bindings.
     pub local_types: IndexMap<SymbolKey, TypeId>,
+    /// Resolved [`TypeId`] for every expression visited by the elaborator
+    /// body walk, keyed by the expression's `(module, AstId)` pair. The
+    /// future `reify` pass (Stage 5 of the elaborator re-architecture WEP)
+    /// reads this map to set `TirExpr::type_id` without re-running
+    /// inference; LSP hover can consult it for a type at the cursor.
+    /// Empty when resolve did not run or bailed before any expression was
+    /// visited.
+    pub expression_types: IndexMap<SymbolKey, TypeId>,
     /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `build_tir` did not run or bailed.
@@ -144,6 +152,7 @@ impl Semantics {
         references: IndexMap<SymbolKey, SymbolKey>,
         locals: IndexMap<SymbolKey, Symbol>,
         local_types: IndexMap<SymbolKey, TypeId>,
+        expression_types: IndexMap<SymbolKey, TypeId>,
         tir_modules: IndexMap<ModuleSource, TirModule>,
     ) -> Self {
         Self {
@@ -157,6 +166,7 @@ impl Semantics {
             references,
             locals,
             local_types,
+            expression_types,
             tir_modules,
             is_complete: false,
         }
@@ -234,6 +244,17 @@ impl Semantics {
     pub fn local_type_name(&self, key: &SymbolKey) -> Option<String> {
         let type_id = self.local_types.get(key).copied()?;
         Some(self.types.type_name(type_id))
+    }
+
+    /// Resolved [`TypeId`] for the expression at `key`, recorded by the
+    /// elaborator's body walk. Covers every visited [`AstId`] inside a
+    /// function body (including operands of binary ops, call arguments,
+    /// and trailing block values). Returns `None` when the key does not
+    /// name an expression that the elaborator reached — typically an item
+    /// id or a body the elaborator bailed on.
+    #[must_use]
+    pub fn expression_type(&self, key: &SymbolKey) -> Option<TypeId> {
+        self.expression_types.get(key).copied()
     }
 
     /// URI (filename) of a module, when the module has one.
@@ -569,6 +590,7 @@ impl Semantics {
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
         )
     }
 }
@@ -661,6 +683,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
         );
     }
 
@@ -688,6 +711,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             TypeTable::new(),
             interner,
             None,
+            IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
@@ -728,14 +752,23 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // Flatten the per-module `ModuleSemantics` into the maps LSP queries
     // consume directly. The Semantics API stays keyed by `SymbolKey`; the
     // per-module storage on `AnnotateState` is the elaborator-side detail
-    // that replaces the previous `Rc<RefCell<…>>` plumbing.
+    // that replaces the previous `Rc<RefCell<…>>` plumbing. `expression_types`
+    // is stored per-module keyed by raw `AstId` (the body walk's natural
+    // index); the rebind here pairs each id with its owning module so the
+    // Semantics-level lookup matches the other flat maps.
     let mut references: IndexMap<SymbolKey, SymbolKey> = IndexMap::default();
     let mut locals: IndexMap<SymbolKey, Symbol> = IndexMap::default();
     let mut local_types: IndexMap<SymbolKey, TypeId> = IndexMap::default();
-    for sem in state.module_semantics.values_mut() {
+    let mut expression_types: IndexMap<SymbolKey, TypeId> = IndexMap::default();
+    for (module_source, sem) in state.module_semantics.iter_mut() {
         references.extend(std::mem::take(&mut sem.bindings.references));
         locals.extend(std::mem::take(&mut sem.bindings.local_symbols));
         local_types.extend(std::mem::take(&mut sem.types.local_types));
+        expression_types.extend(
+            std::mem::take(&mut sem.types.expression_types)
+                .into_iter()
+                .map(|(ast_id, type_id)| (SymbolKey::new(module_source.clone(), ast_id), type_id)),
+        );
     }
 
     Semantics {
@@ -749,6 +782,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         references,
         locals,
         local_types,
+        expression_types,
         tir_modules,
         is_complete: lower_ok,
     }
