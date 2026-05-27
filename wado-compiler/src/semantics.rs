@@ -105,8 +105,7 @@ pub struct Semantics {
     /// the call expression's `(module, AstId)` pair. See
     /// [`crate::elaborator::sem::types::MethodDispatch`] for the contract
     /// (synthetic calls and short-circuiting paths leave no entry).
-    pub(crate) method_dispatch:
-        IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch>,
+    pub(crate) method_dispatch: IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch>,
     /// Coercion choices recorded for each expression that
     /// [`crate::elaborator::Elaborator::try_coerce`] adapted into its
     /// expected type, keyed by the source expression's `(module, AstId)`.
@@ -313,10 +312,7 @@ impl Semantics {
     /// path consumes the full [`crate::elaborator::sem::types::MethodDispatch`]
     /// via `pub(crate)` access from inside the crate.
     #[must_use]
-    pub fn method_dispatch_view(
-        &self,
-        key: &SymbolKey,
-    ) -> Option<(String, ModuleSource, String)> {
+    pub fn method_dispatch_view(&self, key: &SymbolKey) -> Option<(String, ModuleSource, String)> {
         let dispatch = self.method_dispatch.get(key)?;
         let self_kind = match dispatch.self_kind {
             crate::ast::SelfKind::None => "none",
@@ -917,18 +913,12 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     let mut locals: IndexMap<SymbolKey, Symbol> = IndexMap::default();
     let mut local_types: IndexMap<SymbolKey, TypeId> = IndexMap::default();
     let mut expression_types: IndexMap<SymbolKey, TypeId> = IndexMap::default();
-    let mut method_dispatch: IndexMap<
-        SymbolKey,
-        crate::elaborator::sem::types::MethodDispatch,
-    > = IndexMap::default();
-    let mut coercions: IndexMap<
-        SymbolKey,
-        crate::elaborator::sem::types::CoercionChoice,
-    > = IndexMap::default();
-    let mut desugars: IndexMap<
-        SymbolKey,
-        crate::elaborator::sem::types::DesugarKind,
-    > = IndexMap::default();
+    let mut method_dispatch: IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch> =
+        IndexMap::default();
+    let mut coercions: IndexMap<SymbolKey, crate::elaborator::sem::types::CoercionChoice> =
+        IndexMap::default();
+    let mut desugars: IndexMap<SymbolKey, crate::elaborator::sem::types::DesugarKind> =
+        IndexMap::default();
     for (module_source, sem) in state.module_semantics.iter_mut() {
         references.extend(std::mem::take(&mut sem.bindings.references));
         locals.extend(std::mem::take(&mut sem.bindings.local_symbols));

@@ -848,7 +848,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
                     continue;
                 };
-                sem.types.method_dispatch.insert(key.ast_id, dispatch.clone());
+                sem.types
+                    .method_dispatch
+                    .insert(key.ast_id, dispatch.clone());
             }
             for (key, choice) in &snap.coercions {
                 let Some(sem) = module_semantics.get_mut(&key.module) else {

@@ -390,7 +390,20 @@ migration; see Trade-offs.
       `&mut AnnotateState` and swaps each module's instance around the
       body walk; `semantics_with_logger` flattens back so `Semantics`'s
       flat-map API is unchanged.
-- [ ] **Stage 4 — Per-`AstId` annotation storage.**
+- [x] **Stage 4 — Per-`AstId` annotation storage.** `TypeAnnotations`
+      now carries four maps populated by the existing body walk:
+      `expression_types` (every `resolve_expr` records its resolved
+      `TypeId`), `method_dispatch` (each `MethodCallExpr` records the
+      resolved `FunctionRef` + `SelfKind`), `coercions` (each successful
+      `try_coerce` branch records its `CoercionKind` + target),
+      and `desugars` (each TIR-direct rewrite site — `assert`, `matches`,
+      comparison chain, for-of, `while`, compound assignment — tags the
+      enclosing AST node with its `DesugarKind`). `Semantics` flattens
+      every map into a `SymbolKey`-keyed view and exposes stable public
+      projection accessors (`expression_type`, `method_dispatch_view`,
+      `coercion_view`, `desugar_view`) for tests and the future LSP
+      hover path. The stdlib snapshot seeds every map back into
+      per-module storage so cached stdlib modules stay consistent.
 - [ ] **Stage 5 — `annotate_bodies` / `reify` split.**
 - [ ] **Stage 6 — Liveness and DCE.**
 - [ ] **Stage 7 — Cleanup.**
@@ -472,6 +485,62 @@ Stage 5's reify will need to either extend `with_module_perspective`
 to swap `bindings`/`types` too or accept these maps as
 flat-store-by-construction. Same note next to the type in
 `sem/bindings.rs`.
+
+### Design notes (Stage 4)
+
+#### Recording sits at the decision point, not at the call site
+
+Each annotation kind is written from inside the function that owns the
+decision: `resolve_expr` wraps a `resolve_expr_inner` and records the
+final `TypeId`, `resolve_method_call_with` records the `FunctionRef` +
+`SelfKind` just before `build_tir_method_call`, every successful
+`try_coerce` branch records its `CoercionKind`, and each desugar
+function (`desugar_assert`, `desugar_matches_expr`,
+`desugar_comparison_chain`, `resolve_for_of`, `resolve_while`,
+`resolve_compound_assign`) tags its enclosing AST node up front. The
+alternative — extracting the decision from the returned `TirExpr` —
+would tie reify to the TIR shape and miss the receiver-adjustment kind
+that `MethodCall` does not carry.
+
+#### Synthetic call sites stay out of the maps
+
+For-of's `.into_iter()` / `.next()` lowerings call
+`resolve_method_call_with` with both `method_id: None` (no use→def
+edge) and `call_id: None` (no `method_dispatch` entry). The tuple
+`.len()` / `.zip()` and static-method-as-instance short-circuits
+return before the recording site for the same reason — reify
+recognises them from the receiver type alone. The contract is
+documented on `MethodDispatch` and enforced by the field on
+`MethodCallInput`.
+
+#### Recording is idempotent under the assert-capture re-entry
+
+The power-assert path calls `resolve_expr` recursively on the same
+`AstId` (with an `in_progress` guard to suppress the capture hook the
+second time). The wrapper records `(ast_id, type_id)` on both calls,
+but both writes carry the same value, so the final map state is
+correct. Coercion and dispatch sites do not re-enter on the same id.
+
+#### Public projection accessors return strings, not `pub(crate)` types
+
+`MethodDispatch`, `CoercionChoice`, and `DesugarKind` all live in the
+`pub(crate) mod sem` namespace and embed `pub(crate)` TIR types
+(`FunctionRef`'s `MethodInfo`), so a `pub fn …_view` accessor that
+returned them by reference would leak `pub(crate)` types to the API.
+The Stage 4 accessors instead return small public projections —
+`(name, module, self_kind_str)`, `(kind_str, target_type)`, the
+variant name as a `String` — that are sufficient for the testability
+contract while keeping the full structures internal until reify or LSP
+lands a real consumer.
+
+#### `#[allow(dead_code)]` is the load-bearing TODO
+
+The new field bodies on `MethodDispatch` / `CoercionChoice`,
+`CoercionKind`'s variants, and the `pub(crate)` `method_dispatch_at`
+accessor are tagged `#[allow(dead_code)]` because reify (Stage 5) is
+the consumer. Removing those allows when Stage 5 lands gives a
+mechanical "what data is actually consumed" audit; any field that
+stays unread by then is a Stage 4 over-record.
 
 ## Consequences
 

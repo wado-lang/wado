@@ -469,10 +469,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         kind: sem::types::CoercionKind,
         target_type: TypeId,
     ) {
-        self.sem.types.coercions.insert(
-            ast_id,
-            sem::types::CoercionChoice { kind, target_type },
-        );
+        self.sem
+            .types
+            .coercions
+            .insert(ast_id, sem::types::CoercionChoice { kind, target_type });
     }
 
     /// Record a TIR-direct desugar tag for the AST node at `ast_id`.

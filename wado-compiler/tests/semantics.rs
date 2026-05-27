@@ -268,9 +268,7 @@ export fn run() {
         key.module == entry
             && sem
                 .method_dispatch_view(key)
-                .is_some_and(|(name, _, self_kind)| {
-                    name.contains("len") && self_kind == "ref"
-                })
+                .is_some_and(|(name, _, self_kind)| name.contains("len") && self_kind == "ref")
     });
     assert!(
         hit,
@@ -354,7 +352,10 @@ export fn run() {
             saw_null_to_option = true;
         }
     }
-    assert!(saw_numeric, "`1 → u32` must record a numeric_literal coercion");
+    assert!(
+        saw_numeric,
+        "`1 → u32` must record a numeric_literal coercion"
+    );
     assert!(
         saw_null_to_option,
         "`null → Option<i32>` must record a null_to_option coercion",
