@@ -1040,15 +1040,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.logger.span_end(&format!("load {entry_name}"));
 
         // Load all dependencies iteratively
-<<<<<<< HEAD
-||||||| 53618ba2
-        let core_cache = cached_stdlib();
-=======
-        let core_cache = {
-            let _span = self.logger.span("stdlib_cache_init");
-            cached_stdlib()
-        };
->>>>>>> origin/main
         while let Some((from_module_source, module_source)) = pending.pop_front() {
             // Skip if already loaded
             if self.loaded.contains_key(&module_source) {
