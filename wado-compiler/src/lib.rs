@@ -779,6 +779,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     };
 
     // === Phase 7: Resolve all modules to TIR ===
+    // Hand `load_result.included_files` to the elaborator via partial
+    // move + `Rc::new`, matching the `semantics_with_logger` pattern.
+    // The map can be megabytes for projects that bundle binary assets
+    // via `#include_bytes`, and nothing below this line reads
+    // `load_result.included_files` again.
+    let included_files = std::rc::Rc::new(load_result.included_files);
     let resolve_output = {
         let _span = logger.span("elaborate");
         Elaborator::elaborate_all_modules(
@@ -786,7 +792,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             &load_result.modules,
             load_result.entry_module_source.clone(),
             &logger,
-            std::rc::Rc::new(load_result.included_files.clone()),
+            included_files,
             load_result.invocations.clone(),
             interner.clone(),
         )
