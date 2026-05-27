@@ -1,0 +1,60 @@
+// Test: variant SROA tail-call propagation
+//
+// A function whose returns are all "StructNew or `Return { Some(Call(c)) }`
+// where `c` is itself a variant-SROA candidate" should also become a
+// candidate. The fix-point loop in `wir_optimize::sroa_variant_return`
+// grows the candidate set until convergence.
+//
+// `parse_leaf` is the seed (all-StructNew returns). `parse_via_leaf` then
+// becomes a candidate via the `return parse_leaf(...)` tail call. Both
+// callees become multi-value, eliminating the boxed Result allocation at
+// every call site reachable from `try_parse`.
+
+#[inline("never")]
+fn parse_leaf(s: String) -> Result<i32, String> {
+    if s.len() == 0 {
+        return Result::<i32, String>::Err("empty");
+    }
+    return Result::<i32, String>::Ok(s.len() as i32);
+}
+
+#[inline("never")]
+fn parse_via_leaf(s: String) -> Result<i32, String> {
+    if s.len() > 100 {
+        return Result::<i32, String>::Err("too long");
+    }
+    return parse_leaf(s);
+}
+
+#[inline("never")]
+fn try_parse(s: String) -> i32 {
+    let result = parse_via_leaf(s);
+    if let Ok(n) = result {
+        return n;
+    }
+    return -1;
+}
+
+export fn run() {
+    assert try_parse("hello") == 5;
+    assert try_parse("") == -1;
+    let mut long_s = "";
+    for let mut i = 0; i < 101; i += 1 {
+        long_s = `{long_s}x`;
+    }
+    assert try_parse(long_s) == -1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "/parse_leaf\" = fn(ref \"core:prelude/string.wado//String\") -> [i32, i32, ref null \"core:prelude/string.wado//String\"]",
+        "/parse_via_leaf\" = fn(ref \"core:prelude/string.wado//String\") -> [i32, i32, ref null \"core:prelude/string.wado//String\"]",
+        "multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0]",
+        "if __sroa_result_discriminant == 0"
+    ],
+    "wir_not_expect:O2": [
+        "ref.test \"core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>"
+    ]
+}

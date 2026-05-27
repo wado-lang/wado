@@ -215,14 +215,12 @@ fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__SystemC
     let __outptr: i32;
     let __lifted_result_1: i64;
     let __lifted_result_2: i32;
-    let __struct_result: ref "wasi:clocks/system_clock.wado//Instant";
     __outptr = "mem/realloc"(0, 0, 8, 16);
     "wasi/wasi:clocks/SystemClock::now"(__outptr);
     __lifted_result_1 = builtin::load_i64(__outptr);
     __lifted_result_2 = builtin::load_i32(__outptr + 8);
-    __struct_result = struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: __lifted_result_1, nanoseconds: __lifted_result_2 };
     drop("mem/realloc"(__outptr, 16, 8, 0));
-    return __struct_result;
+    return struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: __lifted_result_1, nanoseconds: __lifted_result_2 };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_clocks_timezone.wado/__cm_binding__Timezone_utc_offset"(when) with Timezone {

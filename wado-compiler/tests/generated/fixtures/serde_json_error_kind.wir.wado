@@ -883,7 +883,6 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     let __hfs_pos_52: i32;
     let __hfs_pos_53: i32;
     let __hfs_pos_54: i32;
-    let __hfs_call_55: ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>";
     "core:json/JsonDeserializer::skip_whitespace"(self);
     start = builtin::i64_extend_i32_s(self.pos);
     if self.pos >= self.input.used {
@@ -1019,22 +1018,19 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                 v = "core:prelude/fpfmt.wado/parse"(d, exp - frac);
                 v_signed = select f64(neg, builtin::f64_neg(v), v);
                 if v_signed != builtin::f64_floor(v_signed) {
-                    __hfs_call_55 = struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(msg_45 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 }; struct.new "core:serde//DeserializeError" { kind: 0, message: msg_45, offset: start }) };
                     self.pos = __hfs_pos_54;
-                    return __hfs_call_55;
+                    return struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(msg_45 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 }; struct.new "core:serde//DeserializeError" { kind: 0, message: msg_45, offset: start }) };
                 }
                 if (if v_signed < -2147483648 -> i32 {
                     1;
                 } else {
                     v_signed > 2147483647;
                 }) {
-                    __hfs_call_55 = struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(msg_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 }; struct.new "core:serde//DeserializeError" { kind: 5, message: msg_47, offset: start }) };
                     self.pos = __hfs_pos_54;
-                    return __hfs_call_55;
+                    return struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(msg_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 }; struct.new "core:serde//DeserializeError" { kind: 5, message: msg_47, offset: start }) };
                 }
-                __hfs_call_55 = struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::i32_trunc_f64_s(v_signed) };
                 self.pos = __hfs_pos_54;
-                return __hfs_call_55;
+                return struct.new "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::i32_trunc_f64_s(v_signed) };
             } else {
                 break b114;
             }

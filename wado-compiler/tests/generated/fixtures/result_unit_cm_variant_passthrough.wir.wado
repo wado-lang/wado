@@ -218,7 +218,6 @@ fn "wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado/write_h
     let file: i32;
     let bytes: ref "core:prelude//Array<u8>";
     let sub: i32;
-    let __drop_spill_10: ref null "wasi:filesystem/types.wado//ErrorCode";
     opened = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado/__cm_binding__Descriptor_open_at"(dir, 0, path, 9, 3));
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(opened) {
         e = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(opened).payload_0;
@@ -235,9 +234,8 @@ fn "wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado/write_h
         "core:internal/cm_stream_write_u8"(__mv_hi_1, bytes);
         "wasi/stream-drop-writable"(__mv_hi_1);
         "wasi/future-drop-readable:transmission-filesystem"(sub);
-        __drop_spill_10 = ref.null none;
         "wasi/resource-drop:descriptor"(file);
-        return __drop_spill_10;
+        return ref.null none;
     }
 }
 
