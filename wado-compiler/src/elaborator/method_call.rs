@@ -1486,14 +1486,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Check if a static method exists directly for a given type name (no newtype fallback).
     fn has_static_method_direct(&self, struct_name: &str, method_name: &str) -> bool {
         let mangled = MethodName::format_local(struct_name, None, method_name);
-        if self.function_return_types.contains_key(&mangled) {
+        if self.sem.decls.function_return_types.contains_key(&mangled) {
             return true;
         }
         // Also check with trait-qualified name
         if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
             let trait_mangled =
                 MethodName::format_local(struct_name, Some(&trait_name), method_name);
-            if self.function_return_types.contains_key(&trait_mangled) {
+            if self
+                .sem
+                .decls
+                .function_return_types
+                .contains_key(&trait_mangled)
+            {
                 return true;
             }
         }
@@ -1546,13 +1551,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let struct_module = &method_ref.module;
         let method_name = method_ref.method_name.as_str();
         // First check locally registered function_return_types
-        if let Some(&return_type) = self.function_return_types.get(mangled_func_name) {
+        if let Some(&return_type) = self.sem.decls.function_return_types.get(mangled_func_name) {
             return return_type;
         }
 
         // Also try with just StructName::method (for non-generic types)
         let simple_name = MethodName::format_local(struct_name, None, method_name);
-        if let Some(&return_type) = self.function_return_types.get(&simple_name) {
+        if let Some(&return_type) = self.sem.decls.function_return_types.get(&simple_name) {
             return return_type;
         }
 
@@ -1560,7 +1565,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
             let trait_mangled =
                 MethodName::format_local(struct_name, Some(&trait_name), method_name);
-            if let Some(&return_type) = self.function_return_types.get(&trait_mangled) {
+            if let Some(&return_type) = self.sem.decls.function_return_types.get(&trait_mangled) {
                 return return_type;
             }
         }
@@ -2461,7 +2466,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mangled_name = MethodName::format_local(struct_name, None, method_name);
 
         // Check if it's registered in function_return_types (static methods are registered there)
-        if self.function_return_types.contains_key(&mangled_name) {
+        if self
+            .sem
+            .decls
+            .function_return_types
+            .contains_key(&mangled_name)
+        {
             return true;
         }
 

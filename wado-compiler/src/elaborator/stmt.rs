@@ -638,6 +638,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ns.name == scrutinee_name
                     && scrutinee_arg_len.is_none_or(|n| n == ns.args.len())
                     && self
+                        .sem
+                        .imports
                         .namespace_imports
                         .get(&ns.namespace)
                         .is_some_and(|m| m == scrutinee_module)
@@ -1278,7 +1280,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 // Check if the identifier refers to an immutable global constant
                 if !matches!(pattern, Pattern::MutIdent { .. }) {
-                    if let Some(&(ty, mutable)) = self.current_module_globals.get(name)
+                    if let Some(&(ty, mutable)) = self.sem.decls.current_module_globals.get(name)
                         && !mutable
                     {
                         return TirPattern::ConstantValue {
@@ -1293,7 +1295,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         };
                     }
                     if let Some((source_module, original_name, ty, mutable)) =
-                        self.imported_globals.get(name)
+                        self.sem.decls.imported_globals.get(name)
                         && !*mutable
                     {
                         return TirPattern::ConstantValue {
@@ -1448,8 +1450,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let assoc_const_key =
                         Self::format_assoc_const_key(variant_name, variant_qualifier.as_ref());
                     // Resolve to literal patterns when possible for switch optimization.
-                    if let Some((const_ty, const_expr)) =
-                        self.associated_constants.get(&assoc_const_key).cloned()
+                    if let Some((const_ty, const_expr)) = self
+                        .sem
+                        .decls
+                        .associated_constants
+                        .get(&assoc_const_key)
+                        .cloned()
                     {
                         let type_id = self.resolve_type(&const_ty);
                         let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));

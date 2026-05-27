@@ -737,7 +737,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Namespace import: `use ns from "..."` then `ns::Type::method()`
             // or `ns::VariantType::Case(...)`.
-            else if let Some(ns_source) = self.namespace_imports.get(prefix).cloned() {
+            else if let Some(ns_source) = self.sem.imports.namespace_imports.get(prefix).cloned()
+            {
                 // suffix may be "Type::method" or plain "func"
                 if let Some(inner_pos) = suffix.find("::") {
                     let type_name = &suffix[..inner_pos];
@@ -909,17 +910,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The four constructor names flow through the
         // `CompilerItem` registry so a stdlib rename of any of
         // them is picked up here without re-editing the literal set.
-        else if self.function_return_types.contains_key(effective_name) || {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            effective_name == items.variant_case_name(crate::compiler_item::CompilerItem::ResultOk)
-                || effective_name
-                    == items.variant_case_name(crate::compiler_item::CompilerItem::ResultErr)
-                || effective_name
-                    == items.variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
-                || effective_name
-                    == items.variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
-        } {
+        else if self
+            .sem
+            .decls
+            .function_return_types
+            .contains_key(effective_name)
+            || {
+                let tt = self.tysys.type_table.borrow();
+                let items = tt.compiler_items();
+                effective_name
+                    == items.variant_case_name(crate::compiler_item::CompilerItem::ResultOk)
+                    || effective_name
+                        == items.variant_case_name(crate::compiler_item::CompilerItem::ResultErr)
+                    || effective_name
+                        == items.variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+                    || effective_name
+                        == items.variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+            }
+        {
             self.record_item_reference_by_name(ident.id, effective_name);
             (
                 Some(CalleeRef::local(
@@ -941,7 +949,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // We go through the `Symbol` directly so both the use→def edge
         // and the `CalleeRef` come from the same resolution — this is
         // the single place the alias→defining-name translation happens.
-        else if self.imported_functions.contains(effective_name) {
+        else if self.sem.decls.imported_functions.contains(effective_name) {
             if let Some(symbol) = self.symbols.lookup(effective_name) {
                 self.record_reference_to_key(ident.id, symbol.defined_at.clone());
                 (
@@ -1163,7 +1171,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // First, try local functions (entry point module)
         if callee_module.is_entry_point()
-            && let Some(&return_type) = self.function_return_types.get(func_name)
+            && let Some(&return_type) = self.sem.decls.function_return_types.get(func_name)
         {
             return return_type;
         }
@@ -1358,7 +1366,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             base_type,
                         );
                         // Cache the newtype for future lookups
-                        self.local_newtypes.insert(named.name.clone(), newtype_id);
+                        self.sem
+                            .decls
+                            .local_newtypes
+                            .insert(named.name.clone(), newtype_id);
                         newtype_id
                     } else if self
                         .tysys
@@ -1656,7 +1667,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check if it's a local function (defined in this module)
-        if self.function_return_types.contains_key(name) {
+        if self.sem.decls.function_return_types.contains_key(name) {
             // Clone params and type_params to avoid borrow issues
             let func_info: Option<(Vec<ast::Param>, Vec<ast::GenericParam>)> = self
                 .lookup_current_func(name)
@@ -1822,7 +1833,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(defaults) = ctx.closure_defaults.get(&ident.name) {
             return (defaults.clone(), None);
         }
-        if self.function_return_types.contains_key(&ident.name)
+        if self
+            .sem
+            .decls
+            .function_return_types
+            .contains_key(&ident.name)
             && let Some(func) = self.lookup_current_func(&ident.name)
         {
             return (
@@ -1867,7 +1882,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Local function
-        if self.function_return_types.contains_key(&ident.name)
+        if self
+            .sem
+            .decls
+            .function_return_types
+            .contains_key(&ident.name)
             && let Some(func) = self.lookup_current_func(&ident.name)
         {
             return func.params.iter().map(|p| p.is_mut).collect();
@@ -1962,12 +1981,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Fast path: current-module cache (populated during item resolution).
         let cached = if let (Some(tp), Some(rp)) = (
-            self.generic_function_params.get(func_name).cloned(),
-            self.generic_function_resolved_param_types
+            self.sem
+                .decls
+                .generic_function_params
+                .get(func_name)
+                .cloned(),
+            self.sem
+                .decls
+                .generic_function_resolved_param_types
                 .get(func_name)
                 .cloned(),
         ) {
             let decl_return = self
+                .sem
+                .decls
                 .generic_function_resolved_return_types
                 .get(func_name)
                 .copied();
@@ -2290,23 +2317,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         };
 
-        let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>)> =
-            if self.function_return_types.contains_key(&ident.name) {
-                self.lookup_current_func(&ident.name)
-                    .map(|func| (func.type_params.clone(), func.params.clone()))
-            } else if let Some(symbol) = self.symbols.lookup(&ident.name) {
-                let src = symbol.module_source().clone();
-                let name = symbol.name.clone();
-                Self::lookup_func_in_loaded_module(
-                    self.loaded_modules,
-                    &self.tysys.loaded_module_func_indices,
-                    &src,
-                    &name,
-                )
+        let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>)> = if self
+            .sem
+            .decls
+            .function_return_types
+            .contains_key(&ident.name)
+        {
+            self.lookup_current_func(&ident.name)
                 .map(|func| (func.type_params.clone(), func.params.clone()))
-            } else {
-                None
-            };
+        } else if let Some(symbol) = self.symbols.lookup(&ident.name) {
+            let src = symbol.module_source().clone();
+            let name = symbol.name.clone();
+            Self::lookup_func_in_loaded_module(
+                self.loaded_modules,
+                &self.tysys.loaded_module_func_indices,
+                &src,
+                &name,
+            )
+            .map(|func| (func.type_params.clone(), func.params.clone()))
+        } else {
+            None
+        };
 
         let Some((fn_type_params, fn_params)) = func_info else {
             return Vec::new();

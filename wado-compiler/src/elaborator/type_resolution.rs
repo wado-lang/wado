@@ -363,7 +363,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => {
                 // Check if it's a user-defined generic struct
-                if self.generic_struct_names.contains(name) {
+                if self.sem.decls.generic_struct_names.contains(name) {
                     // Resolve type arguments
                     let type_args: Vec<TypeId> =
                         args.iter().map(|t| self.resolve_type(t)).collect();

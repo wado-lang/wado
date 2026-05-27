@@ -949,11 +949,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .as_ref()
             .map(|t| self.resolve_type(t))
             .unwrap_or(TypeTable::UNIT);
-        self.generic_function_params
+        self.sem
+            .decls
+            .generic_function_params
             .insert(func.name.clone(), type_param_list);
-        self.generic_function_resolved_param_types
+        self.sem
+            .decls
+            .generic_function_resolved_param_types
             .insert(func.name.clone(), resolved_param_types);
-        self.generic_function_resolved_return_types
+        self.sem
+            .decls
+            .generic_function_resolved_return_types
             .insert(func.name.clone(), declared_return_type);
         declared_return_type
     }
@@ -1054,6 +1060,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Update the function_return_types with the resolved return type
         // (This replaces the potentially incorrect type from static resolution)
         scope
+            .sem
+            .decls
             .function_return_types
             .insert(func.name.clone(), return_type);
 
@@ -1610,6 +1618,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (This replaces the potentially incorrect type from static resolution)
         let mangled_name = MethodName::format_local(struct_name, trait_name, &func.name);
         scope
+            .sem
+            .decls
             .function_return_types
             .insert(mangled_name.clone(), return_type);
 
@@ -1766,9 +1776,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Store type parameters for generic methods (for call site substitution)
         if !func.type_params.is_empty() {
-            self.generic_method_params
+            self.sem
+                .decls
+                .generic_method_params
                 .insert(mangled_name.clone(), type_param_list);
-            self.generic_method_resolved_param_types
+            self.sem
+                .decls
+                .generic_method_resolved_param_types
                 .insert(mangled_name, method_resolved_param_types);
         }
 

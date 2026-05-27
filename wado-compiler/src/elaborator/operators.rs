@@ -1168,13 +1168,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             // Check if the global is mutable (check both local and imported globals)
             let is_mutable = self
+                .sem
+                .decls
                 .current_module_globals
                 .get(name)
                 .map(|(_, m)| *m)
                 .or_else(|| {
                     // For imported globals, the name in the TIR is the original name from source
                     // We need to find it by iterating through imported_globals
-                    self.imported_globals
+                    self.sem
+                        .decls
+                        .imported_globals
                         .values()
                         .find(|(src, orig_name, _, _)| src == module_source && orig_name == name)
                         .map(|(_, _, _, m)| *m)
