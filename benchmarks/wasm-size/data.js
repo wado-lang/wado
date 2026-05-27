@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779837626560,
+  "lastUpdate": 1779840360468,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26477,6 +26477,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 443310,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "80c142064538ea48af240ce826e6248c2465ee2f",
+          "message": "Merge pull request #1204 from wado-lang/claude/wado-1184-d4-design-hYAKV\n\nfix(optimize): address branch-review findings in NIR mod_ref / sroa_param / elide_box_local",
+          "timestamp": "2026-05-27T08:59:53+09:00",
+          "tree_id": "ea535e52d286d4e770a57ee6d443332952c568f6",
+          "url": "https://github.com/wado-lang/wado/commit/80c142064538ea48af240ce826e6248c2465ee2f"
+        },
+        "date": 1779840360055,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451317,
             "unit": "bytes"
           }
         ]
