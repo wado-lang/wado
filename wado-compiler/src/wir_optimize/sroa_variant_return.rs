@@ -50,6 +50,19 @@ use super::util::collect_pinned_func_ids;
 /// - Every call site stores the result into a temp and reads only via
 ///   `StructGet`.
 pub(super) fn sroa_variant_returns(module: &mut WirPackage) {
+    // Phase 0: elide return-only temps. NIR's `field_scalarize` (HFS) emits
+    // `__hfs_call_N` locals that ferry a match arm's value into the
+    // surrounding function's `Return`, producing pairs of
+    // `LocalSet(__hfs_call_N, StructNew(...)); Return(LocalGet(__hfs_call_N))`.
+    // The intermediate `LocalGet` blocks `value_expr_is_variant_struct_new`
+    // (which looks for `StructNew`/`Call`/`Unreachable` at the Return leaf),
+    // so chains like `deserialize_i64 → parse_i64_direct` can't propagate
+    // through `parse_i64_direct`. Collapsing every paired
+    // `LocalSet → Return(LocalGet)` into a direct `Return(value)` is sound
+    // when the temp's *only* uses match that shape — no other reads and no
+    // unpaired writes — which is exactly the HFS-synthesised pattern.
+    elide_return_only_temps(module);
+
     // Collect pinned func_ids (exported, in element tables, or RefFunc'd).
     let pinned = collect_pinned_func_ids(module);
 
@@ -159,6 +172,404 @@ fn wir_types_equal(a: &WirType, b: &WirType) -> bool {
             a_id.index() == b_id.index()
         }
         _ => false,
+    }
+}
+
+/// Per-function statistics for return-only temp elision.
+#[derive(Default)]
+struct ReturnTempStats {
+    /// Total `LocalSet` (and `LocalTee`) writes to this name, anywhere.
+    total_writes: usize,
+    /// Subset of writes that sit immediately before `Return(LocalGet(name))`
+    /// in the same statement list.
+    paired_writes: usize,
+    /// Set to true on any use of `name` that disqualifies the temp:
+    ///   - a `LocalGet(name)` *not* inside a `Return(LocalGet(name))` statement;
+    ///   - a `LocalSet` / `LocalTee` to `name` that appears as a sub-expression
+    ///     (not a top-level statement in some block / seq / if / loop body);
+    ///   - a `LocalTee(name, _)` anywhere (consumes-and-leaves-on-stack — fine
+    ///     in WIR but not the paired shape we're matching).
+    has_other_use: bool,
+}
+
+/// Phase 0: collapse `LocalSet(temp, X) ; [intervening stmts] ;
+/// Return(LocalGet(temp))` triples to `Return(X)`. NIR `field_scalarize`
+/// (HFS) introduces `__hfs_call_N` locals to capture a match arm's value
+/// before convergence sync, even when the captured value flows straight
+/// into the surrounding function's `Return`. The pattern in WIR is
+///
+/// ```text
+/// __hfs_call_N = struct.new Result::Err { ... };
+/// self.pos = __hfs_pos_X;                       // HFS write-back
+/// return __hfs_call_N;
+/// ```
+///
+/// The intermediate `LocalGet(name)` would otherwise hide a `StructNew`
+/// leaf from the return-shape checker, blocking the variant-return SROA
+/// candidate analysis. Eliding the temp leaves the equivalent
+/// `Return(StructNew)` shape that the analysis already understands.
+///
+/// Soundness: rewriting one such triple moves `X` past the intervening
+/// stmts to the `Return` site, so we require:
+///   1. Every `LocalGet(name)` is the paired `Return(LocalGet(name))`
+///      value, and every write to `name` is paired with such a `Return`
+///      after zero or more intervening stmts that don't reference `name`.
+///   2. `X` reads no heap / struct / array / memory / global state and
+///      contains no `Call*` — i.e. its value is fixed by the locals it
+///      reads at the moment it would have been evaluated. Any intervening
+///      `StructSet` / memory store therefore can't change `X`'s value.
+///   3. The intervening stmts' local-state effects are disjoint from
+///      `X`'s local-state effects: nothing intervening writes a local
+///      `X` reads, and nothing intervening reads a local `X` writes
+///      (e.g. an internal `offset_N = …; struct.new …`).
+///
+/// HFS-synthesised values consist of locals + literals + pure arithmetic
+/// plus a few internal `LocalSet` temps; their reads / writes are disjoint
+/// from the surrounding `self.pos = __hfs_pos_X` HFS write-back, so they
+/// all pass these checks. `Call`-shaped values fail check (2) — a sub-call
+/// reordered past a `StructSet` could observe different state.
+fn reads_only_local_state(expr: &WirInstr) -> bool {
+    match expr {
+        // Loads from heap / memory / GC state.
+        WirInstr::StructGet { .. }
+        | WirInstr::ArrayGet { .. }
+        | WirInstr::ArrayGetS { .. }
+        | WirInstr::ArrayGetU { .. }
+        | WirInstr::ArrayLen(_)
+        | WirInstr::I32Load { .. }
+        | WirInstr::I32Load8U { .. }
+        | WirInstr::I32Load8S { .. }
+        | WirInstr::I32Load16U { .. }
+        | WirInstr::I32Load16S { .. }
+        | WirInstr::I64Load { .. }
+        | WirInstr::V128Load { .. }
+        | WirInstr::GlobalGet { .. }
+        | WirInstr::TableGet { .. } => false,
+        // Calls — observable + might depend on intervening state.
+        WirInstr::Call { .. }
+        | WirInstr::CallIndirect { .. }
+        | WirInstr::CallRef { .. } => false,
+        // Stores — observable in the moving-past-intervening sense too:
+        // a relocated store would mutate state at a different program
+        // point. Reject conservatively.
+        WirInstr::GlobalSet { .. }
+        | WirInstr::StructSet { .. }
+        | WirInstr::ArraySet { .. }
+        | WirInstr::ArrayCopy { .. }
+        | WirInstr::ArrayFill { .. }
+        | WirInstr::TableSet { .. }
+        | WirInstr::I32Store { .. }
+        | WirInstr::I32Store8 { .. }
+        | WirInstr::I32Store16 { .. }
+        | WirInstr::I64Store { .. }
+        | WirInstr::V128Store { .. }
+        | WirInstr::MemoryGrow(_)
+        | WirInstr::MemoryFill { .. } => false,
+        // Control-flow exits embedded in a value would be bizarre — reject.
+        WirInstr::Return { .. }
+        | WirInstr::Br { .. }
+        | WirInstr::BrIf { .. }
+        | WirInstr::BrTable { .. }
+        | WirInstr::Unreachable => false,
+        // Anything else (constants, arithmetic, ref ops, `StructNew` and
+        // `ArrayNew*` allocations, `RefAsNonNull`, `RefCast`, `LocalGet`
+        // / `LocalSet` / `LocalTee` — the last three are tracked
+        // explicitly by `collect_local_io`) is fine to relocate provided
+        // its children are.
+        _ => {
+            let mut ok = true;
+            expr.for_each_child(&mut |child| {
+                if ok && !reads_only_local_state(child) {
+                    ok = false;
+                }
+            });
+            ok
+        }
+    }
+}
+
+/// Collect every local name read (`LocalGet`) or written (`LocalSet` /
+/// `LocalTee`) anywhere in `expr`'s subtree. Used to verify that
+/// relocating `X` past intervening stmts preserves observable behaviour.
+fn collect_local_io(
+    expr: &WirInstr,
+    reads: &mut IndexSet<String>,
+    writes: &mut IndexSet<String>,
+) {
+    match expr {
+        WirInstr::LocalGet { name, .. } => {
+            reads.insert(name.clone());
+        }
+        WirInstr::LocalSet { name, value } | WirInstr::LocalTee { name, value } => {
+            writes.insert(name.clone());
+            collect_local_io(value, reads, writes);
+        }
+        _ => {
+            expr.for_each_child(&mut |child| collect_local_io(child, reads, writes));
+        }
+    }
+}
+fn elide_return_only_temps(module: &mut WirPackage) {
+    for func in module.functions.iter_mut() {
+        if let Some(body) = &mut func.body {
+            elide_return_only_temps_in_body(body);
+        }
+    }
+}
+
+fn elide_return_only_temps_in_body(body: &mut Vec<WirInstr>) {
+    let mut stats: crate::hashmap::IndexMap<String, ReturnTempStats> =
+        crate::hashmap::IndexMap::default();
+    scan_return_temp_stats(body, &mut stats);
+
+    let valid: IndexSet<String> = stats
+        .iter()
+        .filter(|(_, s)| !s.has_other_use && s.paired_writes == s.total_writes && s.total_writes > 0)
+        .map(|(name, _)| name.clone())
+        .collect();
+    if valid.is_empty() {
+        return;
+    }
+    rewrite_return_temp_pairs(body, &valid);
+}
+
+/// Walk every statement list reachable from `body`, recording pair-vs-other
+/// use counts for every local that participates in a `LocalSet` /
+/// `LocalGet`. Statement-list contexts are: the top-level function body,
+/// `Block` / `Loop` bodies, `If` `then_body` / `else_body`, and explicit
+/// `Seq` instructions. A `LocalSet(name, X)` followed (after zero or
+/// more intervening stmts that don't reference `name` and don't conflict
+/// with `X`'s reads / writes) by `Return(LocalGet(name))` at the same
+/// level counts as one paired write and one paired read; the `LocalGet`
+/// inside the `Return` is *not* counted as a separate use. Any other
+/// shape of write or read tips `has_other_use = true` so the temp is
+/// rejected.
+fn scan_return_temp_stats(
+    instrs: &[WirInstr],
+    stats: &mut crate::hashmap::IndexMap<String, ReturnTempStats>,
+) {
+    let mut i = 0;
+    while i < instrs.len() {
+        if let WirInstr::LocalSet { name, value } = &instrs[i]
+            && reads_only_local_state(value)
+            && let Some(return_idx) = find_paired_return(instrs, i, name, value)
+        {
+            let entry = stats.entry(name.clone()).or_default();
+            entry.total_writes += 1;
+            entry.paired_writes += 1;
+            // The pair's `value` may still contain other locals' uses; the
+            // LocalGet of `name` inside the Return is *consumed* by the pair
+            // and not counted here. Any other use of `name` inside `value`
+            // (unusual but possible — e.g. `__hfs_call = f(__hfs_call)`) is a
+            // disqualifier.
+            scan_return_temp_uses_in_expr(value, Some(name.as_str()), stats);
+            // The intervening stmts (i+1 .. return_idx) were already
+            // disjointness-checked by `find_paired_return`. Still walk them
+            // for the surrounding scan: a LocalGet of *another* temp in those
+            // stmts must still count as an "other read" for that other temp.
+            for j in (i + 1)..return_idx {
+                scan_return_temp_uses_in_instr(&instrs[j], stats);
+            }
+            i = return_idx + 1;
+            continue;
+        }
+        scan_return_temp_uses_in_instr(&instrs[i], stats);
+        i += 1;
+    }
+}
+
+/// Maximum distance the relocation peephole will look ahead from a
+/// `LocalSet` to find a matching `Return(LocalGet)`. Pragmatic upper bound;
+/// HFS-emitted patterns put the write-back stmt right before the `Return`.
+const RETURN_TEMP_INTERVENING_BUDGET: usize = 8;
+
+/// Return the index of a `Return(LocalGet(name))` reachable from
+/// `start_idx + 1` through intervening stmts that
+///   - don't reference `name`,
+///   - don't write any local that `value` reads, and
+///   - don't read any local that `value` writes.
+/// Returns `None` when no such return exists within
+/// [`RETURN_TEMP_INTERVENING_BUDGET`] stmts.
+fn find_paired_return(
+    instrs: &[WirInstr],
+    start_idx: usize,
+    name: &str,
+    value: &WirInstr,
+) -> Option<usize> {
+    let mut x_reads: IndexSet<String> = IndexSet::default();
+    let mut x_writes: IndexSet<String> = IndexSet::default();
+    collect_local_io(value, &mut x_reads, &mut x_writes);
+
+    let end = (start_idx + 1 + RETURN_TEMP_INTERVENING_BUDGET).min(instrs.len());
+    for j in (start_idx + 1)..end {
+        if let WirInstr::Return { value: Some(rv) } = &instrs[j]
+            && let WirInstr::LocalGet { name: rn, .. } = rv.as_ref()
+            && rn == name
+        {
+            return Some(j);
+        }
+        // Intervening stmt — verify it doesn't reference `name` and is
+        // disjoint from `X`'s local I/O.
+        let mut intervening_reads: IndexSet<String> = IndexSet::default();
+        let mut intervening_writes: IndexSet<String> = IndexSet::default();
+        collect_local_io(&instrs[j], &mut intervening_reads, &mut intervening_writes);
+        if intervening_reads.contains(name) || intervening_writes.contains(name) {
+            return None;
+        }
+        if x_reads.iter().any(|r| intervening_writes.contains(r)) {
+            return None;
+        }
+        if x_writes.iter().any(|w| intervening_reads.contains(w)) {
+            return None;
+        }
+    }
+    None
+}
+
+/// Record uses of every local appearing inside `instr`. When
+/// `skip_name == Some(n)`, a top-level `LocalGet(n)` is *not* recorded —
+/// used by the pair detector so the paired LocalGet doesn't double-count
+/// as an "other read". Recurses into child instructions; statement-list
+/// children (Block / Loop / If / Seq bodies) re-enter the pair detector
+/// via [`scan_return_temp_stats`].
+fn scan_return_temp_uses_in_instr(
+    instr: &WirInstr,
+    stats: &mut crate::hashmap::IndexMap<String, ReturnTempStats>,
+) {
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+            scan_return_temp_stats(body, stats);
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            scan_return_temp_uses_in_expr(condition, None, stats);
+            scan_return_temp_stats(then_body, stats);
+            if let Some(eb) = else_body {
+                scan_return_temp_stats(eb, stats);
+            }
+        }
+        WirInstr::Seq(body) => {
+            scan_return_temp_stats(body, stats);
+        }
+        WirInstr::LocalSet { name, value } => {
+            // Unpaired LocalSet (the pair branch would have handled it).
+            // Count the write but disqualify the temp.
+            let entry = stats.entry(name.clone()).or_default();
+            entry.total_writes += 1;
+            entry.has_other_use = true;
+            scan_return_temp_uses_in_expr(value, None, stats);
+        }
+        WirInstr::LocalTee { name, value } => {
+            // LocalTee both writes and leaves the value on the stack, so the
+            // temp is observably read at the same time. Always disqualifies.
+            let entry = stats.entry(name.clone()).or_default();
+            entry.total_writes += 1;
+            entry.has_other_use = true;
+            scan_return_temp_uses_in_expr(value, None, stats);
+        }
+        other => scan_return_temp_uses_in_expr(other, None, stats),
+    }
+}
+
+fn scan_return_temp_uses_in_expr(
+    expr: &WirInstr,
+    skip_name: Option<&str>,
+    stats: &mut crate::hashmap::IndexMap<String, ReturnTempStats>,
+) {
+    if let WirInstr::LocalGet { name, .. } = expr {
+        if skip_name != Some(name.as_str()) {
+            // Any LocalGet outside a paired Return value is an "other read".
+            stats.entry(name.clone()).or_default().has_other_use = true;
+        }
+        return;
+    }
+    if matches!(
+        expr,
+        WirInstr::Block { .. } | WirInstr::Loop { .. } | WirInstr::If { .. } | WirInstr::Seq(_)
+    ) {
+        scan_return_temp_uses_in_instr(expr, stats);
+        return;
+    }
+    if let WirInstr::LocalSet { name, value } | WirInstr::LocalTee { name, value } = expr {
+        // LocalSet / LocalTee appearing as a sub-expression (not a top-level
+        // stmt) is always a disqualifier — it's not the paired shape.
+        let entry = stats.entry(name.clone()).or_default();
+        entry.total_writes += 1;
+        entry.has_other_use = true;
+        scan_return_temp_uses_in_expr(value, None, stats);
+        return;
+    }
+    if let WirInstr::Return { value: Some(rv) } = expr {
+        // Bare `Return(LocalGet(name))` in expression position (shouldn't
+        // arise structurally — Return is a statement — but defend anyway).
+        if let WirInstr::LocalGet { name, .. } = rv.as_ref() {
+            stats.entry(name.clone()).or_default().has_other_use = true;
+            return;
+        }
+        scan_return_temp_uses_in_expr(rv, None, stats);
+        return;
+    }
+    expr.for_each_child(&mut |child| scan_return_temp_uses_in_expr(child, None, stats));
+}
+
+/// Rewrite every paired `LocalSet(name, X); [intervening]; Return(LocalGet(name))`
+/// where `name` is in `valid` into `Nop; [intervening]; Return(X)`. The
+/// original `LocalSet`'s value moves into the `Return`; the `LocalSet`
+/// slot becomes a `Nop` so downstream cleanup passes can drop it.
+fn rewrite_return_temp_pairs(instrs: &mut Vec<WirInstr>, valid: &IndexSet<String>) {
+    let mut i = 0;
+    while i < instrs.len() {
+        // Match the relaxed pair shape: same predicate that
+        // `scan_return_temp_stats` accepted as paired.
+        if let WirInstr::LocalSet { name, value } = &instrs[i]
+            && valid.contains(name.as_str())
+            && reads_only_local_state(value)
+        {
+            let name_owned = name.clone();
+            if let Some(return_idx) = find_paired_return(instrs, i, &name_owned, value) {
+                let WirInstr::LocalSet { value, .. } =
+                    std::mem::replace(&mut instrs[i], WirInstr::Nop)
+                else {
+                    unreachable!()
+                };
+                instrs[return_idx] = WirInstr::Return { value: Some(value) };
+                // Recurse into the intervening stmts (their nested bodies
+                // may still contain other paired triples in nested blocks).
+                for j in (i + 1)..return_idx {
+                    rewrite_return_temp_pairs_in_instr(&mut instrs[j], valid);
+                }
+                i = return_idx + 1;
+                continue;
+            }
+        }
+        rewrite_return_temp_pairs_in_instr(&mut instrs[i], valid);
+        i += 1;
+    }
+}
+
+fn rewrite_return_temp_pairs_in_instr(instr: &mut WirInstr, valid: &IndexSet<String>) {
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+            rewrite_return_temp_pairs(body, valid);
+        }
+        WirInstr::If {
+            then_body,
+            else_body,
+            ..
+        } => {
+            rewrite_return_temp_pairs(then_body, valid);
+            if let Some(eb) = else_body {
+                rewrite_return_temp_pairs(eb, valid);
+            }
+        }
+        WirInstr::Seq(body) => {
+            rewrite_return_temp_pairs(body, valid);
+        }
+        _ => {}
     }
 }
 
@@ -801,6 +1212,47 @@ fn validate_call_sites_in_body(
                     caller_is_candidate,
                 );
             }
+            // `Return { Some(<Seq | Block>) }` — descend into the body and
+            // validate it as if it were a nested statement list. Synthesised
+            // code shapes like
+            //
+            //     return Seq([let __m = call(d), if ref.test(__m, Ok) ... ])
+            //
+            // (e.g. `JsonSeqAccess::next_element<i64>` after lowering) need
+            // this so the inner `LocalSet(__m, Call(candidate))` reaches
+            // the standard variant-access call-site check; without it the
+            // outer `Return`'s default fallthrough would mark `candidate`
+            // as invalid via `find_nested_candidate_calls`.
+            //
+            // The tail-call shape `Return { Some(<wrapper>(Call(candidate))) }`
+            // is still routed through `check_invalid_call_uses` first so
+            // that path's args / block-prefix scan runs (and so we don't
+            // accidentally double-recurse on the call itself).
+            WirInstr::Return { value: Some(v) }
+                if unwrap_to_candidate_call(v, candidate_ids).is_none()
+                    && matches!(
+                        v.as_ref(),
+                        WirInstr::Seq(_) | WirInstr::Block { .. }
+                    ) =>
+            {
+                if let WirInstr::Seq(body) = v.as_ref() {
+                    validate_call_sites_in_body(
+                        body,
+                        root_body,
+                        candidate_ids,
+                        invalid,
+                        caller_is_candidate,
+                    );
+                } else if let WirInstr::Block { body, .. } = v.as_ref() {
+                    validate_call_sites_in_body(
+                        body,
+                        root_body,
+                        candidate_ids,
+                        invalid,
+                        caller_is_candidate,
+                    );
+                }
+            }
             // For non-block instructions, check for invalid call uses at this level
             _ => {
                 check_invalid_call_uses(instr, candidate_ids, invalid, caller_is_candidate);
@@ -952,6 +1404,14 @@ fn check_variant_uses_in_subtree(instr: &WirInstr, local_name: &str) -> bool {
 /// Look through `ValueCopy`, trivial `Block` wrappers, and other transparent
 /// expressions to find a `Call` to a candidate function. Returns the `func_id`
 /// index if found.
+///
+/// Also looks through `Seq` whose last instruction is the value-producing one.
+/// `LocalSet`-from-`Call` site-effects are *always* wrapped in a `Seq` in WIR —
+/// e.g. `LocalSet(name, Seq([prefix..., Call(f)]))` — even when the unparser
+/// flattens the prefix into separate statements. Without `Seq` unwrapping,
+/// `find_nested_candidate_calls` would mis-classify every such site as a
+/// "nested candidate call" and invalidate `f`, even though the pattern is the
+/// idiomatic LocalSet-bound call we want to support.
 fn unwrap_to_candidate_call(instr: &WirInstr, candidate_ids: &IndexSet<u32>) -> Option<u32> {
     match instr {
         WirInstr::Call { func_id, .. } if candidate_ids.contains(&func_id.index()) => {
@@ -961,6 +1421,11 @@ fn unwrap_to_candidate_call(instr: &WirInstr, candidate_ids: &IndexSet<u32>) -> 
         // 1. The last instruction in body (implicit value)
         // 2. A Seq([..., value, Br]) pattern (break-with-value)
         WirInstr::Block { body, .. } => extract_block_result_call(body, candidate_ids),
+        // Seq's value is the last instruction; preceding items are side
+        // effects evaluated before the call.
+        WirInstr::Seq(body) => body
+            .last()
+            .and_then(|last| unwrap_to_candidate_call(last, candidate_ids)),
         _ => None,
     }
 }
@@ -1115,36 +1580,41 @@ fn check_invalid_call_uses(
     }
 }
 
-/// Scan prefix instructions in Block wrappers for nested candidate calls.
-/// When a `LocalSet { value: Block { body } }` wraps a candidate call
-/// as its result, the prefix instructions in the block body may also contain calls
-/// to candidates that the rewrite pass cannot reach.
+/// Scan prefix instructions in `Block` / `Seq` wrappers for nested candidate
+/// calls. When a `LocalSet { value: Block { body } }` or
+/// `LocalSet { value: Seq(body) }` wraps a candidate call as its result, the
+/// prefix instructions in the wrapper's body may also contain calls to
+/// candidates that the rewrite pass cannot reach.
 fn find_candidate_calls_in_block_prefix(
     instr: &WirInstr,
     candidate_ids: &IndexSet<u32>,
     invalid: &mut IndexSet<u32>,
 ) {
-    if let WirInstr::Block { body, .. } = instr {
-        // All instructions except the last (which is the result value) are prefix.
-        // Skip trailing Unreachable — translate_stmts_as_value may append one after
-        // a break-with-value; it is dead code and must not be treated as the result.
-        let effective_body = if matches!(body.last(), Some(WirInstr::Unreachable)) {
-            &body[..body.len() - 1]
-        } else {
-            body.as_slice()
-        };
-        if let Some((_, prefix)) = effective_body.split_last() {
-            for prefix_instr in prefix {
-                find_nested_candidate_calls(prefix_instr, candidate_ids, invalid);
-            }
+    let body = match instr {
+        WirInstr::Block { body, .. } | WirInstr::Seq(body) => body.as_slice(),
+        _ => return,
+    };
+    // All instructions except the last (which is the result value) are prefix.
+    // Skip trailing Unreachable — translate_stmts_as_value may append one after
+    // a break-with-value; it is dead code and must not be treated as the result.
+    let effective_body = if matches!(body.last(), Some(WirInstr::Unreachable)) {
+        &body[..body.len() - 1]
+    } else {
+        body
+    };
+    if let Some((_, prefix)) = effective_body.split_last() {
+        for prefix_instr in prefix {
+            find_nested_candidate_calls(prefix_instr, candidate_ids, invalid);
         }
     }
 }
 
-/// Unwrap through Block to find the inner Call instruction (for arg checking).
+/// Unwrap through `Block` or `Seq` to find the inner `Call` instruction (for
+/// arg checking).
 fn unwrap_to_inner_call(instr: &WirInstr) -> Option<&WirInstr> {
     match instr {
         WirInstr::Call { .. } => Some(instr),
+        WirInstr::Seq(body) => body.last().and_then(unwrap_to_inner_call),
         WirInstr::Block { body, .. } => {
             let last = body.last()?;
             match last {
@@ -2066,9 +2536,10 @@ fn take_call_from_local_set(instr: &mut WirInstr) -> (Vec<WirInstr>, Box<WirInst
     (prefix, Box::new(call))
 }
 
-/// Recursively unwrap `Block` wrappers to extract the `Call` instruction.
-/// Collects any non-result instructions from blocks into `prefix` so they can be
-/// emitted before the call.
+/// Recursively unwrap `Block` / `Seq` wrappers to extract the `Call`
+/// instruction. Collects any non-result instructions from the wrappers into
+/// `prefix` so they can be emitted before the call. Mirrors the
+/// `unwrap_to_candidate_call` recognition path used during validation.
 fn unwrap_and_take_call(instr: WirInstr, prefix: &mut Vec<WirInstr>) -> WirInstr {
     let mut current = instr;
     loop {
@@ -2082,6 +2553,20 @@ fn unwrap_and_take_call(instr: WirInstr, prefix: &mut Vec<WirInstr>) -> WirInstr
                 } else {
                     unreachable!("expected call in SROA block unwrap");
                 }
+            }
+            WirInstr::Seq(mut body) => {
+                if body.is_empty() {
+                    unreachable!("expected non-empty Seq in SROA call unwrap");
+                }
+                let last_idx = body.len() - 1;
+                for item in &mut body[..last_idx] {
+                    let taken = std::mem::replace(item, WirInstr::Nop);
+                    if !matches!(taken, WirInstr::Nop) {
+                        prefix.push(taken);
+                    }
+                }
+                let last = std::mem::replace(&mut body[last_idx], WirInstr::Nop);
+                current = last;
             }
             _ => unreachable!("unexpected instruction in SROA call unwrap"),
         }
