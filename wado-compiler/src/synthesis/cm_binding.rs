@@ -122,7 +122,11 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
-                collect_effect_calls_in_block(body, &mut seen_effects, project.wasi_registry);
+                collect_effect_calls_in_block(
+                    body,
+                    &mut seen_effects,
+                    project.cm_interface_registry,
+                );
             }
         }
     }
@@ -147,7 +151,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
         // participate in monomorphize / lower / DCE like normal functions.
         let mut auxiliary_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
         for qualified_name in &seen_effects {
-            if let Some(func_info) = project.wasi_registry.get_function(qualified_name) {
+            if let Some(func_info) = project.cm_interface_registry.get_function(qualified_name) {
                 let func_info = func_info.clone();
                 let binding_name =
                     binding_func_name(&func_info.interface_name, &func_info.method_name);
@@ -159,7 +163,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                 .unwrap_or_else(|| project.interner.borrow_mut().wasi(&func_info.package));
                 let produced = synthesize_adapter(
                     &func_info,
-                    project.wasi_registry,
+                    project.cm_interface_registry,
                     &entry_type_table,
                     &project.interner,
                     &owner_module,
@@ -201,7 +205,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                         body,
                         &adapter_map,
                         &entry_source,
-                        project.wasi_registry,
+                        project.cm_interface_registry,
                         &entry_type_table,
                     );
                 }
@@ -360,7 +364,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &flat_types,
                                 &project.tir_modules,
                                 &entry_type_table,
-                                project.wasi_registry,
+                                project.cm_interface_registry,
                                 &binding_cm_package,
                                 &project.interner,
                             );
@@ -372,7 +376,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             &project.tir_modules,
                             &entry_type_table,
                             &export.params,
-                            project.wasi_registry,
+                            project.cm_interface_registry,
                             &binding_cm_package,
                             &project.interner,
                         )
@@ -410,7 +414,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &project.tir_modules,
                                 &entry_type_table,
                                 &export.params,
-                                project.wasi_registry,
+                                project.cm_interface_registry,
                                 &binding_cm_package,
                                 &project.interner,
                             )
@@ -440,7 +444,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                     &project.tir_modules,
                                     &entry_type_table,
                                     &export.params,
-                                    project.wasi_registry,
+                                    project.cm_interface_registry,
                                     &binding_cm_package,
                                     &project.interner,
                                 )
@@ -557,7 +561,7 @@ mod tests {
     use super::*;
     use crate::ast::{NamedType, Type};
     use crate::cm_abi;
-    use crate::component_model::WasiRegistry;
+    use crate::component_model::CmInterfaceRegistry;
     use crate::synthesis::common::{
         builtin_call, cm_raw_call, i32_const, i64_const, internal_call, let_stmt, synth_span,
     };
@@ -649,7 +653,7 @@ mod tests {
     /// Mirrors the production `LiftContext` shape so the lift code paths
     /// run end-to-end in unit tests.
     struct LiftCtxFixture {
-        registry: WasiRegistry,
+        registry: CmInterfaceRegistry,
         type_table: std::cell::RefCell<TypeTable>,
         interner: std::cell::RefCell<ModuleSourceInterner>,
     }
@@ -663,7 +667,7 @@ mod tests {
             let mut tt = TypeTable::new();
             register_option_result_for_tests(&mut tt);
             Self {
-                registry: WasiRegistry::new(),
+                registry: CmInterfaceRegistry::new(),
                 type_table: std::cell::RefCell::new(tt),
                 interner: std::cell::RefCell::new(ModuleSourceInterner::new()),
             }
@@ -671,7 +675,7 @@ mod tests {
 
         fn ctx(&self) -> LiftContext<'_> {
             LiftContext {
-                wasi_registry: &self.registry,
+                cm_interface_registry: &self.registry,
                 type_table: &self.type_table,
                 cm_package: "",
                 interner: &self.interner,
@@ -681,7 +685,7 @@ mod tests {
 
     #[test]
     fn flatten_param_i32() {
-        let reg = WasiRegistry::new();
+        let reg = CmInterfaceRegistry::new();
         assert_eq!(
             flatten_param_type(&named_type("i32"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I32]
@@ -690,7 +694,7 @@ mod tests {
 
     #[test]
     fn flatten_param_i64() {
-        let reg = WasiRegistry::new();
+        let reg = CmInterfaceRegistry::new();
         assert_eq!(
             flatten_param_type(&named_type("i64"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
@@ -699,7 +703,7 @@ mod tests {
 
     #[test]
     fn flatten_param_f64() {
-        let reg = WasiRegistry::new();
+        let reg = CmInterfaceRegistry::new();
         assert_eq!(
             flatten_param_type(&named_type("f64"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::F64]
@@ -708,7 +712,7 @@ mod tests {
 
     #[test]
     fn flatten_param_string() {
-        let reg = WasiRegistry::new();
+        let reg = CmInterfaceRegistry::new();
         assert_eq!(
             flatten_param_type(&named_type("String"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I32, TypeTable::I32]
@@ -717,7 +721,7 @@ mod tests {
 
     #[test]
     fn flatten_param_bool() {
-        let reg = WasiRegistry::new();
+        let reg = CmInterfaceRegistry::new();
         assert_eq!(
             flatten_param_type(&named_type("bool"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I32]
@@ -726,7 +730,7 @@ mod tests {
 
     #[test]
     fn flatten_param_unit() {
-        let reg = WasiRegistry::new();
+        let reg = CmInterfaceRegistry::new();
         assert!(
             flatten_param_type(&Type::Tuple(vec![]), &reg, &CmStdlibNames::for_tests()).is_empty()
         );
@@ -734,7 +738,7 @@ mod tests {
 
     #[test]
     fn flatten_param_newtype_u64() {
-        let (reg, _) = WasiRegistry::build_from_stdlib();
+        let (reg, _) = CmInterfaceRegistry::build_from_stdlib();
         assert_eq!(
             flatten_param_type(&named_type("Duration"), reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
@@ -948,7 +952,7 @@ mod tests {
             visit_block(stmts, target)
         }
 
-        let (registry, _) = WasiRegistry::build_from_stdlib();
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
         let elem_ty = named_type("IpAddress");
         let expected_size = u64::from(crate::component_model::cm_size_with_registry_scoped(
             &elem_ty,
@@ -963,7 +967,7 @@ mod tests {
         let type_table = std::cell::RefCell::new(tt);
         let interner = std::cell::RefCell::new(ModuleSourceInterner::new());
         let ctx = LiftContext {
-            wasi_registry: registry,
+            cm_interface_registry: registry,
             type_table: &type_table,
             cm_package: "sockets",
             interner: &interner,

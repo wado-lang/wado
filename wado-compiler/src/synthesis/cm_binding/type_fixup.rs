@@ -14,7 +14,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::Type;
-use crate::component_model::{WasiFunctionInfo, WasiRegistry};
+use crate::component_model::{CmInterfaceRegistry, WasiFunctionInfo};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
@@ -35,7 +35,7 @@ fn replace_wasi_derived_type_recursive(
     adapter: &mut TirFunction,
     wasi_type: &Type,
     user_type: TypeId,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
@@ -43,7 +43,7 @@ fn replace_wasi_derived_type_recursive(
         super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     let old_type = {
         let mut tt = type_table.borrow_mut();
-        wasi_type_to_type_id(wasi_type, &mut tt, wasi_registry, wasi_package)
+        wasi_type_to_type_id(wasi_type, &mut tt, cm_interface_registry, wasi_package)
     };
     if old_type != user_type && old_type != TypeTable::I32 && old_type != TypeTable::UNIT {
         // Skip replacement if the user type resolves to the same base type
@@ -80,7 +80,7 @@ fn replace_wasi_derived_type_recursive(
                     adapter,
                     &g.args[0],
                     new_elem,
-                    wasi_registry,
+                    cm_interface_registry,
                     wasi_package,
                     type_table,
                 );
@@ -94,7 +94,7 @@ fn replace_wasi_derived_type_recursive(
                         adapter,
                         wasi_elem,
                         user_elem,
-                        wasi_registry,
+                        cm_interface_registry,
                         wasi_package,
                         type_table,
                     );
@@ -112,7 +112,7 @@ fn replace_wasi_derived_type_recursive(
                     adapter,
                     &g.args[0],
                     new_inner,
-                    wasi_registry,
+                    cm_interface_registry,
                     wasi_package,
                     type_table,
                 );
@@ -130,7 +130,7 @@ fn replace_wasi_derived_type_recursive(
                     adapter,
                     &g.args[0],
                     new_ok,
-                    wasi_registry,
+                    cm_interface_registry,
                     wasi_package,
                     type_table,
                 );
@@ -138,7 +138,7 @@ fn replace_wasi_derived_type_recursive(
                     adapter,
                     &g.args[1],
                     new_err,
-                    wasi_registry,
+                    cm_interface_registry,
                     wasi_package,
                     type_table,
                 );
@@ -159,7 +159,7 @@ fn fixup_wasi_derived_types_in_adapter(
     call_args: &[TirExpr],
     user_return_type: TypeId,
     type_table: &RefCell<TypeTable>,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     skip_self: bool,
 ) {
     let wasi_package = func_info.package.as_str();
@@ -174,12 +174,12 @@ fn fixup_wasi_derived_types_in_adapter(
         }
         let new_type = call_args[i].type_id;
         // Resolve newtypes (e.g., FieldName → String) before computing WASI-derived TypeId
-        let resolved = wasi_registry.resolve_type(param_type);
+        let resolved = cm_interface_registry.resolve_type(param_type);
         replace_wasi_derived_type_recursive(
             adapter,
             &resolved,
             new_type,
-            wasi_registry,
+            cm_interface_registry,
             wasi_package,
             type_table,
         );
@@ -192,12 +192,12 @@ fn fixup_wasi_derived_types_in_adapter(
     if !adapter.is_cm_binding
         && let Some(return_type) = &func_info.return_type
     {
-        let resolved = wasi_registry.resolve_type(return_type);
+        let resolved = cm_interface_registry.resolve_type(return_type);
         replace_wasi_derived_type_recursive(
             adapter,
             &resolved,
             user_return_type,
-            wasi_registry,
+            cm_interface_registry,
             wasi_package,
             type_table,
         );
@@ -788,11 +788,17 @@ pub(super) fn rewrite_calls_in_block(
     block: &mut TirBlock,
     adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &ModuleSource,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
 ) {
     for stmt in &mut block.stmts {
-        rewrite_calls_in_stmt(stmt, adapters, entry_source, wasi_registry, type_table);
+        rewrite_calls_in_stmt(
+            stmt,
+            adapters,
+            entry_source,
+            cm_interface_registry,
+            type_table,
+        );
     }
 }
 
@@ -800,13 +806,19 @@ fn rewrite_calls_in_stmt(
     stmt: &mut TirStmt,
     adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &ModuleSource,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
 ) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, type_id, .. } => {
             let old_type = value.type_id;
-            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                value,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
             // If the expression type changed (e.g., streaming adapter returns i32
             // instead of Result<(), ErrorCode>), update the let binding's type.
             if value.type_id != old_type {
@@ -814,11 +826,17 @@ fn rewrite_calls_in_stmt(
             }
         }
         TirStmtKind::Expr(value) => {
-            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                value,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                rewrite_calls_in_expr(v, adapters, entry_source, wasi_registry, type_table);
+                rewrite_calls_in_expr(v, adapters, entry_source, cm_interface_registry, type_table);
             }
         }
         TirStmtKind::If {
@@ -826,32 +844,62 @@ fn rewrite_calls_in_stmt(
             then_block,
             else_block,
         } => {
-            rewrite_calls_in_expr(condition, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                condition,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
             rewrite_calls_in_block(
                 then_block,
                 adapters,
                 entry_source,
-                wasi_registry,
+                cm_interface_registry,
                 type_table,
             );
             if let Some(blk) = else_block {
-                rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry, type_table);
+                rewrite_calls_in_block(
+                    blk,
+                    adapters,
+                    entry_source,
+                    cm_interface_registry,
+                    type_table,
+                );
             }
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            rewrite_calls_in_block(body, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_block(
+                body,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                rewrite_calls_in_expr(v, adapters, entry_source, wasi_registry, type_table);
+                rewrite_calls_in_expr(v, adapters, entry_source, cm_interface_registry, type_table);
             }
         }
         TirStmtKind::LetDestructure { value, .. } => {
-            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                value,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
         }
         TirStmtKind::Continue => {}
         TirStmtKind::TaskReturn { value } => {
-            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                value,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
         }
         TirStmtKind::VariadicForOf { .. } => {}
     }
@@ -861,7 +909,7 @@ fn rewrite_calls_in_expr(
     expr: &mut TirExpr,
     adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &ModuleSource,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
 ) {
     let names =
@@ -887,7 +935,7 @@ fn rewrite_calls_in_expr(
 
         if let Some(adapter_rc) = adapters.get(&qualified) {
             // Check if this is a streaming async function
-            let is_streaming = wasi_registry
+            let is_streaming = cm_interface_registry
                 .get_function(&qualified)
                 .is_some_and(|f| !f.is_async && f.has_streaming_param());
 
@@ -904,12 +952,16 @@ fn rewrite_calls_in_expr(
                     adapter.return_type = expr.type_id;
                     fixup_return_type_in_body(&mut adapter, old_return_type, expr.type_id);
                 }
-                let wasi_func = wasi_registry.get_function(&qualified);
+                let wasi_func = cm_interface_registry.get_function(&qualified);
                 for (i, arg) in args.iter().enumerate() {
                     if i < adapter.params.len() && adapter.params[i].type_id != arg.expr.type_id {
                         let is_gc_passthrough = wasi_func.is_some_and(|f| {
                             i < f.params.len()
-                                && is_gc_passthrough_param(&f.params[i].2, wasi_registry, &names)
+                                && is_gc_passthrough_param(
+                                    &f.params[i].2,
+                                    cm_interface_registry,
+                                    &names,
+                                )
                         });
                         if is_streaming && adapter.params[i].type_id == TypeTable::I32 {
                             // Streaming: keep adapter param as i32, cast the arg instead
@@ -969,7 +1021,7 @@ fn rewrite_calls_in_expr(
                     &mut arg.expr,
                     adapters,
                     entry_source,
-                    wasi_registry,
+                    cm_interface_registry,
                     type_table,
                 );
             }
@@ -989,9 +1041,9 @@ fn rewrite_calls_in_expr(
         // `wasi:` — the method resolution path is WASI-only.
         if !adapters.contains_key(&qualified)
             && let Some(source) =
-                wasi_registry.find_wasi_newtype_source(&method_info.base_struct_name)
+                cm_interface_registry.find_wasi_newtype_source(&method_info.base_struct_name)
             && let Some(Type::Named(resolved)) =
-                wasi_registry.get_newtype_by_source(source, &method_info.base_struct_name)
+                cm_interface_registry.get_newtype_by_source(source, &method_info.base_struct_name)
         {
             let aliased = format!("{}::{}", resolved.name, method_info.method_name);
             if adapters.contains_key(&aliased) {
@@ -1000,7 +1052,7 @@ fn rewrite_calls_in_expr(
         }
         if let Some(adapter_rc) = adapters.get(&qualified) {
             // Check if this is a streaming async function
-            let is_streaming = wasi_registry
+            let is_streaming = cm_interface_registry
                 .get_function(&qualified)
                 .is_some_and(|f| !f.is_async && f.has_streaming_param());
 
@@ -1042,7 +1094,7 @@ fn rewrite_calls_in_expr(
                     }
                 }
                 // Fix up remaining params from the args
-                let method_func = wasi_registry.get_function(&qualified);
+                let method_func = cm_interface_registry.get_function(&qualified);
                 for (i, arg) in taken_args.iter().enumerate() {
                     let param_idx = i + 1; // +1 to skip self
                     if param_idx < adapter.params.len()
@@ -1055,7 +1107,7 @@ fn rewrite_calls_in_expr(
                             wasi_param_idx < f.params.len()
                                 && is_gc_passthrough_param(
                                     &f.params[wasi_param_idx].2,
-                                    wasi_registry,
+                                    cm_interface_registry,
                                     &names,
                                 )
                         });
@@ -1079,7 +1131,7 @@ fn rewrite_calls_in_expr(
                 // and the recursive replacement can produce TypeId mismatches for
                 // complex return types like [Stream<T>, Future<Result<_, E>>].
                 if !adapter.is_cm_binding
-                    && let Some(func_info) = wasi_registry.get_function(&qualified)
+                    && let Some(func_info) = cm_interface_registry.get_function(&qualified)
                 {
                     let call_args: Vec<TirExpr> =
                         taken_args.iter().map(|a| a.expr.clone()).collect();
@@ -1089,7 +1141,7 @@ fn rewrite_calls_in_expr(
                         &call_args,
                         expr.type_id,
                         type_table,
-                        wasi_registry,
+                        cm_interface_registry,
                         true, // skip_self: call_args excludes self
                     );
                 }
@@ -1116,7 +1168,7 @@ fn rewrite_calls_in_expr(
 
             // Flatten call site args to match the binding's flat CM params.
             // For method calls, self is the first param; remaining args may need flattening.
-            let method_func = wasi_registry.get_function(&qualified);
+            let method_func = cm_interface_registry.get_function(&qualified);
             let flat_taken_args = if let Some(func_info) = method_func {
                 let mut flat = Vec::new();
                 for (i, arg) in taken_args.iter().enumerate() {
@@ -1127,18 +1179,18 @@ fn rewrite_calls_in_expr(
                         continue;
                     }
                     let param_type = &func_info.params[wasi_param_idx].2;
-                    let flat_tys = flatten_param_type(param_type, wasi_registry, &names);
+                    let flat_tys = flatten_param_type(param_type, cm_interface_registry, &names);
                     if flat_tys.is_empty() {
                         continue;
                     }
-                    if is_gc_passthrough_param(param_type, wasi_registry, &names) {
+                    if is_gc_passthrough_param(param_type, cm_interface_registry, &names) {
                         if matches!(arg.expr.kind, TirExprKind::Null) {
                             let (option_type_id, none_expr) = {
                                 let mut tt = type_table.borrow_mut();
                                 let option_type_id = wasi_type_to_type_id(
                                     param_type,
                                     &mut tt,
-                                    wasi_registry,
+                                    cm_interface_registry,
                                     &func_info.package,
                                 );
                                 let none_expr = option_none(option_type_id, tt.compiler_items());
@@ -1181,7 +1233,7 @@ fn rewrite_calls_in_expr(
                         &mut arg.expr,
                         adapters,
                         entry_source,
-                        wasi_registry,
+                        cm_interface_registry,
                         type_table,
                     );
                 }
@@ -1197,7 +1249,7 @@ fn rewrite_calls_in_expr(
         let func_name = func.name.clone();
         if let Some(adapter_rc) = adapters.get(&func_name) {
             // Look up WASI function info to flatten args at the call site
-            let wasi_func_info = wasi_registry.get_function(&func_name).cloned();
+            let wasi_func_info = cm_interface_registry.get_function(&func_name).cloned();
 
             // Extract args before replacing
             let taken_args = if let TirExprKind::Call { args, .. } = &mut expr.kind {
@@ -1244,7 +1296,8 @@ fn rewrite_calls_in_expr(
                             }
                             flat_idx += 1;
                         } else {
-                            let flat_tys = flatten_param_type(param_type, wasi_registry, &names);
+                            let flat_tys =
+                                flatten_param_type(param_type, cm_interface_registry, &names);
                             flat_idx += flat_tys.len().max(1);
                         }
                     }
@@ -1260,7 +1313,7 @@ fn rewrite_calls_in_expr(
                         &taken_args,
                         expr.type_id,
                         type_table,
-                        wasi_registry,
+                        cm_interface_registry,
                         false, // skip_self: static calls have no self
                     );
                 }
@@ -1273,11 +1326,11 @@ fn rewrite_calls_in_expr(
             let flat_call_args = if let Some(func_info) = &wasi_func_info {
                 let mut flat = Vec::new();
                 for (i, (_param_name, _, param_type)) in func_info.params.iter().enumerate() {
-                    let flat_tys = flatten_param_type(param_type, wasi_registry, &names);
+                    let flat_tys = flatten_param_type(param_type, cm_interface_registry, &names);
                     if flat_tys.is_empty() || i >= taken_args.len() {
                         continue;
                     }
-                    if is_gc_passthrough_param(param_type, wasi_registry, &names) {
+                    if is_gc_passthrough_param(param_type, cm_interface_registry, &names) {
                         let arg = &taken_args[i];
                         // Convert bare Null to VariantConstruct None.
                         // Use the binding's param type (from the WASI registry)
@@ -1289,7 +1342,7 @@ fn rewrite_calls_in_expr(
                                 let option_type_id = wasi_type_to_type_id(
                                     param_type,
                                     &mut tt,
-                                    wasi_registry,
+                                    cm_interface_registry,
                                     &func_info.package,
                                 );
                                 let none_expr = option_none(option_type_id, tt.compiler_items());
@@ -1329,7 +1382,7 @@ fn rewrite_calls_in_expr(
                         &mut arg.expr,
                         adapters,
                         entry_source,
-                        wasi_registry,
+                        cm_interface_registry,
                         type_table,
                     );
                 }
@@ -1346,61 +1399,121 @@ fn rewrite_calls_in_expr(
                     &mut arg.expr,
                     adapters,
                     entry_source,
-                    wasi_registry,
+                    cm_interface_registry,
                     type_table,
                 );
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry, type_table);
+                rewrite_calls_in_expr(
+                    arg,
+                    adapters,
+                    entry_source,
+                    cm_interface_registry,
+                    type_table,
+                );
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            rewrite_calls_in_expr(receiver, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                receiver,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
             for arg in args {
                 rewrite_calls_in_expr(
                     &mut arg.expr,
                     adapters,
                     entry_source,
-                    wasi_registry,
+                    cm_interface_registry,
                     type_table,
                 );
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
-            rewrite_calls_in_expr(callee, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                callee,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
             for arg in args {
-                rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry, type_table);
+                rewrite_calls_in_expr(
+                    arg,
+                    adapters,
+                    entry_source,
+                    cm_interface_registry,
+                    type_table,
+                );
             }
         }
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            rewrite_calls_in_block(block, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_block(
+                block,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
         }
         TirExprKind::Binary { left, right, .. } => {
-            rewrite_calls_in_expr(left, adapters, entry_source, wasi_registry, type_table);
-            rewrite_calls_in_expr(right, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                left,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
+            rewrite_calls_in_expr(
+                right,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. } => {
-            rewrite_calls_in_expr(inner, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                inner,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            rewrite_calls_in_expr(condition, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                condition,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
             rewrite_calls_in_block(
                 then_branch,
                 adapters,
                 entry_source,
-                wasi_registry,
+                cm_interface_registry,
                 type_table,
             );
             if let Some(blk) = else_branch {
-                rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry, type_table);
+                rewrite_calls_in_block(
+                    blk,
+                    adapters,
+                    entry_source,
+                    cm_interface_registry,
+                    type_table,
+                );
             }
         }
         TirExprKind::Index { expr: e, index }
@@ -1408,29 +1521,53 @@ fn rewrite_calls_in_expr(
             target: e,
             value: index,
         } => {
-            rewrite_calls_in_expr(e, adapters, entry_source, wasi_registry, type_table);
-            rewrite_calls_in_expr(index, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(e, adapters, entry_source, cm_interface_registry, type_table);
+            rewrite_calls_in_expr(
+                index,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
         }
         TirExprKind::Match {
             expr: scrutinee,
             arms,
         } => {
-            rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                scrutinee,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
             for arm in arms {
                 if let Some(guard) = &mut arm.guard {
-                    rewrite_calls_in_expr(guard, adapters, entry_source, wasi_registry, type_table);
+                    rewrite_calls_in_expr(
+                        guard,
+                        adapters,
+                        entry_source,
+                        cm_interface_registry,
+                        type_table,
+                    );
                 }
                 rewrite_calls_in_expr(
                     &mut arm.body,
                     adapters,
                     entry_source,
-                    wasi_registry,
+                    cm_interface_registry,
                     type_table,
                 );
             }
         }
         TirExprKind::Closure { body, .. } => {
-            rewrite_calls_in_expr(body, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                body,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in &mut fields.iter_mut() {
@@ -1438,13 +1575,19 @@ fn rewrite_calls_in_expr(
                     &mut field.value,
                     adapters,
                     entry_source,
-                    wasi_registry,
+                    cm_interface_registry,
                     type_table,
                 );
             }
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                value,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
         }
         TirExprKind::WithHandler { bindings, body, .. } => {
             // Walk the handler value and the do-block body so calls
@@ -1458,18 +1601,36 @@ fn rewrite_calls_in_expr(
                     &mut binding.handler,
                     adapters,
                     entry_source,
-                    wasi_registry,
+                    cm_interface_registry,
                     type_table,
                 );
             }
-            rewrite_calls_in_block(body, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_block(
+                body,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
         }
         TirExprKind::Resume { value } => {
-            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                value,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
         }
         TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
-                rewrite_calls_in_expr(elem, adapters, entry_source, wasi_registry, type_table);
+                rewrite_calls_in_expr(
+                    elem,
+                    adapters,
+                    entry_source,
+                    cm_interface_registry,
+                    type_table,
+                );
             }
         }
         TirExprKind::TupleSpread { expr: inner }
@@ -1480,7 +1641,13 @@ fn rewrite_calls_in_expr(
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
-            rewrite_calls_in_expr(inner, adapters, entry_source, wasi_registry, type_table);
+            rewrite_calls_in_expr(
+                inner,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+            );
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
@@ -1488,7 +1655,7 @@ fn rewrite_calls_in_expr(
                     payload_expr,
                     adapters,
                     entry_source,
-                    wasi_registry,
+                    cm_interface_registry,
                     type_table,
                 );
             }
@@ -1496,7 +1663,13 @@ fn rewrite_calls_in_expr(
         TirExprKind::TemplateString { parts } => {
             for part in parts {
                 if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                    rewrite_calls_in_expr(inner, adapters, entry_source, wasi_registry, type_table);
+                    rewrite_calls_in_expr(
+                        inner,
+                        adapters,
+                        entry_source,
+                        cm_interface_registry,
+                        type_table,
+                    );
                 }
             }
         }
@@ -1522,25 +1695,25 @@ fn rewrite_calls_in_expr(
 pub(super) fn collect_effect_calls_in_block(
     block: &TirBlock,
     effects: &mut IndexSet<String>,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
 ) {
     for stmt in &block.stmts {
-        collect_effect_calls_in_stmt(stmt, effects, wasi_registry);
+        collect_effect_calls_in_stmt(stmt, effects, cm_interface_registry);
     }
 }
 
 fn collect_effect_calls_in_stmt(
     stmt: &TirStmt,
     effects: &mut IndexSet<String>,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
 ) {
     match &stmt.kind {
         TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
-            collect_effect_calls_in_expr(value, effects, wasi_registry);
+            collect_effect_calls_in_expr(value, effects, cm_interface_registry);
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                collect_effect_calls_in_expr(v, effects, wasi_registry);
+                collect_effect_calls_in_expr(v, effects, cm_interface_registry);
             }
         }
         TirStmtKind::If {
@@ -1548,26 +1721,26 @@ fn collect_effect_calls_in_stmt(
             then_block,
             else_block,
         } => {
-            collect_effect_calls_in_expr(condition, effects, wasi_registry);
-            collect_effect_calls_in_block(then_block, effects, wasi_registry);
+            collect_effect_calls_in_expr(condition, effects, cm_interface_registry);
+            collect_effect_calls_in_block(then_block, effects, cm_interface_registry);
             if let Some(blk) = else_block {
-                collect_effect_calls_in_block(blk, effects, wasi_registry);
+                collect_effect_calls_in_block(blk, effects, cm_interface_registry);
             }
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            collect_effect_calls_in_block(body, effects, wasi_registry);
+            collect_effect_calls_in_block(body, effects, cm_interface_registry);
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                collect_effect_calls_in_expr(v, effects, wasi_registry);
+                collect_effect_calls_in_expr(v, effects, cm_interface_registry);
             }
         }
         TirStmtKind::LetDestructure { value, .. } => {
-            collect_effect_calls_in_expr(value, effects, wasi_registry);
+            collect_effect_calls_in_expr(value, effects, cm_interface_registry);
         }
         TirStmtKind::Continue => {}
         TirStmtKind::TaskReturn { value } => {
-            collect_effect_calls_in_expr(value, effects, wasi_registry);
+            collect_effect_calls_in_expr(value, effects, cm_interface_registry);
         }
         TirStmtKind::VariadicForOf { .. } => {}
     }
@@ -1576,7 +1749,7 @@ fn collect_effect_calls_in_stmt(
 fn collect_effect_calls_in_expr(
     expr: &TirExpr,
     effects: &mut IndexSet<String>,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
 ) {
     match &expr.kind {
         TirExprKind::Call { func, args, .. } => {
@@ -1586,24 +1759,24 @@ fn collect_effect_calls_in_expr(
             {
                 let method_name = func.name.clone();
                 let qualified = format!("{interface_name}::{method_name}");
-                if wasi_registry.get_function(&qualified).is_some() {
+                if cm_interface_registry.get_function(&qualified).is_some() {
                     effects.insert(qualified);
                 }
             }
             // Also check if this is a WASI resource static method call (e.g., Response::new)
             if func.method_info.is_some() {
                 let func_name = func.name.clone();
-                if wasi_registry.get_function(&func_name).is_some() {
+                if cm_interface_registry.get_function(&func_name).is_some() {
                     effects.insert(func_name);
                 }
             }
             for arg in args {
-                collect_effect_calls_in_expr(&arg.expr, effects, wasi_registry);
+                collect_effect_calls_in_expr(&arg.expr, effects, cm_interface_registry);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                collect_effect_calls_in_expr(arg, effects, wasi_registry);
+                collect_effect_calls_in_expr(arg, effects, cm_interface_registry);
             }
         }
         TirExprKind::MethodCall {
@@ -1618,52 +1791,52 @@ fn collect_effect_calls_in_expr(
                     "{}::{}",
                     method_info.base_struct_name, method_info.method_name
                 );
-                if wasi_registry.get_function(&qualified).is_some() {
+                if cm_interface_registry.get_function(&qualified).is_some() {
                     effects.insert(qualified);
                 } else if let Some(source) =
-                    wasi_registry.find_wasi_newtype_source(&method_info.base_struct_name)
-                    && let Some(Type::Named(resolved)) =
-                        wasi_registry.get_newtype_by_source(source, &method_info.base_struct_name)
+                    cm_interface_registry.find_wasi_newtype_source(&method_info.base_struct_name)
+                    && let Some(Type::Named(resolved)) = cm_interface_registry
+                        .get_newtype_by_source(source, &method_info.base_struct_name)
                 {
                     // Resolve through type aliases (e.g., Headers -> Fields)
                     let aliased = format!("{}::{}", resolved.name, method_info.method_name);
-                    if wasi_registry.get_function(&aliased).is_some() {
+                    if cm_interface_registry.get_function(&aliased).is_some() {
                         effects.insert(aliased);
                     }
                 }
             }
-            collect_effect_calls_in_expr(receiver, effects, wasi_registry);
+            collect_effect_calls_in_expr(receiver, effects, cm_interface_registry);
             for arg in args {
-                collect_effect_calls_in_expr(&arg.expr, effects, wasi_registry);
+                collect_effect_calls_in_expr(&arg.expr, effects, cm_interface_registry);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
-            collect_effect_calls_in_expr(callee, effects, wasi_registry);
+            collect_effect_calls_in_expr(callee, effects, cm_interface_registry);
             for arg in args {
-                collect_effect_calls_in_expr(arg, effects, wasi_registry);
+                collect_effect_calls_in_expr(arg, effects, cm_interface_registry);
             }
         }
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            collect_effect_calls_in_block(block, effects, wasi_registry);
+            collect_effect_calls_in_block(block, effects, cm_interface_registry);
         }
         TirExprKind::Binary { left, right, .. } => {
-            collect_effect_calls_in_expr(left, effects, wasi_registry);
-            collect_effect_calls_in_expr(right, effects, wasi_registry);
+            collect_effect_calls_in_expr(left, effects, cm_interface_registry);
+            collect_effect_calls_in_expr(right, effects, cm_interface_registry);
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. } => {
-            collect_effect_calls_in_expr(inner, effects, wasi_registry);
+            collect_effect_calls_in_expr(inner, effects, cm_interface_registry);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            collect_effect_calls_in_expr(condition, effects, wasi_registry);
-            collect_effect_calls_in_block(then_branch, effects, wasi_registry);
+            collect_effect_calls_in_expr(condition, effects, cm_interface_registry);
+            collect_effect_calls_in_block(then_branch, effects, cm_interface_registry);
             if let Some(blk) = else_branch {
-                collect_effect_calls_in_block(blk, effects, wasi_registry);
+                collect_effect_calls_in_block(blk, effects, cm_interface_registry);
             }
         }
         TirExprKind::Index { expr: e, index }
@@ -1671,31 +1844,31 @@ fn collect_effect_calls_in_expr(
             target: e,
             value: index,
         } => {
-            collect_effect_calls_in_expr(e, effects, wasi_registry);
-            collect_effect_calls_in_expr(index, effects, wasi_registry);
+            collect_effect_calls_in_expr(e, effects, cm_interface_registry);
+            collect_effect_calls_in_expr(index, effects, cm_interface_registry);
         }
         TirExprKind::Match {
             expr: scrutinee,
             arms,
         } => {
-            collect_effect_calls_in_expr(scrutinee, effects, wasi_registry);
+            collect_effect_calls_in_expr(scrutinee, effects, cm_interface_registry);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
-                    collect_effect_calls_in_expr(guard, effects, wasi_registry);
+                    collect_effect_calls_in_expr(guard, effects, cm_interface_registry);
                 }
-                collect_effect_calls_in_expr(&arm.body, effects, wasi_registry);
+                collect_effect_calls_in_expr(&arm.body, effects, cm_interface_registry);
             }
         }
         TirExprKind::Closure { body, .. } => {
-            collect_effect_calls_in_expr(body, effects, wasi_registry);
+            collect_effect_calls_in_expr(body, effects, cm_interface_registry);
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                collect_effect_calls_in_expr(&field.value, effects, wasi_registry);
+                collect_effect_calls_in_expr(&field.value, effects, cm_interface_registry);
             }
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            collect_effect_calls_in_expr(value, effects, wasi_registry);
+            collect_effect_calls_in_expr(value, effects, cm_interface_registry);
         }
         TirExprKind::WithHandler { bindings, body, .. } => {
             // Walk the handler value and the do-block body so effect calls
@@ -1704,16 +1877,16 @@ fn collect_effect_calls_in_expr(
             // functions whose else-branch falls back to the CM-binding
             // adapter) still trigger adapter generation here.
             for binding in bindings {
-                collect_effect_calls_in_expr(&binding.handler, effects, wasi_registry);
+                collect_effect_calls_in_expr(&binding.handler, effects, cm_interface_registry);
             }
-            collect_effect_calls_in_block(body, effects, wasi_registry);
+            collect_effect_calls_in_block(body, effects, cm_interface_registry);
         }
         TirExprKind::Resume { value } => {
-            collect_effect_calls_in_expr(value, effects, wasi_registry);
+            collect_effect_calls_in_expr(value, effects, cm_interface_registry);
         }
         TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
-                collect_effect_calls_in_expr(elem, effects, wasi_registry);
+                collect_effect_calls_in_expr(elem, effects, cm_interface_registry);
             }
         }
         TirExprKind::TupleSpread { expr: inner }
@@ -1724,17 +1897,17 @@ fn collect_effect_calls_in_expr(
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
-            collect_effect_calls_in_expr(inner, effects, wasi_registry);
+            collect_effect_calls_in_expr(inner, effects, cm_interface_registry);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
-                collect_effect_calls_in_expr(payload_expr, effects, wasi_registry);
+                collect_effect_calls_in_expr(payload_expr, effects, cm_interface_registry);
             }
         }
         TirExprKind::TemplateString { parts } => {
             for part in parts {
                 if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                    collect_effect_calls_in_expr(inner, effects, wasi_registry);
+                    collect_effect_calls_in_expr(inner, effects, cm_interface_registry);
                 }
             }
         }

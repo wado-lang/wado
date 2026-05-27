@@ -162,7 +162,7 @@ impl WasiFunctionInfo {
     ///
     /// WASI variant types (e.g., `Method` with `Other(String)`) have string
     /// payloads that require memory for `canon lower`.
-    pub fn needs_memory_with_registry(&self, registry: &WasiRegistry) -> bool {
+    pub fn needs_memory_with_registry(&self, registry: &CmInterfaceRegistry) -> bool {
         if self.needs_memory() {
             return true;
         }
@@ -181,7 +181,7 @@ impl WasiFunctionInfo {
     /// Check if a named type is a WASI variant/struct whose payload requires memory.
     /// Uses the reference's own `source_interface` when present (stdlib-
     /// populated), otherwise falls back to the unique `wasi:*` source.
-    fn named_type_payload_requires_memory(ty: &Type, registry: &WasiRegistry) -> bool {
+    fn named_type_payload_requires_memory(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
         if let Type::Named(named) = ty {
             let source = named
                 .source_interface
@@ -301,7 +301,7 @@ pub struct WasiInterfaceInfo {
 /// - Resolution of effect calls (e.g., "`Stdout::write_via_stream`") to local names
 /// - Iteration over interfaces for Component Model import generation
 #[derive(Debug, Clone, Default)]
-pub struct WasiRegistry {
+pub struct CmInterfaceRegistry {
     /// `Effect::method` -> function info
     effect_to_func: IndexMap<String, WasiFunctionInfo>,
 
@@ -364,7 +364,7 @@ fn register_unique<V>(
     let key = (source_interface, name);
     assert!(
         !map.contains_key(&key),
-        "WasiRegistry: duplicate {kind} registration for `{}` in interface `{}`. \
+        "CmInterfaceRegistry: duplicate {kind} registration for `{}` in interface `{}`. \
          Each (interface, name) pair must be registered exactly once.",
         key.1,
         key.0,
@@ -620,7 +620,7 @@ fn collect_cm_definitions(module: &crate::ast::Module) -> IndexMap<String, Strin
             Item::Interface(e) => (e.name.clone(), e.attrs.as_slice()),
             _ => continue,
         };
-        let source = WasiRegistry::cm_source_interface(attrs);
+        let source = CmInterfaceRegistry::cm_source_interface(attrs);
         if source.is_empty() {
             continue;
         }
@@ -808,7 +808,7 @@ fn walk_type(ty: &mut crate::ast::Type, local_names: &IndexMap<String, String>) 
     }
 }
 
-impl WasiRegistry {
+impl CmInterfaceRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {
         Self::default()
@@ -885,7 +885,7 @@ impl WasiRegistry {
     pub fn build_from_stdlib() -> &'static (Self, crate::world_registry::WorldRegistry) {
         use std::sync::OnceLock;
 
-        static INSTANCE: OnceLock<(WasiRegistry, crate::world_registry::WorldRegistry)> =
+        static INSTANCE: OnceLock<(CmInterfaceRegistry, crate::world_registry::WorldRegistry)> =
             OnceLock::new();
 
         INSTANCE.get_or_init(Self::build_from_stdlib_inner)
@@ -2152,7 +2152,7 @@ impl CmInstanceTypeGen {
         instance_type: &mut InstanceType,
         cm_name: &str,
         cases: &[CmVariantCase],
-        wasi_registry: &WasiRegistry,
+        cm_interface_registry: &CmInterfaceRegistry,
         resource_exports: &IndexMap<&str, u32>,
     ) -> u32 {
         let cache_key = format!("variant:{cm_name}");
@@ -2165,8 +2165,13 @@ impl CmInstanceTypeGen {
             .iter()
             .map(|case| {
                 case.payload.as_ref().map(|ty| {
-                    let resolved = wasi_registry.resolve_type(ty);
-                    self.ast_type_to_cm(&resolved, instance_type, wasi_registry, resource_exports)
+                    let resolved = cm_interface_registry.resolve_type(ty);
+                    self.ast_type_to_cm(
+                        &resolved,
+                        instance_type,
+                        cm_interface_registry,
+                        resource_exports,
+                    )
                 })
             })
             .collect();
@@ -2196,7 +2201,7 @@ impl CmInstanceTypeGen {
         instance_type: &mut InstanceType,
         cm_name: &str,
         fields: &[(String, Type)],
-        wasi_registry: &WasiRegistry,
+        cm_interface_registry: &CmInterfaceRegistry,
         resource_exports: &IndexMap<&str, u32>,
     ) -> u32 {
         let cache_key = format!("record:{cm_name}");
@@ -2208,9 +2213,13 @@ impl CmInstanceTypeGen {
         let field_cm_types: Vec<(String, ComponentValType)> = fields
             .iter()
             .map(|(field_name, field_ty)| {
-                let resolved = wasi_registry.resolve_type(field_ty);
-                let cm_type =
-                    self.ast_type_to_cm(&resolved, instance_type, wasi_registry, resource_exports);
+                let resolved = cm_interface_registry.resolve_type(field_ty);
+                let cm_type = self.ast_type_to_cm(
+                    &resolved,
+                    instance_type,
+                    cm_interface_registry,
+                    resource_exports,
+                );
                 (field_name.clone(), cm_type)
             })
             .collect();
@@ -2365,7 +2374,7 @@ impl CmInstanceTypeGen {
         &mut self,
         ty: &Type,
         instance_type: &mut InstanceType,
-        wasi_registry: &WasiRegistry,
+        cm_interface_registry: &CmInterfaceRegistry,
         resource_exports: &IndexMap<&str, u32>,
     ) -> ComponentValType {
         match ty {
@@ -2392,13 +2401,21 @@ impl CmInstanceTypeGen {
                     // unresolved reference to a type no interface declares.
                     let interface_hint_match: Option<String> =
                         self.interface_hint.as_deref().and_then(|h| {
-                            let hit = wasi_registry
+                            let hit = cm_interface_registry
                                 .get_resource_cm_name_by_source(h, name)
                                 .is_some()
-                                || wasi_registry.get_variant_cases_by_source(h, name).is_some()
-                                || wasi_registry.get_struct_fields_by_source(h, name).is_some()
-                                || wasi_registry.get_enum_variants_by_source(h, name).is_some()
-                                || wasi_registry.get_flags_members_by_source(h, name).is_some();
+                                || cm_interface_registry
+                                    .get_variant_cases_by_source(h, name)
+                                    .is_some()
+                                || cm_interface_registry
+                                    .get_struct_fields_by_source(h, name)
+                                    .is_some()
+                                || cm_interface_registry
+                                    .get_enum_variants_by_source(h, name)
+                                    .is_some()
+                                || cm_interface_registry
+                                    .get_flags_members_by_source(h, name)
+                                    .is_some();
                             hit.then(|| h.to_string())
                         });
                     let source_owned: String = named
@@ -2408,12 +2425,12 @@ impl CmInstanceTypeGen {
                         .map(str::to_string)
                         .or(interface_hint_match)
                         .or_else(|| {
-                            wasi_registry
+                            cm_interface_registry
                                 .find_wasi_resource_source(name)
-                                .or_else(|| wasi_registry.find_wasi_variant_source(name))
-                                .or_else(|| wasi_registry.find_wasi_struct_source(name))
-                                .or_else(|| wasi_registry.find_wasi_enum_source(name))
-                                .or_else(|| wasi_registry.find_wasi_flags_source(name))
+                                .or_else(|| cm_interface_registry.find_wasi_variant_source(name))
+                                .or_else(|| cm_interface_registry.find_wasi_struct_source(name))
+                                .or_else(|| cm_interface_registry.find_wasi_enum_source(name))
+                                .or_else(|| cm_interface_registry.find_wasi_flags_source(name))
                                 .map(str::to_string)
                         })
                         .unwrap_or_else(|| {
@@ -2423,7 +2440,7 @@ impl CmInstanceTypeGen {
                         });
                     let source = source_owned.as_str();
                     if let Some(cm_name) =
-                        wasi_registry.get_resource_cm_name_by_source(source, name)
+                        cm_interface_registry.get_resource_cm_name_by_source(source, name)
                     {
                         let cache_key = format!("own:{cm_name}");
                         if let Some(&idx) = self.cache.get(&cache_key) {
@@ -2440,19 +2457,19 @@ impl CmInstanceTypeGen {
                         // otherwise use the resolved source.
                         let hint = self.interface_hint.clone();
                         let cases_opt = if let Some(h) = hint.as_deref() {
-                            wasi_registry.get_variant_cases_by_interface(h, name)
+                            cm_interface_registry.get_variant_cases_by_interface(h, name)
                         } else {
-                            wasi_registry.get_variant_cases_by_source(source, name)
+                            cm_interface_registry.get_variant_cases_by_source(source, name)
                         };
                         cases_opt.map(<[CmVariantCase]>::to_vec)
                     } {
                         let cm_name = if let Some(hint) = &self.interface_hint {
-                            wasi_registry
+                            cm_interface_registry
                                 .get_variant_cm_name_by_interface(hint, name)
                                 .expect("variant cm_name present when cases are")
                                 .to_string()
                         } else {
-                            wasi_registry
+                            cm_interface_registry
                                 .get_variant_cm_name_by_source(source, name)
                                 .expect("variant cm_name present when cases are")
                                 .to_string()
@@ -2461,15 +2478,15 @@ impl CmInstanceTypeGen {
                             instance_type,
                             &cm_name,
                             &cases,
-                            wasi_registry,
+                            cm_interface_registry,
                             resource_exports,
                         );
                         ComponentValType::Type(idx)
-                    } else if let Some(fields) = wasi_registry
+                    } else if let Some(fields) = cm_interface_registry
                         .get_struct_fields_by_source(source, name)
                         .map(<[(String, Type)]>::to_vec)
                     {
-                        let cm_name = wasi_registry
+                        let cm_name = cm_interface_registry
                             .get_struct_cm_name_by_source(source, name)
                             .expect("struct cm_name present when fields are")
                             .to_string();
@@ -2477,11 +2494,11 @@ impl CmInstanceTypeGen {
                             instance_type,
                             &cm_name,
                             &fields,
-                            wasi_registry,
+                            cm_interface_registry,
                             resource_exports,
                         );
                         ComponentValType::Type(idx)
-                    } else if let Some(variants) = wasi_registry
+                    } else if let Some(variants) = cm_interface_registry
                         .get_enum_variants_by_source(source, name)
                         .map(<[String]>::to_vec)
                     {
@@ -2497,7 +2514,7 @@ impl CmInstanceTypeGen {
                         self.cache.insert(cache_key.clone(), idx);
 
                         if let Some(cm_name) =
-                            wasi_registry.get_enum_cm_name_by_source(source, name)
+                            cm_interface_registry.get_enum_cm_name_by_source(source, name)
                         {
                             instance_type.export(
                                 cm_name,
@@ -2509,7 +2526,7 @@ impl CmInstanceTypeGen {
                         }
 
                         ComponentValType::Type(idx)
-                    } else if let Some(members) = wasi_registry
+                    } else if let Some(members) = cm_interface_registry
                         .get_flags_members_by_source(source, name)
                         .map(<[String]>::to_vec)
                     {
@@ -2535,9 +2552,9 @@ impl CmInstanceTypeGen {
                         .source_interface
                         .as_deref()
                         .filter(|s| s.starts_with("wasi:"))
-                        .or_else(|| wasi_registry.find_wasi_resource_source(&n.name))
+                        .or_else(|| cm_interface_registry.find_wasi_resource_source(&n.name))
                     && let Some(cm_name) =
-                        wasi_registry.get_resource_cm_name_by_source(source, &n.name)
+                        cm_interface_registry.get_resource_cm_name_by_source(source, &n.name)
                 {
                     let export_idx = resource_exports[cm_name];
                     let idx = self.define_borrow(instance_type, export_idx, cm_name);
@@ -2550,7 +2567,7 @@ impl CmInstanceTypeGen {
                     let elem_cm = self.ast_type_to_cm(
                         &generic.args[0],
                         instance_type,
-                        wasi_registry,
+                        cm_interface_registry,
                         resource_exports,
                     );
                     let key = Self::type_key(&generic.args[0]);
@@ -2568,7 +2585,7 @@ impl CmInstanceTypeGen {
                         Some(self.ast_type_to_cm(
                             &generic.args[0],
                             instance_type,
-                            wasi_registry,
+                            cm_interface_registry,
                             resource_exports,
                         ))
                     };
@@ -2578,7 +2595,7 @@ impl CmInstanceTypeGen {
                         Some(self.ast_type_to_cm(
                             &generic.args[1],
                             instance_type,
-                            wasi_registry,
+                            cm_interface_registry,
                             resource_exports,
                         ))
                     };
@@ -2594,7 +2611,7 @@ impl CmInstanceTypeGen {
                     let inner_cm = self.ast_type_to_cm(
                         &generic.args[0],
                         instance_type,
-                        wasi_registry,
+                        cm_interface_registry,
                         resource_exports,
                     );
                     let key = Self::type_key(&generic.args[0]);
@@ -2608,7 +2625,7 @@ impl CmInstanceTypeGen {
                         let cm = self.ast_type_to_cm(
                             &generic.args[0],
                             instance_type,
-                            wasi_registry,
+                            cm_interface_registry,
                             resource_exports,
                         );
                         (Some(cm), Self::type_key(&generic.args[0]))
@@ -2623,7 +2640,7 @@ impl CmInstanceTypeGen {
                         let cm = self.ast_type_to_cm(
                             &generic.args[0],
                             instance_type,
-                            wasi_registry,
+                            cm_interface_registry,
                             resource_exports,
                         );
                         (Some(cm), Self::type_key(&generic.args[0]))
@@ -2639,7 +2656,7 @@ impl CmInstanceTypeGen {
                     self.ast_type_to_cm(
                         &generic.args[0],
                         instance_type,
-                        wasi_registry,
+                        cm_interface_registry,
                         resource_exports,
                     )
                 }
@@ -2651,7 +2668,14 @@ impl CmInstanceTypeGen {
             Type::Tuple(elems) => {
                 let cm_elems: Vec<ComponentValType> = elems
                     .iter()
-                    .map(|e| self.ast_type_to_cm(e, instance_type, wasi_registry, resource_exports))
+                    .map(|e| {
+                        self.ast_type_to_cm(
+                            e,
+                            instance_type,
+                            cm_interface_registry,
+                            resource_exports,
+                        )
+                    })
                     .collect();
                 let key = elems
                     .iter()
@@ -2669,7 +2693,7 @@ impl CmInstanceTypeGen {
 /// Convert a pre-resolved AST type to Wasm `ValType`
 ///
 /// This is a pure conversion function - newtypes must already be resolved
-/// before calling this function. Use `WasiRegistry::resolve_type()` during
+/// before calling this function. Use `CmInterfaceRegistry::resolve_type()` during
 /// registration to ensure types are pre-resolved.
 ///
 /// Note: This returns a SINGLE `ValType`. For compound types that lower to
@@ -2727,7 +2751,7 @@ fn join_val_types(a: Option<ValType>, b: Option<ValType>) -> ValType {
 /// Compound types like String and `Array<T>` are lowered to (ptr: i32, len: i32)
 /// in the Component Model core ABI. This function pushes the appropriate number
 /// of `ValType`s for each parameter.
-pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &WasiRegistry) {
+pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmInterfaceRegistry) {
     match ty {
         Type::Named(named) => match named.name.as_str() {
             // String is lowered to (ptr: i32, len: i32) in CM core ABI
@@ -3070,7 +3094,7 @@ pub fn is_return_type_supported(ty: &Type) -> bool {
 }
 
 /// Check if all types in a WASI function are supported for Component Model generation
-/// (without enum/resource knowledge - use `WasiRegistry::is_function_supported` instead)
+/// (without enum/resource knowledge - use `CmInterfaceRegistry::is_function_supported` instead)
 pub fn is_wasi_function_supported(func: &WasiFunctionInfo) -> bool {
     // Check all parameter types (Result not allowed in params)
     for (_, _, ty) in &func.params {
@@ -3129,7 +3153,7 @@ pub fn return_type_requires_outptr(ty: &Type) -> bool {
 /// `MAX_FLAT_RESULTS` core values, so they must be returned via an outptr.
 /// Generic `cm_flat_types` doesn't know about WASI variant cases; this
 /// registry-aware check fills that gap.
-pub fn wasi_named_type_return_needs_outptr(ty: &Type, registry: &WasiRegistry) -> bool {
+pub fn wasi_named_type_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
     if let Type::Named(named) = ty
         && let Some(source) = registry.resolve_wasi_source_for(named, None)
     {
@@ -3151,7 +3175,7 @@ pub fn wasi_named_type_return_needs_outptr(ty: &Type, registry: &WasiRegistry) -
 ///
 /// Resolves WASI structs (records), enums, flags, and variants through the registry
 /// to compute their true CM layout size, instead of defaulting to 4 (i32 handle).
-pub fn cm_size_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
+pub fn cm_size_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 {
     match ty {
         Type::Named(named) => {
             let Some(source) = registry.resolve_cm_source_for(named, None) else {
@@ -3213,7 +3237,7 @@ pub fn cm_size_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
 }
 
 /// Registry-aware CM canonical ABI alignment for a type.
-pub fn cm_align_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
+pub fn cm_align_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 {
     match ty {
         Type::Named(named) => {
             let Some(source) = registry.resolve_cm_source_for(named, None) else {
@@ -3262,7 +3286,7 @@ pub fn cm_align_with_registry(ty: &Type, registry: &WasiRegistry) -> u32 {
 /// - total: `align_to(payload_offset + max_payload_size, max_payload_align)`
 pub fn wasi_variant_cm_size_align(
     named: &crate::ast::NamedType,
-    registry: &WasiRegistry,
+    registry: &CmInterfaceRegistry,
 ) -> Option<(u32, u32)> {
     wasi_variant_cm_size_align_scoped(named, registry, None)
 }
@@ -3276,7 +3300,7 @@ pub fn wasi_variant_cm_size_align(
 /// resolution is already unambiguous.
 pub fn wasi_variant_cm_size_align_scoped(
     named: &crate::ast::NamedType,
-    registry: &WasiRegistry,
+    registry: &CmInterfaceRegistry,
     _wasi_package: Option<&str>,
 ) -> Option<(u32, u32)> {
     let source = registry.resolve_wasi_source_for(named, None)?;
@@ -3307,7 +3331,7 @@ pub fn wasi_variant_cm_size_align_scoped(
 /// with the same name across different WASI packages.
 pub fn cm_size_with_registry_scoped(
     ty: &Type,
-    registry: &WasiRegistry,
+    registry: &CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> u32 {
     match ty {
@@ -3375,7 +3399,7 @@ pub fn cm_size_with_registry_scoped(
 /// Package-scoped CM canonical ABI alignment for a type.
 pub fn cm_align_with_registry_scoped(
     ty: &Type,
-    registry: &WasiRegistry,
+    registry: &CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> u32 {
     match ty {
@@ -3500,7 +3524,7 @@ mod tests {
 
     #[test]
     fn test_register_and_resolve() {
-        let mut registry = WasiRegistry::new();
+        let mut registry = CmInterfaceRegistry::new();
 
         let wasi = CmImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
 
@@ -3527,7 +3551,7 @@ mod tests {
 
     #[test]
     fn test_no_collision_with_different_interfaces() {
-        let mut registry = WasiRegistry::new();
+        let mut registry = CmInterfaceRegistry::new();
 
         // Register stdout
         let stdout_wasi =
@@ -3577,7 +3601,7 @@ mod tests {
 
     #[test]
     fn test_interfaces_iteration() {
-        let mut registry = WasiRegistry::new();
+        let mut registry = CmInterfaceRegistry::new();
 
         let wasi = CmImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
 
@@ -3709,7 +3733,7 @@ mod tests {
 
     #[test]
     fn test_random_functions_registered() {
-        let (registry, _) = WasiRegistry::build_from_stdlib();
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
         // Check that Random functions are registered
         assert!(
@@ -3746,7 +3770,7 @@ mod tests {
 
     #[test]
     fn test_sockets_resource_methods_registered() {
-        let (registry, _) = WasiRegistry::build_from_stdlib();
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
         // Check that TcpSocket resource methods are registered
         let resolved = registry.resolve("TcpSocket::create");

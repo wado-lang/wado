@@ -5,7 +5,7 @@
 //! produces a [`crate::flat_package::FlatPackage`] for WIR building and codegen.
 
 use crate::builtin_registry::BuiltinRegistry;
-use crate::component_model::WasiRegistry;
+use crate::component_model::CmInterfaceRegistry;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -38,7 +38,7 @@ pub struct Package {
     pub module_name: String,
 
     /// Registry of WASI imports from lib/wasi/*.wado
-    pub wasi_registry: &'static WasiRegistry,
+    pub cm_interface_registry: &'static CmInterfaceRegistry,
     /// Registry of world definitions from lib/wasi/*.wado
     pub world_registry: &'static WorldRegistry,
     /// Registry of builtin function signatures from lib/core/builtin.wado
@@ -104,7 +104,7 @@ impl Package {
         trait_env: Arc<TraitEnv>,
         implicit_modules: IndexSet<ModuleSource>,
         module_name: String,
-        wasi_registry: &'static WasiRegistry,
+        cm_interface_registry: &'static CmInterfaceRegistry,
         world_registry: &'static WorldRegistry,
         builtin_registry: BuiltinRegistry,
         interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
@@ -116,7 +116,7 @@ impl Package {
             trait_env,
             implicit_modules,
             module_name,
-            wasi_registry,
+            cm_interface_registry,
             world_registry,
             builtin_registry,
             interner,

@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use crate::ast::{AstId, GenericType, NamedType, Type};
 use crate::cm_abi;
 use crate::compiler_item::{CompilerItem, CompilerItems};
-use crate::component_model::WasiRegistry;
+use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::tir::{
@@ -115,7 +115,7 @@ impl CmStdlibNames {
 /// recursion sites without propagating a borrow.
 #[derive(Clone, Copy)]
 pub struct LiftContext<'a> {
-    pub wasi_registry: &'a WasiRegistry,
+    pub cm_interface_registry: &'a CmInterfaceRegistry,
     pub type_table: &'a RefCell<TypeTable>,
     /// CM package owning the binding being synthesized (e.g., `"http"`
     /// for `wasi:http/*` bindings, `"kiln"` for `core:kiln/*` bindings).
@@ -155,7 +155,7 @@ pub struct LiftContext<'a> {
 pub fn wasi_type_to_type_id(
     ty: &Type,
     type_table: &mut TypeTable,
-    registry: &WasiRegistry,
+    registry: &CmInterfaceRegistry,
     wasi_package: &str,
 ) -> TypeId {
     let string_struct_name = type_table
@@ -272,7 +272,7 @@ pub(super) fn wasi_package_from_cm_source(source: &str) -> Option<&str> {
 /// package (e.g. `ErrorCode` is owned by `filesystem` but referenced from
 /// `http` bindings).
 pub(super) fn canonical_wasi_package<'a>(
-    registry: &'a WasiRegistry,
+    registry: &'a CmInterfaceRegistry,
     name: &str,
 ) -> Option<&'a str> {
     for kind in [
@@ -367,14 +367,14 @@ pub(super) fn is_unit_type(ty: &Type) -> bool {
 
 pub(super) fn is_gc_passthrough_param(
     ty: &Type,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     names: &CmStdlibNames,
 ) -> bool {
     match ty {
         Type::Named(n) if n.name == names.string => true,
         Type::Named(n) => n.source_interface.as_deref().is_some_and(|s| {
             s.starts_with("wasi:")
-                && wasi_registry
+                && cm_interface_registry
                     .get_variant_cases_by_source(s, &n.name)
                     .is_some()
         }),
@@ -394,7 +394,7 @@ pub(super) fn is_wasm_flat_type(type_id: TypeId) -> bool {
 /// Compute the flat ABI parameter types for a WASI function parameter.
 pub fn flatten_param_type(
     ty: &Type,
-    wasi_registry: &crate::component_model::WasiRegistry,
+    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
     names: &CmStdlibNames,
 ) -> Vec<TypeId> {
     fn cm_val_to_type_id(v: &cm_abi::CmValType) -> TypeId {
@@ -406,7 +406,7 @@ pub fn flatten_param_type(
         }
     }
 
-    let resolved = wasi_registry.resolve_type(ty);
+    let resolved = cm_interface_registry.resolve_type(ty);
     match &resolved {
         Type::Named(named) => {
             if named.name == names.string {
@@ -430,14 +430,16 @@ pub fn flatten_param_type(
                         return vec![TypeTable::I32];
                     };
                     // WASI variant: discriminant + join of all case payload flat types.
-                    if let Some(cases) = wasi_registry.get_variant_cases_by_source(source, name) {
+                    if let Some(cases) =
+                        cm_interface_registry.get_variant_cases_by_source(source, name)
+                    {
                         let mut result = vec![TypeTable::I32]; // discriminant
                         let case_flats: Vec<Vec<TypeId>> = cases
                             .iter()
                             .map(|c| {
                                 c.payload
                                     .as_ref()
-                                    .map(|t| flatten_param_type(t, wasi_registry, names))
+                                    .map(|t| flatten_param_type(t, cm_interface_registry, names))
                                     .unwrap_or_default()
                             })
                             .collect();
@@ -455,12 +457,14 @@ pub fn flatten_param_type(
                         return result;
                     }
                     // WASI struct (record): concatenation of all field flat types.
-                    if let Some(fields) =
-                        wasi_registry.get_struct_fields_with_wado_names_by_source(source, name)
+                    if let Some(fields) = cm_interface_registry
+                        .get_struct_fields_with_wado_names_by_source(source, name)
                     {
                         return fields
                             .iter()
-                            .flat_map(|(_, _, ft)| flatten_param_type(ft, wasi_registry, names))
+                            .flat_map(|(_, _, ft)| {
+                                flatten_param_type(ft, cm_interface_registry, names)
+                            })
                             .collect();
                     }
                     // Resource handles, enums, flags, etc.: single i32
@@ -518,22 +522,22 @@ pub fn cm_enum_byte_size(count: usize) -> u32 {
 /// Compute the CM Canonical ABI size for a param type, resolving WASI types through the registry.
 pub(super) fn cm_param_size(
     ty: &Type,
-    wasi_registry: &crate::component_model::WasiRegistry,
+    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
 ) -> u32 {
-    crate::component_model::cm_size_with_registry(ty, wasi_registry)
+    crate::component_model::cm_size_with_registry(ty, cm_interface_registry)
 }
 
 /// Compute the CM Canonical ABI alignment for a param type, resolving WASI types through the registry.
 pub(super) fn cm_param_align(
     ty: &Type,
-    wasi_registry: &crate::component_model::WasiRegistry,
+    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
 ) -> u32 {
-    crate::component_model::cm_align_with_registry(ty, wasi_registry)
+    crate::component_model::cm_align_with_registry(ty, cm_interface_registry)
 }
 
 pub(super) fn cm_param_store_plan(
     ty: &Type,
-    wasi_registry: &crate::component_model::WasiRegistry,
+    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
     names: &CmStdlibNames,
 ) -> Vec<(u32, &'static str)> {
     if let Type::Named(named) = ty {
@@ -546,7 +550,7 @@ pub(super) fn cm_param_store_plan(
             .filter(|s| s.starts_with("wasi:"));
         // Check WASI flags types.
         if let Some(members) =
-            source.and_then(|s| wasi_registry.get_flags_members_by_source(s, &named.name))
+            source.and_then(|s| cm_interface_registry.get_flags_members_by_source(s, &named.name))
         {
             let store = match cm_flags_byte_size(members.len()) {
                 0 => return vec![],
@@ -558,7 +562,7 @@ pub(super) fn cm_param_store_plan(
         }
         // Check WASI enum types.
         if let Some(variants) =
-            source.and_then(|s| wasi_registry.get_enum_variants_by_source(s, &named.name))
+            source.and_then(|s| cm_interface_registry.get_enum_variants_by_source(s, &named.name))
         {
             let store = match cm_enum_byte_size(variants.len()) {
                 1 => "i32_store8",
@@ -584,10 +588,12 @@ pub(super) fn cm_param_store_plan(
         Type::Generic(g) => match g.name.as_str() {
             "Option" if g.args.len() == 1 => {
                 // option<T>: disc (u8) at offset 0, payload at align_to(1, align(T))
-                let inner_align =
-                    crate::component_model::cm_align_with_registry(&g.args[0], wasi_registry);
+                let inner_align = crate::component_model::cm_align_with_registry(
+                    &g.args[0],
+                    cm_interface_registry,
+                );
                 let payload_offset = crate::cm_abi::align_to(1, inner_align);
-                let inner_store = cm_param_store_plan(&g.args[0], wasi_registry, names);
+                let inner_store = cm_param_store_plan(&g.args[0], cm_interface_registry, names);
                 let mut stores = vec![(0, "i32_store8")]; // discriminant
                 for (sub_offset, store_name) in inner_store {
                     stores.push((payload_offset + sub_offset, store_name));
@@ -954,7 +960,7 @@ pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
 /// `tir_modules` + `type_table` and is looked up lazily.
 ///
 /// Named types receive their `source_interface` populated via
-/// [`WasiRegistry::resolve_cm_source_for`] when the registry knows the
+/// [`CmInterfaceRegistry::resolve_cm_source_for`] when the registry knows the
 /// type (`wasi:*` records or `core:kiln/*` records). Without this,
 /// downstream lower / lift helpers can't find the record's field
 /// layout because they key the registry lookup by
@@ -962,7 +968,7 @@ pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
 pub(super) fn type_id_to_ast_type(
     type_id: TypeId,
     type_table: &TypeTable,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
 ) -> Type {
     let span = synth_span();
     let resolved = type_table.get(type_id);
@@ -981,7 +987,8 @@ pub(super) fn type_id_to_ast_type(
             ModuleSource::Core { name } => name.starts_with("kiln"),
             _ => false,
         };
-        if cm_namespace && let Some(source) = wasi_registry.resolve_cm_source_for(&nt, None) {
+        if cm_namespace && let Some(source) = cm_interface_registry.resolve_cm_source_for(&nt, None)
+        {
             nt.source_interface = Some(source.to_string());
         }
         Type::Named(nt)
@@ -1009,7 +1016,7 @@ pub(super) fn type_id_to_ast_type(
         } => {
             let args: Vec<Type> = type_args
                 .iter()
-                .map(|&tid| type_id_to_ast_type(tid, type_table, wasi_registry))
+                .map(|&tid| type_id_to_ast_type(tid, type_table, cm_interface_registry))
                 .collect();
             Type::Generic(GenericType {
                 id: AstId::fresh(),
@@ -1023,7 +1030,7 @@ pub(super) fn type_id_to_ast_type(
         } => {
             let args: Vec<Type> = type_args
                 .iter()
-                .map(|&tid| type_id_to_ast_type(tid, type_table, wasi_registry))
+                .map(|&tid| type_id_to_ast_type(tid, type_table, cm_interface_registry))
                 .collect();
             Type::Generic(GenericType {
                 id: AstId::fresh(),
@@ -1035,12 +1042,12 @@ pub(super) fn type_id_to_ast_type(
         ResolvedType::Ref(inner) => Type::Reference(Box::new(type_id_to_ast_type(
             *inner,
             type_table,
-            wasi_registry,
+            cm_interface_registry,
         ))),
         ResolvedType::MutRef(inner) => Type::MutReference(Box::new(type_id_to_ast_type(
             *inner,
             type_table,
-            wasi_registry,
+            cm_interface_registry,
         ))),
         _ => named_no_source("i32"),
     }

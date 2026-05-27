@@ -2027,7 +2027,7 @@ impl TypeTable {
     ///
     /// Standalone uses (e.g. `mangle_type_name(ErrorCode)` outside a
     /// generic instance, or method-dispatch `base_struct_name`) keep the
-    /// short name so that `wasi_registry`, `LocalMethodName`, and
+    /// short name so that `cm_interface_registry`, `LocalMethodName`, and
     /// `ModuleSource::interface_name` keys remain unchanged.
     ///
     /// User-facing display (`TypeTable::type_name`) is independent and

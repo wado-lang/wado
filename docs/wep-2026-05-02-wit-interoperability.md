@@ -429,7 +429,7 @@ Each phase ends with green E2E tests for the listed fixtures.
 - [x] Phase 0 — Dependencies and `Semantics` extension
   - [x] Add `wit-encoder` and `wit-component` to `[workspace.dependencies]`
         matching the existing `wit-parser` generation.
-  - [x] Expose `Semantics::world_registry()` and `Semantics::wasi_registry()`.
+  - [x] Expose `Semantics::world_registry()` and `Semantics::cm_interface_registry()`.
         The registries are already built by `Elaborator::annotate_modules`
         and live on `AnnotateState`; the accessors surface them for the
         WIT producer (Phase 1) and LSP without re-running stdlib parsing.
@@ -437,10 +437,10 @@ Each phase ends with green E2E tests for the listed fixtures.
         `FlatPackage` reads the same instance Semantics exposes, so no
         threading change is required downstream.
   - [x] Verify all existing tests still pass; this phase is a pure refactor.
-  - [ ] Rename `WasiRegistry` → `CmInterfaceRegistry` (separate commit on
-        this branch). The current name is stale after the effect→interface
-        unification: the registry covers every CM interface (`wasi:*`,
-        `core:kiln/*`, future user-declared interfaces), not just WASI.
+  - [x] Rename the legacy `WasiRegistry` to `CmInterfaceRegistry`. The
+        old name was stale after the effect→interface unification: the
+        registry covers every CM interface (`wasi:*`, `core:kiln/*`,
+        future user-declared interfaces), not just WASI.
   - [ ] Defer to Phase 1 alongside the `wit_emit` consumer:
         `Semantics::interfaces` (index of `pub interface Foo` with its
         `#[cm("...")]` FQ), `Semantics::exported_items` (`export fn /
@@ -570,7 +570,7 @@ will get one when work starts.
   parameters (`<interface E>`), matching WIT's vocabulary directly. The
   `effect` keyword is retired.
 - World imports are traceable to WIT FQ names by construction, removing the
-  fragile method-name-based disambiguation in `WasiRegistry`.
+  fragile method-name-based disambiguation in `CmInterfaceRegistry`.
 - Adding a new WASI or third-party CM library no longer requires patching the
   compiler or the stdlib list.
 - The producer (WIT Bundling) and consumer (this WEP) sides become

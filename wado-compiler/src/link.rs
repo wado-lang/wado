@@ -52,7 +52,7 @@ pub fn link(package: Package) -> FlatPackage {
         entry_tests,
         &package.export_binding_names,
         package.world_registry,
-        package.wasi_registry,
+        package.cm_interface_registry,
     );
 
     // Flatten all per-module TIR into flat lists.
@@ -114,7 +114,7 @@ pub fn link(package: Package) -> FlatPackage {
         tests,
         wasm_module_sources,
         module_name: package.module_name,
-        wasi_registry: package.wasi_registry,
+        cm_interface_registry: package.cm_interface_registry,
         world_registry: package.world_registry,
         used_wasi_functions: package.used_wasi_functions,
         strip_names: package.strip_names,

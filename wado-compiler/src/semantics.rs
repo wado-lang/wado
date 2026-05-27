@@ -15,7 +15,7 @@ use crate::analyze::Analyzer;
 use crate::ast::{AstId, Module};
 use crate::ast_index::AstIndex;
 use crate::compiler_host::{CompilerHost, LogLevel};
-use crate::component_model::WasiRegistry;
+use crate::component_model::CmInterfaceRegistry;
 use crate::elaborator::Elaborator;
 use crate::elaborator::orchestration::AnnotateState;
 use crate::hashmap::IndexMap;
@@ -147,17 +147,18 @@ impl Semantics {
         self.state.as_ref().map(|s| s.world_registry)
     }
 
-    /// Component Model WASI-import registry produced during annotate.
+    /// Component Model interface registry produced during annotate.
     ///
     /// Carries the resolved `#[cm(...)]` / `#[cm_import(...)]` view of
-    /// every imported interface (effects-as-interfaces under the unified
-    /// WIT vocabulary) the frontend has seen. Powers CM binding
-    /// synthesis, lift/lower, and WIT producer-side emission.
+    /// every CM interface the frontend has seen — `wasi:*`,
+    /// `core:kiln/*`, and any future user-declared interfaces under the
+    /// unified WIT vocabulary (post-`effect` retirement). Powers CM
+    /// binding synthesis, lift/lower, and WIT producer-side emission.
     ///
     /// Returns `None` only when annotate bailed; see [`Self::world_registry`].
     #[must_use]
-    pub fn wasi_registry(&self) -> Option<&'static WasiRegistry> {
-        self.state.as_ref().map(|s| s.tysys.wasi_registry)
+    pub fn cm_interface_registry(&self) -> Option<&'static CmInterfaceRegistry> {
+        self.state.as_ref().map(|s| s.tysys.cm_interface_registry)
     }
 
     /// Construct an empty [`Semantics`] holding only the bookkeeping that

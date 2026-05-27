@@ -1280,7 +1280,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         operation: &str,
     ) -> Option<TypeId> {
         let func_key = format!("{effect}::{operation}");
-        let func = self.tysys.wasi_registry.get_function(&func_key)?;
+        let func = self.tysys.cm_interface_registry.get_function(&func_key)?;
         let is_async = func.is_async;
         let package = func.package.clone();
 
@@ -1349,11 +1349,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Scoped to `wasi:` to keep this elaborator path WASI-only.
                     let aliased = self
                         .tysys
-                        .wasi_registry
+                        .cm_interface_registry
                         .find_wasi_newtype_source(&named.name)
                         .and_then(|src| {
                             self.tysys
-                                .wasi_registry
+                                .cm_interface_registry
                                 .get_newtype_by_source(src, &named.name)
                         })
                         .cloned();
@@ -1373,7 +1373,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         newtype_id
                     } else if self
                         .tysys
-                        .wasi_registry
+                        .cm_interface_registry
                         .find_wasi_resource_source(&named.name)
                         .is_some()
                     {
@@ -1408,7 +1408,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             // types cannot leak in.
                             if self
                                 .tysys
-                                .wasi_registry
+                                .cm_interface_registry
                                 .find_wasi_enum_source(&named.name)
                                 .is_some()
                             {
@@ -1426,7 +1426,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .make_enum(named.name.clone(), module_source)
                             } else if self
                                 .tysys
-                                .wasi_registry
+                                .cm_interface_registry
                                 .find_wasi_struct_source(&named.name)
                                 .is_some()
                             {
@@ -1448,7 +1448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     } else if self
                         .tysys
-                        .wasi_registry
+                        .cm_interface_registry
                         .find_wasi_enum_source(&named.name)
                         .is_some()
                     {
@@ -1471,7 +1471,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .make_enum(named.name.clone(), module_source)
                     } else if self
                         .tysys
-                        .wasi_registry
+                        .cm_interface_registry
                         .find_wasi_struct_source(&named.name)
                         .is_some()
                     {
