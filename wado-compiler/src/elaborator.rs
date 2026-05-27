@@ -472,11 +472,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// [`crate::elaborator::expr::patch_unresolved_null`]); recording
     /// the sentinel here would leave a stale entry the reify pass cannot
     /// consume and the post-patch TIR would disagree with.
-    pub(super) fn record_expression_type(
-        &mut self,
-        ast_id: crate::ast::AstId,
-        type_id: TypeId,
-    ) {
+    pub(super) fn record_expression_type(&mut self, ast_id: crate::ast::AstId, type_id: TypeId) {
         if type_id == TypeTable::ERROR {
             return;
         }

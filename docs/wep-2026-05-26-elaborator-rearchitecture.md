@@ -488,19 +488,45 @@ flat-store-by-construction. Same note next to the type in
 
 ### Design notes (Stage 4)
 
-#### Recording sits at the decision point, not at the call site
+#### Recording sits at the choke point, not the outer dispatcher
 
-Each annotation kind is written from inside the function that owns the
-decision: `resolve_expr` wraps a `resolve_expr_inner` and records the
-final `TypeId`, `resolve_method_call_with` records the `FunctionRef` +
-`SelfKind` just before `build_tir_method_call`, every successful
-`try_coerce` branch records its `CoercionKind`, and each desugar
-function (`desugar_assert`, `desugar_matches_expr`,
-`desugar_comparison_chain`, `resolve_for_of`, `resolve_while`,
-`resolve_compound_assign`) tags its enclosing AST node up front. The
-alternative — extracting the decision from the returned `TirExpr` —
-would tie reify to the TIR shape and miss the receiver-adjustment kind
-that `MethodCall` does not carry.
+Self-review surfaced a class of bypasses: when recording lives in the
+outer dispatcher (`try_coerce`, `resolve_method_call_with`), every
+direct call to a sub-helper (`try_coerce_tuple_to_sequence` from
+`resolve_cast` / `resolve_let`, `recoerce_literal_args` after
+post-inference type-arg substitution, `try_resolve_index_mut_method_call`
+for `container[i].method()`, etc.) silently skips the record. The fix
+is to record at the single TIR-construction choke point per kind, not
+at the outer dispatcher:
+
+- Coercion: each `try_coerce_*` sub-helper records its `CoercionKind`
+  and `expression_types` itself. `try_coerce` no longer wraps the
+  numeric / tuple / struct paths with redundant record calls; the
+  inline string-newtype and closure-newtype branches still record
+  here because they have no sub-helper.
+- Method dispatch: `record_method_dispatch` is called by both the
+  regular `resolve_method_call_with` path and the IndexMut rewrite in
+  `try_resolve_index_mut_method_call`. The MethodNotFound recovery
+  branch sets a `method_found = false` flag that gates the record so
+  the placeholder MethodInfo doesn't leak into the map as a junk
+  dispatch entry.
+- Expression types: `record_expression_type` skips writes when the
+  resolved type is `ERROR` or still contains `UNKNOWN`. The Null
+  literal case (which initially resolves to `Option<UNKNOWN>` and gets
+  patched later by `patch_unresolved_null`) is therefore not written,
+  matching how reify will need to handle Null via context anyway.
+- Desugars: `ForOfIterator` only records after the `IntoIterator`
+  trait check passes; `ComparisonChain` only after the empty- and
+  single-comparison early returns. Both previously tagged nodes the
+  elaborator did not actually desugar.
+- Stmt-position match: dispatches to `resolve_match_expr` directly, so
+  the stmt arm records `expression_types` explicitly to keep the
+  per-AstId map populated for stmt-context matches as well.
+
+Each annotation kind is still written from inside the function that
+owns the decision; the choke-point pattern just ensures that "inside"
+is the single sub-helper every caller routes through, not the outer
+dispatcher one or two of the callers happen to use.
 
 #### Synthetic call sites stay out of the maps
 
@@ -509,8 +535,13 @@ For-of's `.into_iter()` / `.next()` lowerings call
 edge) and `call_id: None` (no `method_dispatch` entry). The tuple
 `.len()` / `.zip()` and static-method-as-instance short-circuits
 return before the recording site for the same reason — reify
-recognises them from the receiver type alone. The contract is
-documented on `MethodDispatch` and enforced by the field on
+recognises them from the receiver type alone. For-of's `.enumerate()`
+unwrap at the AST level is another instance: the `.enumerate()`
+`MethodCallExpr` is consumed by the for-of dispatcher before
+`resolve_expr` ever fires on it, so neither `expression_types` nor
+`method_dispatch` carry an entry for `mc.id`. Reify re-detects the
+pattern by inspecting `for_of.iterable`. The contract is documented on
+`MethodDispatch` and enforced by the `call_id` field on
 `MethodCallInput`.
 
 #### Recording is idempotent under the assert-capture re-entry
