@@ -1049,13 +1049,12 @@ fn block_fallthrough_is_variant_compatible(
 /// wrappers (necessary so the idiomatic `LocalSet(name, Seq([…, Call]))`
 /// lowering is recognised as a call site). This discovery-side checker
 /// is strictly tighter — only the bare top-level `Call` shape produces
-/// a candidate via tail-call propagation. The asymmetry is intentional
-/// but worth a guardrail: a `Return { Some(Seq([…, Call(g)])) }` in a
-/// non-candidate caller routes through validation's tail-call arm
-/// (because `unwrap_to_candidate_call` succeeds) and ends up
-/// over-invalidating `g` via the prefix scan — see the over-
-/// invalidation finding in the code-review notes. If/when that gets
-/// addressed, this comment should be reconciled.
+/// a candidate via tail-call propagation. The asymmetry is intentional:
+/// the validator's prefix scan
+/// (`find_candidate_calls_in_block_prefix` → `validate_call_sites_in_body`)
+/// reuses the standard call-site logic on the wrapper's prefix, so an
+/// inner `LocalSet(temp, Call(g))` with valid variant-access uses is
+/// accepted instead of being over-invalidated.
 fn top_return_value_compatible(
     v: &WirInstr,
     valid_type_indices: &IndexSet<u32>,
@@ -1412,7 +1411,13 @@ fn validate_call_sites_in_body(
             }
             // For non-block instructions, check for invalid call uses at this level
             _ => {
-                check_invalid_call_uses(instr, candidate_ids, invalid, caller_is_candidate);
+                check_invalid_call_uses(
+                    instr,
+                    root_body,
+                    candidate_ids,
+                    invalid,
+                    caller_is_candidate,
+                );
             }
         }
     }
@@ -1686,6 +1691,7 @@ fn instr_has_br_at_depth(instr: &WirInstr, target_depth: u32) -> bool {
 /// `LocalSet` or `Return` in a candidate caller).
 fn check_invalid_call_uses(
     instr: &WirInstr,
+    root_body: &[WirInstr],
     candidate_ids: &IndexSet<u32>,
     invalid: &mut IndexSet<u32>,
     caller_is_candidate: bool,
@@ -1705,9 +1711,17 @@ fn check_invalid_call_uses(
             }
             // Also check prefix instructions in any block wrapper.
             // When the call is wrapped in Block { body: [prefix..., result_call] },
-            // the prefix instructions may contain calls to other candidates that
-            // would go unrewritten.
-            find_candidate_calls_in_block_prefix(value, candidate_ids, invalid);
+            // the prefix instructions may themselves contain SROA-compatible
+            // `LocalSet(temp, Call(candidate))` shapes that should be accepted,
+            // not invalidated. The prefix walk reuses the standard call-site
+            // validator so those patterns are recognised.
+            find_candidate_calls_in_block_prefix(
+                value,
+                root_body,
+                candidate_ids,
+                invalid,
+                caller_is_candidate,
+            );
         }
         // `Return { Some(<wrapper>(Call(candidate))) }` is the tail-call
         // shape accepted by the fix-point candidate discovery. After the
@@ -1728,7 +1742,13 @@ fn check_invalid_call_uses(
                     find_nested_candidate_calls(arg, candidate_ids, invalid);
                 }
             }
-            find_candidate_calls_in_block_prefix(v, candidate_ids, invalid);
+            find_candidate_calls_in_block_prefix(
+                v,
+                root_body,
+                candidate_ids,
+                invalid,
+                caller_is_candidate,
+            );
         }
         // Any other instruction that contains a Call to a candidate is invalid
         _ => {
@@ -1737,15 +1757,24 @@ fn check_invalid_call_uses(
     }
 }
 
-/// Scan prefix instructions in `Block` / `Seq` wrappers for nested candidate
-/// calls. When a `LocalSet { value: Block { body } }` or
+/// Scan prefix instructions in `Block` / `Seq` wrappers for invalid candidate
+/// call sites. When a `LocalSet { value: Block { body } }` or
 /// `LocalSet { value: Seq(body) }` wraps a candidate call as its result, the
-/// prefix instructions in the wrapper's body may also contain calls to
-/// candidates that the rewrite pass cannot reach.
+/// prefix instructions in the wrapper's body form their own statement-list
+/// scope and may themselves contain SROA-compatible call sites.
+///
+/// Rather than unconditionally invalidating every candidate call in the
+/// prefix, recurse into [`validate_call_sites_in_body`] so prefix items that
+/// match `LocalSet(temp, Call(candidate))` with variant-access uses of `temp`
+/// across `root_body` are accepted. The matching rewriter recurses through
+/// `take_call_from_local_set` → `rewrite_call_sites` on the extracted prefix
+/// so those accepted sites get rewritten.
 fn find_candidate_calls_in_block_prefix(
     instr: &WirInstr,
+    root_body: &[WirInstr],
     candidate_ids: &IndexSet<u32>,
     invalid: &mut IndexSet<u32>,
+    caller_is_candidate: bool,
 ) {
     // The trailing-Unreachable trim is Block-specific:
     // `translate_stmts_as_value` appends `Unreachable` after a
@@ -1768,9 +1797,13 @@ fn find_candidate_calls_in_block_prefix(
         body
     };
     if let Some((_, prefix)) = effective_body.split_last() {
-        for prefix_instr in prefix {
-            find_nested_candidate_calls(prefix_instr, candidate_ids, invalid);
-        }
+        validate_call_sites_in_body(
+            prefix,
+            root_body,
+            candidate_ids,
+            invalid,
+            caller_is_candidate,
+        );
     }
 }
 
@@ -2389,7 +2422,16 @@ fn rewrite_call_sites(
         }
 
         // Extract the Call instruction (and any prefix statements from block wrappers)
-        let (prefix_instrs, call_instr) = take_call_from_local_set(&mut instrs[set_idx]);
+        let (mut prefix_instrs, call_instr) = take_call_from_local_set(&mut instrs[set_idx]);
+        // Recursively rewrite the prefix so any nested
+        // `LocalSet(temp, Call(candidate))` shapes it contains are also
+        // turned into `MultiValueLocalBind` (and their variant-access
+        // sites replaced). The validator's
+        // `find_candidate_calls_in_block_prefix` accepts these patterns,
+        // so the rewriter must follow through — otherwise the inner
+        // candidate's signature would be multi-value while its call site
+        // stays single-value, causing a Wasm arity mismatch.
+        rewrite_call_sites(&mut prefix_instrs, candidate_map, types);
         // Emit prefix instructions (e.g. local initialization from inlined blocks)
         result.extend(prefix_instrs);
         result.push(WirInstr::MultiValueLocalBind {
