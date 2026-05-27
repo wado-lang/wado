@@ -9,6 +9,19 @@
 //! classification (`optimize::multi_value_return`); this pass handles only
 //! the variant case, whose layout (shared-vs-per-case payload offsets) is
 //! WIR-specific.
+//!
+//! ## Tail-call propagation
+//!
+//! Eligibility is computed in a fix-point loop so that `return another_call(...)`
+//! at the source level (which lowers to a `Return { Some(Call(g)) }` after
+//! lowering) can also qualify when `g` is itself a candidate returning the same
+//! variant type. Without this, helpers like `deserialize_i64` (whose body ends
+//! in `return parse_i64_direct()` / `return parse_i64_from(...)`) stay boxed
+//! because their returns aren't direct `StructNew` shapes — they pass through
+//! a sub-call's `Result<T, E>`. The seed round still requires all returns to be
+//! `StructNew` of variant case types; subsequent rounds additionally accept
+//! `Return { Some(Call(c)) }` where `c` is already in the candidate set with a
+//! matching variant return type.
 
 use crate::compiler_trace;
 use crate::hashmap::IndexSet;
@@ -149,30 +162,49 @@ fn wir_types_equal(a: &WirType, b: &WirType) -> bool {
     }
 }
 
+/// Per-function info computed up-front so the fix-point loop over candidate
+/// discovery can re-check return shapes without redoing the layout analysis.
+struct PotentialCandidate {
+    func_id_index: u32,
+    variant_type_idx: u32,
+    /// WIR type indices that are valid `StructNew` targets at the leaf of a
+    /// `Return` — every case struct of the variant plus the base variant
+    /// type (for unit cases).
+    valid_case_type_indices: IndexSet<u32>,
+    candidate: SroaCandidate,
+}
+
 /// Phase 1: find functions eligible for SROA.
+///
+/// Two-stage discovery:
+/// 1. Compute layout info (`variant_type_idx`, `valid_case_type_indices`,
+///    `SroaCandidate`) for every function whose return type is an in-range
+///    variant. This stage does not look at the function body's return shapes.
+/// 2. Fix-point: accept a function when every `Return` in its body is either
+///    a `StructNew` of a variant case type, an `Unreachable`, or a
+///    `Return { Some(Call(c)) }` where `c` is already accepted *and* shares
+///    the same variant return type. The seed round runs with an empty
+///    "already accepted" set, so it only accepts the leaf functions whose
+///    returns are direct `StructNew`s. Each subsequent round can then pick
+///    up callers whose tail calls now target accepted callees.
 fn find_sroa_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32, SroaCandidate)> {
-    let mut candidates = Vec::new();
+    // Stage 1: collect potential candidates with layout info.
+    let mut potentials: Vec<PotentialCandidate> = Vec::new();
 
     for (i, func) in module.functions.iter().enumerate() {
         let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
 
-        // Skip pinned functions
         if pinned.contains(&func_id_index) {
             continue;
         }
-
-        // Must have a body
         if func.body.is_none() {
             continue;
         }
 
-        // Look up function type
         let type_idx = func.type_id.index();
         let Some(WirTypeDef::Func(func_type)) = module.types.get(type_idx as usize) else {
             continue;
         };
-
-        // Must return exactly one Ref to a struct
         if func_type.results.len() != 1 {
             continue;
         }
@@ -183,35 +215,93 @@ fn find_sroa_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32
         else {
             continue;
         };
-
         let ret_type_idx = ret_type_id.index();
-        let body = func.body.as_ref().unwrap();
 
         if let Some(WirTypeDef::Variant(variant_type)) = module.types.get(ret_type_idx as usize)
-            && let Some(candidate) =
-                try_variant_sroa_candidate(module, i, ret_type_idx, variant_type, body)
+            && let Some((candidate, valid_case_type_indices)) =
+                analyze_variant_layout(module, i, ret_type_idx, variant_type)
         {
-            candidates.push((func_id_index, candidate));
+            potentials.push(PotentialCandidate {
+                func_id_index,
+                variant_type_idx: ret_type_idx,
+                valid_case_type_indices,
+                candidate,
+            });
         }
     }
 
-    candidates
+    if potentials.is_empty() {
+        return Vec::new();
+    }
+
+    // Stage 2: fix-point. A function is accepted when its return shapes are
+    // all StructNew/Unreachable, optionally with `Return { Some(Call(c)) }`
+    // tail-calls to already-accepted candidates with the same variant type.
+    let mut accepted: IndexSet<u32> = IndexSet::default();
+    loop {
+        // Group accepted candidates by variant_type_idx so the tail-call
+        // check can constrain matches to functions returning the same
+        // variant. Same variant -> same multi-value sig, so swapping
+        // ABI is sound.
+        let mut accepted_by_variant: crate::hashmap::IndexMap<u32, IndexSet<u32>> =
+            crate::hashmap::IndexMap::default();
+        for p in &potentials {
+            if accepted.contains(&p.func_id_index) {
+                accepted_by_variant
+                    .entry(p.variant_type_idx)
+                    .or_default()
+                    .insert(p.func_id_index);
+            }
+        }
+
+        let mut changed = false;
+        for p in &potentials {
+            if accepted.contains(&p.func_id_index) {
+                continue;
+            }
+            let body = module.functions[p.candidate.func_array_idx]
+                .body
+                .as_ref()
+                .unwrap();
+            let empty: IndexSet<u32> = IndexSet::default();
+            let tail_call_set = accepted_by_variant
+                .get(&p.variant_type_idx)
+                .unwrap_or(&empty);
+            if all_returns_are_variant_struct_new(body, &p.valid_case_type_indices, tail_call_set) {
+                accepted.insert(p.func_id_index);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    potentials
+        .into_iter()
+        .filter(|p| accepted.contains(&p.func_id_index))
+        .map(|p| (p.func_id_index, p.candidate))
+        .collect()
 }
 
-/// Try to create a variant SROA candidate. Returns None if the variant is ineligible.
+/// Compute the SROA layout info for a variant-returning function.
 ///
-/// A variant is eligible if:
+/// Returns `(SroaCandidate, valid_case_type_indices)` when the variant is
+/// representable as a small multi-value tuple. The caller separately verifies
+/// that every `Return` in the body is a leaf shape compatible with this
+/// layout (`all_returns_are_variant_struct_new`), so this stage can be
+/// re-used across the fix-point's rounds without touching the body.
+///
+/// A variant is eligible (layout-wise) if:
 /// - All payload types across all cases are eligible scalar types
 /// - Max payload count across all cases is ≤ 3 (so total fields ≤ 4: disc + 3 payloads)
-/// - All returns are `StructNew` of the variant's case types
 /// - Case type indices can be resolved via `variant_case_info`
-fn try_variant_sroa_candidate(
+fn analyze_variant_layout(
     module: &WirPackage,
     func_array_idx: usize,
     variant_type_idx: u32,
     variant_type: &WirVariantType,
-    body: &[WirInstr],
-) -> Option<SroaCandidate> {
+) -> Option<(SroaCandidate, IndexSet<u32>)> {
     // Collect per-case info: case type index and payload count
     let mut case_type_indices: Vec<Option<u32>> = Vec::with_capacity(variant_type.cases.len());
     let mut case_payload_counts: Vec<usize> = Vec::with_capacity(variant_type.cases.len());
@@ -333,47 +423,59 @@ fn try_variant_sroa_candidate(
     // Also include StructNew of the base variant type (for unit cases like None)
     all_case_type_indices.insert(variant_type_idx);
 
-    // Verify all returns are StructNew of one of the variant's case types
-    if !all_returns_are_variant_struct_new(body, &all_case_type_indices) {
-        return None;
-    }
-
-    Some(SroaCandidate {
-        func_array_idx,
-        struct_type_idx: variant_type_idx,
-        field_types,
-        field_count,
-        field_names,
-        variant_info: VariantSroaInfo {
-            case_type_indices,
-            case_payload_counts,
-            max_payload_count: total_payload_slots,
-            case_slot_offsets,
+    Some((
+        SroaCandidate {
+            func_array_idx,
+            struct_type_idx: variant_type_idx,
+            field_types,
+            field_count,
+            field_names,
+            variant_info: VariantSroaInfo {
+                case_type_indices,
+                case_payload_counts,
+                max_payload_count: total_payload_slots,
+                case_slot_offsets,
+            },
         },
-    })
+        all_case_type_indices,
+    ))
 }
 
-/// Check that every `Return` in the body is a `StructNew` of one of the variant's case types.
+/// Check that every `Return` in the body produces a leaf shape we can rewrite:
+/// a `StructNew` of one of the variant's case types, an `Unreachable`, or a
+/// `Return { Some(Call(c)) }` where `c` is a `tail_call_candidate` (a function
+/// already accepted with the same variant return type).
 fn all_returns_are_variant_struct_new(
     instrs: &[WirInstr],
     valid_type_indices: &IndexSet<u32>,
+    tail_call_candidates: &IndexSet<u32>,
 ) -> bool {
     for instr in instrs {
-        if !check_return_variant_struct_new(instr, valid_type_indices) {
+        if !check_return_variant_struct_new(instr, valid_type_indices, tail_call_candidates) {
             return false;
         }
     }
     true
 }
 
-fn check_return_variant_struct_new(instr: &WirInstr, valid_type_indices: &IndexSet<u32>) -> bool {
+fn check_return_variant_struct_new(
+    instr: &WirInstr,
+    valid_type_indices: &IndexSet<u32>,
+    tail_call_candidates: &IndexSet<u32>,
+) -> bool {
     match instr {
         WirInstr::Return { value: Some(v) } => {
-            value_expr_is_variant_struct_new(v, valid_type_indices)
+            // Tail-position only: accept `Return { Some(Call(candidate)) }`
+            // here, and recurse through linear `Seq` sequencing. The
+            // strict (StructNew-only) variant is used for nested branching
+            // value contexts where a Call leaf would leak multi-value
+            // results past the merge point.
+            top_return_value_compatible(v, valid_type_indices, tail_call_candidates)
         }
         WirInstr::Return { value: None } => true,
         WirInstr::Block { body, result, .. } => {
-            let inner_ok = all_returns_are_variant_struct_new(body, valid_type_indices);
+            let inner_ok =
+                all_returns_are_variant_struct_new(body, valid_type_indices, tail_call_candidates);
             if result.is_some() {
                 // Typed block: the block's exit values are carried via [val, Br(0)] pairs.
                 // These Br-exit values must also be StructNew of valid variant case types,
@@ -383,19 +485,25 @@ fn check_return_variant_struct_new(instr: &WirInstr, valid_type_indices: &IndexS
                 inner_ok
             }
         }
-        WirInstr::Loop { body, .. } => all_returns_are_variant_struct_new(body, valid_type_indices),
+        WirInstr::Loop { body, .. } => {
+            all_returns_are_variant_struct_new(body, valid_type_indices, tail_call_candidates)
+        }
         WirInstr::If {
             then_body,
             else_body,
             ..
         } => {
-            all_returns_are_variant_struct_new(then_body, valid_type_indices)
-                && else_body
-                    .as_ref()
-                    .is_none_or(|eb| all_returns_are_variant_struct_new(eb, valid_type_indices))
+            all_returns_are_variant_struct_new(then_body, valid_type_indices, tail_call_candidates)
+                && else_body.as_ref().is_none_or(|eb| {
+                    all_returns_are_variant_struct_new(eb, valid_type_indices, tail_call_candidates)
+                })
         }
-        WirInstr::Seq(body) => all_returns_are_variant_struct_new(body, valid_type_indices),
-        WirInstr::Drop(inner) => check_return_variant_struct_new(inner, valid_type_indices),
+        WirInstr::Seq(body) => {
+            all_returns_are_variant_struct_new(body, valid_type_indices, tail_call_candidates)
+        }
+        WirInstr::Drop(inner) => {
+            check_return_variant_struct_new(inner, valid_type_indices, tail_call_candidates)
+        }
         _ => true,
     }
 }
@@ -409,11 +517,23 @@ fn contains_unreachable(instr: &WirInstr) -> bool {
     }
 }
 
-/// Check if a value-position expression always produces a `StructNew` of one of the valid
-/// variant case types. Handles `return match { ... }` for variant SROA.
+/// Strict (branching-safe) variant of the value-position checker. Accepts
+/// `StructNew(case)` and `Unreachable` leaves, recurses through `Seq`/`If`/
+/// `Block`. Used inside branching value contexts (typed `If`/`Block` arms,
+/// block `Br` exits) where any leaf that pushes values must match the
+/// surrounding result type's arity exactly — so tail-call `Call`s (which now
+/// produce N values from the rewritten multi-value callee) are not allowed
+/// here. The `top_return_value_compatible` wrapper relaxes this for the
+/// single tail-position case `Return { Some(_) }`.
+///
+/// Accepting `Unreachable` is sound and was already implicit for `Br` exits
+/// via `contains_unreachable`; mirroring it here lets functions with a
+/// trailing `else { unreachable; }` exhaustiveness fallback (very common
+/// from match-on-Result) become candidates.
 fn value_expr_is_variant_struct_new(expr: &WirInstr, valid_type_indices: &IndexSet<u32>) -> bool {
     match expr {
         WirInstr::StructNew { type_id, .. } => valid_type_indices.contains(&type_id.index()),
+        WirInstr::Unreachable => true,
         WirInstr::Seq(items) => items
             .last()
             .is_some_and(|last| value_expr_is_variant_struct_new(last, valid_type_indices)),
@@ -438,6 +558,29 @@ fn value_expr_is_variant_struct_new(expr: &WirInstr, valid_type_indices: &IndexS
             ..
         } => all_br_variant_values_are_struct_new(body, valid_type_indices, 0),
         _ => false,
+    }
+}
+
+/// Tail-position relaxation of `value_expr_is_variant_struct_new`. Accepts
+/// the strict shape *plus* a literal `Call(candidate)` at the very top of
+/// the `Return { Some(_) }` value. Anything more deeply nested (through
+/// `Seq`, `If`, or `Block`) falls back to the strict checker so the
+/// rewrite phase's "clear merge-point result type and wrap StructNew
+/// leaves in Return" transform stays well-typed: a `Call(candidate)` leaf
+/// inside a typed merge point would push N multi-values with nowhere to
+/// go after the merge-point result type is cleared.
+///
+/// This restriction matches `unwrap_to_candidate_call` on the validation
+/// side, so the discovery and validation passes agree on what a tail call
+/// looks like.
+fn top_return_value_compatible(
+    v: &WirInstr,
+    valid_type_indices: &IndexSet<u32>,
+    tail_call_candidates: &IndexSet<u32>,
+) -> bool {
+    match v {
+        WirInstr::Call { func_id, .. } => tail_call_candidates.contains(&func_id.index()),
+        other => value_expr_is_variant_struct_new(other, valid_type_indices),
     }
 }
 
@@ -519,21 +662,52 @@ fn all_br_variant_values_are_struct_new(
 /// Phase 2: validate that all call sites of candidate functions are SROA-compatible.
 ///
 /// A call site is compatible if:
-/// 1. The call result is stored to a temp local via `LocalSet`.
-/// 2. Every use of that temp local is `StructGet { expr: LocalGet(temp) }`.
-/// 3. The temp local is not used in any other way (plain `LocalGet`, `LocalSet`, etc.).
+/// 1. The call result is stored to a temp local via `LocalSet`, and every use
+///    of that temp local matches the variant-access patterns
+///    (`RefTest`/`RefCast`/`StructGet`).
+/// 2. Or, the call appears as `Return { Some(<wrapper>(Call(candidate))) }`
+///    *inside another candidate's body* — the surrounding function has its
+///    own multi-value signature, so the callee's multi-value results flow
+///    through to the surrounding return without an arity mismatch.
 fn validate_call_sites(
     module: &WirPackage,
     candidates: &[(u32, SroaCandidate)],
 ) -> Vec<(u32, SroaCandidate)> {
-    let candidate_ids: IndexSet<u32> = candidates.iter().map(|(id, _)| *id).collect();
+    let mut candidate_ids: IndexSet<u32> = candidates.iter().map(|(id, _)| *id).collect();
 
-    // Scan all function bodies for calls to candidate functions
+    // Iterate to a fix-point. The tail-call rule accepts
+    // `Return { Some(Call(callee)) }` only when the surrounding caller is
+    // *also* a candidate. Invalidating a caller can therefore make a
+    // previously-valid tail-call site become invalid (its `caller_is_candidate`
+    // flips false), which in turn can invalidate the callee. Re-run validation
+    // with the shrinking candidate set until no further invalidations occur.
     let mut invalid: IndexSet<u32> = IndexSet::default();
+    loop {
+        let mut round_invalid: IndexSet<u32> = IndexSet::default();
 
-    for func in &module.functions {
-        if let Some(body) = &func.body {
-            validate_call_sites_in_body(body, body, &candidate_ids, &mut invalid);
+        for (i, func) in module.functions.iter().enumerate() {
+            let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
+            let caller_is_candidate = candidate_ids.contains(&func_id_index);
+            if let Some(body) = &func.body {
+                validate_call_sites_in_body(
+                    body,
+                    body,
+                    &candidate_ids,
+                    &mut round_invalid,
+                    caller_is_candidate,
+                );
+            }
+        }
+
+        let mut new_invalid = false;
+        for id in &round_invalid {
+            if candidate_ids.shift_remove(id) {
+                invalid.insert(*id);
+                new_invalid = true;
+            }
+        }
+        if !new_invalid {
+            break;
         }
     }
 
@@ -567,17 +741,31 @@ fn validate_call_sites(
 /// is only accessed via valid patterns across all scopes, not just the current scope.
 /// This prevents SROA when a call site is inside a nested block (If/Block) but the temp
 /// local is used in the outer scope in a non-StructGet context (e.g. `return temp`).
+///
+/// `caller_is_candidate` is true when the function being validated is itself
+/// a candidate. Only then does `Return { Some(Call(candidate)) }` count as a
+/// valid call site shape: the caller's signature is being rewritten to
+/// multi-value in the same pass, so the callee's multi-value results
+/// propagate through naturally. Inside a non-candidate caller, the same
+/// shape would mismatch the (still single-value) caller signature.
 fn validate_call_sites_in_body(
     instrs: &[WirInstr],
     root_body: &[WirInstr],
     candidate_ids: &IndexSet<u32>,
     invalid: &mut IndexSet<u32>,
+    caller_is_candidate: bool,
 ) {
     for instr in instrs {
         // Recurse into nested statement-level blocks
         match instr {
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-                validate_call_sites_in_body(body, root_body, candidate_ids, invalid);
+                validate_call_sites_in_body(
+                    body,
+                    root_body,
+                    candidate_ids,
+                    invalid,
+                    caller_is_candidate,
+                );
             }
             WirInstr::If {
                 condition,
@@ -587,17 +775,35 @@ fn validate_call_sites_in_body(
             } => {
                 // Check condition expression for invalid calls (not in nested block scope)
                 find_nested_candidate_calls(condition, candidate_ids, invalid);
-                validate_call_sites_in_body(then_body, root_body, candidate_ids, invalid);
+                validate_call_sites_in_body(
+                    then_body,
+                    root_body,
+                    candidate_ids,
+                    invalid,
+                    caller_is_candidate,
+                );
                 if let Some(eb) = else_body {
-                    validate_call_sites_in_body(eb, root_body, candidate_ids, invalid);
+                    validate_call_sites_in_body(
+                        eb,
+                        root_body,
+                        candidate_ids,
+                        invalid,
+                        caller_is_candidate,
+                    );
                 }
             }
             WirInstr::Seq(body) => {
-                validate_call_sites_in_body(body, root_body, candidate_ids, invalid);
+                validate_call_sites_in_body(
+                    body,
+                    root_body,
+                    candidate_ids,
+                    invalid,
+                    caller_is_candidate,
+                );
             }
             // For non-block instructions, check for invalid call uses at this level
             _ => {
-                check_invalid_call_uses(instr, candidate_ids, invalid);
+                check_invalid_call_uses(instr, candidate_ids, invalid, caller_is_candidate);
             }
         }
     }
@@ -854,11 +1060,13 @@ fn instr_has_br_at_depth(instr: &WirInstr, target_depth: u32) -> bool {
 }
 
 /// Check if an instruction uses a candidate call result in an invalid way.
-/// Invalid: Call to candidate as a nested expression (not direct child of `LocalSet`).
+/// Invalid: Call to candidate as a nested expression (not direct child of
+/// `LocalSet` or `Return` in a candidate caller).
 fn check_invalid_call_uses(
     instr: &WirInstr,
     candidate_ids: &IndexSet<u32>,
     invalid: &mut IndexSet<u32>,
+    caller_is_candidate: bool,
 ) {
     match instr {
         // LocalSet { value: <wrapper>(Call) } is valid — handled separately
@@ -878,6 +1086,27 @@ fn check_invalid_call_uses(
             // the prefix instructions may contain calls to other candidates that
             // would go unrewritten.
             find_candidate_calls_in_block_prefix(value, candidate_ids, invalid);
+        }
+        // `Return { Some(<wrapper>(Call(candidate))) }` is the tail-call
+        // shape accepted by the fix-point candidate discovery. After the
+        // callee's signature is rewritten to multi-value, the Call already
+        // pushes the correct number of values for the surrounding Return.
+        // *But only when the surrounding function is also a candidate* —
+        // otherwise the caller's still-single-value `Return` would mismatch
+        // the callee's new multi-value sig. We still need to scan the call's
+        // arguments and any block prefix for nested candidate calls that the
+        // rewrite cannot reach.
+        WirInstr::Return { value: Some(v) }
+            if caller_is_candidate && unwrap_to_candidate_call(v, candidate_ids).is_some() =>
+        {
+            if let Some(call) = unwrap_to_inner_call(v)
+                && let WirInstr::Call { args, .. } = call
+            {
+                for arg in args {
+                    find_nested_candidate_calls(arg, candidate_ids, invalid);
+                }
+            }
+            find_candidate_calls_in_block_prefix(v, candidate_ids, invalid);
         }
         // Any other instruction that contains a Call to a candidate is invalid
         _ => {
