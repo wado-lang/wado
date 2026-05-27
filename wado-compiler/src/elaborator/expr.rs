@@ -3238,22 +3238,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // We use expected type for numeric literals (including negated ones)
                 // and null literals to avoid interfering with tuple-to-array coercion
                 // for generic struct fields
-                let is_numeric_literal = matches!(
-                    &field.value,
-                    ast::Expr::Literal(lit) if matches!(
-                        &lit.value,
-                        ast::Literal::Number(_)
-                    )
-                ) || matches!(
-                    &field.value,
-                    ast::Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg && matches!(
-                        &unary.expr,
-                        ast::Expr::Literal(lit) if matches!(
-                            &lit.value,
-                            ast::Literal::Number(_)
-                        )
-                    )
-                );
+                let is_numeric_literal = self.tysys.is_numeric_literal(&field.value);
 
                 let is_null_literal = matches!(
                     &field.value,

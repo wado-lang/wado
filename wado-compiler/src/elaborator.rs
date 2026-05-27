@@ -209,8 +209,18 @@ pub struct Elaborator<'a, H: CompilerHost> {
     >,
     /// Recursion guard for `type_implements_trait` to avoid infinite recursion
     /// on recursive types (e.g., variant Elem containing struct `RepeatElem` with field Elem).
-    // MIGRATION: → TypeSystem (type-system cache); deferred — needs the
-    //   pipeline-wide cache lifetime story.
+    /// Frames are pushed on entry and popped on return; the stack is empty
+    /// at every quiescent point.
+    // MIGRATION: transient annotate-time scope. Despite the `RefCell<Vec<…>>`
+    //   shape this is NOT a type-system cache (whose entries would persist
+    //   across calls) — it is a per-call frame stack. Sharing it across
+    //   modules via `TypeSystem` would either leak stale frames (producing
+    //   wrong "recursive, optimistically true" answers from
+    //   `type_implements_trait` — a soundness bug) or require per-call
+    //   save/restore plumbing that defeats the move. Belongs with
+    //   `trait_ctx` in Stage 5's per-function walker argument bag, not on
+    //   `TypeSystem`. See `tysys.rs` module docs ("Deferred fields") for
+    //   the full rationale.
     trait_check_stack: RefCell<Vec<(TypeId, String)>>,
     /// Cache for `lookup_method_info` results.
     /// Key: (`base_type_id`, `method_name`) → cached `MethodInfo`

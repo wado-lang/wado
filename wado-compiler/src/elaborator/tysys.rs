@@ -23,15 +23,33 @@
 //!
 //! # Deferred fields
 //!
-//! Three [`super::Elaborator`] fields are marked
+//! Two [`super::Elaborator`] fields are marked
 //! `MIGRATION: → TypeSystem` but **stay on `Elaborator` through Stage 2**:
-//! `indexing_trait_cache`, `method_info_cache`, `trait_check_stack`. They
-//! carry per-Elaborator mutable state today (constructed fresh per
-//! module, populated by the body walk), and moving them to a shared
-//! `TypeSystem` requires either making them pipeline-wide caches (a
-//! behaviour change) or interior-mutability plumbing. The migration
-//! markers on those fields point at this future home; the move itself is
-//! deferred to a later stage where the cache lifetime story is settled.
+//! `indexing_trait_cache` and `method_info_cache`. They are genuine
+//! type-system caches (lookup `(TypeId, name) → MethodInfo` or
+//! `(struct_name, base_type, trait, method, assoc_type) → impl info`)
+//! whose keys live entirely in the shared type domain, so they belong on
+//! `TypeSystem` in spirit. But they carry per-Elaborator mutable state
+//! today (constructed fresh per module, populated by the body walk), and
+//! moving them to a shared `TypeSystem` requires either making them
+//! pipeline-wide caches (a behaviour change) or interior-mutability
+//! plumbing. The migration markers on those fields point at this future
+//! home; the move itself is deferred to a later stage where the cache
+//! lifetime story is settled.
+//!
+//! [`super::Elaborator::trait_check_stack`] looks superficially similar
+//! — `RefCell<Vec<…>>` mutable state on `Elaborator` — but is **not** a
+//! cache. It is the per-call frame stack used by
+//! `Elaborator::type_implements_trait` to break recursion on recursive
+//! types (e.g. a variant case whose payload eventually contains itself):
+//! frames are pushed on entry, popped on return, and the stack is empty
+//! at every quiescent point. Moving it to a shared `TypeSystem` would
+//! either leak stale frames across module walks (producing wrong
+//! "recursive, optimistically true" answers in trait resolution — a
+//! soundness bug) or require per-call save/restore plumbing that
+//! defeats the move. The migration marker on that field accordingly
+//! targets the same "transient annotate-time scope" bucket as
+//! [`super::Elaborator::trait_ctx`], not `TypeSystem`.
 
 use std::cell::RefCell;
 use std::rc::Rc;

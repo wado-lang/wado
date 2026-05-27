@@ -388,10 +388,31 @@ fn compile_after_load<H: CompilerHost>(
     let state = state.expect("elaborator state present when is_complete");
 
     // Move trait_env out of `state.tysys` rather than cloning the `Arc`,
-    // so that `Package` is the unique owner. `synthesize` later relies
-    // on `Arc::try_unwrap` succeeding to swap layers in place; a stray
-    // clone here would force a deep `TraitEnv` clone instead.
+    // so that `Package` is the unique owner. `synthesize` later calls
+    // `TraitEnv::extend_with_synthesised`, which `Arc::try_unwrap`s the
+    // `trait_env` and **panics** if the `Arc` has more than one strong
+    // reference (see `trait_env.rs::extend_with_synthesised`). `TraitEnv`
+    // does not implement `Clone`, so a stray clone at this point cannot
+    // degrade gracefully — it would surface as a panic deep inside
+    // synthesis. The `debug_assert!` below makes that contract loud at
+    // the leak site instead of one stage later.
     let tysys = state.tysys;
+    debug_assert_eq!(
+        std::sync::Arc::strong_count(&tysys.trait_env),
+        1,
+        "Package::new must be the unique `Arc<TraitEnv>` owner; a leftover \
+         per-module clone would panic in extend_with_synthesised"
+    );
+    // `Rc::try_unwrap` for `builtin_registry` is the same uniqueness
+    // contract; `BuiltinRegistry` *does* implement `Clone`, so the
+    // fallback path is sound but quietly deep-copies — the debug-assert
+    // catches the leak before that happens.
+    debug_assert_eq!(
+        std::rc::Rc::strong_count(&tysys.builtin_registry),
+        1,
+        "Package::new must be the unique `Rc<BuiltinRegistry>` owner; a \
+         leftover per-module clone would silently fall back to a deep clone"
+    );
     let builtin_registry =
         std::rc::Rc::try_unwrap(tysys.builtin_registry).unwrap_or_else(|rc| (*rc).clone());
     let package = Package::new(
