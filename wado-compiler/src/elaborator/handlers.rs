@@ -461,7 +461,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let value = self.resolve_expr(&resume.value, ctx, expected);
 
         if ctx.in_handler_method {
-            self.typecheck(value.type_id, ctx.return_type, resume.span);
+            self.tysys.typecheck(self.logger, value.type_id, ctx.return_type, resume.span);
         }
 
         TirExpr::new(

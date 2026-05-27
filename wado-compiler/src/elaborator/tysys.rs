@@ -37,7 +37,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::ast::{BinaryOp, Expr, Literal, UnaryOp};
 use crate::builtin_registry::BuiltinRegistry;
+use crate::compiler_item::CompilerItem;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -100,4 +102,68 @@ pub(crate) struct TypeSystem {
     /// for O(1) lookup. Built globally during annotate; read-only
     /// afterwards.
     pub(crate) loaded_module_func_indices: Rc<IndexMap<ModuleSource, IndexMap<String, usize>>>,
+}
+
+impl TypeSystem {
+    /// Check if a name refers to a known type (struct, variant, enum,
+    /// flags, newtype, or primitive). Uses the pre-built cache for O(1)
+    /// lookup instead of scanning all module maps.
+    pub(crate) fn is_known_type_name(&self, name: &str) -> bool {
+        self.known_type_names_cache.contains(name)
+    }
+
+    /// Check if an expression is a numeric literal (possibly negated).
+    pub(crate) fn is_numeric_literal(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::Literal(lit) => matches!(lit.value, Literal::Number(_)),
+            Expr::Unary(unary) if unary.op == UnaryOp::Neg => {
+                matches!(&unary.expr, Expr::Literal(lit) if matches!(lit.value, Literal::Number(_)))
+            }
+            _ => false,
+        }
+    }
+
+    /// Map a binary operator to its `(trait_name, method_name)` pair, or
+    /// `None` when the operator does not dispatch through a trait.
+    ///
+    /// For operators that dispatch through a [`CompilerItem`] trait
+    /// (`Eq` for `==` / `!=`), the trait name is resolved through the
+    /// compiler-item registry so a rename on the stdlib side stays
+    /// transparent. For traits that don't yet have a `CompilerItem`
+    /// anchor (`Add`, `Sub`, …, `Ord`), the canonical stdlib name is
+    /// returned as a literal.
+    pub(crate) fn operator_trait_method(
+        &self,
+        op: &BinaryOp,
+    ) -> Option<(String, &'static str)> {
+        match op {
+            BinaryOp::Add => Some(("Add".to_string(), "add")),
+            BinaryOp::Sub => Some(("Sub".to_string(), "sub")),
+            BinaryOp::Mul => Some(("Mul".to_string(), "mul")),
+            BinaryOp::Div => Some(("Div".to_string(), "div")),
+            BinaryOp::Mod => Some(("Rem".to_string(), "rem")),
+            BinaryOp::BitAnd => Some(("BitAnd".to_string(), "bitand")),
+            BinaryOp::BitOr => Some(("BitOr".to_string(), "bitor")),
+            BinaryOp::BitXor => Some(("BitXor".to_string(), "bitxor")),
+            BinaryOp::Shl => Some(("Shl".to_string(), "shl")),
+            BinaryOp::Shr => Some(("Shr".to_string(), "shr")),
+            BinaryOp::Eq | BinaryOp::NotEq => Some((
+                self.type_table
+                    .borrow()
+                    .compiler_items()
+                    .trait_name(CompilerItem::Eq)
+                    .to_string(),
+                "eq",
+            )),
+            BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => Some((
+                self.type_table
+                    .borrow()
+                    .compiler_items()
+                    .trait_name(CompilerItem::Ord)
+                    .to_string(),
+                "cmp",
+            )),
+            _ => None,
+        }
+    }
 }

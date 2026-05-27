@@ -4,10 +4,11 @@
 //! type B is expected?". All type mismatch checks route through here.
 
 use crate::compiler_host::CompilerHost;
+use crate::logger::Logger;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
-use super::Elaborator;
+use super::tysys::TypeSystem;
 use super::types::TypeError;
 
 /// Result of checking whether `actual` is assignable to `expected`.
@@ -218,16 +219,24 @@ fn unwrap_ref(type_id: TypeId, type_table: &TypeTable) -> (TypeId, bool) {
     }
 }
 
-impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Check type mismatch and emit error if incompatible.
-    pub(super) fn typecheck(&mut self, actual: TypeId, expected: TypeId, span: Span) {
-        let type_table = self.tysys.type_table.borrow();
+impl TypeSystem {
+    /// Check type mismatch and emit a [`TypeError::TypeMismatch`] diagnostic
+    /// via `logger` if incompatible. Pure type-system operation — uses only
+    /// the shared type table and the caller-supplied diagnostic sink.
+    pub(crate) fn typecheck<H: CompilerHost>(
+        &self,
+        logger: &Logger<H>,
+        actual: TypeId,
+        expected: TypeId,
+        span: Span,
+    ) {
+        let type_table = self.type_table.borrow();
         let result = check_assignable(actual, expected, &type_table);
         if result == TypeCheckResult::Incompatible {
             let expected_name = type_table.type_name(expected);
             let found_name = type_table.type_name(actual);
             drop(type_table);
-            let _ = self.logger.error(TypeError::TypeMismatch {
+            let _ = logger.error(TypeError::TypeMismatch {
                 expected: expected_name,
                 found: found_name,
                 span,
@@ -237,11 +246,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Check return type mismatch and emit error if incompatible.
     ///
-    /// Additional allowance: UNIT expected is always compatible (void returns).
-    pub(super) fn typecheck_return(&mut self, actual: TypeId, expected: TypeId, span: Span) {
+    /// Additional allowance: `UNIT` expected is always compatible (void
+    /// returns).
+    pub(crate) fn typecheck_return<H: CompilerHost>(
+        &self,
+        logger: &Logger<H>,
+        actual: TypeId,
+        expected: TypeId,
+        span: Span,
+    ) {
         if expected == TypeTable::UNIT {
             return;
         }
-        self.typecheck(actual, expected, span);
+        self.typecheck(logger, actual, expected, span);
     }
 }

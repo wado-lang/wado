@@ -2,9 +2,8 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, BinaryOp, Expr, Item, Literal, Type, UnaryOp};
+use crate::ast::{self, BinaryOp, Expr, Item, Type};
 use crate::compiler_host::CompilerHost;
-use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
@@ -149,12 +148,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_params
             .iter()
             .map(|p| p.name.clone())
-            .filter(|name| !self.is_known_type_name(name))
+            .filter(|name| !self.tysys.is_known_type_name(name))
             .collect();
         if let Type::Generic(g) = &impl_block.ty {
             for arg in &g.args {
                 if let Type::Named(n) = arg
-                    && !self.is_known_type_name(&n.name)
+                    && !self.tysys.is_known_type_name(&n.name)
                 {
                     declared.insert(n.name.clone());
                 }
@@ -163,46 +162,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         declared
     }
 
-    /// Map a binary operator to its `(trait_name, method_name)` pair, or
-    /// `None` when the operator does not dispatch through a trait.
-    ///
-    /// For operators that dispatch through a [`CompilerItem`] trait
-    /// (`Eq` for `==` / `!=`), the trait name is resolved through the
-    /// compiler-item registry so a rename on the stdlib side stays
-    /// transparent. For traits that don't yet have a `CompilerItem`
-    /// anchor (`Add`, `Sub`, …, `Ord`), the canonical stdlib name is
-    /// returned as a literal.
-    pub(super) fn operator_trait_method(&self, op: &BinaryOp) -> Option<(String, &'static str)> {
-        match op {
-            BinaryOp::Add => Some(("Add".to_string(), "add")),
-            BinaryOp::Sub => Some(("Sub".to_string(), "sub")),
-            BinaryOp::Mul => Some(("Mul".to_string(), "mul")),
-            BinaryOp::Div => Some(("Div".to_string(), "div")),
-            BinaryOp::Mod => Some(("Rem".to_string(), "rem")),
-            BinaryOp::BitAnd => Some(("BitAnd".to_string(), "bitand")),
-            BinaryOp::BitOr => Some(("BitOr".to_string(), "bitor")),
-            BinaryOp::BitXor => Some(("BitXor".to_string(), "bitxor")),
-            BinaryOp::Shl => Some(("Shl".to_string(), "shl")),
-            BinaryOp::Shr => Some(("Shr".to_string(), "shr")),
-            BinaryOp::Eq | BinaryOp::NotEq => Some((
-                self.tysys.type_table
-                    .borrow()
-                    .compiler_items()
-                    .trait_name(CompilerItem::Eq)
-                    .to_string(),
-                "eq",
-            )),
-            BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => Some((
-                self.tysys.type_table
-                    .borrow()
-                    .compiler_items()
-                    .trait_name(CompilerItem::Ord)
-                    .to_string(),
-                "cmp",
-            )),
-            _ => None,
-        }
-    }
 
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
     pub(super) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
@@ -228,11 +187,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (name.to_string(), type_id)
     }
 
-    /// Check if a name refers to a known type (struct, variant, enum, flags, newtype, or primitive).
-    /// Uses pre-built cache for O(1) lookup instead of scanning all module maps.
-    pub(super) fn is_known_type_name(&self, name: &str) -> bool {
-        self.tysys.known_type_names_cache.contains(name)
-    }
 
     /// Find the rhs parameter type for an operator trait on a struct type.
     /// Used to determine what type a literal rhs should be coerced to.
@@ -242,7 +196,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         op: &BinaryOp,
     ) -> Option<TypeId> {
         let struct_name = self.struct_name_for_type(self_type_id)?;
-        let (trait_name, method_name) = self.operator_trait_method(op)?;
+        let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
         let trait_info =
             self.find_arithmetic_trait_impl(&struct_name, self_type_id, &trait_name, method_name)?;
         // Unwrap the &T reference wrapper if present (e.g., rhs: &Self → return Self)
@@ -264,22 +218,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         op: &BinaryOp,
     ) -> Option<TypeId> {
         let struct_name = self.struct_name_for_type(rhs_type_id)?;
-        let (trait_name, method_name) = self.operator_trait_method(op)?;
+        let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
         // Verify the trait impl exists; the self type is the struct type itself
         self.find_arithmetic_trait_impl(&struct_name, rhs_type_id, &trait_name, method_name)?;
         Some(rhs_type_id)
     }
 
-    /// Check if an expression is a numeric literal
-    pub(super) fn is_numeric_literal(&self, expr: &Expr) -> bool {
-        match expr {
-            Expr::Literal(lit) => matches!(lit.value, Literal::Number(_)),
-            Expr::Unary(unary) if unary.op == UnaryOp::Neg => {
-                matches!(&unary.expr, Expr::Literal(lit) if matches!(lit.value, Literal::Number(_)))
-            }
-            _ => false,
-        }
-    }
 
     /// Check if a qualified name `struct_name::method_name` is a static method
     pub(super) fn get_ultimate_base_struct_name(&self, type_id: TypeId) -> String {
@@ -1834,7 +1778,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let impl_block = self.get_impl_block(impl_ref);
             let impl_struct_name = self.get_type_name(&impl_block.ty);
             // Accept if the type matches by name, or if it's a blanket impl type parameter.
-            let is_blanket_type_param = matches!(&impl_block.ty, Type::Named(named) if !self.is_known_type_name(&named.name));
+            let is_blanket_type_param = matches!(&impl_block.ty, Type::Named(named) if !self.tysys.is_known_type_name(&named.name));
             if !names_to_check.contains(&impl_struct_name) && !is_blanket_type_param {
                 continue;
             }
@@ -1864,7 +1808,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let impl_inner_outer = match &impl_block.ty {
                     Type::Reference(inner) | Type::MutReference(inner) => match inner.as_ref() {
                         Type::Generic(g) => Some(g.name.clone()),
-                        Type::Named(named) if self.is_known_type_name(&named.name) => {
+                        Type::Named(named) if self.tysys.is_known_type_name(&named.name) => {
                             Some(named.name.clone())
                         }
                         _ => None, // blanket `&T` form — handled by the bound check
@@ -1929,7 +1873,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let impl_block = self.get_impl_block(impl_ref);
                     let is_blanket_tp = matches!(
                         &impl_block.ty,
-                        Type::Named(named) if !self.is_known_type_name(&named.name)
+                        Type::Named(named) if !self.tysys.is_known_type_name(&named.name)
                     );
                     // Skip the filter for impls whose receiver is
                     // intentionally widely-applicable: blanket impls
@@ -2109,7 +2053,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // For blanket impls where impl_ty is a free type parameter
             if let Some(ref name) = blanket_name
                 && !scope.trait_ctx.type_params.contains_key(name)
-                && !scope.is_known_type_name(name)
+                && !scope.tysys.is_known_type_name(name)
             {
                 if let Some(recv_id) = receiver_type_id {
                     scope

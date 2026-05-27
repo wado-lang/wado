@@ -1674,7 +1674,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => None,
             };
             if let Some(expected) = derefed_index_type {
-                self.typecheck(index_type, expected, index.index.span());
+                self.tysys.typecheck(self.logger, index_type, expected, index.index.span());
             }
 
             // First, try Index trait (returns reference)
@@ -3305,7 +3305,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some((_, expected_type_id)) =
                     struct_field_types.iter().find(|(n, _)| n == &field.name)
                 {
-                    self.typecheck(value.type_id, *expected_type_id, field.value.span());
+                    self.tysys.typecheck(self.logger, value.type_id, *expected_type_id, field.value.span());
                 }
 
                 let decl_idx = struct_field_types
@@ -3340,7 +3340,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
                 if let Some(default_expr) = default_ast {
                     let resolved = self.resolve_expr(&default_expr, ctx, Some(*expected_type_id));
-                    self.typecheck(resolved.type_id, *expected_type_id, struct_lit.span);
+                    self.tysys.typecheck(self.logger, resolved.type_id, *expected_type_id, struct_lit.span);
                     fields.push(TirStructField {
                         name: expected_name.clone(),
                         value: resolved,
@@ -4322,8 +4322,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         use crate::tir::{TirExprKind, TirStructField};
 
         // Bidirectional coercion: resolve non-literal first to infer the element type
-        let start_is_literal = self.is_numeric_literal(&range.start);
-        let end_is_literal = self.is_numeric_literal(&range.end);
+        let start_is_literal = self.tysys.is_numeric_literal(&range.start);
+        let end_is_literal = self.tysys.is_numeric_literal(&range.end);
 
         let (start, end) = if start_is_literal && !end_is_literal {
             let end = self.resolve_expr(&range.end, ctx, None);

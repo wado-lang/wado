@@ -161,7 +161,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 let expected = expected_elem_types.get(i).copied();
                                 let resolved = self.resolve_expr(elem, ctx, expected);
                                 if let Some(expected_type) = expected {
-                                    self.typecheck(resolved.type_id, expected_type, elem.span());
+                                    self.tysys.typecheck(self.logger, resolved.type_id, expected_type, elem.span());
                                 }
                                 resolved
                             })
@@ -953,7 +953,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check return value type matches function return type
         if let Some(value) = &value {
-            self.typecheck_return(value.type_id, return_type, ret_stmt.span);
+            self.tysys.typecheck_return(self.logger, value.type_id, return_type, ret_stmt.span);
         }
 
         TirStmt::new(TirStmtKind::Return { value }, ret_stmt.span)

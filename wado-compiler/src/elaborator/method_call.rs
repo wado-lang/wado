@@ -467,7 +467,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check each argument against expected parameter type
         for (i, (arg, &expected_type)) in args.iter().zip(expected_param_types.iter()).enumerate() {
             let arg_span = args_ast.get(i).map_or(span, super::ast::Expr::span);
-            self.typecheck(arg.type_id, expected_type, arg_span);
+            self.tysys.typecheck(self.logger, arg.type_id, expected_type, arg_span);
         }
 
         // Substitute return type for inherited newtype methods
@@ -582,7 +582,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.recoerce_literal_args(args_ast, &mut args, &substituted_param_types);
             for (i, arg) in args.iter().enumerate() {
                 if let Some(&expected) = substituted_param_types.get(i) {
-                    self.typecheck(
+                    self.tysys.typecheck(self.logger, 
                         arg.type_id,
                         expected,
                         args_ast.get(i).map_or(span, super::ast::Expr::span),
@@ -1081,7 +1081,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .args
                             .first()
                             .map_or(static_call.span, super::ast::Expr::span);
-                        self.typecheck(args[0].type_id, expected_type, span);
+                        self.tysys.typecheck(self.logger, args[0].type_id, expected_type, span);
                     }
 
                     // Payload was already resolved with the correct expected type

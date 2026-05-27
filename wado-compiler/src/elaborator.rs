@@ -1063,7 +1063,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // `impl<T: Bound> OtherTrait for T` (T is the impl type directly).
                     let mut actual_idx = 0u32;
                     for param in &impl_block.type_params {
-                        if self.is_known_type_name(&param.name) {
+                        if self.tysys.is_known_type_name(&param.name) {
                             // Concrete type in explicit params (e.g., `impl<i32, T>`): skip
                             if !param.bounds.is_empty() {
                                 self.trait_ctx
@@ -1110,7 +1110,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             if let ast::Type::Named(named) = arg {
                                 let name = &named.name;
                                 if !self.trait_ctx.type_params.contains_key(name)
-                                    && !self.is_known_type_name(name)
+                                    && !self.tysys.is_known_type_name(name)
                                 {
                                     let type_id = self
                                         .tysys.type_table

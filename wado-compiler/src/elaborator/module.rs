@@ -364,7 +364,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // (e.g., `impl<i32, T> IndexValue<i32> for Triple<T>` — skip "i32").
                     let mut actual_idx = 0u32;
                     for param in &impl_block.type_params {
-                        if scope.is_known_type_name(&param.name) {
+                        if scope.tysys.is_known_type_name(&param.name) {
                             continue;
                         }
                         let type_id = if param.is_pack {
@@ -410,7 +410,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             if let ast::Type::Named(named) = arg {
                                 let name = &named.name;
                                 if !scope.trait_ctx.type_params.contains_key(name)
-                                    && !scope.is_known_type_name(name)
+                                    && !scope.tysys.is_known_type_name(name)
                                 {
                                     let index = (offset + i) as u32;
                                     let type_id = scope

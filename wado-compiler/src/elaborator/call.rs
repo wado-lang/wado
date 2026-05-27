@@ -553,7 +553,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.recoerce_literal_args(&call.args, &mut args, &substituted);
                     for (i, arg) in args.iter().enumerate() {
                         if let Some(&expected) = substituted.get(i) {
-                            self.typecheck(
+                            self.tysys.typecheck(self.logger, 
                                 arg.type_id,
                                 expected,
                                 call.args.get(i).map_or(call.span, ast::Expr::span),
@@ -717,7 +717,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // If prefix is a known type (struct/enum/newtype/flags) with no matching
             // static method, emit a compile error.
-            else if self.is_known_type_name(prefix) {
+            else if self.tysys.is_known_type_name(prefix) {
                 let _ = self.logger.error(TypeError::UnknownFunction {
                     name: format!("{prefix}::{suffix}"),
                     span: call.span,
@@ -1021,7 +1021,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
-                self.typecheck(
+                self.tysys.typecheck(self.logger, 
                     arg.type_id,
                     expected,
                     call.args.get(i).map_or(call.span, ast::Expr::span),
@@ -1093,7 +1093,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = fn_params.get(i) {
-                self.typecheck(
+                self.tysys.typecheck(self.logger, 
                     arg.type_id,
                     expected,
                     call.args.get(i).map_or(call.span, ast::Expr::span),
