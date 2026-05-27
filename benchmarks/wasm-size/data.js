@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779898732669,
+  "lastUpdate": 1779901413995,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26677,6 +26677,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e99b1cd36bbbbb7880f1c56caed9d197f56cf974"
         },
         "date": 1779898732340,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c1ba4a86508f67a3ff959dcf959f9f08d543e3ba",
+          "message": "Merge pull request #1209 from wado-lang/gfx/log-unmeasured-spans\n\nchore(logger): name previously-unmeasured spans in loader / semantics",
+          "timestamp": "2026-05-28T01:56:00+09:00",
+          "tree_id": "15efbeed6ad7a099f385330645b0ad512b5b16c2",
+          "url": "https://github.com/wado-lang/wado/commit/c1ba4a86508f67a3ff959dcf959f9f08d543e3ba"
+        },
+        "date": 1779901413520,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
