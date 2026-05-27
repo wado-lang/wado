@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779840360468,
+  "lastUpdate": 1779876333690,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26521,6 +26521,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 451317,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "778946061b122ae886714de8e042bb3b0fde95de",
+          "message": "Merge pull request #1205 from wado-lang/claude/benchmark-json-catalog-perf-PiAFm\n\nVariant-return SROA: tail-call propagation, HFS-temp elision, prefix call-site recursion",
+          "timestamp": "2026-05-27T18:59:27+09:00",
+          "tree_id": "b42840135c50dc70c0a8cc771010b79d219f2c62",
+          "url": "https://github.com/wado-lang/wado/commit/778946061b122ae886714de8e042bb3b0fde95de"
+        },
+        "date": 1779876333363,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
             "unit": "bytes"
           }
         ]
