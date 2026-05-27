@@ -472,9 +472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             let default_expr = field.default.as_ref().map(|default_ast| {
                 let resolved = scope.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
-                scope
-                    .tysys
-                    .typecheck(scope.logger, resolved.type_id, type_id, default_ast.span());
+                scope.typecheck(resolved.type_id, type_id, default_ast.span());
                 Box::new(resolved)
             });
             // A field with a declared default is implicitly non-required at
@@ -712,12 +710,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let initializer = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
         // Type check: initializer type must match declared type.
-        self.tysys.typecheck(
-            self.logger,
-            initializer.type_id,
-            ty,
-            global_decl.initializer.span(),
-        );
+        self.typecheck(initializer.type_id, ty, global_decl.initializer.span());
 
         Some(TirGlobal {
             name: global_decl.name.clone(),
@@ -1107,9 +1100,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 }
                 let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
-                scope
-                    .tysys
-                    .typecheck(scope.logger, resolved.type_id, type_id, default_ast.span());
+                scope.typecheck(resolved.type_id, type_id, default_ast.span());
                 Box::new(resolved)
             });
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
@@ -1690,9 +1681,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let default_expr = param.default.as_ref().map(|default_ast| {
                 let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
-                scope
-                    .tysys
-                    .typecheck(scope.logger, resolved.type_id, type_id, default_ast.span());
+                scope.typecheck(resolved.type_id, type_id, default_ast.span());
                 Box::new(resolved)
             });
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));

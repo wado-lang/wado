@@ -1083,12 +1083,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         _ => None,
                     };
                     if let Some(expected) = derefed_index_type {
-                        self.tysys.typecheck(
-                            self.logger,
-                            index_type,
-                            expected,
-                            index_expr.index.span(),
-                        );
+                        self.typecheck(index_type, expected, index_expr.index.span());
                     }
 
                     let assign_info = self
@@ -1111,12 +1106,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         };
 
                         // Check: reject &T/&mut T assigned where non-ref expected
-                        self.tysys.typecheck(
-                            self.logger,
-                            value_tir.type_id,
-                            trait_info.input_type,
-                            value_span,
-                        );
+                        self.typecheck(value_tir.type_id, trait_info.input_type, value_span);
 
                         let receiver = self.adjust_receiver_for_self_kind(
                             indexed_expr,
@@ -1168,8 +1158,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Reject &T assigned where non-ref T expected
-        self.tysys
-            .typecheck(self.logger, value_tir.type_id, target.type_id, value_span);
+        self.typecheck(value_tir.type_id, target.type_id, value_span);
 
         // Handle assignment to global variables
         if let TirExprKind::GlobalVarGet {
@@ -1485,8 +1474,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // For concrete parameter types (e.g. `rhs: u32` on
             // `Shl::shl`) the expected type is the parameter type itself.
             let expected = if wrap { receiver.type_id } else { param_ty };
-            self.tysys
-                .typecheck(self.logger, arg.type_id, expected, span);
+            self.typecheck(arg.type_id, expected, span);
             wrap_flags.push(wrap);
         }
 

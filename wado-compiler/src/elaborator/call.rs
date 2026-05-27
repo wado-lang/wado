@@ -563,8 +563,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.recoerce_literal_args(&call.args, &mut args, &substituted);
                     for (i, arg) in args.iter().enumerate() {
                         if let Some(&expected) = substituted.get(i) {
-                            self.tysys.typecheck(
-                                self.logger,
+                            self.typecheck(
                                 arg.type_id,
                                 expected,
                                 call.args.get(i).map_or(call.span, ast::Expr::span),
@@ -1034,8 +1033,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
-                self.tysys.typecheck(
-                    self.logger,
+                self.typecheck(
                     arg.type_id,
                     expected,
                     call.args.get(i).map_or(call.span, ast::Expr::span),
@@ -1107,8 +1105,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = fn_params.get(i) {
-                self.tysys.typecheck(
-                    self.logger,
+                self.typecheck(
                     arg.type_id,
                     expected,
                     call.args.get(i).map_or(call.span, ast::Expr::span),

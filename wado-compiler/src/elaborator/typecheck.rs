@@ -2,12 +2,33 @@
 //!
 //! This module is the single source of truth for "can type A be used where
 //! type B is expected?". All type mismatch checks route through here.
+//!
+//! # Layering
+//!
+//! The check is split across three layers, each more host-aware than the
+//! last:
+//!
+//! 1. [`check_assignable`] — pure function over the type table. Returns
+//!    [`TypeCheckResult`] (`Compatible` / `Deferred` / `Incompatible`).
+//!    No diagnostics, no host.
+//! 2. [`TypeSystem::typecheck`] / [`TypeSystem::typecheck_return`] —
+//!    type-system operations that build a [`TypeMismatchPayload`] (the
+//!    pretty-printed `expected` / `found` names) on rejection. Still
+//!    host-agnostic — `TypeSystem` does not carry `<H: CompilerHost>`.
+//! 3. [`Elaborator::typecheck`] / [`Elaborator::typecheck_return`] —
+//!    thin wrappers that call (2) and emit a [`TypeError::TypeMismatch`]
+//!    diagnostic via `self.logger` on rejection. This is the layer
+//!    callers in the body walk use.
+//!
+//! Keeping the `<H>` plumbing confined to layer 3 means future
+//! `TypeSystem` operations that report errors can mirror this split
+//! without bleeding the host trait into the type-system API.
 
 use crate::compiler_host::CompilerHost;
-use crate::logger::Logger;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
+use super::Elaborator;
 use super::types::TypeError;
 use super::tysys::TypeSystem;
 
@@ -219,45 +240,87 @@ fn unwrap_ref(type_id: TypeId, type_table: &TypeTable) -> (TypeId, bool) {
     }
 }
 
+/// Pretty-printed payload carried when [`TypeSystem::typecheck`] /
+/// [`TypeSystem::typecheck_return`] rejects an assignment.
+///
+/// The strings are materialised at the rejection site (while the
+/// [`TypeTable`] is still borrowed) so the caller can drop the type
+/// table before emitting the diagnostic. Both fields use the same
+/// [`TypeTable::type_name`] formatting that the original
+/// `TypeError::TypeMismatch` diagnostic used.
+#[derive(Debug, Clone)]
+pub(crate) struct TypeMismatchPayload {
+    pub(crate) expected: String,
+    pub(crate) found: String,
+}
+
 impl TypeSystem {
-    /// Check type mismatch and emit a [`TypeError::TypeMismatch`] diagnostic
-    /// via `logger` if incompatible. Pure type-system operation — uses only
-    /// the shared type table and the caller-supplied diagnostic sink.
-    pub(crate) fn typecheck<H: CompilerHost>(
+    /// Host-agnostic type-mismatch check. Returns `Ok(())` if `actual`
+    /// is assignable to `expected` (or if the answer is deferred —
+    /// unknown types, unresolved generics — which the body walk
+    /// re-checks once the type is known); returns `Err` with the
+    /// pretty-printed `expected` / `found` names on a definite reject.
+    ///
+    /// This is layer 2 of [the typecheck stack](self): callers that
+    /// want a diagnostic emitted should go through
+    /// [`Elaborator::typecheck`].
+    pub(crate) fn typecheck(
         &self,
-        logger: &Logger<H>,
         actual: TypeId,
         expected: TypeId,
-        span: Span,
-    ) {
+    ) -> Result<(), TypeMismatchPayload> {
         let type_table = self.type_table.borrow();
-        let result = check_assignable(actual, expected, &type_table);
-        if result == TypeCheckResult::Incompatible {
-            let expected_name = type_table.type_name(expected);
-            let found_name = type_table.type_name(actual);
-            drop(type_table);
-            let _ = logger.error(TypeError::TypeMismatch {
-                expected: expected_name,
-                found: found_name,
+        match check_assignable(actual, expected, &type_table) {
+            TypeCheckResult::Incompatible => Err(TypeMismatchPayload {
+                expected: type_table.type_name(expected),
+                found: type_table.type_name(actual),
+            }),
+            TypeCheckResult::Compatible | TypeCheckResult::Deferred => Ok(()),
+        }
+    }
+
+    /// Host-agnostic return-type check. `UNIT` expected always succeeds
+    /// (void returns); otherwise delegates to [`TypeSystem::typecheck`].
+    pub(crate) fn typecheck_return(
+        &self,
+        actual: TypeId,
+        expected: TypeId,
+    ) -> Result<(), TypeMismatchPayload> {
+        if expected == TypeTable::UNIT {
+            return Ok(());
+        }
+        self.typecheck(actual, expected)
+    }
+}
+
+impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Check type mismatch and emit a [`TypeError::TypeMismatch`]
+    /// diagnostic via [`Self::logger`] on rejection.
+    ///
+    /// Layer 3 wrapper over [`TypeSystem::typecheck`]: confines the
+    /// `<H: CompilerHost>` plumbing to the `Elaborator` boundary so
+    /// `TypeSystem` itself stays host-agnostic.
+    pub(super) fn typecheck(&self, actual: TypeId, expected: TypeId, span: Span) {
+        if let Err(payload) = self.tysys.typecheck(actual, expected) {
+            let _ = self.logger.error(TypeError::TypeMismatch {
+                expected: payload.expected,
+                found: payload.found,
                 span,
             });
         }
     }
 
-    /// Check return type mismatch and emit error if incompatible.
+    /// Check return type mismatch and emit a diagnostic on rejection.
     ///
-    /// Additional allowance: `UNIT` expected is always compatible (void
-    /// returns).
-    pub(crate) fn typecheck_return<H: CompilerHost>(
-        &self,
-        logger: &Logger<H>,
-        actual: TypeId,
-        expected: TypeId,
-        span: Span,
-    ) {
-        if expected == TypeTable::UNIT {
-            return;
+    /// `UNIT` expected is always compatible (void returns); otherwise
+    /// delegates to [`Self::typecheck`]'s emit path.
+    pub(super) fn typecheck_return(&self, actual: TypeId, expected: TypeId, span: Span) {
+        if let Err(payload) = self.tysys.typecheck_return(actual, expected) {
+            let _ = self.logger.error(TypeError::TypeMismatch {
+                expected: payload.expected,
+                found: payload.found,
+                span,
+            });
         }
-        self.typecheck(logger, actual, expected, span);
     }
 }
