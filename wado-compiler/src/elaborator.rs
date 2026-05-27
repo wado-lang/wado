@@ -23,6 +23,7 @@ mod method_lookup;
 mod module;
 mod operators;
 pub(crate) mod orchestration;
+mod sem;
 mod stmt;
 mod template;
 pub(crate) mod trait_env;
@@ -30,6 +31,7 @@ mod trait_query;
 mod type_resolution;
 mod typecheck;
 pub(crate) mod types;
+mod tysys;
 mod util;
 
 use std::cell::RefCell;
@@ -80,19 +82,30 @@ use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
 };
 
+// Migration markers below trace the WEP 2026-05-26 elaborator
+// re-architecture. Each `MIGRATION:` line names the field's future home —
+// `TypeSystem` (pipeline-wide type knowledge) or a sub-struct of
+// `ModuleSemantics` (per-module facts), or a transient annotate-time scope
+// or cross-cutting input that stays on the per-module driver. Stage 1
+// only fixes the placement; the fields themselves do not move.
+
 pub struct Elaborator<'a, H: CompilerHost> {
     /// Type table (shared across all modules via Rc<RefCell>)
+    // MIGRATION: → TypeSystem (arena).
     type_table: Rc<RefCell<TypeTable>>,
     /// Symbol table from analyzer
+    // MIGRATION: cross-cutting input (stays on the driver).
     #[allow(dead_code)]
     symbols: &'a SymbolTable,
     /// Loaded modules from analyzer
+    // MIGRATION: cross-cutting input (stays on the driver).
     #[allow(dead_code)]
     loaded_modules: &'a IndexMap<ModuleSource, Module>,
     /// Per-module nested maps for cross-module type resolution (shared via Rc).
     /// These are the *single source of truth* for declared type info; all
     /// per-module name resolution is performed by walking these via
     /// [`TypeLookup`] without cloning their contents into per-module flat maps.
+    // MIGRATION: → TypeSystem (decl-interned type tables, all 7 below).
     all_newtypes: Rc<IndexMap<ModuleSource, IndexMap<String, TypeId>>>,
     all_generic_newtypes: Rc<IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>>>,
     all_struct_fields: Rc<IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>>,
@@ -103,6 +116,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Per-module import context (consumed by [`TypeLookup`]). Built once per
     /// module from `use` declarations; replaces the 7 flat maps the elaborator
     /// used to clone for each module.
+    // MIGRATION: → ModuleSemantics::imports (both fields below).
     imported_type_sources: IndexMap<String, ModuleSource>,
     import_original_names: IndexMap<String, String>,
     /// Locally discovered additions to the type tables. Anonymous structs
@@ -110,6 +124,9 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// `module.items` insert here so [`TypeLookup`] can find them at the
     /// highest priority. Always empty unless the current module has a
     /// reason to override / extend the shared tables.
+    // MIGRATION: → ModuleSemantics::decls (per-module decl overrides, all 6 below).
+    //   Stage 2/3 may instead promote these into a per-module view on TypeSystem;
+    //   decided at the move site.
     local_struct_fields: IndexMap<String, StructFieldInfo>,
     local_newtypes: IndexMap<String, TypeId>,
     local_generic_newtypes: IndexMap<String, GenericNewtypeInfo>,
@@ -117,114 +134,158 @@ pub struct Elaborator<'a, H: CompilerHost> {
     local_flags_cases: IndexMap<String, FlagsInfo>,
     local_variant_cases: IndexMap<String, VariantInfo>,
     /// Function return types (name -> return type)
+    // MIGRATION: → ModuleSemantics::decls.
     function_return_types: IndexMap<String, TypeId>,
     /// Imported function names for the current module
+    // MIGRATION: → ModuleSemantics::decls.
     imported_functions: IndexSet<String>,
     /// Logger for emitting diagnostics
+    // MIGRATION: cross-cutting input (stays on the driver).
     logger: &'a Logger<'a, H>,
     /// Current module source being resolved (for struct type `module_source`)
+    // MIGRATION: identifies the active `ModuleSemantics` — the driver swaps
+    //   modules via the `IndexMap<ModuleSource, ModuleSemantics>` key, so this
+    //   field disappears after Stage 3.
     current_module_source: ModuleSource,
     /// Entry module source (for cross-module import dedup)
+    // MIGRATION: cross-cutting input (stays on the driver).
     entry_module_source: ModuleSource,
     /// Current module items (for local function parameter lookup)
+    // MIGRATION: cross-cutting input (the active module's AST is passed
+    //   alongside its `ModuleSemantics`).
     current_module_items: &'a [Item],
     /// Mutable trait resolution context: type params, bounds, associated type bindings, self type.
     /// Grouped together so scope entry/exit can save/restore the whole context at once.
+    // MIGRATION: transient annotate-time scope (Stage 5 carries it as an
+    //   explicit argument to `annotate_*` walkers).
     trait_ctx: trait_env::TraitContext,
     /// Generic struct definitions (name -> type param count)
     /// Used to determine if a struct is generic
+    // MIGRATION: → ModuleSemantics::decls.
     generic_struct_names: IndexSet<String>,
     /// Generic function type parameters (`func_name` -> `type_params`)
     /// Used for substituting type parameters in return types
+    // MIGRATION: → ModuleSemantics::decls.
     generic_function_params: IndexMap<String, Vec<(String, TypeId)>>,
     /// Resolved param types for generic functions (`func_name` -> `param TypeIds`)
     /// Resolved in the function's own type param scope so `TypeParams` have correct ids.
+    // MIGRATION: → ModuleSemantics::decls.
     generic_function_resolved_param_types: IndexMap<String, Vec<TypeId>>,
     /// Resolved return type for generic functions (`func_name` -> `return TypeId`)
     /// Resolved in the function's own type param scope; used for expected-return
     /// driven back-inference by [`infer::InferCtx::add_expected_return`].
+    // MIGRATION: → ModuleSemantics::decls.
     generic_function_resolved_return_types: IndexMap<String, TypeId>,
     /// Generic method type parameters (`mangled_name` -> `type_params`)
     /// Used for substituting type parameters in method return types
+    // MIGRATION: → ModuleSemantics::decls.
     generic_method_params: IndexMap<String, Vec<(String, TypeId)>>,
     /// Resolved param types for generic methods (`mangled_name` -> `param TypeIds`)
     /// Resolved in the method's own type param scope so `TypeParams` have correct ids.
+    // MIGRATION: → ModuleSemantics::decls.
     generic_method_resolved_param_types: IndexMap<String, Vec<TypeId>>,
     /// Namespace import aliases (e.g., "helper" -> module source for `use helper from "..."`)
+    // MIGRATION: → ModuleSemantics::imports.
     namespace_imports: IndexMap<String, ModuleSource>,
     /// Effect name to source module mapping (e.g., "Stdout" -> wasi:cli module source)
     /// Built from import declarations and local interface declarations.
+    // MIGRATION: → ModuleSemantics::imports.
     effect_sources: IndexMap<String, ModuleSource>,
     /// Effect parameter names currently in scope (from enclosing function's `<effect E>`)
+    // MIGRATION: transient annotate-time scope (per-function, not per-module).
     current_effect_params: IndexSet<String>,
     /// Map from effect parameter name to its declaration `AstId` in the current scope.
     /// Used to record use→def edges for effect parameter references in `with` clauses.
+    // MIGRATION: transient annotate-time scope (per-function, not per-module).
     current_effect_param_decls: IndexMap<String, crate::ast::AstId>,
     /// WASI registry for looking up effect return types
+    // MIGRATION: → TypeSystem (registry).
     wasi_registry: &'static WasiRegistry,
     /// Builtin registry for looking up builtin function return types
+    // MIGRATION: → TypeSystem (registry).
     builtin_registry: &'a BuiltinRegistry,
     /// Global variables in the current module (name -> (type, `is_mutable`))
+    // MIGRATION: → ModuleSemantics::decls.
     current_module_globals: IndexMap<String, (TypeId, bool)>,
     /// Imported globals (local name -> (source module, original name, type, `is_mutable`))
+    // MIGRATION: → ModuleSemantics::decls.
     imported_globals: IndexMap<String, (ModuleSource, String, TypeId, bool)>,
     /// Associated constants from impl blocks ("`TypeName::CONST`" -> (type, expr))
     /// These are inlined at every use site during resolution.
+    // MIGRATION: → ModuleSemantics::decls.
     associated_constants: IndexMap<String, (ast::Type, ast::Expr)>,
     /// Immutable trait knowledge base: impl indices, trait declarations, and blanket impls.
     /// Built once and shared across all module elaborators via `Arc`.
+    // MIGRATION: → TypeSystem.
     trait_env: Arc<TraitEnv>,
     /// Pre-loaded file contents for `#include_str` / `#include_bytes`.
     /// Key: `[module_source_display, raw_path]`, value: raw bytes.
+    // MIGRATION: → TypeSystem (included-files map).
     included_files: &'a IndexMap<[String; 2], Vec<u8>>,
     /// Cached flat set of all known type names for fast `is_known_type_name` lookups.
+    // MIGRATION: → TypeSystem.
     known_type_names_cache: IndexSet<String>,
     /// Anonymous structs created during expression resolution.
     /// Flushed into the `TirModule` at the end of `resolve_module`.
+    // MIGRATION: → ModuleSemantics::decls.
     pending_anonymous_structs: Vec<crate::tir::TirStruct>,
     /// Cache for `find_indexing_trait_impl` results.
     /// Key: (`struct_name`, `base_type_id`, `trait_base_name`, `method_name`, `assoc_type_name`)
+    // MIGRATION: → TypeSystem (type-system cache).
     indexing_trait_cache: IndexMap<
         (String, TypeId, String, String, String),
         Option<(TypeId, ast::SelfKind, String, ModuleSource)>,
     >,
     /// Recursion guard for `type_implements_trait` to avoid infinite recursion
     /// on recursive types (e.g., variant Elem containing struct `RepeatElem` with field Elem).
+    // MIGRATION: → TypeSystem (type-system cache).
     trait_check_stack: RefCell<Vec<(TypeId, String)>>,
     /// Cache for `lookup_method_info` results.
     /// Key: (`base_type_id`, `method_name`) → cached `MethodInfo`
+    // MIGRATION: → TypeSystem (type-system cache).
     method_info_cache: IndexMap<(TypeId, String), Option<types::MethodInfo>>,
     /// Index from function name → position in `current_module_items` for O(1) lookup.
+    // MIGRATION: transient annotate-time scope (rebuilt for the active module).
     current_module_func_index: IndexMap<String, usize>,
     /// Per-module index from function name → position in module.items for O(1) lookup.
+    // MIGRATION: → TypeSystem (pipeline-wide func-name index over loaded modules).
     loaded_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>>,
     /// Use→def map for local variables. Shared via `Rc<RefCell<…>>` with
     /// [`crate::elaborator::orchestration::AnnotateState`] so LSP queries see
     /// references as soon as the elaborator has walked the body.
+    // MIGRATION: → ModuleSemantics::bindings (drops the `Rc<RefCell<…>>`;
+    //   the body walk takes `&mut ModuleSemantics`).
     references: Rc<RefCell<IndexMap<SymbolKey, SymbolKey>>>,
     /// Local binding [`Symbol`]s emitted alongside `references`. Populated at
     /// every `ctx.add_local(...)` call that carries a user-visible defining
     /// `AstId`. Shared via `Rc<RefCell<…>>` with `AnnotateState`.
+    // MIGRATION: → ModuleSemantics::bindings (drops the `Rc<RefCell<…>>`).
     local_symbols: Rc<RefCell<IndexMap<SymbolKey, Symbol>>>,
     /// Resolved [`TypeId`] for each local binding, keyed by the binding's
     /// defining [`SymbolKey`]. Populated alongside `local_symbols` at every
     /// `record_local_symbol` call. Shared via `Rc<RefCell<…>>` with
     /// `AnnotateState` and ultimately drained into `Semantics::local_types`
     /// for LSP inlay-hint consumption.
+    // MIGRATION: → ModuleSemantics::types (TypeId per binding-AstId fits the
+    //   "per-`AstId` type annotations" rule). LSP consumer
+    //   `Semantics::local_type_name` hides the placement.
     local_types: Rc<RefCell<IndexMap<SymbolKey, TypeId>>>,
     /// When resolving a default-expression AST at a call site, fall back to
     /// looking up unresolved identifiers in this module's global scope. This
     /// preserves the callee's lexical scope for defaults that reference
     /// module-private items (see WEP 2026-04-11).
+    // MIGRATION: transient annotate-time scope (per-call-site override).
     pub(super) default_scope_module: Option<ModuleSource>,
     /// Kiln invocation redirects consulted by `use` resolution sites. Shared
     /// by `Rc` so per-module Elaborator instances can read the single
     /// compilation-unit-wide redirect map cheaply.
+    // MIGRATION: cross-cutting input (loader-provided redirect map).
     pub(super) invocations: Rc<crate::kiln::InvocationIndex>,
     /// `ModuleSource` interner shared with the loader and downstream
     /// phases. Wrapped in `Rc<RefCell<>>` so per-module elaborator
     /// instances can `borrow_mut()` it from `&self` contexts (e.g.
     /// `record_use_specifier_references`).
+    // MIGRATION: cross-cutting input (shared interner).
     pub(super) interner: Rc<RefCell<ModuleSourceInterner>>,
 }
 

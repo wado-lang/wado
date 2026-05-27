@@ -52,10 +52,20 @@ use super::types::{
 /// underlying data. The [`TypeTable`] itself is behind `Rc<RefCell<…>>`
 /// because lowering interns additional types (anonymous structs,
 /// monomorphized instances) into the same table.
+///
+/// Migration markers on each field below trace the WEP 2026-05-26
+/// elaborator re-architecture. `AnnotateState` itself disappears after
+/// Stage 7 — its contents redistribute into [`super::tysys::TypeSystem`]
+/// (pipeline-wide), per-module [`super::sem::ModuleSemantics`] instances,
+/// and cross-cutting driver state.
 pub(crate) struct AnnotateState {
+    // MIGRATION: → TypeSystem (arena).
     pub(crate) type_table: Rc<RefCell<TypeTable>>,
+    // MIGRATION: → TypeSystem.
     pub(crate) trait_env: Arc<TraitEnv>,
+    // MIGRATION: cross-cutting driver state (topological order of modules).
     pub(crate) sorted_sources: Vec<ModuleSource>,
+    // MIGRATION: → TypeSystem (decl-interned type tables, all 7 below).
     pub(crate) all_newtypes: Rc<IndexMap<ModuleSource, IndexMap<String, TypeId>>>,
     pub(crate) all_generic_newtypes:
         Rc<IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>>>,
@@ -64,19 +74,27 @@ pub(crate) struct AnnotateState {
     pub(crate) all_enum_cases: Rc<IndexMap<ModuleSource, IndexMap<String, EnumInfo>>>,
     pub(crate) all_flags_cases: Rc<IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>>,
     pub(crate) all_resource_types: Rc<IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>>,
+    // MIGRATION: → TypeSystem (registry).
     pub(crate) wasi_registry: &'static WasiRegistry,
+    // MIGRATION: → TypeSystem (registry).
     pub(crate) world_registry: &'static WorldRegistry,
+    // MIGRATION: → TypeSystem (registry).
     pub(crate) builtin_registry: BuiltinRegistry,
+    // MIGRATION: → TypeSystem.
     pub(crate) global_known_type_names: IndexSet<String>,
+    // MIGRATION: → TypeSystem (pipeline-wide func-name index over loaded modules).
     pub(crate) all_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>>,
     /// Use→def map for local variables: `(module, IdentExpr.id)` →
     /// `(module, defining AstId)`. Populated by [`Elaborator::resolve_ident`]
     /// whenever a name resolves to a local binding. Consumed by LSP
     /// `definition` / `hover` to jump to the defining pattern / parameter.
+    // MIGRATION: → ModuleSemantics::bindings (per-module after Stage 3;
+    //   the `Rc<RefCell<…>>` plumbing collapses into `&mut ModuleSemantics`).
     pub(crate) references: Rc<RefCell<IndexMap<SymbolKey, SymbolKey>>>,
     /// Locally-defined [`Symbol`]s (let bindings, parameters, closure
     /// parameters). Keyed by the binding's defining [`SymbolKey`]. Populated
     /// alongside [`Self::references`] as the elaborator walks function bodies.
+    // MIGRATION: → ModuleSemantics::bindings (per-module after Stage 3).
     pub(crate) local_symbols: Rc<RefCell<IndexMap<SymbolKey, Symbol>>>,
     /// Resolved [`TypeId`] for each local binding, keyed by the binding's
     /// defining [`SymbolKey`]. Populated alongside [`Self::local_symbols`]
@@ -84,13 +102,18 @@ pub(crate) struct AnnotateState {
     /// `let x = 1` can render the inferred `: i32` annotation without
     /// reaching into TIR (which is `pub(crate)` and mixes resolver-synth
     /// temporaries into the local namespace).
+    // MIGRATION: → ModuleSemantics::types (TypeId per binding-AstId fits the
+    //   "per-`AstId` type annotations" rule). LSP consumer
+    //   `Semantics::local_type_name` hides the placement.
     pub(crate) local_types: Rc<RefCell<IndexMap<SymbolKey, TypeId>>>,
     /// Kiln invocation redirects consulted by `resolve_import` call sites
     /// when walking `use` declarations. Populated from [`crate::loader::LoadResult`].
+    // MIGRATION: cross-cutting input (loader-provided redirect map).
     pub(crate) invocations: Rc<crate::kiln::InvocationIndex>,
     /// `ModuleSource` interner shared across phases. `Rc<RefCell<>>` so
     /// `&self` elaborator methods can `borrow_mut()` it when constructing
     /// new module sources during name resolution.
+    // MIGRATION: cross-cutting input (shared interner).
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
 }
 
