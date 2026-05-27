@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779876333690,
+  "lastUpdate": 1779877221645,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26545,6 +26545,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/778946061b122ae886714de8e042bb3b0fde95de"
         },
         "date": 1779876333363,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "66653bd011b5ce40efc31ed78b2ac8374a4883b4",
+          "message": "Merge pull request #1206 from wado-lang/claude/elaborator-refactoring-stage-1-i06wm\n\nelaborator: introduce TypeSystem / ModuleSemantics (Stage 1 + Stage 2)",
+          "timestamp": "2026-05-27T19:14:09+09:00",
+          "tree_id": "a11d54694378cc7918261ff7e43438e4ac29d245",
+          "url": "https://github.com/wado-lang/wado/commit/66653bd011b5ce40efc31ed78b2ac8374a4883b4"
+        },
+        "date": 1779877221325,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
