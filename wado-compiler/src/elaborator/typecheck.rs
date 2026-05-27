@@ -221,7 +221,7 @@ fn unwrap_ref(type_id: TypeId, type_table: &TypeTable) -> (TypeId, bool) {
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Check type mismatch and emit error if incompatible.
     pub(super) fn typecheck(&mut self, actual: TypeId, expected: TypeId, span: Span) {
-        let type_table = self.type_table.borrow();
+        let type_table = self.tysys.type_table.borrow();
         let result = check_assignable(actual, expected, &type_table);
         if result == TypeCheckResult::Incompatible {
             let expected_name = type_table.type_name(expected);

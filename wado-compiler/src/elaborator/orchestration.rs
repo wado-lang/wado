@@ -35,10 +35,10 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name};
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
-use crate::world_registry::WorldRegistry;
 
 use super::Elaborator;
 use super::trait_env::TraitEnv;
+use super::tysys::TypeSystem;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ResourceInfo,
     StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
@@ -59,31 +59,15 @@ use super::types::{
 /// (pipeline-wide), per-module [`super::sem::ModuleSemantics`] instances,
 /// and cross-cutting driver state.
 pub(crate) struct AnnotateState {
-    // MIGRATION: → TypeSystem (arena).
-    pub(crate) type_table: Rc<RefCell<TypeTable>>,
-    // MIGRATION: → TypeSystem.
-    pub(crate) trait_env: Arc<TraitEnv>,
-    // MIGRATION: cross-cutting driver state (topological order of modules).
+    /// Pipeline-wide type knowledge: the type arena, decl-interned type
+    /// tables, registries, included-files map, and read-only caches
+    /// built once at annotate time. See [`TypeSystem`].
+    pub(crate) tysys: TypeSystem,
+    /// Topological order of modules; the per-module body walk in
+    /// [`Elaborator::build_tir_from_state`] visits sources in this order
+    /// so a `TirModule`'s position in the result map matches the
+    /// dependency order downstream phases expect.
     pub(crate) sorted_sources: Vec<ModuleSource>,
-    // MIGRATION: → TypeSystem (decl-interned type tables, all 7 below).
-    pub(crate) all_newtypes: Rc<IndexMap<ModuleSource, IndexMap<String, TypeId>>>,
-    pub(crate) all_generic_newtypes:
-        Rc<IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>>>,
-    pub(crate) all_struct_fields: Rc<IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>>,
-    pub(crate) all_variant_cases: Rc<IndexMap<ModuleSource, IndexMap<String, VariantInfo>>>,
-    pub(crate) all_enum_cases: Rc<IndexMap<ModuleSource, IndexMap<String, EnumInfo>>>,
-    pub(crate) all_flags_cases: Rc<IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>>,
-    pub(crate) all_resource_types: Rc<IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>>,
-    // MIGRATION: → TypeSystem (registry).
-    pub(crate) wasi_registry: &'static WasiRegistry,
-    // MIGRATION: → TypeSystem (registry).
-    pub(crate) world_registry: &'static WorldRegistry,
-    // MIGRATION: → TypeSystem (registry).
-    pub(crate) builtin_registry: BuiltinRegistry,
-    // MIGRATION: → TypeSystem.
-    pub(crate) global_known_type_names: IndexSet<String>,
-    // MIGRATION: → TypeSystem (pipeline-wide func-name index over loaded modules).
-    pub(crate) all_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>>,
     /// Use→def map for local variables: `(module, IdentExpr.id)` →
     /// `(module, defining AstId)`. Populated by [`Elaborator::resolve_ident`]
     /// whenever a name resolves to a local binding. Consumed by LSP
@@ -128,7 +112,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         modules: &'a IndexMap<ModuleSource, Module>,
         entry_module_source: ModuleSource,
         logger: &'a Logger<'a, H>,
-        included_files: &'a IndexMap<[String; 2], Vec<u8>>,
+        included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
         invocations: crate::kiln::InvocationIndex,
         interner: Rc<RefCell<ModuleSourceInterner>>,
     ) -> Result<(IndexMap<ModuleSource, TirModule>, Arc<TraitEnv>), Bail> {
@@ -137,18 +121,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             modules,
             &entry_module_source,
             logger,
+            included_files,
             invocations,
             interner,
             None,
         )?;
-        let trait_env = state.trait_env.clone();
+        let trait_env = state.tysys.trait_env.clone();
         let tir_modules = Self::build_tir_from_state(
             &state,
             symbols,
             modules,
             entry_module_source,
             logger,
-            included_files,
             None,
         )?;
         Ok((tir_modules, trait_env))
@@ -163,6 +147,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         modules: &'a IndexMap<ModuleSource, Module>,
         entry_module_source: &ModuleSource,
         logger: &'a Logger<'a, H>,
+        included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
         invocations: crate::kiln::InvocationIndex,
         interner: Rc<RefCell<ModuleSourceInterner>>,
         snapshot: Option<&crate::semantics::Semantics>,
@@ -188,30 +173,30 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .expect("stdlib snapshot must have a populated annotate state")
         });
         let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> = snapshot_state
-            .map(|s| (*s.all_newtypes).clone())
+            .map(|s| (*s.tysys.all_newtypes).clone())
             .unwrap_or_default();
         let mut all_generic_newtypes: IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>> =
             snapshot_state
-                .map(|s| (*s.all_generic_newtypes).clone())
+                .map(|s| (*s.tysys.all_generic_newtypes).clone())
                 .unwrap_or_default();
         let mut all_struct_fields: IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>> =
             snapshot_state
-                .map(|s| (*s.all_struct_fields).clone())
+                .map(|s| (*s.tysys.all_struct_fields).clone())
                 .unwrap_or_default();
         let mut all_variant_cases: IndexMap<ModuleSource, IndexMap<String, VariantInfo>> =
             snapshot_state
-                .map(|s| (*s.all_variant_cases).clone())
+                .map(|s| (*s.tysys.all_variant_cases).clone())
                 .unwrap_or_default();
         let mut all_enum_cases: IndexMap<ModuleSource, IndexMap<String, EnumInfo>> = snapshot_state
-            .map(|s| (*s.all_enum_cases).clone())
+            .map(|s| (*s.tysys.all_enum_cases).clone())
             .unwrap_or_default();
         let mut all_flags_cases: IndexMap<ModuleSource, IndexMap<String, FlagsInfo>> =
             snapshot_state
-                .map(|s| (*s.all_flags_cases).clone())
+                .map(|s| (*s.tysys.all_flags_cases).clone())
                 .unwrap_or_default();
         let mut all_resource_types: IndexMap<ModuleSource, IndexMap<String, ResourceInfo>> =
             snapshot_state
-                .map(|s| (*s.all_resource_types).clone())
+                .map(|s| (*s.tysys.all_resource_types).clone())
                 .unwrap_or_default();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
@@ -660,7 +645,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // The snapshot's registry is bound to the snapshot's
                 // `TypeTable`, whose entries we cloned into `type_table`
                 // above — so the registered `TypeId`s remain valid.
-                snap_state.builtin_registry.clone()
+                (*snap_state.tysys.builtin_registry).clone()
             } else {
                 BuiltinRegistry::build_from_stdlib(&type_table)
             };
@@ -765,7 +750,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Pre-build function name → index maps for all loaded modules (O(1) lookup)
         let all_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>> = {
             let mut indices: IndexMap<ModuleSource, IndexMap<String, usize>> = snapshot_state
-                .map(|s| s.all_module_func_indices.clone())
+                .map(|s| (*s.tysys.loaded_module_func_indices).clone())
                 .unwrap_or_default();
             for (src, module) in modules {
                 if stdlib_set.contains(src) {
@@ -809,10 +794,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             snapshot.map(|s| s.local_types.clone()).unwrap_or_default(),
         ));
 
-        Ok(AnnotateState {
+        let tysys = TypeSystem {
             type_table,
-            trait_env,
-            sorted_sources,
             all_newtypes,
             all_generic_newtypes,
             all_struct_fields,
@@ -820,11 +803,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             all_enum_cases,
             all_flags_cases,
             all_resource_types,
+            trait_env,
             wasi_registry,
             world_registry,
-            builtin_registry,
-            global_known_type_names,
-            all_module_func_indices,
+            builtin_registry: Rc::new(builtin_registry),
+            included_files,
+            known_type_names_cache: Rc::new(global_known_type_names),
+            loaded_module_func_indices: Rc::new(all_module_func_indices),
+        };
+        Ok(AnnotateState {
+            tysys,
+            sorted_sources,
             references,
             local_symbols,
             local_types,
@@ -842,7 +831,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         modules: &'a IndexMap<ModuleSource, Module>,
         entry_module_source: ModuleSource,
         logger: &'a Logger<'a, H>,
-        included_files: &'a IndexMap<[String; 2], Vec<u8>>,
         snapshot: Option<&crate::semantics::Semantics>,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::default();
@@ -882,7 +870,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     module_source.clone(),
                     crate::stdlib_snapshot::rehydrate_tir_module(
                         snap_module,
-                        &state.type_table,
+                        &state.tysys.type_table,
                         &mut fn_remap,
                     ),
                 );
@@ -913,13 +901,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     current_module_source: module_source,
                     imported_type_sources: &imported_type_sources,
                     import_original_names: &import_original_names,
-                    all_newtypes: &state.all_newtypes,
-                    all_struct_fields: &state.all_struct_fields,
-                    all_variant_cases: &state.all_variant_cases,
-                    all_enum_cases: &state.all_enum_cases,
-                    all_flags_cases: &state.all_flags_cases,
-                    all_resource_types: &state.all_resource_types,
-                    all_generic_newtypes: &state.all_generic_newtypes,
+                    all_newtypes: &state.tysys.all_newtypes,
+                    all_struct_fields: &state.tysys.all_struct_fields,
+                    all_variant_cases: &state.tysys.all_variant_cases,
+                    all_enum_cases: &state.tysys.all_enum_cases,
+                    all_flags_cases: &state.tysys.all_flags_cases,
+                    all_resource_types: &state.tysys.all_resource_types,
+                    all_generic_newtypes: &state.tysys.all_generic_newtypes,
                     local_struct_fields: &empty_struct,
                     local_newtypes: &empty_newtype,
                     local_enum_cases: &empty_enum,
@@ -932,7 +920,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         let return_type = if let Some(ret_ty) = &func.return_type {
                             Self::resolve_type_static(
                                 ret_ty,
-                                &mut state.type_table.borrow_mut(),
+                                &mut state.tysys.type_table.borrow_mut(),
                                 &lookup,
                             )
                         } else {
@@ -989,16 +977,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
 
             let mut elaborator = Elaborator {
-                type_table: Rc::clone(&state.type_table),
+                tysys: state.tysys.clone(),
                 symbols,
                 loaded_modules: modules,
-                all_newtypes: Rc::clone(&state.all_newtypes),
-                all_generic_newtypes: Rc::clone(&state.all_generic_newtypes),
-                all_struct_fields: Rc::clone(&state.all_struct_fields),
-                all_variant_cases: Rc::clone(&state.all_variant_cases),
-                all_enum_cases: Rc::clone(&state.all_enum_cases),
-                all_flags_cases: Rc::clone(&state.all_flags_cases),
-                all_resource_types: Rc::clone(&state.all_resource_types),
                 imported_type_sources,
                 import_original_names,
                 local_struct_fields: IndexMap::default(),
@@ -1024,20 +1005,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 generic_function_resolved_return_types: IndexMap::default(),
                 generic_method_params: IndexMap::default(),
                 generic_method_resolved_param_types: IndexMap::default(),
-                wasi_registry: state.wasi_registry,
-                builtin_registry: &state.builtin_registry,
                 current_module_globals: IndexMap::default(),
                 imported_globals: IndexMap::default(),
                 associated_constants: IndexMap::default(),
-                trait_env: Arc::clone(&state.trait_env),
-                included_files,
-                known_type_names_cache: state.global_known_type_names.clone(),
                 indexing_trait_cache: IndexMap::default(),
                 trait_check_stack: RefCell::new(Vec::new()),
                 method_info_cache: IndexMap::default(),
                 pending_anonymous_structs: Vec::new(),
                 current_module_func_index: IndexMap::default(), // Built in resolve_module
-                loaded_module_func_indices: state.all_module_func_indices.clone(),
                 references: Rc::clone(&state.references),
                 local_symbols: Rc::clone(&state.local_symbols),
                 local_types: Rc::clone(&state.local_types),
@@ -1045,7 +1020,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 invocations: Rc::clone(&state.invocations),
                 interner: Rc::clone(&state.interner),
             };
-            // known_type_names_cache is pre-computed globally; no per-module rebuild needed
 
             // Set file context so diagnostics emitted during resolution
             // carry the correct module filename (not the entry module).

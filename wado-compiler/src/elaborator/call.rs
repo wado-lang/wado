@@ -75,7 +75,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// fn-type newtypes such as `type Handler = fn(...);` — return its
     /// signature. Otherwise return `None`. Borrows the type table once.
     fn as_fn_signature(&self, type_id: TypeId) -> Option<FnSignature> {
-        let table = self.type_table.borrow();
+        let table = self.tysys.type_table.borrow();
         let peeled_ref = table.peel_refs(type_id);
         let base = table.get_ultimate_base_type(peeled_ref);
         match table.get(base) {
@@ -138,7 +138,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let is_mut_ref = matches!(
-            self.type_table.borrow().get(local.type_id),
+            self.tysys.type_table.borrow().get(local.type_id),
             ResolvedType::MutRef(_)
         );
         if is_mut_ref {
@@ -164,7 +164,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if prefix == "Self"
             && let Some(self_type_id) = self.trait_ctx.self_type
         {
-            let self_name = self.type_table.borrow().type_name(self_type_id);
+            let self_name = self.tysys.type_table.borrow().type_name(self_type_id);
             return CalleeIdentKind::Rewritten(format!("{self_name}::{suffix}"));
         }
 
@@ -176,7 +176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // abstract form and route through the trait-bound dispatch
             // path so the monomorphizer can substitute later.
             let is_abstract = matches!(
-                self.type_table.borrow().get(type_param_type_id),
+                self.tysys.type_table.borrow().get(type_param_type_id),
                 ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
             );
             if is_abstract {
@@ -187,7 +187,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
             }
             let concrete_name = self
-                .type_table
+                .tysys.type_table
                 .borrow()
                 .mangle_type_name(type_param_type_id);
             return CalleeIdentKind::Rewritten(format!("{concrete_name}::{suffix}"));
@@ -270,7 +270,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // when the callee already resolved to the error type so we
             // don't pile a second diagnostic on top of the first.
             if callee_expr.type_id != TypeTable::ERROR {
-                let type_name = self.type_table.borrow().type_name(callee_expr.type_id);
+                let type_name = self.tysys.type_table.borrow().type_name(callee_expr.type_id);
                 let _ = self.logger.error(TypeError::CalleeNotCallable {
                     type_name,
                     span: call.callee.span(),
@@ -335,7 +335,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .find(|(_, c)| c.name == suffix)
             {
                 let payload_is_unit = matches!(
-                    self.type_table.borrow().get(case_data.payload),
+                    self.tysys.type_table.borrow().get(case_data.payload),
                     ResolvedType::Unit
                 );
                 if !payload_is_unit {
@@ -350,7 +350,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             self.substitute_type_params(payload_type, &variant_type_args);
                     } else if let Some(expected) = expected_type {
                         // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
-                        let expected_resolved = self.type_table.borrow().get(expected).clone();
+                        let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
                         if let ResolvedType::GenericInstance {
                             name: expected_name,
                             type_args: expected_args,
@@ -417,7 +417,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(suffix_seg) = ident.segments.get(1) {
                     let arg_hint = if (suffix == "from" || suffix == "try_from") && args.len() == 1
                     {
-                        Some(self.type_table.borrow().type_name(args[0].type_id))
+                        Some(self.tysys.type_table.borrow().type_name(args[0].type_id))
                     } else {
                         None
                     };
@@ -494,7 +494,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Handle From conversions with no explicit impl: reflexive and newtype.
                 if suffix == "from" && args.len() == 1 {
                     let arg_type = args[0].type_id;
-                    let arg_type_name = self.type_table.borrow().type_name(arg_type);
+                    let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
 
                     // Reflexive: T::from(T_val) — identity conversion
                     if arg_type_name == prefix {
@@ -502,9 +502,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Newtype→Base: u64::from(UserId_val) where type UserId = u64
-                    let base_of_arg = self.type_table.borrow().get_newtype_base(arg_type);
+                    let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
                     if let Some(base_id) = base_of_arg
-                        && self.type_table.borrow().type_name(base_id) == prefix
+                        && self.tysys.type_table.borrow().type_name(base_id) == prefix
                     {
                         return TirExpr::new(
                             TirExprKind::Cast {
@@ -518,9 +518,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Base→Newtype: UserId::from(u64_val) where type UserId = u64
                     if let Some(newtype_type_id) = self.lookup_newtype(prefix) {
-                        let base_opt = self.type_table.borrow().get_newtype_base(newtype_type_id);
+                        let base_opt = self.tysys.type_table.borrow().get_newtype_base(newtype_type_id);
                         if let Some(base_id) = base_opt
-                            && self.type_table.borrow().type_name(base_id) == arg_type_name
+                            && self.tysys.type_table.borrow().type_name(base_id) == arg_type_name
                         {
                             return TirExpr::new(
                                 TirExprKind::Cast {
@@ -618,7 +618,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Each variant case has exactly one payload.
                     // Unit variants expect 0 args, non-unit variants expect 1 arg.
                     let payload_is_unit = matches!(
-                        self.type_table.borrow().get(case_data.payload),
+                        self.tysys.type_table.borrow().get(case_data.payload),
                         ResolvedType::Unit
                     );
                     let expected_args = usize::from(!payload_is_unit);
@@ -636,7 +636,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Infer variant type: use GenericInstance for generic variants
                     let variant_type = if variant_info.type_params.is_empty() {
-                        self.type_table.borrow_mut().make_variant(
+                        self.tysys.type_table.borrow_mut().make_variant(
                             variant_info.name.clone(),
                             variant_info.module_source.clone(),
                         )
@@ -663,14 +663,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 // If no matching case, check for From<T> synthesis requests
                 else if suffix == "from" && args.len() == 1 {
-                    let target_type_id = self.type_table.borrow_mut().make_variant(
+                    let target_type_id = self.tysys.type_table.borrow_mut().make_variant(
                         variant_info.name.clone(),
                         variant_info.module_source.clone(),
                     );
                     let from_type = args[0].type_id;
-                    let from_type_name = self.type_table.borrow().type_name(from_type);
+                    let from_type_name = self.tysys.type_table.borrow().type_name(from_type);
                     let from_trait_name = self
-                        .type_table
+                        .tysys.type_table
                         .borrow()
                         .compiler_items()
                         .trait_name(crate::compiler_item::CompilerItem::From)
@@ -734,7 +734,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Check if this is a variant construction in the namespace
                     let ns_variant = self
-                        .all_variant_cases
+                        .tysys.all_variant_cases
                         .get(&ns_source)
                         .and_then(|m| m.get(type_name))
                         .cloned();
@@ -752,7 +752,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 case_data.ast_id,
                             );
                             let payload_is_unit = matches!(
-                                self.type_table.borrow().get(case_data.payload),
+                                self.tysys.type_table.borrow().get(case_data.payload),
                                 ResolvedType::Unit
                             );
                             let expected_args = usize::from(!payload_is_unit);
@@ -770,7 +770,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             }
                             let payload = args.into_iter().next().map(Box::new);
                             let variant_type = if variant_info.type_params.is_empty() {
-                                self.type_table.borrow_mut().make_variant(
+                                self.tysys.type_table.borrow_mut().make_variant(
                                     variant_info.name.clone(),
                                     variant_info.module_source.clone(),
                                 )
@@ -809,7 +809,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let arg_type_hint = if (method_name == "from" || method_name == "try_from")
                         && args.len() == 1
                     {
-                        Some(self.type_table.borrow().type_name(args[0].type_id))
+                        Some(self.tysys.type_table.borrow().type_name(args[0].type_id))
                     } else {
                         None
                     };
@@ -898,7 +898,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `CompilerItem` registry so a stdlib rename of any of
         // them is picked up here without re-editing the literal set.
         else if self.function_return_types.contains_key(effective_name) || {
-            let tt = self.type_table.borrow();
+            let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             effective_name == items.variant_case_name(crate::compiler_item::CompilerItem::ResultOk)
                 || effective_name
@@ -1161,7 +1161,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Clone the return type AST and type params to avoid borrow issues
             let func_info = Self::lookup_func_in_loaded_module(
                 self.loaded_modules,
-                &self.loaded_module_func_indices,
+                &self.tysys.loaded_module_func_indices,
                 callee_module,
                 func_name,
             )
@@ -1235,7 +1235,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // disambiguates which Logger this call site means.
         let canonical_key = self.canonical_decl_key(effect);
         let (module_source, item_idx) = self
-            .trait_env
+            .tysys.trait_env
             .effect_decl_index
             .get(&canonical_key)?
             .clone();
@@ -1259,7 +1259,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         operation: &str,
     ) -> Option<TypeId> {
         let func_key = format!("{effect}::{operation}");
-        let func = self.wasi_registry.get_function(&func_key)?;
+        let func = self.tysys.wasi_registry.get_function(&func_key)?;
         let is_async = func.is_async;
         let package = func.package.clone();
 
@@ -1269,7 +1269,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         if is_async {
-            Some(self.type_table.borrow_mut().make_async_call(inner))
+            Some(self.tysys.type_table.borrow_mut().make_async_call(inner))
         } else if func.return_type.is_some() {
             Some(inner)
         } else {
@@ -1285,13 +1285,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         wasi_package: Option<&str>,
     ) -> TypeId {
         let string_struct_name = self
-            .type_table
+            .tysys.type_table
             .borrow()
             .compiler_items()
             .struct_name(crate::compiler_item::CompilerItem::String)
             .to_string();
         let array_struct_name = self
-            .type_table
+            .tysys.type_table
             .borrow()
             .compiler_items()
             .struct_name(crate::compiler_item::CompilerItem::Array)
@@ -1325,14 +1325,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Otherwise, try to resolve via WASI registry's newtypes.
                     // Scoped to `wasi:` to keep this elaborator path WASI-only.
                     let aliased = self
-                        .wasi_registry
+                        .tysys.wasi_registry
                         .find_wasi_newtype_source(&named.name)
-                        .and_then(|src| self.wasi_registry.get_newtype_by_source(src, &named.name))
+                        .and_then(|src| self.tysys.wasi_registry.get_newtype_by_source(src, &named.name))
                         .cloned();
                     if let Some(aliased) = aliased {
                         // Create a newtype for this WASI newtype
                         let base_type = self.resolve_wasi_type_scoped(&aliased, wasi_package);
-                        let newtype_id = self.type_table.borrow_mut().make_newtype(
+                        let newtype_id = self.tysys.type_table.borrow_mut().make_newtype(
                             named.name.clone(),
                             ModuleSource::wasi_clocks(),
                             base_type,
@@ -1341,7 +1341,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.local_newtypes.insert(named.name.clone(), newtype_id);
                         newtype_id
                     } else if self
-                        .wasi_registry
+                        .tysys.wasi_registry
                         .find_wasi_resource_source(&named.name)
                         .is_some()
                     {
@@ -1349,7 +1349,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // method calls on the returned handle resolve correctly.
                         // Look up the actual module source from all_resource_types.
                         let module_source = self
-                            .all_resource_types
+                            .tysys.all_resource_types
                             .iter()
                             .find_map(|(ms, map)| {
                                 if map.contains_key(&named.name) {
@@ -1359,12 +1359,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 }
                             })
                             .unwrap_or_else(ModuleSource::wasi_filesystem);
-                        self.type_table
+                        self.tysys.type_table
                             .borrow_mut()
                             .make_resource(named.name.clone(), module_source)
                     } else if let Some(pkg) = wasi_package {
                         // Scoped lookup: use type table's package-aware search
-                        let tt = self.type_table.borrow();
+                        let tt = self.tysys.type_table.borrow();
                         if let Some(tid) = tt.find_named_type_by_cm_package(&named.name, pkg) {
                             tid
                         } else {
@@ -1373,33 +1373,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             // via find_wasi_*_source so same-named core:*
                             // types cannot leak in.
                             if self
-                                .wasi_registry
+                                .tysys.wasi_registry
                                 .find_wasi_enum_source(&named.name)
                                 .is_some()
                             {
                                 let module_source = self
-                                    .all_enum_cases
+                                    .tysys.all_enum_cases
                                     .iter()
                                     .find_map(|(ms, map)| {
                                         map.contains_key(&named.name).then(|| ms.clone())
                                     })
                                     .unwrap_or_else(ModuleSource::wasi_cli);
-                                self.type_table
+                                self.tysys.type_table
                                     .borrow_mut()
                                     .make_enum(named.name.clone(), module_source)
                             } else if self
-                                .wasi_registry
+                                .tysys.wasi_registry
                                 .find_wasi_struct_source(&named.name)
                                 .is_some()
                             {
                                 let module_source = self
-                                    .all_struct_fields
+                                    .tysys.all_struct_fields
                                     .iter()
                                     .find_map(|(ms, map)| {
                                         map.contains_key(&named.name).then(|| ms.clone())
                                     })
                                     .unwrap_or_else(ModuleSource::wasi_clocks);
-                                self.type_table
+                                self.tysys.type_table
                                     .borrow_mut()
                                     .make_struct(named.name.clone(), module_source)
                             } else {
@@ -1407,13 +1407,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             }
                         }
                     } else if self
-                        .wasi_registry
+                        .tysys.wasi_registry
                         .find_wasi_enum_source(&named.name)
                         .is_some()
                     {
                         // WASI enum type - look up the module source from all_enum_cases
                         let module_source = self
-                            .all_enum_cases
+                            .tysys.all_enum_cases
                             .iter()
                             .find_map(|(ms, map)| {
                                 if map.contains_key(&named.name) {
@@ -1423,17 +1423,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 }
                             })
                             .unwrap_or_else(ModuleSource::wasi_cli);
-                        self.type_table
+                        self.tysys.type_table
                             .borrow_mut()
                             .make_enum(named.name.clone(), module_source)
                     } else if self
-                        .wasi_registry
+                        .tysys.wasi_registry
                         .find_wasi_struct_source(&named.name)
                         .is_some()
                     {
                         // WASI struct (record) type - look up module source from all_struct_fields
                         let module_source = self
-                            .all_struct_fields
+                            .tysys.all_struct_fields
                             .iter()
                             .find_map(|(ms, map)| {
                                 if map.contains_key(&named.name) {
@@ -1443,7 +1443,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 }
                             })
                             .unwrap_or_else(ModuleSource::wasi_clocks);
-                        self.type_table
+                        self.tysys.type_table
                             .borrow_mut()
                             .make_struct(named.name.clone(), module_source)
                     } else {
@@ -1456,31 +1456,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if generic.name == array_struct_name && generic.args.len() == 1 =>
             {
                 let elem_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                self.type_table.borrow_mut().make_array(elem_type)
+                self.tysys.type_table.borrow_mut().make_array(elem_type)
             }
             Type::Generic(generic) => match generic.name.as_str() {
                 "Option" if generic.args.len() == 1 => {
                     let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                    self.type_table.borrow_mut().make_option(inner_type)
+                    self.tysys.type_table.borrow_mut().make_option(inner_type)
                 }
                 "Stream" if generic.args.len() == 1 => {
                     let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                    self.type_table.borrow_mut().make_stream(inner_type)
+                    self.tysys.type_table.borrow_mut().make_stream(inner_type)
                 }
                 "Future" if generic.args.len() == 1 => {
                     let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                    self.type_table.borrow_mut().make_future(inner_type)
+                    self.tysys.type_table.borrow_mut().make_future(inner_type)
                 }
                 "AsyncCall" if generic.args.len() == 1 => {
                     let inner_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                    self.type_table.borrow_mut().make_async_call(inner_type)
+                    self.tysys.type_table.borrow_mut().make_async_call(inner_type)
                 }
                 "Result" if generic.args.len() == 2 => {
                     let ok_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
                     let err_type = self.resolve_wasi_type_scoped(&generic.args[1], wasi_package);
                     // Look up the module source where Result variant is defined
                     let module_source = self
-                        .all_variant_cases
+                        .tysys.all_variant_cases
                         .iter()
                         .find_map(|(ms, map)| {
                             if map.contains_key("Result") {
@@ -1490,7 +1490,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             }
                         })
                         .unwrap_or_else(ModuleSource::prelude);
-                    self.type_table.borrow_mut().make_generic_instance(
+                    self.tysys.type_table.borrow_mut().make_generic_instance(
                         "Result".to_string(),
                         module_source,
                         vec![ok_type, err_type],
@@ -1506,7 +1506,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .map(|t| self.resolve_wasi_type_scoped(t, wasi_package))
                     .collect();
-                self.type_table.borrow_mut().make_tuple(resolved)
+                self.tysys.type_table.borrow_mut().make_tuple(resolved)
             }
             _ => TypeTable::UNIT,
         }
@@ -1514,7 +1514,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Get the String struct type (from core:prelude/string.wado)
     pub(super) fn get_string_struct_type(&mut self) -> TypeId {
-        self.type_table
+        self.tysys.type_table
             .borrow_mut()
             .make_compiler_struct(crate::compiler_item::CompilerItem::String)
     }
@@ -1578,7 +1578,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// For generic builtins like `array_new<T>`, returns a type containing
     /// `TypeParam` placeholders that get substituted during monomorphization.
     pub(super) fn get_builtin_return_type(&self, name: &str) -> TypeId {
-        self.builtin_registry
+        self.tysys.builtin_registry
             .get_return_type(name)
             .unwrap_or(TypeTable::UNIT)
     }
@@ -1601,7 +1601,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let module_source = ModuleSource::builtin();
                 let params = Self::lookup_func_in_loaded_module(
                     self.loaded_modules,
-                    &self.loaded_module_func_indices,
+                    &self.tysys.loaded_module_func_indices,
                     &module_source,
                     suffix,
                 )
@@ -1657,7 +1657,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let sym_name = symbol.name.clone();
             let params = Self::lookup_func_in_loaded_module(
                 self.loaded_modules,
-                &self.loaded_module_func_indices,
+                &self.tysys.loaded_module_func_indices,
                 &src,
                 &sym_name,
             )
@@ -1742,7 +1742,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && expected_type != TypeTable::ERROR
                 && expected_type != TypeTable::UNKNOWN
             {
-                let expected_name = self.type_table.borrow().type_name(expected_type);
+                let expected_name = self.tysys.type_table.borrow().type_name(expected_type);
                 panic!(
                     "compiler bug: default expression for parameter '{name}' \
                      re-resolved to () at call site but parameter expects '{expected_name}'. \
@@ -1797,7 +1797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let name = symbol.name.clone();
             if let Some(func) = Self::lookup_func_in_loaded_module(
                 self.loaded_modules,
-                &self.loaded_module_func_indices,
+                &self.tysys.loaded_module_func_indices,
                 &src,
                 &name,
             ) {
@@ -1838,7 +1838,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let name = symbol.name.clone();
             if let Some(func) = Self::lookup_func_in_loaded_module(
                 self.loaded_modules,
-                &self.loaded_module_func_indices,
+                &self.tysys.loaded_module_func_indices,
                 &src,
                 &name,
             ) {
@@ -1879,7 +1879,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `builtin::array_new(n)` infer their generic type parameters from
         // argument types or LHS annotations the same way ordinary generic
         // functions do.
-        if let Some(info) = self.builtin_registry.get(func_name) {
+        if let Some(info) = self.tysys.builtin_registry.get(func_name) {
             let real_type_params: Vec<&String> = info.type_params.iter().collect();
             if real_type_params.is_empty() {
                 return vec![];
@@ -1888,7 +1888,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .enumerate()
                 .map(|(i, name)| {
-                    self.type_table
+                    self.tysys.type_table
                         .borrow_mut()
                         .intern(ResolvedType::TypeParam {
                             index: i as u32,
@@ -1899,7 +1899,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let resolved_param_types: Vec<TypeId> = info.params.iter().map(|(_, t)| *t).collect();
             let decl_return_type = info.return_type;
 
-            let mut infer = InferCtx::new(&self.type_table, param_ids.clone());
+            let mut infer = InferCtx::new(&self.tysys.type_table, param_ids.clone());
             for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
                 if Self::is_literal_number_arg(raw_args.get(i)) {
                     infer.add_deferred(*param_type, arg.type_id);
@@ -1949,7 +1949,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let param_ids: Vec<TypeId> = type_param_list.iter().map(|(_, id)| *id).collect();
-        let mut infer = InferCtx::new(&self.type_table, param_ids.clone());
+        let mut infer = InferCtx::new(&self.tysys.type_table, param_ids.clone());
         for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
             if Self::is_literal_number_arg(raw_args.get(i)) {
                 infer.add_deferred(*param_type, arg.type_id);
@@ -1989,7 +1989,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>, Option<ast::Type>)> =
             Self::lookup_func_in_loaded_module(
                 self.loaded_modules,
-                &self.loaded_module_func_indices,
+                &self.tysys.loaded_module_func_indices,
                 &callee.module,
                 &callee.name,
             )
@@ -2157,7 +2157,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut impl_param_ids: Vec<TypeId> = Vec::with_capacity(impl_type_param_names.len());
         for (i, name) in impl_type_param_names.iter().enumerate() {
             let type_id = scope
-                .type_table
+                .tysys.type_table
                 .borrow_mut()
                 .make_type_param(name.clone(), i as u32);
             scope
@@ -2177,12 +2177,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let idx = (m_offset + i) as u32;
             let type_id = if tp.is_pack {
                 scope
-                    .type_table
+                    .tysys.type_table
                     .borrow_mut()
                     .make_type_pack(tp.name.clone(), idx)
             } else {
                 scope
-                    .type_table
+                    .tysys.type_table
                     .borrow_mut()
                     .make_type_param(tp.name.clone(), idx)
             };
@@ -2206,7 +2206,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut all_param_ids = impl_param_ids.clone();
         all_param_ids.extend_from_slice(&method_param_ids);
 
-        let mut infer = InferCtx::new(&self.type_table, all_param_ids.clone());
+        let mut infer = InferCtx::new(&self.tysys.type_table, all_param_ids.clone());
         for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
             if Self::is_literal_number_arg(raw_args.get(i)) {
                 infer.add_deferred(*param_type, arg.type_id);
@@ -2254,7 +2254,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let name = symbol.name.clone();
                 Self::lookup_func_in_loaded_module(
                     self.loaded_modules,
-                    &self.loaded_module_func_indices,
+                    &self.tysys.loaded_module_func_indices,
                     &src,
                     &name,
                 )
@@ -2324,7 +2324,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // which may differ from variant_info.module_source (e.g., prelude/types.wado).
         let mut canonical_module_source = None;
 
-        let mut infer = InferCtx::new(&self.type_table, variant_info.type_param_type_ids.clone());
+        let mut infer = InferCtx::new(&self.tysys.type_table, variant_info.type_param_type_ids.clone());
 
         // Forward inference: unify the case payload's declared type against
         // the actual payload expression's type.
@@ -2336,7 +2336,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Queued through `add_expected_return` so it runs after the payload pass,
         // preserving the "stronger constraint wins" policy via `or_insert`.
         if let Some(expected) = expected_type {
-            let expected_resolved = self.type_table.borrow().get(expected).clone();
+            let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
             if let ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -2364,16 +2364,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If unresolved type params remain in concrete code, fall back to bare Variant
         let has_unresolved = type_args
             .iter()
-            .any(|&t| self.type_table.borrow().contains_type_param(t));
+            .any(|&t| self.tysys.type_table.borrow().contains_type_param(t));
 
         if has_unresolved && self.trait_ctx.type_params.is_empty() {
-            return self.type_table.borrow_mut().make_variant(
+            return self.tysys.type_table.borrow_mut().make_variant(
                 variant_info.name.clone(),
                 variant_info.module_source.clone(),
             );
         }
 
-        self.type_table.borrow_mut().make_generic_instance(
+        self.tysys.type_table.borrow_mut().make_generic_instance(
             variant_info.name.clone(),
             module_source,
             type_args,
@@ -2426,7 +2426,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && !method_info_result.method_type_param_ids.is_empty()
             {
                 let method_param_ids = method_info_result.method_type_param_ids.clone();
-                let mut infer = InferCtx::new(&self.type_table, method_param_ids.clone());
+                let mut infer = InferCtx::new(&self.tysys.type_table, method_param_ids.clone());
                 for (i, (param_type, arg)) in method_info_result
                     .param_types
                     .iter()
@@ -2458,7 +2458,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Build method_info with is_type_param_receiver = true
             let method_type_arg_names: Vec<String> = method_type_args
                 .iter()
-                .map(|t| self.type_table.borrow().mangle_type_name(*t))
+                .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
                 .collect();
             let mut method_info = LocalMethodName::new(
                 type_param_name.to_string(),

@@ -24,7 +24,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // two modules with same-named traits never collide at the lookup
         // step.
         let canonical_key = self.canonical_decl_key(trait_name);
-        if let Some((module_src, item_idx)) = self.trait_env.decl_index.get(&canonical_key) {
+        if let Some((module_src, item_idx)) = self.tysys.trait_env.decl_index.get(&canonical_key) {
             let module = &self.loaded_modules[module_src];
             if let Item::Trait(trait_decl) = &module.items[*item_idx] {
                 return Some(trait_decl.methods.clone());
@@ -47,7 +47,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_name: &str,
     ) -> Option<Vec<ast::GenericParam>> {
         let canonical_key = self.canonical_decl_key(trait_name);
-        if let Some((module_src, item_idx)) = self.trait_env.decl_index.get(&canonical_key) {
+        if let Some((module_src, item_idx)) = self.tysys.trait_env.decl_index.get(&canonical_key) {
             let module = &self.loaded_modules[module_src];
             if let Item::Trait(trait_decl) = &module.items[*item_idx] {
                 return Some(trait_decl.type_params.clone());
@@ -65,7 +65,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Check if a type implements a specific trait (for trait bound checking)
     pub(super) fn type_implements_trait(&self, type_id: TypeId, trait_name: &str) -> bool {
-        let resolved = self.type_table.borrow().get(type_id).clone();
+        let resolved = self.tysys.type_table.borrow().get(type_id).clone();
 
         // Recursion guard: if we're already checking this (type, trait) pair,
         // optimistically return true to break infinite recursion on recursive types.
@@ -106,7 +106,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // stay aligned with the actual stdlib decls (and a rename of
         // `Eq` / `Ord` / `Default` does not silently disable auto-impl).
         let (eq_name, ord_name, default_name) = {
-            let tt = self.type_table.borrow();
+            let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
                 items.trait_name(CompilerItem::Eq).to_string(),
@@ -322,7 +322,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args: Option<&[TypeId]>,
     ) -> bool {
         // Use pre-built index for O(1) lookup by type name.
-        if let Some(entries) = self.trait_env.impl_index.get(type_name) {
+        if let Some(entries) = self.tysys.trait_env.impl_index.get(type_name) {
             for (module_src, item_idx) in entries {
                 let module = &self.loaded_modules[module_src];
                 if let Item::Impl(impl_block) = &module.items[*item_idx]
@@ -355,7 +355,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Blanket impl fallback: check `impl<T: Bound> Trait for T` where the
         // concrete type satisfies the bound.
-        for (module_src, item_idx) in &self.trait_env.blanket_impl_index {
+        for (module_src, item_idx) in &self.tysys.trait_env.blanket_impl_index {
             let module = &self.loaded_modules[module_src];
             if let Item::Impl(impl_block) = &module.items[*item_idx]
                 && let Some(trait_type) = &impl_block.trait_type
@@ -400,7 +400,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut bindings = Vec::new();
         let Some(type_param_name) = self_type_param_name else {
             // Also handle AssocTypeProjection self_type: propagate bindings from its bindings
-            let resolved = self.type_table.borrow().get(self_type_id).clone();
+            let resolved = self.tysys.type_table.borrow().get(self_type_id).clone();
             if let ResolvedType::AssocTypeProjection {
                 assoc_type_bindings,
                 ..
@@ -514,7 +514,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // associated type chains.
                 // Determine the TypeParam name for Self, if self_type is a TypeParam.
                 let self_type_param_name = {
-                    let resolved = scope.type_table.borrow().get(self_type_id).clone();
+                    let resolved = scope.tysys.type_table.borrow().get(self_type_id).clone();
                     if let ResolvedType::TypeParam { name, .. } = resolved {
                         Some(name)
                     } else {
@@ -525,7 +525,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Check if self_type has a direct assoc_type_binding for this name.
                     // This handles the case: self_type = I::Iter which has ("Item", u8_typeid).
                     let directly_bound = {
-                        let resolved = scope.type_table.borrow().get(self_type_id).clone();
+                        let resolved = scope.tysys.type_table.borrow().get(self_type_id).clone();
                         if let ResolvedType::AssocTypeProjection {
                             assoc_type_bindings,
                             ..
@@ -550,7 +550,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             self_type_param_name.as_deref(),
                             &assoc_decl.bounds,
                         );
-                        scope.type_table.borrow_mut().make_assoc_type_projection(
+                        scope.tysys.type_table.borrow_mut().make_assoc_type_projection(
                             self_type_id,
                             assoc_decl.name.clone(),
                             bound_names,
@@ -572,7 +572,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut method_type_param_ids: Vec<TypeId> = Vec::new();
                 for (index, param) in method.type_params.iter().enumerate() {
                     let type_id = scope
-                        .type_table
+                        .tysys.type_table
                         .borrow_mut()
                         .make_type_param(param.name.clone(), index as u32);
                     scope
@@ -695,7 +695,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // skip the bounds check. Within a bounded impl block, type params are assumed
                     // to satisfy bounds; concrete types are checked at call sites.
                     if matches!(
-                        self.type_table.borrow().get(type_arg),
+                        self.tysys.type_table.borrow().get(type_arg),
                         ResolvedType::TypeParam { .. }
                     ) {
                         continue;
@@ -713,7 +713,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(bounds) = bounds_map.get(inner_name)
                 && let Some(&type_arg) = type_args.first()
                 && !matches!(
-                    self.type_table.borrow().get(type_arg),
+                    self.tysys.type_table.borrow().get(type_arg),
                     ResolvedType::TypeParam { .. }
                 )
             {
@@ -786,7 +786,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // but registration (below) still uses concrete_type_id so the monomorphizer can
         // resolve e.g. `MyBytes::Iter` when `MyBytes` is a newtype over `Array<u8>`.
         let (type_name, concrete_type_args) = {
-            let tt = self.type_table.borrow();
+            let tt = self.tysys.type_table.borrow();
             let effective_id = tt.get_ultimate_base_type(concrete_type_id);
             let array_name = tt
                 .compiler_items()
@@ -816,7 +816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let impl_infos: Vec<ImplInfo> = {
             let mut result = vec![];
-            if let Some(entries) = self.trait_env.impl_index.get(&type_name) {
+            if let Some(entries) = self.tysys.trait_env.impl_index.get(&type_name) {
                 let entries = entries.clone();
                 for (module_src, item_idx) in entries {
                     let module = &self.loaded_modules[&module_src];
@@ -880,9 +880,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Resolve and register each associated type in this substituted context
             for binding in &info.assoc_types {
                 let resolved_id = scope.resolve_type(&binding.ty);
-                if !scope.type_table.borrow().contains_type_param(resolved_id) {
+                if !scope.tysys.type_table.borrow().contains_type_param(resolved_id) {
                     scope
-                        .type_table
+                        .tysys.type_table
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
@@ -904,7 +904,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
-            for (module_src, item_idx) in &self.trait_env.blanket_impl_index {
+            for (module_src, item_idx) in &self.tysys.trait_env.blanket_impl_index {
                 let module = &self.loaded_modules[module_src];
                 if let Item::Impl(impl_block) = &module.items[*item_idx]
                     && let Some(trait_type) = &impl_block.trait_type
@@ -953,9 +953,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Resolve and register each associated type
             for binding in &info.assoc_types {
                 let resolved_id = scope.resolve_type(&binding.ty);
-                if !scope.type_table.borrow().contains_type_param(resolved_id) {
+                if !scope.tysys.type_table.borrow().contains_type_param(resolved_id) {
                     scope
-                        .type_table
+                        .tysys.type_table
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
@@ -1109,7 +1109,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `output_type` to the receiver type when no `type Output` is
         // declared.
         let (eq_name, ord_name) = {
-            let tt = self.type_table.borrow();
+            let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
                 items.trait_name(CompilerItem::Eq).to_string(),
@@ -1124,7 +1124,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let return_type = if is_eq {
                 TypeTable::BOOL
             } else if is_ord {
-                self.type_table
+                self.tysys.type_table
                     .borrow_mut()
                     .make_compiler_enum(CompilerItem::Ordering)
             } else {
@@ -1134,13 +1134,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (info.trait_name, info.self_kind, param_types, return_type)
         } else if (is_eq || is_ord) && self.type_implements_trait(lookup_type_id, trait_name) {
             let ref_self_ty = self
-                .type_table
+                .tysys.type_table
                 .borrow_mut()
                 .intern(ResolvedType::Ref(lookup_type_id));
             let return_type = if is_eq {
                 TypeTable::BOOL
             } else {
-                self.type_table
+                self.tysys.type_table
                     .borrow_mut()
                     .make_compiler_enum(CompilerItem::Ordering)
             };
@@ -1208,7 +1208,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_id: TypeId,
     ) -> Option<TraitMethodMatch> {
         let (eq_name, ord_name) = {
-            let tt = self.type_table.borrow();
+            let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
                 items.trait_name(CompilerItem::Eq).to_string(),
@@ -1228,14 +1228,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let ref_self_ty = self
-            .type_table
+            .tysys.type_table
             .borrow_mut()
             .intern(ResolvedType::Ref(base_type_id));
         let is_eq_match = trait_name == eq_name;
         let return_type = if is_eq_match {
             TypeTable::BOOL
         } else {
-            self.type_table
+            self.tysys.type_table
                 .borrow_mut()
                 .make_compiler_enum(CompilerItem::Ordering)
         };
@@ -1269,7 +1269,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// rather than a callable method.
     fn auto_derive_eligible_kind(&self, type_id: TypeId) -> bool {
         matches!(
-            self.type_table.borrow().get(type_id),
+            self.tysys.type_table.borrow().get(type_id),
             ResolvedType::Struct { .. }
                 | ResolvedType::Variant { .. }
                 | ResolvedType::Enum { .. }

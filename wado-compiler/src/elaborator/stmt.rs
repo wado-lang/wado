@@ -151,7 +151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Special case: tuple literal with Tuple type annotation
             if let ast::Expr::TupleLiteral(tuple_lit) = ast_value {
                 {
-                    let tuple_elems = self.type_table.borrow().as_tuple(target_type);
+                    let tuple_elems = self.tysys.type_table.borrow().as_tuple(target_type);
                     if let Some(expected_elem_types) = tuple_elems {
                         let elements: Vec<TirExpr> = tuple_lit
                             .elements
@@ -194,7 +194,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Handle implicit struct literal: let p: Point = { x: 1, y: 2 }
                 if struct_lit.name.is_none() {
                     // Check if target type is a struct
-                    let target_resolved = self.type_table.borrow().get(target_type).clone();
+                    let target_resolved = self.tysys.type_table.borrow().get(target_type).clone();
                     if let ResolvedType::Struct {
                         name,
                         module_source,
@@ -273,7 +273,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         (coerced, target_type)
                     } else {
                         // Target type does not implement KeyValueLiteral
-                        let type_name = self.type_table.borrow().type_name(target_type);
+                        let type_name = self.tysys.type_table.borrow().type_name(target_type);
                         let _ = self.logger.error(TypeError::MissingTraitImpl {
                             type_name,
                             trait_name: "KeyValueLiteral".to_string(),
@@ -309,7 +309,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             // Allow null (Option<unknown>) to be assigned to Option<T>
             let is_null_to_option = {
-                let type_table = self.type_table.borrow();
+                let type_table = self.tysys.type_table.borrow();
                 type_table
                     .as_option(value.type_id)
                     .is_some_and(|inner| inner == TypeTable::UNKNOWN)
@@ -327,7 +327,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // accepts identical generic shapes that differ only in effects
             // without admitting any type-param-to-concrete mismatches.
             let is_compatible_fn_type = {
-                let type_table = self.type_table.borrow();
+                let type_table = self.tysys.type_table.borrow();
                 if let (
                     ResolvedType::Function {
                         params: actual_params,
@@ -359,8 +359,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if !is_null_to_option && !is_compatible_fn_type {
                 let _ = self.logger.error(TypeError::TypeMismatch {
-                    expected: self.type_table.borrow().type_name(type_id),
-                    found: self.type_table.borrow().type_name(value.type_id),
+                    expected: self.tysys.type_table.borrow().type_name(type_id),
+                    found: self.tysys.type_table.borrow().type_name(value.type_id),
                     span: ast_value.span(),
                 });
             }
@@ -587,7 +587,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.pattern_qualifier_matches_scrutinee(type_id, qualifier) {
             return false;
         }
-        let resolved = self.type_table.borrow().get(type_id).clone();
+        let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Enum { name, .. } => self
                 .lookup_enum_case(name)
@@ -610,7 +610,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(qualifier) = qualifier else {
             return true;
         };
-        let scrutinee_resolved = self.type_table.borrow().get(scrutinee_type).clone();
+        let scrutinee_resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
         let (scrutinee_name, scrutinee_module, scrutinee_arg_len) = match &scrutinee_resolved {
             ResolvedType::Enum {
                 name,
@@ -697,7 +697,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut current = type_id;
                 let mut rb = RefBinding::None;
                 while let resolved @ (ResolvedType::Ref(_) | ResolvedType::MutRef(_)) =
-                    self.type_table.borrow().get(current).clone()
+                    self.tysys.type_table.borrow().get(current).clone()
                 {
                     match resolved {
                         ResolvedType::Ref(inner) => {
@@ -743,11 +743,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let pat_mut = is_mut || matches!(pattern, ast::Pattern::MutIdent { .. });
                 let binding_type = match ref_binding {
                     RefBinding::Ref => self
-                        .type_table
+                        .tysys.type_table
                         .borrow_mut()
                         .intern(ResolvedType::Ref(type_id)),
                     RefBinding::MutRef => self
-                        .type_table
+                        .tysys.type_table
                         .borrow_mut()
                         .intern(ResolvedType::MutRef(type_id)),
                     RefBinding::None => type_id,
@@ -763,7 +763,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Pattern::Tuple(patterns, has_rest) => {
                 // Get element types from the tuple type
                 let elem_types = {
-                    let type_table = self.type_table.borrow();
+                    let type_table = self.tysys.type_table.borrow();
                     if let Some(elem_types) = type_table.as_tuple(type_id) {
                         elem_types
                     } else {
@@ -817,7 +817,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 // Get struct name from type
                 let struct_name = {
-                    let type_table = self.type_table.borrow();
+                    let type_table = self.tysys.type_table.borrow();
                     match type_table.get(type_id) {
                         ResolvedType::Struct { name, .. } => Some(name.clone()),
                         _ => None,
@@ -837,7 +837,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if actual_short != expected_short {
                         let _ = self.logger.error(TypeError::PatternTypeMismatch {
                             expected: expected_name.clone(),
-                            found: self.type_table.borrow().type_name(type_id),
+                            found: self.tysys.type_table.borrow().type_name(type_id),
                             span: *pat_span,
                         });
                     }
@@ -846,7 +846,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if struct_name.is_none() {
                     let _ = self.logger.error(TypeError::PatternTypeMismatch {
                         expected: "struct type".to_string(),
-                        found: self.type_table.borrow().type_name(type_id),
+                        found: self.tysys.type_table.borrow().type_name(type_id),
                         span: *pat_span,
                     });
                     return TirPattern::Wildcard;
@@ -1208,7 +1208,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut peeled_type = scrutinee_type;
         let mut ref_binding = RefBinding::None;
         while let resolved @ (ResolvedType::Ref(_) | ResolvedType::MutRef(_)) =
-            self.type_table.borrow().get(peeled_type).clone()
+            self.tysys.type_table.borrow().get(peeled_type).clone()
         {
             match resolved {
                 ResolvedType::Ref(inner) => {
@@ -1309,11 +1309,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let is_mut = matches!(pattern, Pattern::MutIdent { .. });
                 let binding_type = match ref_binding {
                     RefBinding::Ref => self
-                        .type_table
+                        .tysys.type_table
                         .borrow_mut()
                         .intern(ResolvedType::Ref(scrutinee_type)),
                     RefBinding::MutRef => self
-                        .type_table
+                        .tysys.type_table
                         .borrow_mut()
                         .intern(ResolvedType::MutRef(scrutinee_type)),
                     RefBinding::None => scrutinee_type,
@@ -1340,7 +1340,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         // Check if scrutinee type is unsigned
                         let scrutinee_resolved =
-                            self.type_table.borrow().get(scrutinee_type).clone();
+                            self.tysys.type_table.borrow().get(scrutinee_type).clone();
                         let is_unsigned = matches!(
                             scrutinee_resolved,
                             ResolvedType::Primitive(
@@ -1388,12 +1388,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Pattern::Tuple(patterns, has_rest) => {
                 // For tuple patterns, extract element types
                 let element_types =
-                    if let Some(types) = self.type_table.borrow().as_tuple(scrutinee_type) {
+                    if let Some(types) = self.tysys.type_table.borrow().as_tuple(scrutinee_type) {
                         types
                     } else {
                         let _ = self.logger.error(TypeError::PatternTypeMismatch {
                             expected: "tuple type".to_string(),
-                            found: self.type_table.borrow().type_name(scrutinee_type),
+                            found: self.tysys.type_table.borrow().type_name(scrutinee_type),
                             span,
                         });
                         vec![TypeTable::UNKNOWN; patterns.len()]
@@ -1454,7 +1454,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         match &resolved.kind {
                             TirExprKind::IntLiteral { repr, .. } => {
                                 let scrutinee_resolved =
-                                    self.type_table.borrow().get(scrutinee_type).clone();
+                                    self.tysys.type_table.borrow().get(scrutinee_type).clone();
                                 let is_unsigned = matches!(
                                     scrutinee_resolved,
                                     ResolvedType::Primitive(
@@ -1491,11 +1491,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     let binding_type = match ref_binding {
                         RefBinding::Ref => self
-                            .type_table
+                            .tysys.type_table
                             .borrow_mut()
                             .intern(ResolvedType::Ref(scrutinee_type)),
                         RefBinding::MutRef => self
-                            .type_table
+                            .tysys.type_table
                             .borrow_mut()
                             .intern(ResolvedType::MutRef(scrutinee_type)),
                         RefBinding::None => scrutinee_type,
@@ -1509,7 +1509,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                 }
 
-                let resolved_type = self.type_table.borrow().get(scrutinee_type).clone();
+                let resolved_type = self.tysys.type_table.borrow().get(scrutinee_type).clone();
                 if !self
                     .pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier.as_ref())
                 {
@@ -1694,7 +1694,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 // Verify type if named
                 if let Some(expected_name) = type_name {
-                    let resolved = self.type_table.borrow().get(scrutinee_type).clone();
+                    let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
                     if let ResolvedType::Struct { ref name, .. } = resolved {
                         let expected_short = self
                             .strip_ns_prefix(expected_name)
@@ -1703,7 +1703,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if actual_short != expected_short {
                             let _ = self.logger.error(TypeError::PatternTypeMismatch {
                                 expected: expected_name.clone(),
-                                found: self.type_table.borrow().type_name(scrutinee_type),
+                                found: self.tysys.type_table.borrow().type_name(scrutinee_type),
                                 span: *pat_span,
                             });
                         }
@@ -1731,7 +1731,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Exhaustiveness check
                 if !has_rest {
                     let struct_name = {
-                        let type_table = self.type_table.borrow();
+                        let type_table = self.tysys.type_table.borrow();
                         match type_table.get(scrutinee_type) {
                             ResolvedType::Struct { name, .. } => Some(name.clone()),
                             _ => None,
@@ -1875,7 +1875,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// If the scrutinee is a variant type that has a `None` case, return
     /// a `TirPattern::Variant` for `None`. Otherwise return `None`.
     fn try_null_as_none_pattern(&self, scrutinee_type: TypeId) -> Option<TirPattern> {
-        let resolved = self.type_table.borrow().get(scrutinee_type).clone();
+        let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
         let variant_name = match &resolved {
             ResolvedType::Variant { name, .. } => Some(name.clone()),
             ResolvedType::GenericInstance { name, .. } if self.contains_variant(name) => {
@@ -1885,7 +1885,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }?;
         let variant_info = self.lookup_variant_case(&variant_name)?;
         let none_case_name = self
-            .type_table
+            .tysys.type_table
             .borrow()
             .compiler_items()
             .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
@@ -1911,7 +1911,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
         span: Span,
     ) -> TirPattern {
-        let scrutinee_resolved = self.type_table.borrow().get(scrutinee_type).clone();
+        let scrutinee_resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
         let is_unsigned = matches!(
             scrutinee_resolved,
             ResolvedType::Primitive(
@@ -2109,7 +2109,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check if it's a tuple type
         let tuple_info = {
-            let type_table = self.type_table.borrow();
+            let type_table = self.tysys.type_table.borrow();
             if let Some(elems) = type_table.as_tuple(iterable_type_id) {
                 let has_type_pack = elems
                     .iter()
@@ -2138,18 +2138,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Check that the iterable type implements IntoIterator
             let mut inner_type_id = iterable_type_id;
             while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                self.type_table.borrow().get(inner_type_id).clone()
+                self.tysys.type_table.borrow().get(inner_type_id).clone()
             {
                 inner_type_id = t;
             }
             if !self.type_implements_trait(iterable_type_id, "IntoIterator")
                 && !self.type_implements_trait(inner_type_id, "IntoIterator")
                 && !matches!(
-                    self.type_table.borrow().get(iterable_type_id),
+                    self.tysys.type_table.borrow().get(iterable_type_id),
                     ResolvedType::Unknown | ResolvedType::TypeParam { .. }
                 )
             {
-                let type_name = self.type_table.borrow().type_name(iterable_type_id);
+                let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
                 let _ = self.logger.error(TypeError::MissingTraitImpl {
                     type_name,
                     trait_name: "IntoIterator".to_string(),
@@ -2205,7 +2205,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For direct TypePack: iterable is Tuple([TypePack{T}]), binding type is TypePack.
         // For TupleZip: iterable is Tuple([Tuple([TypePack, TypePack])]), binding type is the inner tuple.
         let binding_type = {
-            let type_table = self.type_table.borrow();
+            let type_table = self.tysys.type_table.borrow();
             if let Some(elems) = type_table.as_tuple(iterable.type_id) {
                 // Prefer a direct TypePack element
                 if let Some(tp) = elems
@@ -2249,7 +2249,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut destruct_stmts = Vec::new();
         if is_destructured && let crate::ast::Pattern::Tuple(tp, _) = &for_of.binding {
             let inner_elems = self
-                .type_table
+                .tysys.type_table
                 .borrow()
                 .as_tuple(binding_type)
                 .unwrap_or_else(|| vec![binding_type]);
@@ -2396,7 +2396,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span,
                 );
                 let enum_tuple_type = self
-                    .type_table
+                    .tysys.type_table
                     .borrow_mut()
                     .make_tuple(vec![i32_type, elem_type]);
                 let enum_tuple = TirExpr::new(
@@ -2582,11 +2582,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // surface error.
         if !self.type_implements_trait(iter_type, "Iterator")
             && !matches!(
-                self.type_table.borrow().get(iter_type),
+                self.tysys.type_table.borrow().get(iter_type),
                 ResolvedType::Unknown | ResolvedType::TypeParam { .. }
             )
         {
-            let type_name = self.type_table.borrow().type_name(iter_type);
+            let type_name = self.tysys.type_table.borrow().type_name(iter_type);
             let _ = self.logger.error(TypeError::MissingTraitImpl {
                 type_name,
                 trait_name: "Iterator".to_string(),
@@ -2648,7 +2648,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Some` token has no source position, so giving it one would be
         // misleading.
         let some_case_name = self
-            .type_table
+            .tysys.type_table
             .borrow()
             .compiler_items()
             .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
@@ -2657,7 +2657,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // for the binding scrutinee. Bind out of the borrow first so the
         // `get_variant_case_payload_type` call below can re-borrow `&mut self`.
         let option_shape: Option<(String, Vec<TypeId>)> =
-            match self.type_table.borrow().get(option_type).clone() {
+            match self.tysys.type_table.borrow().get(option_type).clone() {
                 ResolvedType::GenericInstance {
                     name, type_args, ..
                 } if self.contains_variant(&name) => Some((name, type_args)),

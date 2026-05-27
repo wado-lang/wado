@@ -37,7 +37,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else if self.lookup_newtype(&newtype_decl.name).is_none() {
                         // Concrete newtype: resolve immediately
                         let base_type_id = self.resolve_type(&newtype_decl.ty);
-                        let newtype_id = self.type_table.borrow_mut().make_newtype(
+                        let newtype_id = self.tysys.type_table.borrow_mut().make_newtype(
                             newtype_decl.name.clone(),
                             module_source.clone(),
                             base_type_id,
@@ -109,7 +109,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .enumerate()
                         .map(|(i, param)| {
                             scope
-                                .type_table
+                                .tysys.type_table
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), i as u32)
                         })
@@ -135,7 +135,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if newtype_decl.type_params.is_empty() {
                         // Concrete newtype: resolve immediately
                         let base_type_id = self.resolve_type(&newtype_decl.ty);
-                        let newtype_id = self.type_table.borrow_mut().make_newtype(
+                        let newtype_id = self.tysys.type_table.borrow_mut().make_newtype(
                             newtype_decl.name.clone(),
                             self.current_module_source.clone(),
                             base_type_id,
@@ -210,7 +210,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
 
                     super::item::register_variant_compiler_item(
-                        &scope.type_table,
+                        &scope.tysys.type_table,
                         &variant_decl.attrs,
                         &variant_decl.name,
                         &module_source,
@@ -220,7 +220,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     for (case_index, case) in variant_decl.cases.iter().enumerate() {
                         super::item::register_variant_case_compiler_item(
-                            &scope.type_table,
+                            &scope.tysys.type_table,
                             &case.attrs,
                             &variant_decl.name,
                             &case.name,
@@ -260,7 +260,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // first-pass walk in `orchestration.rs`) still lands in
                     // the registry.
                     super::item::register_enum_compiler_item(
-                        &self.type_table,
+                        &self.tysys.type_table,
                         &enum_decl.attrs,
                         &enum_decl.name,
                         &self.current_module_source,
@@ -269,7 +269,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                     for (case_index, case) in enum_decl.cases.iter().enumerate() {
                         super::item::register_enum_case_compiler_item(
-                            &self.type_table,
+                            &self.tysys.type_table,
                             &case.attrs,
                             &enum_decl.name,
                             &case.name,
@@ -283,7 +283,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Item::Flags(flags_decl) => {
                     // Create a distinct Flags type (not a newtype over u32)
                     let flags_type = self
-                        .type_table
+                        .tysys.type_table
                         .borrow_mut()
                         .make_flags(flags_decl.name.clone(), self.current_module_source.clone());
                     // Add to newtypes so it can be used as a type name
@@ -311,7 +311,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 Item::Trait(trait_decl) => {
                     super::item::register_trait_compiler_item(
-                        &self.type_table,
+                        &self.tysys.type_table,
                         &trait_decl.attrs,
                         &trait_decl.name,
                         &trait_decl.methods,
@@ -369,12 +369,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         let type_id = if param.is_pack {
                             scope
-                                .type_table
+                                .tysys.type_table
                                 .borrow_mut()
                                 .make_type_pack(param.name.clone(), actual_idx)
                         } else {
                             scope
-                                .type_table
+                                .tysys.type_table
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), actual_idx)
                         };
@@ -414,7 +414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 {
                                     let index = (offset + i) as u32;
                                     let type_id = scope
-                                        .type_table
+                                        .tysys.type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), index);
                                     scope
@@ -464,7 +464,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // simultaneously in scope.
                     for method in &impl_block.methods {
                         super::item::register_method_compiler_item(
-                            &scope.type_table,
+                            &scope.tysys.type_table,
                             &method.attrs,
                             &method.name,
                             &scope.get_type_name(&impl_block.ty),
@@ -482,7 +482,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for (i, param) in method.type_params.iter().enumerate() {
                             let idx = (offset + i) as u32;
                             let type_id = scope
-                                .type_table
+                                .tysys.type_table
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), idx);
                             scope

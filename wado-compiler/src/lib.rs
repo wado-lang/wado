@@ -387,20 +387,23 @@ fn compile_after_load<H: CompilerHost>(
     // is populated.
     let state = state.expect("elaborator state present when is_complete");
 
+    // Move trait_env out of `state.tysys` rather than cloning the `Arc`,
+    // so that `Package` is the unique owner. `synthesize` later relies
+    // on `Arc::try_unwrap` succeeding to swap layers in place; a stray
+    // clone here would force a deep `TraitEnv` clone instead.
+    let tysys = state.tysys;
+    let builtin_registry = std::rc::Rc::try_unwrap(tysys.builtin_registry)
+        .unwrap_or_else(|rc| (*rc).clone());
     let package = Package::new(
         entry_module_source,
         tir_modules,
         symbols,
-        // Move trait_env out of `state` rather than cloning the `Arc`,
-        // so that `Package` is the unique owner. `synthesize` later relies
-        // on `Arc::try_unwrap` succeeding to swap layers in place; a stray
-        // clone here would force a deep `TraitEnv` clone instead.
-        state.trait_env,
+        tysys.trait_env,
         implicit_modules,
         module_name,
-        state.wasi_registry,
-        state.world_registry,
-        state.builtin_registry,
+        tysys.wasi_registry,
+        tysys.world_registry,
+        builtin_registry,
         interner,
     );
 
@@ -761,7 +764,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             &load_result.modules,
             load_result.entry_module_source.clone(),
             &logger,
-            &load_result.included_files,
+            std::rc::Rc::new(load_result.included_files.clone()),
             load_result.invocations.clone(),
             interner.clone(),
         )

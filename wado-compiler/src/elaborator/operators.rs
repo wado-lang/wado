@@ -80,7 +80,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if left_is_numeric_literal && !right_is_numeric_literal {
             // Resolve right first, then coerce left
             let right = self.resolve_expr(right_ast, ctx, expected_type);
-            let coerce_type = if self.type_table.borrow().is_numeric(right.type_id) {
+            let coerce_type = if self.tysys.type_table.borrow().is_numeric(right.type_id) {
                 // Primitive type: coerce literal to the same type
                 Some(right.type_id)
             } else {
@@ -92,7 +92,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else if right_is_numeric_literal && !left_is_numeric_literal {
             // Resolve left first, then coerce right
             let left = self.resolve_expr(left_ast, ctx, expected_type);
-            let coerce_type = if self.type_table.borrow().is_numeric(left.type_id) {
+            let coerce_type = if self.tysys.type_table.borrow().is_numeric(left.type_id) {
                 // Primitive type: coerce literal to the same type
                 Some(left.type_id)
             } else {
@@ -132,12 +132,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TirExpr {
         // Check if this is a comparison operation on a non-primitive type
         // Non-primitives use Eq/Ord traits instead of direct Wasm instructions
-        let left_type = self.type_table.borrow().get(left.type_id).clone();
+        let left_type = self.tysys.type_table.borrow().get(left.type_id).clone();
 
         // Reference types (&T, &mut T): only == and != are allowed (identity via ref.eq).
         // All other operators (ordering, arithmetic, bitwise) are rejected.
         if matches!(&left_type, ResolvedType::Ref(_) | ResolvedType::MutRef(_)) {
-            let right_type = self.type_table.borrow().get(right.type_id).clone();
+            let right_type = self.tysys.type_table.borrow().get(right.type_id).clone();
             let both_refs = matches!(
                 (&left_type, &right_type),
                 (ResolvedType::Ref(_), ResolvedType::Ref(_))
@@ -149,7 +149,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && left.type_id != TypeTable::ERROR
                     && right.type_id != TypeTable::ERROR
                 {
-                    let type_table = self.type_table.borrow();
+                    let type_table = self.tysys.type_table.borrow();
                     let left_name = type_table.type_name(left.type_id);
                     let right_name = type_table.type_name(right.type_id);
                     if left_name != right_name {
@@ -176,7 +176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             } else if both_refs {
                 // All operators other than == and != are invalid on reference types
-                let type_name = self.type_table.borrow().type_name(left.type_id);
+                let type_name = self.tysys.type_table.borrow().type_name(left.type_id);
                 let op_str = match op {
                     BinaryOp::Lt => "<",
                     BinaryOp::LtEq => "<=",
@@ -224,7 +224,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
                 ResolvedType::Newtype { base_type, .. } => {
-                    let tt = self.type_table.borrow();
+                    let tt = self.tysys.type_table.borrow();
                     let ultimate = tt.get_ultimate_base_type(*base_type);
                     match tt.get(ultimate) {
                         ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
@@ -240,14 +240,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(struct_name) = struct_name {
                 // For newtypes, use the base type ID for trait lookup
                 let lookup_type_id = {
-                    let tt = self.type_table.borrow();
+                    let tt = self.tysys.type_table.borrow();
                     tt.get_newtype_base(left.type_id).unwrap_or(left.type_id)
                 };
 
                 // Handle Eq trait (== and !=)
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
                     let eq_trait_name = self
-                        .type_table
+                        .tysys.type_table
                         .borrow()
                         .compiler_items()
                         .trait_name(CompilerItem::Eq)
@@ -259,7 +259,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         "eq",
                         false,
                     ) else {
-                        let type_name = self.type_table.borrow().type_name(left.type_id);
+                        let type_name = self.tysys.type_table.borrow().type_name(left.type_id);
                         let op_str = if op == BinaryOp::Eq { "==" } else { "!=" };
                         let _ = self.logger.error(TypeError::InvalidPattern {
                             message: format!(
@@ -294,7 +294,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) {
                     let ord_trait_name = self
-                        .type_table
+                        .tysys.type_table
                         .borrow()
                         .compiler_items()
                         .trait_name(CompilerItem::Ord)
@@ -306,7 +306,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         "cmp",
                         false,
                     ) else {
-                        let type_name = self.type_table.borrow().type_name(left.type_id);
+                        let type_name = self.tysys.type_table.borrow().type_name(left.type_id);
                         let op_str = match op {
                             BinaryOp::Lt => "<",
                             BinaryOp::Gt => ">",
@@ -353,7 +353,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.find_method_in_trait_bounds(&bound_names, "eq", left.type_id)
                 {
                     let eq_trait_name = self
-                        .type_table
+                        .tysys.type_table
                         .borrow()
                         .compiler_items()
                         .trait_name(CompilerItem::Eq)
@@ -392,7 +392,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.find_method_in_trait_bounds(&bound_names, "cmp", left.type_id)
                 {
                     let ord_trait_name = self
-                        .type_table
+                        .tysys.type_table
                         .borrow()
                         .compiler_items()
                         .trait_name(CompilerItem::Ord)
@@ -603,7 +603,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check for arithmetic on flags types: only bitwise ops are allowed
         {
-            let left_resolved = self.type_table.borrow().get(left.type_id).clone();
+            let left_resolved = self.tysys.type_table.borrow().get(left.type_id).clone();
             let is_flags_arith = matches!(
                 op,
                 BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod
@@ -630,7 +630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check for modulo on float types: Wasm has no float remainder instruction.
         // Users should use f64::fmod() or f32::fmod() instead.
         {
-            let left_resolved = self.type_table.borrow().get(left.type_id).clone();
+            let left_resolved = self.tysys.type_table.borrow().get(left.type_id).clone();
             if matches!(op, BinaryOp::Mod)
                 && matches!(
                     left_resolved,
@@ -662,7 +662,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let requires_trait = match &left_type {
                 ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
                 ResolvedType::Newtype { base_type, .. } => {
-                    let tt = self.type_table.borrow();
+                    let tt = self.tysys.type_table.borrow();
                     let ultimate = tt.get_ultimate_base_type(*base_type);
                     matches!(
                         tt.get(ultimate),
@@ -685,7 +685,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && left.type_id != TypeTable::ERROR
                 && right.type_id != TypeTable::ERROR
             {
-                let type_table = self.type_table.borrow();
+                let type_table = self.tysys.type_table.borrow();
                 let type_name = type_table.type_name(left.type_id);
                 let op_char = match op {
                     BinaryOp::Add => "+",
@@ -754,7 +754,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && left.type_id != TypeTable::NEVER
             && right.type_id != TypeTable::NEVER
         {
-            let type_table = self.type_table.borrow();
+            let type_table = self.tysys.type_table.borrow();
             let left_name = type_table.type_name(left.type_id);
             let right_name = type_table.type_name(right.type_id);
             if left_name != right_name {
@@ -804,7 +804,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // way a bare `identity` to a `fn(...)` parameter would.
         let inner_expected = if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) {
             expected_type.and_then(|expected| {
-                let table = self.type_table.borrow();
+                let table = self.tysys.type_table.borrow();
                 match table.get(expected) {
                     ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
                     _ => None,
@@ -841,12 +841,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For GC reference types (struct, String, Array, etc.), struct.get returns
         // the shared reference, so &mut field works correctly.
         if unary.op == UnaryOp::MutRef && matches!(&expr.kind, TirExprKind::FieldAccess { .. }) {
-            let field_type = self.type_table.borrow().get(expr.type_id).clone();
+            let field_type = self.tysys.type_table.borrow().get(expr.type_id).clone();
             let base_type = self
-                .type_table
+                .tysys.type_table
                 .borrow()
                 .get(
-                    self.type_table
+                    self.tysys.type_table
                         .borrow()
                         .get_ultimate_base_type(expr.type_id),
                 )
@@ -870,7 +870,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             UnaryOp::BitNot => Some(("BitNot", "bitnot")),
             _ => None,
         } {
-            let expr_type = self.type_table.borrow().get(expr.type_id).clone();
+            let expr_type = self.tysys.type_table.borrow().get(expr.type_id).clone();
             let struct_name = match &expr_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
@@ -969,18 +969,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let type_id = match unary.op {
             UnaryOp::Not => TypeTable::BOOL,
-            UnaryOp::Ref => self.type_table.borrow_mut().make_ref(expr.type_id),
-            UnaryOp::MutRef => self.type_table.borrow_mut().make_mut_ref(expr.type_id),
+            UnaryOp::Ref => self.tysys.type_table.borrow_mut().make_ref(expr.type_id),
+            UnaryOp::MutRef => self.tysys.type_table.borrow_mut().make_mut_ref(expr.type_id),
             UnaryOp::Deref => {
-                let outer = self.type_table.borrow().get(expr.type_id).clone();
+                let outer = self.tysys.type_table.borrow().get(expr.type_id).clone();
                 match outer {
                     ResolvedType::MutRef(inner) => inner,
                     ResolvedType::Ref(inner) => {
                         // Dereffing a shared reference: &(&mut T) yields &T, not &mut T.
                         // Mutability cannot propagate outward through a shared reference.
-                        let inner_resolved = self.type_table.borrow().get(inner).clone();
+                        let inner_resolved = self.tysys.type_table.borrow().get(inner).clone();
                         if let ResolvedType::MutRef(u) = inner_resolved {
-                            self.type_table.borrow_mut().make_ref(u)
+                            self.tysys.type_table.borrow_mut().make_ref(u)
                         } else {
                             inner
                         }
@@ -988,7 +988,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => {
                         let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: "reference type".to_string(),
-                            found: self.type_table.borrow().type_name(expr.type_id),
+                            found: self.tysys.type_table.borrow().type_name(expr.type_id),
                             span: unary.span,
                         });
                         TypeTable::ERROR
@@ -1043,7 +1043,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let indexed_expr = self.resolve_expr(&index_expr.expr, ctx, None);
 
             // Get base type (unwrap reference if needed)
-            let base_type_id = match self.type_table.borrow().get(indexed_expr.type_id) {
+            let base_type_id = match self.tysys.type_table.borrow().get(indexed_expr.type_id) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
                 _ => indexed_expr.type_id,
             };
@@ -1052,7 +1052,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Arrays now use IndexAssign trait like other types
             {
                 // Check for IndexAssign trait implementation
-                let struct_name = match self.type_table.borrow().get(base_type_id).clone() {
+                let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
                     ResolvedType::Struct { name, .. } => name,
                     ResolvedType::GenericInstance { name, .. } => name,
                     ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name,
@@ -1068,7 +1068,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let index_type = index_resolved.type_id;
 
                     // Reject &T/&mut T used as index expression (would ICE in codegen)
-                    let derefed_index_type = match self.type_table.borrow().get(index_type) {
+                    let derefed_index_type = match self.tysys.type_table.borrow().get(index_type) {
                         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
                         _ => None,
                     };
@@ -1202,7 +1202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 expr,
                 ..
             } => {
-                let inner_type = self.type_table.borrow().get(expr.type_id).clone();
+                let inner_type = self.tysys.type_table.borrow().get(expr.type_id).clone();
                 if matches!(inner_type, ResolvedType::Ref(_)) {
                     let _ = self.logger.error(TypeError::CannotAssign {
                         message: "cannot assign through immutable reference".to_string(),
@@ -1455,7 +1455,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut wrap_flags: Vec<bool> = Vec::with_capacity(args.len());
         for (arg, &param_ty) in args.iter().zip(resolved.param_types.iter()) {
             let wrap = matches!(
-                self.type_table.borrow().get(param_ty),
+                self.tysys.type_table.borrow().get(param_ty),
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             );
             // For `&Self` parameters the "value-level" expected type is
@@ -1477,7 +1477,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(arg, wrap)| {
                 let arg_expr = if wrap {
                     let arg_ref_type = self
-                        .type_table
+                        .tysys.type_table
                         .borrow_mut()
                         .intern(ResolvedType::Ref(arg.type_id));
                     TirExpr::new(
@@ -1529,14 +1529,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `<=`  → `cmp != Greater`, `>=` → `cmp != Less`.
     fn ord_bool_from_cmp(&mut self, cmp_call: TirExpr, op: BinaryOp, span: Span) -> TirExpr {
         let ordering_type_id = self
-            .type_table
+            .tysys.type_table
             .borrow_mut()
             .make_compiler_enum(CompilerItem::Ordering);
         // Look up Ordering's `Less` / `Greater` cases through the
         // `CompilerItem` registry so a stdlib rename of either case
         // flows here without touching the operator-lowering path.
         let (less_name, less_index, greater_name, greater_index) = {
-            let tt = self.type_table.borrow();
+            let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             let (_, _, less_name, less_index) = items.require_enum_case(CompilerItem::OrderingLess);
             let (_, _, greater_name, greater_index) =

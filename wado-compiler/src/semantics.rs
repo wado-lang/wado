@@ -664,6 +664,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         );
     }
 
+    let included_files = std::rc::Rc::new(load_result.included_files);
     let state = {
         let _span = logger.span("elaborate/annotate");
         Elaborator::annotate_modules(
@@ -671,6 +672,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             &load_result.modules,
             &load_result.entry_module_source,
             logger,
+            included_files,
             load_result.invocations.clone(),
             interner.clone(),
             snapshot.as_deref(),
@@ -710,7 +712,6 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             &load_result.modules,
             load_result.entry_module_source.clone(),
             logger,
-            &load_result.included_files,
             snapshot.as_deref(),
         ) {
             Ok(m) => (m, true),
@@ -722,7 +723,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // LSP queries read this snapshot; any further lowering (none today) would
     // continue interning into the shared `Rc<RefCell<TypeTable>>` held by
     // `state.type_table`.
-    let types = state.type_table.borrow().clone();
+    let types = state.tysys.type_table.borrow().clone();
 
     // Drain the elaborator's shared reference / local maps into owned IndexMaps
     // so LSP queries can hand out `&Symbol` references without juggling
