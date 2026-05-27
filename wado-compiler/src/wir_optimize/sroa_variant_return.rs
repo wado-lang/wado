@@ -305,11 +305,7 @@ fn reads_only_local_state(expr: &WirInstr) -> bool {
 /// Collect every local name read (`LocalGet`) or written (`LocalSet` /
 /// `LocalTee`) anywhere in `expr`'s subtree. Used to verify that
 /// relocating `X` past intervening stmts preserves observable behaviour.
-fn collect_local_io(
-    expr: &WirInstr,
-    reads: &mut IndexSet<String>,
-    writes: &mut IndexSet<String>,
-) {
+fn collect_local_io(expr: &WirInstr, reads: &mut IndexSet<String>, writes: &mut IndexSet<String>) {
     match expr {
         WirInstr::LocalGet { name, .. } => {
             reads.insert(name.clone());
@@ -346,7 +342,9 @@ fn elide_return_only_temps_in_body(body: &mut Vec<WirInstr>) {
 
     let valid: IndexSet<String> = stats
         .iter()
-        .filter(|(_, s)| !s.has_other_use && s.paired_writes == s.total_writes && s.total_writes > 0)
+        .filter(|(_, s)| {
+            !s.has_other_use && s.paired_writes == s.total_writes && s.total_writes > 0
+        })
         .map(|(name, _)| name.clone())
         .collect();
     if valid.is_empty() {
@@ -456,7 +454,7 @@ fn find_paired_return(
 
 /// Record uses of every local appearing inside `instr`. When
 /// `skip_name == Some(n)`, a top-level `LocalGet(n)` is *not* recorded —
-/// used by the pair detector so the paired LocalGet doesn't double-count
+/// used by the pair detector so the paired `LocalGet` doesn't double-count
 /// as an "other read". Recurses into child instructions; statement-list
 /// children (Block / Loop / If / Seq bodies) re-enter the pair detector
 /// via [`scan_return_temp_stats`].
@@ -1039,7 +1037,7 @@ fn block_fallthrough_is_variant_compatible(
 /// the strict shape *plus* a literal `Call(candidate)` at the very top of
 /// the `Return { Some(_) }` value. Anything more deeply nested (through
 /// `Seq`, `If`, or `Block`) falls back to the strict checker so the
-/// rewrite phase's "clear merge-point result type and wrap StructNew
+/// rewrite phase's "clear merge-point result type and wrap `StructNew`
 /// leaves in Return" transform stays well-typed: a `Call(candidate)` leaf
 /// inside a typed merge point would push N multi-values with nowhere to
 /// go after the merge-point result type is cleared.
@@ -1221,12 +1219,10 @@ fn validate_call_sites(
                 }
                 let body = module.functions[c.func_array_idx].body.as_ref().unwrap();
                 let empty: IndexSet<u32> = IndexSet::default();
-                let tail_set = effective_by_variant.get(&c.struct_type_idx).unwrap_or(&empty);
-                if !all_returns_are_variant_struct_new(
-                    body,
-                    &c.valid_case_type_indices,
-                    tail_set,
-                ) {
+                let tail_set = effective_by_variant
+                    .get(&c.struct_type_idx)
+                    .unwrap_or(&empty);
+                if !all_returns_are_variant_struct_new(body, &c.valid_case_type_indices, tail_set) {
                     round_invalid.insert(*id);
                     cascade_changed = true;
                 }
@@ -1789,13 +1785,12 @@ fn find_candidate_calls_in_block_prefix(
         WirInstr::Seq(body) => (body.as_slice(), false),
         _ => return,
     };
-    let effective_body = if drop_trailing_unreachable
-        && matches!(body.last(), Some(WirInstr::Unreachable))
-    {
-        &body[..body.len() - 1]
-    } else {
-        body
-    };
+    let effective_body =
+        if drop_trailing_unreachable && matches!(body.last(), Some(WirInstr::Unreachable)) {
+            &body[..body.len() - 1]
+        } else {
+            body
+        };
     if let Some((_, prefix)) = effective_body.split_last() {
         validate_call_sites_in_body(
             prefix,
