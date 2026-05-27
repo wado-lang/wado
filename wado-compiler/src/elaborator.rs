@@ -106,11 +106,9 @@ pub struct Elaborator<'a, H: CompilerHost> {
     pub(crate) tysys: tysys::TypeSystem,
     /// Symbol table from analyzer
     // MIGRATION: cross-cutting input (stays on the driver).
-    #[allow(dead_code)]
     symbols: &'a SymbolTable,
     /// Loaded modules from analyzer
     // MIGRATION: cross-cutting input (stays on the driver).
-    #[allow(dead_code)]
     loaded_modules: &'a IndexMap<ModuleSource, Module>,
     /// Per-module import context (consumed by [`TypeLookup`]). Built once per
     /// module from `use` declarations; replaces the 7 flat maps the elaborator
