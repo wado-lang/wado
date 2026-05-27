@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779840358262,
+  "lastUpdate": 1779876331182,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -113231,6 +113231,195 @@ window.BENCHMARK_DATA = {
           {
             "name": "syntax_highlight (-O3)",
             "value": 1249,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "778946061b122ae886714de8e042bb3b0fde95de",
+          "message": "Merge pull request #1205 from wado-lang/claude/benchmark-json-catalog-perf-PiAFm\n\nVariant-return SROA: tail-call propagation, HFS-temp elision, prefix call-site recursion",
+          "timestamp": "2026-05-27T18:59:27+09:00",
+          "tree_id": "b42840135c50dc70c0a8cc771010b79d219f2c62",
+          "url": "https://github.com/wado-lang/wado/commit/778946061b122ae886714de8e042bb3b0fde95de"
+        },
+        "date": 1779876330813,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "count_prime (-O1)",
+            "value": 3313,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O1)",
+            "value": 149,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O1)",
+            "value": 209,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O1)",
+            "value": 124,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O1)",
+            "value": 353,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O1)",
+            "value": 143,
+            "unit": "ms"
+          },
+          {
+            "name": "json/twitter (-O1)",
+            "value": 7,
+            "unit": "ms"
+          },
+          {
+            "name": "json/canada (-O1)",
+            "value": 90,
+            "unit": "ms"
+          },
+          {
+            "name": "json/catalog (-O1)",
+            "value": 38,
+            "unit": "ms"
+          },
+          {
+            "name": "sqlite_parse (-O1)",
+            "value": 627,
+            "unit": "ms"
+          },
+          {
+            "name": "syntax_highlight (-O1)",
+            "value": 1024,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O2)",
+            "value": 3304,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O2)",
+            "value": 149,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O2)",
+            "value": 54,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O2)",
+            "value": 56,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O2)",
+            "value": 169,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O2)",
+            "value": 90,
+            "unit": "ms"
+          },
+          {
+            "name": "json/twitter (-O2)",
+            "value": 7,
+            "unit": "ms"
+          },
+          {
+            "name": "json/canada (-O2)",
+            "value": 88,
+            "unit": "ms"
+          },
+          {
+            "name": "json/catalog (-O2)",
+            "value": 38,
+            "unit": "ms"
+          },
+          {
+            "name": "sqlite_parse (-O2)",
+            "value": 606,
+            "unit": "ms"
+          },
+          {
+            "name": "syntax_highlight (-O2)",
+            "value": 915,
+            "unit": "ms"
+          },
+          {
+            "name": "count_prime (-O3)",
+            "value": 3297,
+            "unit": "ms"
+          },
+          {
+            "name": "mandelbrot (-O3)",
+            "value": 149,
+            "unit": "ms"
+          },
+          {
+            "name": "sieve (-O3)",
+            "value": 54,
+            "unit": "ms"
+          },
+          {
+            "name": "fts (-O3)",
+            "value": 53,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/compress (-O3)",
+            "value": 170,
+            "unit": "ms"
+          },
+          {
+            "name": "zlib/decompress (-O3)",
+            "value": 92,
+            "unit": "ms"
+          },
+          {
+            "name": "json/twitter (-O3)",
+            "value": 7,
+            "unit": "ms"
+          },
+          {
+            "name": "json/canada (-O3)",
+            "value": 88,
+            "unit": "ms"
+          },
+          {
+            "name": "json/catalog (-O3)",
+            "value": 36,
+            "unit": "ms"
+          },
+          {
+            "name": "sqlite_parse (-O3)",
+            "value": 706,
+            "unit": "ms"
+          },
+          {
+            "name": "syntax_highlight (-O3)",
+            "value": 1362,
             "unit": "ms"
           }
         ]
