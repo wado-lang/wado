@@ -871,7 +871,10 @@ fn stdlib_slots() -> &'static StdlibSlotMap {
 /// Return the cached AST for a stdlib module, parsing it on first access.
 fn cached_stdlib_module(import_path: &str) -> Option<&'static Module> {
     let (key, slot) = stdlib_slots().get_key_value(import_path)?;
-    Some(slot.module.get_or_init(|| parse_bind_stdlib(key, slot.source)))
+    Some(
+        slot.module
+            .get_or_init(|| parse_bind_stdlib(key, slot.source)),
+    )
 }
 
 /// Compute the cache key string used by [`cached_stdlib_module`] for a
