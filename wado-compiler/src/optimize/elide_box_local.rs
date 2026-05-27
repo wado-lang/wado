@@ -558,7 +558,7 @@ fn walk_children_pure<'a>(
         match walk_expr_for_leftmost(c, candidate, field_name) {
             LeftmostWalk::Found => return LeftmostWalk::Found,
             LeftmostWalk::Blocked => return LeftmostWalk::Blocked,
-            LeftmostWalk::Pure => continue,
+            LeftmostWalk::Pure => {}
         }
     }
     LeftmostWalk::Pure
