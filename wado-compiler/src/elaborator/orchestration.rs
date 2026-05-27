@@ -818,7 +818,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     debug_assert!(false, "{snapshot_invariant}: {:?}", use_key.module);
                     continue;
                 };
-                sem.bindings.references.insert(use_key.clone(), def_key.clone());
+                sem.bindings
+                    .references
+                    .insert(use_key.clone(), def_key.clone());
             }
             for (key, sym) in &snap.locals {
                 let Some(sem) = module_semantics.get_mut(&key.module) else {
