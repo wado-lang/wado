@@ -1040,6 +1040,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.logger.span_end(&format!("load {entry_name}"));
 
         // Load all dependencies iteratively
+<<<<<<< HEAD
+||||||| 53618ba2
+        let core_cache = cached_stdlib();
+=======
+        let core_cache = {
+            let _span = self.logger.span("stdlib_cache_init");
+            cached_stdlib()
+        };
+>>>>>>> origin/main
         while let Some((from_module_source, module_source)) = pending.pop_front() {
             // Skip if already loaded
             if self.loaded.contains_key(&module_source) {
@@ -1100,7 +1109,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
 
         // Load implicit modules (for compiler-generated code)
-        self.load_implicit_modules()?;
+        self.logger.span_start("load/implicit_modules");
+        let implicit_result = self.load_implicit_modules();
+        self.logger.span_end("load/implicit_modules");
+        implicit_result?;
 
         // Drain any wasm asset imports surfaced by implicit modules (e.g.
         // `core:builtin` declaring `use _ from "./libm.wat" with { type: "wat" };`).
@@ -1110,7 +1122,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
 
         // Collect and load files referenced by #include_str / #include_bytes
-        let included_files = self.load_included_files().await?;
+        let included_files = {
+            let _span = self.logger.span("load/included_files");
+            self.load_included_files().await?
+        };
 
         Ok(LoadResult {
             modules: self.loaded,
@@ -1190,17 +1205,21 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             ModuleSource::Wasm { path, .. } => path.clone(),
             _ => unreachable!(),
         };
-        let raw_bytes = self.fetch_wasm_asset_bytes(&source, &path).await?;
-        let core_wasm_bytes = match kind {
-            WasmAssetKind::Wat => wat::parse_bytes(&raw_bytes)
-                .map_err(|e| LoadError::WasmImport {
-                    module_source: source.clone(),
-                    message: format!("failed to parse .wat: {e}"),
-                })?
-                .into_owned(),
-            WasmAssetKind::Wasm => raw_bytes,
+        let (core_wasm_bytes, function_exports) = {
+            let _span = self.logger.span(&format!("load_wasm_asset {namespace}"));
+            let raw_bytes = self.fetch_wasm_asset_bytes(&source, &path).await?;
+            let core_wasm_bytes = match kind {
+                WasmAssetKind::Wat => wat::parse_bytes(&raw_bytes)
+                    .map_err(|e| LoadError::WasmImport {
+                        module_source: source.clone(),
+                        message: format!("failed to parse .wat: {e}"),
+                    })?
+                    .into_owned(),
+                WasmAssetKind::Wasm => raw_bytes,
+            };
+            let function_exports = parse_wasm_module_exports(&source, &core_wasm_bytes)?;
+            (core_wasm_bytes, function_exports)
         };
-        let function_exports = parse_wasm_module_exports(&source, &core_wasm_bytes)?;
 
         // Synthesize a Wado AST module from the asset's exports and run
         // it through the regular parse/bind pipeline so that

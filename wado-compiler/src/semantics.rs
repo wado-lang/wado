@@ -628,7 +628,10 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // the ~28 s of CPU otherwise duplicated across a typical `wado test`
     // run.  Returns `None` when called from inside the snapshot builder
     // itself (re-entry guard); a fresh full pipeline runs in that case.
-    let snapshot = crate::stdlib_snapshot::get_or_init_snapshot();
+    let snapshot = {
+        let _span = logger.span("stdlib_snapshot");
+        crate::stdlib_snapshot::get_or_init_snapshot()
+    };
 
     let (symbols, analyze_ok) = {
         let _span = logger.span("analyze");
@@ -679,7 +682,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         )
         .ok()
     };
-    let Some(state) = state else {
+    let Some(mut state) = state else {
         return Semantics::partial(
             load_result.entry_module_source,
             load_result.modules,
@@ -695,11 +698,11 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         );
     };
 
-    // Run the full body-level resolve pass so `state.references` and
-    // `state.local_symbols` are populated by the real elaborator. This is the
-    // single source of truth for use→def edges — LSP and batch compilation
-    // both consume what the elaborator recorded here, with no separate lexical
-    // re-scan to drift out of sync.
+    // Run the full body-level resolve pass so each module's
+    // `ModuleSemantics::bindings` is populated by the real elaborator. This
+    // is the single source of truth for use→def edges — LSP and batch
+    // compilation both consume what the elaborator recorded here, with no
+    // separate lexical re-scan to drift out of sync.
     //
     // On Bail we still drain the partial reference / local maps so the LSP
     // can answer cursor queries against whatever bodies the elaborator did
@@ -707,7 +710,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     let (tir_modules, lower_ok) = {
         let _span = logger.span("elaborate/build_tir");
         match Elaborator::build_tir_from_state(
-            &state,
+            &mut state,
             &symbols,
             &load_result.modules,
             load_result.entry_module_source.clone(),
@@ -725,12 +728,18 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // `state.tysys.type_table`.
     let types = state.tysys.type_table.borrow().clone();
 
-    // Drain the elaborator's shared reference / local maps into owned IndexMaps
-    // so LSP queries can hand out `&Symbol` references without juggling
-    // `RefCell` borrows.
-    let references = std::mem::take(&mut *state.references.borrow_mut());
-    let locals = std::mem::take(&mut *state.local_symbols.borrow_mut());
-    let local_types = std::mem::take(&mut *state.local_types.borrow_mut());
+    // Flatten the per-module `ModuleSemantics` into the maps LSP queries
+    // consume directly. The Semantics API stays keyed by `SymbolKey`; the
+    // per-module storage on `AnnotateState` is the elaborator-side detail
+    // that replaces the previous `Rc<RefCell<…>>` plumbing.
+    let mut references: IndexMap<SymbolKey, SymbolKey> = IndexMap::default();
+    let mut locals: IndexMap<SymbolKey, Symbol> = IndexMap::default();
+    let mut local_types: IndexMap<SymbolKey, TypeId> = IndexMap::default();
+    for sem in state.module_semantics.values_mut() {
+        references.extend(std::mem::take(&mut sem.bindings.references));
+        locals.extend(std::mem::take(&mut sem.bindings.local_symbols));
+        local_types.extend(std::mem::take(&mut sem.types.local_types));
+    }
 
     Semantics {
         entry_module_source: load_result.entry_module_source,

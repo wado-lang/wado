@@ -10,9 +10,11 @@
 //!   without running TIR lowering. The output is an [`AnnotateState`] that
 //!   both `build_tir` and the LSP consume.
 //! - [`Elaborator::build_tir_from_state`] reads that state and produces one
-//!   [`TirModule`] per source module. It does not mutate the annotate
-//!   output; all new types created during lowering (anonymous structs,
-//!   monomorphic instances) are written through the shared
+//!   [`TirModule`] per source module. It also extends the per-module
+//!   [`super::sem::ModuleSemantics`] entries on `state.module_semantics`
+//!   with the body-walk results (use→def edges, local symbols, local
+//!   types), and new types created during lowering (anonymous structs,
+//!   monomorphic instances) are interned through the shared
 //!   `Rc<RefCell<TypeTable>>`.
 //!
 //! This split keeps the annotate phase self-contained and cheap enough to
@@ -33,7 +35,7 @@ use crate::component_model::WasiRegistry;
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name};
-use crate::symbol::{Symbol, SymbolKey, SymbolTable};
+use crate::symbol::SymbolTable;
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::world_registry::WorldRegistry;
 
@@ -48,11 +50,18 @@ use super::tysys::TypeSystem;
 /// Analysis state produced by [`Elaborator::annotate_modules`] and consumed by
 /// [`Elaborator::build_tir_from_state`].
 ///
-/// All expensive maps are stored behind `Rc` so the state is cheap to share
-/// between LSP queries and the lowering pipeline without cloning the
-/// underlying data. The [`TypeTable`] itself is behind `Rc<RefCell<…>>`
-/// because lowering interns additional types (anonymous structs,
-/// monomorphized instances) into the same table.
+/// The shared [`TypeSystem`] internals (type arena, decl maps, registries)
+/// are reference-counted so per-module elaborators can clone them cheaply.
+/// The [`TypeTable`] itself remains behind `Rc<RefCell<…>>` because lowering
+/// interns additional types (anonymous structs, monomorphic instances) into
+/// the same table.
+///
+/// Per-module semantic facts (use→def edges, local symbols, decl tables,
+/// import context) live in [`Self::module_semantics`] as a `IndexMap` of
+/// [`super::sem::ModuleSemantics`]. Each entry is owned by exactly one
+/// place at a time — the driver hands the entry to the body walk via
+/// `swap_remove` + `insert`, so no shared-mutability plumbing is needed
+/// (WEP 2026-05-26, Stage 3).
 ///
 /// Migration markers on each field below trace the WEP 2026-05-26
 /// elaborator re-architecture. `AnnotateState` itself disappears after
@@ -79,28 +88,17 @@ pub(crate) struct AnnotateState {
     /// so a `TirModule`'s position in the result map matches the
     /// dependency order downstream phases expect.
     pub(crate) sorted_sources: Vec<ModuleSource>,
-    /// Use→def map for local variables: `(module, IdentExpr.id)` →
-    /// `(module, defining AstId)`. Populated by [`Elaborator::resolve_ident`]
-    /// whenever a name resolves to a local binding. Consumed by LSP
-    /// `definition` / `hover` to jump to the defining pattern / parameter.
-    // MIGRATION: → ModuleSemantics::bindings (per-module after Stage 3;
-    //   the `Rc<RefCell<…>>` plumbing collapses into `&mut ModuleSemantics`).
-    pub(crate) references: Rc<RefCell<IndexMap<SymbolKey, SymbolKey>>>,
-    /// Locally-defined [`Symbol`]s (let bindings, parameters, closure
-    /// parameters). Keyed by the binding's defining [`SymbolKey`]. Populated
-    /// alongside [`Self::references`] as the elaborator walks function bodies.
-    // MIGRATION: → ModuleSemantics::bindings (per-module after Stage 3).
-    pub(crate) local_symbols: Rc<RefCell<IndexMap<SymbolKey, Symbol>>>,
-    /// Resolved [`TypeId`] for each local binding, keyed by the binding's
-    /// defining [`SymbolKey`]. Populated alongside [`Self::local_symbols`]
-    /// at every `record_local_symbol` call. Consumed by LSP inlay hints so
-    /// `let x = 1` can render the inferred `: i32` annotation without
-    /// reaching into TIR (which is `pub(crate)` and mixes resolver-synth
-    /// temporaries into the local namespace).
-    // MIGRATION: → ModuleSemantics::types (TypeId per binding-AstId fits the
-    //   "per-`AstId` type annotations" rule). LSP consumer
-    //   `Semantics::local_type_name` hides the placement.
-    pub(crate) local_types: Rc<RefCell<IndexMap<SymbolKey, TypeId>>>,
+    /// Per-module semantic facts produced by the elaborator. One entry per
+    /// loaded module. Stdlib entries are seeded from the snapshot in
+    /// [`Self::annotate_modules`]; per-compile entries are produced by the
+    /// body walk in [`Self::build_tir_from_state`].
+    ///
+    /// Replaces the previous trio of `Rc<RefCell<…>>` maps
+    /// (`references` / `local_symbols` / `local_types`) — each module's
+    /// data now lives in its own owned [`super::sem::ModuleSemantics`], so
+    /// the body walk's `&mut` access stays disjoint across modules and the
+    /// shared-mutability plumbing disappears (WEP 2026-05-26, Stage 3).
+    pub(crate) module_semantics: IndexMap<ModuleSource, super::sem::ModuleSemantics>,
     /// Kiln invocation redirects consulted by `resolve_import` call sites
     /// when walking `use` declarations. Populated from [`crate::loader::LoadResult`].
     // MIGRATION: cross-cutting input (loader-provided redirect map).
@@ -127,7 +125,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         invocations: crate::kiln::InvocationIndex,
         interner: Rc<RefCell<ModuleSourceInterner>>,
     ) -> Result<(IndexMap<ModuleSource, TirModule>, Arc<TraitEnv>), Bail> {
-        let state = Self::annotate_modules(
+        let mut state = Self::annotate_modules(
             symbols,
             modules,
             &entry_module_source,
@@ -139,7 +137,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )?;
         let trait_env = state.tysys.trait_env.clone();
         let tir_modules = Self::build_tir_from_state(
-            &state,
+            &mut state,
             symbols,
             modules,
             entry_module_source,
@@ -793,18 +791,52 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // lower phase.
         Self::register_symbol_key_type_indices(symbols, &type_table);
 
-        // Seed the use→def reference map and the local-symbol map with the
-        // snapshot's pre-resolved stdlib entries so the LSP edges remain
-        // consistent and user-module body resolution can extend on top.
-        let references = Rc::new(RefCell::new(
-            snapshot.map(|s| s.references.clone()).unwrap_or_default(),
-        ));
-        let local_symbols = Rc::new(RefCell::new(
-            snapshot.map(|s| s.locals.clone()).unwrap_or_default(),
-        ));
-        let local_types = Rc::new(RefCell::new(
-            snapshot.map(|s| s.local_types.clone()).unwrap_or_default(),
-        ));
+        // Seed per-module semantics with the snapshot's pre-resolved stdlib
+        // entries so the LSP edges remain consistent and the body walk on
+        // user modules can extend on top. The snapshot stores `references` /
+        // `locals` / `local_types` as flat maps keyed by `SymbolKey`; we
+        // split them by `key.module` because each module's data now lives in
+        // its own [`super::sem::ModuleSemantics`].
+        let mut module_semantics: IndexMap<ModuleSource, super::sem::ModuleSemantics> =
+            IndexMap::default();
+        // Ensure every loaded module has an entry; the body walk in
+        // `build_tir_from_state` requires a `ModuleSemantics` to swap in
+        // for each user module it processes.
+        for ms in modules.keys() {
+            module_semantics.entry(ms.clone()).or_default();
+        }
+        if let Some(snap) = snapshot {
+            // Snapshot keys must always reference modules in the current
+            // compile's `modules` set — the loader's implicit-modules pass
+            // pulls in the snapshot's stdlib closure on every compile. Use
+            // `get_mut` so a divergence shows up as a `debug_assert` failure
+            // rather than silently creating phantom `ModuleSemantics` entries
+            // that LSP would later flatten into `Semantics::references`.
+            let snapshot_invariant = "snapshot module must be in the current compile's loaded set";
+            for (use_key, def_key) in &snap.references {
+                let Some(sem) = module_semantics.get_mut(&use_key.module) else {
+                    debug_assert!(false, "{snapshot_invariant}: {:?}", use_key.module);
+                    continue;
+                };
+                sem.bindings
+                    .references
+                    .insert(use_key.clone(), def_key.clone());
+            }
+            for (key, sym) in &snap.locals {
+                let Some(sem) = module_semantics.get_mut(&key.module) else {
+                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+                    continue;
+                };
+                sem.bindings.local_symbols.insert(key.clone(), sym.clone());
+            }
+            for (key, type_id) in &snap.local_types {
+                let Some(sem) = module_semantics.get_mut(&key.module) else {
+                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+                    continue;
+                };
+                sem.types.local_types.insert(key.clone(), *type_id);
+            }
+        }
 
         let tysys = TypeSystem {
             type_table,
@@ -826,9 +858,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             tysys,
             world_registry,
             sorted_sources,
-            references,
-            local_symbols,
-            local_types,
+            module_semantics,
             invocations,
             interner,
         })
@@ -838,7 +868,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// produced by [`Elaborator::annotate_modules`]. Errors are collected in the
     /// logger; the function returns [`Bail`] if any module failed.
     pub(crate) fn build_tir_from_state(
-        state: &AnnotateState,
+        state: &mut AnnotateState,
         symbols: &'a SymbolTable,
         modules: &'a IndexMap<ModuleSource, Module>,
         entry_module_source: ModuleSource,
@@ -865,7 +895,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // are emitted to the logger; we keep going so one broken module
         // doesn't mask others.
         let _span = logger.span("elaborate/modules");
-        for module_source in &state.sorted_sources {
+        // Iterate a snapshot of the source order: we need `&mut state` to
+        // swap each module's `ModuleSemantics` in and out, which would
+        // otherwise conflict with borrowing `state.sorted_sources`.
+        let sorted_sources = state.sorted_sources.clone();
+        for module_source in &sorted_sources {
             // Cache hit: deep-clone the cached `TirModule` into the
             // per-compile shared type table.  Only `Core` / `Wasi` /
             // `Wasm` variants are eligible — `ModuleSource::EntryPoint`
@@ -988,45 +1022,41 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
 
+            // Take this module's `ModuleSemantics` out of `state` so the
+            // elaborator can own it for the body walk. The map entry was
+            // pre-populated in `annotate_modules` for every `modules.keys()`
+            // (and `sorted_sources` is derived from `modules`), so the entry
+            // is guaranteed to exist; `expect` rather than `unwrap_or_default`
+            // surfaces any future divergence between `sorted_sources` and
+            // `module_semantics.keys()` loudly. Any bindings the snapshot
+            // contributed survive in the taken instance. We seed the
+            // imports / decls populated above and reinstall the populated
+            // instance after `resolve_module` returns.
+            let mut sem = state
+                .module_semantics
+                .swap_remove(module_source)
+                .expect("module_semantics is pre-populated by annotate_modules");
+            sem.imports.imported_type_sources = imported_type_sources;
+            sem.imports.import_original_names = import_original_names;
+            sem.imports.namespace_imports = namespace_imports;
+            sem.decls.function_return_types = function_return_types;
+            sem.decls.imported_functions = imported_functions;
+
             let mut elaborator = Elaborator {
                 tysys: state.tysys.clone(),
+                sem,
                 symbols,
                 loaded_modules: modules,
-                imported_type_sources,
-                import_original_names,
-                local_struct_fields: IndexMap::default(),
-                local_newtypes: IndexMap::default(),
-                local_generic_newtypes: IndexMap::default(),
-                local_enum_cases: IndexMap::default(),
-                local_flags_cases: IndexMap::default(),
-                local_variant_cases: IndexMap::default(),
-                function_return_types,
-                imported_functions,
-                namespace_imports,
                 logger,
                 current_module_source: ModuleSource::entry_point_uninitialized(), // Set in Elaborator::resolve_module
                 entry_module_source: entry_module_source.clone(),
                 current_module_items: &[], // Set in Elaborator::resolve_module
-                effect_sources: IndexMap::default(), // Populated per-module in Elaborator::resolve_module
                 current_effect_params: IndexSet::default(),
                 current_effect_param_decls: IndexMap::default(),
                 trait_ctx: super::trait_env::TraitContext::default(),
-                generic_struct_names: IndexSet::default(),
-                generic_function_params: IndexMap::default(),
-                generic_function_resolved_param_types: IndexMap::default(),
-                generic_function_resolved_return_types: IndexMap::default(),
-                generic_method_params: IndexMap::default(),
-                generic_method_resolved_param_types: IndexMap::default(),
-                current_module_globals: IndexMap::default(),
-                imported_globals: IndexMap::default(),
-                associated_constants: IndexMap::default(),
                 indexing_trait_cache: IndexMap::default(),
                 trait_check_stack: RefCell::new(Vec::new()),
                 method_info_cache: IndexMap::default(),
-                pending_anonymous_structs: Vec::new(),
-                references: Rc::clone(&state.references),
-                local_symbols: Rc::clone(&state.local_symbols),
-                local_types: Rc::clone(&state.local_types),
                 default_scope_module: None,
                 invocations: Rc::clone(&state.invocations),
                 interner: Rc::clone(&state.interner),
@@ -1038,7 +1068,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
             // Errors are emitted to the logger; if resolve_module returns Bail,
             // we continue to resolve remaining modules to collect more errors
-            if let Ok(tir_module) = elaborator.resolve_module(module, module_source.clone()) {
+            let resolve_result = elaborator.resolve_module(module, module_source.clone());
+            // Re-install the (now-populated) `ModuleSemantics` even on bail
+            // so the LSP can answer cursor queries against whatever bindings
+            // the elaborator did reach before bailing.
+            state
+                .module_semantics
+                .insert(module_source.clone(), elaborator.sem);
+            if let Ok(tir_module) = resolve_result {
                 result.insert(module_source.clone(), tir_module);
             }
         }

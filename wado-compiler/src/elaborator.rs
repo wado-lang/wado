@@ -104,90 +104,34 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// tables, registries, included-files map, and the read-only caches
     /// built once during `annotate_modules`. See [`tysys::TypeSystem`].
     pub(crate) tysys: tysys::TypeSystem,
+    /// Per-module semantic facts (imports, decls, bindings, type
+    /// annotations). The elaborator takes ownership of one
+    /// [`sem::ModuleSemantics`] at the start of [`Self::resolve_module`]
+    /// and the driver re-installs it into
+    /// [`orchestration::AnnotateState::module_semantics`] afterwards. See
+    /// the [`sem`] module-level documentation for the membership rules.
+    pub(crate) sem: sem::ModuleSemantics,
     /// Symbol table from analyzer
-    // MIGRATION: cross-cutting input (stays on the driver).
     symbols: &'a SymbolTable,
     /// Loaded modules from analyzer
-    // MIGRATION: cross-cutting input (stays on the driver).
     loaded_modules: &'a IndexMap<ModuleSource, Module>,
-    /// Per-module import context (consumed by [`TypeLookup`]). Built once per
-    /// module from `use` declarations; replaces the 7 flat maps the elaborator
-    /// used to clone for each module.
-    // MIGRATION: → ModuleSemantics::imports (both fields below).
-    imported_type_sources: IndexMap<String, ModuleSource>,
-    import_original_names: IndexMap<String, String>,
-    /// Locally discovered additions to the type tables. Anonymous structs
-    /// (synthesized from struct literals) and the elaborator's own walk of
-    /// `module.items` insert here so [`TypeLookup`] can find them at the
-    /// highest priority. Always empty unless the current module has a
-    /// reason to override / extend the shared tables.
-    // MIGRATION: → ModuleSemantics::decls (per-module decl overrides, all 6 below).
-    //   Stage 2/3 may instead promote these into a per-module view on TypeSystem;
-    //   decided at the move site.
-    local_struct_fields: IndexMap<String, StructFieldInfo>,
-    local_newtypes: IndexMap<String, TypeId>,
-    local_generic_newtypes: IndexMap<String, GenericNewtypeInfo>,
-    local_enum_cases: IndexMap<String, EnumInfo>,
-    local_flags_cases: IndexMap<String, FlagsInfo>,
-    local_variant_cases: IndexMap<String, VariantInfo>,
-    /// Function return types (name -> return type)
-    // MIGRATION: → ModuleSemantics::decls.
-    function_return_types: IndexMap<String, TypeId>,
-    /// Imported function names for the current module
-    // MIGRATION: → ModuleSemantics::decls.
-    imported_functions: IndexSet<String>,
     /// Logger for emitting diagnostics
-    // MIGRATION: cross-cutting input (stays on the driver).
     logger: &'a Logger<'a, H>,
     /// Current module source being resolved (for struct type `module_source`)
     // MIGRATION: identifies the active `ModuleSemantics` — the driver swaps
     //   modules via the `IndexMap<ModuleSource, ModuleSemantics>` key, so this
-    //   field disappears after Stage 3.
+    //   field eventually disappears (Stage 5 carries it as an explicit
+    //   argument to the per-module walker).
     current_module_source: ModuleSource,
     /// Entry module source (for cross-module import dedup)
-    // MIGRATION: cross-cutting input (stays on the driver).
     entry_module_source: ModuleSource,
     /// Current module items (for local function parameter lookup)
-    // MIGRATION: cross-cutting input (the active module's AST is passed
-    //   alongside its `ModuleSemantics`).
     current_module_items: &'a [Item],
     /// Mutable trait resolution context: type params, bounds, associated type bindings, self type.
     /// Grouped together so scope entry/exit can save/restore the whole context at once.
     // MIGRATION: transient annotate-time scope (Stage 5 carries it as an
     //   explicit argument to `annotate_*` walkers).
     trait_ctx: trait_env::TraitContext,
-    /// Generic struct definitions (name -> type param count)
-    /// Used to determine if a struct is generic
-    // MIGRATION: → ModuleSemantics::decls.
-    generic_struct_names: IndexSet<String>,
-    /// Generic function type parameters (`func_name` -> `type_params`)
-    /// Used for substituting type parameters in return types
-    // MIGRATION: → ModuleSemantics::decls.
-    generic_function_params: IndexMap<String, Vec<(String, TypeId)>>,
-    /// Resolved param types for generic functions (`func_name` -> `param TypeIds`)
-    /// Resolved in the function's own type param scope so `TypeParams` have correct ids.
-    // MIGRATION: → ModuleSemantics::decls.
-    generic_function_resolved_param_types: IndexMap<String, Vec<TypeId>>,
-    /// Resolved return type for generic functions (`func_name` -> `return TypeId`)
-    /// Resolved in the function's own type param scope; used for expected-return
-    /// driven back-inference by [`infer::InferCtx::add_expected_return`].
-    // MIGRATION: → ModuleSemantics::decls.
-    generic_function_resolved_return_types: IndexMap<String, TypeId>,
-    /// Generic method type parameters (`mangled_name` -> `type_params`)
-    /// Used for substituting type parameters in method return types
-    // MIGRATION: → ModuleSemantics::decls.
-    generic_method_params: IndexMap<String, Vec<(String, TypeId)>>,
-    /// Resolved param types for generic methods (`mangled_name` -> `param TypeIds`)
-    /// Resolved in the method's own type param scope so `TypeParams` have correct ids.
-    // MIGRATION: → ModuleSemantics::decls.
-    generic_method_resolved_param_types: IndexMap<String, Vec<TypeId>>,
-    /// Namespace import aliases (e.g., "helper" -> module source for `use helper from "..."`)
-    // MIGRATION: → ModuleSemantics::imports.
-    namespace_imports: IndexMap<String, ModuleSource>,
-    /// Effect name to source module mapping (e.g., "Stdout" -> wasi:cli module source)
-    /// Built from import declarations and local interface declarations.
-    // MIGRATION: → ModuleSemantics::imports.
-    effect_sources: IndexMap<String, ModuleSource>,
     /// Effect parameter names currently in scope (from enclosing function's `<effect E>`)
     // MIGRATION: transient annotate-time scope (per-function, not per-module).
     current_effect_params: IndexSet<String>,
@@ -195,20 +139,6 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Used to record use→def edges for effect parameter references in `with` clauses.
     // MIGRATION: transient annotate-time scope (per-function, not per-module).
     current_effect_param_decls: IndexMap<String, crate::ast::AstId>,
-    /// Global variables in the current module (name -> (type, `is_mutable`))
-    // MIGRATION: → ModuleSemantics::decls.
-    current_module_globals: IndexMap<String, (TypeId, bool)>,
-    /// Imported globals (local name -> (source module, original name, type, `is_mutable`))
-    // MIGRATION: → ModuleSemantics::decls.
-    imported_globals: IndexMap<String, (ModuleSource, String, TypeId, bool)>,
-    /// Associated constants from impl blocks ("`TypeName::CONST`" -> (type, expr))
-    /// These are inlined at every use site during resolution.
-    // MIGRATION: → ModuleSemantics::decls.
-    associated_constants: IndexMap<String, (ast::Type, ast::Expr)>,
-    /// Anonymous structs created during expression resolution.
-    /// Flushed into the `TirModule` at the end of `resolve_module`.
-    // MIGRATION: → ModuleSemantics::decls.
-    pending_anonymous_structs: Vec<crate::tir::TirStruct>,
     /// Cache for `find_indexing_trait_impl` results.
     /// Key: (`struct_name`, `base_type_id`, `trait_base_name`, `method_name`, `assoc_type_name`)
     // MIGRATION: → TypeSystem (type-system cache); deferred — needs the
@@ -237,26 +167,6 @@ pub struct Elaborator<'a, H: CompilerHost> {
     // MIGRATION: → TypeSystem (type-system cache); deferred — needs the
     //   pipeline-wide cache lifetime story.
     method_info_cache: IndexMap<(TypeId, String), Option<types::MethodInfo>>,
-    /// Use→def map for local variables. Shared via `Rc<RefCell<…>>` with
-    /// [`crate::elaborator::orchestration::AnnotateState`] so LSP queries see
-    /// references as soon as the elaborator has walked the body.
-    // MIGRATION: → ModuleSemantics::bindings (drops the `Rc<RefCell<…>>`;
-    //   the body walk takes `&mut ModuleSemantics`).
-    references: Rc<RefCell<IndexMap<SymbolKey, SymbolKey>>>,
-    /// Local binding [`Symbol`]s emitted alongside `references`. Populated at
-    /// every `ctx.add_local(...)` call that carries a user-visible defining
-    /// `AstId`. Shared via `Rc<RefCell<…>>` with `AnnotateState`.
-    // MIGRATION: → ModuleSemantics::bindings (drops the `Rc<RefCell<…>>`).
-    local_symbols: Rc<RefCell<IndexMap<SymbolKey, Symbol>>>,
-    /// Resolved [`TypeId`] for each local binding, keyed by the binding's
-    /// defining [`SymbolKey`]. Populated alongside `local_symbols` at every
-    /// `record_local_symbol` call. Shared via `Rc<RefCell<…>>` with
-    /// `AnnotateState` and ultimately drained into `Semantics::local_types`
-    /// for LSP inlay-hint consumption.
-    // MIGRATION: → ModuleSemantics::types (TypeId per binding-AstId fits the
-    //   "per-`AstId` type annotations" rule). LSP consumer
-    //   `Semantics::local_type_name` hides the placement.
-    local_types: Rc<RefCell<IndexMap<SymbolKey, TypeId>>>,
     /// When resolving a default-expression AST at a call site, fall back to
     /// looking up unresolved identifiers in this module's global scope. This
     /// preserves the callee's lexical scope for defaults that reference
@@ -266,13 +176,11 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Kiln invocation redirects consulted by `use` resolution sites. Shared
     /// by `Rc` so per-module Elaborator instances can read the single
     /// compilation-unit-wide redirect map cheaply.
-    // MIGRATION: cross-cutting input (loader-provided redirect map).
     pub(super) invocations: Rc<crate::kiln::InvocationIndex>,
     /// `ModuleSource` interner shared with the loader and downstream
     /// phases. Wrapped in `Rc<RefCell<>>` so per-module elaborator
     /// instances can `borrow_mut()` it from `&self` contexts (e.g.
     /// `record_use_specifier_references`).
-    // MIGRATION: cross-cutting input (shared interner).
     pub(super) interner: Rc<RefCell<ModuleSourceInterner>>,
 }
 
@@ -283,8 +191,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
         TypeLookup {
             current_module_source: &self.current_module_source,
-            imported_type_sources: &self.imported_type_sources,
-            import_original_names: &self.import_original_names,
+            imported_type_sources: &self.sem.imports.imported_type_sources,
+            import_original_names: &self.sem.imports.import_original_names,
             all_newtypes: &self.tysys.all_newtypes,
             all_struct_fields: &self.tysys.all_struct_fields,
             all_variant_cases: &self.tysys.all_variant_cases,
@@ -292,12 +200,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             all_flags_cases: &self.tysys.all_flags_cases,
             all_resource_types: &self.tysys.all_resource_types,
             all_generic_newtypes: &self.tysys.all_generic_newtypes,
-            local_struct_fields: &self.local_struct_fields,
-            local_newtypes: &self.local_newtypes,
-            local_enum_cases: &self.local_enum_cases,
-            local_flags_cases: &self.local_flags_cases,
-            local_generic_newtypes: &self.local_generic_newtypes,
-            local_variant_cases: &self.local_variant_cases,
+            local_struct_fields: &self.sem.decls.local_struct_fields,
+            local_newtypes: &self.sem.decls.local_newtypes,
+            local_enum_cases: &self.sem.decls.local_enum_cases,
+            local_flags_cases: &self.sem.decls.local_flags_cases,
+            local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
+            local_variant_cases: &self.sem.decls.local_variant_cases,
         }
     }
 
@@ -318,7 +226,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if suffix.contains("::") {
             return None;
         }
-        if !self.namespace_imports.contains_key(prefix) {
+        if !self.sem.imports.namespace_imports.contains_key(prefix) {
             return None;
         }
         Some(suffix)
@@ -371,44 +279,58 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let saved_src = std::mem::replace(&mut self.current_module_source, module_source);
-        let saved_imp = std::mem::replace(&mut self.imported_type_sources, imported_type_sources);
-        let saved_orig = std::mem::replace(&mut self.import_original_names, import_original_names);
-        let saved_local_struct = std::mem::take(&mut self.local_struct_fields);
-        let saved_local_newtypes = std::mem::take(&mut self.local_newtypes);
-        let saved_local_enum = std::mem::take(&mut self.local_enum_cases);
-        let saved_local_flags = std::mem::take(&mut self.local_flags_cases);
-        let saved_local_gnt = std::mem::take(&mut self.local_generic_newtypes);
-        let saved_local_variant = std::mem::take(&mut self.local_variant_cases);
+        let saved_imp = std::mem::replace(
+            &mut self.sem.imports.imported_type_sources,
+            imported_type_sources,
+        );
+        let saved_orig = std::mem::replace(
+            &mut self.sem.imports.import_original_names,
+            import_original_names,
+        );
+        let saved_local_struct = std::mem::take(&mut self.sem.decls.local_struct_fields);
+        let saved_local_newtypes = std::mem::take(&mut self.sem.decls.local_newtypes);
+        let saved_local_enum = std::mem::take(&mut self.sem.decls.local_enum_cases);
+        let saved_local_flags = std::mem::take(&mut self.sem.decls.local_flags_cases);
+        let saved_local_gnt = std::mem::take(&mut self.sem.decls.local_generic_newtypes);
+        let saved_local_variant = std::mem::take(&mut self.sem.decls.local_variant_cases);
 
         let result = body(self);
 
         self.current_module_source = saved_src;
-        self.imported_type_sources = saved_imp;
-        self.import_original_names = saved_orig;
-        self.local_struct_fields = saved_local_struct;
-        self.local_newtypes = saved_local_newtypes;
-        self.local_enum_cases = saved_local_enum;
-        self.local_flags_cases = saved_local_flags;
-        self.local_generic_newtypes = saved_local_gnt;
-        self.local_variant_cases = saved_local_variant;
+        self.sem.imports.imported_type_sources = saved_imp;
+        self.sem.imports.import_original_names = saved_orig;
+        self.sem.decls.local_struct_fields = saved_local_struct;
+        self.sem.decls.local_newtypes = saved_local_newtypes;
+        self.sem.decls.local_enum_cases = saved_local_enum;
+        self.sem.decls.local_flags_cases = saved_local_flags;
+        self.sem.decls.local_generic_newtypes = saved_local_gnt;
+        self.sem.decls.local_variant_cases = saved_local_variant;
         result
     }
 
     /// Record that an identifier resolved to a local binding in the current
     /// module. Both `use_id` and `def_id` live in `current_module_source`.
-    pub(super) fn record_reference(&self, use_id: crate::ast::AstId, def_id: crate::ast::AstId) {
+    pub(super) fn record_reference(
+        &mut self,
+        use_id: crate::ast::AstId,
+        def_id: crate::ast::AstId,
+    ) {
         let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
         let def_key = SymbolKey::new(self.current_module_source.clone(), def_id);
-        self.references.borrow_mut().insert(use_key, def_key);
+        self.sem.bindings.references.insert(use_key, def_key);
     }
 
     /// Record a use→def reference when the definition lives in a (possibly
     /// different) module identified directly by a [`SymbolKey`]. Prefer
     /// [`Self::record_reference_to_decl`] when the call site is constructing
     /// the key from `(module, ast_id)` parts.
-    pub(super) fn record_reference_to_key(&self, use_id: crate::ast::AstId, def_key: SymbolKey) {
+    pub(super) fn record_reference_to_key(
+        &mut self,
+        use_id: crate::ast::AstId,
+        def_key: SymbolKey,
+    ) {
         let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
-        self.references.borrow_mut().insert(use_key, def_key);
+        self.sem.bindings.references.insert(use_key, def_key);
     }
 
     /// Record a use→def reference where the defining declaration is
@@ -417,7 +339,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// otherwise construct a [`SymbolKey`] inline — keeps `SymbolKey::new`
     /// confined to a single place.
     pub(super) fn record_reference_to_decl(
-        &self,
+        &mut self,
         use_id: crate::ast::AstId,
         decl_module: &ModuleSource,
         decl_ast_id: crate::ast::AstId,
@@ -429,7 +351,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// the current module under `name` (local item, imported item, imported
     /// namespace member, etc.). Looks up the defining [`SymbolKey`] through
     /// the symbol table; no-op if the name is not declared.
-    pub(super) fn record_item_reference_by_name(&self, use_id: crate::ast::AstId, name: &str) {
+    pub(super) fn record_item_reference_by_name(&mut self, use_id: crate::ast::AstId, name: &str) {
         let Some(sym) = self
             .symbols
             .lookup_in_module(&self.current_module_source, name)
@@ -438,8 +360,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         };
         let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
-        self.references
-            .borrow_mut()
+        self.sem
+            .bindings
+            .references
             .insert(use_key, sym.defined_at.clone());
     }
 
@@ -451,7 +374,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Used for variant cases, enum cases, and flags members reached via
     /// a two-segment qualified ident.
     pub(super) fn record_qualified_case(
-        &self,
+        &mut self,
         ident: &crate::ast::IdentExpr,
         type_name: &str,
         case_module: &ModuleSource,
@@ -469,7 +392,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// namespace-qualified case path. The leading `ns` and `Type`
     /// segments are left to existing namespace-import edges.
     pub(super) fn record_namespaced_case(
-        &self,
+        &mut self,
         ident: &crate::ast::IdentExpr,
         case_module: &ModuleSource,
         case_ast_id: crate::ast::AstId,
@@ -483,7 +406,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// module) when the defining id is known. Convenience for sites that
     /// receive an `Option<AstId>` from a local variable lookup.
     pub(super) fn record_reference_opt(
-        &self,
+        &mut self,
         use_id: crate::ast::AstId,
         def_id: Option<crate::ast::AstId>,
     ) {
@@ -498,7 +421,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// the `<T>` declaration rather than on a top-level item that happens
     /// to share the name. Falls through to the symbol-table lookup
     /// otherwise.
-    pub(super) fn record_type_name_reference(&self, use_id: crate::ast::AstId, name: &str) {
+    pub(super) fn record_type_name_reference(&mut self, use_id: crate::ast::AstId, name: &str) {
         if let Some(&decl_id) = self.trait_ctx.type_param_decls.get(name) {
             self.record_reference(use_id, decl_id);
         } else {
@@ -541,7 +464,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// and inlay hints can surface the inferred type. Called at each site
     /// where a user-visible local is introduced.
     pub(super) fn record_local_symbol(
-        &self,
+        &mut self,
         def_id: crate::ast::AstId,
         name: &str,
         span: crate::token::Span,
@@ -558,8 +481,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             defined_at: key.clone(),
             span: Some(span),
         };
-        self.local_symbols.borrow_mut().insert(key.clone(), symbol);
-        self.local_types.borrow_mut().insert(key, type_id);
+        self.sem.bindings.local_symbols.insert(key.clone(), symbol);
+        self.sem.types.local_types.insert(key, type_id);
     }
 
     /// Look up a function by name in a loaded module, returning the Item at that index.
@@ -608,7 +531,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&StructFieldInfo> {
-        self.local_struct_fields
+        self.sem
+            .decls
+            .local_struct_fields
             .get(name)
             .filter(|info| info.module_source == *module_source)
             .or_else(|| {
@@ -706,8 +631,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if is_primitive_type_name(name) {
             return (ModuleSource::primitive(), name.to_string());
         }
-        if let Some(src) = self.imported_type_sources.get(name) {
+        if let Some(src) = self.sem.imports.imported_type_sources.get(name) {
             let original = self
+                .sem
+                .imports
                 .import_original_names
                 .get(name)
                 .cloned()
@@ -719,7 +646,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .unwrap_or_else(|| src.clone());
             return (canonical, original);
         }
-        if let Some(src) = self.effect_sources.get(name) {
+        if let Some(src) = self.sem.imports.effect_sources.get(name) {
             // `effect_sources` carries either a local effect / resource
             // declaration (no alias possible — the local name IS the
             // declaration name) or a non-aliased import that
@@ -774,7 +701,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// works on effect references in `with` clauses. An empty slice skips recording
     /// (used by synthetic/internal effect lists with no source identifiers).
     pub(crate) fn resolve_effects(
-        &self,
+        &mut self,
         effects: &[String],
         effect_ids: &[(crate::ast::AstId, crate::token::Span)],
     ) -> Vec<tir::EffectRef> {
@@ -788,14 +715,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         self.record_reference(use_id, decl_id);
                     }
                     tir::EffectRef::Param { name: name.clone() }
-                } else if let Some(source) = self.effect_sources.get(name) {
+                } else if let Some(source) = self.sem.imports.effect_sources.get(name).cloned() {
                     // Canonicalize: re-exports point at the importing module, but
                     // identity must match the defining module so two `with Stdout`
                     // clauses (one importing from `core:cli`, one from `wasi:cli`)
                     // refer to the same effect.
                     let canonical = self
                         .symbols
-                        .lookup_in_module(source, name)
+                        .lookup_in_module(&source, name)
                         .map(|sym| {
                             if let Some(use_id) = use_id {
                                 self.record_reference_to_key(use_id, sym.defined_at.clone());
@@ -838,7 +765,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Record use→def edges for each imported name in `use { a, b as c } from "..."`
     /// declarations. The cursor landing on an imported name inside a `use`
     /// specifier list should jump to the defining symbol in the source module.
-    fn record_use_specifier_references(&self, module: &Module) {
+    fn record_use_specifier_references(&mut self, module: &Module) {
         for item in &module.items {
             let Item::Use(use_decl) = item else { continue };
             let source = name::resolve_import_with_invocations(
@@ -880,7 +807,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Clear trait lookup caches (current_module_items changed)
         self.indexing_trait_cache.clear();
         // Build effect source map from imports
-        self.effect_sources = Self::build_effect_sources(
+        self.sem.imports.effect_sources = Self::build_effect_sources(
             &mut self.interner.borrow_mut(),
             module,
             &module_source,
@@ -905,12 +832,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         // Collect global variable names and types (before resolving functions that may reference them)
-        self.current_module_globals.clear();
-        self.imported_globals.clear();
+        self.sem.decls.current_module_globals.clear();
+        self.sem.decls.imported_globals.clear();
         for item in &module.items {
             if let Item::Global(global_decl) = item {
                 let ty = self.resolve_type(&global_decl.ty);
-                self.current_module_globals
+                self.sem
+                    .decls
+                    .current_module_globals
                     .insert(global_decl.name.clone(), (ty, global_decl.mutable));
             }
         }
@@ -942,7 +871,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     {
                                         let ty = self.resolve_type(&global_decl.ty);
                                         let local_name = alias.as_ref().unwrap_or(name).clone();
-                                        self.imported_globals.insert(
+                                        self.sem.decls.imported_globals.insert(
                                             local_name,
                                             (
                                                 source_module_source.clone(),
@@ -962,7 +891,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         // Collect associated constants from loaded modules and current module
-        self.associated_constants.clear();
+        self.sem.decls.associated_constants.clear();
         for module_items in self
             .loaded_modules
             .values()
@@ -974,7 +903,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let type_name = self.get_type_name(&impl_block.ty);
                     for assoc_const in &impl_block.constants {
                         let key = MethodName::format_local(&type_name, None, &assoc_const.name);
-                        self.associated_constants
+                        self.sem
+                            .decls
+                            .associated_constants
                             .insert(key, (assoc_const.ty.clone(), assoc_const.value.clone()));
                     }
                 }
@@ -1325,7 +1256,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         // Add anonymous structs created during expression resolution
-        for anon_struct in self.pending_anonymous_structs.drain(..) {
+        for anon_struct in self.sem.decls.pending_anonymous_structs.drain(..) {
             tir_module.add_struct(anon_struct);
         }
 

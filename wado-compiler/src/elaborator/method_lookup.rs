@@ -353,7 +353,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // synthesized lookups (e.g. `String^Inspect`) must still resolve
         // through their well-known modules, which the full chain might
         // route elsewhere.
-        if let Some(src) = self.imported_type_sources.get(struct_name) {
+        if let Some(src) = self.sem.imports.imported_type_sources.get(struct_name) {
             return src.clone();
         }
         // Default to current module source
@@ -536,7 +536,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let mangled_name = MethodName::format_local(&struct_name, None, method_name);
-        if let Some(&return_type) = self.function_return_types.get(&mangled_name) {
+        if let Some(&return_type) = self.sem.decls.function_return_types.get(&mangled_name) {
             // For locally registered methods, find self_kind and param_types from the AST
             // Also checks that bounded impl block constraints are satisfied
             if let Some((self_kind, param_types, param_is_mut, param_defaults, param_names)) = self

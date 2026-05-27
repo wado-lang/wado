@@ -25,7 +25,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .iter()
                                 .map(|p| p.name.clone())
                                 .collect();
-                            self.local_generic_newtypes.insert(
+                            self.sem.decls.local_generic_newtypes.insert(
                                 newtype_decl.name.clone(),
                                 GenericNewtypeInfo {
                                     module_source: module_source.clone(),
@@ -42,7 +42,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             module_source.clone(),
                             base_type_id,
                         );
-                        self.local_newtypes
+                        self.sem
+                            .decls
+                            .local_newtypes
                             .insert(newtype_decl.name.clone(), newtype_id);
                     }
                 }
@@ -55,7 +57,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Item::Struct(struct_decl) = item
                     && !struct_decl.type_params.is_empty()
                 {
-                    self.generic_struct_names.insert(struct_decl.name.clone());
+                    self.sem
+                        .decls
+                        .generic_struct_names
+                        .insert(struct_decl.name.clone());
                 }
             }
         }
@@ -65,7 +70,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Item::Struct(struct_decl) = item
                 && !struct_decl.type_params.is_empty()
             {
-                self.generic_struct_names.insert(struct_decl.name.clone());
+                self.sem
+                    .decls
+                    .generic_struct_names
+                    .insert(struct_decl.name.clone());
             }
         }
 
@@ -117,7 +125,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .collect();
 
                     let module_source = scope.current_module_source.clone();
-                    scope.local_struct_fields.insert(
+                    scope.sem.decls.local_struct_fields.insert(
                         struct_decl.name.clone(),
                         StructFieldInfo {
                             name: struct_decl.name.clone(),
@@ -141,7 +149,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             self.current_module_source.clone(),
                             base_type_id,
                         );
-                        self.local_newtypes
+                        self.sem
+                            .decls
+                            .local_newtypes
                             .insert(newtype_decl.name.clone(), newtype_id);
                     } else {
                         // Generic newtype: store definition for lazy instantiation
@@ -150,7 +160,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .iter()
                             .map(|p| p.name.clone())
                             .collect();
-                        self.local_generic_newtypes.insert(
+                        self.sem.decls.local_generic_newtypes.insert(
                             newtype_decl.name.clone(),
                             GenericNewtypeInfo {
                                 module_source: self.current_module_source.clone(),
@@ -199,7 +209,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     let module_source = scope.current_module_source.clone();
-                    scope.local_variant_cases.insert(
+                    scope.sem.decls.local_variant_cases.insert(
                         variant_decl.name.clone(),
                         VariantInfo {
                             name: variant_decl.name.clone(),
@@ -246,7 +256,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             ast_id: case.id,
                         })
                         .collect();
-                    self.local_enum_cases.insert(
+                    self.sem.decls.local_enum_cases.insert(
                         enum_decl.name.clone(),
                         EnumInfo::new(
                             enum_decl.name.clone(),
@@ -289,7 +299,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_flags(flags_decl.name.clone(), self.current_module_source.clone());
                     // Add to newtypes so it can be used as a type name
-                    self.local_newtypes
+                    self.sem
+                        .decls
+                        .local_newtypes
                         .insert(flags_decl.name.clone(), flags_type);
                     // Store member info with bitmask values (1 << index)
                     let members: Vec<FlagsMemberData> = flags_decl
@@ -302,7 +314,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             ast_id: m.id,
                         })
                         .collect();
-                    self.local_flags_cases.insert(
+                    self.sem.decls.local_flags_cases.insert(
                         flags_decl.name.clone(),
                         FlagsInfo {
                             type_id: flags_type,
@@ -348,7 +360,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map(|t| scope.resolve_type(t))
                         .unwrap_or(TypeTable::UNIT);
                     drop(scope);
-                    self.function_return_types
+                    self.sem
+                        .decls
+                        .function_return_types
                         .insert(func.name.clone(), return_type);
                 }
                 Item::Impl(impl_block) => {
@@ -526,6 +540,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &method.name,
                         );
                         scope
+                            .sem
+                            .decls
                             .function_return_types
                             .insert(mangled_name, return_type);
                     }
