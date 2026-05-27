@@ -44,54 +44,36 @@ be consumed without compiler changes. Concretely:
 There is no separate registry of "known WASI modules". The set of supported
 worlds equals the set of WITs the compiler has parsed during this compilation.
 
-## Key Decision: Unify `effect` (declaration) into `interface`
+## Key Decision: Unify `effect` into `interface`
 
 WIT's organizing primitive is `interface`: a named group of free functions,
-resources (with their methods), and types. Wado split this into two keywords —
-`effect` for the import side (with effect tracking) and `interface` for the
-export side (pure CM grouping). The split was justified in WEP: WIT and Wado
-Mapping under the assumption that the import side carries Wado-level meaning
-(effect tracking) while the export side does not.
+resources (with their methods), and types. Wado previously used `effect` as a
+parallel keyword in two places — block declarations (`effect Foo { ... }`)
+and polymorphic effect parameters (`<effect E>`). For WIT interoperability
+both collapse into `interface`:
 
-In practice, `effect` blocks already contain free functions, resources, and
-types. The keyword name no longer matches the contents, and the producer-side
-`interface` keyword (a pure grouping) becomes a separate concept the user has
-to learn.
-
-This WEP collapses the two:
-
-- `effect <Name> { ... }` declarations become `interface <Name> { ... }`.
-- An interface contains free functions, resources, and types — exactly the
-  WIT shape.
-- The `with` clause continues to take interface names. `fn foo() with Stdout`
-  reads as "this function uses the Stdout interface, which is effectful".
-  Effect tracking semantics are unchanged.
-- Worlds `import` and `export` interfaces by name. Each `import Foo` resolves
-  to a known `pub interface Foo` declaration that carries `#[cm(...)]` and is
-  therefore traceable back to its WIT FQ name.
-
-The `effect` keyword is retained for one purpose only: **polymorphic effect
-parameters**, e.g.
+- `effect Foo { ... }` → `interface Foo { ... }` (block declarations).
+- `<effect E>` → `<interface E>` (polymorphic interface parameter; this was
+  previously `<effect E>`, renamed for WIT interoperability).
 
 ```wado
-fn wrapper<effect E>(f: fn() with E) with E { f(); }
+fn wrapper<interface E>(f: fn() with E) with E { f(); }
 ```
 
-Here `E` is an effect variable, not an interface declaration. This is a
-genuinely different concept (a type-level binder over effect rows) and keeping
-the keyword for this case avoids overloading `interface` with a meaning it does
-not have in WIT.
+The `with` clause continues to take interface names. Effect tracking
+semantics are unchanged; only the spelling.
+
+The `effect` keyword is removed.
 
 ### What this resolves
 
-- Effect-vs-interface ambiguity: `interface` is the single concept; `effect` is
-  a binder for polymorphic effect parameters only.
-- Producer-side keyword duplication: there is one keyword for both sides.
-  `pub interface Geometry { ... }` defines and groups; `export Geometry` from a
-  world publishes it.
-- World import information loss (see Current State below): `import Foo` in a
-  world is now a reference to an `interface Foo` declaration, which carries
-  `#[cm(...)]`. The interface FQ name is preserved by construction.
+- One keyword (`interface`) for both the import and export sides, matching
+  WIT's vocabulary directly.
+- `pub interface Geometry { ... }` defines and groups; `export Geometry`
+  from a world publishes it. No producer-side keyword duplication.
+- World import information loss is gone: `import Foo` in a world is a
+  reference to an `interface Foo` declaration carrying `#[cm(...)]`, so
+  the FQ name is preserved by construction.
 
 ### Cross-package disambiguation (resolved by omission)
 
@@ -127,12 +109,16 @@ The migration runs on a single feature branch and lands as one merge:
       `lib/wasi/**`, `lib/core/**`, `wado-compiler` internals, examples, fixtures,
       and docs.
 - [x] Update `wado-from-idl` so its generated stdlib emits `interface` blocks.
-- [x] Keep the `effect` keyword in the parser for `<effect E>` polymorphic effect
-      parameters only. Remove `effect` as a declaration form.
 - [x] Add `cm_interface_fq` to `WorldImportInfo` and populate it from the
       referenced interface's `#[cm(...)]`.
 - [x] World imports/exports are bare WIT-faithful interface refs (`import Foo;`
       / `export Foo;`); the brace-block form has been removed.
+- [ ] Rename `<effect E>` to `<interface E>` and remove the `effect` keyword
+      entirely. Touches the parser, AST/TIR/NIR effect-parameter nodes, the
+      elaborator's effect-row plumbing, `lib/core/iter.wado` and other stdlib
+      `<effect E>` sites, examples, fixtures, and dependent WEPs
+      ([Closure Implementation](./wep-2026-01-16-closure-implementation.md),
+      [Effect Handler](./wep-2026-04-11-effect-handler.md), etc.).
 - [ ] Update WEP: WIT and Wado Mapping to mark the interface/effect split as
       superseded.
 
@@ -201,9 +187,13 @@ form is unambiguous and minimal.
   new WASI/CM library currently requires either putting the binding `.wado`
   in this list or feeding it through `CompilerHost`. Neither path reads
   embedded WIT directly.
-- Cargo dependencies do not yet include `wit-parser` / `wit-component`. The
-  compiler relies on `wado-from-idl`-generated `.wado` files as the source of
-  truth.
+- `wit-parser` is in `[workspace.dependencies]` but is consumed only by
+  `wado-from-idl` (WIT → Wado, build-time). `wit-component` and
+  `wit-encoder` are not yet added; they are required by the producer-side
+  work in §"Producer Side: WIT Generation and Embedding" and by future
+  consumer-side `component-type` parsing for external `.wasm` imports.
+  `wado-compiler` itself still relies on `wado-from-idl`-generated `.wado`
+  files as the source of truth.
 - Producer-side WIT embedding (the `component-type` custom section described
   in [WIT Bundling](./wep-2026-03-21-wit-bundling.md)) is designed but not
   yet implemented in codegen. Without it, a Wado-compiled component cannot
@@ -522,9 +512,10 @@ This WEP is a roadmap document. Each item below either has its own WEP or
 will get one when work starts.
 
 - [x] Type-driven CM binding synthesis (WEP: TIR-Level CM Binding Synthesis).
-- [x] Unify `effect` declarations into `interface` (single-branch migration;
-      see Migration Plan above). Retain `effect` keyword for `<effect E>`
-      polymorphic effect parameters.
+- [x] Unify `effect` block declarations into `interface` (landed; see
+      Migration Plan above).
+- [ ] Rename `<effect E>` to `<interface E>` and retire the `effect`
+      keyword entirely. Tracked in Migration Plan.
 - [x] World imports/exports are bare WIT-faithful interface refs
       (`import Foo;` / `export Foo;`); brace-form removed. `WorldImportInfo`
       and `WorldExportInfo` carry `cm_interface_fq` resolved from the
@@ -541,9 +532,10 @@ will get one when work starts.
 - [ ] Decouple HTTP handler specialization from codegen: drive it from
       `WorldExportInfo::from_interface_fq` rather than the return-type sniffer
       (`returns_http_response`) and the post-hoc `append_http_handler_export`.
-- [ ] Add `wit-parser` / `wit-component` as compiler dependencies, behind a
-      use-resolver entry point that reads embedded `component-type` from
-      external `.wasm` imports.
+- [ ] Add `wit-component` as a `wado-compiler` dependency (consumer side).
+      `wit-parser` is already in `[workspace.dependencies]` for
+      `wado-from-idl`; the consumer-side use-resolver reads embedded
+      `component-type` from external `.wasm` imports via the same crate.
 - [ ] Construct world / interface / resource entries in the existing
       registries directly from parsed WIT, on the same code path as
       stdlib-derived entries.
@@ -562,9 +554,9 @@ will get one when work starts.
 
 - A single, documented end-to-end goal for WIT support replaces a scatter of
   point WEPs.
-- One keyword (`interface`) for both the import and export sides, matching
-  WIT's vocabulary directly. The `effect` keyword keeps a narrow,
-  well-defined role (polymorphic effect parameters).
+- One keyword (`interface`) for block declarations and for polymorphic
+  parameters (`<interface E>`), matching WIT's vocabulary directly. The
+  `effect` keyword is retired.
 - World imports are traceable to WIT FQ names by construction, removing the
   fragile method-name-based disambiguation in `WasiRegistry`.
 - Adding a new WASI or third-party CM library no longer requires patching the
@@ -575,10 +567,11 @@ will get one when work starts.
 
 ### Negative
 
-- A one-shot rename of `effect` to `interface` touches the entire stdlib and
-  any user code that declared effects. There is no migration period; this is
-  a single-branch change.
-- Bringing `wit-parser` / `wit-component` into the compiler increases the
+- Retiring `effect` is a two-step rename: block declarations have already
+  landed; `<effect E>` → `<interface E>` still has to land. Both are
+  one-shot, no-deprecation changes against the stdlib, fixtures, and any
+  user code.
+- Bringing `wit-encoder` / `wit-component` into the compiler increases the
   dependency surface and binary size of the compiler itself.
 - L3 world scoping changes the meaning of `use`: a `use` of an interface not
   in the active world's imports becomes a compile error. This is a
