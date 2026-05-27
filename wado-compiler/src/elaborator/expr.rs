@@ -148,10 +148,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TirExpr {
         let ast_id = expr.id();
         let resolved = self.resolve_expr_inner(expr, ctx, expected_type);
-        self.sem
-            .types
-            .expression_types
-            .insert(ast_id, resolved.type_id);
+        self.record_expression_type(ast_id, resolved.type_id);
         resolved
     }
 
@@ -1852,6 +1849,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TirExpr {
         match &if_expr.condition {
             Condition::LetChain { elements, .. } => {
+                self.record_desugar(if_expr.id, super::sem::types::DesugarKind::IfLetChain);
                 // Resolve else_block in outer scope (chain bindings not visible there)
                 let else_block = if_expr
                     .else_block

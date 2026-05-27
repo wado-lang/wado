@@ -148,6 +148,8 @@ pub(crate) enum DesugarKind {
     /// `expr matches { PATTERN }` → two-arm `match` expression.
     Matches,
     /// `a < b < c` → `(a < b) && (b < c)` with middle-term let bindings.
+    /// Only recorded when the chain has 2+ comparisons (single
+    /// comparisons collapse to a plain `Binary` and are not tagged).
     ComparisonChain,
     /// `for let v of tuple { body }` → unrolled body per element.
     ForOfTuple,
@@ -155,11 +157,18 @@ pub(crate) enum DesugarKind {
     /// TIR node consumed by monomorphization.
     ForOfVariadic,
     /// `for let v of expr { body }` → `IntoIterator` / `next()` loop.
+    /// Not recorded when the iterable fails the `IntoIterator` check.
     ForOfIterator,
+    /// `for (init; cond; update) { body }` → labeled-block + loop with
+    /// init, conditional break, body, update (the C-style for desugar).
+    CStyleFor,
     /// `while cond { body }` → `loop { if !cond { break } body }`.
     While,
     /// `while let chain { body }` → let-chain `match` with break arm.
     WhileLetChain,
+    /// `if let chain { … } else { … }` → let-chain `match` with the
+    /// else block as the wildcard arm.
+    IfLetChain,
     /// `x += y` (and other compound ops) → `x = x + y` style rewrite.
     CompoundAssign,
 }

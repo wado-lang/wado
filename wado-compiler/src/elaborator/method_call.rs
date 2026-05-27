@@ -293,6 +293,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Get method info (error if method not found)
+        // Track whether the lookup actually found a real method. The
+        // error-recovery branch below fabricates a placeholder MethodInfo
+        // so resolution can continue past a diagnostic, but the
+        // FunctionRef we then build mangles a non-existent method
+        // against the receiver's struct module — we MUST NOT record that
+        // as a successful dispatch in `sem.types.method_dispatch`, or
+        // Stage 5 reify would try to lower a call to a function that
+        // does not exist.
+        let method_found = method_info.is_some();
         let MethodInfo {
             mut return_type,
             self_kind,
@@ -766,18 +775,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Stage 4 of WEP 2026-05-26: record the dispatch decision so the
         // future `reify` pass can emit the same `MethodCall` TIR without
-        // re-running trait lookup / method-name mangling. Synthetic calls
-        // (`call_id == None`) and the early-returning short-circuits above
-        // (tuple `.len()` / `.zip()`) skip recording per the
-        // `MethodDispatch` contract.
-        if let Some(call_id) = call_id {
-            self.sem.types.method_dispatch.insert(
-                call_id,
-                super::sem::types::MethodDispatch {
-                    function_ref: func.clone(),
-                    self_kind,
-                },
-            );
+        // re-running trait lookup / method-name mangling. Skipped when:
+        //  - `call_id == None` (synthetic call: for-of's `.into_iter()`
+        //    / `.next()`),
+        //  - The early-returning short-circuits above (tuple `.len()` /
+        //    `.zip()`, static-method-as-instance error) returned before
+        //    reaching here, or
+        //  - Method lookup failed and we are in the error-recovery
+        //    placeholder path (`method_found == false`).
+        if method_found {
+            self.record_method_dispatch(call_id, &func, self_kind);
         }
 
         Self::build_tir_method_call(

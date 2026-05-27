@@ -386,8 +386,10 @@ impl Semantics {
             DesugarKind::ForOfTuple => "for_of_tuple",
             DesugarKind::ForOfVariadic => "for_of_variadic",
             DesugarKind::ForOfIterator => "for_of_iterator",
+            DesugarKind::CStyleFor => "c_style_for",
             DesugarKind::While => "while",
             DesugarKind::WhileLetChain => "while_let_chain",
+            DesugarKind::IfLetChain => "if_let_chain",
             DesugarKind::CompoundAssign => "compound_assign",
         };
         Some(name.to_string())
