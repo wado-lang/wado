@@ -768,7 +768,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // Pre-populated from snapshot.
                     continue;
                 }
-                indices.insert(src.clone(), Self::build_func_index(&module.items));
+                indices.insert(src.clone(), super::build_func_index(&module.items));
             }
             indices
         };
@@ -1023,7 +1023,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 trait_check_stack: RefCell::new(Vec::new()),
                 method_info_cache: IndexMap::default(),
                 pending_anonymous_structs: Vec::new(),
-                current_module_func_index: IndexMap::default(), // Built in resolve_module
                 references: Rc::clone(&state.references),
                 local_symbols: Rc::clone(&state.local_symbols),
                 local_types: Rc::clone(&state.local_types),

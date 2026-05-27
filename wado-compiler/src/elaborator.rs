@@ -54,6 +54,22 @@ use crate::tir::{
 
 use trait_env::TraitEnv;
 
+/// Build a function-name → item-index map for a module's items. Used
+/// once per loaded module during annotate
+/// ([`orchestration::Elaborator::annotate_modules`]) to populate
+/// [`tysys::TypeSystem::loaded_module_func_indices`]; the per-module
+/// body walk then consults that pre-built index instead of rebuilding
+/// here.
+pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
+    let mut index = IndexMap::default();
+    for (i, item) in items.iter().enumerate() {
+        if let Item::Function(func) = item {
+            index.insert(func.name.clone(), i);
+        }
+    }
+    index
+}
+
 /// `true` if `name` denotes a built-in primitive Wado type. Primitives
 /// have inherent impl blocks in `core:prelude/primitive` but no
 /// `Symbol` entry to canonicalise through, so both
@@ -227,9 +243,6 @@ pub struct Elaborator<'a, H: CompilerHost> {
     // MIGRATION: → TypeSystem (type-system cache); deferred — needs the
     //   pipeline-wide cache lifetime story.
     method_info_cache: IndexMap<(TypeId, String), Option<types::MethodInfo>>,
-    /// Index from function name → position in `current_module_items` for O(1) lookup.
-    // MIGRATION: transient annotate-time scope (rebuilt for the active module).
-    current_module_func_index: IndexMap<String, usize>,
     /// Use→def map for local variables. Shared via `Rc<RefCell<…>>` with
     /// [`crate::elaborator::orchestration::AnnotateState`] so LSP queries see
     /// references as soon as the elaborator has walked the body.
@@ -312,7 +325,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             trait_check_stack: RefCell::new(Vec::new()),
             method_info_cache: IndexMap::default(),
             pending_anonymous_structs: Vec::new(),
-            current_module_func_index: IndexMap::default(),
             references: Rc::new(RefCell::new(IndexMap::default())),
             local_symbols: Rc::new(RefCell::new(IndexMap::default())),
             local_types: Rc::new(RefCell::new(IndexMap::default())),
@@ -607,17 +619,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.local_types.borrow_mut().insert(key, type_id);
     }
 
-    /// Build a function-name → index map for a module's items.
-    fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
-        let mut index = IndexMap::default();
-        for (i, item) in items.iter().enumerate() {
-            if let Item::Function(func) = item {
-                index.insert(func.name.clone(), i);
-            }
-        }
-        index
-    }
-
     /// Look up a function by name in a loaded module, returning the Item at that index.
     fn lookup_func_in_loaded_module<'b>(
         loaded_modules: &'b IndexMap<ModuleSource, Module>,
@@ -636,8 +637,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Look up a function by name in current module items.
+    ///
+    /// Consults [`tysys::TypeSystem::loaded_module_func_indices`] — the
+    /// per-module name→item-index map built once during annotate — to
+    /// avoid rebuilding the index at every `resolve_module` call.
     fn lookup_current_func(&self, func_name: &str) -> Option<&ast::Function> {
-        let &idx = self.current_module_func_index.get(func_name)?;
+        let idx_map = self
+            .tysys
+            .loaded_module_func_indices
+            .get(&self.current_module_source)?;
+        let &idx = idx_map.get(func_name)?;
         if let Item::Function(func) = &self.current_module_items[idx] {
             Some(func)
         } else {
@@ -921,8 +930,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.current_module_source = module_source.clone();
         // Store current module items as a reference (no clone)
         self.current_module_items = &module.items;
-        // Build function name → index for O(1) lookup
-        self.current_module_func_index = Self::build_func_index(self.current_module_items);
+        // Function name → item-index lookup is pre-built per loaded
+        // module on `tysys.loaded_module_func_indices` during annotate;
+        // `lookup_current_func` consults it through
+        // `self.current_module_source` so no per-resolve rebuild here.
         // Clear trait lookup caches (current_module_items changed)
         self.indexing_trait_cache.clear();
         // Build effect source map from imports
@@ -1398,6 +1409,12 @@ pub fn resolve_module<H: CompilerHost>(
     let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
     let (wasi_registry, _world_registry) = WasiRegistry::build_from_stdlib();
     let (trait_env, _) = TraitEnv::build(loaded_modules, symbols);
+    // Seed the loaded-module function index for the single module this
+    // path resolves. The main pipeline populates this map across every
+    // loaded module in `annotate_modules`; here we only need the one,
+    // so `lookup_current_func` can find functions defined in `module`.
+    let mut func_indices = IndexMap::default();
+    func_indices.insert(module_source.clone(), build_func_index(&module.items));
     let tysys = tysys::TypeSystem {
         type_table,
         all_newtypes: Rc::new(IndexMap::default()),
@@ -1412,7 +1429,7 @@ pub fn resolve_module<H: CompilerHost>(
         builtin_registry: Rc::new(builtin_registry),
         included_files: Rc::new(IndexMap::default()),
         known_type_names_cache: Rc::new(IndexSet::default()),
-        loaded_module_func_indices: Rc::new(IndexMap::default()),
+        loaded_module_func_indices: Rc::new(func_indices),
     };
     let mut elaborator = Elaborator::new(symbols, loaded_modules, tysys, logger);
     elaborator.resolve_module(module, module_source)
