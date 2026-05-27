@@ -19,10 +19,12 @@
 //! `local_types`; Stage 4 adds `expression_types` (per-`AstId` resolved
 //! type for every expression visited by the body walk),
 //! `method_dispatch` (per-`MethodCallExpr` resolved target plus the
-//! receiver-adjustment kind that annotate picked), and `coercions`
+//! receiver-adjustment kind that annotate picked), `coercions`
 //! (per-`AstId` coercion choice that
-//! [`super::super::Elaborator::try_coerce`] applied). Desugar-kind
-//! annotations land as a follow-up commit inside Stage 4.
+//! [`super::super::Elaborator::try_coerce`] applied), and `desugars`
+//! (per-`AstId` rewrite tag for the TIR-direct desugar sites: `assert`,
+//! `matches`, comparison chains, `for x of …`, `while`, and compound
+//! assignment).
 
 use crate::ast::{self, AstId};
 use crate::hashmap::IndexMap;
@@ -126,4 +128,38 @@ pub(crate) struct TypeAnnotations {
     /// expected type, or no `expected_type` was supplied) leave no entry.
     /// See [`CoercionChoice`] / [`CoercionKind`] for the variants.
     pub(crate) coercions: IndexMap<AstId, CoercionChoice>,
+    /// Desugar-kind tag for each TIR-direct rewrite site (assert,
+    /// matches, comparison chain, for-of, while, compound assignment),
+    /// keyed by the enclosing AST node's [`AstId`]. See [`DesugarKind`].
+    pub(crate) desugars: IndexMap<AstId, DesugarKind>,
+}
+
+/// Which TIR-direct desugar path the body walk took at a source-level
+/// rewrite site. The variants enumerate every surface form whose
+/// lowering bypasses synthetic AST construction (see the LSP-friendly
+/// compiler architecture note in
+/// `wado-compiler/CLAUDE.md`); the future `reify` pass (Stage 5) reads
+/// this tag to pick the same expansion without re-deciding the shape.
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+pub(crate) enum DesugarKind {
+    /// `assert cond[, msg];` → power-assert capture + guard expansion.
+    Assert,
+    /// `expr matches { PATTERN }` → two-arm `match` expression.
+    Matches,
+    /// `a < b < c` → `(a < b) && (b < c)` with middle-term let bindings.
+    ComparisonChain,
+    /// `for let v of tuple { body }` → unrolled body per element.
+    ForOfTuple,
+    /// `for let v of variadic_tuple { body }` → deferred `VariadicForOf`
+    /// TIR node consumed by monomorphization.
+    ForOfVariadic,
+    /// `for let v of expr { body }` → `IntoIterator` / `next()` loop.
+    ForOfIterator,
+    /// `while cond { body }` → `loop { if !cond { break } body }`.
+    While,
+    /// `while let chain { body }` → let-chain `match` with break arm.
+    WhileLetChain,
+    /// `x += y` (and other compound ops) → `x = x + y` style rewrite.
+    CompoundAssign,
 }

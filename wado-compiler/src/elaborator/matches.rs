@@ -28,6 +28,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         _expected_type: Option<TypeId>,
     ) -> TirExpr {
+        self.record_desugar(m.id, super::sem::types::DesugarKind::Matches);
         let scrutinee = self.resolve_expr(&m.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 

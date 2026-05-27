@@ -114,6 +114,12 @@ pub struct Semantics {
     /// [`crate::elaborator::sem::types::CoercionChoice`] for the data
     /// shape.
     pub(crate) coercions: IndexMap<SymbolKey, crate::elaborator::sem::types::CoercionChoice>,
+    /// TIR-direct desugar tags recorded by the body walk at each
+    /// `assert` / `matches` / comparison-chain / for-of / `while` /
+    /// compound-assignment site, keyed by the enclosing AST node's
+    /// `(module, AstId)`. See
+    /// [`crate::elaborator::sem::types::DesugarKind`].
+    pub(crate) desugars: IndexMap<SymbolKey, crate::elaborator::sem::types::DesugarKind>,
     /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `build_tir` did not run or bailed.
@@ -169,6 +175,7 @@ impl Semantics {
         expression_types: IndexMap<SymbolKey, TypeId>,
         method_dispatch: IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch>,
         coercions: IndexMap<SymbolKey, crate::elaborator::sem::types::CoercionChoice>,
+        desugars: IndexMap<SymbolKey, crate::elaborator::sem::types::DesugarKind>,
         tir_modules: IndexMap<ModuleSource, TirModule>,
     ) -> Self {
         Self {
@@ -185,6 +192,7 @@ impl Semantics {
             expression_types,
             method_dispatch,
             coercions,
+            desugars,
             tir_modules,
             is_complete: false,
         }
@@ -360,6 +368,40 @@ impl Semantics {
     /// for the stable public view onto each entry.
     pub fn iter_coercions(&self) -> impl Iterator<Item = &SymbolKey> {
         self.coercions.keys()
+    }
+
+    /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
+    /// desugar tag at `key`.
+    ///
+    /// Returns the variant name (lower_snake_case) for a TIR-direct
+    /// rewrite site (`assert`, `matches`, comparison chain, for-of,
+    /// `while`, compound assignment) or `None` for nodes that did not
+    /// take a desugar path. See
+    /// [`crate::elaborator::sem::types::DesugarKind`] for the full
+    /// variant set.
+    #[must_use]
+    pub fn desugar_view(&self, key: &SymbolKey) -> Option<String> {
+        use crate::elaborator::sem::types::DesugarKind;
+        let kind = self.desugars.get(key)?;
+        let name = match kind {
+            DesugarKind::Assert => "assert",
+            DesugarKind::Matches => "matches",
+            DesugarKind::ComparisonChain => "comparison_chain",
+            DesugarKind::ForOfTuple => "for_of_tuple",
+            DesugarKind::ForOfVariadic => "for_of_variadic",
+            DesugarKind::ForOfIterator => "for_of_iterator",
+            DesugarKind::While => "while",
+            DesugarKind::WhileLetChain => "while_let_chain",
+            DesugarKind::CompoundAssign => "compound_assign",
+        };
+        Some(name.to_string())
+    }
+
+    /// Iterate every recorded desugar tag keyed by the enclosing AST
+    /// node's `(module, AstId)`. Pair with [`Self::desugar_view`] for the
+    /// stable public view onto each entry.
+    pub fn iter_desugars(&self) -> impl Iterator<Item = &SymbolKey> {
+        self.desugars.keys()
     }
 
     /// URI (filename) of a module, when the module has one.
@@ -698,6 +740,7 @@ impl Semantics {
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
         )
     }
 }
@@ -793,6 +836,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
         );
     }
 
@@ -820,6 +864,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             TypeTable::new(),
             interner,
             None,
+            IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
@@ -880,6 +925,10 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         SymbolKey,
         crate::elaborator::sem::types::CoercionChoice,
     > = IndexMap::default();
+    let mut desugars: IndexMap<
+        SymbolKey,
+        crate::elaborator::sem::types::DesugarKind,
+    > = IndexMap::default();
     for (module_source, sem) in state.module_semantics.iter_mut() {
         references.extend(std::mem::take(&mut sem.bindings.references));
         locals.extend(std::mem::take(&mut sem.bindings.local_symbols));
@@ -901,6 +950,11 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
                 .into_iter()
                 .map(|(ast_id, choice)| (SymbolKey::new(module_source.clone(), ast_id), choice)),
         );
+        desugars.extend(
+            std::mem::take(&mut sem.types.desugars)
+                .into_iter()
+                .map(|(ast_id, kind)| (SymbolKey::new(module_source.clone(), ast_id), kind)),
+        );
     }
 
     Semantics {
@@ -917,6 +971,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         expression_types,
         method_dispatch,
         coercions,
+        desugars,
         tir_modules,
         is_complete: lower_ok,
     }

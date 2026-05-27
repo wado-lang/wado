@@ -857,6 +857,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 };
                 sem.types.coercions.insert(key.ast_id, choice.clone());
             }
+            for (key, kind) in &snap.desugars {
+                let Some(sem) = module_semantics.get_mut(&key.module) else {
+                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+                    continue;
+                };
+                sem.types.desugars.insert(key.ast_id, *kind);
+            }
         }
 
         let tysys = TypeSystem {

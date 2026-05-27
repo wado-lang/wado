@@ -475,6 +475,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         );
     }
 
+    /// Record a TIR-direct desugar tag for the AST node at `ast_id`.
+    /// Called from each `assert` / `matches` / comparison-chain / for-of
+    /// / `while` / compound-assignment lowering site so the future
+    /// `reify` pass can pick the same expansion path. See
+    /// [`sem::types::DesugarKind`].
+    pub(super) fn record_desugar(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        kind: sem::types::DesugarKind,
+    ) {
+        self.sem.types.desugars.insert(ast_id, kind);
+    }
+
     /// Record a local binding's [`Symbol`] and resolved [`TypeId`] so that
     /// LSP hover on a use site can retrieve the defining name / mutability
     /// and inlay hints can surface the inferred type. Called at each site

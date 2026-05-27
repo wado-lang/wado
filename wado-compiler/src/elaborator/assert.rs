@@ -68,6 +68,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
         let span = assert_stmt.span;
+        self.record_desugar(assert_stmt.id, super::sem::types::DesugarKind::Assert);
 
         // Phase 1: read-only AST scan to decide captures.
         let mut scanner = CaptureScanner::new();

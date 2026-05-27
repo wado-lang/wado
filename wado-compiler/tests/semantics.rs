@@ -278,6 +278,48 @@ export fn run() {
     );
 }
 
+/// Stage 4 of the elaborator re-architecture WEP: each TIR-direct
+/// desugar site (`assert`, `matches`, comparison chain, for-of, `while`,
+/// compound assignment) records its variant in
+/// `ModuleSemantics::types.desugars`. Verify a few representative kinds
+/// land in the map for a small program that exercises them.
+#[test]
+fn semantics_records_desugar_kind_per_ast_id() {
+    let source = r"
+export fn run() {
+    let mut x = 0;
+    let xs: Array<i32> = [10, 20, 30];
+    for let v of xs {
+        x += v;
+    }
+    while x > 0 {
+        x -= 1;
+    }
+    let chained = 1 < 2 && 2 < 3;
+    assert chained;
+}
+";
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+
+    let mut kinds: Vec<String> = sem
+        .iter_desugars()
+        .filter(|key| key.module == entry)
+        .filter_map(|key| sem.desugar_view(key))
+        .collect();
+    kinds.sort();
+    kinds.dedup();
+    let expected = ["assert", "compound_assign", "for_of_iterator", "while"];
+    for want in &expected {
+        assert!(
+            kinds.iter().any(|k| k == want),
+            "expected desugar kind {want} in {kinds:?}",
+        );
+    }
+}
+
 /// Stage 4 of the elaborator re-architecture WEP: every successful
 /// branch of `try_coerce` records its [`CoercionKind`] on
 /// `ModuleSemantics::types.coercions`. Verify the numeric-literal

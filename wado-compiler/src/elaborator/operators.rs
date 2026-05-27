@@ -1269,6 +1269,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         compound: &ast::CompoundAssignExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
+        self.record_desugar(compound.id, super::sem::types::DesugarKind::CompoundAssign);
         let op = match compound.op {
             ast::CompoundAssignOp::Add => BinaryOp::Add,
             ast::CompoundAssignOp::Sub => BinaryOp::Sub,
@@ -1304,6 +1305,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         use crate::tir::{TirBlock, TirStmt, TirStmtKind};
+
+        self.record_desugar(chain.id, super::sem::types::DesugarKind::ComparisonChain);
 
         if chain.comparisons.is_empty() {
             return self.resolve_expr(&chain.first, ctx, None);

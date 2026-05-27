@@ -2143,8 +2143,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     !is_enumerate,
                     "variadic for-of with .enumerate() is not yet supported"
                 );
+                self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfVariadic);
                 self.resolve_variadic_for_of(for_of, iterable, ctx)
             } else {
+                self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfTuple);
                 self.resolve_tuple_for_of(for_of, iterable, &elems, is_enumerate, ctx)
             }
         } else {
@@ -2169,6 +2171,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: for_of.span,
                 });
             }
+            self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfIterator);
             self.resolve_iterator_for_of(for_of, ctx)
         };
 
@@ -2912,6 +2915,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
         let stmts = match &w.condition {
             Condition::Expr(cond_expr) => {
+                self.record_desugar(w.id, super::sem::types::DesugarKind::While);
                 let cond_tir = self.resolve_expr(cond_expr, ctx, Some(TypeTable::BOOL));
                 let cond_span = cond_expr.span();
                 let neg_cond = TirExpr::new(
@@ -2947,6 +2951,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 elements,
                 span: cond_span,
             } => {
+                self.record_desugar(w.id, super::sem::types::DesugarKind::WhileLetChain);
                 // The else-branch unconditionally terminates the loop. Build it as a
                 // TirBlock holding a single `Break` so `resolve_let_chain_stmts`
                 // (shared with `if let` resolution) can splice it in as the
