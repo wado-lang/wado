@@ -369,7 +369,7 @@ impl Semantics {
     /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
     /// desugar tag at `key`.
     ///
-    /// Returns the variant name (lower_snake_case) for a TIR-direct
+    /// Returns the variant name (`lower_snake_case`) for a TIR-direct
     /// rewrite site (`assert`, `matches`, comparison chain, for-of,
     /// `while`, compound assignment) or `None` for nodes that did not
     /// take a desugar path. See
@@ -919,7 +919,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         IndexMap::default();
     let mut desugars: IndexMap<SymbolKey, crate::elaborator::sem::types::DesugarKind> =
         IndexMap::default();
-    for (module_source, sem) in state.module_semantics.iter_mut() {
+    for (module_source, sem) in &mut state.module_semantics {
         references.extend(std::mem::take(&mut sem.bindings.references));
         locals.extend(std::mem::take(&mut sem.bindings.local_symbols));
         local_types.extend(std::mem::take(&mut sem.types.local_types));
