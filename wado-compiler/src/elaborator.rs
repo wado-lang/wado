@@ -40,9 +40,7 @@ use std::rc::Rc;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, Item, Module};
-use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
-use crate::component_model::WasiRegistry;
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, MethodName};
@@ -51,8 +49,6 @@ use crate::tir::{
     self as tir, TirEnum, TirEnumCase, TirFlags, TirFlagsMember, TirModule, TirNewtype, TypeId,
     TypeTable,
 };
-
-use trait_env::TraitEnv;
 
 /// Build a function-name → item-index map for a module's items. Used
 /// once per loaded module during annotate
@@ -283,57 +279,6 @@ pub struct Elaborator<'a, H: CompilerHost> {
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
-    pub(crate) fn new(
-        symbols: &'a SymbolTable,
-        loaded_modules: &'a IndexMap<ModuleSource, Module>,
-        tysys: tysys::TypeSystem,
-        logger: &'a Logger<'a, H>,
-    ) -> Self {
-        Self {
-            tysys,
-            symbols,
-            loaded_modules,
-            imported_type_sources: IndexMap::default(),
-            import_original_names: IndexMap::default(),
-            local_struct_fields: IndexMap::default(),
-            local_newtypes: IndexMap::default(),
-            local_generic_newtypes: IndexMap::default(),
-            local_enum_cases: IndexMap::default(),
-            local_flags_cases: IndexMap::default(),
-            local_variant_cases: IndexMap::default(),
-            function_return_types: IndexMap::default(),
-            imported_functions: IndexSet::default(),
-            namespace_imports: IndexMap::default(),
-            logger,
-            current_module_source: ModuleSource::entry_point_uninitialized(),
-            entry_module_source: ModuleSource::entry_point_uninitialized(),
-            current_module_items: &[],
-            effect_sources: IndexMap::default(),
-            current_effect_params: IndexSet::default(),
-            current_effect_param_decls: IndexMap::default(),
-            trait_ctx: trait_env::TraitContext::default(),
-            generic_struct_names: IndexSet::default(),
-            generic_function_params: IndexMap::default(),
-            generic_function_resolved_param_types: IndexMap::default(),
-            generic_function_resolved_return_types: IndexMap::default(),
-            generic_method_params: IndexMap::default(),
-            generic_method_resolved_param_types: IndexMap::default(),
-            current_module_globals: IndexMap::default(),
-            imported_globals: IndexMap::default(),
-            associated_constants: IndexMap::default(),
-            indexing_trait_cache: IndexMap::default(),
-            trait_check_stack: RefCell::new(Vec::new()),
-            method_info_cache: IndexMap::default(),
-            pending_anonymous_structs: Vec::new(),
-            references: Rc::new(RefCell::new(IndexMap::default())),
-            local_symbols: Rc::new(RefCell::new(IndexMap::default())),
-            local_types: Rc::new(RefCell::new(IndexMap::default())),
-            default_scope_module: None,
-            invocations: Rc::new(crate::kiln::InvocationIndex::new()),
-            interner: Rc::new(RefCell::new(ModuleSourceInterner::new())),
-        }
-    }
-
     /// Construct a [`TypeLookup`] view over the elaborator's current import
     /// context and shared `all_*` tables. Use this for any type-name
     /// resolution; never reach into `all_*` directly.
@@ -1396,41 +1341,4 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub fn into_type_table(self) -> Rc<RefCell<TypeTable>> {
         self.tysys.type_table
     }
-}
-
-pub fn resolve_module<H: CompilerHost>(
-    module: &Module,
-    module_source: ModuleSource,
-    symbols: &SymbolTable,
-    loaded_modules: &IndexMap<ModuleSource, Module>,
-    logger: &Logger<H>,
-) -> Result<TirModule, Bail> {
-    let type_table = Rc::new(RefCell::new(crate::tir::TypeTable::new()));
-    let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
-    let (wasi_registry, _world_registry) = WasiRegistry::build_from_stdlib();
-    let (trait_env, _) = TraitEnv::build(loaded_modules, symbols);
-    // Seed the loaded-module function index for the single module this
-    // path resolves. The main pipeline populates this map across every
-    // loaded module in `annotate_modules`; here we only need the one,
-    // so `lookup_current_func` can find functions defined in `module`.
-    let mut func_indices = IndexMap::default();
-    func_indices.insert(module_source.clone(), build_func_index(&module.items));
-    let tysys = tysys::TypeSystem {
-        type_table,
-        all_newtypes: Rc::new(IndexMap::default()),
-        all_generic_newtypes: Rc::new(IndexMap::default()),
-        all_struct_fields: Rc::new(IndexMap::default()),
-        all_variant_cases: Rc::new(IndexMap::default()),
-        all_enum_cases: Rc::new(IndexMap::default()),
-        all_flags_cases: Rc::new(IndexMap::default()),
-        all_resource_types: Rc::new(IndexMap::default()),
-        trait_env,
-        wasi_registry,
-        builtin_registry: Rc::new(builtin_registry),
-        included_files: Rc::new(IndexMap::default()),
-        known_type_names_cache: Rc::new(IndexSet::default()),
-        loaded_module_func_indices: Rc::new(func_indices),
-    };
-    let mut elaborator = Elaborator::new(symbols, loaded_modules, tysys, logger);
-    elaborator.resolve_module(module, module_source)
 }
