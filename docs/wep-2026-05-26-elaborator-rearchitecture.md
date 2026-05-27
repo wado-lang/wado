@@ -387,11 +387,87 @@ migration; see Trade-offs.
   - The legacy `pub fn resolve_module` single-module wrapper and
     `Elaborator::new` were removed as dead code; all entry now goes
     through `annotate_modules` + `build_tir_from_state`.
-- [ ] **Stage 3 — `ModuleSemantics` population.**
+- [x] **Stage 3 — `ModuleSemantics` population.**
+  - The four sub-structs (`bindings`, `imports`, `types`, `decls`) gained
+    their concrete fields, replacing the flat per-module fields that
+    previously lived on `Elaborator` and the `Rc<RefCell<…>>` maps that
+    `AnnotateState` shared with the body walk.
+  - `Elaborator` now owns a single `sem: ModuleSemantics`; the per-module
+    body walk's `&mut sem` access stays disjoint across modules and the
+    shared-mutability plumbing is gone.
+  - `AnnotateState.module_semantics: IndexMap<ModuleSource, ModuleSemantics>`
+    replaces `references` / `local_symbols` / `local_types`
+    `Rc<RefCell<…>>`. The snapshot's flat maps are split by `key.module`
+    during seeding; `semantics_with_logger` flattens back at the end so
+    the LSP-facing `Semantics` API (keyed by full `SymbolKey`) is
+    unchanged.
+  - `Elaborator::build_tir_from_state` now takes `&mut AnnotateState` so
+    it can swap each module's `ModuleSemantics` out for the body walk
+    and reinstall the populated instance afterwards.
 - [ ] **Stage 4 — Per-`AstId` annotation storage.**
 - [ ] **Stage 5 — `annotate_bodies` / `reify` split.**
 - [ ] **Stage 6 — Liveness and DCE.**
 - [ ] **Stage 7 — Cleanup.**
+
+### Stage 3 design notes
+
+#### `Elaborator` owns `ModuleSemantics`, not `&mut`
+
+The WEP's Decision sketch had the per-module elaborator hold
+`&mut ModuleSemantics`. The implementation diverges: `Elaborator` owns a
+`sem: ModuleSemantics` by value, populated from `state.module_semantics`
+on entry to `resolve_module` and re-installed on exit.
+
+The motivation is the same — keep the body walk's mutable access
+disjoint across modules — but ownership turned out to be the lighter
+shape:
+
+- No second lifetime parameter on `Elaborator<'a, H>`, which already
+  threads `'a` through `symbols` / `loaded_modules` / `logger` /
+  `current_module_items`. Adding `'sem` would touch every `impl<'a, H>`
+  block and the existing extension methods on `TypeParamScope`.
+- Same `Clone`-by-shallow-Rc handoff pattern as
+  [`tysys::TypeSystem`] already uses — moving a per-module value out of
+  the driver, into the per-module worker, and back at completion. The
+  call site reads as one symmetric pair (`swap_remove` + `insert`)
+  around the body walk.
+- `&mut ModuleSemantics` would have forced the driver to keep
+  `state.module_semantics` borrowed across `resolve_module`, conflicting
+  with the iteration over `state.sorted_sources` (cloned out of the
+  same `state`). Owning the value sidesteps that.
+
+The decision is structural, not policy: the membership rule and the
+sub-struct boundaries from the Decision section all stand.
+
+#### `module_semantics` is the storage location, `Semantics` keeps its flat API
+
+`AnnotateState.module_semantics: IndexMap<ModuleSource, ModuleSemantics>`
+replaces three `Rc<RefCell<…>>` fields (`references`, `local_symbols`,
+`local_types`). `semantics_with_logger` flattens it back into the
+existing `Semantics` flat maps after `build_tir_from_state` returns,
+keeping the LSP-facing query surface (`Semantics::referenced_symbol`,
+`iter_references`, `local_type_name`, …) byte-for-byte compatible with
+Stage 2.
+
+The snapshot seeds module_semantics by splitting its own flat maps by
+`key.module`. The split is O(snapshot size) and happens once per
+compile; the alternative — storing per-module data on the snapshot
+itself — is a Stage 7 cleanup, not a Stage 3 requirement.
+
+The two layouts (per-module on `AnnotateState`, flat on `Semantics`)
+buy the work the elaborator needs from per-module ownership without
+churning the LSP API. A future Stage 7 refactor that promotes
+`module_semantics` to `Semantics` directly can do so without touching
+the LSP query call sites — they go through `Semantics`'s methods.
+
+#### `build_tir_from_state` now takes `&mut AnnotateState`
+
+The per-module body walk needs to swap each `ModuleSemantics` out of
+`state.module_semantics` and back in, which requires unique access to
+the map. `build_tir_from_state`'s signature changes from
+`&AnnotateState` to `&mut AnnotateState` accordingly. The two callers
+(`elaborate_all_modules`, `semantics_with_logger`) own their state by
+value at that point, so threading `&mut` through is mechanical.
 
 ### Stage 2 design notes
 

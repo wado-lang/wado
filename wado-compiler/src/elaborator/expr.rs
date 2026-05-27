@@ -572,7 +572,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check for associated constants (e.g., f64::PI, i32::MAX)
-        if let Some((const_ty, const_expr)) = self.associated_constants.get(&ident.name).cloned() {
+        if let Some((const_ty, const_expr)) = self
+            .sem
+            .decls
+            .associated_constants
+            .get(&ident.name)
+            .cloned()
+        {
             let type_id = self.resolve_type(&const_ty);
             let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
             return TirExpr::new(resolved.kind, type_id, ident.span);
@@ -690,7 +696,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Check for namespace import: ns::Type::Case or ns::Enum::Case
-            if let Some(ns_source) = self.namespace_imports.get(prefix).cloned()
+            if let Some(ns_source) = self.sem.imports.namespace_imports.get(prefix).cloned()
                 && let Some(inner_pos) = suffix.find("::")
             {
                 let type_name = &suffix[..inner_pos];
@@ -811,7 +817,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check for global variables in current module
-        if let Some(&(ty, _mutable)) = self.current_module_globals.get(&ident.name) {
+        if let Some(&(ty, _mutable)) = self.sem.decls.current_module_globals.get(&ident.name) {
             self.record_item_reference_by_name(ident.id, &ident.name);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
@@ -824,23 +830,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check for imported global variables
-        if let Some((source_module, original_name, ty, _mutable)) =
-            self.imported_globals.get(&ident.name)
+        if let Some((source_module, original_name, ty)) = self
+            .sem
+            .decls
+            .imported_globals
+            .get(&ident.name)
+            .map(|(src, orig, ty, _mut)| (src.clone(), orig.clone(), *ty))
         {
             self.record_item_reference_by_name(ident.id, &ident.name);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
-                    module_source: source_module.clone(),
-                    name: original_name.clone(),
+                    module_source: source_module,
+                    name: original_name,
                 },
-                *ty,
+                ty,
                 ident.span,
             );
         }
 
         // Check if it's a known function (function reference)
-        if self.function_return_types.contains_key(&ident.name)
-            || self.imported_functions.contains(&ident.name)
+        if self
+            .sem
+            .decls
+            .function_return_types
+            .contains_key(&ident.name)
+            || self.sem.decls.imported_functions.contains(&ident.name)
         {
             return self.resolve_func_ref_ident(ident, expected_type);
         }
@@ -1053,7 +1067,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             // Fallback: known function but its AST is unreachable (shouldn't
             // normally happen). Emit a stub FuncRef so downstream stays sane.
-            let module_source = if self.function_return_types.contains_key(&ident.name) {
+            let module_source = if self
+                .sem
+                .decls
+                .function_return_types
+                .contains_key(&ident.name)
+            {
                 self.current_module_source.clone()
             } else {
                 self.symbols
@@ -3380,6 +3399,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check if this is a generic struct and infer type arguments
         let (struct_type, mangled_struct_name, fields) = if self
+            .sem
+            .decls
             .generic_struct_names
             .contains(&struct_name)
         {
@@ -3567,7 +3588,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
         };
-        self.local_struct_fields
+        self.sem
+            .decls
+            .local_struct_fields
             .insert(anon_name.clone(), field_info);
 
         // Create TirStruct definition for codegen
@@ -3587,7 +3610,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
 
-        self.pending_anonymous_structs.push(TirStruct {
+        self.sem.decls.pending_anonymous_structs.push(TirStruct {
             name: anon_name.clone(),
             module_source: self.current_module_source.clone(),
             is_pub: false,

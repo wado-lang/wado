@@ -1,17 +1,19 @@
 //! [`ModuleSemantics`] — per-module semantic facts produced by the elaborator.
 //!
-//! Stage 1 skeleton introduced by
-//! [`wep-2026-05-26-elaborator-rearchitecture.md`]. The four sub-structs
-//! are empty at this stage; the migration plan populates them across
-//! stages 3-5 by moving fields off [`super::Elaborator`] and
-//! [`super::orchestration::AnnotateState`].
+//! Introduced by [`wep-2026-05-26-elaborator-rearchitecture.md`]. Stage 1
+//! placed the empty skeleton; Stage 3 populates the four sub-structs with
+//! the per-module state that previously lived as flat fields on
+//! [`super::Elaborator`] (and as `Rc<RefCell<…>>`-shared maps on
+//! [`super::orchestration::AnnotateState`]).
 //!
-//! # Future ownership (per the WEP)
+//! # Ownership
 //!
-//! One instance per loaded module, owned by [`crate::semantics::Semantics`]
-//! in an `IndexMap<ModuleSource, ModuleSemantics>`. `annotate_bodies` takes
-//! `&mut ModuleSemantics` for the module it is processing; every other phase
-//! (including `reify`) takes `&ModuleSemantics`.
+//! One instance per loaded module, owned by
+//! [`super::orchestration::AnnotateState::module_semantics`]. The per-module
+//! [`super::Elaborator`] takes ownership of the instance for the duration
+//! of [`super::Elaborator::resolve_module`] and the driver re-installs it
+//! into the map afterwards; every other phase (including the future
+//! `reify`) takes `&ModuleSemantics`.
 //!
 //! # Decomposition
 //!
@@ -41,10 +43,9 @@ pub(crate) use decls::ModuleDecls;
 pub(crate) use imports::ModuleImports;
 pub(crate) use types::TypeAnnotations;
 
-#[expect(
-    dead_code,
-    reason = "Stage 1 skeleton; populated by stages 3-5 of the elaborator re-architecture."
-)]
+/// Per-module semantic facts. See the module-level documentation for the
+/// membership rules and ownership story.
+#[derive(Default, Clone)]
 pub(crate) struct ModuleSemantics {
     pub(crate) bindings: ModuleBindings,
     pub(crate) imports: ModuleImports,

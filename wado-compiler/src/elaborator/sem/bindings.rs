@@ -1,7 +1,9 @@
 //! [`ModuleBindings`] — `use → def` edges and locally defined symbols.
 //!
-//! Stage 1 skeleton introduced by
-//! [`wep-2026-05-26-elaborator-rearchitecture.md`]. Empty at this stage.
+//! Populated by the body walk (Stage 3 of
+//! [`wep-2026-05-26-elaborator-rearchitecture.md`]) — every call site that
+//! resolves an identifier to its defining symbol writes here, and every
+//! site that introduces a user-visible local binding registers it here.
 //!
 //! # Membership rule
 //!
@@ -11,25 +13,29 @@
 //! module. Per-`AstId` type facts go to [`super::types::TypeAnnotations`],
 //! not here.
 //!
-//! # Planned contents
+//! # Ownership
 //!
-//! - **`references`** — `(module, IdentExpr.id) → (module, defining AstId)`.
-//!   Populated by `resolve_ident` / `resolve_call` / etc. as the body walk
-//!   reaches each identifier. Today lives on
-//!   [`super::super::Elaborator::references`] (shared via `Rc<RefCell<…>>`
-//!   with [`super::super::orchestration::AnnotateState::references`]).
-//! - **`local_symbols`** — locally-defined [`crate::symbol::Symbol`]s
-//!   (let bindings, parameters, closure parameters) keyed by the binding's
-//!   defining [`crate::symbol::SymbolKey`]. Today lives on
-//!   [`super::super::Elaborator::local_symbols`] (shared via
-//!   `Rc<RefCell<…>>` with
-//!   [`super::super::orchestration::AnnotateState::local_symbols`]).
-//!
-//! # Planned API
-//!
-//! - `record_reference(use_id, def_id)`
-//! - `record_local_symbol(def_id, symbol)`
-//! - Reference-resolution helpers used by `Semantics::referenced_symbol`
-//!   and `Semantics::references_to_def`.
+//! One instance per loaded module, owned by [`super::ModuleSemantics`].
+//! Plain owned [`crate::hashmap::IndexMap`]s replace the previous
+//! `Rc<RefCell<…>>` plumbing the elaborator shared with
+//! [`super::super::orchestration::AnnotateState`]: each module's body walk
+//! has exclusive `&mut` access to its own [`ModuleBindings`] for the
+//! duration of [`super::super::Elaborator::resolve_module`], and the
+//! driver re-installs the populated instance back into
+//! `state.module_semantics` afterwards.
 
-pub(crate) struct ModuleBindings {}
+use crate::hashmap::IndexMap;
+use crate::symbol::{Symbol, SymbolKey};
+
+/// `use → def` edges and locally defined symbols for one module.
+#[derive(Default, Clone)]
+pub(crate) struct ModuleBindings {
+    /// `(module, IdentExpr.id) → (module, defining AstId)`. The use-site key
+    /// always lives in this module's `ModuleSource`; the def-site key may
+    /// point at a different module (e.g. an imported function).
+    pub(crate) references: IndexMap<SymbolKey, SymbolKey>,
+    /// Locally-defined [`Symbol`]s (let bindings, parameters, closure
+    /// parameters) keyed by the binding's defining [`SymbolKey`]. The key's
+    /// `module` field always equals this `ModuleBindings`'s owning module.
+    pub(crate) local_symbols: IndexMap<SymbolKey, Symbol>,
+}
