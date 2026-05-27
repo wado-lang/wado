@@ -1396,7 +1396,7 @@ pub fn resolve_module<H: CompilerHost>(
 ) -> Result<TirModule, Bail> {
     let type_table = Rc::new(RefCell::new(crate::tir::TypeTable::new()));
     let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
-    let (wasi_registry, world_registry) = WasiRegistry::build_from_stdlib();
+    let (wasi_registry, _world_registry) = WasiRegistry::build_from_stdlib();
     let (trait_env, _) = TraitEnv::build(loaded_modules, symbols);
     let tysys = tysys::TypeSystem {
         type_table,
@@ -1409,7 +1409,6 @@ pub fn resolve_module<H: CompilerHost>(
         all_resource_types: Rc::new(IndexMap::default()),
         trait_env,
         wasi_registry,
-        world_registry,
         builtin_registry: Rc::new(builtin_registry),
         included_files: Rc::new(IndexMap::default()),
         known_type_names_cache: Rc::new(IndexSet::default()),

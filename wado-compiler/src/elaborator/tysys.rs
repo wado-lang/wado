@@ -62,7 +62,6 @@ use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{TypeId, TypeTable};
-use crate::world_registry::WorldRegistry;
 
 use super::trait_env::TraitEnv;
 use super::types::{
@@ -101,9 +100,12 @@ pub(crate) struct TypeSystem {
     /// across every per-module elaborator via `Arc`.
     pub(crate) trait_env: Arc<TraitEnv>,
 
-    /// Registries.
+    /// Registries the elaborator queries. The Component-Model
+    /// `WorldRegistry` is built by the same `WasiRegistry::build_from_stdlib`
+    /// call but lives on [`super::orchestration::AnnotateState`] instead
+    /// of here — the elaborator never asks "what does world X export?",
+    /// only post-elaborator stages (link, synthesis, DCE) do.
     pub(crate) wasi_registry: &'static WasiRegistry,
-    pub(crate) world_registry: &'static WorldRegistry,
     pub(crate) builtin_registry: Rc<BuiltinRegistry>,
 
     /// Pre-loaded file contents for `#include_str` / `#include_bytes`.

@@ -396,6 +396,7 @@ fn compile_after_load<H: CompilerHost>(
     // degrade gracefully — it would surface as a panic deep inside
     // synthesis. The `debug_assert!` below makes that contract loud at
     // the leak site instead of one stage later.
+    let world_registry = state.world_registry;
     let tysys = state.tysys;
     debug_assert_eq!(
         std::sync::Arc::strong_count(&tysys.trait_env),
@@ -423,7 +424,7 @@ fn compile_after_load<H: CompilerHost>(
         implicit_modules,
         module_name,
         tysys.wasi_registry,
-        tysys.world_registry,
+        world_registry,
         builtin_registry,
         interner,
     );

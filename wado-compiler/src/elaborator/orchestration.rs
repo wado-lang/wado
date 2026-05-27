@@ -35,6 +35,7 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name};
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
+use crate::world_registry::WorldRegistry;
 
 use super::Elaborator;
 use super::trait_env::TraitEnv;
@@ -63,6 +64,16 @@ pub(crate) struct AnnotateState {
     /// tables, registries, included-files map, and read-only caches
     /// built once at annotate time. See [`TypeSystem`].
     pub(crate) tysys: TypeSystem,
+    /// Component-Model world specifications. Built by the same
+    /// [`WasiRegistry::build_from_stdlib`] call that populates
+    /// [`TypeSystem::wasi_registry`], but lives here rather than on
+    /// `TypeSystem`: the elaborator never asks "what does world X
+    /// export?" — only post-elaborator stages (link, synthesis, DCE,
+    /// world-existence validation in [`crate::lib`]) do. Keeping it on
+    /// the driver state respects the `TypeSystem` membership rule
+    /// ("would this fit the type system itself?" — see
+    /// [`super::tysys`] module docs).
+    pub(crate) world_registry: &'static WorldRegistry,
     /// Topological order of modules; the per-module body walk in
     /// [`Elaborator::build_tir_from_state`] visits sources in this order
     /// so a `TirModule`'s position in the result map matches the
@@ -805,7 +816,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             all_resource_types,
             trait_env,
             wasi_registry,
-            world_registry,
             builtin_registry: Rc::new(builtin_registry),
             included_files,
             known_type_names_cache: Rc::new(global_known_type_names),
@@ -813,6 +823,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         };
         Ok(AnnotateState {
             tysys,
+            world_registry,
             sorted_sources,
             references,
             local_symbols,
