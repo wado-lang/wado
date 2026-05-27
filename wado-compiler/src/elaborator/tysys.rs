@@ -133,18 +133,49 @@ impl TypeSystem {
     }
 
     /// Check if an expression is a numeric literal (possibly negated).
+    ///
+    /// The non-numeric arms are enumerated explicitly rather than a
+    /// catch-all `_` so that adding a new [`Expr`] variant produces a
+    /// compile error here, forcing a deliberate decision about whether
+    /// the new shape should participate in numeric-literal coercion.
     pub(crate) fn is_numeric_literal(&self, expr: &Expr) -> bool {
         match expr {
             Expr::Literal(lit) => matches!(lit.value, Literal::Number(_)),
             Expr::Unary(unary) if unary.op == UnaryOp::Neg => {
                 matches!(&unary.expr, Expr::Literal(lit) if matches!(lit.value, Literal::Number(_)))
             }
-            _ => false,
+            Expr::Unary(_)
+            | Expr::Ident(_)
+            | Expr::Binary(_)
+            | Expr::Assign(_)
+            | Expr::CompoundAssign(_)
+            | Expr::ComparisonChain(_)
+            | Expr::Call(_)
+            | Expr::MethodCall(_)
+            | Expr::StaticMethodCall(_)
+            | Expr::FieldAccess(_)
+            | Expr::Index(_)
+            | Expr::Block(_)
+            | Expr::If(_)
+            | Expr::Match(_)
+            | Expr::Matches(_)
+            | Expr::Closure(_)
+            | Expr::TemplateString(_)
+            | Expr::Cast(_)
+            | Expr::StructLiteral(_)
+            | Expr::TupleLiteral(_)
+            | Expr::LabeledBlock(_)
+            | Expr::TryOp(_)
+            | Expr::Spread(..)
+            | Expr::Range(_)
+            | Expr::WithHandler(_)
+            | Expr::Resume(_) => false,
         }
     }
 
     /// Map a binary operator to its `(trait_name, method_name)` pair, or
-    /// `None` when the operator does not dispatch through a trait.
+    /// `None` for short-circuit operators that don't dispatch through a
+    /// trait.
     ///
     /// For operators that dispatch through a [`CompilerItem`] trait
     /// (`Eq` for `==` / `!=`), the trait name is resolved through the
@@ -152,6 +183,10 @@ impl TypeSystem {
     /// transparent. For traits that don't yet have a `CompilerItem`
     /// anchor (`Add`, `Sub`, …, `Ord`), the canonical stdlib name is
     /// returned as a literal.
+    ///
+    /// The non-trait arms (`And` / `Or`) are explicit rather than a
+    /// catch-all `_` so that adding a new [`BinaryOp`] variant produces
+    /// a compile error here instead of silently returning `None`.
     pub(crate) fn operator_trait_method(&self, op: &BinaryOp) -> Option<(String, &'static str)> {
         match op {
             BinaryOp::Add => Some(("Add".to_string(), "add")),
@@ -180,7 +215,8 @@ impl TypeSystem {
                     .to_string(),
                 "cmp",
             )),
-            _ => None,
+            // Logical `&&` / `||` short-circuit on `bool`; no trait dispatch.
+            BinaryOp::And | BinaryOp::Or => None,
         }
     }
 }
