@@ -17,10 +17,12 @@
 //!
 //! Stage 3 of [`wep-2026-05-26-elaborator-rearchitecture.md`] populated
 //! `local_types`; Stage 4 adds `expression_types` (per-`AstId` resolved
-//! type for every expression visited by the body walk) and
+//! type for every expression visited by the body walk),
 //! `method_dispatch` (per-`MethodCallExpr` resolved target plus the
-//! receiver-adjustment kind that annotate picked). Coercion choices and
-//! desugar-kind annotations land as follow-up commits inside Stage 4.
+//! receiver-adjustment kind that annotate picked), and `coercions`
+//! (per-`AstId` coercion choice that
+//! [`super::super::Elaborator::try_coerce`] applied). Desugar-kind
+//! annotations land as a follow-up commit inside Stage 4.
 
 use crate::ast::{self, AstId};
 use crate::hashmap::IndexMap;
@@ -58,6 +60,41 @@ pub(crate) struct MethodDispatch {
     pub(crate) self_kind: ast::SelfKind,
 }
 
+/// Which sub-coercion [`super::super::Elaborator::try_coerce`] applied at
+/// a given expression site.
+///
+/// The variant is what `reify` (Stage 5) needs to pick the same lowering
+/// path without re-checking expected-type compatibility; the target type
+/// comes alongside on [`CoercionChoice`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+pub(crate) enum CoercionKind {
+    /// `42 → i64`, `1.0 → f32`, `0xff_ff_ff_ff → u32`, etc.
+    NumericLiteral,
+    /// `null → Option<T>` for some unwrapped `T`.
+    NullToOption,
+    /// A `String` / template literal retagged as a newtype over `String`.
+    StringNewtype,
+    /// A closure literal retagged as a newtype over its fn-type.
+    ClosureToFnNewtype,
+    /// A tuple literal lowered through `SequenceLiteralBuilder` (Array
+    /// and user-defined sequence types).
+    TupleToSequence,
+    /// An anonymous struct literal lowered through `KeyValueLiteralBuilder`.
+    StructToMap,
+}
+
+/// Coercion decision recorded for an expression that
+/// [`super::super::Elaborator::try_coerce`] adapted into its expected
+/// type. See [`CoercionKind`] for the variants.
+#[derive(Clone)]
+pub(crate) struct CoercionChoice {
+    #[allow(dead_code)]
+    pub(crate) kind: CoercionKind,
+    #[allow(dead_code)]
+    pub(crate) target_type: TypeId,
+}
+
 /// Per-`AstId` type annotations recorded by the body walk.
 #[derive(Default, Clone)]
 pub(crate) struct TypeAnnotations {
@@ -82,4 +119,11 @@ pub(crate) struct TypeAnnotations {
     /// the call expression's [`AstId`]. See [`MethodDispatch`] for the
     /// data shape and the recording contract.
     pub(crate) method_dispatch: IndexMap<AstId, MethodDispatch>,
+    /// Coercion decisions recorded for each expression that
+    /// [`super::super::Elaborator::try_coerce`] adapted into its expected
+    /// type, keyed by the source-expression's [`AstId`]. Expressions that
+    /// did not need coercion (the resolved type already matched the
+    /// expected type, or no `expected_type` was supplied) leave no entry.
+    /// See [`CoercionChoice`] / [`CoercionKind`] for the variants.
+    pub(crate) coercions: IndexMap<AstId, CoercionChoice>,
 }

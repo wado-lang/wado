@@ -278,6 +278,47 @@ export fn run() {
     );
 }
 
+/// Stage 4 of the elaborator re-architecture WEP: every successful
+/// branch of `try_coerce` records its [`CoercionKind`] on
+/// `ModuleSemantics::types.coercions`. Verify the numeric-literal
+/// (`1 → u32`) and null-to-option (`null → Option<i32>`) variants both
+/// land in the map.
+#[test]
+fn semantics_records_coercion_choice_per_ast_id() {
+    let source = r"
+export fn run() {
+    let _x: u32 = 1;
+    let _y: Option<i32> = null;
+}
+";
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+
+    let mut saw_numeric = false;
+    let mut saw_null_to_option = false;
+    for key in sem.iter_coercions() {
+        if key.module != entry {
+            continue;
+        }
+        let Some((kind, _target)) = sem.coercion_view(key) else {
+            continue;
+        };
+        if kind == "numeric_literal" {
+            saw_numeric = true;
+        }
+        if kind == "null_to_option" {
+            saw_null_to_option = true;
+        }
+    }
+    assert!(saw_numeric, "`1 → u32` must record a numeric_literal coercion");
+    assert!(
+        saw_null_to_option,
+        "`null → Option<i32>` must record a null_to_option coercion",
+    );
+}
+
 /// Stage 4 of the elaborator re-architecture WEP: every expression
 /// visited by the body walk must leave its resolved [`TypeId`] in
 /// [`Semantics::expression_types`], keyed by the expression's

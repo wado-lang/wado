@@ -459,6 +459,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         None
     }
 
+    /// Record a coercion decision for the expression at `ast_id`. Called
+    /// from each successful branch of [`Self::try_coerce`] so the future
+    /// `reify` pass (Stage 5 of WEP 2026-05-26) can apply the same
+    /// adaptation without re-checking expected-type compatibility.
+    pub(super) fn record_coercion(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        kind: sem::types::CoercionKind,
+        target_type: TypeId,
+    ) {
+        self.sem.types.coercions.insert(
+            ast_id,
+            sem::types::CoercionChoice { kind, target_type },
+        );
+    }
+
     /// Record a local binding's [`Symbol`] and resolved [`TypeId`] so that
     /// LSP hover on a use site can retrieve the defining name / mutability
     /// and inlay hints can surface the inferred type. Called at each site

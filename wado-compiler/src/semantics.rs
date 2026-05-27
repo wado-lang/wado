@@ -107,6 +107,13 @@ pub struct Semantics {
     /// (synthetic calls and short-circuiting paths leave no entry).
     pub(crate) method_dispatch:
         IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch>,
+    /// Coercion choices recorded for each expression that
+    /// [`crate::elaborator::Elaborator::try_coerce`] adapted into its
+    /// expected type, keyed by the source expression's `(module, AstId)`.
+    /// Expressions that did not need coercion leave no entry. See
+    /// [`crate::elaborator::sem::types::CoercionChoice`] for the data
+    /// shape.
+    pub(crate) coercions: IndexMap<SymbolKey, crate::elaborator::sem::types::CoercionChoice>,
     /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `build_tir` did not run or bailed.
@@ -161,6 +168,7 @@ impl Semantics {
         local_types: IndexMap<SymbolKey, TypeId>,
         expression_types: IndexMap<SymbolKey, TypeId>,
         method_dispatch: IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch>,
+        coercions: IndexMap<SymbolKey, crate::elaborator::sem::types::CoercionChoice>,
         tir_modules: IndexMap<ModuleSource, TirModule>,
     ) -> Self {
         Self {
@@ -176,6 +184,7 @@ impl Semantics {
             local_types,
             expression_types,
             method_dispatch,
+            coercions,
             tir_modules,
             is_complete: false,
         }
@@ -319,6 +328,38 @@ impl Semantics {
     /// each entry.
     pub fn iter_method_dispatch(&self) -> impl Iterator<Item = &SymbolKey> {
         self.method_dispatch.keys()
+    }
+
+    /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
+    /// coercion choice at `key`.
+    ///
+    /// Returns `(coercion_kind_str, target_type_id)` for an expression
+    /// that the body walk adapted via `try_coerce`, or `None` for
+    /// expressions whose resolved type already matched the expected
+    /// type (or that were resolved without an expected type). See
+    /// [`crate::elaborator::sem::types::CoercionKind`] for the full
+    /// variant set; the returned string mirrors the variant name in
+    /// lowercase-with-underscores form.
+    #[must_use]
+    pub fn coercion_view(&self, key: &SymbolKey) -> Option<(String, TypeId)> {
+        use crate::elaborator::sem::types::CoercionKind;
+        let choice = self.coercions.get(key)?;
+        let kind = match choice.kind {
+            CoercionKind::NumericLiteral => "numeric_literal",
+            CoercionKind::NullToOption => "null_to_option",
+            CoercionKind::StringNewtype => "string_newtype",
+            CoercionKind::ClosureToFnNewtype => "closure_to_fn_newtype",
+            CoercionKind::TupleToSequence => "tuple_to_sequence",
+            CoercionKind::StructToMap => "struct_to_map",
+        };
+        Some((kind.to_string(), choice.target_type))
+    }
+
+    /// Iterate every recorded coercion choice keyed by the source
+    /// expression's `(module, AstId)`. Pair with [`Self::coercion_view`]
+    /// for the stable public view onto each entry.
+    pub fn iter_coercions(&self) -> impl Iterator<Item = &SymbolKey> {
+        self.coercions.keys()
     }
 
     /// URI (filename) of a module, when the module has one.
@@ -656,6 +697,7 @@ impl Semantics {
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
         )
     }
 }
@@ -750,6 +792,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
         );
     }
 
@@ -777,6 +820,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             TypeTable::new(),
             interner,
             None,
+            IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
@@ -819,10 +863,11 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // Flatten the per-module `ModuleSemantics` into the maps LSP queries
     // consume directly. The Semantics API stays keyed by `SymbolKey`; the
     // per-module storage on `AnnotateState` is the elaborator-side detail
-    // that replaces the previous `Rc<RefCell<…>>` plumbing. `expression_types`
-    // and `method_dispatch` are stored per-module keyed by raw `AstId` (the
-    // body walk's natural index); the rebind here pairs each id with its
-    // owning module so the Semantics-level lookup matches the other flat maps.
+    // that replaces the previous `Rc<RefCell<…>>` plumbing. The
+    // `expression_types` / `method_dispatch` / `coercions` maps are stored
+    // per-module keyed by raw `AstId` (the body walk's natural index); the
+    // rebind here pairs each id with its owning module so the
+    // Semantics-level lookup matches the other flat maps.
     let mut references: IndexMap<SymbolKey, SymbolKey> = IndexMap::default();
     let mut locals: IndexMap<SymbolKey, Symbol> = IndexMap::default();
     let mut local_types: IndexMap<SymbolKey, TypeId> = IndexMap::default();
@@ -830,6 +875,10 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     let mut method_dispatch: IndexMap<
         SymbolKey,
         crate::elaborator::sem::types::MethodDispatch,
+    > = IndexMap::default();
+    let mut coercions: IndexMap<
+        SymbolKey,
+        crate::elaborator::sem::types::CoercionChoice,
     > = IndexMap::default();
     for (module_source, sem) in state.module_semantics.iter_mut() {
         references.extend(std::mem::take(&mut sem.bindings.references));
@@ -847,6 +896,11 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
                     (SymbolKey::new(module_source.clone(), ast_id), dispatch)
                 }),
         );
+        coercions.extend(
+            std::mem::take(&mut sem.types.coercions)
+                .into_iter()
+                .map(|(ast_id, choice)| (SymbolKey::new(module_source.clone(), ast_id), choice)),
+        );
     }
 
     Semantics {
@@ -862,6 +916,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         local_types,
         expression_types,
         method_dispatch,
+        coercions,
         tir_modules,
         is_complete: lower_ok,
     }

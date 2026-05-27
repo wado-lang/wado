@@ -381,6 +381,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Try to coerce an expression to match the expected type.
     /// Handles numeric literals, null, string newtypes, and tuple-to-array coercion.
     /// Returns `None` if no coercion applies.
+    ///
+    /// Stage 4 of WEP 2026-05-26: every successful branch records the
+    /// chosen [`super::sem::types::CoercionKind`] in
+    /// [`super::sem::types::TypeAnnotations::coercions`] keyed by
+    /// `expr.id()`, so the future `reify` pass can replay the same
+    /// adaptation without re-checking expected-type compatibility.
     pub(super) fn try_coerce(
         &mut self,
         expr: &Expr,
@@ -389,6 +395,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TirExpr> {
         // Numeric literal coercion (int, float, i128/u128)
         if let Some(coerced) = self.try_coerce_numeric_literal(expr, target_type) {
+            self.record_coercion(
+                expr.id(),
+                super::sem::types::CoercionKind::NumericLiteral,
+                target_type,
+            );
             return Some(coerced);
         }
 
@@ -402,6 +413,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .as_option(target_type)
                 .is_some()
         {
+            self.record_coercion(
+                expr.id(),
+                super::sem::types::CoercionKind::NullToOption,
+                target_type,
+            );
             return Some(TirExpr::new(TirExprKind::Null, target_type, lit.span));
         }
 
@@ -431,6 +447,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if is_string_newtype {
                 let mut resolved = self.resolve_expr(expr, ctx, None);
                 resolved.type_id = target_type;
+                self.record_coercion(
+                    expr.id(),
+                    super::sem::types::CoercionKind::StringNewtype,
+                    target_type,
+                );
                 return Some(resolved);
             }
         }
@@ -451,17 +472,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if is_fn_newtype {
                 let mut resolved = self.resolve_expr(expr, ctx, Some(base_id));
                 resolved.type_id = target_type;
+                self.record_coercion(
+                    expr.id(),
+                    super::sem::types::CoercionKind::ClosureToFnNewtype,
+                    target_type,
+                );
                 return Some(resolved);
             }
         }
 
         // Tuple literal → type implementing SequenceLiteralBuilder (Array<T> and user types)
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(expr, ctx, target_type) {
+            self.record_coercion(
+                expr.id(),
+                super::sem::types::CoercionKind::TupleToSequence,
+                target_type,
+            );
             return Some(coerced);
         }
 
         // Anonymous struct literal → type implementing KeyValueLiteralBuilder
         if let Some(coerced) = self.try_coerce_struct_to_map(expr, ctx, target_type) {
+            self.record_coercion(
+                expr.id(),
+                super::sem::types::CoercionKind::StructToMap,
+                target_type,
+            );
             return Some(coerced);
         }
 
