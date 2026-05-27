@@ -806,29 +806,33 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             module_semantics.entry(ms.clone()).or_default();
         }
         if let Some(snap) = snapshot {
+            // Snapshot keys must always reference modules in the current
+            // compile's `modules` set — the loader's implicit-modules pass
+            // pulls in the snapshot's stdlib closure on every compile. Use
+            // `get_mut` so a divergence shows up as a `debug_assert` failure
+            // rather than silently creating phantom `ModuleSemantics` entries
+            // that LSP would later flatten into `Semantics::references`.
+            let snapshot_invariant = "snapshot module must be in the current compile's loaded set";
             for (use_key, def_key) in &snap.references {
-                module_semantics
-                    .entry(use_key.module.clone())
-                    .or_default()
-                    .bindings
-                    .references
-                    .insert(use_key.clone(), def_key.clone());
+                let Some(sem) = module_semantics.get_mut(&use_key.module) else {
+                    debug_assert!(false, "{snapshot_invariant}: {:?}", use_key.module);
+                    continue;
+                };
+                sem.bindings.references.insert(use_key.clone(), def_key.clone());
             }
             for (key, sym) in &snap.locals {
-                module_semantics
-                    .entry(key.module.clone())
-                    .or_default()
-                    .bindings
-                    .local_symbols
-                    .insert(key.clone(), sym.clone());
+                let Some(sem) = module_semantics.get_mut(&key.module) else {
+                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+                    continue;
+                };
+                sem.bindings.local_symbols.insert(key.clone(), sym.clone());
             }
             for (key, type_id) in &snap.local_types {
-                module_semantics
-                    .entry(key.module.clone())
-                    .or_default()
-                    .types
-                    .local_types
-                    .insert(key.clone(), *type_id);
+                let Some(sem) = module_semantics.get_mut(&key.module) else {
+                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+                    continue;
+                };
+                sem.types.local_types.insert(key.clone(), *type_id);
             }
         }
 
@@ -1018,14 +1022,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
             // Take this module's `ModuleSemantics` out of `state` so the
             // elaborator can own it for the body walk. The map entry was
-            // pre-populated in `annotate_modules`; any bindings the snapshot
+            // pre-populated in `annotate_modules` for every `modules.keys()`
+            // (and `sorted_sources` is derived from `modules`), so the entry
+            // is guaranteed to exist; `expect` rather than `unwrap_or_default`
+            // surfaces any future divergence between `sorted_sources` and
+            // `module_semantics.keys()` loudly. Any bindings the snapshot
             // contributed survive in the taken instance. We seed the
             // imports / decls populated above and reinstall the populated
             // instance after `resolve_module` returns.
             let mut sem = state
                 .module_semantics
                 .swap_remove(module_source)
-                .unwrap_or_default();
+                .expect("module_semantics is pre-populated by annotate_modules");
             sem.imports.imported_type_sources = imported_type_sources;
             sem.imports.import_original_names = import_original_names;
             sem.imports.namespace_imports = namespace_imports;
