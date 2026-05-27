@@ -370,182 +370,108 @@ migration; see Trade-offs.
 ## Status
 
 - [x] **Stage 1 — Skeleton.** Empty `TypeSystem` + `ModuleSemantics`
-      (`bindings`, `decls`, `imports`, `types`) introduced alongside the
-      existing `Elaborator` / `AnnotateState`. Every existing field
-      annotated with its future destination via `// MIGRATION:` markers.
-      No method or field moved.
-- [x] **Stage 2 — Pure type-system operations on `TypeSystem`.**
-  - Stage 2a: 15 pipeline-wide fields hoisted onto `TypeSystem`
-    (type arena, decl-interned tables, registries, included-files
-    map, read-only caches). `AnnotateState` and `Elaborator` each
-    hold one `tysys: TypeSystem` field; `TypeSystem` is `Clone`
-    (shallow `Rc` / `Arc` copy) so per-module elaborators get a
-    cheap view.
-  - Stage 2b: five host-agnostic helpers moved to `impl TypeSystem`:
-    `is_known_type_name`, `is_numeric_literal`,
-    `operator_trait_method`, `typecheck`, `typecheck_return`.
-  - The legacy `pub fn resolve_module` single-module wrapper and
-    `Elaborator::new` were removed as dead code; all entry now goes
-    through `annotate_modules` + `build_tir_from_state`.
-- [x] **Stage 3 — `ModuleSemantics` population.**
-  - The four sub-structs (`bindings`, `imports`, `types`, `decls`) gained
-    their concrete fields, replacing the flat per-module fields that
-    previously lived on `Elaborator` and the `Rc<RefCell<…>>` maps that
-    `AnnotateState` shared with the body walk.
-  - `Elaborator` now owns a single `sem: ModuleSemantics`; the per-module
-    body walk's `&mut sem` access stays disjoint across modules and the
-    shared-mutability plumbing is gone.
-  - `AnnotateState.module_semantics: IndexMap<ModuleSource, ModuleSemantics>`
-    replaces `references` / `local_symbols` / `local_types`
-    `Rc<RefCell<…>>`. The snapshot's flat maps are split by `key.module`
-    during seeding; `semantics_with_logger` flattens back at the end so
-    the LSP-facing `Semantics` API (keyed by full `SymbolKey`) is
-    unchanged.
-  - `Elaborator::build_tir_from_state` now takes `&mut AnnotateState` so
-    it can swap each module's `ModuleSemantics` out for the body walk
-    and reinstall the populated instance afterwards.
+      sub-structs introduced alongside the existing `Elaborator` /
+      `AnnotateState`; every existing field annotated with its future
+      destination via `// MIGRATION:` markers.
+- [x] **Stage 2 — Pure type-system operations on `TypeSystem`.** 15
+      pipeline-wide fields (type arena, decl-interned tables, registries,
+      included-files map, read-only caches) and five host-agnostic
+      helpers (`is_known_type_name`, `is_numeric_literal`,
+      `operator_trait_method`, `typecheck`, `typecheck_return`) now live
+      on `TypeSystem`. Both `AnnotateState` and `Elaborator` hold one
+      `tysys: TypeSystem` (shallow `Rc`/`Arc` clone). Legacy
+      `pub fn resolve_module` + `Elaborator::new` removed as dead code.
+- [x] **Stage 3 — `ModuleSemantics` population.** The four sub-structs
+      hold the per-module state previously flat on `Elaborator`.
+      `Elaborator` owns one `sem: ModuleSemantics`;
+      `AnnotateState.module_semantics: IndexMap<ModuleSource, ModuleSemantics>`
+      replaces the trio of `Rc<RefCell<…>>` maps (`references` /
+      `local_symbols` / `local_types`). `build_tir_from_state` takes
+      `&mut AnnotateState` and swaps each module's instance around the
+      body walk; `semantics_with_logger` flattens back so `Semantics`'s
+      flat-map API is unchanged.
 - [ ] **Stage 4 — Per-`AstId` annotation storage.**
 - [ ] **Stage 5 — `annotate_bodies` / `reify` split.**
 - [ ] **Stage 6 — Liveness and DCE.**
 - [ ] **Stage 7 — Cleanup.**
 
-### Stage 3 design notes
+### Design notes (Stages 1–3)
 
-#### `Elaborator` owns `ModuleSemantics`, not `&mut`
+#### TypeSystem membership rule
 
-The WEP's Decision sketch had the per-module elaborator hold
-`&mut ModuleSemantics`. The implementation diverges: `Elaborator` owns a
-`sem: ModuleSemantics` by value, populated from `state.module_semantics`
-on entry to `resolve_module` and re-installed on exit.
+A field belongs on `TypeSystem` iff the elaborator's body walk queries
+it while making a type decision. `world_registry` lives on
+`AnnotateState`, not `TypeSystem`: only post-elaborator stages (`link`,
+`synthesis`, `optimize/dce`, world-existence validation in `lib.rs`)
+read it.
 
-The motivation is the same — keep the body walk's mutable access
-disjoint across modules — but ownership turned out to be the lighter
-shape:
-
-- No second lifetime parameter on `Elaborator<'a, H>`, which already
-  threads `'a` through `symbols` / `loaded_modules` / `logger` /
-  `current_module_items`. Adding `'sem` would touch every `impl<'a, H>`
-  block and the existing extension methods on `TypeParamScope`.
-- Same `Clone`-by-shallow-Rc handoff pattern as
-  [`tysys::TypeSystem`] already uses — moving a per-module value out of
-  the driver, into the per-module worker, and back at completion. The
-  call site reads as one symmetric pair (`swap_remove` + `insert`)
-  around the body walk.
-- `&mut ModuleSemantics` would have forced the driver to keep
-  `state.module_semantics` borrowed across `resolve_module`, conflicting
-  with the iteration over `state.sorted_sources` (cloned out of the
-  same `state`). Owning the value sidesteps that.
-
-The decision is structural, not policy: the membership rule and the
-sub-struct boundaries from the Decision section all stand.
-
-#### `module_semantics` is the storage location, `Semantics` keeps its flat API
-
-`AnnotateState.module_semantics: IndexMap<ModuleSource, ModuleSemantics>`
-replaces three `Rc<RefCell<…>>` fields (`references`, `local_symbols`,
-`local_types`). `semantics_with_logger` flattens it back into the
-existing `Semantics` flat maps after `build_tir_from_state` returns,
-keeping the LSP-facing query surface (`Semantics::referenced_symbol`,
-`iter_references`, `local_type_name`, …) byte-for-byte compatible with
-Stage 2.
-
-The snapshot seeds module_semantics by splitting its own flat maps by
-`key.module`. The split is O(snapshot size) and happens once per
-compile; the alternative — storing per-module data on the snapshot
-itself — is a Stage 7 cleanup, not a Stage 3 requirement.
-
-The two layouts (per-module on `AnnotateState`, flat on `Semantics`)
-buy the work the elaborator needs from per-module ownership without
-churning the LSP API. A future Stage 7 refactor that promotes
-`module_semantics` to `Semantics` directly can do so without touching
-the LSP query call sites — they go through `Semantics`'s methods.
-
-#### `build_tir_from_state` now takes `&mut AnnotateState`
-
-The per-module body walk needs to swap each `ModuleSemantics` out of
-`state.module_semantics` and back in, which requires unique access to
-the map. `build_tir_from_state`'s signature changes from
-`&AnnotateState` to `&mut AnnotateState` accordingly. The two callers
-(`elaborate_all_modules`, `semantics_with_logger`) own their state by
-value at that point, so threading `&mut` through is mechanical.
-
-### Stage 2 design notes
-
-The following decisions emerged while moving the type system out
-from under `Elaborator`. They refine — and in a few cases narrow
-— the surface sketched in "TypeSystem surface" above.
+`indexing_trait_cache` / `method_info_cache` are genuine type-system
+caches but stay on `Elaborator` until the pipeline-wide cache lifetime
+story is decided. `trait_check_stack` is a per-call frame stack (not a
+cache); sharing it would either leak stale frames (soundness bug) or
+need save/restore that defeats the move — it stays with `trait_ctx`.
 
 #### TypeSystem stays host-agnostic
 
-`TypeSystem` operations that need to report a type error return
-`Result<(), TypeMismatchPayload>` (or analogous payload), never
-`&Logger<H>`. The `<H: CompilerHost>` parameter is confined to a
-thin wrapper on `Elaborator` that emits the diagnostic. Without
-this discipline `<H>` is contagious — every `TypeSystem` method
-that errors would propagate it, eventually pulling the host trait
-into the type-system API.
-
-The pattern in `typecheck.rs` is the template for the rest of the
-operations the WEP plans to move (`coerce`, method-lookup core,
-trait queries):
-
-1. A pure helper over `&TypeTable` (e.g. `check_assignable`).
-2. `impl TypeSystem { fn op(&self, …) -> Result<…, Payload> }`.
-3. `impl Elaborator { fn op(&self, …) { logger.error(payload) } }`.
-
-#### TypeSystem membership rule, in code
-
-`TypeSystem` only holds fields the elaborator queries while making
-type decisions. Concretely:
-
-- `wasi_registry` belongs (`call.rs` queries WASI function
-  signatures through it).
-- `world_registry` does **not** belong on `TypeSystem`, even
-  though it is built by the same `WasiRegistry::build_from_stdlib`
-  call. Only post-elaborator stages (`link`, `synthesis`,
-  `optimize/dce`, `lib.rs` world-existence validation) read it.
-  It lives on `AnnotateState` (driver state).
-
-The mechanical question to ask when adding a field: "does the
-elaborator's body walk query this field?" If no, it does not
-belong on `TypeSystem`.
-
-#### Three caches are deferred
-
-`indexing_trait_cache` and `method_info_cache` are genuine
-type-system caches whose keys are pure `TypeId` / name tuples;
-their move to `TypeSystem` is deferred only because the
-pipeline-wide cache lifetime story (today they are per-Elaborator
-mutable state, populated by the body walk) is not yet decided.
-
-`trait_check_stack` _looks_ similar — `RefCell<Vec<…>>` mutable
-state on `Elaborator` — but it is **not** a cache. It is the
-per-call frame stack used by `type_implements_trait` to break
-recursion on recursive types; sharing it across modules would
-either leak stale frames (a soundness bug — wrong "recursive,
-optimistically true" answers) or require per-call save/restore
-plumbing that defeats the move. Its migration target is the
-transient annotate-time scope bucket alongside `trait_ctx`, not
-`TypeSystem`.
+`TypeSystem` operations return `Result<(), Payload>`, never
+`&Logger<H>`. The `<H: CompilerHost>` parameter is confined to a thin
+wrapper on `Elaborator` that emits the diagnostic. The pattern in
+`typecheck.rs` is the template: pure helper over `&TypeTable` →
+`impl TypeSystem` returning payload → `impl Elaborator` calling
+`logger.error`. Pure `TypeSystem` helpers enumerate enum variants
+exhaustively (no `_ => …`) so a new variant surfaces as a compile
+error.
 
 #### Unique-ownership contracts surface at the leak site
 
-`compile_after_load` consumes `Arc<TraitEnv>` and
-`Rc<BuiltinRegistry>` out of `state.tysys`. Both must be uniquely
-owned at that point — `synthesize`'s `extend_with_synthesised`
-panics on a shared `Arc<TraitEnv>`, and a shared
-`Rc<BuiltinRegistry>` silently falls back to a deep clone. The
-handoff uses `debug_assert_eq!` on `Arc::strong_count` /
-`Rc::strong_count` so a stray clone introduced by a later refactor
-surfaces at the leak site instead of in a downstream phase.
+`compile_after_load` consumes `Arc<TraitEnv>` and `Rc<BuiltinRegistry>`
+out of `state.tysys` and `debug_assert_eq!`s their strong counts. A
+stray clone in a later refactor surfaces at the handoff rather than in
+a downstream phase (`synthesize` panics on shared `Arc<TraitEnv>`;
+shared `Rc<BuiltinRegistry>` silently deep-clones).
 
-#### Exhaustive matches over enum kinds
+#### `Elaborator` owns `sem` by value, not `&mut ModuleSemantics`
 
-Pure `TypeSystem` helpers (`is_numeric_literal`,
-`operator_trait_method`) enumerate every `Expr` / `BinaryOp`
-variant rather than using `_ => …`. A new variant added to either
-enum surfaces here as a compile error, forcing a deliberate
-decision instead of silently falling into the catch-all.
+The Decision sketch had the elaborator hold `&mut ModuleSemantics`;
+the implementation owns `sem: ModuleSemantics` instead. Same goal
+(disjoint mutable access per module), lighter shape: no second
+lifetime parameter, same `Clone`-by-shallow-Rc handoff as `TypeSystem`
+already uses, and the driver iterates a cloned `sorted_sources` while
+mutating `state.module_semantics` without borrow conflict. The body
+walk is bracketed by `swap_remove(ms)` → `resolve_module` →
+`insert(ms, elaborator.sem)`.
+
+#### `Semantics` keeps its flat API
+
+`semantics_with_logger` drains `state.module_semantics.values_mut()`
+into the existing flat `references` / `locals` / `local_types` maps,
+so the LSP query surface (`referenced_symbol`, `iter_references`,
+`local_type_name`, …) is unchanged. Promoting per-module storage onto
+`Semantics` itself is a Stage 7 cleanup.
+
+#### Snapshot seeding asserts the loaded-set invariant
+
+The snapshot's flat maps are split by `key.module` into per-module
+`ModuleSemantics`. Seeding uses `get_mut` + `debug_assert!` rather
+than `entry().or_default()`: an invariant break (snapshot module not
+in current `modules.keys()`) surfaces in debug builds instead of
+silently creating phantom entries that the flatten would leak into
+`Semantics::references` as edges into unloaded modules.
+
+`build_tir_from_state` mirrors the invariant with
+`.expect("module_semantics is pre-populated by annotate_modules")`
+instead of `unwrap_or_default()` at `swap_remove`.
+
+#### `ModuleBindings` has a transient cross-module exception
+
+`with_module_perspective` swaps `current_module_source` without
+swapping `self.sem`, so record calls inside its body tag the use-key
+with the foreign module while writing into the outer module's
+`sem.bindings`. Today's flatten reconciles by full `SymbolKey`;
+Stage 5's reify will need to either extend `with_module_perspective`
+to swap `bindings`/`types` too or accept these maps as
+flat-store-by-construction. Same note next to the type in
+`sem/bindings.rs`.
 
 ## Consequences
 
