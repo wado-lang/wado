@@ -287,7 +287,7 @@ fn semantics_records_desugar_kind_per_ast_id() {
     // that drops `record_desugar` from any of the surface sites is
     // caught by this single test. Each helper expression below targets
     // exactly one variant. See `crate::elaborator::sem::types::DesugarKind`.
-    let source = r#"
+    let source = r"
 fn helper() -> Option<i32> {
     return Option::Some(1);
 }
@@ -338,7 +338,7 @@ export fn run() {
         x = x + 1;
     }
 }
-"#;
+";
     let host = InMemoryHost::new();
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
@@ -533,10 +533,10 @@ export fn run() {
     );
 }
 
-/// Stage 4 / WEP 2026-05-26: failed method lookup emits a MethodNotFound
-/// diagnostic and falls through with a placeholder MethodInfo so error
+/// Stage 4 / WEP 2026-05-26: failed method lookup emits a `MethodNotFound`
+/// diagnostic and falls through with a placeholder `MethodInfo` so error
 /// recovery can continue. The dispatch-recording gate must skip writing
-/// to `method_dispatch` in this case — recording a FunctionRef whose
+/// to `method_dispatch` in this case — recording a `FunctionRef` whose
 /// mangled name targets a non-existent method would mislead Stage 5
 /// reify into lowering a call to a function that does not exist.
 #[test]
