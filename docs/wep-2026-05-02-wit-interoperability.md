@@ -426,15 +426,27 @@ a project.
 
 Each phase ends with green E2E tests for the listed fixtures.
 
-- [ ] Phase 0 — Dependencies and `Semantics` extension
-  - [ ] Add `wit-encoder` and `wit-component` to `[workspace.dependencies]`
+- [x] Phase 0 — Dependencies and `Semantics` extension
+  - [x] Add `wit-encoder` and `wit-component` to `[workspace.dependencies]`
         matching the existing `wit-parser` generation.
-  - [ ] Move `WorldRegistry` population into `semantics_of`. Expose
-        `Semantics::worlds`, `Semantics::interfaces`,
-        `Semantics::exported_items`, `Semantics::default_interface_name`.
-  - [ ] Transition `FlatPackage` from `&'static WorldRegistry` to borrowing
-        the one on `Semantics` (or via shared `Rc`).
-  - [ ] Verify all existing tests still pass; this phase is a pure refactor.
+  - [x] Expose `Semantics::world_registry()` and `Semantics::wasi_registry()`.
+        The registries are already built by `Elaborator::annotate_modules`
+        and live on `AnnotateState`; the accessors surface them for the
+        WIT producer (Phase 1) and LSP without re-running stdlib parsing.
+        Both registries remain `OnceLock`-cached `&'static` singletons —
+        `FlatPackage` reads the same instance Semantics exposes, so no
+        threading change is required downstream.
+  - [x] Verify all existing tests still pass; this phase is a pure refactor.
+  - [ ] Rename `WasiRegistry` → `CmInterfaceRegistry` (separate commit on
+        this branch). The current name is stale after the effect→interface
+        unification: the registry covers every CM interface (`wasi:*`,
+        `core:kiln/*`, future user-declared interfaces), not just WASI.
+  - [ ] Defer to Phase 1 alongside the `wit_emit` consumer:
+        `Semantics::interfaces` (index of `pub interface Foo` with its
+        `#[cm("...")]` FQ), `Semantics::exported_items` (`export fn /
+        export struct / export interface` index), `default_interface_name`
+        (project-level option, not a frontend output — passed via
+        `WitEmitOptions`).
 
 - [ ] Phase 1 — `wado wit` text emission
   - [ ] `wado-compiler/src/wit_emit.rs`: type mapping, kebabification,

@@ -15,6 +15,7 @@ use crate::analyze::Analyzer;
 use crate::ast::{AstId, Module};
 use crate::ast_index::AstIndex;
 use crate::compiler_host::{CompilerHost, LogLevel};
+use crate::component_model::WasiRegistry;
 use crate::elaborator::Elaborator;
 use crate::elaborator::orchestration::AnnotateState;
 use crate::hashmap::IndexMap;
@@ -24,6 +25,7 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
+use crate::world_registry::WorldRegistry;
 
 /// A ready-to-query analysis result.
 ///
@@ -124,6 +126,38 @@ impl Semantics {
     #[must_use]
     pub fn is_complete(&self) -> bool {
         self.is_complete
+    }
+
+    /// Component Model world registry produced during annotate.
+    ///
+    /// Carries every `world` declaration the frontend has seen — stdlib
+    /// (`wasi:cli/command`, `wasi:http/service`, `core:kiln/generator`,
+    /// …) plus any user-declared worlds. Keyed by fully-qualified name.
+    ///
+    /// Returns `None` only when annotate bailed before constructing the
+    /// elaborator state. Batch compilation refuses to continue in that
+    /// case via [`Self::is_complete`]; LSP queries proceed without world
+    /// data.
+    ///
+    /// Consumed by the WIT producer (`wado wit` /
+    /// `wado compile --embed-wit=…`) and by world-shape decisions in
+    /// codegen / DCE (see [`crate::flat_package::FlatPackage`]).
+    #[must_use]
+    pub fn world_registry(&self) -> Option<&'static WorldRegistry> {
+        self.state.as_ref().map(|s| s.world_registry)
+    }
+
+    /// Component Model WASI-import registry produced during annotate.
+    ///
+    /// Carries the resolved `#[cm(...)]` / `#[cm_import(...)]` view of
+    /// every imported interface (effects-as-interfaces under the unified
+    /// WIT vocabulary) the frontend has seen. Powers CM binding
+    /// synthesis, lift/lower, and WIT producer-side emission.
+    ///
+    /// Returns `None` only when annotate bailed; see [`Self::world_registry`].
+    #[must_use]
+    pub fn wasi_registry(&self) -> Option<&'static WasiRegistry> {
+        self.state.as_ref().map(|s| s.tysys.wasi_registry)
     }
 
     /// Construct an empty [`Semantics`] holding only the bookkeeping that
