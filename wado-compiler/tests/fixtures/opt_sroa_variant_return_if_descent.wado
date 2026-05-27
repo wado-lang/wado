@@ -1,0 +1,57 @@
+// Regression: validator's `Return { Some(<wrapper>) }` descent must also
+// recurse into `If` wrappers, not only `Seq` / `Block`. The rewriter's
+// `lift_return_into_variant_leaves` already handles `Return(If(...))`,
+// so the validator must too — otherwise a candidate appearing inside
+// `Return(If(...))` via the canonical `LocalSet(temp, Call(candidate))`
+// shape gets over-invalidated by the `_` fallback's
+// `find_nested_candidate_calls`, losing the SROA opportunity.
+
+#[inline("never")]
+fn leaf(x: i32) -> Result<i32, String> {
+    if x < 0 {
+        return Result::<i32, String>::Err("negative");
+    }
+    return Result::<i32, String>::Ok(x + 1);
+}
+
+// `return if cond { ... } else { ... }` produces a top-level
+// `Return { Some(If { result: Some(VariantT), then, else }) }` shape.
+// The then-branch's last expression is an inline `match`, which
+// lowers to a typed value-If with `StructNew` leaves — so the function
+// passes discovery. Validating its body needs the If descent to find
+// the `LocalSet(__m, Call(leaf))` inside the then-branch and run the
+// standard call-site check on it; without descent, the bare
+// `find_nested_candidate_calls` walk over-invalidates `leaf`.
+#[inline("never")]
+fn dispatch(use_leaf: bool, x: i32) -> Result<i32, String> {
+    return if use_leaf {
+        match leaf(x) {
+            Ok(v) => Result::<i32, String>::Ok(v * 10),
+            Err(e) => Result::<i32, String>::Err(e),
+        }
+    } else {
+        Result::<i32, String>::Ok(-1)
+    };
+}
+
+fn run_all() -> i32 {
+    let a = match dispatch(true, 5) { Ok(v) => v, Err(_) => -100 };
+    let b = match dispatch(false, 0) { Ok(v) => v, Err(_) => -100 };
+    let c = match dispatch(true, -1) { Ok(v) => v, Err(_) => -100 };
+    return a + b + c;
+}
+
+export fn run() {
+    // leaf(5) -> Ok(6), dispatch -> Ok(60), a = 60
+    // dispatch(false, 0) -> Ok(-1), b = -1
+    // leaf(-1) -> Err, dispatch -> Err, c = -100
+    assert run_all() == -41;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "/leaf\" = fn(i32) -> [i32, i32, ref null \"core:prelude/string.wado//String\"]"
+    ]
+}

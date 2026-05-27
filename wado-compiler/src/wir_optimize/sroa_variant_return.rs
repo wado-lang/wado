@@ -50,6 +50,9 @@ use super::util::collect_pinned_func_ids;
 /// - Every call site stores the result into a temp and reads only via
 ///   `StructGet`.
 pub(super) fn sroa_variant_returns(module: &mut WirPackage) {
+    // Collect pinned func_ids (exported, in element tables, or RefFunc'd).
+    let pinned = collect_pinned_func_ids(module);
+
     // Phase 0: elide return-only temps. NIR's `field_scalarize` (HFS) emits
     // `__hfs_call_N` locals that ferry a match arm's value into the
     // surrounding function's `Return`, producing pairs of
@@ -61,10 +64,10 @@ pub(super) fn sroa_variant_returns(module: &mut WirPackage) {
     // `LocalSet → Return(LocalGet)` into a direct `Return(value)` is sound
     // when the temp's *only* uses match that shape — no other reads and no
     // unpaired writes — which is exactly the HFS-synthesised pattern.
-    elide_return_only_temps(module);
-
-    // Collect pinned func_ids (exported, in element tables, or RefFunc'd).
-    let pinned = collect_pinned_func_ids(module);
+    //
+    // Skip pinned functions: SROA never touches them anyway, so any subtle
+    // bug in the elision peephole shouldn't affect exported entry points.
+    elide_return_only_temps(module, &pinned);
 
     // Phase 1: identify candidate functions.
     let candidates = find_sroa_candidates(module, &pinned);
@@ -90,6 +93,13 @@ struct SroaCandidate {
     func_array_idx: usize,
     /// The WIR type index of the variant being returned.
     struct_type_idx: u32,
+    /// WIR type indices that are valid `StructNew` targets at the leaf of a
+    /// `Return` — every case struct of the variant plus the base variant
+    /// type (for unit cases). Cached so the validation phase can re-run
+    /// `all_returns_are_variant_struct_new` when an invalidation removes a
+    /// tail-call target and the surrounding caller's return shape must be
+    /// rechecked (cascade invalidation).
+    valid_case_type_indices: IndexSet<u32>,
     /// The field types of the new multi-value result types:
     /// `[i32 (discriminant), payload_type_0, payload_type_1, ...]`.
     field_types: Vec<WirType>,
@@ -244,7 +254,11 @@ fn reads_only_local_state(expr: &WirInstr) -> bool {
         | WirInstr::I64Load { .. }
         | WirInstr::V128Load { .. }
         | WirInstr::GlobalGet { .. }
-        | WirInstr::TableGet { .. } => false,
+        | WirInstr::TableGet { .. }
+        // `memory.size` observes the post-growth size of linear memory;
+        // moving it past an intervening `memory.grow` would observe a
+        // different value.
+        | WirInstr::MemorySize => false,
         // Calls — observable + might depend on intervening state.
         WirInstr::Call { .. }
         | WirInstr::CallIndirect { .. }
@@ -309,8 +323,16 @@ fn collect_local_io(
         }
     }
 }
-fn elide_return_only_temps(module: &mut WirPackage) {
-    for func in module.functions.iter_mut() {
+fn elide_return_only_temps(module: &mut WirPackage, pinned: &IndexSet<u32>) {
+    for (i, func) in module.functions.iter_mut().enumerate() {
+        let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
+        // Pinned functions (exports, RefFunc'd, element-table entries) are
+        // SROA-ineligible anyway; skipping them limits the blast radius of
+        // any bug in this peephole to functions that the rest of the pass
+        // would have rewritten too.
+        if pinned.contains(&func_id_index) {
+            continue;
+        }
         if let Some(body) = &mut func.body {
             elide_return_only_temps_in_body(body);
         }
@@ -381,7 +403,13 @@ fn scan_return_temp_stats(
 /// Maximum distance the relocation peephole will look ahead from a
 /// `LocalSet` to find a matching `Return(LocalGet)`. Pragmatic upper bound;
 /// HFS-emitted patterns put the write-back stmt right before the `Return`.
-const RETURN_TEMP_INTERVENING_BUDGET: usize = 8;
+/// Maximum number of intervening statements between the `LocalSet(temp, X)`
+/// and its paired `Return(LocalGet(temp))`. HFS write-back sequences sit
+/// here; nested struct deserializers can emit several restore-and-store
+/// statements before the return. 32 covers the patterns observed in
+/// `core:json` and `core:serde` deserializers without being open-ended (a
+/// truly large gap is unlikely to be safe to relocate past anyway).
+const RETURN_TEMP_INTERVENING_BUDGET: usize = 32;
 
 /// Return the index of a `Return(LocalGet(name))` reachable from
 /// `start_idx + 1` through intervening stmts that
@@ -838,6 +866,7 @@ fn analyze_variant_layout(
         SroaCandidate {
             func_array_idx,
             struct_type_idx: variant_type_idx,
+            valid_case_type_indices: all_case_type_indices.clone(),
             field_types,
             field_count,
             field_names,
@@ -967,8 +996,42 @@ fn value_expr_is_variant_struct_new(expr: &WirInstr, valid_type_indices: &IndexS
             body,
             result: Some(_),
             ..
-        } => all_br_variant_values_are_struct_new(body, valid_type_indices, 0),
+        } => {
+            // A typed block produces a value via two paths: every
+            // `[val, Br(0)]` exit pair, and (if the body doesn't end in a
+            // divergent instruction) the fallthrough value of the last
+            // item. The Br-exit values are checked by
+            // `all_br_variant_values_are_struct_new`; the fallthrough also
+            // needs validation, otherwise a body like
+            // `[LocalSet(x, Call), StructGet(RefCast(...))]` would be
+            // accepted vacuously (no Br exits, fallthrough not checked) and
+            // the rewriter would clear the block's result type with no
+            // matching StructNew leaf, producing invalid Wasm.
+            all_br_variant_values_are_struct_new(body, valid_type_indices, 0)
+                && block_fallthrough_is_variant_compatible(body, valid_type_indices)
+        }
         _ => false,
+    }
+}
+
+/// True when `body`'s fallthrough value path is acceptable for variant SROA:
+/// either the body diverges (last is `Return` / `Unreachable` / `Br*`) so no
+/// fallthrough value is produced, or the last instruction is itself one of
+/// the accepted leaf shapes recognised by `value_expr_is_variant_struct_new`.
+fn block_fallthrough_is_variant_compatible(
+    body: &[WirInstr],
+    valid_type_indices: &IndexSet<u32>,
+) -> bool {
+    let Some(last) = body.last() else {
+        return true;
+    };
+    match last {
+        WirInstr::Return { .. }
+        | WirInstr::Unreachable
+        | WirInstr::Br { .. }
+        | WirInstr::BrIf { .. }
+        | WirInstr::BrTable { .. } => true,
+        _ => value_expr_is_variant_struct_new(last, valid_type_indices),
     }
 }
 
@@ -981,9 +1044,18 @@ fn value_expr_is_variant_struct_new(expr: &WirInstr, valid_type_indices: &IndexS
 /// inside a typed merge point would push N multi-values with nowhere to
 /// go after the merge-point result type is cleared.
 ///
-/// This restriction matches `unwrap_to_candidate_call` on the validation
-/// side, so the discovery and validation passes agree on what a tail call
-/// looks like.
+/// **Asymmetry with `unwrap_to_candidate_call`.** Validation's
+/// `unwrap_to_candidate_call` *does* look through `Seq` / `Block`
+/// wrappers (necessary so the idiomatic `LocalSet(name, Seq([…, Call]))`
+/// lowering is recognised as a call site). This discovery-side checker
+/// is strictly tighter — only the bare top-level `Call` shape produces
+/// a candidate via tail-call propagation. The asymmetry is intentional
+/// but worth a guardrail: a `Return { Some(Seq([…, Call(g)])) }` in a
+/// non-candidate caller routes through validation's tail-call arm
+/// (because `unwrap_to_candidate_call` succeeds) and ends up
+/// over-invalidating `g` via the prefix scan — see the over-
+/// invalidation finding in the code-review notes. If/when that gets
+/// addressed, this comment should be reconciled.
 fn top_return_value_compatible(
     v: &WirInstr,
     valid_type_indices: &IndexSet<u32>,
@@ -1086,12 +1158,24 @@ fn validate_call_sites(
 ) -> Vec<(u32, SroaCandidate)> {
     let mut candidate_ids: IndexSet<u32> = candidates.iter().map(|(id, _)| *id).collect();
 
-    // Iterate to a fix-point. The tail-call rule accepts
-    // `Return { Some(Call(callee)) }` only when the surrounding caller is
-    // *also* a candidate. Invalidating a caller can therefore make a
-    // previously-valid tail-call site become invalid (its `caller_is_candidate`
-    // flips false), which in turn can invalidate the callee. Re-run validation
-    // with the shrinking candidate set until no further invalidations occur.
+    // Iterate to a fix-point. Two kinds of cascade need to converge:
+    //
+    // 1. **Caller-status cascade.** The tail-call rule accepts
+    //    `Return { Some(Call(callee)) }` only when the surrounding caller
+    //    is *also* a candidate. Invalidating a caller can therefore make a
+    //    previously-valid tail-call site become invalid (its
+    //    `caller_is_candidate` flips false), which in turn can invalidate
+    //    the callee.
+    // 2. **Tail-call-target cascade.** Discovery accepted a function `f`
+    //    because its returns include `Return { Some(Call(g)) }` and `g`
+    //    was a candidate. When `g` gets invalidated mid-validation, `f`'s
+    //    return shape no longer holds (the tail-call target is gone), so
+    //    `f` must also be invalidated — otherwise `apply_sroa` rewrites
+    //    `f`'s signature to multi-value while leaving `Return(Call(g))`
+    //    pointing at the still-single-value `g`, producing a Wasm
+    //    validator type mismatch. Re-running the discovery shape check
+    //    after each round (against an "effective" candidate set that
+    //    excludes pending invalidations) closes this cascade.
     let mut invalid: IndexSet<u32> = IndexSet::default();
     loop {
         let mut round_invalid: IndexSet<u32> = IndexSet::default();
@@ -1110,9 +1194,52 @@ fn validate_call_sites(
             }
         }
 
+        // Cascade 2: re-check return shapes against the effective set
+        // (candidate_ids minus pending round_invalid). Any candidate
+        // whose tail-call target was just invalidated loses its return
+        // shape and must be invalidated too. Iterate the recheck until
+        // it stabilises so transitive cascades are caught.
+        loop {
+            let mut cascade_changed = false;
+            let effective: IndexSet<u32> = candidate_ids
+                .iter()
+                .copied()
+                .filter(|id| !round_invalid.contains(id))
+                .collect();
+            let mut effective_by_variant: crate::hashmap::IndexMap<u32, IndexSet<u32>> =
+                crate::hashmap::IndexMap::default();
+            for (id, c) in candidates {
+                if effective.contains(id) {
+                    effective_by_variant
+                        .entry(c.struct_type_idx)
+                        .or_default()
+                        .insert(*id);
+                }
+            }
+            for (id, c) in candidates {
+                if !effective.contains(id) {
+                    continue;
+                }
+                let body = module.functions[c.func_array_idx].body.as_ref().unwrap();
+                let empty: IndexSet<u32> = IndexSet::default();
+                let tail_set = effective_by_variant.get(&c.struct_type_idx).unwrap_or(&empty);
+                if !all_returns_are_variant_struct_new(
+                    body,
+                    &c.valid_case_type_indices,
+                    tail_set,
+                ) {
+                    round_invalid.insert(*id);
+                    cascade_changed = true;
+                }
+            }
+            if !cascade_changed {
+                break;
+            }
+        }
+
         let mut new_invalid = false;
         for id in &round_invalid {
-            if candidate_ids.shift_remove(id) {
+            if candidate_ids.swap_remove(id) {
                 invalid.insert(*id);
                 new_invalid = true;
             }
@@ -1131,6 +1258,7 @@ fn validate_call_sites(
                 SroaCandidate {
                     func_array_idx: c.func_array_idx,
                     struct_type_idx: c.struct_type_idx,
+                    valid_case_type_indices: c.valid_case_type_indices.clone(),
                     field_types: c.field_types.clone(),
                     field_count: c.field_count,
                     field_names: c.field_names.clone(),
@@ -1212,9 +1340,9 @@ fn validate_call_sites_in_body(
                     caller_is_candidate,
                 );
             }
-            // `Return { Some(<Seq | Block>) }` — descend into the body and
-            // validate it as if it were a nested statement list. Synthesised
-            // code shapes like
+            // `Return { Some(<Seq | Block | If>) }` — descend into the body
+            // and validate it as if it were a nested statement list.
+            // Synthesised code shapes like
             //
             //     return Seq([let __m = call(d), if ref.test(__m, Ok) ... ])
             //
@@ -1224,6 +1352,12 @@ fn validate_call_sites_in_body(
             // outer `Return`'s default fallthrough would mark `candidate`
             // as invalid via `find_nested_candidate_calls`.
             //
+            // `If` is included for symmetry with the rewriter's
+            // `lift_return_into_variant_leaves` which explicitly handles
+            // `Return(If(...))`. Without this arm the validator's `_`
+            // fallback over-invalidates candidates that the rewriter
+            // could otherwise handle.
+            //
             // The tail-call shape `Return { Some(<wrapper>(Call(candidate))) }`
             // is still routed through `check_invalid_call_uses` first so
             // that path's args / block-prefix scan runs (and so we don't
@@ -1232,25 +1366,48 @@ fn validate_call_sites_in_body(
                 if unwrap_to_candidate_call(v, candidate_ids).is_none()
                     && matches!(
                         v.as_ref(),
-                        WirInstr::Seq(_) | WirInstr::Block { .. }
+                        WirInstr::Seq(_) | WirInstr::Block { .. } | WirInstr::If { .. }
                     ) =>
             {
-                if let WirInstr::Seq(body) = v.as_ref() {
-                    validate_call_sites_in_body(
-                        body,
-                        root_body,
-                        candidate_ids,
-                        invalid,
-                        caller_is_candidate,
-                    );
-                } else if let WirInstr::Block { body, .. } = v.as_ref() {
-                    validate_call_sites_in_body(
-                        body,
-                        root_body,
-                        candidate_ids,
-                        invalid,
-                        caller_is_candidate,
-                    );
+                match v.as_ref() {
+                    WirInstr::Seq(body) | WirInstr::Block { body, .. } => {
+                        validate_call_sites_in_body(
+                            body,
+                            root_body,
+                            candidate_ids,
+                            invalid,
+                            caller_is_candidate,
+                        );
+                    }
+                    WirInstr::If {
+                        condition,
+                        then_body,
+                        else_body,
+                        ..
+                    } => {
+                        // Check the condition for any nested candidate calls
+                        // (a Call inside the condition isn't a tail call
+                        // — it gets invalidated normally), then recurse
+                        // into both arms as statement lists.
+                        find_nested_candidate_calls(condition, candidate_ids, invalid);
+                        validate_call_sites_in_body(
+                            then_body,
+                            root_body,
+                            candidate_ids,
+                            invalid,
+                            caller_is_candidate,
+                        );
+                        if let Some(eb) = else_body {
+                            validate_call_sites_in_body(
+                                eb,
+                                root_body,
+                                candidate_ids,
+                                invalid,
+                                caller_is_candidate,
+                            );
+                        }
+                    }
+                    _ => unreachable!(),
                 }
             }
             // For non-block instructions, check for invalid call uses at this level
@@ -1590,14 +1747,22 @@ fn find_candidate_calls_in_block_prefix(
     candidate_ids: &IndexSet<u32>,
     invalid: &mut IndexSet<u32>,
 ) {
-    let body = match instr {
-        WirInstr::Block { body, .. } | WirInstr::Seq(body) => body.as_slice(),
+    // The trailing-Unreachable trim is Block-specific:
+    // `translate_stmts_as_value` appends `Unreachable` after a
+    // break-with-value statement so the Wasm validator sees no
+    // fallthrough value, and that `Unreachable` is dead code that must
+    // not be treated as the result. `Seq` has no equivalent emitter
+    // convention, so a trailing `Unreachable` inside `Seq([..., Call, Unreachable])`
+    // is meant as "execute the Call then trap" — `Call` is genuinely
+    // the prefix that needs scanning. Don't drop the Unreachable there.
+    let (body, drop_trailing_unreachable) = match instr {
+        WirInstr::Block { body, .. } => (body.as_slice(), true),
+        WirInstr::Seq(body) => (body.as_slice(), false),
         _ => return,
     };
-    // All instructions except the last (which is the result value) are prefix.
-    // Skip trailing Unreachable — translate_stmts_as_value may append one after
-    // a break-with-value; it is dead code and must not be treated as the result.
-    let effective_body = if matches!(body.last(), Some(WirInstr::Unreachable)) {
+    let effective_body = if drop_trailing_unreachable
+        && matches!(body.last(), Some(WirInstr::Unreachable))
+    {
         &body[..body.len() - 1]
     } else {
         body
