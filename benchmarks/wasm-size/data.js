@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779901546291,
+  "lastUpdate": 1779914085271,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26765,6 +26765,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2744b854824de1b937e3e608429ae08d2cffd849"
         },
         "date": 1779901546156,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e5c6e38cab802cd1a48857de22ee069fd3c7a914",
+          "message": "Merge pull request #1211 from wado-lang/claude/wado-stdlib-lazy-load-acxYG\n\nwado-compiler: parse stdlib modules lazily",
+          "timestamp": "2026-05-28T05:28:31+09:00",
+          "tree_id": "8fb2e65f3e7481deac6bc80dc990516bac147566",
+          "url": "https://github.com/wado-lang/wado/commit/e5c6e38cab802cd1a48857de22ee069fd3c7a914"
+        },
+        "date": 1779914084797,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
