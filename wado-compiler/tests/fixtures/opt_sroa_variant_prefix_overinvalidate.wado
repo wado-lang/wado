@@ -1,0 +1,68 @@
+// Regression marker for the prefix over-invalidation in
+// `find_candidate_calls_in_block_prefix` (review finding P1 #3).
+//
+// `helper` is `#[inline(always)]`'d into `caller`. The inlined block has
+// a `LocalSet(y, Call(g))` in its prefix and a tail value `Call(h)`.
+// `unwrap_to_candidate_call` recognises the outer `LS+Call(h)` and the
+// LS-arm validates `h` correctly. The block's prefix is then scanned by
+// `find_candidate_calls_in_block_prefix` via the unconditional
+// `find_nested_candidate_calls`, which marks `g` as invalid even though
+// `y`'s only use is the canonical `ref.test(Ok, y)` variant-access
+// pattern (which the bottom LS check would otherwise accept).
+//
+// Currently `g` is single-value (over-invalidated) and `h` is
+// multi-value. After the P1 #3 fix lands, `g` should also become
+// multi-value — flip the `wir_expect:O2` entries below.
+
+struct Counter { n: i32 }
+
+#[inline("never")]
+fn g(c: &mut Counter, x: i32) -> Result<i32, String> {
+    c.n = c.n + 1;
+    return Result::<i32, String>::Ok(x);
+}
+
+#[inline("never")]
+fn h(c: &mut Counter, x: i32) -> Result<i32, String> {
+    c.n = c.n + 10;
+    return Result::<i32, String>::Ok(x * 2);
+}
+
+#[inline(always)]
+fn helper(c: &mut Counter, x: i32) -> Result<i32, String> {
+    let y = g(c, x);
+    if let Ok(_) = y {
+        c.n = c.n + 100;  // observable side effect — keeps the ref.test alive
+    } else {
+        c.n = c.n + 1000;
+    }
+    return h(c, x + 1);
+}
+
+#[inline("never")]
+fn caller(c: &mut Counter, x: i32) -> Result<i32, String> {
+    let r = helper(c, x);
+    if let Ok(v) = r {
+        return Result::<i32, String>::Ok(v);
+    }
+    return Result::<i32, String>::Err("err");
+}
+
+export fn run() {
+    let mut c = Counter { n: 0 };
+    let r = caller(&mut c, 5);
+    let v = match r { Ok(v) => v, Err(_) => -1 };
+    assert v == 12;
+    assert c.n == 111;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "/g\" = fn(ref \"",
+        "//Counter\", i32) -> ref \"core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>\"",
+        "/h\" = fn(ref \"",
+        "//Counter\", i32) -> [i32, i32, ref null \"core:prelude/string.wado//String\"]"
+    ]
+}
