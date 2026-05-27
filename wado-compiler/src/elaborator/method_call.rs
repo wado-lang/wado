@@ -26,10 +26,17 @@ use super::types::{FunctionContext, MethodInfo, TypeError};
 /// `method_id == None` signals a synthetic call: no use→def edge is
 /// recorded against any AST node for the method name token. This is what
 /// keeps internal helper calls out of LSP jump-to-definition.
+///
+/// `call_id == None` likewise suppresses recording the dispatch decision
+/// in [`super::sem::TypeAnnotations::method_dispatch`]: the future
+/// `reify` pass (Stage 5 of WEP 2026-05-26) only walks source-level
+/// `MethodCallExpr` nodes, so a synthesised call has no AST id under which
+/// to file an entry.
 pub(super) struct MethodCallInput<'a> {
     pub receiver: TirExpr,
     pub method_name: &'a str,
     pub method_id: Option<AstId>,
+    pub call_id: Option<AstId>,
     pub type_args: Vec<TypeId>,
     pub args: &'a [ast::Expr],
     pub expected_type: Option<TypeId>,
@@ -67,6 +74,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver,
                 method_name: &method_call.method,
                 method_id: Some(method_call.method_id),
+                call_id: Some(method_call.id),
                 type_args,
                 args: &method_call.args,
                 expected_type,
@@ -87,6 +95,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             mut receiver,
             method_name,
             method_id,
+            call_id,
             type_args,
             args: args_ast,
             expected_type,
@@ -748,14 +757,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_reference_to_decl(method_id, &method_module_source, method_ast_id);
         }
 
+        let func = FunctionRef {
+            module_source: method_module_source,
+            name: mangled_method_name,
+            monomorph_info,
+            method_info: Some(method_info),
+        };
+
+        // Stage 4 of WEP 2026-05-26: record the dispatch decision so the
+        // future `reify` pass can emit the same `MethodCall` TIR without
+        // re-running trait lookup / method-name mangling. Synthetic calls
+        // (`call_id == None`) and the early-returning short-circuits above
+        // (tuple `.len()` / `.zip()`) skip recording per the
+        // `MethodDispatch` contract.
+        if let Some(call_id) = call_id {
+            self.sem.types.method_dispatch.insert(
+                call_id,
+                super::sem::types::MethodDispatch {
+                    function_ref: func.clone(),
+                    self_kind,
+                },
+            );
+        }
+
         Self::build_tir_method_call(
             receiver,
-            FunctionRef {
-                module_source: method_module_source,
-                name: mangled_method_name,
-                monomorph_info,
-                method_info: Some(method_info),
-            },
+            func,
             method_type_args, // Use inferred type args
             args.into_iter()
                 .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))

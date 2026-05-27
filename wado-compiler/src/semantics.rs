@@ -100,6 +100,13 @@ pub struct Semantics {
     /// Empty when resolve did not run or bailed before any expression was
     /// visited.
     pub expression_types: IndexMap<SymbolKey, TypeId>,
+    /// Method-dispatch decisions recorded for each AST
+    /// [`crate::ast::MethodCallExpr`] visited by the body walk, keyed by
+    /// the call expression's `(module, AstId)` pair. See
+    /// [`crate::elaborator::sem::types::MethodDispatch`] for the contract
+    /// (synthetic calls and short-circuiting paths leave no entry).
+    pub(crate) method_dispatch:
+        IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch>,
     /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `build_tir` did not run or bailed.
@@ -153,6 +160,7 @@ impl Semantics {
         locals: IndexMap<SymbolKey, Symbol>,
         local_types: IndexMap<SymbolKey, TypeId>,
         expression_types: IndexMap<SymbolKey, TypeId>,
+        method_dispatch: IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch>,
         tir_modules: IndexMap<ModuleSource, TirModule>,
     ) -> Self {
         Self {
@@ -167,6 +175,7 @@ impl Semantics {
             locals,
             local_types,
             expression_types,
+            method_dispatch,
             tir_modules,
             is_complete: false,
         }
@@ -255,6 +264,61 @@ impl Semantics {
     #[must_use]
     pub fn expression_type(&self, key: &SymbolKey) -> Option<TypeId> {
         self.expression_types.get(key).copied()
+    }
+
+    /// Method-dispatch decision recorded for the `MethodCallExpr` at
+    /// `key`, if any. Synthetic calls (for-of's `.into_iter()` /
+    /// `.next()`) and the short-circuiting paths inside
+    /// `resolve_method_call_with` (tuple `.len()` / `.zip()`,
+    /// static-method-as-instance error) leave no entry. See
+    /// [`crate::elaborator::sem::types::MethodDispatch`] for the data
+    /// shape.
+    ///
+    /// `#[allow(dead_code)]` until the consumer (`reify`, Stage 5 of the
+    /// WEP) lands.
+    #[allow(dead_code)]
+    #[must_use]
+    pub(crate) fn method_dispatch_at(
+        &self,
+        key: &SymbolKey,
+    ) -> Option<&crate::elaborator::sem::types::MethodDispatch> {
+        self.method_dispatch.get(key)
+    }
+
+    /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
+    /// method-dispatch decision at `key`.
+    ///
+    /// Returns `(resolved_function_name, defining_module, self_kind_str)`
+    /// for a `MethodCallExpr` whose dispatch was recorded by the body
+    /// walk, or `None` for synthetic / short-circuited call paths (see
+    /// [`crate::elaborator::sem::types::MethodDispatch`]). Used today as a
+    /// reachability probe in tests; the future `reify` pass / LSP hover
+    /// path consumes the full [`crate::elaborator::sem::types::MethodDispatch`]
+    /// via `pub(crate)` access from inside the crate.
+    #[must_use]
+    pub fn method_dispatch_view(
+        &self,
+        key: &SymbolKey,
+    ) -> Option<(String, ModuleSource, String)> {
+        let dispatch = self.method_dispatch.get(key)?;
+        let self_kind = match dispatch.self_kind {
+            crate::ast::SelfKind::None => "none",
+            crate::ast::SelfKind::Ref => "ref",
+            crate::ast::SelfKind::MutRef => "mut_ref",
+        };
+        Some((
+            dispatch.function_ref.name.clone(),
+            dispatch.function_ref.module_source.clone(),
+            self_kind.to_string(),
+        ))
+    }
+
+    /// Iterate every recorded method-dispatch decision keyed by the
+    /// `MethodCallExpr`'s `(module, AstId)`. Pair with
+    /// [`Self::method_dispatch_view`] for the stable public view onto
+    /// each entry.
+    pub fn iter_method_dispatch(&self) -> impl Iterator<Item = &SymbolKey> {
+        self.method_dispatch.keys()
     }
 
     /// URI (filename) of a module, when the module has one.
@@ -591,6 +655,7 @@ impl Semantics {
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
         )
     }
 }
@@ -684,6 +749,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
         );
     }
 
@@ -711,6 +777,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             TypeTable::new(),
             interner,
             None,
+            IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
@@ -753,13 +820,17 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // consume directly. The Semantics API stays keyed by `SymbolKey`; the
     // per-module storage on `AnnotateState` is the elaborator-side detail
     // that replaces the previous `Rc<RefCell<…>>` plumbing. `expression_types`
-    // is stored per-module keyed by raw `AstId` (the body walk's natural
-    // index); the rebind here pairs each id with its owning module so the
-    // Semantics-level lookup matches the other flat maps.
+    // and `method_dispatch` are stored per-module keyed by raw `AstId` (the
+    // body walk's natural index); the rebind here pairs each id with its
+    // owning module so the Semantics-level lookup matches the other flat maps.
     let mut references: IndexMap<SymbolKey, SymbolKey> = IndexMap::default();
     let mut locals: IndexMap<SymbolKey, Symbol> = IndexMap::default();
     let mut local_types: IndexMap<SymbolKey, TypeId> = IndexMap::default();
     let mut expression_types: IndexMap<SymbolKey, TypeId> = IndexMap::default();
+    let mut method_dispatch: IndexMap<
+        SymbolKey,
+        crate::elaborator::sem::types::MethodDispatch,
+    > = IndexMap::default();
     for (module_source, sem) in state.module_semantics.iter_mut() {
         references.extend(std::mem::take(&mut sem.bindings.references));
         locals.extend(std::mem::take(&mut sem.bindings.local_symbols));
@@ -768,6 +839,13 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             std::mem::take(&mut sem.types.expression_types)
                 .into_iter()
                 .map(|(ast_id, type_id)| (SymbolKey::new(module_source.clone(), ast_id), type_id)),
+        );
+        method_dispatch.extend(
+            std::mem::take(&mut sem.types.method_dispatch)
+                .into_iter()
+                .map(|(ast_id, dispatch)| {
+                    (SymbolKey::new(module_source.clone(), ast_id), dispatch)
+                }),
         );
     }
 
@@ -783,6 +861,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         locals,
         local_types,
         expression_types,
+        method_dispatch,
         tir_modules,
         is_complete: lower_ok,
     }

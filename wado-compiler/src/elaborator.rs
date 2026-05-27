@@ -23,7 +23,7 @@ mod method_lookup;
 mod module;
 mod operators;
 pub(crate) mod orchestration;
-mod sem;
+pub(crate) mod sem;
 mod stmt;
 mod template;
 pub(crate) mod trait_env;

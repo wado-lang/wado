@@ -17,14 +17,46 @@
 //!
 //! Stage 3 of [`wep-2026-05-26-elaborator-rearchitecture.md`] populated
 //! `local_types`; Stage 4 adds `expression_types` (per-`AstId` resolved
-//! type for every expression visited by the body walk). Method-dispatch
-//! targets, coercion choices, and desugar-kind annotations land as
-//! follow-up commits inside Stage 4.
+//! type for every expression visited by the body walk) and
+//! `method_dispatch` (per-`MethodCallExpr` resolved target plus the
+//! receiver-adjustment kind that annotate picked). Coercion choices and
+//! desugar-kind annotations land as follow-up commits inside Stage 4.
 
-use crate::ast::AstId;
+use crate::ast::{self, AstId};
 use crate::hashmap::IndexMap;
 use crate::symbol::SymbolKey;
-use crate::tir::TypeId;
+use crate::tir::{FunctionRef, TypeId};
+
+/// Method-dispatch decision recorded by the body walk for a
+/// [`crate::ast::MethodCallExpr`].
+///
+/// `function_ref` captures the resolved target (module, mangled name,
+/// monomorph info, and method-name metadata) so the future `reify` pass
+/// can emit the [`crate::tir::TirExprKind::MethodCall`] without re-running
+/// trait lookup, blanket-impl selection, or method-name mangling.
+/// `self_kind` carries the receiver-adjustment decision (`self` / `&self`
+/// / `&mut self`) so reify can drive `adjust_receiver_for_self_kind` with
+/// the same kind that annotate used.
+///
+/// Short-circuiting paths inside
+/// [`super::super::Elaborator::resolve_method_call_with`] (tuple `.len()`
+/// / `.zip()`, the static-method-as-instance error) do *not* leave an
+/// entry here — they rewrite the call into a non-`MethodCall` TIR shape
+/// that reify recognises from the receiver type alone. The synthetic
+/// for-of `.into_iter()` / `.next()` dispatches also skip recording
+/// because they have no source-level `MethodCallExpr` to attach to.
+///
+/// `#[allow(dead_code)]` on the fields is intentional: nothing reads them
+/// yet because the consumer (`reify`, Stage 5 of the WEP) has not landed.
+/// The Stage 4 contract is "the data is recorded and reachable;" the read
+/// path arrives with reify.
+#[derive(Clone)]
+pub(crate) struct MethodDispatch {
+    #[allow(dead_code)]
+    pub(crate) function_ref: FunctionRef,
+    #[allow(dead_code)]
+    pub(crate) self_kind: ast::SelfKind,
+}
 
 /// Per-`AstId` type annotations recorded by the body walk.
 #[derive(Default, Clone)]
@@ -45,4 +77,9 @@ pub(crate) struct TypeAnnotations {
     /// `TirExpr::type_id` without re-running type inference; LSP hover
     /// may also consult it directly.
     pub(crate) expression_types: IndexMap<AstId, TypeId>,
+    /// Method-dispatch decisions recorded for each AST
+    /// [`crate::ast::MethodCallExpr`] visited by the body walk, keyed by
+    /// the call expression's [`AstId`]. See [`MethodDispatch`] for the
+    /// data shape and the recording contract.
+    pub(crate) method_dispatch: IndexMap<AstId, MethodDispatch>,
 }

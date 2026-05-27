@@ -242,6 +242,42 @@ export fn run() with Stdout {
     assert_eq!(r1.1, "println");
 }
 
+/// Stage 4 of the elaborator re-architecture WEP: every `MethodCallExpr`
+/// the body walk reaches must leave its dispatch decision in
+/// `ModuleSemantics::types.method_dispatch`, surfaced through
+/// `Semantics::method_dispatch_view`. The synthetic helper calls used by
+/// the for-of loop carry `call_id == None` and stay out of the map.
+#[test]
+fn semantics_records_method_dispatch_per_call_site() {
+    let source = r"
+export fn run() {
+    let xs: Array<i32> = [1, 2, 3];
+    let _n = xs.len();
+}
+";
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+
+    // Walk every recorded dispatch and check that one of them is the
+    // `xs.len()` call. Using `iter_method_dispatch` here (rather than a
+    // brittle column lookup that depends on which sub-node sits beneath
+    // the cursor) keeps the test resilient to AstId numbering changes.
+    let hit = sem.iter_method_dispatch().any(|key| {
+        key.module == entry
+            && sem
+                .method_dispatch_view(key)
+                .is_some_and(|(name, _, self_kind)| {
+                    name.contains("len") && self_kind == "ref"
+                })
+    });
+    assert!(
+        hit,
+        "the `xs.len()` MethodCallExpr must record a dispatch decision with self_kind=ref",
+    );
+}
+
 /// Stage 4 of the elaborator re-architecture WEP: every expression
 /// visited by the body walk must leave its resolved [`TypeId`] in
 /// [`Semantics::expression_types`], keyed by the expression's
