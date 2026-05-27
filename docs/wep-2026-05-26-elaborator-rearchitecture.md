@@ -367,6 +367,110 @@ Each stage keeps `mise run test`, the WIR golden fixtures, and
 the LSP query tests green. Performance is not tracked during
 migration; see Trade-offs.
 
+## Status
+
+- [x] **Stage 1 — Skeleton.** Empty `TypeSystem` + `ModuleSemantics`
+      (`bindings`, `decls`, `imports`, `types`) introduced alongside the
+      existing `Elaborator` / `AnnotateState`. Every existing field
+      annotated with its future destination via `// MIGRATION:` markers.
+      No method or field moved.
+- [x] **Stage 2 — Pure type-system operations on `TypeSystem`.**
+  - Stage 2a: 15 pipeline-wide fields hoisted onto `TypeSystem`
+    (type arena, decl-interned tables, registries, included-files
+    map, read-only caches). `AnnotateState` and `Elaborator` each
+    hold one `tysys: TypeSystem` field; `TypeSystem` is `Clone`
+    (shallow `Rc` / `Arc` copy) so per-module elaborators get a
+    cheap view.
+  - Stage 2b: five host-agnostic helpers moved to `impl TypeSystem`:
+    `is_known_type_name`, `is_numeric_literal`,
+    `operator_trait_method`, `typecheck`, `typecheck_return`.
+  - The legacy `pub fn resolve_module` single-module wrapper and
+    `Elaborator::new` were removed as dead code; all entry now goes
+    through `annotate_modules` + `build_tir_from_state`.
+- [ ] **Stage 3 — `ModuleSemantics` population.**
+- [ ] **Stage 4 — Per-`AstId` annotation storage.**
+- [ ] **Stage 5 — `annotate_bodies` / `reify` split.**
+- [ ] **Stage 6 — Liveness and DCE.**
+- [ ] **Stage 7 — Cleanup.**
+
+### Stage 2 design notes
+
+The following decisions emerged while moving the type system out
+from under `Elaborator`. They refine — and in a few cases narrow
+— the surface sketched in "TypeSystem surface" above.
+
+#### TypeSystem stays host-agnostic
+
+`TypeSystem` operations that need to report a type error return
+`Result<(), TypeMismatchPayload>` (or analogous payload), never
+`&Logger<H>`. The `<H: CompilerHost>` parameter is confined to a
+thin wrapper on `Elaborator` that emits the diagnostic. Without
+this discipline `<H>` is contagious — every `TypeSystem` method
+that errors would propagate it, eventually pulling the host trait
+into the type-system API.
+
+The pattern in `typecheck.rs` is the template for the rest of the
+operations the WEP plans to move (`coerce`, method-lookup core,
+trait queries):
+
+1. A pure helper over `&TypeTable` (e.g. `check_assignable`).
+2. `impl TypeSystem { fn op(&self, …) -> Result<…, Payload> }`.
+3. `impl Elaborator { fn op(&self, …) { logger.error(payload) } }`.
+
+#### TypeSystem membership rule, in code
+
+`TypeSystem` only holds fields the elaborator queries while making
+type decisions. Concretely:
+
+- `wasi_registry` belongs (`call.rs` queries WASI function
+  signatures through it).
+- `world_registry` does **not** belong on `TypeSystem`, even
+  though it is built by the same `WasiRegistry::build_from_stdlib`
+  call. Only post-elaborator stages (`link`, `synthesis`,
+  `optimize/dce`, `lib.rs` world-existence validation) read it.
+  It lives on `AnnotateState` (driver state).
+
+The mechanical question to ask when adding a field: "does the
+elaborator's body walk query this field?" If no, it does not
+belong on `TypeSystem`.
+
+#### Three caches are deferred
+
+`indexing_trait_cache` and `method_info_cache` are genuine
+type-system caches whose keys are pure `TypeId` / name tuples;
+their move to `TypeSystem` is deferred only because the
+pipeline-wide cache lifetime story (today they are per-Elaborator
+mutable state, populated by the body walk) is not yet decided.
+
+`trait_check_stack` _looks_ similar — `RefCell<Vec<…>>` mutable
+state on `Elaborator` — but it is **not** a cache. It is the
+per-call frame stack used by `type_implements_trait` to break
+recursion on recursive types; sharing it across modules would
+either leak stale frames (a soundness bug — wrong "recursive,
+optimistically true" answers) or require per-call save/restore
+plumbing that defeats the move. Its migration target is the
+transient annotate-time scope bucket alongside `trait_ctx`, not
+`TypeSystem`.
+
+#### Unique-ownership contracts surface at the leak site
+
+`compile_after_load` consumes `Arc<TraitEnv>` and
+`Rc<BuiltinRegistry>` out of `state.tysys`. Both must be uniquely
+owned at that point — `synthesize`'s `extend_with_synthesised`
+panics on a shared `Arc<TraitEnv>`, and a shared
+`Rc<BuiltinRegistry>` silently falls back to a deep clone. The
+handoff uses `debug_assert_eq!` on `Arc::strong_count` /
+`Rc::strong_count` so a stray clone introduced by a later refactor
+surfaces at the leak site instead of in a downstream phase.
+
+#### Exhaustive matches over enum kinds
+
+Pure `TypeSystem` helpers (`is_numeric_literal`,
+`operator_trait_method`) enumerate every `Expr` / `BinaryOp`
+variant rather than using `_ => …`. A new variant added to either
+enum surfaces here as a compile error, forcing a deliberate
+decision instead of silently falling into the catch-all.
+
 ## Consequences
 
 ### Benefits

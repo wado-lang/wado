@@ -388,7 +388,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// containers, newtype unwrap, and (when the struct's field registry is
     /// in scope) named-struct field types.
     pub(super) fn type_contains_closure(&self, type_id: TypeId) -> bool {
-        let type_table = self.type_table.borrow();
+        let type_table = self.tysys.type_table.borrow();
         let mut visited: IndexSet<TypeId> = IndexSet::default();
         self.type_contains_closure_inner(&type_table, type_id, &mut visited)
     }
@@ -580,16 +580,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .expect("type param registered by register_generic_params")
                     })
                     .collect();
-                scope
-                    .type_table
-                    .borrow_mut()
-                    .intern(crate::tir::ResolvedType::GenericResource {
+                scope.tysys.type_table.borrow_mut().intern(
+                    crate::tir::ResolvedType::GenericResource {
                         name: name.to_string(),
                         module_source: module,
                         type_args: type_arg_ids,
-                    })
+                    },
+                )
             } else {
                 scope
+                    .tysys
                     .type_table
                     .borrow_mut()
                     .make_resource(name.to_string(), module)
@@ -611,9 +611,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // in the AST (`SelfKind` has no `Self_` variant),
                     // so the match is exhaustive over the resource
                     // case.
-                    (SelfKind::Ref, Some(self_t)) => scope.type_table.borrow_mut().make_ref(self_t),
+                    (SelfKind::Ref, Some(self_t)) => {
+                        scope.tysys.type_table.borrow_mut().make_ref(self_t)
+                    }
                     (SelfKind::MutRef, Some(self_t)) => {
-                        scope.type_table.borrow_mut().make_mut_ref(self_t)
+                        scope.tysys.type_table.borrow_mut().make_mut_ref(self_t)
                     }
                     // No `Self` in scope (effect decls) — drop the
                     // receiver as before; effect operations don't take
@@ -778,7 +780,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(scope);
 
         register_variant_compiler_item(
-            &self.type_table,
+            &self.tysys.type_table,
             &variant_decl.attrs,
             &variant_decl.name,
             &self.current_module_source,
@@ -837,7 +839,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Validate that stores declarations reference valid reference parameters.
     fn validate_stores(&self, stores: &[String], params: &[TirParam], span: crate::token::Span) {
-        let tt = self.type_table.borrow();
+        let tt = self.tysys.type_table.borrow();
         for store_name in stores {
             if let Some(param) = params.iter().find(|p| p.name == *store_name) {
                 let resolved = tt.get(param.type_id);
@@ -980,7 +982,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let _ = self.logger.error(TypeError::MissingReturn {
-            return_type: self.type_table.borrow().type_name(return_type),
+            return_type: self.tysys.type_table.borrow().type_name(return_type),
             span,
         });
     }
@@ -1362,6 +1364,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let name = &named.name;
                     if !scope.trait_ctx.type_params.contains_key(name) {
                         let type_id = scope
+                            .tysys
                             .type_table
                             .borrow_mut()
                             .make_type_param(name.clone(), i as u32);
@@ -1387,6 +1390,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // now living in the saved (parent) scope.
             if let Some(&(idx, _)) = scope.saved().type_params.get(&named.name) {
                 let type_id = scope
+                    .tysys
                     .type_table
                     .borrow_mut()
                     .make_type_param(named.name.clone(), idx);
@@ -1416,6 +1420,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(&(idx, _)) = scope.saved().type_params.get(&named.name)
             {
                 let type_id = scope
+                    .tysys
                     .type_table
                     .borrow_mut()
                     .make_type_param(named.name.clone(), idx);
@@ -1446,6 +1451,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && let Some(&(idx, _)) = scope.saved().type_params.get(name)
                 {
                     let type_id = scope
+                        .tysys
                         .type_table
                         .borrow_mut()
                         .make_type_pack(name.clone(), idx);
@@ -1526,6 +1532,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let (type_id, consumed_index) = if param.is_pack {
                 (
                     scope
+                        .tysys
                         .type_table
                         .borrow_mut()
                         .make_type_pack(param.name.clone(), idx),
@@ -1536,6 +1543,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 (
                     scope
+                        .tysys
                         .type_table
                         .borrow_mut()
                         .make_type_param(param.name.clone(), idx),
@@ -1626,10 +1634,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // named effects / resources don't get a false negative here.
             let canonical_key = scope.canonical_decl_key(name);
             if scope
+                .tysys
                 .trait_env
                 .effect_decl_index
                 .contains_key(&canonical_key)
                 || scope
+                    .tysys
                     .trait_env
                     .resource_decl_index
                     .contains_key(&canonical_key)
@@ -1646,12 +1656,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ast::SelfKind::Ref => {
                     // &self: wrap impl type in immutable reference
                     let inner_type = scope.resolve_type(impl_type);
-                    scope.type_table.borrow_mut().make_ref(inner_type)
+                    scope.tysys.type_table.borrow_mut().make_ref(inner_type)
                 }
                 ast::SelfKind::MutRef => {
                     // &mut self: wrap impl type in mutable reference
                     let inner_type = scope.resolve_type(impl_type);
-                    scope.type_table.borrow_mut().make_mut_ref(inner_type)
+                    scope.tysys.type_table.borrow_mut().make_mut_ref(inner_type)
                 }
                 ast::SelfKind::None => {
                     // Regular parameter

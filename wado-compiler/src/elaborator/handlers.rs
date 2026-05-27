@@ -141,8 +141,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // decl-index key from it directly rather than walking the
                     // import graph a second time via `canonical_decl_key`.
                     let key = (module_source.clone(), name.clone());
-                    let is_known_effect = self.trait_env.effect_decl_index.contains_key(&key);
-                    let is_known_resource = self.trait_env.resource_decl_index.contains_key(&key);
+                    let is_known_effect = self.tysys.trait_env.effect_decl_index.contains_key(&key);
+                    let is_known_resource =
+                        self.tysys.trait_env.resource_decl_index.contains_key(&key);
                     if !is_known_effect && !is_known_resource {
                         let _ = self.logger.error(TypeError::NotAnEffect {
                             name: name.clone(),
@@ -171,12 +172,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ..
         }) = &effect
         {
-            let type_name = self.type_table.borrow().type_name(handler_type);
+            let type_name = self.tysys.type_table.borrow().type_name(handler_type);
             // Skip the impl-presence check when the handler type is unresolved
             // (e.g. `Unknown` / `Error`), because earlier diagnostics already
             // reported the handler-side problem.
             let is_real_type = !matches!(
-                self.type_table.borrow().get(handler_type),
+                self.tysys.type_table.borrow().get(handler_type),
                 ResolvedType::Unknown | ResolvedType::Error
             );
             if is_real_type && !self.find_trait_impl_for_type(&type_name, interface_name) {
@@ -241,7 +242,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let handler = self.resolve_expr(&binding.handler, ctx, None);
         let handler_type = self.handler_underlying_type(handler.type_id);
 
-        let resolved = self.type_table.borrow().get(handler_type).clone();
+        let resolved = self.tysys.type_table.borrow().get(handler_type).clone();
         match resolved {
             // Already-diagnosed shapes: keep quiet so we don't pile a
             // bundled-specific error on top.
@@ -263,7 +264,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // empty bindings list lets the rest of the `with` body
             // continue resolving (the user gets one error, not a chain).
             ref other => {
-                let type_name = self.type_table.borrow().type_name(handler_type);
+                let type_name = self.tysys.type_table.borrow().type_name(handler_type);
                 let type_kind = describe_resolved_type_kind(other);
                 let _ = self
                     .logger
@@ -276,7 +277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let type_name = self.type_table.borrow().type_name(handler_type);
+        let type_name = self.tysys.type_table.borrow().type_name(handler_type);
         let effects = self.collect_effect_impls_for_type(&type_name);
 
         if effects.is_empty() {
@@ -354,7 +355,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // borrows on `trait_env.impl_index` / `loaded_modules` /
         // `current_module_items`.
         let mut trait_types: Vec<ast::Type> = Vec::new();
-        if let Some(entries) = self.trait_env.impl_index.get(type_name) {
+        if let Some(entries) = self.tysys.trait_env.impl_index.get(type_name) {
             for (module_src, item_idx) in entries {
                 let module = &self.loaded_modules[module_src];
                 if let Item::Impl(impl_block) = &module.items[*item_idx]
@@ -389,12 +390,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // a same-named effect / resource.
             let canonical_key = self.canonical_decl_key(&base_trait_name);
             let decl_module = self
+                .tysys
                 .trait_env
                 .effect_decl_index
                 .get(&canonical_key)
                 .map(|(m, _)| m.clone())
                 .or_else(|| {
-                    self.trait_env
+                    self.tysys
+                        .trait_env
                         .resource_decl_index
                         .get(&canonical_key)
                         .map(|(m, _)| m.clone())
@@ -426,7 +429,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// handler value points at. The handler's `impl Effect for T` block is
     /// indexed by `T`, not `&T`.
     fn handler_underlying_type(&self, type_id: TypeId) -> TypeId {
-        match self.type_table.borrow().get(type_id) {
+        match self.tysys.type_table.borrow().get(type_id) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
             _ => type_id,
         }

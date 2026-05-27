@@ -387,20 +387,45 @@ fn compile_after_load<H: CompilerHost>(
     // is populated.
     let state = state.expect("elaborator state present when is_complete");
 
+    // Move trait_env out of `state.tysys` rather than cloning the `Arc`,
+    // so that `Package` is the unique owner. `synthesize` later calls
+    // `TraitEnv::extend_with_synthesised`, which `Arc::try_unwrap`s the
+    // `trait_env` and **panics** if the `Arc` has more than one strong
+    // reference (see `trait_env.rs::extend_with_synthesised`). `TraitEnv`
+    // does not implement `Clone`, so a stray clone at this point cannot
+    // degrade gracefully — it would surface as a panic deep inside
+    // synthesis. The `debug_assert!` below makes that contract loud at
+    // the leak site instead of one stage later.
+    let world_registry = state.world_registry;
+    let tysys = state.tysys;
+    debug_assert_eq!(
+        std::sync::Arc::strong_count(&tysys.trait_env),
+        1,
+        "Package::new must be the unique `Arc<TraitEnv>` owner; a leftover \
+         per-module clone would panic in extend_with_synthesised"
+    );
+    // `Rc::try_unwrap` for `builtin_registry` is the same uniqueness
+    // contract; `BuiltinRegistry` *does* implement `Clone`, so the
+    // fallback path is sound but quietly deep-copies — the debug-assert
+    // catches the leak before that happens.
+    debug_assert_eq!(
+        std::rc::Rc::strong_count(&tysys.builtin_registry),
+        1,
+        "Package::new must be the unique `Rc<BuiltinRegistry>` owner; a \
+         leftover per-module clone would silently fall back to a deep clone"
+    );
+    let builtin_registry =
+        std::rc::Rc::try_unwrap(tysys.builtin_registry).unwrap_or_else(|rc| (*rc).clone());
     let package = Package::new(
         entry_module_source,
         tir_modules,
         symbols,
-        // Move trait_env out of `state` rather than cloning the `Arc`,
-        // so that `Package` is the unique owner. `synthesize` later relies
-        // on `Arc::try_unwrap` succeeding to swap layers in place; a stray
-        // clone here would force a deep `TraitEnv` clone instead.
-        state.trait_env,
+        tysys.trait_env,
         implicit_modules,
         module_name,
-        state.wasi_registry,
-        state.world_registry,
-        state.builtin_registry,
+        tysys.wasi_registry,
+        world_registry,
+        builtin_registry,
         interner,
     );
 
@@ -754,6 +779,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     };
 
     // === Phase 7: Resolve all modules to TIR ===
+    // Hand `load_result.included_files` to the elaborator via partial
+    // move + `Rc::new`, matching the `semantics_with_logger` pattern.
+    // The map can be megabytes for projects that bundle binary assets
+    // via `#include_bytes`, and nothing below this line reads
+    // `load_result.included_files` again.
+    let included_files = std::rc::Rc::new(load_result.included_files);
     let resolve_output = {
         let _span = logger.span("elaborate");
         Elaborator::elaborate_all_modules(
@@ -761,7 +792,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             &load_result.modules,
             load_result.entry_module_source.clone(),
             &logger,
-            &load_result.included_files,
+            included_files,
             load_result.invocations.clone(),
             interner.clone(),
         )

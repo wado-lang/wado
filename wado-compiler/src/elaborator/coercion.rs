@@ -22,7 +22,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Number literal coercion to integer
         if let Expr::Literal(lit) = expr
             && let Literal::Number(repr) = &lit.value
-            && self.type_table.borrow().is_integer(target_type)
+            && self.tysys.type_table.borrow().is_integer(target_type)
         {
             if util::is_float_only_literal(repr) {
                 let _ = self.logger.error(TypeError::InvalidLiteral {
@@ -45,7 +45,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(err_msg) = util::check_int_range_positive(
                         value,
                         target_type,
-                        &self.type_table.borrow(),
+                        &self.tysys.type_table.borrow(),
                         repr,
                     ) {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
@@ -84,7 +84,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && unary.op == UnaryOp::Neg
             && let Expr::Literal(lit) = &unary.expr
             && let Literal::Number(repr) = &lit.value
-            && self.type_table.borrow().is_integer(target_type)
+            && self.tysys.type_table.borrow().is_integer(target_type)
         {
             if util::is_float_only_literal(repr) {
                 let _ = self.logger.error(TypeError::InvalidLiteral {
@@ -107,7 +107,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(err_msg) = util::check_int_range_negative(
                         value,
                         target_type,
-                        &self.type_table.borrow(),
+                        &self.tysys.type_table.borrow(),
                         repr,
                     ) {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
@@ -145,7 +145,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Number literal coercion to float
         if let Expr::Literal(lit) = expr
             && let Literal::Number(repr) = &lit.value
-            && self.type_table.borrow().is_float(target_type)
+            && self.tysys.type_table.borrow().is_float(target_type)
         {
             return Some(match util::parse_float_literal(repr) {
                 Ok(value) => TirExpr::new(
@@ -178,7 +178,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && unary.op == UnaryOp::Neg
             && let Expr::Literal(lit) = &unary.expr
             && let Literal::Number(repr) = &lit.value
-            && self.type_table.borrow().is_float(target_type)
+            && self.tysys.type_table.borrow().is_float(target_type)
         {
             return Some(match util::parse_float_literal(repr) {
                 Ok(value) => TirExpr::new(
@@ -211,7 +211,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Literal::Number(repr) = &lit.value
             && !util::is_float_only_literal(repr)
         {
-            let struct_name = match self.type_table.borrow().get(target_type).clone() {
+            let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
                 ResolvedType::Struct { name, .. } => Some(name),
                 _ => None,
             };
@@ -307,7 +307,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Literal::Number(repr) = &lit.value
             && !util::is_float_only_literal(repr)
         {
-            let struct_name = match self.type_table.borrow().get(target_type).clone() {
+            let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
                 ResolvedType::Struct { name, .. } => Some(name),
                 _ => None,
             };
@@ -366,7 +366,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             let is_numeric = {
-                let tt = self.type_table.borrow();
+                let tt = self.tysys.type_table.borrow();
                 tt.is_integer(expected) || tt.is_float(expected)
             };
             if !is_numeric {
@@ -395,7 +395,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Null literal → Option<T>
         if let Expr::Literal(lit) = expr
             && matches!(&lit.value, Literal::Null)
-            && self.type_table.borrow().as_option(target_type).is_some()
+            && self
+                .tysys
+                .type_table
+                .borrow()
+                .as_option(target_type)
+                .is_some()
         {
             return Some(TirExpr::new(TirExprKind::Null, target_type, lit.span));
         }
@@ -407,15 +412,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) || matches!(expr, Expr::TemplateString(_));
 
         if is_string_or_template {
-            let base_id = self.type_table.borrow().get_ultimate_base_type(target_type);
+            let base_id = self
+                .tysys
+                .type_table
+                .borrow()
+                .get_ultimate_base_type(target_type);
             let string_struct_name = self
+                .tysys
                 .type_table
                 .borrow()
                 .compiler_items()
                 .struct_name(crate::compiler_item::CompilerItem::String)
                 .to_string();
             let is_string_newtype = matches!(
-                self.type_table.borrow().get(base_id),
+                self.tysys.type_table.borrow().get(base_id),
                 ResolvedType::Struct { name, .. } if name == &string_struct_name
             ) && target_type != base_id;
             if is_string_newtype {
@@ -429,9 +439,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // unwrapped base fn type (so unannotated params are inferred from the
         // expected signature) and retag the result with the newtype id.
         if matches!(expr, Expr::Closure(_)) {
-            let base_id = self.type_table.borrow().get_ultimate_base_type(target_type);
+            let base_id = self
+                .tysys
+                .type_table
+                .borrow()
+                .get_ultimate_base_type(target_type);
             let is_fn_newtype = matches!(
-                self.type_table.borrow().get(base_id),
+                self.tysys.type_table.borrow().get(base_id),
                 ResolvedType::Function { .. }
             ) && target_type != base_id;
             if is_fn_newtype {
@@ -456,11 +470,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Expr::StructLiteral(struct_lit) = expr
             && struct_lit.name.is_none()
             && matches!(
-                self.type_table.borrow().get(target_type),
+                self.tysys.type_table.borrow().get(target_type),
                 ResolvedType::GenericInstance { .. }
             )
         {
-            let type_name = self.type_table.borrow().type_name(target_type);
+            let type_name = self.tysys.type_table.borrow().type_name(target_type);
             let _ = self.logger.error(TypeError::MissingTraitImpl {
                 type_name,
                 trait_name: "KeyValueLiteral".to_string(),
@@ -506,7 +520,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let builder_name_for_lookup = self
             .struct_name_for_type(builder_type)
             .unwrap_or_else(|| base_name.clone());
-        let builder_type_module = match self.type_table.borrow().get(builder_type) {
+        let builder_type_module = match self.tysys.type_table.borrow().get(builder_type) {
             ResolvedType::Struct { module_source, .. }
             | ResolvedType::GenericInstance { module_source, .. }
             | ResolvedType::Enum { module_source, .. }
@@ -523,6 +537,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // current-module fallback — if neither resolves, the builder
         // has no callable `new_literal` and that's a synthesis bug.
         let impl_module_source = self
+            .tysys
             .trait_env
             .impl_module_for(
                 &builder_name_for_lookup,
@@ -541,6 +556,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let span = expr.span();
         let string_type = self
+            .tysys
             .type_table
             .borrow_mut()
             .make_compiler_struct(crate::compiler_item::CompilerItem::String);
@@ -551,7 +567,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .struct_name_for_type(builder_type)
             .unwrap_or_else(|| base_name.clone());
         let (type_arg_names, type_arg_ids): (Vec<String>, Vec<TypeId>) = {
-            let tt = self.type_table.borrow();
+            let tt = self.tysys.type_table.borrow();
             match tt.get(builder_type) {
                 ResolvedType::GenericInstance { type_args, .. } => {
                     let names: Vec<String> = type_args
@@ -676,8 +692,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && value.type_id != TypeTable::NEVER
             {
                 let _ = self.logger.error(TypeError::TypeMismatch {
-                    expected: self.type_table.borrow().type_name(value_type),
-                    found: self.type_table.borrow().type_name(value.type_id),
+                    expected: self.tysys.type_table.borrow().type_name(value_type),
+                    found: self.tysys.type_table.borrow().type_name(value.type_id),
                     span: field.value.span(),
                 });
             }
@@ -823,7 +839,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|info| (info, false))
             .or_else(|| {
                 // For newtypes, try the base type's SequenceLiteral impl
-                let base_type = self.type_table.borrow().get_newtype_base(target_type)?;
+                let base_type = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .get_newtype_base(target_type)?;
                 let base_name = self.struct_name_for_type(base_type)?;
                 self.find_sequence_literal_trait_impl(&base_name, base_type)
                     .map(|info| (info, true))
@@ -841,7 +861,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let span = expr.span();
 
         let (type_arg_names, type_arg_ids): (Vec<String>, Vec<TypeId>) = {
-            let tt = self.type_table.borrow();
+            let tt = self.tysys.type_table.borrow();
             match tt.get(builder_type) {
                 ResolvedType::GenericInstance { type_args, .. } => {
                     let names: Vec<String> = type_args
@@ -938,16 +958,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if elem_expr.type_id != element_type
                 && elem_expr.type_id != TypeTable::UNKNOWN
                 && element_type != TypeTable::UNKNOWN
-                && !self.type_table.borrow().contains_type_param(element_type)
+                && !self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_type_param(element_type)
             {
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: format!(
                         "homogeneous elements of type '{}'",
-                        self.type_table.borrow().type_name(element_type)
+                        self.tysys.type_table.borrow().type_name(element_type)
                     ),
                     found: format!(
                         "heterogeneous element of type '{}'",
-                        self.type_table.borrow().type_name(elem_expr.type_id)
+                        self.tysys.type_table.borrow().type_name(elem_expr.type_id)
                     ),
                     span: element.span(),
                 });

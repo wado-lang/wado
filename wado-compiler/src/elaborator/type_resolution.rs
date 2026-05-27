@@ -78,7 +78,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect();
                 // Resolve effect names in function type position
                 let effects = self.resolve_effects(&func_ty.effects, &func_ty.effect_ids);
-                self.type_table.borrow_mut().make_function_with_mut(
+                self.tysys.type_table.borrow_mut().make_function_with_mut(
                     func_ty.is_mut,
                     params,
                     return_type,
@@ -89,21 +89,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::Tuple(elements) => {
                 let elem_types: Vec<TypeId> =
                     elements.iter().map(|e| self.resolve_type(e)).collect();
-                self.type_table.borrow_mut().make_tuple(elem_types)
+                self.tysys.type_table.borrow_mut().make_tuple(elem_types)
             }
             Type::Reference(inner) => {
                 let inner_type = self.resolve_type(inner);
-                self.type_table.borrow_mut().make_ref(inner_type)
+                self.tysys.type_table.borrow_mut().make_ref(inner_type)
             }
             Type::MutReference(inner) => {
                 let inner_type = self.resolve_type(inner);
-                self.type_table.borrow_mut().make_mut_ref(inner_type)
+                self.tysys.type_table.borrow_mut().make_mut_ref(inner_type)
             }
             Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
             Type::TypePackSpread(name, span) => {
                 // Look up the type pack parameter
                 if let Some((index, _type_id)) = self.trait_ctx.type_params.get(name) {
-                    self.type_table
+                    self.tysys
+                        .type_table
                         .borrow_mut()
                         .make_type_pack(name.clone(), *index)
                 } else {
@@ -142,10 +143,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // type from the TypeTable directly. This handles cases like blanket impl resolution
             // where we temporarily bind e.g. I = StrUtf8ByteIter (concrete struct), and
             // I::Item should resolve to u8 via (StrUtf8ByteIter, "Item") → u8.
-            let param_is_concrete = !self.type_table.borrow().contains_type_param(param_type_id);
+            let param_is_concrete = !self
+                .tysys
+                .type_table
+                .borrow()
+                .contains_type_param(param_type_id);
             if param_is_concrete {
                 // First try pre-registered concrete associated type resolution.
                 if let Some(resolved) = self
+                    .tysys
                     .type_table
                     .borrow()
                     .resolve_assoc_type(param_type_id, &namespaced.name)
@@ -157,6 +163,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // is generic — resolve_assoc_type won't find a pre-registered entry, but
                 // resolve_generic_assoc_type can derive i32 from ("ArrayIter", "Item") → TypeParam(0).
                 if let Some(resolved) = self
+                    .tysys
                     .type_table
                     .borrow()
                     .resolve_generic_assoc_type(param_type_id, &namespaced.name)
@@ -184,12 +191,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let assoc_type_bindings =
                 self.compute_assoc_type_bindings(&namespaced.namespace.clone(), &assoc_bounds);
 
-            return self.type_table.borrow_mut().make_assoc_type_projection(
-                param_type_id,
-                namespaced.name.clone(),
-                bound_names,
-                assoc_type_bindings,
-            );
+            return self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_assoc_type_projection(
+                    param_type_id,
+                    namespaced.name.clone(),
+                    bound_names,
+                    assoc_type_bindings,
+                );
         }
 
         if namespaced.namespace.as_str() == "builtin" {
@@ -203,7 +214,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return TypeTable::ERROR;
                 }
                 let element_type = self.resolve_type(&namespaced.args[0]);
-                self.type_table
+                self.tysys
+                    .type_table
                     .borrow_mut()
                     .make_builtin_array(element_type)
             } else {
@@ -263,22 +275,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else if let Some(struct_info) = self.lookup_struct_fields(name) {
                     // Use canonical name (not import alias) so interning produces the same TypeId
                     let (n, src) = (struct_info.name.clone(), struct_info.module_source.clone());
-                    self.type_table.borrow_mut().make_struct(n, src)
+                    self.tysys.type_table.borrow_mut().make_struct(n, src)
                 } else if let Some(variant_info) = self.lookup_variant_case(name) {
                     let (n, src) = (
                         variant_info.name.clone(),
                         variant_info.module_source.clone(),
                     );
-                    self.type_table.borrow_mut().make_variant(n, src)
+                    self.tysys.type_table.borrow_mut().make_variant(n, src)
                 } else if let Some(enum_info) = self.lookup_enum_case(name) {
                     let (n, src) = (enum_info.name.clone(), enum_info.module_source.clone());
-                    self.type_table.borrow_mut().make_enum(n, src)
+                    self.tysys.type_table.borrow_mut().make_enum(n, src)
                 } else if let Some(resource_info) = self.lookup_resource_type(name) {
                     let (n, src) = (
                         resource_info.name.clone(),
                         resource_info.module_source.clone(),
                     );
-                    self.type_table.borrow_mut().make_resource(n, src)
+                    self.tysys.type_table.borrow_mut().make_resource(n, src)
                 } else {
                     // Unknown type
                     TypeTable::UNKNOWN
@@ -313,35 +325,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table.borrow_mut().make_option(inner)
+                self.tysys.type_table.borrow_mut().make_option(inner)
             }
             "Stream" => {
                 let elem = args
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table.borrow_mut().make_stream(elem)
+                self.tysys.type_table.borrow_mut().make_stream(elem)
             }
             "StreamWritable" => {
                 let elem = args
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table.borrow_mut().make_stream_writable(elem)
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_stream_writable(elem)
             }
             "Future" => {
                 let elem = args
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table.borrow_mut().make_future(elem)
+                self.tysys.type_table.borrow_mut().make_future(elem)
             }
             "FutureWritable" => {
                 let elem = args
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
-                self.type_table.borrow_mut().make_future_writable(elem)
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_future_writable(elem)
             }
             _ => {
                 // Check if it's a user-defined generic struct
@@ -379,7 +397,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Create a GenericInstance type
-                    self.type_table.borrow_mut().make_generic_instance(
+                    self.tysys.type_table.borrow_mut().make_generic_instance(
                         name.to_string(),
                         module_source,
                         type_args,
@@ -391,7 +409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         let type_args: Vec<TypeId> =
                             args.iter().map(|t| self.resolve_type(t)).collect();
-                        self.type_table.borrow_mut().make_generic_instance(
+                        self.tysys.type_table.borrow_mut().make_generic_instance(
                             name.to_string(),
                             variant_info.module_source,
                             type_args,
@@ -411,7 +429,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map(|&tid| self.type_id_to_string(tid))
                         .collect();
                     let display_name = format!("{}<{}>", name, arg_names.join(", "));
-                    self.type_table.borrow_mut().make_newtype(
+                    self.tysys.type_table.borrow_mut().make_newtype(
                         display_name,
                         gn_info.module_source,
                         base_type_id,
@@ -431,7 +449,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_id: TypeId,
         assoc_name: &str,
     ) -> Vec<crate::ast::TraitBound> {
-        let param_type = self.type_table.borrow().get(param_id).clone();
+        let param_type = self.tysys.type_table.borrow().get(param_id).clone();
         if !matches!(param_type, ResolvedType::TypeParam { .. }) {
             return Vec::new();
         }

@@ -36,7 +36,7 @@ struct ExpectedFn {
 impl<H: CompilerHost> Elaborator<'_, H> {
     fn extract_expected_fn(&self, expected_type: Option<TypeId>) -> Option<ExpectedFn> {
         let tid = expected_type?;
-        let tt = self.type_table.borrow();
+        let tt = self.tysys.type_table.borrow();
         // See through newtype layers so a closure assigned to a `type Handler =
         // fn(...)` newtype still gets its parameter types inferred from the
         // underlying fn signature.
@@ -156,7 +156,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 any_mutating_capture = true;
                 let inner_type = local.type_id;
                 let outer_index = local.index;
-                let ref_type = self.type_table.borrow_mut().make_mut_ref(inner_type);
+                let ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(inner_type);
                 let ref_name = format!("__ref_{var_name}");
                 let ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
                 ctx.address_taken_locals.insert(outer_index);
@@ -194,7 +194,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Step 3: Open the closure scope with the deref overrides.
         let mut closure_ctx =
-            FunctionContext::new_closure(TypeTable::UNKNOWN, ctx, &self.type_table);
+            FunctionContext::new_closure(TypeTable::UNKNOWN, ctx, &self.tysys.type_table);
         closure_ctx.deref_overrides = deref_overrides;
 
         // Step 4: Add closure parameters.
@@ -250,7 +250,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         && body.type_id != TypeTable::NEVER
                     {
                         let _ = self.logger.error(TypeError::MissingReturn {
-                            return_type: self.type_table.borrow().type_name(t),
+                            return_type: self.tysys.type_table.borrow().type_name(t),
                             span: closure.span,
                         });
                     }
@@ -261,7 +261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 None => {
                     let _ = self.logger.error(TypeError::MissingReturn {
-                        return_type: self.type_table.borrow().type_name(body.type_id),
+                        return_type: self.tysys.type_table.borrow().type_name(body.type_id),
                         span: closure.span,
                     });
                     TypeTable::UNIT
@@ -276,7 +276,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the same reason as before: function-type assignability is
         // structural in params/return and ignores effects.
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
-        let func_type = self.type_table.borrow_mut().make_function_with_mut(
+        let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
             any_mutating_capture,
             param_types,
             return_type,

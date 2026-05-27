@@ -23,6 +23,7 @@ mod method_lookup;
 mod module;
 mod operators;
 pub(crate) mod orchestration;
+mod sem;
 mod stmt;
 mod template;
 pub(crate) mod trait_env;
@@ -30,18 +31,16 @@ mod trait_query;
 mod type_resolution;
 mod typecheck;
 pub(crate) mod types;
+mod tysys;
 mod util;
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, Item, Module};
-use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
-use crate::component_model::WasiRegistry;
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, MethodName};
@@ -51,7 +50,21 @@ use crate::tir::{
     TypeTable,
 };
 
-use trait_env::TraitEnv;
+/// Build a function-name → item-index map for a module's items. Used
+/// once per loaded module during annotate
+/// ([`orchestration::Elaborator::annotate_modules`]) to populate
+/// [`tysys::TypeSystem::loaded_module_func_indices`]; the per-module
+/// body walk then consults that pre-built index instead of rebuilding
+/// here.
+pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
+    let mut index = IndexMap::default();
+    for (i, item) in items.iter().enumerate() {
+        if let Item::Function(func) = item {
+            index.insert(func.name.clone(), i);
+        }
+    }
+    index
+}
 
 /// `true` if `name` denotes a built-in primitive Wado type. Primitives
 /// have inherent impl blocks in `core:prelude/primitive` but no
@@ -80,29 +93,27 @@ use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
 };
 
+// Migration markers below trace the WEP 2026-05-26 elaborator
+// re-architecture. Each `MIGRATION:` line names the field's future home —
+// `TypeSystem` (pipeline-wide type knowledge) or a sub-struct of
+// `ModuleSemantics` (per-module facts), or a transient annotate-time scope
+// or cross-cutting input that stays on the per-module driver.
+
 pub struct Elaborator<'a, H: CompilerHost> {
-    /// Type table (shared across all modules via Rc<RefCell>)
-    type_table: Rc<RefCell<TypeTable>>,
+    /// Pipeline-wide type knowledge: type arena, decl-interned type
+    /// tables, registries, included-files map, and the read-only caches
+    /// built once during `annotate_modules`. See [`tysys::TypeSystem`].
+    pub(crate) tysys: tysys::TypeSystem,
     /// Symbol table from analyzer
-    #[allow(dead_code)]
+    // MIGRATION: cross-cutting input (stays on the driver).
     symbols: &'a SymbolTable,
     /// Loaded modules from analyzer
-    #[allow(dead_code)]
+    // MIGRATION: cross-cutting input (stays on the driver).
     loaded_modules: &'a IndexMap<ModuleSource, Module>,
-    /// Per-module nested maps for cross-module type resolution (shared via Rc).
-    /// These are the *single source of truth* for declared type info; all
-    /// per-module name resolution is performed by walking these via
-    /// [`TypeLookup`] without cloning their contents into per-module flat maps.
-    all_newtypes: Rc<IndexMap<ModuleSource, IndexMap<String, TypeId>>>,
-    all_generic_newtypes: Rc<IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>>>,
-    all_struct_fields: Rc<IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>>,
-    all_variant_cases: Rc<IndexMap<ModuleSource, IndexMap<String, VariantInfo>>>,
-    all_enum_cases: Rc<IndexMap<ModuleSource, IndexMap<String, EnumInfo>>>,
-    all_flags_cases: Rc<IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>>,
-    all_resource_types: Rc<IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>>,
     /// Per-module import context (consumed by [`TypeLookup`]). Built once per
     /// module from `use` declarations; replaces the 7 flat maps the elaborator
     /// used to clone for each module.
+    // MIGRATION: → ModuleSemantics::imports (both fields below).
     imported_type_sources: IndexMap<String, ModuleSource>,
     import_original_names: IndexMap<String, String>,
     /// Locally discovered additions to the type tables. Anonymous structs
@@ -110,6 +121,9 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// `module.items` insert here so [`TypeLookup`] can find them at the
     /// highest priority. Always empty unless the current module has a
     /// reason to override / extend the shared tables.
+    // MIGRATION: → ModuleSemantics::decls (per-module decl overrides, all 6 below).
+    //   Stage 2/3 may instead promote these into a per-module view on TypeSystem;
+    //   decided at the move site.
     local_struct_fields: IndexMap<String, StructFieldInfo>,
     local_newtypes: IndexMap<String, TypeId>,
     local_generic_newtypes: IndexMap<String, GenericNewtypeInfo>,
@@ -117,187 +131,152 @@ pub struct Elaborator<'a, H: CompilerHost> {
     local_flags_cases: IndexMap<String, FlagsInfo>,
     local_variant_cases: IndexMap<String, VariantInfo>,
     /// Function return types (name -> return type)
+    // MIGRATION: → ModuleSemantics::decls.
     function_return_types: IndexMap<String, TypeId>,
     /// Imported function names for the current module
+    // MIGRATION: → ModuleSemantics::decls.
     imported_functions: IndexSet<String>,
     /// Logger for emitting diagnostics
+    // MIGRATION: cross-cutting input (stays on the driver).
     logger: &'a Logger<'a, H>,
     /// Current module source being resolved (for struct type `module_source`)
+    // MIGRATION: identifies the active `ModuleSemantics` — the driver swaps
+    //   modules via the `IndexMap<ModuleSource, ModuleSemantics>` key, so this
+    //   field disappears after Stage 3.
     current_module_source: ModuleSource,
     /// Entry module source (for cross-module import dedup)
+    // MIGRATION: cross-cutting input (stays on the driver).
     entry_module_source: ModuleSource,
     /// Current module items (for local function parameter lookup)
+    // MIGRATION: cross-cutting input (the active module's AST is passed
+    //   alongside its `ModuleSemantics`).
     current_module_items: &'a [Item],
     /// Mutable trait resolution context: type params, bounds, associated type bindings, self type.
     /// Grouped together so scope entry/exit can save/restore the whole context at once.
+    // MIGRATION: transient annotate-time scope (Stage 5 carries it as an
+    //   explicit argument to `annotate_*` walkers).
     trait_ctx: trait_env::TraitContext,
     /// Generic struct definitions (name -> type param count)
     /// Used to determine if a struct is generic
+    // MIGRATION: → ModuleSemantics::decls.
     generic_struct_names: IndexSet<String>,
     /// Generic function type parameters (`func_name` -> `type_params`)
     /// Used for substituting type parameters in return types
+    // MIGRATION: → ModuleSemantics::decls.
     generic_function_params: IndexMap<String, Vec<(String, TypeId)>>,
     /// Resolved param types for generic functions (`func_name` -> `param TypeIds`)
     /// Resolved in the function's own type param scope so `TypeParams` have correct ids.
+    // MIGRATION: → ModuleSemantics::decls.
     generic_function_resolved_param_types: IndexMap<String, Vec<TypeId>>,
     /// Resolved return type for generic functions (`func_name` -> `return TypeId`)
     /// Resolved in the function's own type param scope; used for expected-return
     /// driven back-inference by [`infer::InferCtx::add_expected_return`].
+    // MIGRATION: → ModuleSemantics::decls.
     generic_function_resolved_return_types: IndexMap<String, TypeId>,
     /// Generic method type parameters (`mangled_name` -> `type_params`)
     /// Used for substituting type parameters in method return types
+    // MIGRATION: → ModuleSemantics::decls.
     generic_method_params: IndexMap<String, Vec<(String, TypeId)>>,
     /// Resolved param types for generic methods (`mangled_name` -> `param TypeIds`)
     /// Resolved in the method's own type param scope so `TypeParams` have correct ids.
+    // MIGRATION: → ModuleSemantics::decls.
     generic_method_resolved_param_types: IndexMap<String, Vec<TypeId>>,
     /// Namespace import aliases (e.g., "helper" -> module source for `use helper from "..."`)
+    // MIGRATION: → ModuleSemantics::imports.
     namespace_imports: IndexMap<String, ModuleSource>,
     /// Effect name to source module mapping (e.g., "Stdout" -> wasi:cli module source)
     /// Built from import declarations and local interface declarations.
+    // MIGRATION: → ModuleSemantics::imports.
     effect_sources: IndexMap<String, ModuleSource>,
     /// Effect parameter names currently in scope (from enclosing function's `<effect E>`)
+    // MIGRATION: transient annotate-time scope (per-function, not per-module).
     current_effect_params: IndexSet<String>,
     /// Map from effect parameter name to its declaration `AstId` in the current scope.
     /// Used to record use→def edges for effect parameter references in `with` clauses.
+    // MIGRATION: transient annotate-time scope (per-function, not per-module).
     current_effect_param_decls: IndexMap<String, crate::ast::AstId>,
-    /// WASI registry for looking up effect return types
-    wasi_registry: &'static WasiRegistry,
-    /// Builtin registry for looking up builtin function return types
-    builtin_registry: &'a BuiltinRegistry,
     /// Global variables in the current module (name -> (type, `is_mutable`))
+    // MIGRATION: → ModuleSemantics::decls.
     current_module_globals: IndexMap<String, (TypeId, bool)>,
     /// Imported globals (local name -> (source module, original name, type, `is_mutable`))
+    // MIGRATION: → ModuleSemantics::decls.
     imported_globals: IndexMap<String, (ModuleSource, String, TypeId, bool)>,
     /// Associated constants from impl blocks ("`TypeName::CONST`" -> (type, expr))
     /// These are inlined at every use site during resolution.
+    // MIGRATION: → ModuleSemantics::decls.
     associated_constants: IndexMap<String, (ast::Type, ast::Expr)>,
-    /// Immutable trait knowledge base: impl indices, trait declarations, and blanket impls.
-    /// Built once and shared across all module elaborators via `Arc`.
-    trait_env: Arc<TraitEnv>,
-    /// Pre-loaded file contents for `#include_str` / `#include_bytes`.
-    /// Key: `[module_source_display, raw_path]`, value: raw bytes.
-    included_files: &'a IndexMap<[String; 2], Vec<u8>>,
-    /// Cached flat set of all known type names for fast `is_known_type_name` lookups.
-    known_type_names_cache: IndexSet<String>,
     /// Anonymous structs created during expression resolution.
     /// Flushed into the `TirModule` at the end of `resolve_module`.
+    // MIGRATION: → ModuleSemantics::decls.
     pending_anonymous_structs: Vec<crate::tir::TirStruct>,
     /// Cache for `find_indexing_trait_impl` results.
     /// Key: (`struct_name`, `base_type_id`, `trait_base_name`, `method_name`, `assoc_type_name`)
+    // MIGRATION: → TypeSystem (type-system cache); deferred — needs the
+    //   pipeline-wide cache lifetime story (currently per-Elaborator).
     indexing_trait_cache: IndexMap<
         (String, TypeId, String, String, String),
         Option<(TypeId, ast::SelfKind, String, ModuleSource)>,
     >,
     /// Recursion guard for `type_implements_trait` to avoid infinite recursion
     /// on recursive types (e.g., variant Elem containing struct `RepeatElem` with field Elem).
+    /// Frames are pushed on entry and popped on return; the stack is empty
+    /// at every quiescent point.
+    // MIGRATION: transient annotate-time scope. Despite the `RefCell<Vec<…>>`
+    //   shape this is NOT a type-system cache (whose entries would persist
+    //   across calls) — it is a per-call frame stack. Sharing it across
+    //   modules via `TypeSystem` would either leak stale frames (producing
+    //   wrong "recursive, optimistically true" answers from
+    //   `type_implements_trait` — a soundness bug) or require per-call
+    //   save/restore plumbing that defeats the move. Belongs with
+    //   `trait_ctx` in Stage 5's per-function walker argument bag, not on
+    //   `TypeSystem`. See `tysys.rs` module docs ("Deferred fields") for
+    //   the full rationale.
     trait_check_stack: RefCell<Vec<(TypeId, String)>>,
     /// Cache for `lookup_method_info` results.
     /// Key: (`base_type_id`, `method_name`) → cached `MethodInfo`
+    // MIGRATION: → TypeSystem (type-system cache); deferred — needs the
+    //   pipeline-wide cache lifetime story.
     method_info_cache: IndexMap<(TypeId, String), Option<types::MethodInfo>>,
-    /// Index from function name → position in `current_module_items` for O(1) lookup.
-    current_module_func_index: IndexMap<String, usize>,
-    /// Per-module index from function name → position in module.items for O(1) lookup.
-    loaded_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>>,
     /// Use→def map for local variables. Shared via `Rc<RefCell<…>>` with
     /// [`crate::elaborator::orchestration::AnnotateState`] so LSP queries see
     /// references as soon as the elaborator has walked the body.
+    // MIGRATION: → ModuleSemantics::bindings (drops the `Rc<RefCell<…>>`;
+    //   the body walk takes `&mut ModuleSemantics`).
     references: Rc<RefCell<IndexMap<SymbolKey, SymbolKey>>>,
     /// Local binding [`Symbol`]s emitted alongside `references`. Populated at
     /// every `ctx.add_local(...)` call that carries a user-visible defining
     /// `AstId`. Shared via `Rc<RefCell<…>>` with `AnnotateState`.
+    // MIGRATION: → ModuleSemantics::bindings (drops the `Rc<RefCell<…>>`).
     local_symbols: Rc<RefCell<IndexMap<SymbolKey, Symbol>>>,
     /// Resolved [`TypeId`] for each local binding, keyed by the binding's
     /// defining [`SymbolKey`]. Populated alongside `local_symbols` at every
     /// `record_local_symbol` call. Shared via `Rc<RefCell<…>>` with
     /// `AnnotateState` and ultimately drained into `Semantics::local_types`
     /// for LSP inlay-hint consumption.
+    // MIGRATION: → ModuleSemantics::types (TypeId per binding-AstId fits the
+    //   "per-`AstId` type annotations" rule). LSP consumer
+    //   `Semantics::local_type_name` hides the placement.
     local_types: Rc<RefCell<IndexMap<SymbolKey, TypeId>>>,
     /// When resolving a default-expression AST at a call site, fall back to
     /// looking up unresolved identifiers in this module's global scope. This
     /// preserves the callee's lexical scope for defaults that reference
     /// module-private items (see WEP 2026-04-11).
+    // MIGRATION: transient annotate-time scope (per-call-site override).
     pub(super) default_scope_module: Option<ModuleSource>,
     /// Kiln invocation redirects consulted by `use` resolution sites. Shared
     /// by `Rc` so per-module Elaborator instances can read the single
     /// compilation-unit-wide redirect map cheaply.
+    // MIGRATION: cross-cutting input (loader-provided redirect map).
     pub(super) invocations: Rc<crate::kiln::InvocationIndex>,
     /// `ModuleSource` interner shared with the loader and downstream
     /// phases. Wrapped in `Rc<RefCell<>>` so per-module elaborator
     /// instances can `borrow_mut()` it from `&self` contexts (e.g.
     /// `record_use_specifier_references`).
+    // MIGRATION: cross-cutting input (shared interner).
     pub(super) interner: Rc<RefCell<ModuleSourceInterner>>,
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
-    pub fn new(
-        symbols: &'a SymbolTable,
-        loaded_modules: &'a IndexMap<ModuleSource, Module>,
-        builtin_registry: &'a BuiltinRegistry,
-        logger: &'a Logger<'a, H>,
-        included_files: &'a IndexMap<[String; 2], Vec<u8>>,
-    ) -> Self {
-        let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
-        let type_table = Rc::new(RefCell::new(TypeTable::new()));
-        let (trait_env, _) = TraitEnv::build(loaded_modules, symbols);
-        Self {
-            type_table,
-            symbols,
-            loaded_modules,
-            all_newtypes: Rc::new(IndexMap::default()),
-            all_generic_newtypes: Rc::new(IndexMap::default()),
-            all_struct_fields: Rc::new(IndexMap::default()),
-            all_variant_cases: Rc::new(IndexMap::default()),
-            all_enum_cases: Rc::new(IndexMap::default()),
-            all_flags_cases: Rc::new(IndexMap::default()),
-            all_resource_types: Rc::new(IndexMap::default()),
-            imported_type_sources: IndexMap::default(),
-            import_original_names: IndexMap::default(),
-            local_struct_fields: IndexMap::default(),
-            local_newtypes: IndexMap::default(),
-            local_generic_newtypes: IndexMap::default(),
-            local_enum_cases: IndexMap::default(),
-            local_flags_cases: IndexMap::default(),
-            local_variant_cases: IndexMap::default(),
-            function_return_types: IndexMap::default(),
-            imported_functions: IndexSet::default(),
-            namespace_imports: IndexMap::default(),
-            logger,
-            current_module_source: ModuleSource::entry_point_uninitialized(),
-            entry_module_source: ModuleSource::entry_point_uninitialized(),
-            current_module_items: &[],
-            effect_sources: IndexMap::default(),
-            current_effect_params: IndexSet::default(),
-            current_effect_param_decls: IndexMap::default(),
-            trait_ctx: trait_env::TraitContext::default(),
-            generic_struct_names: IndexSet::default(),
-            generic_function_params: IndexMap::default(),
-            generic_function_resolved_param_types: IndexMap::default(),
-            generic_function_resolved_return_types: IndexMap::default(),
-            generic_method_params: IndexMap::default(),
-            generic_method_resolved_param_types: IndexMap::default(),
-            wasi_registry,
-            builtin_registry,
-            current_module_globals: IndexMap::default(),
-            imported_globals: IndexMap::default(),
-            associated_constants: IndexMap::default(),
-            trait_env,
-            included_files,
-            known_type_names_cache: IndexSet::default(),
-            indexing_trait_cache: IndexMap::default(),
-            trait_check_stack: RefCell::new(Vec::new()),
-            method_info_cache: IndexMap::default(),
-            pending_anonymous_structs: Vec::new(),
-            current_module_func_index: IndexMap::default(),
-            loaded_module_func_indices: IndexMap::default(),
-            references: Rc::new(RefCell::new(IndexMap::default())),
-            local_symbols: Rc::new(RefCell::new(IndexMap::default())),
-            local_types: Rc::new(RefCell::new(IndexMap::default())),
-            default_scope_module: None,
-            invocations: Rc::new(crate::kiln::InvocationIndex::new()),
-            interner: Rc::new(RefCell::new(ModuleSourceInterner::new())),
-        }
-    }
-
     /// Construct a [`TypeLookup`] view over the elaborator's current import
     /// context and shared `all_*` tables. Use this for any type-name
     /// resolution; never reach into `all_*` directly.
@@ -306,13 +285,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             current_module_source: &self.current_module_source,
             imported_type_sources: &self.imported_type_sources,
             import_original_names: &self.import_original_names,
-            all_newtypes: &self.all_newtypes,
-            all_struct_fields: &self.all_struct_fields,
-            all_variant_cases: &self.all_variant_cases,
-            all_enum_cases: &self.all_enum_cases,
-            all_flags_cases: &self.all_flags_cases,
-            all_resource_types: &self.all_resource_types,
-            all_generic_newtypes: &self.all_generic_newtypes,
+            all_newtypes: &self.tysys.all_newtypes,
+            all_struct_fields: &self.tysys.all_struct_fields,
+            all_variant_cases: &self.tysys.all_variant_cases,
+            all_enum_cases: &self.tysys.all_enum_cases,
+            all_flags_cases: &self.tysys.all_flags_cases,
+            all_resource_types: &self.tysys.all_resource_types,
+            all_generic_newtypes: &self.tysys.all_generic_newtypes,
             local_struct_fields: &self.local_struct_fields,
             local_newtypes: &self.local_newtypes,
             local_enum_cases: &self.local_enum_cases,
@@ -583,17 +562,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.local_types.borrow_mut().insert(key, type_id);
     }
 
-    /// Build a function-name → index map for a module's items.
-    fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
-        let mut index = IndexMap::default();
-        for (i, item) in items.iter().enumerate() {
-            if let Item::Function(func) = item {
-                index.insert(func.name.clone(), i);
-            }
-        }
-        index
-    }
-
     /// Look up a function by name in a loaded module, returning the Item at that index.
     fn lookup_func_in_loaded_module<'b>(
         loaded_modules: &'b IndexMap<ModuleSource, Module>,
@@ -612,8 +580,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Look up a function by name in current module items.
+    ///
+    /// Consults [`tysys::TypeSystem::loaded_module_func_indices`] — the
+    /// per-module name→item-index map built once during annotate — to
+    /// avoid rebuilding the index at every `resolve_module` call.
     fn lookup_current_func(&self, func_name: &str) -> Option<&ast::Function> {
-        let &idx = self.current_module_func_index.get(func_name)?;
+        let idx_map = self
+            .tysys
+            .loaded_module_func_indices
+            .get(&self.current_module_source)?;
+        let &idx = idx_map.get(func_name)?;
         if let Item::Function(func) = &self.current_module_items[idx] {
             Some(func)
         } else {
@@ -636,7 +612,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .get(name)
             .filter(|info| info.module_source == *module_source)
             .or_else(|| {
-                self.all_struct_fields
+                self.tysys
+                    .all_struct_fields
                     .get(module_source)
                     .and_then(|m| m.get(name))
             })
@@ -772,10 +749,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // same-named items; this is the legacy bare-name behaviour and is
         // reachable only when the prior priorities (which DO disambiguate
         // user-visible cases) all miss.
-        if let Some(key) = self.trait_env.find_trait_decl_key(name) {
+        if let Some(key) = self.tysys.trait_env.find_trait_decl_key(name) {
             return key;
         }
-        if let Some(key) = self.trait_env.find_effect_or_resource_decl_key(name) {
+        if let Some(key) = self.tysys.trait_env.find_effect_or_resource_decl_key(name) {
             return key;
         }
         // Final fallback: a receiver type name (often a built-in primitive
@@ -784,7 +761,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // build time by `(impl_module, type_name)`; scanning its keys for
         // a matching bare name recovers the receiver's canonical module
         // so the lookup site sees the same key the build phase wrote.
-        if let Some(key) = self.trait_env.find_static_method_decl_key(name) {
+        if let Some(key) = self.tysys.trait_env.find_static_method_decl_key(name) {
             return key;
         }
         (self.current_module_source.clone(), name.to_string())
@@ -896,8 +873,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.current_module_source = module_source.clone();
         // Store current module items as a reference (no clone)
         self.current_module_items = &module.items;
-        // Build function name → index for O(1) lookup
-        self.current_module_func_index = Self::build_func_index(self.current_module_items);
+        // Function name → item-index lookup is pre-built per loaded
+        // module on `tysys.loaded_module_func_indices` during annotate;
+        // `lookup_current_func` consults it through
+        // `self.current_module_source` so no per-resolve rebuild here.
         // Clear trait lookup caches (current_module_items changed)
         self.indexing_trait_cache.clear();
         // Build effect source map from imports
@@ -1049,7 +1028,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // `impl<T: Bound> OtherTrait for T` (T is the impl type directly).
                     let mut actual_idx = 0u32;
                     for param in &impl_block.type_params {
-                        if self.is_known_type_name(&param.name) {
+                        if self.tysys.is_known_type_name(&param.name) {
                             // Concrete type in explicit params (e.g., `impl<i32, T>`): skip
                             if !param.bounds.is_empty() {
                                 self.trait_ctx
@@ -1062,11 +1041,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                         if !self.trait_ctx.type_params.contains_key(&param.name) {
                             let type_id = if param.is_pack {
-                                self.type_table
+                                self.tysys
+                                    .type_table
                                     .borrow_mut()
                                     .make_type_pack(param.name.clone(), actual_idx)
                             } else {
-                                self.type_table
+                                self.tysys
+                                    .type_table
                                     .borrow_mut()
                                     .make_type_param(param.name.clone(), actual_idx)
                             };
@@ -1096,9 +1077,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             if let ast::Type::Named(named) = arg {
                                 let name = &named.name;
                                 if !self.trait_ctx.type_params.contains_key(name)
-                                    && !self.is_known_type_name(name)
+                                    && !self.tysys.is_known_type_name(name)
                                 {
                                     let type_id = self
+                                        .tysys
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), i as u32);
@@ -1141,8 +1123,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if impl_block.trait_type.is_some() {
                         // Resolve the target type for registering associated type resolutions
                         let target_type_id = self.resolve_type(&impl_block.ty);
-                        let is_concrete =
-                            !self.type_table.borrow().contains_type_param(target_type_id);
+                        let is_concrete = !self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .contains_type_param(target_type_id);
 
                         for binding in &impl_block.associated_types {
                             let type_id = self.resolve_type(&binding.ty);
@@ -1153,15 +1138,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             // Register in TypeTable for substitution resolution
                             // Only for concrete types (not generic impls like impl<T> Trait for Array<T>)
                             if is_concrete {
-                                self.type_table.borrow_mut().register_assoc_type_resolution(
-                                    target_type_id,
-                                    binding.name.clone(),
-                                    type_id,
-                                );
+                                self.tysys
+                                    .type_table
+                                    .borrow_mut()
+                                    .register_assoc_type_resolution(
+                                        target_type_id,
+                                        binding.name.clone(),
+                                        type_id,
+                                    );
                             } else {
                                 // For generic impls, register the definition so the monomorphizer
                                 // can resolve associated types for GenericInstance types.
-                                self.type_table
+                                self.tysys
+                                    .type_table
                                     .borrow_mut()
                                     .register_generic_assoc_type_def(
                                         struct_name.clone(),
@@ -1328,7 +1317,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         drop(_resolve_funcs_span);
         // Share the type table via Rc::clone
-        tir_module.type_table = Rc::clone(&self.type_table);
+        tir_module.type_table = Rc::clone(&self.tysys.type_table);
 
         // Preserve data section
         if let Some(data) = module.data_section() {
@@ -1348,26 +1337,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Get the type table (after resolution)
     pub fn into_type_table(self) -> Rc<RefCell<TypeTable>> {
-        self.type_table
+        self.tysys.type_table
     }
-}
-
-pub fn resolve_module<H: CompilerHost>(
-    module: &Module,
-    module_source: ModuleSource,
-    symbols: &SymbolTable,
-    loaded_modules: &IndexMap<ModuleSource, Module>,
-    logger: &Logger<H>,
-) -> Result<TirModule, Bail> {
-    let type_table = std::cell::RefCell::new(crate::tir::TypeTable::new());
-    let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
-    let empty_included = IndexMap::default();
-    let mut elaborator = Elaborator::new(
-        symbols,
-        loaded_modules,
-        &builtin_registry,
-        logger,
-        &empty_included,
-    );
-    elaborator.resolve_module(module, module_source)
 }
