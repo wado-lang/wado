@@ -469,11 +469,31 @@ migration; see Trade-offs.
       blocks deterministically. Struct field defaults reify via
       the per-struct `FunctionContext` (`struct:<name>`),
       matching `Elaborator::resolve_struct` (item.rs:461)
-      byte-for-byte. Under these annotations the E2E suite at
-      `-O0` reaches **677 / 1326 fixtures passing under
-      `WADO_REIFY=1`** (+54 from the 623 baseline, almost
-      entirely from the sequence-coercion gap). Default-path
-      E2E behaviour is unchanged. Concrete arms cover every
+      byte-for-byte. `ForOfIteratorInfo::iter_type` records the
+      resolved `into_iter()` return type so the synthesised
+      `let mut __iter_N = …;` is typed concretely and the
+      subsequent `__iter.next()` MethodCall resolves under
+      monomorph. `MethodDispatch::param_is_mut` carries
+      `lookup_method_param_is_mut`'s result so reify zips it
+      with reified args to produce CallArg `is_mut` flags that
+      match production. `index_assign_dispatch` records the
+      resolved `IndexAssign` trait dispatch so reify emits
+      `arr.index_assign(i, v)` for `arr[i] = v` /
+      `arr[i] OP= v` (previously a no-op Assign through an
+      Index target). Call type-args read both
+      `call.type_args` (explicit turbofish) and
+      `generic_instantiations[call.id]` (inferred) so generic
+      free / static / builtin calls round-trip. Under these
+      annotations the E2E suite at `-O0` reaches **709 / 1326
+      fixtures passing under `WADO_REIFY=1`** (+86 from the
+      623 baseline). Open gap: generic-variant constructors
+      (`Result::Ok(42)`, `Option::Some(42)`, `MyOpt<T>::None`)
+      reach codegen with an unsubstituted `TypeParam`; the
+      reify TIR is byte-identical to production
+      (`variant_type=Result<i32, String>` confirmed via
+      `wado dump --tir-resolved`), so the divergence lives in
+      a downstream pass that walks `tir_module.variants` —
+      tracked. Default-path E2E behaviour is unchanged. Concrete arms cover every
       `reify_pattern` variant, every `reify_literal` variant
       (host-driven included), every `reify_ident` shape
       (local / current+imported globals / assoc constants /
