@@ -1637,15 +1637,100 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        // TODO(stage-5-bodies): the remaining ident kinds —
-        //   - qualified variant ctor (`Color::Red` with `::` in name)
-        //     → `VariantConstruct` using `tysys.all_variant_cases`
-        //   - qualified enum case → `EnumConstruct`
-        //   - qualified flags member → `IntLiteral` with the bitmask
-        //   - namespace-imported `ns::Type::Case`
-        // each needs a dedicated branch driven by the `::` prefix
-        // lookup against `tysys.all_*` (the elaborator's
-        // `resolve_ident` shape, expr.rs ≈600–800).
+        // 6. Qualified case path `Type::Case`. Variant / enum / flags
+        //    are checked in the same priority order as
+        //    `Elaborator::resolve_ident` (expr.rs:607+). The
+        //    namespace-import form `ns::Type::Case` (two `::`
+        //    separators) is handled by a dedicated branch in the
+        //    elaborator that resolves the namespace alias first;
+        //    that path stays a `todo!` until the dispatcher gets it.
+        if let Some(pos) = ident.name.find("::") {
+            let prefix = &ident.name[..pos];
+            let suffix = &ident.name[pos + 2..];
+
+            // Two-segment qualified path is "Type::Case". Anything with
+            // a further `::` is `ns::Type::Case` (namespace path) —
+            // defer to a later branch.
+            if !suffix.contains("::") {
+                let lookup = self.type_lookup();
+
+                // Variant case.
+                if let Some(variant_info) = lookup.variant_case(prefix).cloned()
+                    && let Some((case_index, case_data)) = variant_info
+                        .cases
+                        .iter()
+                        .enumerate()
+                        .find(|(_, c)| c.name == suffix)
+                        .map(|(i, c)| (i, c.clone()))
+                {
+                    // Generic variants record the instance type +
+                    // type_args via Gap 1 — read them. Non-generic
+                    // variants leave no record and the bare
+                    // `recorded_type` already names the right
+                    // `Variant` TypeId.
+                    let variant_type = self
+                        .sem
+                        .types
+                        .generic_instantiations
+                        .get(&ident.id)
+                        .map(|gi| gi.instance_type)
+                        .unwrap_or(recorded_type);
+                    return TirExpr::new(
+                        TirExprKind::VariantConstruct {
+                            variant_type,
+                            case_index: case_index as u32,
+                            case_name: case_data.name.clone(),
+                            payload: None,
+                        },
+                        variant_type,
+                        ident.span,
+                    );
+                }
+
+                // Enum case.
+                if let Some(enum_info) = lookup.enum_case(prefix).cloned()
+                    && let Some(case_data) = enum_info.find_case(suffix).cloned()
+                {
+                    let enum_type = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_enum(enum_info.name.clone(), enum_info.module_source);
+                    return TirExpr::new(
+                        TirExprKind::EnumConstruct {
+                            enum_type,
+                            case_index: case_data.index,
+                            case_name: case_data.name,
+                        },
+                        enum_type,
+                        ident.span,
+                    );
+                }
+
+                // Flags member.
+                if let Some(flags_info) = lookup.flags_case(prefix).cloned()
+                    && let Some(member) = flags_info
+                        .members
+                        .iter()
+                        .find(|m| m.name == suffix)
+                        .cloned()
+                {
+                    return TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: u64::from(member.bitmask),
+                            repr: member.bitmask.to_string(),
+                        },
+                        flags_info.type_id,
+                        ident.span,
+                    );
+                }
+            }
+        }
+
+        // TODO(stage-5-bodies): namespace-imported `ns::Type::Case`
+        // path — strip the `ns::` prefix via
+        // `sem.imports.namespace_imports`, then route through the
+        // qualified-case branch above against the namespace's module.
         let _ = recorded_type;
         todo!(
             "reify_ident: non-local `{}` (kind dispatch pending body-walk reify)",
