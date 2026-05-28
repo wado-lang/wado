@@ -483,17 +483,27 @@ migration; see Trade-offs.
       Index target). Call type-args read both
       `call.type_args` (explicit turbofish) and
       `generic_instantiations[call.id]` (inferred) so generic
-      free / static / builtin calls round-trip. Under these
-      annotations the E2E suite at `-O0` reaches **709 / 1326
-      fixtures passing under `WADO_REIFY=1`** (+86 from the
-      623 baseline). Open gap: generic-variant constructors
-      (`Result::Ok(42)`, `Option::Some(42)`, `MyOpt<T>::None`)
-      reach codegen with an unsubstituted `TypeParam`; the
-      reify TIR is byte-identical to production
-      (`variant_type=Result<i32, String>` confirmed via
-      `wado dump --tir-resolved`), so the divergence lives in
-      a downstream pass that walks `tir_module.variants` —
-      tracked. Default-path E2E behaviour is unchanged. Concrete arms cover every
+      free / static / builtin calls round-trip. Global writes
+      (`g = v` / `g OP= v`) lower to `GlobalVarSet` matching
+      production's `assign_to_target` (operators.rs:1192+).
+      Closure captures resolve through `lookup_or_capture` so a
+      closure body referencing an outer-scope binding lands as
+      `TirExprKind::Capture` (or `Deref(Capture)` for `__ref_v`
+      mut-capture proxies), matching production's `resolve_ident`
+      (expr.rs:534+). Under these annotations the E2E suite at
+      `-O0` reaches **729 / 1326 fixtures passing under
+      `WADO_REIFY=1`** (+106 from the 623 baseline). Open
+      gaps: generic-variant constructors (`Result::Ok(42)`,
+      `Option::Some(42)`, `MyOpt<T>::None`) reach codegen with
+      an unsubstituted `TypeParam`; the reify TIR is
+      byte-identical to production (`variant_type=Result<i32,
+      String>` confirmed via `wado dump --tir-resolved`), so
+      the divergence lives in a downstream pass that walks
+      `tir_module.variants`. The default-arguments pad path
+      (`pad_args_with_defaults`) also remains a follow-up —
+      reify doesn't insert the callee's default expressions
+      for missing positional args. Default-path E2E behaviour
+      is unchanged. Concrete arms cover every
       `reify_pattern` variant, every `reify_literal` variant
       (host-driven included), every `reify_ident` shape
       (local / current+imported globals / assoc constants /
