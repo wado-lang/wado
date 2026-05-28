@@ -654,6 +654,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )
                     };
 
+                    // Stage 5 (Gap 1): record generic type args for
+                    // payload-less variant references that compile to a
+                    // `VariantConstruct` (e.g. `Option::<i32>::None`).
+                    let type_args = match self.tysys.type_table.borrow().get(variant_type) {
+                        ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                        _ => Vec::new(),
+                    };
+                    self.record_generic_instantiation(ident.id, type_args, variant_type);
+
                     return TirExpr::new(
                         TirExprKind::VariantConstruct {
                             variant_type,
@@ -770,6 +779,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             expected_type,
                         )
                     };
+                    // Stage 5 (Gap 1): record generic type args for
+                    // namespace-qualified payload-less variant references.
+                    let type_args = match self.tysys.type_table.borrow().get(variant_type) {
+                        ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                        _ => Vec::new(),
+                    };
+                    self.record_generic_instantiation(ident.id, type_args, variant_type);
                     return TirExpr::new(
                         TirExprKind::VariantConstruct {
                             variant_type,
@@ -3514,6 +3530,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 struct_module_source,
                 type_args.clone(),
             );
+            // Stage 5 (Gap 1 of WEP 2026-05-26): record the inferred
+            // type_args + the resulting `GenericInstance` so reify can
+            // emit `TirExprKind::StructLiteral { struct_type, … }`
+            // without re-running `infer_struct_type_args`.
+            self.record_generic_instantiation(struct_lit.id, type_args.clone(), struct_type);
             // Build mangled name with type arguments
             let arg_names: Vec<String> = type_args
                 .iter()

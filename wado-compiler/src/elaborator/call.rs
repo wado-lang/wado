@@ -468,6 +468,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_type_args_inferred = impl_args;
                     method_type_args = method_args;
                 }
+                // Stage 5 (Gap 1 of WEP 2026-05-26): record the combined
+                // `(impl_args, method_args)` for the static-method call
+                // site. Reify needs both halves to reconstruct the
+                // mangled `__<Type>__<method>` name with the same type
+                // arg shape annotate computed. The combined order is
+                // `[impl_args, method_args]` — same as
+                // `lookup_static_method_param_types`'s substitution
+                // input below. Instance type is UNKNOWN: a static-method
+                // call has no decl-anchored `GenericInstance`; reify
+                // reads `expression_types[call.id]` for the result type.
+                {
+                    let mut combined = impl_type_args_inferred.clone();
+                    combined.extend_from_slice(&method_type_args);
+                    self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
+                }
                 // Check trait bounds and register assoc type resolutions for inferred type args
                 if !method_type_args.is_empty() {
                     let mtype_params = self.lookup_static_method_type_params(prefix, suffix);
@@ -670,6 +685,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )
                     };
 
+                    // Stage 5 (Gap 1 of WEP 2026-05-26): record generic
+                    // type args for variant constructors. Non-generic
+                    // variants emit a `Variant` (no type_args) and the
+                    // recording is skipped via the empty-`type_args`
+                    // guard inside `record_generic_instantiation`.
+                    let type_args = match self.tysys.type_table.borrow().get(variant_type) {
+                        ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                        _ => Vec::new(),
+                    };
+                    self.record_generic_instantiation(call.id, type_args, variant_type);
+
                     return TirExpr::new(
                         TirExprKind::VariantConstruct {
                             variant_type,
@@ -806,6 +832,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     expected_type,
                                 )
                             };
+
+                            // Stage 5 (Gap 1): record generic type args
+                            // for namespace-qualified variant ctors.
+                            let type_args = match self.tysys.type_table.borrow().get(variant_type) {
+                                ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                                _ => Vec::new(),
+                            };
+                            self.record_generic_instantiation(call.id, type_args, variant_type);
+
                             return TirExpr::new(
                                 TirExprKind::VariantConstruct {
                                     variant_type,
@@ -1017,6 +1052,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !type_args.is_empty() {
             return_type = self.substitute_type_params(return_type, &type_args);
         }
+
+        // Stage 5 (Gap 1 of WEP 2026-05-26): record the inferred /
+        // explicit `type_args` so reify can emit
+        // `TirExprKind::Call { type_args, … }` without re-running
+        // inference. Free-function calls have no `GenericInstance`-style
+        // anchor type — the substituted return type plays the same role
+        // (it pins the per-call monomorphic shape reify needs to seed
+        // mangled-name construction).
+        self.record_generic_instantiation(call.id, type_args.clone(), return_type);
 
         // Check each argument: reject &T/&mut T passed where non-ref is expected.
         // For generic functions with explicit type args, rebuild param types with
