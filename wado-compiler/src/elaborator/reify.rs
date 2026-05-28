@@ -1566,11 +1566,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// expansion path; only the `ForOfIterator` path lands here
     /// (the most common form). Tuple unrolling and the variadic
     /// type-pack form fall through to a labelled `todo!`.
-    fn reify_for_of(
-        &mut self,
-        for_of: &ast::ForOfStmt,
-        ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
+    fn reify_for_of(&mut self, for_of: &ast::ForOfStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         use crate::tir::{
             CallArg, ResolvedType, TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind,
             TypeTable,
@@ -1596,7 +1592,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // placeholder stmt so the surrounding block stays well-
             // typed.
             return vec![TirStmt::new(
-                TirStmtKind::Expr(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, for_of.span)),
+                TirStmtKind::Expr(TirExpr::new(
+                    TirExprKind::Unit,
+                    TypeTable::UNIT,
+                    for_of.span,
+                )),
                 for_of.span,
             )];
         };
@@ -1651,7 +1651,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
         let iter_type = into_iter_call.type_id;
 
-        let iter_local_index = ctx.add_local(iter_var.clone(), iter_type, /* is_mut */ true, None);
+        let iter_local_index =
+            ctx.add_local(iter_var.clone(), iter_type, /* is_mut */ true, None);
         let iter_let = TirStmt::new(
             TirStmtKind::Let {
                 name: iter_var.clone(),
