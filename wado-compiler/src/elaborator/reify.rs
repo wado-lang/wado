@@ -2451,17 +2451,51 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     payload_type,
                 }
             }
-            ast::Pattern::Struct { .. } | ast::Pattern::Or(_) | ast::Pattern::Range { .. } => {
-                // TODO(stage-5-bodies): Struct / Or / Range pattern
-                // dispatch. `Struct` needs `tysys.all_struct_fields`
-                // for field-name → index resolution; `Range` needs the
-                // start/end literals decoded into i128 / u128 + the
-                // signedness flag from `scrutinee_type`; `Or`
-                // recursively reifies each alternative.
-                todo!(
-                    "reify_pattern: {:?} variant pending body-walk reify",
-                    pattern
-                )
+            ast::Pattern::Or(alternatives) => {
+                // Or patterns match any alternative. Each alternative
+                // reifies against the same scrutinee type. Annotate
+                // already validated that alternatives bind the same
+                // set of names; reify trusts the validated shape and
+                // only forwards the recursion.
+                let sub: Vec<TirPattern> = alternatives
+                    .iter()
+                    .map(|p| self.reify_pattern(p, scrutinee_type, ctx))
+                    .collect();
+                TirPattern::Or(sub)
+            }
+            ast::Pattern::Range {
+                start, end, kind, ..
+            } => {
+                use crate::ast::RangeKind;
+                use crate::tir::{PrimitiveType, ResolvedType};
+                let inclusive = matches!(kind, RangeKind::Inclusive);
+                let start_val = pattern_endpoint_to_i128(start);
+                let end_val = pattern_endpoint_to_i128(end);
+                let is_unsigned = matches!(
+                    self.tysys.type_table.borrow().get(scrutinee_type),
+                    ResolvedType::Primitive(
+                        PrimitiveType::U8
+                            | PrimitiveType::U16
+                            | PrimitiveType::U32
+                            | PrimitiveType::U64
+                            | PrimitiveType::U128,
+                    )
+                );
+                TirPattern::Range {
+                    start: start_val,
+                    end: end_val,
+                    inclusive,
+                    is_unsigned,
+                }
+            }
+            ast::Pattern::Struct { .. } => {
+                // TODO(stage-5-bodies): `Struct` pattern needs
+                // `tysys.all_struct_fields` for field-name → index
+                // resolution + per-field sub-pattern reification at
+                // the field's declared type, plus the `type_name` →
+                // `struct_type` interning. Mirror
+                // `Elaborator::resolve_struct_pattern`.
+                todo!("reify_pattern: Struct variant pending body-walk reify")
             }
         }
     }
@@ -2505,6 +2539,38 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `Elaborator::get_variant_case_payload_type` would for the
         // un-substitutable path.
         case_data.payload
+    }
+}
+
+/// Decode a range-pattern endpoint (`a..<b` / `a..=b`) into its
+/// `i128` value. The endpoint syntactic form is itself a `Pattern`:
+/// either a `Literal(Number)` or a `Literal(Char)` (for char-range
+/// patterns). Char endpoints lower to their codepoint as `i128`;
+/// numeric endpoints reuse the same hex / oct / bin recogniser as
+/// `ast_literal_to_pattern`'s integer decode. Non-literal endpoints
+/// are a parser-elaborator invariant violation — annotate has already
+/// diagnosed them — so reify panics with a labelled tripwire.
+fn pattern_endpoint_to_i128(endpoint: &ast::Pattern) -> i128 {
+    match endpoint {
+        ast::Pattern::Literal(ast::Literal::Number(repr)) => {
+            if let Some(stripped) = repr.strip_prefix("0x") {
+                i128::from_str_radix(stripped, 16).unwrap_or(0)
+            } else if let Some(stripped) = repr.strip_prefix("0o") {
+                i128::from_str_radix(stripped, 8).unwrap_or(0)
+            } else if let Some(stripped) = repr.strip_prefix("0b") {
+                i128::from_str_radix(stripped, 2).unwrap_or(0)
+            } else {
+                repr.parse::<i128>().unwrap_or(0)
+            }
+        }
+        ast::Pattern::Literal(ast::Literal::Char(s)) => {
+            let inner = s.trim_start_matches('\'').trim_end_matches('\'');
+            i128::from(inner.chars().next().unwrap_or('\0') as u32)
+        }
+        _ => panic!(
+            "pattern_endpoint_to_i128: non-literal range endpoint {endpoint:?} \
+             (annotate should have diagnosed)"
+        ),
     }
 }
 
