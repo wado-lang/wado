@@ -1607,15 +1607,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 )
             }
-            ast::Expr::WithHandler(_) => {
-                // TODO(stage-5-bodies): mirror the corresponding
-                // `Elaborator::resolve_expr` arm. Each arm consults
-                // `sem.types.{expression_types, coercions,
-                // method_dispatch, desugars, generic_instantiations,
-                // closure_captures, assert_captures, for_of_iterator}`
-                // as documented at the call site.
-                todo!("reify_expr: {:?} variant pending body-walk reify", expr)
-            }
+            ast::Expr::WithHandler(with_expr) => self.reify_with_handler(with_expr, ctx),
         }
     }
 
@@ -3929,6 +3921,121 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         self.current_module_source.clone()
+    }
+
+    /// Reify a `with E => h, … do { body }` effect handler block.
+    /// Mirrors `Elaborator::resolve_with_handler` (handlers.rs:37+).
+    ///
+    /// Each handler binding is one of:
+    /// - Explicit `Effect => handler_expr` — reify the effect type
+    ///   to its `(module, name)` canonical key and emit a
+    ///   `TirHandlerBinding` with `EffectRef::Concrete`.
+    /// - Bundled `handler_expr` (no `=>`) — staged for a follow-up
+    ///   that records the handler type's implemented effect set
+    ///   per binding so reify can enumerate them without
+    ///   re-running `trait_env.implements_effect` lookups.
+    fn reify_with_handler(
+        &mut self,
+        with_expr: &ast::WithHandlerExpr,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        use crate::tir::{
+            EffectRef, ResolvedType, TirExprKind, TirHandlerBinding, TypeTable,
+        };
+
+        let mut bindings: Vec<TirHandlerBinding> = Vec::with_capacity(with_expr.handlers.len());
+        for binding in &with_expr.handlers {
+            let Some(effect_ty) = &binding.effect else {
+                // TODO(stage-5-bodies): bundled handler form. The
+                // elaborator expands one binding per effect the
+                // handler value's type implements
+                // (`trait_env.iter_effects_implemented_by`); reify
+                // needs that enumeration recorded as a per-binding
+                // annotation. Until then, skip — annotate would
+                // have already produced TIR via the combined walk
+                // path; reify only fires under `WADO_REIFY=1`.
+                continue;
+            };
+
+            let effect_name = ast_type_name_static(effect_ty);
+            let (module, canonical_name) = self.canonical_decl_key(&effect_name);
+            let handler = self.reify_expr(&binding.handler, ctx, None);
+            let handler_type = {
+                let tt = self.tysys.type_table.borrow();
+                let mut t = handler.type_id;
+                loop {
+                    match tt.get(t).clone() {
+                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                            t = inner;
+                        }
+                        _ => break,
+                    }
+                }
+                t
+            };
+            // Type args on `Stream<u8>` etc. The elaborator
+            // extracts them from `effect_ty` if it's a Generic
+            // shape; reify reproduces.
+            let trait_type_args: Vec<TypeId> = if let ast::Type::Generic(g) = effect_ty {
+                g.args.iter().map(|t| self.resolve_type(t)).collect()
+            } else {
+                Vec::new()
+            };
+
+            bindings.push(TirHandlerBinding {
+                effect: Some(EffectRef::Concrete {
+                    name: canonical_name,
+                    module_source: module,
+                }),
+                trait_type_args,
+                handler,
+                handler_type,
+                span: binding.span,
+                bundle_group: None,
+            });
+        }
+
+        ctx.enter_scope();
+        let body = self.reify_block(&with_expr.body, ctx, None);
+        ctx.exit_scope();
+
+        TirExpr::new(
+            TirExprKind::WithHandler {
+                bindings,
+                body,
+                result_type: TypeTable::UNIT,
+            },
+            TypeTable::UNIT,
+            with_expr.span,
+        )
+    }
+
+    /// Reify-side canonicalisation of a decl name through the
+    /// current module's import context. Mirrors
+    /// `Elaborator::canonical_decl_key`. Used by `reify_with_handler`
+    /// to canonicalise an effect reference's `(module, name)` key.
+    fn canonical_decl_key(&self, name: &str) -> (ModuleSource, String) {
+        if let Some(src) = self.sem.imports.effect_sources.get(name) {
+            let original = self
+                .sem
+                .imports
+                .import_original_names
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| name.to_string());
+            return (src.clone(), original);
+        }
+        if let Some(src) = self.sem.imports.imported_type_sources.get(name) {
+            let original = self
+                .sem
+                .imports
+                .import_original_names
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| name.to_string());
+            return (src.clone(), original);
+        }
+        (self.current_module_source.clone(), name.to_string())
     }
 
     /// Reify a `matches!`-style expression: `scrutinee matches { PAT
