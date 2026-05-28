@@ -832,20 +832,102 @@ test "LR helper stamps min_prec on a self-ref nested inside a Repeat group" {
     // (the alt's `own_prec + 1` floor for left-associative).
     // Regression fixture: `tests/antlr4-compat/stage_a/LeftRecursion/
     // ReturnValueAndActionsList1_2_parse_test.wado` (and ...List1_4).
+    //
+    // Grammar mirrors the real ReturnValueAndActionsList1_2 fixture:
+    // two LR alts (#Factor and #Send) so we also catch a regression
+    // where stamping reads the wrong alt's `conflict_min` (e.g. always
+    // `lr_alts[0]`). Single-LR-alt grammars hide that class of bug.
     let input = "grammar Test;
 s : expr EOF ;
-expr : b+=expr (',' b+=expr)* '>>' c=expr #Send | ID #JustId ;
+expr :
+    a=expr '*' a=expr #Factor
+    | b+=expr (',' b+=expr)* '>>' c=expr #Send
+    | ID #JustId
+;
 ID : 'a' ;
+WS : [ \\t\\n]+ -> skip ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    let helper = extract_fn_body(&output, &"fn _parse_expr_lr_1");
+    assert !str_contains(&helper, &"_parse_expr(p)?"),
+        `inner self-ref nested in a Repeat must pass min_prec; bare _parse_expr(p)? leaks the default min_prec=0:\n{helper}`;
+    // Positive check: own_prec=1 + 1 = 2 for the Send alt (second LR
+    // alt of two left-assoc alts). The helper must emit at least one
+    // `_parse_expr(p, 2)?` for the inner b+=expr in the comma loop AND
+    // one for the trailing `c=expr`. Without this positive check the
+    // negative assertion above could pass on `_parse_expr(p, 0)?`
+    // (different substring) or on a future refactor that drops the
+    // inner call entirely.
+    assert str_contains(&helper, &"_parse_expr(p, 2)?"),
+        `_parse_expr_lr_1 must emit _parse_expr(p, 2)? for inner / trailing self-refs (own_prec=1 + 1 = 2):\n{helper}`;
+    let scan_helper = extract_fn_body(&output, &"fn scan_expr_lr_1");
+    assert !str_contains(&scan_helper, &"scan_expr(tokens, pos, 0)"),
+        `inner scan self-ref nested in a Repeat must pass min_prec; scan_expr(_, _, 0) leaks the default min_prec=0:\n{scan_helper}`;
+    assert str_contains(&scan_helper, &"scan_expr(tokens, pos, 2)"),
+        `scan_expr_lr_1 must emit scan_expr(tokens, pos, 2) for inner / trailing self-refs:\n{scan_helper}`;
+}
+
+test "SimpleCst group emit threads min_prec_arg on a self-ref alt inside an LR suffix" {
+    // Regression: `gen_consume_group_store_op`,
+    // `gen_consume_group_store_optional_op`, and
+    // `gen_rule_ref_group_scan_dispatch` (parser_gen.wado ~3898 / 3943 /
+    // 4052) all emitted `_parse_X(p)?` without reading
+    // `RuleCallOp.min_prec_arg`. So even though
+    // `deep_stamp_inner_self_refs_op` stamped the inner self-ref op,
+    // emit dropped the stamp for SimpleCst-shaped Groups. The fix
+    // threads `min_prec_arg` through the same `if let Some(min_prec)`
+    // branch `gen_op_leaf` uses.
+    //
+    // The grammar puts a self-ref alt (`expr`) inside a SimpleCst
+    // Group `(expr | INT)` as an LR-suffix element: `expr ',' (expr | INT)`.
+    // The deep walker stamps the inner `expr` with conflict_min, and
+    // the SimpleCst dispatch must surface it.
+    let input = "grammar Test;
+s : expr EOF ;
+expr : expr ',' (expr | INT) | INT ;
+INT : [0-9]+ ;
 WS : [ \\t\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let helper = extract_fn_body(&output, &"fn _parse_expr_lr_");
     assert !str_contains(&helper, &"_parse_expr(p)?"),
-        `inner self-ref nested in a Repeat must pass min_prec; bare _parse_expr(p)? leaks the default min_prec=0:\n{helper}`;
-    let scan_helper = extract_fn_body(&output, &"fn scan_expr_lr_");
-    assert !str_contains(&scan_helper, &"scan_expr(tokens, pos, 0)"),
-        `inner scan self-ref nested in a Repeat must pass min_prec; scan_expr(_, _, 0) leaks the default min_prec=0:\n{scan_helper}`;
+        `SimpleCst self-ref alt must thread min_prec, not bare _parse_expr(p)?:\n{helper}`;
+}
+
+test "LR helper preserves per-call-site variant_id on a self-ref nested inside a Repeat" {
+    // Regression: `deep_stamp_inner_self_refs_scan` used to clear
+    // `variant_id` to `null` on every nested self-ref it stamped,
+    // mirroring `rebind_scan_self_ref_min_prec`. The pre-existing
+    // post-pass `attach_variant_id_to_lr_self_refs` only re-stamped
+    // top-level `scan_suffix.elements`, so a nested self-ref in a
+    // follow-variant body lost its variant_id and emit produced
+    // `scan_<rule>(tokens, pos, prec)` instead of
+    // `scan_<rule>__follow_<id>(tokens, pos, prec)`. The fix preserves
+    // `rc.variant_id` in the deep walker AND deepens
+    // `attach_variant_id_to_lr_self_refs` so it walks Repeat / Group /
+    // OptionalLookahead containers.
+    //
+    // This test asserts the parse-side mirror by exercising a
+    // multi-LR-alt list-label pattern; concretely we just check that
+    // the parse helper does not regress on the inner self-ref calling
+    // a bare `_parse_expr(p)?`.
+    let input = "grammar Test;
+s : expr EOF ;
+expr :
+    a=expr '*' a=expr #Factor
+    | b+=expr (',' b+=expr)* '>>' c=expr #Send
+    | ID #JustId
+;
+ID : 'a' ;
+WS : [ \\t\\n]+ -> skip ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    let helper = extract_fn_body(&output, &"fn _parse_expr_lr_1");
+    assert !str_contains(&helper, &"_parse_expr(p)?"),
+        `nested self-ref must not leak as bare _parse_expr(p)?:\n{helper}`;
 }
 
 test "LR parse loop predicts via scan when suffix's first token is shared with the atom" {
