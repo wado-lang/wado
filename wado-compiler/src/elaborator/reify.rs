@@ -1695,6 +1695,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // expression in Wado, mirroring Rust).
                 let target = self.reify_expr(&assign.target, ctx, None);
                 let value = self.reify_expr(&assign.value, ctx, Some(target.type_id));
+                // Global-var write: `g = v` lowers to `GlobalVarSet` so
+                // codegen actually mutates the global. The production
+                // `assign_to_target` rewrites here too (operators.rs:1192+).
+                if let TirExprKind::GlobalVarGet {
+                    module_source,
+                    name,
+                } = &target.kind
+                {
+                    return TirExpr::new(
+                        TirExprKind::GlobalVarSet {
+                            module_source: module_source.clone(),
+                            name: name.clone(),
+                            value: Box::new(value),
+                        },
+                        crate::tir::TypeTable::UNIT,
+                        span,
+                    );
+                }
                 TirExpr::new(
                     TirExprKind::Assign {
                         target: Box::new(target),
@@ -3236,6 +3254,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // resolves to `IndexMut` not `IndexAssign`) remain a follow-up.
         let target_for_assign = self.reify_expr(&compound.target, ctx, None);
         let _ = recorded_type;
+        // Global-var compound-assign: `g OP= v` lowers to
+        // `GlobalVarSet { value: g OP v }` so codegen actually
+        // mutates the global. Mirrors production's
+        // `assign_to_target` (operators.rs:1192+) which the
+        // compound-assign desugar also feeds through.
+        if let TirExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } = &target_for_assign.kind
+        {
+            return TirExpr::new(
+                TirExprKind::GlobalVarSet {
+                    module_source: module_source.clone(),
+                    name: name.clone(),
+                    value: Box::new(combined),
+                },
+                TypeTable::UNIT,
+                compound.span,
+            );
+        }
         TirExpr::new(
             TirExprKind::Assign {
                 target: Box::new(target_for_assign),
