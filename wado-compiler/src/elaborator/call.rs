@@ -836,7 +836,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             // Stage 5 (Gap 1): record generic type args
                             // for namespace-qualified variant ctors.
                             let type_args = match self.tysys.type_table.borrow().get(variant_type) {
-                                ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                                ResolvedType::GenericInstance { type_args, .. } => {
+                                    type_args.clone()
+                                }
                                 _ => Vec::new(),
                             };
                             self.record_generic_instantiation(call.id, type_args, variant_type);

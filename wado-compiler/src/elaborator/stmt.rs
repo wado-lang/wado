@@ -2742,8 +2742,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `into_iter()` / `next()` calls without re-dispatching. Only
         // record when both dispatches succeeded (the trait-check error
         // path above bailed without resolving them).
-        if let (Some(into_iter_func), Some(into_iter_dispatch), Some(next_func), Some(next_dispatch)) =
-            (into_iter_func, into_iter_dispatch, next_func, next_dispatch)
+        if let (
+            Some(into_iter_func),
+            Some(into_iter_dispatch),
+            Some(next_func),
+            Some(next_dispatch),
+        ) = (into_iter_func, into_iter_dispatch, next_func, next_dispatch)
         {
             self.record_for_of_iterator(
                 for_of.id,

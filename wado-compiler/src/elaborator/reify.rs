@@ -75,8 +75,8 @@ use crate::tir::{
 };
 
 use super::sem::ModuleSemantics;
-use super::tysys::TypeSystem;
 use super::types::{FunctionContext, TypeLookup};
+use super::tysys::TypeSystem;
 
 /// Per-module reify pass. One instance per loaded module the batch driver
 /// emits TIR for.
@@ -225,7 +225,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // already registered the signature on `TraitEnv`.
                 }
                 Item::Variant(variant_decl) => {
-                    tir_module.variants.push(self.reify_variant_decl(variant_decl));
+                    tir_module
+                        .variants
+                        .push(self.reify_variant_decl(variant_decl));
                 }
                 Item::Test(test_decl) => {
                     let test_index = tir_module.tests.len();
@@ -402,11 +404,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // `Elaborator::resolve_struct` builds at item.rs:461). When
             // `reify_expr` lands, replace the `None` below with
             // `field.default.as_ref().map(|e| Box::new(self.reify_expr(e, …)))`.
-            let default_expr: Option<Box<TirExpr>> = if field.default.is_some() {
-                None
-            } else {
-                None
-            };
+            let default_expr: Option<Box<TirExpr>> =
+                if field.default.is_some() { None } else { None };
 
             let serde_default = field.default.is_some()
                 || field
@@ -581,14 +580,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             .make_type_param(p.name.clone(), i as u32)
                     })
                     .collect();
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .intern(crate::tir::ResolvedType::GenericResource {
+                self.tysys.type_table.borrow_mut().intern(
+                    crate::tir::ResolvedType::GenericResource {
                         name: name.to_string(),
                         module_source: module,
                         type_args: type_arg_ids,
-                    })
+                    },
+                )
             } else {
                 self.tysys
                     .type_table

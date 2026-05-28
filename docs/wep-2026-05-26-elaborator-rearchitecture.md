@@ -404,7 +404,26 @@ migration; see Trade-offs.
       `coercion_view`, `desugar_view`) for tests and the future LSP
       hover path. The stdlib snapshot seeds every map back into
       per-module storage so cached stdlib modules stay consistent.
-- [ ] **Stage 5 — `annotate_bodies` / `reify` split.**
+- [ ] **Stage 5 — `annotate_bodies` / `reify` split.** _In progress._
+      Recording half landed: `MethodDispatch.is_ref_impl` and the
+      `IndexMutMethodCall` / `NewtypeFromCollapse` desugar tags
+      (Gaps 2–3, 9); `TypeAnnotations.closure_captures`,
+      `assert_captures`, `for_of_iterator` populated by the existing
+      body walk (Gaps 4–6); `generic_instantiations` recorded at every
+      generic call / struct-literal / variant-ctor site (Gap 1).
+      `Reify<'a, H>` introduced in `elaborator/reify.rs` with a complete
+      per-Item dispatch surface; concrete implementations for the
+      decl-only items (`Enum`, `Flags`, `Newtype`, `Struct` modulo
+      field defaults, `Variant`, `Interface`, `Resource`) read from
+      `tysys.all_*` and produce TIR without touching `TypeAnnotations`.
+      Remaining: body-walk reify (`reify_function` / `reify_impl` /
+      `reify_test_decl` / `reify_global` and the
+      `reify_block` / `reify_stmt` / `reify_expr` / `reify_pattern`
+      surface they call), then the orchestration switch that calls
+      `annotate_bodies` (the rebuilt resolve-without-TIR walk) before
+      `reify_modules`. Field defaults on `reify_struct` are tied to the
+      body-walk reify landing — the `default_expr: None` slot stays
+      empty until `reify_expr` can populate it.
 - [ ] **Stage 6 — Liveness and DCE.**
 - [ ] **Stage 7 — Cleanup.**
 
