@@ -218,6 +218,18 @@ pub(crate) struct TypeAnnotations {
     /// independently.
     #[allow(dead_code)]
     pub(crate) impl_facts: IndexMap<AstId, ImplFacts>,
+    /// Resolved `with` clause for each function / method declaration
+    /// (Gap of Stage 5). Keyed by the [`crate::ast::Function`]'s or
+    /// [`crate::ast::Method`]'s [`AstId`]. The body walk calls
+    /// [`super::super::Elaborator::resolve_effects`] while effect
+    /// parameters are still in scope and stashes the result here so
+    /// reify can drop the `Vec<EffectRef>` straight into
+    /// [`crate::tir::TirFunction::effects`] without re-running
+    /// effect-param / import / canonicalisation lookups (none of which
+    /// reify has the transient `current_effect_param_decls` scope to
+    /// reproduce faithfully).
+    #[allow(dead_code)]
+    pub(crate) function_effects: IndexMap<AstId, Vec<crate::tir::EffectRef>>,
 }
 
 /// Generic-instantiation decision recorded by the body walk at a call,

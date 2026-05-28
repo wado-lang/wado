@@ -832,7 +832,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             } else {
                 None
             },
-            effects: self.reify_effects(&func.effects),
+            effects: self
+                .sem
+                .types
+                .function_effects
+                .get(&func.id)
+                .cloned()
+                .unwrap_or_else(|| self.reify_effects(&func.effects)),
             stores: func.stores.clone(),
             body,
             span: func.span,
@@ -1045,7 +1051,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             } else {
                 None
             },
-            effects: self.reify_effects(&func.effects),
+            effects: self
+                .sem
+                .types
+                .function_effects
+                .get(&func.id)
+                .cloned()
+                .unwrap_or_else(|| self.reify_effects(&func.effects)),
             stores: func.stores.clone(),
             body,
             span: func.span,

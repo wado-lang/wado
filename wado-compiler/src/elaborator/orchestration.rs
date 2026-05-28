@@ -1119,9 +1119,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .module_semantics
                 .insert(module_source.clone(), saved_sem);
 
-            let use_reify = std::env::var("WADO_REIFY")
-                .map(|v| v == "1" || v == "true")
-                .unwrap_or(false);
+            // Stage 5 / WEP 2026-05-26: WADO_REIFY enables reify for
+            // user-module compilation. The snapshot itself is always
+            // produced via the production path — reify rehydrates a
+            // snapshot built by the proven pipeline, and a reify bug
+            // inside the snapshot build would poison every downstream
+            // compile on this thread. See `stdlib_snapshot::is_building`.
+            let use_reify = !crate::stdlib_snapshot::is_building()
+                && std::env::var("WADO_REIFY")
+                    .map(|v| v == "1" || v == "true")
+                    .unwrap_or(false);
 
             if let Ok(tir_module) = resolve_result {
                 if use_reify {
