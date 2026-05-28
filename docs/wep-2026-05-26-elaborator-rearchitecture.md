@@ -457,21 +457,23 @@ migration; see Trade-offs.
       records every resolved free / namespaced / static-method
       `FunctionRef` so reify replays the same TIR `Call` shape
       (module_source, mangled name, monomorph_info, method_info)
-      without re-running impl lookup. Under these annotations
-      the E2E suite at `-O0` reaches **623 / 1326 fixtures
-      passing under `WADO_REIFY=1`** — the remaining failures
-      cluster around the residual `todo!`s below plus a
-      downstream codegen-time type mismatch (`type mismatch:
-      expected (ref null $type), found i32`) for end-to-end
-      runs of arr-indexing fixtures. Reify's TIR for `arr[i]`
-      matches production byte-for-byte (the
-      `Array<i32>^IndexValue<i32>::index_value` name appears
-      mangled in both, confirmed via `wado dump --tir-resolved`),
-      so the divergence lives downstream of TIR emission —
-      most likely a per-arg `is_mut` flag, a struct field
-      index, or an `address_taken_locals` entry that the
-      reify path doesn't reproduce. Default-path E2E
-      behaviour is unchanged. Concrete arms cover every
+      without re-running impl lookup. The sequence /
+      key-value coercion gaps land too — `sequence_coercions`
+      and `key_value_coercions` annotations record the
+      resolved `SequenceLiteralBuilder` / `KeyValueLiteralBuilder`
+      impl data (builder/element/value types, self-kind,
+      trait/builder names with type args, impl module source,
+      newtype-cast target, new-vs-legacy API flag), and reify's
+      `reify_sequence_coercion` / `reify_key_value_coercion`
+      rebuild the same `__seq_lit:` / `__kv_lit:` desugar
+      blocks deterministically. Struct field defaults reify via
+      the per-struct `FunctionContext` (`struct:<name>`),
+      matching `Elaborator::resolve_struct` (item.rs:461)
+      byte-for-byte. Under these annotations the E2E suite at
+      `-O0` reaches **677 / 1326 fixtures passing under
+      `WADO_REIFY=1`** (+54 from the 623 baseline, almost
+      entirely from the sequence-coercion gap). Default-path
+      E2E behaviour is unchanged. Concrete arms cover every
       `reify_pattern` variant, every `reify_literal` variant
       (host-driven included), every `reify_ident` shape
       (local / current+imported globals / assoc constants /
