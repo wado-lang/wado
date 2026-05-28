@@ -9149,7 +9149,7 @@ fn scan_expr_lr_10(tokens: &Array<Token>, pos: i32) -> i32 {
                         }
                         pos = gp_190;
                         sg_190_1: {
-                            pos = scan_expr(tokens, pos, 0);
+                            pos = scan_expr(tokens, pos, 9);
                             if pos < 0 { break sg_190_1; }
                             while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
                                 let sp = pos;
@@ -9157,7 +9157,7 @@ fn scan_expr_lr_10(tokens: &Array<Token>, pos: i32) -> i32 {
                                     sg_191: {
                                         if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_191; }
                                         pos += 1;
-                                        pos = scan_expr(tokens, pos, 0);
+                                        pos = scan_expr(tokens, pos, 9);
                                         if pos < 0 { break sg_191; }
                                         break sg_191_done;
                                     }
@@ -9274,7 +9274,7 @@ fn scan_expr_lr_17(tokens: &Array<Token>, pos: i32) -> i32 {
             sg_194: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_K_ESCAPE { break sg_194; }
                 pos += 1;
-                pos = scan_expr(tokens, pos, 0);
+                pos = scan_expr(tokens, pos, 5);
                 if pos < 0 { break sg_194; }
                 break sg_194_done;
             }
@@ -16747,7 +16747,7 @@ fn _parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
                         }
                         pos = gp_342;
                         sg_342_1: {
-                            pos = scan_expr(tokens, pos, 0);
+                            pos = scan_expr(tokens, pos, 9);
                             if pos < 0 { break sg_342_1; }
                             while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
                                 let sp = pos;
@@ -16755,7 +16755,7 @@ fn _parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
                                     sg_343: {
                                         if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_343; }
                                         pos += 1;
-                                        pos = scan_expr(tokens, pos, 0);
+                                        pos = scan_expr(tokens, pos, 9);
                                         if pos < 0 { break sg_343; }
                                         break sg_343_done;
                                     }
@@ -16794,7 +16794,7 @@ fn _parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
                     }
                     pos = gp_344;
                     sg_344_1: {
-                        pos = scan_expr(tokens, pos, 0);
+                        pos = scan_expr(tokens, pos, 9);
                         if pos < 0 { break sg_344_1; }
                         while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
                             let sp = pos;
@@ -16802,7 +16802,7 @@ fn _parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
                                 sg_345: {
                                     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_345; }
                                     pos += 1;
-                                    pos = scan_expr(tokens, pos, 0);
+                                    pos = scan_expr(tokens, pos, 9);
                                     if pos < 0 { break sg_345; }
                                     break sg_345_done;
                                 }
@@ -16839,7 +16839,7 @@ fn _parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
                             select_stmt,
                         }));
                     } else {
-                        let expr = _parse_expr(p)?;
+                        let expr = _parse_expr(p, 9)?;
                         let mut comma_expr_list: Array<CommaExprItem> = [];
                         loop {
                             let mut rep_scan_pos: i32 = -1;
@@ -16850,7 +16850,7 @@ fn _parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
                                     sg_346: {
                                         if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_346; }
                                         pos += 1;
-                                        pos = scan_expr(tokens, pos, 0);
+                                        pos = scan_expr(tokens, pos, 9);
                                         if pos < 0 { break sg_346; }
                                         break sg_346_done;
                                     }
@@ -16861,7 +16861,7 @@ fn _parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
                             }
                             if rep_scan_pos < 0 { break; }
                             let comma = p.expect(TK_LIT_COMMA)?;
-                            let expr = _parse_expr(p)?;
+                            let expr = _parse_expr(p, 9)?;
                             let comma_expr = CommaExprItem {
                                 comma,
                                 expr,
@@ -16971,7 +16971,7 @@ fn _parse_expr_lr_17(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
     let expr_2 = _parse_expr(p, 5)?;
     let k_escape_expr: Option<KEscapeExprItem> = if p.peek_kind() == TK_K_ESCAPE {
         let k_escape = p.expect(TK_K_ESCAPE)?;
-        let expr = _parse_expr(p)?;
+        let expr = _parse_expr(p, 5)?;
         let k_escape_expr = KEscapeExprItem {
             k_escape,
             expr,

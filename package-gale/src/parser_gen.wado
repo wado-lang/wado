@@ -3895,7 +3895,7 @@ fn rule_ref_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternat
 ///
 /// `scan_alts` drives the scan via the op-driven walker against the
 /// lowered `ScanBody`.
-fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32>, alts: &Array<Alternative>, scan_alts: &Array<ScanBody>, opt_var: &String, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32>, alts: &Array<Alternative>, g_op_alts: &Array<AltBody>, scan_alts: &Array<ScanBody>, opt_var: &String, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
     w.line(&`let mut {winner_var}: i32 = -1;`);
@@ -3921,10 +3921,22 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         let alt_idx = sorted_group[k];
         let is_last = k == last;
-        if let RuleRef(r) = &alts[alt_idx].elements[0] {
-            let fn_name = `_parse_{r.snake_name}`;
+        // Read the lowered `RuleCallOp` so `variant_id` and
+        // `min_prec_arg` (baked at lower time) reach emit. The surface
+        // `RuleRef` carries only the source-level name.
+        if let RuleCall(rc) = &g_op_alts[alt_idx].ops[0] {
+            let fn_name = if let Some(id) = rc.variant_id {
+                `_parse_{rc.target_snake}__follow_{id}`;
+            } else {
+                `_parse_{rc.target_snake}`;
+            };
             let case_name = group_case_name(&alts[alt_idx]);
-            let local_var = r.snake_name;
+            let local_var = rc.target_snake;
+            let call_args = if let Some(min_prec) = rc.min_prec_arg {
+                `p, {min_prec}`;
+            } else {
+                "p";
+            };
 
             if k == 0 && !is_last {
                 w.begin(&`if {winner_var} == {k}`);
@@ -3933,8 +3945,10 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
             } else {
                 w.else_begin(&`else if {winner_var} == {k}`);
             }
-            w.line(&`let {local_var} = {fn_name}(p)?;`);
+            w.line(&`let {local_var} = {fn_name}({call_args})?;`);
             w.line(&`{*opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
+        } else {
+            panic("gen_rule_ref_group_scan_dispatch: SimpleCst alt op is not RuleCall");
         }
     }
     w.end();
@@ -3972,7 +3986,12 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                     `_parse_{rc.target_snake}`;
                 };
                 let local_var = rc.target_snake;
-                w.line(&`let {local_var} = {fn_name}(p)?;`);
+                let call_args = if let Some(min_prec) = rc.min_prec_arg {
+                    `p, {min_prec}`;
+                } else {
+                    "p";
+                };
+                w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                 w.line(&`{type_name}::{body.case_name}({local_var})`);
             } else {
                 panic("gen_consume_group_store_op: SimpleCst alt op is not RuleCall");
@@ -4011,7 +4030,12 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                         `_parse_{rc.target_snake}`;
                     };
                     let local_var = rc.target_snake;
-                    w.line(&`let {local_var} = {fn_name}(p)?;`);
+                    let call_args = if let Some(min_prec) = rc.min_prec_arg {
+                        `p, {min_prec}`;
+                    } else {
+                        "p";
+                    };
+                    w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                     w.line(&`{opt_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
                 } else {
                     panic("gen_consume_group_store_op: SimpleCst alt op is not RuleCall");
@@ -4025,6 +4049,7 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                     w,
                     &sorted_group,
                     alts,
+                    g_op_alts,
                     g_op_scan_alts,
                     &opt_var,
                     &type_name,
@@ -4094,7 +4119,12 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
                     `_parse_{rc.target_snake}`;
                 };
                 let local_var = rc.target_snake;
-                w.line(&`let {local_var} = {fn_name}(p)?;`);
+                let call_args = if let Some(min_prec) = rc.min_prec_arg {
+                    `p, {min_prec}`;
+                } else {
+                    "p";
+                };
+                w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                 w.line(&`{inner_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
             }
         } else {
@@ -4106,6 +4136,7 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
                 w,
                 &sorted_group,
                 alts,
+                g_op_alts,
                 g_op_scan_alts,
                 &inner_var,
                 &type_name,
