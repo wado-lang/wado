@@ -4276,7 +4276,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | ResolvedType::Flags {
                     name,
                     module_source,
+                }
+                | ResolvedType::Enum {
+                    name,
+                    module_source,
+                }
+                | ResolvedType::Resource {
+                    name,
+                    module_source,
+                }
+                | ResolvedType::GenericResource {
+                    name,
+                    module_source,
+                    ..
                 } => (name, module_source),
+                ResolvedType::Primitive(prim) => {
+                    (prim.as_str().to_string(), crate::module_source::ModuleSource::primitive())
+                }
                 _ => (String::new(), self.current_module_source.clone()),
             }
         };

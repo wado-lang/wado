@@ -1120,12 +1120,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .insert(module_source.clone(), saved_sem);
 
             // Stage 5 / WEP 2026-05-26: WADO_REIFY enables reify for
-            // user-module compilation. The snapshot itself is always
-            // produced via the production path — reify rehydrates a
-            // snapshot built by the proven pipeline, and a reify bug
-            // inside the snapshot build would poison every downstream
-            // compile on this thread. See `stdlib_snapshot::is_building`.
+            // user-module compilation only. Stdlib modules
+            // (`Core` / `Wasi` / `Wasm`) — whether in the snapshot
+            // cache or live-loaded — go through the production path
+            // until reify reaches feature parity for every
+            // stdlib-shaped construct. See the Stage 5 follow-up list
+            // in `docs/wep-2026-05-26-elaborator-rearchitecture.md`.
+            // The snapshot bypass also applies during snapshot
+            // construction (`is_building == true`) so the snapshot's
+            // foundation TIR never depends on reify.
+            let is_stdlib = matches!(
+                module_source,
+                ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
+            );
             let use_reify = !crate::stdlib_snapshot::is_building()
+                && !is_stdlib
                 && std::env::var("WADO_REIFY")
                     .map(|v| v == "1" || v == "true")
                     .unwrap_or(false);
