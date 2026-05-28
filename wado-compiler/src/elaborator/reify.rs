@@ -898,8 +898,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Stmt::Continue(continue_stmt) => {
                 vec![TirStmt::new(TirStmtKind::Continue, continue_stmt.span)]
             }
-            ast::Stmt::Let(_)
-            | ast::Stmt::If(_)
+            ast::Stmt::Let(let_stmt) => vec![self.reify_let(let_stmt, ctx)],
+            ast::Stmt::If(_)
             | ast::Stmt::While(_)
             | ast::Stmt::For(_)
             | ast::Stmt::ForOf(_)
@@ -913,6 +913,68 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // pick the recorded expansion path; the iterator path
                 // additionally reads `sem.types.for_of_iterator`.
                 todo!("reify_stmt: {:?} variant pending body-walk reify", stmt)
+            }
+        }
+    }
+
+    /// Reify `let pat[: T] = expr;`. Currently handles the common
+    /// `Ident` / `MutIdent` / `Wildcard` patterns; destructuring
+    /// (`Tuple` / `Struct` / `Variant`) defers to the dispatcher's
+    /// `todo!`.
+    fn reify_let(&mut self, let_stmt: &ast::LetStmt, ctx: &mut FunctionContext) -> TirStmt {
+        use crate::tir::{TirStmtKind, TypeTable};
+        // Uninitialised `let x: T;` is rare and routes to its own
+        // helper in the elaborator; reify follows suit.
+        let Some(ast_value) = let_stmt.value.as_ref() else {
+            todo!("reify_let: uninitialised `let x: T;` pending")
+        };
+
+        let annotated_type = let_stmt.ty.as_ref().map(|t| self.resolve_type(t));
+        let value = self.reify_expr(ast_value, ctx, annotated_type);
+        let type_id = annotated_type.unwrap_or(value.type_id);
+
+        match &let_stmt.pattern {
+            ast::Pattern::Ident { id, name, span: _ } => {
+                let local_index = ctx.add_local(name.clone(), type_id, false, Some(*id));
+                TirStmt::new(
+                    TirStmtKind::Let {
+                        name: name.clone(),
+                        local_index,
+                        is_mut: false,
+                        is_reactive: let_stmt.is_reactive,
+                        type_id,
+                        value,
+                        skip_value_copy: false,
+                    },
+                    let_stmt.span,
+                )
+            }
+            ast::Pattern::MutIdent { id, name, span: _ } => {
+                let local_index = ctx.add_local(name.clone(), type_id, true, Some(*id));
+                TirStmt::new(
+                    TirStmtKind::Let {
+                        name: name.clone(),
+                        local_index,
+                        is_mut: true,
+                        is_reactive: let_stmt.is_reactive,
+                        type_id,
+                        value,
+                        skip_value_copy: false,
+                    },
+                    let_stmt.span,
+                )
+            }
+            ast::Pattern::Wildcard => {
+                // `let _ = expr;` discards. Lower as an Expr stmt.
+                TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
+            }
+            _ => {
+                let _ = type_id;
+                let _ = TypeTable::UNKNOWN;
+                // TODO(stage-5-bodies): tuple / struct / variant
+                // destructuring (`resolve_let` calls
+                // `resolve_destructure_pattern`).
+                todo!("reify_let: destructuring pattern pending body-walk reify")
             }
         }
     }
@@ -952,25 +1014,84 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let block_tir = self.reify_block(block, ctx, expected_type);
                 TirExpr::new(TirExprKind::Block(block_tir), recorded_type, span)
             }
-            ast::Expr::Ident(_)
-            | ast::Expr::Binary(_)
-            | ast::Expr::Unary(_)
+            ast::Expr::Ident(ident) => self.reify_ident(ident, recorded_type, ctx),
+            ast::Expr::TupleLiteral(tuple_lit) => {
+                // Element-by-element walk; the recorded type is the
+                // tuple `TypeId` annotate produced (potentially after
+                // coercion to a sequence type — that path goes through
+                // `coercions[id]` and is handled by the wrapper above
+                // once it lands).
+                let elements: Vec<TirExpr> = tuple_lit
+                    .elements
+                    .iter()
+                    .map(|e| self.reify_expr(e, ctx, None))
+                    .collect();
+                TirExpr::new(
+                    TirExprKind::TupleLiteral { elements },
+                    recorded_type,
+                    span,
+                )
+            }
+            ast::Expr::Cast(cast) => {
+                // `expr as Ty` — emit `Cast` with the recorded target
+                // type. Numeric vs newtype-cast handling is downstream;
+                // reify just produces the shape.
+                let inner = self.reify_expr(&cast.expr, ctx, None);
+                let target_type = self.resolve_type(&cast.target_type);
+                TirExpr::new(
+                    TirExprKind::Cast {
+                        expr: Box::new(inner),
+                        target_type,
+                    },
+                    target_type,
+                    span,
+                )
+            }
+            ast::Expr::Unary(unary) => {
+                let op = ast_unary_op_to_tir(unary.op);
+                let inner = self.reify_expr(&unary.expr, ctx, None);
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op,
+                        expr: Box::new(inner),
+                    },
+                    recorded_type,
+                    span,
+                )
+            }
+            ast::Expr::FieldAccess(field_access) => {
+                // The `field_index` and `field_name` on `FieldAccess`
+                // TIR are positional; the elaborator looks them up from
+                // the receiver's struct decl. Reify reads the same
+                // info from `tysys.all_struct_fields` keyed by the
+                // receiver's resolved struct name.
+                let inner = self.reify_expr(&field_access.expr, ctx, None);
+                let (field_index, field_name) =
+                    self.lookup_struct_field_index(inner.type_id, &field_access.field);
+                TirExpr::new(
+                    TirExprKind::FieldAccess {
+                        expr: Box::new(inner),
+                        field_index,
+                        field_name,
+                    },
+                    recorded_type,
+                    span,
+                )
+            }
+            ast::Expr::Binary(_)
             | ast::Expr::Assign(_)
             | ast::Expr::CompoundAssign(_)
             | ast::Expr::ComparisonChain(_)
             | ast::Expr::Call(_)
             | ast::Expr::MethodCall(_)
             | ast::Expr::StaticMethodCall(_)
-            | ast::Expr::FieldAccess(_)
             | ast::Expr::Index(_)
             | ast::Expr::If(_)
             | ast::Expr::Match(_)
             | ast::Expr::Matches(_)
             | ast::Expr::Closure(_)
             | ast::Expr::TemplateString(_)
-            | ast::Expr::Cast(_)
             | ast::Expr::StructLiteral(_)
-            | ast::Expr::TupleLiteral(_)
             | ast::Expr::LabeledBlock(_)
             | ast::Expr::TryOp(_)
             | ast::Expr::Spread(_, _)
@@ -986,6 +1107,96 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 todo!("reify_expr: {:?} variant pending body-walk reify", expr)
             }
         }
+    }
+
+    /// Resolve a struct field name to its `(index, name)` pair via
+    /// the resolved struct type. Tuple-struct projections (`t.0`)
+    /// resolve through the tuple element index. Returns `(0, name)` on
+    /// lookup failure so reify doesn't panic on a type the dispatch
+    /// hasn't ported yet — the produced TIR is wrong, but downstream
+    /// validation flags it loudly.
+    fn lookup_struct_field_index(
+        &self,
+        receiver_type: TypeId,
+        field_name: &str,
+    ) -> (u32, String) {
+        use crate::tir::ResolvedType;
+        let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
+        let struct_name = match resolved {
+            ResolvedType::Struct { name, .. } => name,
+            ResolvedType::GenericInstance { name, .. } => name,
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                let inner_resolved = self.tysys.type_table.borrow().get(inner).clone();
+                match inner_resolved {
+                    ResolvedType::Struct { name, .. } => name,
+                    ResolvedType::GenericInstance { name, .. } => name,
+                    _ => return (0, field_name.to_string()),
+                }
+            }
+            _ => return (0, field_name.to_string()),
+        };
+
+        let lookup = self.type_lookup();
+        if let Some(info) = lookup.struct_fields(&struct_name)
+            && let Some((idx, (n, _, _))) = info
+                .fields
+                .iter()
+                .enumerate()
+                .find(|(_, (n, _, _))| n == field_name)
+        {
+            return (idx as u32, n.clone());
+        }
+        (0, field_name.to_string())
+    }
+
+    /// Reify a bare identifier reference. Local lookup goes through
+    /// the per-function context (`FunctionContext::lookup`, walk-order
+    /// invariant — Gap 7). Non-local idents (globals, function refs,
+    /// enum / variant ctors) need the use→def edge in
+    /// `sem.bindings.references` to pick the right TIR shape; that
+    /// dispatch is the body-walk pending work.
+    fn reify_ident(
+        &mut self,
+        ident: &ast::IdentExpr,
+        recorded_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        use crate::tir::TirExprKind;
+
+        if let Some(local) = ctx.lookup(&ident.name) {
+            return TirExpr::new(
+                TirExprKind::Local {
+                    index: local.index,
+                    name: ident.name.clone(),
+                },
+                recorded_type,
+                ident.span,
+            );
+        }
+
+        // TODO(stage-5-bodies): non-local idents need to dispatch on
+        // `sem.bindings.references[ident.id]`:
+        //   - Global (`current_module_globals` / `imported_globals`)
+        //     → `GlobalVarGet`
+        //   - Free function → `FuncRef` (with type_args from
+        //     `sem.types.generic_instantiations[ident.id]` and
+        //     turbofish `ident.type_args` resolved via
+        //     `resolve_type_in_scope`)
+        //   - Enum / payload-less variant ctor → `EnumConstruct` /
+        //     `VariantConstruct` (with type_args from
+        //     `sem.types.generic_instantiations[ident.id]`)
+        //   - Flags member → `IntLiteral` with the bitmask value
+        //   - Associated constant → inlined via
+        //     `sem.decls.associated_constants`
+        //
+        // The full surface matches `Elaborator::resolve_ident`
+        // (expr.rs ≈300–800); panic with a labelled todo until the
+        // dispatch is ported.
+        let _ = recorded_type;
+        todo!(
+            "reify_ident: non-local `{}` pending body-walk reify",
+            ident.name
+        )
     }
 
     /// Reify a literal expression into its TIR shape. The recorded
@@ -1065,7 +1276,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a pattern in a `let`, `match`, `if let`, or `while let`.
     /// Binding patterns add locals to `ctx` in the same order annotate
     /// did (per the walk-order invariant).
-    #[allow(unused_variables)]
+    #[allow(unused_variables)] // kept until pattern dispatch is fleshed out
     pub(super) fn reify_pattern(
         &mut self,
         pattern: &ast::Pattern,
@@ -1082,5 +1293,49 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 todo!("reify_pattern: variant pending body-walk reify")
             }
         }
+    }
+}
+
+/// Map an AST [`ast::UnaryOp`] to its TIR counterpart. The two enums
+/// are 1:1; this helper exists so the dispatch table doesn't repeat
+/// the mapping at every Unary arm.
+fn ast_unary_op_to_tir(op: ast::UnaryOp) -> crate::tir::TirUnaryOp {
+    use crate::tir::TirUnaryOp;
+    match op {
+        ast::UnaryOp::Neg => TirUnaryOp::Neg,
+        ast::UnaryOp::Not => TirUnaryOp::Not,
+        ast::UnaryOp::BitNot => TirUnaryOp::BitNot,
+        ast::UnaryOp::Ref => TirUnaryOp::Ref,
+        ast::UnaryOp::MutRef => TirUnaryOp::MutRef,
+        ast::UnaryOp::Deref => TirUnaryOp::Deref,
+    }
+}
+
+/// Map an AST [`ast::BinaryOp`] to its TIR counterpart. The mapping is
+/// 1:1 for the source-level ops; TIR adds `RefEq` / `RefNotEq` as
+/// internal variants that the elaborator only synthesises after
+/// coercion analysis, so reify never produces them from this helper.
+#[allow(dead_code)] // used by `Binary` arm once it lands
+fn ast_binary_op_to_tir(op: ast::BinaryOp) -> crate::tir::TirBinaryOp {
+    use crate::tir::TirBinaryOp;
+    match op {
+        ast::BinaryOp::Add => TirBinaryOp::Add,
+        ast::BinaryOp::Sub => TirBinaryOp::Sub,
+        ast::BinaryOp::Mul => TirBinaryOp::Mul,
+        ast::BinaryOp::Div => TirBinaryOp::Div,
+        ast::BinaryOp::Mod => TirBinaryOp::Mod,
+        ast::BinaryOp::Eq => TirBinaryOp::Eq,
+        ast::BinaryOp::NotEq => TirBinaryOp::NotEq,
+        ast::BinaryOp::Lt => TirBinaryOp::Lt,
+        ast::BinaryOp::LtEq => TirBinaryOp::LtEq,
+        ast::BinaryOp::Gt => TirBinaryOp::Gt,
+        ast::BinaryOp::GtEq => TirBinaryOp::GtEq,
+        ast::BinaryOp::And => TirBinaryOp::And,
+        ast::BinaryOp::Or => TirBinaryOp::Or,
+        ast::BinaryOp::BitAnd => TirBinaryOp::BitAnd,
+        ast::BinaryOp::BitOr => TirBinaryOp::BitOr,
+        ast::BinaryOp::BitXor => TirBinaryOp::BitXor,
+        ast::BinaryOp::Shl => TirBinaryOp::Shl,
+        ast::BinaryOp::Shr => TirBinaryOp::Shr,
     }
 }
