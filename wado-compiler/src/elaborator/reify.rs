@@ -2488,15 +2488,80 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     is_unsigned,
                 }
             }
-            ast::Pattern::Struct { .. } => {
-                // TODO(stage-5-bodies): `Struct` pattern needs
-                // `tysys.all_struct_fields` for field-name → index
-                // resolution + per-field sub-pattern reification at
-                // the field's declared type, plus the `type_name` →
-                // `struct_type` interning. Mirror
-                // `Elaborator::resolve_struct_pattern`.
-                todo!("reify_pattern: Struct variant pending body-walk reify")
-            }
+            ast::Pattern::Struct {
+                type_name,
+                fields,
+                has_rest,
+                ..
+            } => self.reify_struct_pattern(type_name.as_deref(), fields, *has_rest, scrutinee_type, ctx),
+        }
+    }
+
+    /// Reify a struct destructuring pattern `Point { x, y }` or
+    /// `{ x, y }` (anonymous). The struct's field-name → index map
+    /// comes from `tysys.all_struct_fields`; sub-patterns recurse
+    /// against the declared field type. Mirrors
+    /// `Elaborator::resolve_struct_pattern`'s shape; shorthand
+    /// `{ x }` (== `{ x: x }`) is encoded by the AST having the
+    /// sub-pattern be an `Ident { name: x }` either way.
+    fn reify_struct_pattern(
+        &mut self,
+        type_name: Option<&str>,
+        fields: &[ast::StructPatternField],
+        has_rest: bool,
+        scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirPattern {
+        use crate::tir::{ResolvedType, TirStructPatternField};
+
+        // Determine the struct name: explicit `Type::Pattern` wins;
+        // otherwise read from the scrutinee.
+        let scrutinee_struct_name = match self.tysys.type_table.borrow().get(scrutinee_type).clone()
+        {
+            ResolvedType::Struct { name, .. } => name,
+            ResolvedType::GenericInstance { name, .. } => name,
+            _ => String::new(),
+        };
+        let lookup_name = type_name.unwrap_or(&scrutinee_struct_name);
+
+        // Decl-interned struct info for field-name → (index, type)
+        // lookup. Falls back to UNKNOWN-typed sub-patterns for
+        // anonymous / unresolved scrutinees (matches annotate's
+        // recovery shape).
+        let field_info: crate::hashmap::IndexMap<String, (u32, TypeId)> = {
+            let lookup = self.type_lookup();
+            lookup
+                .struct_fields(lookup_name)
+                .map(|info| {
+                    info.fields
+                        .iter()
+                        .enumerate()
+                        .map(|(i, (n, t, _))| (n.clone(), (i as u32, *t)))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+
+        let tir_fields: Vec<TirStructPatternField> = fields
+            .iter()
+            .map(|f| {
+                let (field_index, field_ty) = field_info
+                    .get(&f.field_name)
+                    .copied()
+                    .unwrap_or((0, crate::tir::TypeTable::UNKNOWN));
+                let pattern = self.reify_pattern(&f.pattern, field_ty, ctx);
+                TirStructPatternField {
+                    field_name: f.field_name.clone(),
+                    field_index,
+                    pattern,
+                }
+            })
+            .collect();
+
+        TirPattern::Struct {
+            struct_type: scrutinee_type,
+            fields: tir_fields,
+            has_rest,
         }
     }
 
