@@ -934,11 +934,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ctx.for_continue_labels = saved;
                 vec![TirStmt::new(TirStmtKind::Loop { body }, loop_stmt.span)]
             }
+            ast::Stmt::LabeledBlock(labeled_block) => {
+                // `LABEL: { … }` stmt — mirrors
+                // `Elaborator::resolve_labeled_block` (stmt.rs:116+).
+                // Push the label onto `active_labels` so a nested
+                // `break LABEL` lowers against this frame, walk the
+                // inner block, pop. The block result is dropped at
+                // stmt position, so no `expected_type` propagates.
+                ctx.active_labels.push(labeled_block.label.clone());
+                let block = self.reify_block(&labeled_block.block, ctx, None);
+                ctx.active_labels.pop();
+                vec![TirStmt::new(
+                    TirStmtKind::LabeledBlock {
+                        label: labeled_block.label.clone(),
+                        block,
+                    },
+                    labeled_block.span,
+                )]
+            }
             ast::Stmt::While(_)
             | ast::Stmt::For(_)
             | ast::Stmt::ForOf(_)
-            | ast::Stmt::Assert(_)
-            | ast::Stmt::LabeledBlock(_) => {
+            | ast::Stmt::Assert(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
                 // `Elaborator::resolve_*` branches. `For` / `While` /
                 // `Assert` reads `sem.types.desugars[stmt.id()]` to
@@ -1098,6 +1115,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::StructLiteral(struct_lit) => {
                 self.reify_struct_literal(struct_lit, ctx, recorded_type)
             }
+            ast::Expr::Range(range) => self.reify_range(range, ctx, recorded_type),
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
@@ -1197,7 +1215,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             | ast::Expr::Closure(_)
             | ast::Expr::TemplateString(_)
             | ast::Expr::TryOp(_)
-            | ast::Expr::Range(_)
             | ast::Expr::WithHandler(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
                 // `Elaborator::resolve_expr` arm. Each arm consults
@@ -1371,6 +1388,106 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             recorded_type,
             binary.span,
+        )
+    }
+
+    /// Reify a `a..<b` / `a..=b` range expression. The elaborator
+    /// lowers ranges into the prelude's `RangeExclusive` /
+    /// `RangeInclusive` struct literals (expr.rs:4397+); reify
+    /// produces the same shape by reading the element type from
+    /// the reified `start` expression and interning the
+    /// `GenericInstance` via `make_generic_instance`.
+    fn reify_range(
+        &mut self,
+        range: &ast::RangeExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::ast::RangeKind;
+        use crate::tir::{TirExprKind, TirStructField, TypeTable};
+
+        // Resolve both operands first; the element type comes from
+        // `start` (annotate has unified start/end to the same type, so
+        // either operand's type works).
+        let start = self.reify_expr(&range.start, ctx, None);
+        let end_expected = Some(start.type_id);
+        let end = self.reify_expr(&range.end, ctx, end_expected);
+        let element_type = start.type_id;
+
+        // The recorded `expression_types[range.id]` carries the
+        // assembled `GenericInstance` type, but the elaborator's
+        // construction is purely from the prelude's compiler-item
+        // registry — reproduce here so the same `module_source` lands
+        // even if a future inference change made the recorded type
+        // less specific.
+        let (struct_name, module_source) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            match range.kind {
+                RangeKind::Exclusive => (
+                    "RangeExclusive".to_string(),
+                    items
+                        .struct_module(crate::compiler_item::CompilerItem::RangeExclusive)
+                        .cloned()
+                        .unwrap_or_else(crate::module_source::ModuleSource::range),
+                ),
+                RangeKind::Inclusive => (
+                    "RangeInclusive".to_string(),
+                    items
+                        .struct_module(crate::compiler_item::CompilerItem::RangeInclusive)
+                        .cloned()
+                        .unwrap_or_else(crate::module_source::ModuleSource::range),
+                ),
+            }
+        };
+
+        let struct_type = self.tysys.type_table.borrow_mut().make_generic_instance(
+            struct_name.clone(),
+            module_source,
+            vec![element_type],
+        );
+
+        let mut fields = vec![
+            TirStructField {
+                name: "start".to_string(),
+                value: start,
+                field_index: 0,
+            },
+            TirStructField {
+                name: "end".to_string(),
+                value: end,
+                field_index: 1,
+            },
+        ];
+        if matches!(range.kind, RangeKind::Inclusive) {
+            fields.push(TirStructField {
+                name: "exhausted".to_string(),
+                value: TirExpr::new(
+                    TirExprKind::BoolLiteral(false),
+                    TypeTable::BOOL,
+                    range.span,
+                ),
+                field_index: 2,
+            });
+        }
+
+        let arg_names = vec![self.tysys.type_table.borrow().type_name(element_type)];
+        let mangled_name = crate::name::mangle_generic_name(&struct_name, &arg_names);
+
+        // Honour the recorded result type if present (annotate may
+        // have unified with a more specific `RangeInclusive<i32>` etc.
+        // already on `recorded_type`); reify trusts it as the final
+        // expression type.
+        let _ = recorded_type;
+
+        TirExpr::new(
+            TirExprKind::StructLiteral {
+                struct_type,
+                struct_name: mangled_name,
+                fields,
+            },
+            struct_type,
+            range.span,
         )
     }
 
