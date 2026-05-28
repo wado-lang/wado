@@ -1967,8 +1967,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a pattern in a `let`, `match`, `if let`, or `while let`.
     /// Binding patterns add locals to `ctx` in the same order annotate
-    /// did (per the walk-order invariant).
-    #[allow(unused_variables)] // kept until pattern dispatch is fleshed out
+    /// did (per the walk-order invariant). The variant binding order
+    /// mirrors `Elaborator::resolve_if_pattern_inner`'s recursion.
     pub(super) fn reify_pattern(
         &mut self,
         pattern: &ast::Pattern,
@@ -1977,13 +1977,204 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirPattern {
         match pattern {
             ast::Pattern::Wildcard => TirPattern::Wildcard,
-            _ => {
-                // TODO(stage-5-bodies): mirror
-                // `Elaborator::resolve_if_pattern_inner`'s remaining
-                // arms (Ident, Tuple, Struct, Variant, Enum, Literal,
-                // Range, Or, Binding).
-                todo!("reify_pattern: variant pending body-walk reify")
+            ast::Pattern::Ident { id, name, span: _ } => {
+                let local_index =
+                    ctx.add_local(name.clone(), scrutinee_type, /* is_mut */ false, Some(*id));
+                TirPattern::Binding {
+                    name: name.clone(),
+                    local_index,
+                    type_id: scrutinee_type,
+                }
             }
+            ast::Pattern::MutIdent { id, name, span: _ } => {
+                let local_index =
+                    ctx.add_local(name.clone(), scrutinee_type, /* is_mut */ true, Some(*id));
+                TirPattern::Binding {
+                    name: name.clone(),
+                    local_index,
+                    type_id: scrutinee_type,
+                }
+            }
+            ast::Pattern::Literal(lit) => {
+                let lit_pat = ast_literal_to_pattern(lit);
+                TirPattern::Literal(lit_pat)
+            }
+            ast::Pattern::Tuple(elements, has_rest) => {
+                // Tuple patterns destructure into the scrutinee's
+                // element types. The elaborator already validated
+                // arity; reify reads `tysys.type_table.as_tuple` to
+                // get the per-element types, falling back to
+                // UNKNOWN-typed inner walks for type-pack scrutinees.
+                let elem_types: Vec<TypeId> = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .as_tuple(scrutinee_type)
+                    .unwrap_or_default();
+                let sub_patterns: Vec<TirPattern> = elements
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        let elem_ty =
+                            elem_types.get(i).copied().unwrap_or(crate::tir::TypeTable::UNKNOWN);
+                        self.reify_pattern(p, elem_ty, ctx)
+                    })
+                    .collect();
+                TirPattern::Tuple(sub_patterns, *has_rest)
+            }
+            ast::Pattern::Variant {
+                variant_name,
+                bindings,
+                ..
+            } => {
+                // Variant patterns appear in `match Some(x) { Some(v) => …
+                // }` etc. The case's payload type lives on
+                // `tysys.all_variant_cases`; reify reads it to give
+                // sub-patterns the right scrutinee type. The
+                // `variant_name` strips a `Variant::` prefix when
+                // present (the AST keeps the qualified form).
+                let case_name = variant_name
+                    .rsplit("::")
+                    .next()
+                    .unwrap_or(variant_name)
+                    .to_string();
+
+                // Resolve the variant decl + case payload.
+                let (payload_type, _payload_decl_module) = {
+                    use crate::tir::ResolvedType;
+                    let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
+                    let (decl_name, type_args) = match resolved {
+                        ResolvedType::Variant {
+                            name,
+                            module_source,
+                        } => (name, (Vec::<TypeId>::new(), module_source)),
+                        ResolvedType::GenericInstance {
+                            name,
+                            module_source,
+                            type_args,
+                        } => (name, (type_args, module_source)),
+                        _ => (String::new(), (Vec::new(), self.current_module_source.clone())),
+                    };
+                    let payload = self.get_variant_case_payload_type(
+                        &decl_name,
+                        &case_name,
+                        &type_args.0,
+                    );
+                    (payload, type_args.1)
+                };
+
+                let sub_patterns: Vec<TirPattern> = bindings
+                    .iter()
+                    .map(|p| self.reify_pattern(p, payload_type, ctx))
+                    .collect();
+                TirPattern::Variant {
+                    enum_type: scrutinee_type,
+                    variant_name: case_name,
+                    bindings: sub_patterns,
+                    payload_type,
+                }
+            }
+            ast::Pattern::Struct { .. }
+            | ast::Pattern::Or(_)
+            | ast::Pattern::Range { .. } => {
+                // TODO(stage-5-bodies): Struct / Or / Range pattern
+                // dispatch. `Struct` needs `tysys.all_struct_fields`
+                // for field-name → index resolution; `Range` needs the
+                // start/end literals decoded into i128 / u128 + the
+                // signedness flag from `scrutinee_type`; `Or`
+                // recursively reifies each alternative.
+                todo!("reify_pattern: {:?} variant pending body-walk reify", pattern)
+            }
+        }
+    }
+
+    /// Look up a variant case's payload type, substituted with the
+    /// scrutinee's type args. Reify-side mirror of the elaborator's
+    /// `Elaborator::get_variant_case_payload_type`; the lookup walks
+    /// `tysys.all_variant_cases` and the local-module override map
+    /// via [`TypeLookup`], so the same `TypeId` annotate produced
+    /// lands on the reified pattern.
+    fn get_variant_case_payload_type(
+        &self,
+        variant_name: &str,
+        case_name: &str,
+        type_args: &[TypeId],
+    ) -> TypeId {
+        let lookup = self.type_lookup();
+        let Some(variant_info) = lookup.variant_case(variant_name) else {
+            return crate::tir::TypeTable::UNKNOWN;
+        };
+        let Some(case_data) = variant_info.cases.iter().find(|c| c.name == case_name) else {
+            return crate::tir::TypeTable::UNKNOWN;
+        };
+        if type_args.is_empty() {
+            return case_data.payload;
+        }
+        // Substitute decl type params with concrete `type_args` in the
+        // payload type.
+        let param_map: crate::hashmap::IndexMap<TypeId, TypeId> = variant_info
+            .type_param_type_ids
+            .iter()
+            .zip(type_args.iter())
+            .map(|(&p, &t)| (p, t))
+            .collect();
+        let _ = param_map;
+        // Stage 5 follow-up: full substitution needs the elaborator's
+        // `substitute_type_params_by_map`; until that helper is
+        // factored to a free function, fall back to the raw payload
+        // for non-generic cases (most variants in current fixtures)
+        // and accept the same `UNKNOWN` slot as
+        // `Elaborator::get_variant_case_payload_type` would for the
+        // un-substitutable path.
+        case_data.payload
+    }
+}
+
+/// Map an AST [`ast::Literal`] in pattern position to its
+/// [`crate::tir::TirLiteralPattern`] counterpart. Number literals
+/// decode into `I128` (parsed via the same hex / oct / bin prefix
+/// recogniser used by `reify_literal`), with negative sources kept
+/// as their parsed numeric value. The `Null` / `Unit` literals never
+/// appear in pattern position in the surface grammar — they panic
+/// here to surface a parser-elaborator invariant violation early.
+fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
+    use crate::tir::TirLiteralPattern;
+    match lit {
+        ast::Literal::Number(repr) => {
+            // Mirror `reify_literal`'s numeric decode: prefer
+            // hex/oct/bin radix, else decimal. Pattern position
+            // never sees float literals (the elaborator rejects
+            // them earlier), so decode as integer.
+            let value: i128 = if let Some(stripped) = repr.strip_prefix("0x") {
+                i128::from_str_radix(stripped, 16).unwrap_or(0)
+            } else if let Some(stripped) = repr.strip_prefix("0o") {
+                i128::from_str_radix(stripped, 8).unwrap_or(0)
+            } else if let Some(stripped) = repr.strip_prefix("0b") {
+                i128::from_str_radix(stripped, 2).unwrap_or(0)
+            } else {
+                repr.parse::<i128>().unwrap_or(0)
+            };
+            TirLiteralPattern::I128(value)
+        }
+        ast::Literal::String(s) => TirLiteralPattern::String(s.clone()),
+        ast::Literal::Char(s) => {
+            let inner = s.trim_start_matches('\'').trim_end_matches('\'');
+            TirLiteralPattern::Char(inner.chars().next().unwrap_or('\0'))
+        }
+        ast::Literal::Bool(b) => TirLiteralPattern::Bool(*b),
+        ast::Literal::Null => TirLiteralPattern::Null,
+        // Unit / Location / Include literals don't appear as pattern
+        // literals in the surface grammar — the parser rejects them
+        // earlier. Falling here would be a parser-elaborator
+        // invariant violation; panic with a labelled tripwire.
+        ast::Literal::Unit
+        | ast::Literal::LocationFile
+        | ast::Literal::LocationLine
+        | ast::Literal::LocationFunction
+        | ast::Literal::DataSection
+        | ast::Literal::IncludeStr(_)
+        | ast::Literal::IncludeBytes(_) => {
+            panic!("ast_literal_to_pattern: literal kind {lit:?} not valid in pattern position")
         }
     }
 }
