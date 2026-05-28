@@ -271,7 +271,7 @@ fn render_single(doc: &DocModule, format_name: &str, input: &str, format: Output
                 OutputFormat::Simple => out.push_str(&render_simple(doc, 0)),
                 OutputFormat::Json => unreachable!(),
             }
-            out
+            format_markdown(&out)
         }
     }
 }
@@ -311,7 +311,65 @@ fn render_combined(
             OutputFormat::Json => unreachable!(),
         }
     }
-    out
+    format_markdown(&out)
+}
+
+/// Normalize Markdown via dprint. The contract for `wado doc -f markdown`
+/// and `-f simple` is that emitted output is always dprint-stable: re-running
+/// `dprint` over the output is a no-op. This lets downstream tooling avoid a
+/// post-format pass.
+fn format_markdown(content: &str) -> String {
+    let config = dprint_plugin_markdown::configuration::ConfigurationBuilder::new().build();
+    match dprint_plugin_markdown::format_text(content, &config, |_, _, _| Ok(None)) {
+        Ok(Some(formatted)) => formatted,
+        Ok(None) => content.to_string(),
+        Err(e) => panic!("wado doc: dprint failed to format generated markdown: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod format_contract_tests {
+    use super::*;
+    use wado_compiler::doc::extract_stdlib_doc;
+
+    fn assert_dprint_stable(content: &str, label: &str) {
+        let reformatted = format_markdown(content);
+        assert_eq!(
+            content, reformatted,
+            "{label}: wado doc output must be dprint-stable but re-formatting changed it",
+        );
+    }
+
+    #[test]
+    fn markdown_output_is_dprint_stable() {
+        let doc = extract_stdlib_doc("core:cli").expect("core:cli stdlib doc");
+        let out = render_single(&doc, "markdown", "core:cli", OutputFormat::Markdown);
+        assert_dprint_stable(&out, "markdown single");
+    }
+
+    #[test]
+    fn simple_output_is_dprint_stable() {
+        let doc = extract_stdlib_doc("core:cli").expect("core:cli stdlib doc");
+        let out = render_single(&doc, "simple", "core:cli", OutputFormat::Simple);
+        assert_dprint_stable(&out, "simple single");
+    }
+
+    #[test]
+    fn combined_markdown_output_is_dprint_stable() {
+        let inputs = ["core:cli".to_string(), "core:base64".to_string()];
+        let docs: Vec<(String, _)> = inputs
+            .iter()
+            .map(|i| (i.clone(), extract_stdlib_doc(i).expect("stdlib doc")))
+            .collect();
+        let opts = DocOptions {
+            inputs: inputs.to_vec(),
+            format: OutputFormat::Markdown,
+            title: Some("Test".to_string()),
+            output: None,
+        };
+        let out = render_combined(&docs, opts.title.as_deref(), "markdown", &opts);
+        assert_dprint_stable(&out, "markdown combined");
+    }
 }
 
 fn render_auto_generated_header(
