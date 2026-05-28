@@ -1302,6 +1302,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::TryOp(qm) => self.reify_question_mark(qm, ctx, recorded_type),
             ast::Expr::Closure(closure) => self.reify_closure(closure, ctx, recorded_type, expected_type),
+            ast::Expr::Index(index) => self.reify_index(index, ctx, recorded_type),
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
@@ -1395,7 +1396,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::ComparisonChain(_)
             | ast::Expr::StaticMethodCall(_)
-            | ast::Expr::Index(_)
             | ast::Expr::WithHandler(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
                 // `Elaborator::resolve_expr` arm. Each arm consults
@@ -2447,6 +2447,109 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ok_type,
             span,
         )
+    }
+
+    /// Reify an `expr[idx]` index expression.
+    ///
+    /// Three shapes per `Elaborator::resolve_index` (expr.rs:1659+):
+    /// - Tuple constant index → `TirExprKind::FieldAccess` with the
+    ///   constant index as `field_index` / `field_name`.
+    /// - `Index` trait dispatch → `*receiver.index(idx)` wrapped in
+    ///   `Unary { Deref }`; the `operator_dispatch[index.id]` record
+    ///   (Gap 11) carries the dispatch target. The `Ref(Output)`
+    ///   `return_type` on the record is the signal that the outer
+    ///   `Deref` wrap is needed.
+    /// - `IndexValue` trait dispatch → `receiver.index_value(idx)`
+    ///   returns the value by copy; no outer wrap.
+    fn reify_index(
+        &mut self,
+        index: &ast::IndexExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::tir::{CallArg, ResolvedType, TirExprKind, TirUnaryOp, TypeTable};
+
+        let receiver = self.reify_expr(&index.expr, ctx, None);
+
+        // Tuple constant-index path: detect via the receiver's
+        // resolved type + the index being a constant integer
+        // literal. Matches `Elaborator::resolve_index`'s tuple
+        // branch (expr.rs:1674+).
+        let tuple_elems: Option<Vec<TypeId>> = {
+            let tt = self.tysys.type_table.borrow();
+            let base = receiver.type_id;
+            let unwrapped = match tt.get(base) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+                _ => base,
+            };
+            tt.as_tuple(unwrapped)
+        };
+        if let Some(elems) = tuple_elems
+            && let ast::Expr::Literal(lit) = &index.index
+            && let ast::Literal::Number(repr) = &lit.value
+            && let Ok(idx) = repr.parse::<usize>()
+            && idx < elems.len()
+        {
+            return TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(receiver),
+                    field_index: idx as u32,
+                    field_name: idx.to_string(),
+                },
+                elems[idx],
+                index.span,
+            );
+        }
+
+        // Operator-dispatch path: Gap 11's `operator_dispatch[index.id]`
+        // carries the resolved Index / IndexValue trait method. The
+        // `return_type` on the record signals whether the outer
+        // `Deref` wrap applies (Index returns `&Output`; IndexValue
+        // returns `Output`).
+        if let Some(dispatch) = self.sem.types.operator_dispatch.get(&index.id).cloned() {
+            let adjusted_receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                receiver,
+                dispatch.self_kind,
+                false,
+                index.span,
+                &self.tysys.type_table,
+            );
+            let idx_expr = self.reify_expr(&index.index, ctx, None);
+            let method_call = super::Elaborator::<H>::build_tir_method_call(
+                adjusted_receiver,
+                dispatch.function_ref,
+                vec![],
+                vec![CallArg::new(idx_expr, false)],
+                dispatch.return_type,
+                index.span,
+            );
+            // `Index` trait returns `&Output`, so the outer wrap is
+            // a `Deref`. Detect via the recorded `return_type`'s
+            // `Ref` shape — IndexValue's record has the raw output
+            // type and skips the wrap.
+            let needs_deref = matches!(
+                self.tysys.type_table.borrow().get(dispatch.return_type),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_),
+            );
+            if needs_deref {
+                return TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        expr: Box::new(method_call),
+                    },
+                    recorded_type,
+                    index.span,
+                );
+            }
+            return method_call;
+        }
+
+        // No dispatch recorded → the elaborator emitted a recovery
+        // shape (annotate would have diagnosed missing trait impl).
+        // Match the recovery output with a Unit placeholder typed
+        // as ERROR.
+        let _ = recorded_type;
+        TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, index.span)
     }
 
     /// Reify a closure expression. The Gap 4 record
