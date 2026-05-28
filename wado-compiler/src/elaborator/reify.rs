@@ -4659,6 +4659,113 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, span)
     }
 
+    /// Reify the `container[i].method(args)` IndexMut rewrite
+    /// (Gap 3 desugar tag). Mirrors
+    /// `Elaborator::try_resolve_index_mut_method_call`
+    /// (method_lookup.rs:3390+).
+    ///
+    /// Two dispatch records drive the shape:
+    /// - The inner `IndexMut::index_mut(idx)` call lives on
+    ///   `sem.types.operator_dispatch[index_expr.id]` (recorded
+    ///   alongside the desugar tag, mirroring Gap 11's Index
+    ///   wiring).
+    /// - The outer method call's dispatch lives on
+    ///   `sem.types.method_dispatch[method_call.id]` (recorded by
+    ///   the Stage 4 / Gap 2 path).
+    ///
+    /// Reify reads both, reifies the container + index, builds
+    /// `container.index_mut(idx)`, then adjusts the receiver via
+    /// the outer dispatch's `self_kind` / `is_ref_impl` and emits
+    /// the outer `MethodCall` TIR.
+    fn reify_index_mut_method_call(
+        &mut self,
+        method_call: &ast::MethodCallExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::tir::CallArg;
+
+        // The AST receiver of the IndexMutMethodCall is always an
+        // `Expr::Index` — guaranteed by the elaborator's
+        // dispatcher; reify trusts the desugar tag's contract.
+        let ast::Expr::Index(index_expr) = &method_call.receiver else {
+            panic!(
+                "reify_index_mut_method_call: receiver is not an IndexExpr (Gap 3 desugar invariant violated)"
+            );
+        };
+
+        let inner_dispatch = self
+            .sem
+            .types
+            .operator_dispatch
+            .get(&index_expr.id)
+            .cloned()
+            .expect(
+                "reify_index_mut_method_call: inner IndexMut dispatch missing — annotate should have recorded it alongside the IndexMutMethodCall desugar tag",
+            );
+
+        let outer_dispatch = self
+            .sem
+            .types
+            .method_dispatch
+            .get(&method_call.id)
+            .cloned()
+            .expect(
+                "reify_index_mut_method_call: outer method dispatch missing — annotate should have recorded it via record_method_dispatch",
+            );
+
+        // Step 1: build the `container.index_mut(idx)` call.
+        let container = self.reify_expr(&index_expr.expr, ctx, None);
+        let receiver_for_index_mut =
+            super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                container,
+                inner_dispatch.self_kind,
+                false,
+                index_expr.span,
+                &self.tysys.type_table,
+            );
+        let index_resolved = self.reify_expr(&index_expr.index, ctx, None);
+        let index_mut_call = super::Elaborator::<H>::build_tir_method_call(
+            receiver_for_index_mut,
+            inner_dispatch.function_ref,
+            vec![],
+            vec![CallArg::new(index_resolved, false)],
+            inner_dispatch.return_type,
+            index_expr.span,
+        );
+
+        // Step 2: adjust the index_mut result for the outer method's
+        // self_kind and build the outer MethodCall TIR.
+        let receiver_for_method =
+            super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                index_mut_call,
+                outer_dispatch.self_kind,
+                outer_dispatch.is_ref_impl,
+                method_call.span,
+                &self.tysys.type_table,
+            );
+
+        let type_args: Vec<TypeId> = method_call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+        let args: Vec<CallArg> = method_call
+            .args
+            .iter()
+            .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
+            .collect();
+
+        super::Elaborator::<H>::build_tir_method_call(
+            receiver_for_method,
+            outer_dispatch.function_ref,
+            type_args,
+            args,
+            recorded_type,
+            method_call.span,
+        )
+    }
+
     /// Reify a `MethodCallExpr`. This is the cleanest Stage 5 path:
     /// every decision — the resolved `FunctionRef`, the receiver-
     /// adjustment kind, the ref-impl flag, the expression's final type
@@ -4689,15 +4796,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.sem.types.desugars.get(&method_call.id),
             Some(super::sem::types::DesugarKind::IndexMutMethodCall)
         ) {
-            // TODO(stage-5-bodies): mirror
-            // `Elaborator::try_resolve_index_mut_method_call`
-            // (method_lookup.rs:3390–3500). Synthesise
-            // `let __index_mut_val = container.index_mut(idx);` (the
-            // existing local-frame walk-order invariant makes
-            // `__index_mut_val`'s index reproducible), then dispatch
-            // the method on it. `sem.types.method_dispatch[id]` already
-            // carries the *outer* method's dispatch target.
-            todo!("reify_method_call: IndexMut rewrite pending body-walk reify");
+            return self.reify_index_mut_method_call(method_call, ctx, recorded_type);
         }
 
         // Synthetic-call shortcuts: `tuple.len()` / `tuple.zip()`

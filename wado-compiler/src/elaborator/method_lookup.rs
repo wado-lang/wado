@@ -3428,18 +3428,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .make_mut_ref(index_mut_info.output_type);
 
+        let index_mut_func = FunctionRef {
+            module_source: index_mut_info.impl_module_source.clone(),
+            name: mangled_index_mut_name,
+            monomorph_info: None,
+            method_info: Some(LocalMethodName::new(
+                struct_name.clone(),
+                Some(index_mut_info.trait_name.clone()),
+                "index_mut".to_string(),
+            )),
+        };
+
+        // Stage 5 / Gap 3 inner-dispatch recording: keyed by the
+        // `IndexExpr`'s `AstId`, capture the IndexMut::index_mut
+        // dispatch decision so reify can reproduce the same
+        // `*expr.index_mut(idx)` shape. The outer method's
+        // `method_dispatch` entry (recorded below at
+        // `record_method_dispatch`) tells reify the outer call;
+        // this entry tells it the inner call.
+        self.record_operator_dispatch(
+            index_expr.id,
+            super::sem::types::OperatorDispatch {
+                function_ref: index_mut_func.clone(),
+                self_kind: index_mut_info.self_kind,
+                arg_ref_wraps: vec![false],
+                return_type: mut_ref_output_type,
+            },
+        );
+
         let index_mut_call = Self::build_tir_method_call(
             receiver_for_index_mut,
-            FunctionRef {
-                module_source: index_mut_info.impl_module_source.clone(),
-                name: mangled_index_mut_name,
-                monomorph_info: None,
-                method_info: Some(LocalMethodName::new(
-                    struct_name.clone(),
-                    Some(index_mut_info.trait_name),
-                    "index_mut".to_string(),
-                )),
-            },
+            index_mut_func,
             vec![],
             vec![CallArg::new(index_resolved, false)],
             mut_ref_output_type,
