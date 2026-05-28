@@ -1557,20 +1557,95 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
+        // 4. Associated constant (e.g. `f64::PI`, `i32::MAX`). The
+        //    elaborator inlines these to the resolved expression at
+        //    every use site; reify reproduces the same inlining by
+        //    re-reifying the constant's `Expr` from
+        //    `sem.decls.associated_constants`. The constant's body is
+        //    independent of the call site's scope (a pure literal /
+        //    static expression in practice), so reify uses the
+        //    surrounding `ctx` directly — matches the elaborator's
+        //    `resolve_expr(&const_expr, ctx, …)` (expr.rs:594–605).
+        if let Some((const_ty, const_expr)) = self
+            .sem
+            .decls
+            .associated_constants
+            .get(&ident.name)
+            .cloned()
+        {
+            let type_id = self.resolve_type(&const_ty);
+            let resolved = self.reify_expr(&const_expr, ctx, Some(type_id));
+            return TirExpr::new(resolved.kind, type_id, ident.span);
+        }
+
+        // 5. Free function reference — the ident names a function in
+        //    the current module or imported via a `use` declaration.
+        //    Emit `TirExprKind::FuncRef` with the recorded
+        //    instantiation's type_args when present.
+        if self
+            .sem
+            .decls
+            .function_return_types
+            .contains_key(&ident.name)
+        {
+            let type_args = self
+                .sem
+                .types
+                .generic_instantiations
+                .get(&ident.id)
+                .map(|gi| gi.type_args.clone())
+                .unwrap_or_default();
+            return TirExpr::new(
+                TirExprKind::FuncRef {
+                    module_source: self.current_module_source.clone(),
+                    name: ident.name.clone(),
+                    type_args,
+                },
+                recorded_type,
+                ident.span,
+            );
+        }
+        if let Some(import_src) = self.sem.imports.imported_type_sources.get(&ident.name).cloned()
+        {
+            let original_name = self
+                .sem
+                .imports
+                .import_original_names
+                .get(&ident.name)
+                .cloned()
+                .unwrap_or_else(|| ident.name.clone());
+            // Imports through `use` collapse types + functions into the
+            // same `imported_type_sources` map; the type / variant /
+            // enum / flags / resource cases were already handled
+            // above and would have returned. Anything left here is a
+            // function import.
+            let type_args = self
+                .sem
+                .types
+                .generic_instantiations
+                .get(&ident.id)
+                .map(|gi| gi.type_args.clone())
+                .unwrap_or_default();
+            return TirExpr::new(
+                TirExprKind::FuncRef {
+                    module_source: import_src,
+                    name: original_name,
+                    type_args,
+                },
+                recorded_type,
+                ident.span,
+            );
+        }
+
         // TODO(stage-5-bodies): the remaining ident kinds —
-        //   - free function → `FuncRef { module_source, name,
-        //     type_args }` (type_args sourced from
-        //     `sem.types.generic_instantiations[ident.id]` plus the
-        //     turbofish `ident.type_args`)
-        //   - payload-less variant ctor → `VariantConstruct`
-        //   - enum case → `EnumConstruct`
-        //   - flags member → `IntLiteral` with the bitmask value
-        //   - associated constant → inlined expr from
-        //     `sem.decls.associated_constants`
-        // each need a dedicated branch driven by
-        // `sem.bindings.references[(current_module, ident.id)]` →
-        // looking at the def's `Item` kind to decide the TIR shape.
-        // The reified type is already on `recorded_type`.
+        //   - qualified variant ctor (`Color::Red` with `::` in name)
+        //     → `VariantConstruct` using `tysys.all_variant_cases`
+        //   - qualified enum case → `EnumConstruct`
+        //   - qualified flags member → `IntLiteral` with the bitmask
+        //   - namespace-imported `ns::Type::Case`
+        // each needs a dedicated branch driven by the `::` prefix
+        // lookup against `tysys.all_*` (the elaborator's
+        // `resolve_ident` shape, expr.rs ≈600–800).
         let _ = recorded_type;
         todo!(
             "reify_ident: non-local `{}` (kind dispatch pending body-walk reify)",
