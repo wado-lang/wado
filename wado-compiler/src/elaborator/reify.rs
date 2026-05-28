@@ -1074,14 +1074,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Stmt::While(w) => self.reify_while(w, ctx),
             ast::Stmt::For(f) => self.reify_for(f, ctx),
             ast::Stmt::Assert(assert_stmt) => self.reify_assert(assert_stmt, ctx),
-            ast::Stmt::ForOf(_) => {
-                // TODO(stage-5-bodies): mirror the corresponding
-                // `Elaborator::resolve_*` branches. `For` / `While` /
-                // `Assert` reads `sem.types.desugars[stmt.id()]` to
-                // pick the recorded expansion path; the iterator path
-                // additionally reads `sem.types.for_of_iterator`.
-                todo!("reify_stmt: {:?} variant pending body-walk reify", stmt)
-            }
+            ast::Stmt::ForOf(for_of) => self.reify_for_of(for_of, ctx),
         }
     }
 
@@ -1562,6 +1555,235 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirStmtKind::LabeledBlock {
                 label: format!("__assert_{assert_serial}"),
                 block: TirBlock::new(vec![if_stmt], span),
+            },
+            span,
+        )]
+    }
+
+    /// Reify a `for x of expr { body }` loop. Reads the
+    /// `DesugarKind` tag (`ForOfTuple` / `ForOfVariadic` /
+    /// `ForOfIterator`) annotate placed on `for_of.id` to pick the
+    /// expansion path; only the `ForOfIterator` path lands here
+    /// (the most common form). Tuple unrolling and the variadic
+    /// type-pack form fall through to a labelled `todo!`.
+    fn reify_for_of(
+        &mut self,
+        for_of: &ast::ForOfStmt,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TirStmt> {
+        use crate::tir::{
+            CallArg, ResolvedType, TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind,
+            TypeTable,
+        };
+
+        let desugar = self.sem.types.desugars.get(&for_of.id).cloned();
+        let info = self.sem.types.for_of_iterator.get(&for_of.id).cloned();
+
+        // Tuple / variadic forms are still pending — they're
+        // compile-time unrolled / deferred-resolved by the elaborator
+        // and need their own re-emitters in reify.
+        if matches!(
+            desugar,
+            Some(super::sem::types::DesugarKind::ForOfTuple)
+                | Some(super::sem::types::DesugarKind::ForOfVariadic)
+        ) {
+            todo!("reify_for_of: tuple / variadic path pending body-walk reify");
+        }
+
+        let Some(info) = info else {
+            // No iterator dispatch recorded: annotate's trait check
+            // failed and the diagnostic already fired. Emit a Unit
+            // placeholder stmt so the surrounding block stays well-
+            // typed.
+            return vec![TirStmt::new(
+                TirStmtKind::Expr(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, for_of.span)),
+                for_of.span,
+            )];
+        };
+
+        // `.enumerate()` is unwrapped at the AST level: the
+        // elaborator reads `for_of.iterable` and treats a leading
+        // `.enumerate()` MethodCall as a sigil rather than a real
+        // method call. Reify mirrors.
+        let actual_iterable = match &for_of.iterable {
+            ast::Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
+                &mc.receiver
+            }
+            other => other,
+        };
+        // Stage 5 follow-up: `.enumerate()` unwrap path needs the
+        // index local + tuple-binding shape; the simple path
+        // ignores the sigil for now and lowers the raw iterable.
+        let _ = actual_iterable;
+
+        let span = for_of.span;
+        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
+        let unique_id = ctx.next_local;
+        let iter_var = format!("__iter_{unique_id}");
+        let label = format!("__for_of_{unique_id}");
+
+        let into_iter_receiver = self.reify_expr(&for_of.iterable, ctx, None);
+        let into_iter_receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+            into_iter_receiver,
+            info.into_iter_self_kind,
+            info.into_iter_is_ref_impl,
+            span,
+            &self.tysys.type_table,
+        );
+        let iter_type = info.into_iter.method_info.as_ref().map_or_else(
+            || crate::tir::TypeTable::UNKNOWN,
+            |_| {
+                // The iterator's resolved type lives implicitly on
+                // the into_iter call's return — we can re-derive it
+                // by reading the `next` method's receiver type, but
+                // for simplicity reify trusts annotate's recorded
+                // shape via the `option_type` below.
+                crate::tir::TypeTable::UNKNOWN
+            },
+        );
+        let into_iter_call = super::Elaborator::<H>::build_tir_method_call(
+            into_iter_receiver,
+            info.into_iter.clone(),
+            vec![],
+            vec![],
+            iter_type,
+            span,
+        );
+        let iter_type = into_iter_call.type_id;
+
+        let iter_local_index = ctx.add_local(iter_var.clone(), iter_type, /* is_mut */ true, None);
+        let iter_let = TirStmt::new(
+            TirStmtKind::Let {
+                name: iter_var.clone(),
+                local_index: iter_local_index,
+                is_mut: true,
+                is_reactive: false,
+                type_id: iter_type,
+                value: into_iter_call,
+                skip_value_copy: false,
+            },
+            span,
+        );
+
+        ctx.active_labels.push(label.clone());
+
+        let iter_local_ref = TirExpr::new(
+            TirExprKind::Local {
+                index: iter_local_index,
+                name: iter_var.clone(),
+            },
+            iter_type,
+            span,
+        );
+        let next_receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+            iter_local_ref,
+            info.next_self_kind,
+            info.next_is_ref_impl,
+            span,
+            &self.tysys.type_table,
+        );
+        // `Option<Item>` is the next() return type. Reify can either
+        // derive it (`make_option(item_type)`) or read it from the
+        // `next` call's `return_type` in the FunctionRef. The simpler
+        // route: synthesise `Option<item_type>` via the compiler-item
+        // registry.
+        let option_type = {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            tt.make_option(info.item_type)
+        };
+        let next_call = super::Elaborator::<H>::build_tir_method_call(
+            next_receiver,
+            info.next.clone(),
+            vec![],
+            vec![],
+            option_type,
+            span,
+        );
+
+        let some_case_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+            .to_string();
+
+        ctx.enter_scope();
+        let binding_pattern = self.reify_pattern(&for_of.binding, info.item_type, ctx);
+        let body_block = self.reify_block(&for_of.body, ctx, None);
+        ctx.exit_scope();
+
+        let some_pattern = TirPattern::Variant {
+            enum_type: option_type,
+            variant_name: some_case_name,
+            bindings: vec![binding_pattern],
+            payload_type: info.item_type,
+        };
+
+        let body_type = match &body_block.stmts.last() {
+            Some(stmt) => match &stmt.kind {
+                TirStmtKind::Expr(e) => e.type_id,
+                _ => TypeTable::UNIT,
+            },
+            None => TypeTable::UNIT,
+        };
+        let some_body = TirExpr::new(TirExprKind::Block(body_block), body_type, span);
+
+        let break_block = TirBlock::new(
+            vec![TirStmt::new(
+                TirStmtKind::Break {
+                    label: None,
+                    value: None,
+                },
+                span,
+            )],
+            span,
+        );
+        let break_body = TirExpr::new(TirExprKind::Block(break_block), TypeTable::UNIT, span);
+
+        let match_type =
+            crate::tir::agree_branch_types(body_type, TypeTable::UNIT).unwrap_or(TypeTable::UNIT);
+        let arms = vec![
+            TirMatchArm {
+                pattern: some_pattern,
+                guard: None,
+                body: some_body,
+                span,
+            },
+            TirMatchArm {
+                pattern: TirPattern::Wildcard,
+                guard: None,
+                body: break_body,
+                span,
+            },
+        ];
+        let match_expr = TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(next_call),
+                arms,
+            },
+            match_type,
+            span,
+        );
+        let loop_body = TirBlock::new(
+            vec![TirStmt::new(TirStmtKind::Expr(match_expr), span)],
+            span,
+        );
+        let loop_tir = TirStmt::new(TirStmtKind::Loop { body: loop_body }, span);
+
+        ctx.active_labels.pop();
+        ctx.for_continue_labels = saved_continue;
+
+        let _ = CallArg::new(
+            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+            false,
+        );
+        let _ = ResolvedType::Unit;
+
+        vec![TirStmt::new(
+            TirStmtKind::LabeledBlock {
+                label,
+                block: TirBlock::new(vec![iter_let, loop_tir], span),
             },
             span,
         )]
