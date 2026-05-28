@@ -2041,13 +2041,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::{TirExprKind, TirStructField};
 
         let Some(struct_name) = struct_lit.name.clone() else {
-            // TODO(stage-5-bodies): anonymous struct literal —
-            // `Elaborator::resolve_anonymous_struct_literal` synthesises a
-            // struct based on the expected type's shape. Reify needs to
-            // read the synthesised entry from
-            // `sem.decls.pending_anonymous_structs` keyed off the
-            // recorded type.
-            todo!("reify_struct_literal: anonymous struct literal pending body-walk reify")
+            // Anonymous struct literal `{ x: 1, y: 2 }` — annotate
+            // synthesised the struct from the field shape and
+            // registered it via `make_struct` + populated
+            // `local_struct_fields` / `pending_anonymous_structs`.
+            // Reify reproduces the deterministic naming scheme and
+            // reads the already-registered type back from the type
+            // table.
+            return self.reify_anonymous_struct_literal(struct_lit, ctx);
         };
 
         // Field positional info from the decl-interned struct.
@@ -2947,6 +2948,75 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             TypeTable::BOOL,
             m.span,
+        )
+    }
+
+    /// Reify an anonymous struct literal `{ x: 1, y: 2 }`. Annotate
+    /// synthesises the struct from the field shape, gives it a
+    /// deterministic `__anon_{x:i32,y:i32}`-style name, and registers
+    /// it on `tysys.type_table` + `sem.decls.local_struct_fields` +
+    /// `sem.decls.pending_anonymous_structs`. Reify reproduces the
+    /// same name from the reified field types and looks the struct
+    /// type up; the registration already happened during annotate so
+    /// reify is a pure read.
+    fn reify_anonymous_struct_literal(
+        &mut self,
+        struct_lit: &ast::StructLiteralExpr,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        use crate::tir::{TirExprKind, TirStructField, TypeTable};
+
+        let resolved_fields: Vec<TirStructField> = struct_lit
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(index, field)| {
+                let value = self.reify_expr(&field.value, ctx, None);
+                TirStructField {
+                    name: field.name.clone(),
+                    value,
+                    field_index: index as u32,
+                }
+            })
+            .collect();
+
+        let anon_name = {
+            let mut parts = Vec::new();
+            for f in &resolved_fields {
+                let type_name = self.tysys.type_table.borrow().type_name(f.value.type_id);
+                parts.push(format!("{}:{}", f.name, type_name));
+            }
+            format!("__anon_{{{}}}", parts.join(","))
+        };
+
+        let module_source = self.current_module_source.clone();
+        let struct_type = self
+            .tysys
+            .type_table
+            .borrow()
+            .find_struct_type(&anon_name, &module_source)
+            .unwrap_or_else(|| {
+                // Annotate would have registered this anonymous type;
+                // fall back to a fresh `make_struct` for safety so
+                // reify doesn't panic on a misregistered shape. The
+                // resulting TIR is consistent with what
+                // `resolve_anonymous_struct_literal`'s new-struct
+                // branch emits.
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_struct(anon_name.clone(), module_source)
+            });
+
+        let _ = TypeTable::UNKNOWN;
+        TirExpr::new(
+            TirExprKind::StructLiteral {
+                struct_type,
+                struct_name: anon_name,
+                fields: resolved_fields,
+            },
+            struct_type,
+            struct_lit.span,
         )
     }
 
