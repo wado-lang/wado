@@ -2759,6 +2759,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     next_self_kind: next_dispatch.0,
                     next_is_ref_impl: next_dispatch.1,
                     item_type,
+                    iter_type,
                 },
             );
         }

@@ -460,13 +460,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// type-param defaults are read from `ModuleSemantics`.
     fn reify_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
         // Field types are decl-resolved during annotate and live in
-        // `tysys.all_struct_fields`. Read them directly rather than
-        // re-running `resolve_type` over `field.ty`.
-        let field_info = self
-            .tysys
-            .all_struct_fields
-            .get(&self.current_module_source)
-            .and_then(|m| m.get(&struct_decl.name));
+        // `tysys.all_struct_fields`. Snapshot the per-field types into
+        // an owned `Vec` so the borrow on `self.tysys` ends here —
+        // the field-default reify below mutably borrows `self`.
+        let field_types: Vec<TypeId> = {
+            let field_info = self
+                .tysys
+                .all_struct_fields
+                .get(&self.current_module_source)
+                .and_then(|m| m.get(&struct_decl.name));
+            (0..struct_decl.fields.len())
+                .map(|i| {
+                    field_info
+                        .and_then(|info| info.fields.get(i).map(|(_, t, _)| *t))
+                        .unwrap_or(crate::tir::TypeTable::UNKNOWN)
+                })
+                .collect()
+        };
 
         // Field-default expressions resolve in a per-struct
         // `FunctionContext` keyed `struct:<name>` (no self, no other
@@ -480,9 +490,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let mut fields = Vec::with_capacity(struct_decl.fields.len());
         for (index, field) in struct_decl.fields.iter().enumerate() {
-            let type_id = field_info
-                .and_then(|info| info.fields.get(index).map(|(_, t, _)| *t))
-                .unwrap_or(crate::tir::TypeTable::UNKNOWN);
+            let type_id = field_types[index];
 
             let serde_rename = field.attrs.iter().find_map(|a| {
                 if a.name == "serde" {
@@ -1926,15 +1934,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
             &self.tysys.type_table,
         );
+        let iter_type = info.iter_type;
         let into_iter_call = super::Elaborator::<H>::build_tir_method_call(
             into_iter_receiver,
             info.into_iter.clone(),
             vec![],
             vec![],
-            TypeTable::UNKNOWN,
+            iter_type,
             span,
         );
-        let iter_type = into_iter_call.type_id;
 
         let iter_local_index =
             ctx.add_local(iter_var.clone(), iter_type, /* is_mut */ true, None);

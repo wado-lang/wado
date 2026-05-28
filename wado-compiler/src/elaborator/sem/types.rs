@@ -591,6 +591,12 @@ pub(crate) struct ForOfIteratorInfo {
     /// Item type — what the loop variable is bound to. Reify uses this
     /// to type-annotate the synthesised `let <var> = …;`.
     pub(crate) item_type: TypeId,
+    /// Iterator type — the resolved return type of
+    /// `iterable.into_iter()` (`info.into_iter` returns this).
+    /// Reify uses this to type the synthesised iterator local
+    /// `let mut __iter_N: <iter_type> = …;` without re-running
+    /// method dispatch.
+    pub(crate) iter_type: TypeId,
 }
 
 /// Which TIR-direct desugar path the body walk took at a source-level
