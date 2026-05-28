@@ -202,8 +202,8 @@ pub async fn execute<H: CompilerHost>(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecuteMode {
     /// Default `wado compile` behavior: write generator outputs to disk,
-    /// surface a [`Code::KilnGeneratedRegenerated`] warning when the new
-    /// bytes differ from the pre-existing on-disk file.
+    /// surface a [`Code::KilnGeneratedRegenerated`] debug notice when the
+    /// new bytes differ from the pre-existing on-disk file.
     WriteAndWarnOnOverwrite,
     /// `wado check` behavior: do not write to disk. The caller is
     /// responsible for byte-comparing the returned [`InvocationRun`]
@@ -283,7 +283,7 @@ pub async fn execute_with_mode<H: CompilerHost>(
                 if let Ok(existing) = std::fs::read(&full_path)
                     && existing != bytes
                 {
-                    emit_generated_regenerated_warning(
+                    emit_generated_regenerated_notice(
                         host,
                         &invocation.decl_site.synthetic_id,
                         normalized.as_str(),
@@ -534,10 +534,16 @@ fn emit_generated_modified_warning<H: CompilerHost>(host: &H, invocation: &str, 
     });
 }
 
-fn emit_generated_regenerated_warning<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
+fn emit_generated_regenerated_notice<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
     use wado_compiler::{Diagnostic, Severity};
+    // Emitted at `Debug` rather than `Warning`: after any generator source
+    // edit, *every* consumer's cached output legitimately differs from the
+    // new generator output, so a per-file warning is just noise (a single
+    // run can regenerate hundreds of files — see issue #1218). The cache
+    // refresh is the expected state, not a surprise, so it stays below the
+    // default `--log-level info` threshold and only surfaces under `debug`.
     host.emit_diagnostic(Diagnostic {
-        severity: Severity::Warning,
+        severity: Severity::Debug,
         code: wado_compiler::Code::KilnGeneratedRegenerated,
         message: format!(
             "kiln[{invocation}]: regenerating {path} (previous content differed from \
@@ -1763,6 +1769,91 @@ mod tests {
             runtime()
                 .block_on(async { execute(&sample_invocation(), b"wasm", tmp, &host).await })
                 .unwrap()
+        }
+
+        #[test]
+        fn regenerating_existing_output_emits_debug_notice_not_warning() {
+            // Issue #1218: regenerating a cached output whose on-disk bytes
+            // differ from the new generator output must not spam a warning
+            // per file. The notice is demoted to `Debug` so it stays below
+            // the default `--log-level info` threshold.
+            struct RecordingHost {
+                sources: IndexMap<String, Vec<u8>>,
+                response: Mutex<Option<Result<GeneratorResponse, GeneratorRunnerError>>>,
+                diagnostics: Mutex<Vec<Diagnostic>>,
+            }
+            impl CompilerHost for RecordingHost {
+                async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
+                    self.sources
+                        .get(path)
+                        .cloned()
+                        .ok_or_else(|| SourceError::NotFound {
+                            path: path.to_string(),
+                        })
+                }
+                fn emit_diagnostic(&self, d: Diagnostic) {
+                    self.diagnostics.lock().unwrap().push(d);
+                }
+                async fn run_generator(
+                    &self,
+                    _wasm: &[u8],
+                    _request: GeneratorRequest,
+                ) -> Result<GeneratorResponse, GeneratorRunnerError> {
+                    self.response
+                        .lock()
+                        .unwrap()
+                        .take()
+                        .expect("already consumed")
+                }
+            }
+
+            let tmp = tempfile::tempdir().unwrap();
+            let inv = sample_invocation();
+
+            // Pre-write a differing on-disk output so the rewrite path fires.
+            let existing = tmp.path().join(inv.output_dir.as_str()).join("lib.wado");
+            std::fs::create_dir_all(existing.parent().unwrap()).unwrap();
+            std::fs::write(&existing, b"// stale local edit\n").unwrap();
+
+            let response = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "lib.wado".to_string(),
+                    content: "pub fn hello() {}\n".to_string(),
+                    is_entry: true,
+                }],
+                reads: vec![],
+            };
+            let host = RecordingHost {
+                sources: [
+                    ("schema.proto".to_string(), b"primary".to_vec()),
+                    ("dep.proto".to_string(), b"dep".to_vec()),
+                ]
+                .into_iter()
+                .collect(),
+                response: Mutex::new(Some(Ok(response))),
+                diagnostics: Mutex::new(Vec::new()),
+            };
+
+            runtime()
+                .block_on(async { execute(&inv, b"wasm", tmp.path(), &host).await })
+                .unwrap();
+
+            let diagnostics = host.diagnostics.lock().unwrap();
+            let regenerated: Vec<_> = diagnostics
+                .iter()
+                .filter(|d| d.code == wado_compiler::Code::KilnGeneratedRegenerated)
+                .collect();
+            assert_eq!(
+                regenerated.len(),
+                1,
+                "exactly one regeneration notice expected, got {regenerated:?}"
+            );
+            assert_eq!(
+                regenerated[0].severity,
+                wado_compiler::Severity::Debug,
+                "the regeneration notice must be `Debug`, not a `Warning`, \
+                 so it does not flood the default log output (issue #1218)"
+            );
         }
 
         #[test]
