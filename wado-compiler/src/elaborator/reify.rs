@@ -953,7 +953,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )]
             }
             ast::Stmt::While(w) => self.reify_while(w, ctx),
-            ast::Stmt::For(_) | ast::Stmt::ForOf(_) | ast::Stmt::Assert(_) => {
+            ast::Stmt::For(f) => self.reify_for(f, ctx),
+            ast::Stmt::ForOf(_) | ast::Stmt::Assert(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
                 // `Elaborator::resolve_*` branches. `For` / `While` /
                 // `Assert` reads `sem.types.desugars[stmt.id()]` to
@@ -1313,6 +1314,126 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             span,
         )]
+    }
+
+    /// Reify a C-style `for init; cond; update { body }` loop into
+    /// the shape `Elaborator::resolve_for` produces (stmt.rs:3095+).
+    /// Implements the `Condition::Expr` arm; `Condition::LetChain`
+    /// shares the let-chain expansion with `if let` / `while let`
+    /// and routes through the same pending `todo!`.
+    fn reify_for(&mut self, f: &ast::ForStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
+        use crate::tir::{TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable};
+
+        let span = f.span;
+        let loop_id = ctx.next_loop_id;
+        ctx.next_loop_id += 1;
+        let body_label = format!("__for_{loop_id}_body");
+
+        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
+        ctx.enter_scope();
+
+        let mut outer_stmts: Vec<TirStmt> = Vec::new();
+        if let Some(init) = &f.init {
+            outer_stmts.extend(self.reify_stmt(init, ctx));
+        }
+
+        let iter_stmts: Vec<TirStmt> = match &f.condition {
+            None => {
+                let labeled_body = self.reify_for_labeled_body(&body_label, &f.body, ctx);
+                let mut s = vec![labeled_body];
+                s.extend(self.reify_for_update(f.update.as_ref(), ctx));
+                s
+            }
+            Some(ast::Condition::Expr(cond_expr)) => {
+                let cond_span = cond_expr.span();
+                let cond_tir = self.reify_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                let neg_cond = TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Not,
+                        expr: Box::new(cond_tir),
+                    },
+                    TypeTable::BOOL,
+                    cond_span,
+                );
+                let break_stmt = TirStmt::new(
+                    TirStmtKind::Break {
+                        label: None,
+                        value: None,
+                    },
+                    span,
+                );
+                let if_break = TirStmt::new(
+                    TirStmtKind::If {
+                        condition: neg_cond,
+                        then_block: TirBlock::new(vec![break_stmt], span),
+                        else_block: None,
+                    },
+                    span,
+                );
+                let labeled_body = self.reify_for_labeled_body(&body_label, &f.body, ctx);
+                let mut s = vec![if_break, labeled_body];
+                s.extend(self.reify_for_update(f.update.as_ref(), ctx));
+                s
+            }
+            Some(ast::Condition::LetChain { .. }) => {
+                // TODO(stage-5-bodies): for-let-chain mirrors the
+                // `if let` / `while let` chain expansion. Lands when
+                // `reify_let_chain_stmts` lands.
+                todo!("reify_for: LetChain condition pending body-walk reify")
+            }
+        };
+
+        outer_stmts.push(TirStmt::new(
+            TirStmtKind::Loop {
+                body: TirBlock::new(iter_stmts, span),
+            },
+            span,
+        ));
+
+        ctx.exit_scope();
+        ctx.for_continue_labels = saved_continue;
+        outer_stmts
+    }
+
+    /// Reify the for-loop body wrapped in `__for_N_body:` so naked
+    /// `continue` lowers as `break __for_N_body` (letting the
+    /// `update` expression run before the next iteration). Mirrors
+    /// `Elaborator::resolve_for_labeled_body` (stmt.rs:3280+).
+    fn reify_for_labeled_body(
+        &mut self,
+        body_label: &str,
+        body: &ast::Block,
+        ctx: &mut FunctionContext,
+    ) -> TirStmt {
+        use crate::tir::TirStmtKind;
+        ctx.for_continue_labels.push(body_label.to_string());
+        ctx.active_labels.push(body_label.to_string());
+        let body_block = self.reify_block(body, ctx, None);
+        ctx.active_labels.pop();
+        ctx.for_continue_labels.pop();
+        TirStmt::new(
+            TirStmtKind::LabeledBlock {
+                label: body_label.to_string(),
+                block: body_block,
+            },
+            body.span,
+        )
+    }
+
+    /// Reify the for-loop's optional `update` expression as a single
+    /// stmt-list (empty when absent). Mirrors
+    /// `Elaborator::resolve_for_update` (stmt.rs:3302+).
+    fn reify_for_update(
+        &mut self,
+        update: Option<&ast::Expr>,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TirStmt> {
+        update
+            .map(|u| {
+                let tir = self.reify_expr(u, ctx, None);
+                vec![TirStmt::new(crate::tir::TirStmtKind::Expr(tir), u.span())]
+            })
+            .unwrap_or_default()
     }
 
     /// Reify a stmt-position `if cond { … } else { … }`. Stmt
