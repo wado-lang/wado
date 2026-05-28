@@ -300,11 +300,10 @@ depends on `wit_emit` for text, parses it with `wit-parser` into a
 and appends the custom section to the component the codegen already
 produced.
 
-New `[workspace.dependencies]` entries (matching the existing `wit-parser`
-generation, currently `0.246`):
-
-- `wit-encoder`
-- `wit-component`
+`wit-encoder` and `wit-component` are pinned in `[workspace.dependencies]`
+alongside the existing `wit-parser` (all at generation `0.246`, matching
+wasmtime's tree). `wado-compiler` adds them to its own `Cargo.toml` in
+Phase 1.
 
 ### Type mapping
 
@@ -444,32 +443,45 @@ a project.
 
 Each phase ends with green E2E tests for the listed fixtures.
 
-- [x] Phase 0 — Dependencies and `Semantics` extension
-  - [x] Add `wit-encoder` and `wit-component` to `[workspace.dependencies]`
-        matching the existing `wit-parser` generation.
-  - [x] Expose `Semantics::world_registry()` and `Semantics::cm_interface_registry()`.
-        The registries are already built by `Elaborator::annotate_modules`
-        and live on `AnnotateState`; the accessors surface them for the
-        WIT producer (Phase 1) and LSP without re-running stdlib parsing.
-        Both registries remain `OnceLock`-cached `&'static` singletons —
-        `FlatPackage` reads the same instance Semantics exposes, so no
-        threading change is required downstream.
-  - [x] Verify all existing tests still pass; this phase is a pure refactor.
-  - [x] Rename the legacy `WasiRegistry` to `CmInterfaceRegistry`. The
-        old name was stale after the effect→interface unification: the
-        registry covers every CM interface (`wasi:*`, `core:kiln/*`,
-        future user-declared interfaces), not just WASI.
-  - [ ] Defer to Phase 1 alongside the `wit_emit` consumer:
-        `Semantics::interfaces` (index of `pub interface Foo` with its
-        `#[cm("...")]` FQ), `Semantics::exported_items` (`export fn /
-        export struct / export interface` index), `default_interface_name`
-        (project-level option, not a frontend output — passed via
-        `WitEmitOptions`).
+- [x] Phase 0 — Dependencies and `Semantics` groundwork
+  - [x] Add `wit-encoder` and `wit-component` to `[workspace.dependencies]`,
+        matching the existing `wit-parser` generation (currently `0.246`).
+        No crate consumes them yet; Phase 1 pulls them into
+        `wado-compiler`.
+  - [x] Expose `Semantics::world_registry()` and
+        `Semantics::cm_interface_registry()`. The registries are already
+        built by `Elaborator::annotate_modules` and live on
+        `AnnotateState`; the accessors surface them for the WIT producer
+        (Phase 1) and LSP without re-running stdlib parsing. Both
+        registries stay as `OnceLock`-cached `&'static` singletons —
+        `FlatPackage` reads the same instance the accessors hand out, so
+        no threading change is required downstream.
+  - [x] Rename the legacy `WasiRegistry` to `CmInterfaceRegistry`, and
+        the CM-general functions/types named `wasi_*` / `Wasi*` to
+        `cm_*` / `Cm*`. The old names were stale after the
+        effect→interface unification: the registry and the surrounding
+        helpers cover every CM interface (`wasi:*`, `core:kiln/*`,
+        future user-declared interfaces), not just WASI. Methods with
+        genuinely WASI-namespace-scoped semantics
+        (`find_wasi_struct_source` and siblings, `resolve_wasi_source_for`)
+        keep their `wasi_` prefix.
+  - [x] All existing tests still pass; Phase 0 is a non-breaking
+        surface addition.
 
 - [ ] Phase 1 — `wado wit` text emission
+  - [ ] Pull `wit-encoder` and `wit-component` into
+        `wado-compiler/Cargo.toml`.
+  - [ ] Extend `Semantics`: `Semantics::interfaces()` (index of
+        `pub interface Foo { ... }` decls with their `#[cm("...")]` FQ)
+        and `Semantics::exported_items()` (`export fn / export struct /
+        export interface / ...` keyed by source key). Threaded via the
+        same `state: AnnotateState` path as the Phase 0 accessors.
   - [ ] `wado-compiler/src/wit_emit.rs`: type mapping, kebabification,
         interface grouping, transitive-type closure, both `full` and
         `local` scopes.
+  - [ ] `WitEmitOptions::default_interface_name` — `[package].name`
+        from `wado.toml` or entry-file stem, threaded in from the CLI
+        rather than read off `Semantics`.
   - [ ] `wado-cli/src/wit.rs` subcommand + `Cmd::Wit` registration in
         `wado-cli/src/main.rs`.
   - [ ] E2E fixtures under `wado-compiler/tests/fixtures/wit/`: empty
