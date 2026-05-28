@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779928454602,
+  "lastUpdate": 1779937028441,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26853,6 +26853,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/10faa9c0414989a72ade6fb8dbdaf45054fb9b6a"
         },
         "date": 1779928454289,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f72fc3dc8a1bceb0015e855435bb84a2479db28e",
+          "message": "Merge pull request #1214 from wado-lang/claude/wado-wit-generation-e8gdG\n\nfeat(wit): Phase 0 groundwork for WIT producer-side",
+          "timestamp": "2026-05-28T11:50:54+09:00",
+          "tree_id": "f1f59ef49df7383181811f447783075caf3176f7",
+          "url": "https://github.com/wado-lang/wado/commit/f72fc3dc8a1bceb0015e855435bb84a2479db28e"
+        },
+        "date": 1779937027965,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
