@@ -1068,6 +1068,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Expr::MethodCall(method_call) => self.reify_method_call(method_call, ctx, recorded_type),
+            ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
             ast::Expr::If(if_expr) => self.reify_if_expr(if_expr, ctx, expected_type, recorded_type),
             ast::Expr::Assign(assign) => {
                 // `target = value` — both sides walked recursively; the
@@ -1103,8 +1104,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 )
             }
-            ast::Expr::Binary(_)
-            | ast::Expr::CompoundAssign(_)
+            ast::Expr::CompoundAssign(_)
             | ast::Expr::ComparisonChain(_)
             | ast::Expr::Call(_)
             | ast::Expr::StaticMethodCall(_)
@@ -1215,6 +1215,89 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             recorded_type,
             if_expr.span,
+        )
+    }
+
+    /// Reify a binary expression. When the elaborator dispatched the
+    /// operator to a trait method (Gap 11), the
+    /// `sem.types.operator_dispatch[binary.id]` entry carries the
+    /// `(FunctionRef, self_kind, arg_ref_wraps, return_type)` reify
+    /// needs to emit the same `TirExprKind::MethodCall` shape. Absence
+    /// of an entry means the elaborator emitted a native
+    /// `TirExprKind::Binary`; reify mirrors with the 1:1 op mapping.
+    fn reify_binary(
+        &mut self,
+        binary: &ast::BinaryExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::tir::{CallArg, ResolvedType, TirExprKind, TirUnaryOp};
+
+        let left = self.reify_expr(&binary.left, ctx, None);
+        let right = self.reify_expr(&binary.right, ctx, None);
+
+        if let Some(dispatch) = self.sem.types.operator_dispatch.get(&binary.id).cloned() {
+            // Operator-trait dispatch path. Reuse the shared receiver
+            // adjuster (statically; no Elaborator needed) and the
+            // shared arg-wrap helper to produce TIR identical to what
+            // `build_trait_op_method_call_on_resolved` emitted.
+            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                left,
+                dispatch.self_kind,
+                /* is_ref_impl */ false,
+                binary.span,
+                &self.tysys.type_table,
+            );
+            let args = vec![right];
+            let call_args: Vec<CallArg> = args
+                .into_iter()
+                .zip(dispatch.arg_ref_wraps.iter().copied())
+                .map(|(arg, wrap)| {
+                    let arg_expr = if wrap {
+                        let arg_ref_type = self
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .intern(ResolvedType::Ref(arg.type_id));
+                        TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::Ref,
+                                expr: Box::new(arg),
+                            },
+                            arg_ref_type,
+                            binary.span,
+                        )
+                    } else {
+                        arg
+                    };
+                    CallArg::new(arg_expr, false)
+                })
+                .collect();
+            return super::Elaborator::<H>::build_tir_method_call(
+                receiver,
+                dispatch.function_ref,
+                vec![],
+                call_args,
+                dispatch.return_type,
+                binary.span,
+            );
+        }
+
+        // Native binary op — primitive path. The op mapping is 1:1
+        // with the AST. Stage 5 follow-up: ref-equality
+        // (`RefEq` / `RefNotEq`) is synthesised by the elaborator
+        // after type analysis; until that decision is recorded, reify
+        // emits the source-level op verbatim. The Cap on this is the
+        // `==` / `!=` path on ref types; other ops on refs would
+        // already be diagnosed by annotate.
+        TirExpr::new(
+            TirExprKind::Binary {
+                left: Box::new(left),
+                op: ast_binary_op_to_tir(binary.op),
+                right: Box::new(right),
+            },
+            recorded_type,
+            binary.span,
         )
     }
 
@@ -1535,7 +1618,6 @@ fn ast_unary_op_to_tir(op: ast::UnaryOp) -> crate::tir::TirUnaryOp {
 /// 1:1 for the source-level ops; TIR adds `RefEq` / `RefNotEq` as
 /// internal variants that the elaborator only synthesises after
 /// coercion analysis, so reify never produces them from this helper.
-#[allow(dead_code)] // used by `Binary` arm once it lands
 fn ast_binary_op_to_tir(op: ast::BinaryOp) -> crate::tir::TirBinaryOp {
     use crate::tir::TirBinaryOp;
     match op {

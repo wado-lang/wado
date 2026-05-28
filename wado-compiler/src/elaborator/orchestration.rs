@@ -1091,6 +1091,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 invocations: Rc::clone(&state.invocations),
                 interner: Rc::clone(&state.interner),
                 pending_method_dispatch: None,
+                pending_operator_ast_id: None,
             };
 
             // Set file context so diagnostics emitted during resolution

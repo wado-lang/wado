@@ -53,7 +53,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ctx,
             expected_type,
         );
-        self.build_binary_op_tir(left, binary.op, right, binary.span)
+        // Stage 5 (Gap 11): pin the binary's source AstId on the
+        // side-channel so the operator-trait dispatch path can record
+        // the decision under it. Cleared by
+        // `build_trait_op_method_call_on_resolved` on success; we
+        // also clear here defensively in case
+        // `build_binary_op_tir` takes a native (non-dispatch) path,
+        // so a later synthesised binary call doesn't pick up a stale
+        // id from this entry.
+        self.pending_operator_ast_id = Some(binary.id);
+        let result = self.build_binary_op_tir(left, binary.op, right, binary.span);
+        self.pending_operator_ast_id = None;
+        result
     }
 
     /// Resolve both operands of a binary op, applying the standard
@@ -1496,7 +1507,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let call_args: Vec<CallArg> = args
             .into_iter()
-            .zip(wrap_flags)
+            .zip(wrap_flags.iter().copied())
             .map(|(arg, wrap)| {
                 let arg_expr = if wrap {
                     let arg_ref_type = self
@@ -1532,19 +1543,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         method_info.is_type_param_receiver = resolved.is_type_param_receiver;
 
-        Self::build_tir_method_call(
-            receiver,
-            FunctionRef {
-                module_source: self.find_struct_module_source(&resolved.impl_name),
-                name: mangled_method_name,
-                monomorph_info: None,
-                method_info: Some(method_info),
-            },
-            vec![],
-            call_args,
-            resolved.return_type,
-            span,
-        )
+        let function_ref = FunctionRef {
+            module_source: self.find_struct_module_source(&resolved.impl_name),
+            name: mangled_method_name,
+            monomorph_info: None,
+            method_info: Some(method_info),
+        };
+
+        // Stage 5 (Gap 11 of WEP 2026-05-26): when the operator-dispatch
+        // request carries a source AST id on the
+        // [`Self::pending_operator_ast_id`] side-channel, record the
+        // dispatch decision so reify can re-emit the same `MethodCall`
+        // TIR for the binary / index expression. Synthesised callers
+        // (e.g. `desugar_comparison_chain`'s inner comparisons) leave
+        // the channel `None` and the record is skipped — they have no
+        // source-level `BinaryExpr` reify would key on.
+        if let Some(ast_id) = self.pending_operator_ast_id.take() {
+            self.record_operator_dispatch(
+                ast_id,
+                super::sem::types::OperatorDispatch {
+                    function_ref: function_ref.clone(),
+                    self_kind: resolved.self_kind,
+                    arg_ref_wraps: wrap_flags,
+                    return_type: resolved.return_type,
+                },
+            );
+        }
+
+        Self::build_tir_method_call(receiver, function_ref, vec![], call_args, resolved.return_type, span)
     }
 
     /// Wrap an `Ord::cmp` method call into a `bool` by comparing the returned

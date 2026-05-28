@@ -199,6 +199,20 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// paths returned early) or the method-not-found recovery branch
     /// took over.
     pub(super) pending_method_dispatch: Option<(ast::SelfKind, bool)>,
+    /// Side-channel populated by [`Self::resolve_binary`] and the
+    /// `Expr::Index` arm of [`Self::resolve_expr`] before they call
+    /// the trait-operator dispatcher, carrying the source-level
+    /// [`crate::ast::BinaryExpr`] / [`crate::ast::IndexExpr`] id that
+    /// reify needs to key the `OperatorDispatch` record on (Gap 11
+    /// of WEP 2026-05-26 §`Design notes (Stage 5)`).
+    ///
+    /// [`Self::build_trait_op_method_call_on_resolved`] reads this
+    /// channel, records the dispatch decision via
+    /// [`Self::record_operator_dispatch`], and clears it. Synthesised
+    /// binary calls (e.g. inside `desugar_comparison_chain`) leave the
+    /// channel `None`, and the recording is skipped — those calls have
+    /// no source AST id reify could key on.
+    pub(super) pending_operator_ast_id: Option<crate::ast::AstId>,
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -603,13 +617,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// reify that the native
     /// [`tir::TirExprKind::Binary`] / [`tir::TirExprKind::Index`] path
     /// was taken instead. See [`sem::types::OperatorDispatch`].
-    ///
-    /// `#[allow(dead_code)]` until the recording sites in `operators.rs`
-    /// (every call to `Self::build_trait_op_method_call_on_resolved`)
-    /// are wired up. Reify consumes the map; the wiring is its own
-    /// follow-up so this commit lands the data shape with the WEP's
-    /// Gap 11 contract intact.
-    #[allow(dead_code)]
     pub(super) fn record_operator_dispatch(
         &mut self,
         ast_id: crate::ast::AstId,

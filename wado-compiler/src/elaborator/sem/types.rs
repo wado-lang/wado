@@ -186,11 +186,6 @@ pub(crate) struct TypeAnnotations {
     /// [`crate::tir::TirExprKind::Binary`] /
     /// [`crate::tir::TirExprKind::Index`] for this expression. See
     /// [`OperatorDispatch`].
-    ///
-    /// `#[allow(dead_code)]` until reify consumes it and the recording
-    /// sites in `operators.rs` (every call to
-    /// `Elaborator::build_trait_op_method_call_on_resolved`) are wired up.
-    #[allow(dead_code)]
     pub(crate) operator_dispatch: IndexMap<AstId, OperatorDispatch>,
 }
 
