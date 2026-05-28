@@ -202,8 +202,8 @@ pub async fn execute<H: CompilerHost>(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecuteMode {
     /// Default `wado compile` behavior: write generator outputs to disk,
-    /// surface a [`Code::KilnGeneratedRegenerated`] warning when the new
-    /// bytes differ from the pre-existing on-disk file.
+    /// surface a [`Code::KilnGeneratedRegenerated`] debug notice when the
+    /// new bytes differ from the pre-existing on-disk file.
     WriteAndWarnOnOverwrite,
     /// `wado check` behavior: do not write to disk. The caller is
     /// responsible for byte-comparing the returned [`InvocationRun`]
@@ -283,7 +283,7 @@ pub async fn execute_with_mode<H: CompilerHost>(
                 if let Ok(existing) = std::fs::read(&full_path)
                     && existing != bytes
                 {
-                    emit_generated_regenerated_warning(
+                    emit_generated_regenerated_notice(
                         host,
                         &invocation.decl_site.synthetic_id,
                         normalized.as_str(),
@@ -534,10 +534,13 @@ fn emit_generated_modified_warning<H: CompilerHost>(host: &H, invocation: &str, 
     });
 }
 
-fn emit_generated_regenerated_warning<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
+fn emit_generated_regenerated_notice<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
     use wado_compiler::{Diagnostic, Severity};
+    // `Debug`, not `Warning`: regenerating cached outputs is the expected
+    // state after a generator edit, and one run can touch hundreds of
+    // files (issue #1218), so per-file warnings are just noise.
     host.emit_diagnostic(Diagnostic {
-        severity: Severity::Warning,
+        severity: Severity::Debug,
         code: wado_compiler::Code::KilnGeneratedRegenerated,
         message: format!(
             "kiln[{invocation}]: regenerating {path} (previous content differed from \
