@@ -899,11 +899,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 vec![TirStmt::new(TirStmtKind::Continue, continue_stmt.span)]
             }
             ast::Stmt::Let(let_stmt) => vec![self.reify_let(let_stmt, ctx)],
-            ast::Stmt::If(_)
-            | ast::Stmt::While(_)
+            ast::Stmt::If(if_stmt) => self.reify_if_stmt(if_stmt, ctx),
+            ast::Stmt::Loop(loop_stmt) => {
+                // `loop { … }` — direct lowering. The
+                // `for_continue_labels` save/restore mirrors
+                // `Elaborator::resolve_loop` (stmt.rs:2092–2101).
+                let saved = std::mem::take(&mut ctx.for_continue_labels);
+                let body = self.reify_block(&loop_stmt.body, ctx, None);
+                ctx.for_continue_labels = saved;
+                vec![TirStmt::new(TirStmtKind::Loop { body }, loop_stmt.span)]
+            }
+            ast::Stmt::While(_)
             | ast::Stmt::For(_)
             | ast::Stmt::ForOf(_)
-            | ast::Stmt::Loop(_)
             | ast::Stmt::Match(_)
             | ast::Stmt::Assert(_)
             | ast::Stmt::LabeledBlock(_) => {
@@ -1119,6 +1127,48 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // closure_captures, assert_captures, for_of_iterator}`
                 // as documented at the call site.
                 todo!("reify_expr: {:?} variant pending body-walk reify", expr)
+            }
+        }
+    }
+
+    /// Reify a stmt-position `if cond { … } else { … }`. Stmt
+    /// position never carries an `expected_type` from the surrounding
+    /// block (the elaborator switches to `…_with_expected` only on a
+    /// trailing position; reify follows suit by passing `None` to the
+    /// branches). `Condition::LetChain` mirrors the expression-level
+    /// `IfLetChain` desugar; the chain expansion lives behind the
+    /// same `todo!` as `reify_if_expr`.
+    fn reify_if_stmt(
+        &mut self,
+        if_stmt: &ast::IfStmt,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TirStmt> {
+        use crate::tir::TirStmtKind;
+        match &if_stmt.condition {
+            ast::Condition::Expr(cond_expr) => {
+                let condition =
+                    self.reify_expr(cond_expr, ctx, Some(crate::tir::TypeTable::BOOL));
+                let then_block = self.reify_block(&if_stmt.then_block, ctx, None);
+                let else_block = if_stmt
+                    .else_block
+                    .as_ref()
+                    .map(|b| self.reify_block(b, ctx, None));
+                vec![TirStmt::new(
+                    TirStmtKind::If {
+                        condition,
+                        then_block,
+                        else_block,
+                    },
+                    if_stmt.span,
+                )]
+            }
+            ast::Condition::LetChain { .. } => {
+                // TODO(stage-5-bodies): mirror
+                // `Elaborator::resolve_if_stmt`'s `Condition::LetChain`
+                // arm (stmt.rs ≈1014). The expansion shape is the
+                // same as the expression-position chain — share with
+                // `reify_if_expr`'s LetChain branch when it lands.
+                todo!("reify_if_stmt: LetChain pending body-walk reify")
             }
         }
     }
