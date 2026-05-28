@@ -597,6 +597,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.for_of_iterator.insert(ast_id, info);
     }
 
+    /// Record the operator-dispatch decision for a binary / index
+    /// expression that the elaborator lowered to a trait method call
+    /// (Gap 11 of Stage 5). Absence of a recorded entry signals to
+    /// reify that the native
+    /// [`tir::TirExprKind::Binary`] / [`tir::TirExprKind::Index`] path
+    /// was taken instead. See [`sem::types::OperatorDispatch`].
+    ///
+    /// `#[allow(dead_code)]` until the recording sites in `operators.rs`
+    /// (every call to `Self::build_trait_op_method_call_on_resolved`)
+    /// are wired up. Reify consumes the map; the wiring is its own
+    /// follow-up so this commit lands the data shape with the WEP's
+    /// Gap 11 contract intact.
+    #[allow(dead_code)]
+    pub(super) fn record_operator_dispatch(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::OperatorDispatch,
+    ) {
+        self.sem.types.operator_dispatch.insert(ast_id, info);
+    }
+
     /// Record a coercion decision for the expression at `ast_id`. Called
     /// from each successful `try_coerce_*` sub-helper so every caller of
     /// those helpers (`try_coerce`, `resolve_cast`, the deferred-coercion

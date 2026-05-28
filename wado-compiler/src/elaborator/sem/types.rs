@@ -178,6 +178,20 @@ pub(crate) struct TypeAnnotations {
     /// [`AstId`]. Tuple and variadic paths are tagged via [`DesugarKind`]
     /// alone and leave no entry here. See [`ForOfIteratorInfo`].
     pub(crate) for_of_iterator: IndexMap<AstId, ForOfIteratorInfo>,
+    /// Operator-dispatch decisions for binary / index expressions that
+    /// the elaborator lowered to a trait method call (Gap 11 of
+    /// Stage 5). Keyed by the [`crate::ast::BinaryExpr`]'s or
+    /// [`crate::ast::IndexExpr`]'s [`AstId`]. Absence of an entry
+    /// means the elaborator emitted a native
+    /// [`crate::tir::TirExprKind::Binary`] /
+    /// [`crate::tir::TirExprKind::Index`] for this expression. See
+    /// [`OperatorDispatch`].
+    ///
+    /// `#[allow(dead_code)]` until reify consumes it and the recording
+    /// sites in `operators.rs` (every call to
+    /// `Elaborator::build_trait_op_method_call_on_resolved`) are wired up.
+    #[allow(dead_code)]
+    pub(crate) operator_dispatch: IndexMap<AstId, OperatorDispatch>,
 }
 
 /// Generic-instantiation decision recorded by the body walk at a call,
@@ -277,6 +291,35 @@ pub(crate) struct AssertSlot {
 pub(crate) struct AssertCaptureInfo {
     pub(crate) slots: Vec<AssertSlot>,
     pub(crate) emitted_slot_indices: Vec<u32>,
+}
+
+/// Operator-dispatch decision recorded when the elaborator lowers a
+/// binary or index expression to a trait method call (Gap 11 of
+/// Stage 5). Reify checks this map before falling back to the native
+/// [`crate::tir::TirExprKind::Binary`] / [`crate::tir::TirExprKind::Index`]
+/// path.
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct OperatorDispatch {
+    /// The trait method to dispatch to. Carries the impl block's
+    /// module source, mangled name, and `LocalMethodName` metadata
+    /// the elaborator already populated.
+    pub(crate) function_ref: FunctionRef,
+    /// Self-kind of the trait method's receiver. Reify feeds this
+    /// (with `is_ref_impl = false` — operator trait methods are
+    /// always dispatched on the value type, not on a ref-impl) into
+    /// [`super::super::Elaborator::adjust_receiver_for_self_kind_static`].
+    pub(crate) self_kind: ast::SelfKind,
+    /// Per-argument flag: `true` when the operator's trait parameter
+    /// is declared as `&T` / `&mut T` and reify must wrap the
+    /// argument in `Unary { Ref }` / `Unary { MutRef }` before
+    /// passing it. Indexed in the same order the elaborator's
+    /// argument-walk produces (LHS-first for binary; the lone index
+    /// for `IndexExpr`).
+    pub(crate) arg_ref_wraps: Vec<bool>,
+    /// Return type the elaborator resolved for the method call. Pinned
+    /// here so reify reads it without re-running impl-table lookups.
+    pub(crate) return_type: TypeId,
 }
 
 /// `for x of expr` iterator dispatch result (Gap 6 of Stage 5).

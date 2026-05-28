@@ -900,6 +900,57 @@ spurious `TirExprKind::Call` that the elaborator never did.
   directly (the inner `expression_types` entry already names the
   right type) and skips the call construction entirely.
 
+#### Gap 11: operator dispatch to a trait method
+
+`Elaborator::build_binary_op_tir` (`operators.rs:126`+) and the
+matching path for `IndexExpr` lower an operator to either a native
+[`TirExprKind::Binary`] / [`TirExprKind::Index`] or to a
+[`TirExprKind::MethodCall`] against the operator trait
+(`Add::add`, `Eq::eq`, `Index::index`, …) — the decision is made
+by the receiver type, not the AST. The method-dispatch branch
+constructs the [`TirExprKind::MethodCall`] through
+[`Elaborator::build_tir_method_call`] with a hand-built
+[`crate::tir::FunctionRef`] rather than routing through
+`resolve_method_call_with`, so no
+`TypeAnnotations::method_dispatch` entry is left under the AST id
+of the [`crate::ast::BinaryExpr`] / [`crate::ast::IndexExpr`].
+Reify cannot tell native vs. method dispatch apart without an
+annotation.
+
+- Field: `TypeAnnotations::operator_dispatch:
+  IndexMap<AstId, OperatorDispatch>`, with
+  ```rust
+  pub(crate) struct OperatorDispatch {
+      pub(crate) function_ref: FunctionRef,
+      pub(crate) self_kind: ast::SelfKind,
+      // Per-argument flag: `true` when the operator's trait parameter is
+      // declared as `&T` / `&mut T` and reify must wrap the argument
+      // in a `Unary { Ref }` / `Unary { MutRef }` before passing it.
+      // Indexed in the order the elaborator's argument-walk produces
+      // (LHS-first for binary; the lone index for `IndexExpr`).
+      pub(crate) arg_ref_wraps: Vec<bool>,
+      pub(crate) return_type: TypeId,
+  }
+  ```
+- Recording site: `Elaborator::build_trait_op_method_call_on_resolved`
+  (`operators.rs:1446`+) and the IndexExpr operator-dispatch path.
+  Each call site already computes the inputs above
+  (`resolved.self_kind`, the `wrap_flags` vector, `resolved.return_type`,
+  `FunctionRef` from `ResolvedTraitMethod`) — the recording is one
+  call at the top of the helper, just before
+  [`Elaborator::build_tir_method_call`].
+- Reify consumer: `reify_expr` for [`ast::Expr::Binary`] /
+  [`ast::Expr::Index`] checks `operator_dispatch[id]` first; on hit
+  it emits the same `MethodCall` TIR (sharing the receiver-adjustment
+  and arg-wrap helpers with `reify_method_call`); on miss it emits
+  the native [`TirExprKind::Binary`] / [`TirExprKind::Index`].
+- Why not reuse `method_dispatch`: `MethodDispatch` carries an
+  `is_ref_impl: bool` flag that is meaningful only for receiver-
+  adjustment off a real method-call receiver. Operator dispatch
+  uses `is_ref_impl = false` and additionally needs per-argument
+  ref-wrap flags that `MethodDispatch` does not carry. Splitting
+  into `operator_dispatch` keeps each map's invariants clean.
+
 #### Gap 10: stmt-position match and other dispatch shortcuts
 
 `resolve_stmt` dispatches a stmt-position `Expr::Match` directly
