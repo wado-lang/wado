@@ -242,6 +242,50 @@ pub(crate) struct TypeAnnotations {
     /// without consulting the trait-impl index.
     #[allow(dead_code)]
     pub(crate) static_method_dispatch: IndexMap<AstId, StaticMethodDispatch>,
+    /// `SequenceLiteralBuilder` coercion data for a tuple literal
+    /// coerced into an `Array<T>` / user-defined sequence type. Keyed
+    /// by the `Expr::TupleLiteral`'s [`AstId`]. The
+    /// `try_coerce_tuple_to_sequence` path produces a desugar block
+    /// (`__seq_lit: { let __b = Builder::new_literal(N); __b.push_literal(...); ...; break __seq_lit: __b.build(); }`)
+    /// whose shape depends on impl-lookup decisions reify cannot
+    /// reproduce from the AST alone. Recording the resolved trait
+    /// info here lets reify rebuild the same desugar deterministically
+    /// — the `__b` local lands at the same `FunctionContext` index
+    /// reify reserves for it (Gap 7 walk-order invariant).
+    #[allow(dead_code)]
+    pub(crate) sequence_coercions: IndexMap<AstId, SequenceCoercionFacts>,
+}
+
+/// Resolved `SequenceLiteralBuilder` impl data for a tuple-to-sequence
+/// coercion site. See [`TypeAnnotations::sequence_coercions`].
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct SequenceCoercionFacts {
+    /// The builder struct's [`crate::tir::TypeId`] (e.g.
+    /// `Array<i32>`'s SequenceLiteralBuilder is `Array<i32>` itself).
+    pub(crate) builder_type: crate::tir::TypeId,
+    /// The element type each `push_literal` call takes.
+    pub(crate) element_type: crate::tir::TypeId,
+    /// `self` kind on the resolved `push_literal` method.
+    pub(crate) push_self_kind: crate::ast::SelfKind,
+    /// Fully resolved trait name (e.g. `"SequenceLiteralBuilder<i32>"`).
+    pub(crate) trait_name: String,
+    /// The `Builder::build()` call's return type.
+    pub(crate) output_type: crate::tir::TypeId,
+    /// Module that hosts the impl block.
+    pub(crate) impl_module_source: crate::module_source::ModuleSource,
+    /// Builder's base struct name (e.g. `"Array"`).
+    pub(crate) builder_base_name: String,
+    /// Mangled struct name used in `format_local` (e.g. `"Array<i32>"`).
+    pub(crate) mangled_builder_name: String,
+    /// Type-arg `TypeId`s on the builder (e.g. `[i32]` for `Array<i32>`).
+    pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
+    /// Type-arg display names (mangled) parallel to `type_arg_ids`.
+    pub(crate) type_arg_names: Vec<String>,
+    /// When `Some`, the literal is being coerced into a newtype over
+    /// the builder's output — reify wraps the final `__b.build()` call
+    /// in a `Cast` to this newtype `TypeId`.
+    pub(crate) newtype_cast_to: Option<crate::tir::TypeId>,
 }
 
 /// Static-method call dispatch decision. See

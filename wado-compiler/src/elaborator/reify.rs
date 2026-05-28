@@ -1503,11 +1503,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Ident(ident) => self.reify_ident(ident, recorded_type, ctx),
             ast::Expr::TupleLiteral(tuple_lit) => {
+                // SequenceLiteralBuilder coercion: when the elaborator
+                // recorded `sequence_coercions[tuple.id]`, the literal
+                // was lowered through `Builder::new_literal` /
+                // `Builder::push_literal` / `Builder::build`. Reify
+                // replays the same desugar deterministically — the
+                // `__b` local lands at the same `FunctionContext`
+                // index reify reserves for it.
+                if let Some(facts) = self
+                    .sem
+                    .types
+                    .sequence_coercions
+                    .get(&tuple_lit.id)
+                    .cloned()
+                {
+                    return self.reify_sequence_coercion(tuple_lit, facts, ctx, span);
+                }
                 // Element-by-element walk; the recorded type is the
-                // tuple `TypeId` annotate produced (potentially after
-                // coercion to a sequence type — that path goes through
-                // `coercions[id]` and is handled by the wrapper above
-                // once it lands).
+                // tuple `TypeId` annotate produced.
                 let elements: Vec<TirExpr> = tuple_lit
                     .elements
                     .iter()
@@ -3868,6 +3881,221 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `Elaborator::resolve_from_call` (expr.rs:4263+): builds a
     /// mangled `__<Target>__From<From>__from` method name with the
     /// `LocalMethodName` carrying the canonical From-impl
+    /// Reify a tuple-to-sequence coercion (`[1, 2, 3]: Array<i32>`).
+    /// Mirrors `try_coerce_tuple_to_sequence_inner`'s desugar block
+    /// shape (`__seq_lit: { let __b = Builder::new_literal(N); __b.push_literal(...); ...; break __seq_lit: __b.build(); }`).
+    /// The Stage-5 walk-order invariant (Gap 7) keeps the `__b`
+    /// local at the same `FunctionContext` index reify reserves for
+    /// it, so the resulting TIR is byte-identical to production's.
+    fn reify_sequence_coercion(
+        &mut self,
+        tuple_lit: &ast::TupleLiteralExpr,
+        facts: super::sem::types::SequenceCoercionFacts,
+        ctx: &mut FunctionContext,
+        span: crate::token::Span,
+    ) -> TirExpr {
+        use crate::name::{LocalMethodName, MethodName};
+        use crate::tir::{
+            CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExprKind, TirStmt, TirStmtKind,
+            TypeTable,
+        };
+
+        let label = "__seq_lit".to_string();
+        ctx.enter_scope();
+
+        // --- Builder::new_literal(capacity) ---
+        let new_method_info = LocalMethodName::new(
+            facts.builder_base_name.clone(),
+            Some(facts.trait_name.clone()),
+            "new_literal".to_string(),
+        )
+        .with_struct_type_args(&facts.type_arg_names);
+        let new_mangled_name = MethodName::format_local(
+            &facts.mangled_builder_name,
+            Some(&facts.trait_name),
+            "new_literal",
+        );
+        let capacity = tuple_lit.elements.len() as u64;
+        let new_call = TirExpr::new(
+            TirExprKind::Call {
+                func: FunctionRef {
+                    module_source: facts.impl_module_source.clone(),
+                    name: new_mangled_name,
+                    monomorph_info: if facts.type_arg_ids.is_empty() {
+                        None
+                    } else {
+                        Some(MonomorphInfo {
+                            generic_name: format!("{}::new_literal", facts.builder_base_name),
+                            impl_type_args: facts.type_arg_ids.clone(),
+                            method_type_args: vec![],
+                            is_blanket: false,
+                        })
+                    },
+                    method_info: Some(new_method_info),
+                },
+                type_args: vec![],
+                args: vec![CallArg::new(
+                    TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: capacity,
+                            repr: (capacity as i64).to_string(),
+                        },
+                        TypeTable::I32,
+                        span,
+                    ),
+                    false,
+                )],
+            },
+            facts.builder_type,
+            span,
+        );
+
+        let builder_index = ctx.add_local("__b".to_string(), facts.builder_type, true, None);
+        let mut stmts = vec![TirStmt::new(
+            TirStmtKind::Let {
+                name: "__b".to_string(),
+                local_index: builder_index,
+                is_mut: true,
+                is_reactive: false,
+                type_id: facts.builder_type,
+                value: new_call,
+                skip_value_copy: false,
+            },
+            span,
+        )];
+
+        // --- For each element: __b.push_literal(elem) ---
+        let push_mangled_name = MethodName::format_local(
+            &facts.mangled_builder_name,
+            Some(&facts.trait_name),
+            "push_literal",
+        );
+        let push_method_info = LocalMethodName::new(
+            facts.builder_base_name.clone(),
+            Some(facts.trait_name.clone()),
+            "push_literal".to_string(),
+        )
+        .with_struct_type_args(&facts.type_arg_names);
+
+        for element in &tuple_lit.elements {
+            let elem_expr = self.reify_expr(element, ctx, Some(facts.element_type));
+            let builder_local = TirExpr::new(
+                TirExprKind::Local {
+                    index: builder_index,
+                    name: "__b".to_string(),
+                },
+                facts.builder_type,
+                span,
+            );
+            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                builder_local,
+                facts.push_self_kind,
+                false,
+                span,
+                &self.tysys.type_table,
+            );
+            let push_call = super::Elaborator::<H>::build_tir_method_call(
+                receiver,
+                FunctionRef {
+                    module_source: facts.impl_module_source.clone(),
+                    name: push_mangled_name.clone(),
+                    monomorph_info: if facts.type_arg_ids.is_empty() {
+                        None
+                    } else {
+                        Some(MonomorphInfo {
+                            generic_name: format!("{}::push_literal", facts.builder_base_name),
+                            impl_type_args: facts.type_arg_ids.clone(),
+                            method_type_args: vec![],
+                            is_blanket: false,
+                        })
+                    },
+                    method_info: Some(push_method_info.clone()),
+                },
+                vec![],
+                vec![CallArg::new(elem_expr, false)],
+                TypeTable::UNIT,
+                span,
+            );
+            stmts.push(TirStmt::new(TirStmtKind::Expr(push_call), span));
+        }
+
+        // --- break __seq_lit: __b.build(); ---
+        let builder_local_final = TirExpr::new(
+            TirExprKind::Local {
+                index: builder_index,
+                name: "__b".to_string(),
+            },
+            facts.builder_type,
+            span,
+        );
+        let build_mangled_name = MethodName::format_local(
+            &facts.mangled_builder_name,
+            Some(&facts.trait_name),
+            "build",
+        );
+        let build_method_info = LocalMethodName::new(
+            facts.builder_base_name.clone(),
+            Some(facts.trait_name.clone()),
+            "build".to_string(),
+        )
+        .with_struct_type_args(&facts.type_arg_names);
+        let build_call = super::Elaborator::<H>::build_tir_method_call(
+            builder_local_final,
+            FunctionRef {
+                module_source: facts.impl_module_source.clone(),
+                name: build_mangled_name,
+                monomorph_info: if facts.type_arg_ids.is_empty() {
+                    None
+                } else {
+                    Some(MonomorphInfo {
+                        generic_name: format!("{}::build", facts.builder_base_name),
+                        impl_type_args: facts.type_arg_ids.clone(),
+                        method_type_args: vec![],
+                        is_blanket: false,
+                    })
+                },
+                method_info: Some(build_method_info),
+            },
+            vec![],
+            vec![],
+            facts.output_type,
+            span,
+        );
+
+        stmts.push(TirStmt::new(
+            TirStmtKind::Break {
+                label: Some(label.clone()),
+                value: Some(build_call),
+            },
+            span,
+        ));
+
+        ctx.exit_scope();
+
+        let block_expr = TirExpr::new(
+            TirExprKind::LabeledBlock {
+                label,
+                block: TirBlock::new(stmts, span),
+                result_type: facts.output_type,
+            },
+            facts.output_type,
+            span,
+        );
+
+        if let Some(target_type) = facts.newtype_cast_to {
+            TirExpr::new(
+                TirExprKind::Cast {
+                    expr: Box::new(block_expr),
+                    target_type,
+                },
+                target_type,
+                span,
+            )
+        } else {
+            block_expr
+        }
+    }
+
     /// signature, and finds the impl's home module by walking the
     /// current module + loaded modules looking for a matching
     /// `impl From<From> for Target`.
