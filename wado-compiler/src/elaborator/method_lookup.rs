@@ -3381,7 +3381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_is_mut: method_param_is_mut,
             inherited_from_base: _,
             cm_name: _,
-            is_ref_impl: _,
+            is_ref_impl: method_is_ref_impl,
             method_type_param_ids: _,
             param_defaults: _,
             param_names: _,
@@ -3480,7 +3480,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // through `resolve_method_call_with`. Record dispatch here so
         // `m["k"].push(1)` and friends leave the same annotation as the
         // ordinary path.
-        self.record_method_dispatch(Some(method_call.id), &func, self_kind);
+        //
+        // Stage 5 (Gap 3) additionally tags the call's AstId with
+        // `DesugarKind::IndexMutMethodCall` so reify knows to follow the
+        // IndexMut expansion path (synthesise `__index_mut_val`) instead
+        // of the plain method-call path.
+        self.record_method_dispatch(
+            Some(method_call.id),
+            &func,
+            self_kind,
+            method_is_ref_impl,
+        );
+        self.record_desugar(
+            method_call.id,
+            super::sem::types::DesugarKind::IndexMutMethodCall,
+        );
 
         Some(Self::build_tir_method_call(
             receiver_for_method,

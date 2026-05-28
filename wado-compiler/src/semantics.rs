@@ -391,6 +391,8 @@ impl Semantics {
             DesugarKind::WhileLetChain => "while_let_chain",
             DesugarKind::IfLetChain => "if_let_chain",
             DesugarKind::CompoundAssign => "compound_assign",
+            DesugarKind::IndexMutMethodCall => "index_mut_method_call",
+            DesugarKind::NewtypeFromCollapse => "newtype_from_collapse",
         };
         Some(name.to_string())
     }

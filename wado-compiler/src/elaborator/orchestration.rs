@@ -1090,6 +1090,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 default_scope_module: None,
                 invocations: Rc::clone(&state.invocations),
                 interner: Rc::clone(&state.interner),
+                pending_method_dispatch: None,
             };
 
             // Set file context so diagnostics emitted during resolution

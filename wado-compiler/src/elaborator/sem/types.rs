@@ -25,6 +25,18 @@
 //! (per-`AstId` rewrite tag for the TIR-direct desugar sites: `assert`,
 //! `matches`, comparison chains, `for x of …`, `while`, and compound
 //! assignment).
+//!
+//! Stage 5 extends the map set with the remaining decisions reify needs:
+//! `generic_instantiations` (call/struct/variant generic type args plus
+//! the resulting instance `TypeId`), `closure_captures` (the capture
+//! list plus the mut-capture `__ref_*` materialisation order),
+//! `assert_captures` (the power-assert capture-slot table), and
+//! `for_of_iterator` (the resolved `into_iter`/`next` dispatch targets
+//! for the iterator path of `for x of expr`). `MethodDispatch` also
+//! grows an `is_ref_impl` flag that reify needs alongside `self_kind`
+//! to drive `adjust_receiver_for_self_kind`. See
+//! `wep-2026-05-26-elaborator-rearchitecture.md` §`Design notes (Stage 5)`
+//! for the full gap inventory.
 
 use crate::ast::{self, AstId};
 use crate::hashmap::IndexMap;
@@ -54,12 +66,25 @@ use crate::tir::{FunctionRef, TypeId};
 /// yet because the consumer (`reify`, Stage 5 of the WEP) has not landed.
 /// The Stage 4 contract is "the data is recorded and reachable;" the read
 /// path arrives with reify.
+///
+/// Stage 5 adds [`Self::is_ref_impl`]: receiver adjustment for `&self` /
+/// `&mut self` requires not only `self_kind` but also whether the method
+/// was found on a reference-type impl (`impl Trait for &T`), because such
+/// impls take an *extra* layer of `&` on the receiver. The flag is the
+/// output of `lookup_method_info` and the input reify feeds to
+/// `adjust_receiver_for_self_kind` (Gap 2 in
+/// `wep-2026-05-26-elaborator-rearchitecture.md` §`Design notes (Stage 5)`).
 #[derive(Clone)]
 pub(crate) struct MethodDispatch {
     #[allow(dead_code)]
     pub(crate) function_ref: FunctionRef,
     #[allow(dead_code)]
     pub(crate) self_kind: ast::SelfKind,
+    /// True when the resolved method's impl was found on a reference type
+    /// (`impl Trait for &T`). Reify wraps the receiver in an extra `&` /
+    /// `&mut` layer before passing it to the method.
+    #[allow(dead_code)]
+    pub(crate) is_ref_impl: bool,
 }
 
 /// Which sub-coercion [`super::super::Elaborator::try_coerce`] applied at
@@ -132,6 +157,155 @@ pub(crate) struct TypeAnnotations {
     /// matches, comparison chain, for-of, while, compound assignment),
     /// keyed by the enclosing AST node's [`AstId`]. See [`DesugarKind`].
     pub(crate) desugars: IndexMap<AstId, DesugarKind>,
+    /// Generic instantiations decided by inference at call / construction
+    /// sites (Gap 1 of Stage 5). Keyed by the call expression's, struct
+    /// literal's, or variant-ctor's [`AstId`]. See [`GenericInstantiation`].
+    ///
+    /// `#[allow(dead_code)]` until the call.rs / expr.rs recording call
+    /// sites are wired up in a follow-up of Stage 5.
+    #[allow(dead_code)]
+    pub(crate) generic_instantiations: IndexMap<AstId, GenericInstantiation>,
+    /// Capture analysis result for each closure expression (Gap 4 of
+    /// Stage 5). Keyed by the [`crate::ast::ClosureExpr`]'s [`AstId`].
+    /// See [`ClosureCaptureInfo`].
+    pub(crate) closure_captures: IndexMap<AstId, ClosureCaptureInfo>,
+    /// Power-assert capture-slot map for each assert statement (Gap 5
+    /// of Stage 5). Keyed by the [`crate::ast::AssertStmt`]'s [`AstId`].
+    /// See [`AssertCaptureInfo`].
+    pub(crate) assert_captures: IndexMap<AstId, AssertCaptureInfo>,
+    /// For-of iterator dispatch decisions for the `IntoIterator` path
+    /// (Gap 6 of Stage 5). Keyed by the [`crate::ast::ForOfStmt`]'s
+    /// [`AstId`]. Tuple and variadic paths are tagged via [`DesugarKind`]
+    /// alone and leave no entry here. See [`ForOfIteratorInfo`].
+    pub(crate) for_of_iterator: IndexMap<AstId, ForOfIteratorInfo>,
+}
+
+/// Generic-instantiation decision recorded by the body walk at a call,
+/// struct-literal, or variant-construction site. `type_args` is the
+/// inferred (or explicitly written) concrete type for each generic
+/// parameter in declaration order. `instance_type` is the `TypeId` of
+/// the resulting [`crate::tir::ResolvedType::GenericInstance`] (for
+/// generic struct/variant types) or the call's monomorphic
+/// [`crate::tir::FunctionRef::monomorph_info`]-keyed target — recorded
+/// alongside `type_args` so reify can drop straight into the TIR slot
+/// without re-running `make_generic_instance` or mangled-name
+/// construction.
+///
+/// `#[allow(dead_code)]` because reify is the consumer (Stage 5).
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct GenericInstantiation {
+    pub(crate) type_args: Vec<TypeId>,
+    pub(crate) instance_type: TypeId,
+}
+
+/// A single mutating outer-binding captured by a closure. The closure
+/// pre-pass at `closure.rs:140–193` materialises a
+/// `let __ref_<var_name> = &mut <var_name>;` in the outer scope before
+/// opening the closure body; reify replays the same `add_local` at the
+/// same point. The fields below carry every value the replay needs.
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct MutCapture {
+    /// Original outer-binding name (the source-level identifier).
+    pub(crate) var_name: String,
+    /// Synthesised reference binding name (`__ref_<var_name>`).
+    pub(crate) ref_name: String,
+    /// `TypeId` of the inner value (`T`).
+    pub(crate) inner_type: TypeId,
+    /// `TypeId` of the mut-ref (`&mut T`).
+    pub(crate) ref_type: TypeId,
+    /// Outer function's local index for the original binding. Reify
+    /// recomputes the same index from its own walk (see the
+    /// `FunctionContext::locals` walk-order invariant in
+    /// `wep-2026-05-26-elaborator-rearchitecture.md` §`Design notes
+    /// (Stage 5)`); this field is the cross-check.
+    pub(crate) outer_index: u32,
+}
+
+/// One entry in the closure's capture list. Mirrors
+/// [`crate::tir::TirCapture`] but lives off the TIR so reify produces
+/// the same shape from the recorded info.
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct CaptureEntry {
+    pub(crate) name: String,
+    pub(crate) outer_index: u32,
+    pub(crate) type_id: TypeId,
+    pub(crate) is_mut: bool,
+}
+
+/// Closure capture-analysis result recorded by [`super::super::Elaborator::resolve_closure`].
+/// Keyed by the closure expression's [`AstId`] in
+/// [`TypeAnnotations::closure_captures`].
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct ClosureCaptureInfo {
+    /// Mut-captures the outer scope must materialise before the closure
+    /// body opens, in declaration order. Reify replays each as
+    /// `let __ref_<var> = &mut <var>;`.
+    pub(crate) mut_captures: Vec<MutCapture>,
+    /// Final capture list the closure surfaces to its caller, in the
+    /// order `FunctionContext::get_captures` produced.
+    pub(crate) captures: Vec<CaptureEntry>,
+    /// True when any capture mutates its outer binding. Drives the
+    /// `fn mut(...)` vs `fn(...)` choice at the closure type.
+    pub(crate) is_mutating: bool,
+}
+
+/// One power-assert capture slot — a sub-expression of the assert
+/// condition that the [`super::super::assert::CaptureScanner`] flagged
+/// for capture as `let __vK = …;` so the panic template can quote its
+/// value.
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct AssertSlot {
+    /// The flagged sub-expression's [`AstId`].
+    pub(crate) ast_id: AstId,
+    /// The user-facing label the panic template uses for this slot.
+    pub(crate) capture_label: String,
+}
+
+/// Power-assert capture map recorded by
+/// [`super::super::Elaborator::desugar_assert`]. Reify walks the
+/// condition AST and consults `slots` to decide which sub-expressions
+/// become `let __vK = …;`; only the indices in `emitted_slot_indices`
+/// actually produced a binding (slots whose AST evaporated during
+/// resolution stay unbound and are skipped by the template).
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct AssertCaptureInfo {
+    pub(crate) slots: Vec<AssertSlot>,
+    pub(crate) emitted_slot_indices: Vec<u32>,
+}
+
+/// `for x of expr` iterator dispatch result (Gap 6 of Stage 5).
+/// Recorded only on the iterator path (`DesugarKind::ForOfIterator`);
+/// tuple and variadic paths don't dispatch, so they don't record here.
+///
+/// The two `FunctionRef`s are the same dispatch targets the elaborator
+/// resolved through `resolve_method_call_with(method_id: None,
+/// call_id: None)`, captured here so reify emits the synthetic calls
+/// without re-dispatching.
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct ForOfIteratorInfo {
+    /// Resolved `IntoIterator::into_iter` dispatch target.
+    pub(crate) into_iter: FunctionRef,
+    /// Receiver-adjustment kind for the `.into_iter()` call.
+    pub(crate) into_iter_self_kind: ast::SelfKind,
+    /// True when the `into_iter` impl was found on a reference-type
+    /// impl (cf. [`MethodDispatch::is_ref_impl`]).
+    pub(crate) into_iter_is_ref_impl: bool,
+    /// Resolved `Iterator::next` dispatch target.
+    pub(crate) next: FunctionRef,
+    /// Receiver-adjustment kind for the `.next()` call.
+    pub(crate) next_self_kind: ast::SelfKind,
+    /// True when the `next` impl was found on a reference-type impl.
+    pub(crate) next_is_ref_impl: bool,
+    /// Item type — what the loop variable is bound to. Reify uses this
+    /// to type-annotate the synthesised `let <var> = …;`.
+    pub(crate) item_type: TypeId,
 }
 
 /// Which TIR-direct desugar path the body walk took at a source-level
@@ -171,4 +345,16 @@ pub(crate) enum DesugarKind {
     IfLetChain,
     /// `x += y` (and other compound ops) → `x = x + y` style rewrite.
     CompoundAssign,
+    /// `container[i].method()` → materialise `let __index_mut_val =
+    /// &mut container[i];` + dispatch the method through it
+    /// (`method_lookup.rs::try_resolve_index_mut_method_call`). Tagged
+    /// on the [`crate::ast::MethodCallExpr`]'s [`AstId`]; the receiver
+    /// `IndexExpr` keeps its own `expression_types` entry so reify
+    /// types the synthesised initialiser correctly.
+    IndexMutMethodCall,
+    /// `Newtype::from(x)` where `x` is already of the newtype's base
+    /// type — the elaborator collapses the call to `x` itself. Reify
+    /// reads this tag on the outer `Call`'s [`AstId`] and emits the
+    /// inner argument's TIR directly, skipping the call construction.
+    NewtypeFromCollapse,
 }

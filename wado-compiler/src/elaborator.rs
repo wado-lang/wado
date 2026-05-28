@@ -182,6 +182,22 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// instances can `borrow_mut()` it from `&self` contexts (e.g.
     /// `record_use_specifier_references`).
     pub(super) interner: Rc<RefCell<ModuleSourceInterner>>,
+    /// Side-channel populated by [`Self::resolve_method_call_with`]
+    /// immediately before it builds the final `TirExprKind::MethodCall`,
+    /// carrying the `(self_kind, is_ref_impl)` the dispatch resolved.
+    /// Synthetic callers (e.g. for-of's `.into_iter()` / `.next()`) read
+    /// it back to record the dispatch info their own way — they pass
+    /// `call_id == None` so the in-function `record_method_dispatch`
+    /// call is skipped, and reify needs the recorded receiver-adjustment
+    /// inputs all the same (Gap 6 of WEP 2026-05-26 §`Design notes
+    /// (Stage 5)`).
+    ///
+    /// Cleared at the top of `resolve_method_call_with` so a synthetic
+    /// caller never accidentally reads a stale value from a previous
+    /// dispatch. `None` means either no dispatch ran (the short-circuit
+    /// paths returned early) or the method-not-found recovery branch
+    /// took over.
+    pub(super) pending_method_dispatch: Option<(ast::SelfKind, bool)>,
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -492,11 +508,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Synthetic calls (for-of's `.into_iter()` / `.next()`) pass
     /// `ast_id == None` and skip recording per the
     /// [`sem::types::MethodDispatch`] contract.
+    ///
+    /// `is_ref_impl` is the flag `lookup_method_info` produces alongside
+    /// the dispatch target; reify uses it together with `self_kind` to
+    /// drive `adjust_receiver_for_self_kind` without re-running impl
+    /// lookup (Gap 2 of Stage 5).
     pub(super) fn record_method_dispatch(
         &mut self,
         ast_id: Option<crate::ast::AstId>,
         function_ref: &tir::FunctionRef,
         self_kind: ast::SelfKind,
+        is_ref_impl: bool,
     ) {
         let Some(ast_id) = ast_id else { return };
         self.sem.types.method_dispatch.insert(
@@ -504,8 +526,74 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             sem::types::MethodDispatch {
                 function_ref: function_ref.clone(),
                 self_kind,
+                is_ref_impl,
             },
         );
+    }
+
+    /// Record a generic-instantiation decision for the call / struct
+    /// literal / variant-ctor at `ast_id` (Gap 1 of Stage 5). `type_args`
+    /// is the inferred (or explicitly written) concrete type for each
+    /// generic parameter in declaration order; `instance_type` is the
+    /// `TypeId` of the resulting `GenericInstance` / monomorphic target.
+    ///
+    /// Skipped when `type_args` is empty (the site is non-generic) so the
+    /// map only carries decisions reify needs.
+    ///
+    /// `#[allow(dead_code)]` while the recording call sites in
+    /// `call.rs` / `expr.rs` are still being wired up — once every
+    /// generic call / struct literal / variant ctor records, drop the
+    /// allow.
+    #[allow(dead_code)]
+    pub(super) fn record_generic_instantiation(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        type_args: Vec<TypeId>,
+        instance_type: TypeId,
+    ) {
+        if type_args.is_empty() {
+            return;
+        }
+        self.sem.types.generic_instantiations.insert(
+            ast_id,
+            sem::types::GenericInstantiation {
+                type_args,
+                instance_type,
+            },
+        );
+    }
+
+    /// Record the capture-analysis result for the closure expression at
+    /// `ast_id` (Gap 4 of Stage 5). See [`sem::types::ClosureCaptureInfo`].
+    pub(super) fn record_closure_captures(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::ClosureCaptureInfo,
+    ) {
+        self.sem.types.closure_captures.insert(ast_id, info);
+    }
+
+    /// Record the power-assert capture-slot table for the assert
+    /// statement at `ast_id` (Gap 5 of Stage 5). See
+    /// [`sem::types::AssertCaptureInfo`].
+    pub(super) fn record_assert_captures(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::AssertCaptureInfo,
+    ) {
+        self.sem.types.assert_captures.insert(ast_id, info);
+    }
+
+    /// Record the iterator-path dispatch decision for the for-of
+    /// statement at `ast_id` (Gap 6 of Stage 5). Tuple / variadic paths
+    /// are tagged via [`sem::types::DesugarKind`] alone and leave no
+    /// entry here. See [`sem::types::ForOfIteratorInfo`].
+    pub(super) fn record_for_of_iterator(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::ForOfIteratorInfo,
+    ) {
+        self.sem.types.for_of_iterator.insert(ast_id, info);
     }
 
     /// Record a coercion decision for the expression at `ast_id`. Called

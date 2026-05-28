@@ -502,8 +502,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let arg_type = args[0].type_id;
                     let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
 
-                    // Reflexive: T::from(T_val) — identity conversion
+                    // Reflexive: T::from(T_val) — identity conversion. Stage 5
+                    // (Gap 9): the outer Call AstId evaporates, so tag it with
+                    // `NewtypeFromCollapse` for reify to recognise — otherwise
+                    // reify would emit a `TirExprKind::Call` the elaborator
+                    // never built. The inner argument's `expression_types`
+                    // entry survives because it was recorded by the
+                    // `resolve_expr` wrapper for the argument itself.
                     if arg_type_name == prefix {
+                        self.record_desugar(
+                            call.id,
+                            super::sem::types::DesugarKind::NewtypeFromCollapse,
+                        );
                         return args[0].clone();
                     }
 
