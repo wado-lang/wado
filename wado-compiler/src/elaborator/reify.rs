@@ -1301,6 +1301,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_compound_assign(compound, ctx, recorded_type)
             }
             ast::Expr::TryOp(qm) => self.reify_question_mark(qm, ctx, recorded_type),
+            ast::Expr::Closure(closure) => self.reify_closure(closure, ctx, recorded_type, expected_type),
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
@@ -1395,7 +1396,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::ComparisonChain(_)
             | ast::Expr::StaticMethodCall(_)
             | ast::Expr::Index(_)
-            | ast::Expr::Closure(_)
             | ast::Expr::WithHandler(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
                 // `Elaborator::resolve_expr` arm. Each arm consults
@@ -2445,6 +2445,195 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 arms: vec![ok_arm, err_arm],
             },
             ok_type,
+            span,
+        )
+    }
+
+    /// Reify a closure expression. The Gap 4 record
+    /// (`sem.types.closure_captures[closure.id]`) carries the
+    /// capture-analysis result annotate computed:
+    /// - `mut_captures`: outer mut-locals to materialise as
+    ///   `let __ref_v = &mut v;` before the closure body opens, in
+    ///   declaration order.
+    /// - `captures`: the closure's final capture list (name +
+    ///   outer-index + type + mut flag).
+    /// - `is_mutating`: drives the `fn mut(...)` vs `fn(...)` tag on
+    ///   the closure type.
+    ///
+    /// Mirror `Elaborator::resolve_closure` (closure.rs:127+) step
+    /// by step so the walk-order invariant (Gap 7) lands the
+    /// same locals at the same indices.
+    fn reify_closure(
+        &mut self,
+        closure: &ast::ClosureExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+        expected_type: Option<TypeId>,
+    ) -> TirExpr {
+        use crate::tir::{
+            ResolvedType, TirBlock, TirCapture, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable,
+        };
+
+        let span = closure.span;
+
+        let cap_info = self
+            .sem
+            .types
+            .closure_captures
+            .get(&closure.id)
+            .cloned()
+            .unwrap_or_else(|| super::sem::types::ClosureCaptureInfo {
+                mut_captures: Vec::new(),
+                captures: Vec::new(),
+                is_mutating: false,
+            });
+
+        // Step 1 (replay): materialise outer-scope `__ref_v` locals
+        // for each mut-capture in the recorded order; emit the
+        // matching `let __ref_v = &mut v;` TIR; register
+        // `deref_overrides` so the closure body's references to
+        // captured mut-locals dereference the proxy.
+        let mut ref_stmts: Vec<TirStmt> = Vec::new();
+        let mut deref_overrides: crate::hashmap::IndexMap<String, (String, TypeId)> =
+            crate::hashmap::IndexMap::default();
+        for mc in &cap_info.mut_captures {
+            ctx.add_local(mc.ref_name.clone(), mc.ref_type, false, None);
+            ctx.address_taken_locals.insert(mc.outer_index);
+            ref_stmts.push(TirStmt::new(
+                TirStmtKind::Let {
+                    name: mc.ref_name.clone(),
+                    local_index: ctx.next_local - 1,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id: mc.ref_type,
+                    value: TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::MutRef,
+                            expr: Box::new(TirExpr::new(
+                                TirExprKind::Local {
+                                    index: mc.outer_index,
+                                    name: mc.var_name.clone(),
+                                },
+                                mc.inner_type,
+                                span,
+                            )),
+                        },
+                        mc.ref_type,
+                        span,
+                    ),
+                    skip_value_copy: false,
+                },
+                span,
+            ));
+            deref_overrides.insert(mc.var_name.clone(), (mc.ref_name.clone(), mc.inner_type));
+        }
+
+        // Step 2: open the closure context with the deref overrides.
+        let mut closure_ctx =
+            FunctionContext::new_closure(TypeTable::UNKNOWN, ctx, &self.tysys.type_table);
+        closure_ctx.deref_overrides = deref_overrides;
+
+        // Step 3: add closure parameters. Param types come from the
+        // AST (resolved via the outer scope's type-param view); if
+        // the expected fn type is available, prefer its param types
+        // for cases where the closure has no explicit annotation.
+        let expected_fn_params: Option<Vec<TypeId>> = expected_type.and_then(|t| {
+            match self.tysys.type_table.borrow().get(t) {
+                ResolvedType::Function { params, .. } => Some(params.clone()),
+                _ => None,
+            }
+        });
+        let params: Vec<(String, TypeId)> = closure
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let type_id = if let Some(ty) = &p.ty {
+                    self.resolve_type(ty)
+                } else if let Some(ref fn_params) = expected_fn_params {
+                    fn_params.get(i).copied().unwrap_or(TypeTable::UNKNOWN)
+                } else {
+                    TypeTable::UNKNOWN
+                };
+                closure_ctx.add_local(p.name.clone(), type_id, p.is_mut, Some(p.id));
+                (p.name.clone(), type_id)
+            })
+            .collect();
+
+        // Step 4: reify the body in the closure scope.
+        let body_expected = expected_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
+            ResolvedType::Function { return_type, .. } => Some(*return_type),
+            _ => None,
+        });
+        let body = self.reify_expr(&closure.body, &mut closure_ctx, body_expected);
+
+        // Step 5: assemble the capture list from the recorded entries.
+        let captures: Vec<TirCapture> = cap_info
+            .captures
+            .iter()
+            .map(|c| TirCapture {
+                name: c.name.clone(),
+                outer_index: c.outer_index,
+                type_id: c.type_id,
+                is_mut: c.is_mut,
+            })
+            .collect();
+
+        // Step 6: determine the return type. Prefer the body's
+        // resolved type (which annotate already unified) over the
+        // recorded `recorded_type` for the inner — `recorded_type`
+        // is the closure expression's function type, not the return
+        // type.
+        let return_type = body.type_id;
+
+        let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
+        let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
+            cap_info.is_mutating,
+            param_types,
+            return_type,
+            Vec::new(),
+            Vec::new(),
+        );
+
+        let mut all_locals = closure_ctx.locals;
+        let body_locals = if params.len() <= all_locals.len() {
+            all_locals.split_off(params.len())
+        } else {
+            Vec::new()
+        };
+        let address_taken_locals = closure_ctx.address_taken_locals;
+
+        let declared_effects = expected_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
+            ResolvedType::Function { effects, .. } if !effects.is_empty() => Some(effects.clone()),
+            _ => None,
+        });
+
+        let closure_tir = TirExpr::new(
+            TirExprKind::Closure {
+                params,
+                body: Box::new(body),
+                captures,
+                functor_id: None,
+                address_taken_locals,
+                body_locals,
+                declared_effects,
+            },
+            func_type,
+            span,
+        );
+
+        // Step 7: wrap in a Block when ref_stmts materialised any
+        // outer-scope `__ref_v` bindings.
+        if ref_stmts.is_empty() {
+            let _ = recorded_type;
+            return closure_tir;
+        }
+
+        let mut stmts = ref_stmts;
+        stmts.push(TirStmt::new(TirStmtKind::Expr(closure_tir), span));
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            func_type,
             span,
         )
     }
