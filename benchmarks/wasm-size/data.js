@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779914085271,
+  "lastUpdate": 1779928454602,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26809,6 +26809,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e5c6e38cab802cd1a48857de22ee069fd3c7a914"
         },
         "date": 1779914084797,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "10faa9c0414989a72ade6fb8dbdaf45054fb9b6a",
+          "message": "Merge pull request #1212 from wado-lang/claude/elaborator-refactor-stage-4-fHBX4\n\nrefactor: elaborator Stage 4 — per-AstId annotation storage",
+          "timestamp": "2026-05-28T09:27:55+09:00",
+          "tree_id": "ccbe87869e3dfc701d43d2b9bbbcb32a62424c26",
+          "url": "https://github.com/wado-lang/wado/commit/10faa9c0414989a72ade6fb8dbdaf45054fb9b6a"
+        },
+        "date": 1779928454289,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
