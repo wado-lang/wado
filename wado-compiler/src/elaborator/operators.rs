@@ -1133,18 +1133,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             "index_assign",
                         );
 
+                        let func = FunctionRef {
+                            module_source: trait_info.impl_module_source.clone(),
+                            name: mangled_method_name,
+                            monomorph_info: None,
+                            method_info: Some(LocalMethodName::new(
+                                lookup_name,
+                                Some(trait_info.trait_name),
+                                "index_assign".to_string(),
+                            )),
+                        };
+
+                        // Stage 5 (WEP 2026-05-26): record the
+                        // resolved `IndexAssign` dispatch keyed by
+                        // the inner `IndexExpr`'s `AstId` so reify
+                        // can replay the same `arr.index_assign(idx,
+                        // value)` shape for `arr[i] = v` and
+                        // `arr[i] OP= v`.
+                        self.record_index_assign_dispatch(
+                            index_expr.id,
+                            super::sem::types::OperatorDispatch {
+                                function_ref: func.clone(),
+                                self_kind: trait_info.self_kind,
+                                arg_ref_wraps: vec![false, false],
+                                return_type: TypeTable::UNIT,
+                            },
+                        );
+
                         return Self::build_tir_method_call(
                             receiver,
-                            FunctionRef {
-                                module_source: trait_info.impl_module_source.clone(),
-                                name: mangled_method_name,
-                                monomorph_info: None,
-                                method_info: Some(LocalMethodName::new(
-                                    lookup_name,
-                                    Some(trait_info.trait_name),
-                                    "index_assign".to_string(),
-                                )),
-                            },
+                            func,
                             vec![],
                             vec![
                                 CallArg::new(index_resolved, false),

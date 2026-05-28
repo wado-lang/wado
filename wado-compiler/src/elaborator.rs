@@ -625,6 +625,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.operator_dispatch.insert(ast_id, info);
     }
 
+    /// Record the resolved `IndexAssign` trait dispatch keyed by the
+    /// inner `IndexExpr`'s `AstId`. See
+    /// [`sem::types::TypeAnnotations::index_assign_dispatch`]. Reify
+    /// reads this to emit `receiver.index_assign(idx, value)` for
+    /// `arr[i] = v` and `arr[i] OP= v` shapes — separate from the
+    /// read-side `operator_dispatch` that carries the `IndexValue` /
+    /// `Index` dispatch keyed by the same `AstId`.
+    pub(super) fn record_index_assign_dispatch(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::OperatorDispatch,
+    ) {
+        self.sem.types.index_assign_dispatch.insert(ast_id, info);
+    }
+
     /// Record the handler-binding resolution facts (Gap 13 of
     /// Stage 5) keyed by the
     /// [`crate::ast::EffectHandlerBinding`]'s [`AstId`]. Reify

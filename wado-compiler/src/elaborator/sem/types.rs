@@ -263,6 +263,20 @@ pub(crate) struct TypeAnnotations {
     /// deterministically.
     #[allow(dead_code)]
     pub(crate) key_value_coercions: IndexMap<AstId, KeyValueCoercionFacts>,
+    /// `IndexAssign` trait dispatch decisions for `arr[i] = v` and
+    /// `arr[i] OP= v` shapes whose target is an `Expr::Index`. Keyed
+    /// by the **inner [`crate::ast::IndexExpr`]'s [`AstId`]** (the
+    /// `target` of the surrounding `Expr::Assign` /
+    /// `Expr::CompoundAssign`). The recording sites live in
+    /// `Elaborator::assign_to_target` so both `Expr::Assign` and the
+    /// compound-assign desugar feed the same map. Note that
+    /// [`Self::operator_dispatch`] keyed by the same `AstId` carries
+    /// the *read-side* `IndexValue` / `Index` dispatch — the two
+    /// annotations cohabit because an `Expr::Index` is read in
+    /// `let x = arr[i]` and written in `arr[i] = v`, and the
+    /// elaborator dispatches each shape to a different trait.
+    #[allow(dead_code)]
+    pub(crate) index_assign_dispatch: IndexMap<AstId, OperatorDispatch>,
 }
 
 /// Resolved `SequenceLiteralBuilder` impl data for a tuple-to-sequence

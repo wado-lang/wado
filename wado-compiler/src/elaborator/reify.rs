@@ -1655,6 +1655,41 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_if_expr(if_expr, ctx, expected_type, recorded_type)
             }
             ast::Expr::Assign(assign) => {
+                // IndexAssign rewrite: `arr[i] = v` lowers to
+                // `arr.index_assign(i, v)`. The elaborator's
+                // `assign_to_target` records the resolved
+                // `FunctionRef` on `index_assign_dispatch[index.id]`;
+                // reify replays the same `MethodCall` shape.
+                if let ast::Expr::Index(index_expr) = &assign.target
+                    && let Some(dispatch) = self
+                        .sem
+                        .types
+                        .index_assign_dispatch
+                        .get(&index_expr.id)
+                        .cloned()
+                {
+                    let receiver = self.reify_expr(&index_expr.expr, ctx, None);
+                    let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                        receiver,
+                        dispatch.self_kind,
+                        false,
+                        span,
+                        &self.tysys.type_table,
+                    );
+                    let idx_expr = self.reify_expr(&index_expr.index, ctx, None);
+                    let value_expr = self.reify_expr(&assign.value, ctx, None);
+                    return super::Elaborator::<H>::build_tir_method_call(
+                        receiver,
+                        dispatch.function_ref,
+                        vec![],
+                        vec![
+                            crate::tir::CallArg::new(idx_expr, false),
+                            crate::tir::CallArg::new(value_expr, false),
+                        ],
+                        dispatch.return_type,
+                        span,
+                    );
+                }
                 // `target = value` — both sides walked recursively; the
                 // expression's type is `Unit` (assignment is a stmt-shape
                 // expression in Wado, mirroring Rust).
@@ -3145,13 +3180,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // read for the binary op, and as the assignment target). The
         // elaborator side reifies it once and emits the same node
         // twice (it's pure for the lvalue shapes the elaborator
-        // accepts); reify mirrors by walking the AST twice. For
-        // simple-local lvalues both walks observe the same
-        // `expression_types` entry so the type stays consistent.
-        // Complex lvalues (`a[i] += x`) leave a follow-up: the
-        // elaborator's `assign_to_target` synthesises an
-        // `IndexMut::index_mut(idx)` extra call, and reify needs the
-        // matching `IndexMutMethodCall` desugar tag on the target.
+        // accepts); reify mirrors by walking the AST twice.
         let read = self.reify_expr(&compound.target, ctx, None);
         let rhs = self.reify_expr(&compound.value, ctx, Some(read.type_id));
         let combined_type = read.type_id;
@@ -3164,11 +3193,47 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             combined_type,
             compound.span,
         );
+
+        // IndexAssign rewrite for `arr[i] OP= v`: dispatch the
+        // assignment side through `index_assign_dispatch` so reify
+        // emits `arr.index_assign(i, combined)` (the same MethodCall
+        // production's `assign_to_target` builds), not a plain
+        // `Assign` whose target is an `Index` expression.
+        if let ast::Expr::Index(index_expr) = &compound.target
+            && let Some(dispatch) = self
+                .sem
+                .types
+                .index_assign_dispatch
+                .get(&index_expr.id)
+                .cloned()
+        {
+            let receiver = self.reify_expr(&index_expr.expr, ctx, None);
+            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                receiver,
+                dispatch.self_kind,
+                false,
+                compound.span,
+                &self.tysys.type_table,
+            );
+            let idx_expr = self.reify_expr(&index_expr.index, ctx, None);
+            let _ = recorded_type;
+            return super::Elaborator::<H>::build_tir_method_call(
+                receiver,
+                dispatch.function_ref,
+                vec![],
+                vec![
+                    crate::tir::CallArg::new(idx_expr, false),
+                    crate::tir::CallArg::new(combined, false),
+                ],
+                dispatch.return_type,
+                compound.span,
+            );
+        }
+
         // Re-walk the target for the assignment side. For the simple
         // local / global / field-access cases this reproduces the same
-        // TIR shape; complex IndexMut targets would need the dedicated
-        // index-mut rewrite path (Gap 3) — `reify_assign_to_target` is
-        // the follow-up that ports that branch.
+        // TIR shape; IndexMut targets (`a[i] OP= x` where the trait
+        // resolves to `IndexMut` not `IndexAssign`) remain a follow-up.
         let target_for_assign = self.reify_expr(&compound.target, ctx, None);
         let _ = recorded_type;
         TirExpr::new(
