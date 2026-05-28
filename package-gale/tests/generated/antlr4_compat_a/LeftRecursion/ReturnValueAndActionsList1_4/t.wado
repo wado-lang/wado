@@ -993,7 +993,7 @@ fn scan_expr_lr_1(tokens: &Array<Token>, pos: i32) -> i32 {
             sg_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_0; }
                 pos += 1;
-                pos = scan_expr(tokens, pos, 0);
+                pos = scan_expr(tokens, pos, 2);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -1088,7 +1088,7 @@ fn _parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
                 sg_1: {
                     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_1; }
                     pos += 1;
-                    pos = scan_expr(tokens, pos, 0);
+                    pos = scan_expr(tokens, pos, 2);
                     if pos < 0 { break sg_1; }
                     break sg_1_done;
                 }
@@ -1100,7 +1100,7 @@ fn _parse_expr_lr_1(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_LIT_COMMA)?;
         let mut b: Array<ExprNode> = [];
-        let expr = _parse_expr(p)?;
+        let expr = _parse_expr(p, 2)?;
         b.push(expr);
         let comma_b = CommaBItem {
             comma,

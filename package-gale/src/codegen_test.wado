@@ -818,6 +818,36 @@ WS : [ \\t\\n]+ -> skip ;
     assert str_contains(&helper, &"b: [left] as Array<ExprNode>,"), `LR helper must wrap a list-label \`left\` in an Array<T>-typed array literal:\n{helper}`;
 }
 
+test "LR helper stamps min_prec on a self-ref nested inside a Repeat group" {
+    // Regression: `b+=expr (',' b+=expr)* '>>' c=expr` has an inner self-ref
+    // (`b+=expr`) nested inside the `(',' b+=expr)*` Repeat group.
+    // `stamp_lr_self_ref_min_prec` used to walk only top-level
+    // `Op::RuleCall` / `Op::ListLabel`, leaving nested self-refs with the
+    // default `min_prec = 0`. The generated parser then called
+    // `_parse_expr(p)?` inside the comma loop, letting the inner expr
+    // greedily consume the `'>>'` token that belongs to the outer suffix.
+    // For input `a,c>>x` the LR loop bailed out at the first comma because
+    // the scan-side mirror (`scan_expr(tokens, pos, 0)`) also misjudged the
+    // suffix as consumed. After the fix both calls pass `conflict_min`
+    // (the alt's `own_prec + 1` floor for left-associative).
+    // Regression fixture: `tests/antlr4-compat/stage_a/LeftRecursion/
+    // ReturnValueAndActionsList1_2_parse_test.wado` (and ...List1_4).
+    let input = "grammar Test;
+s : expr EOF ;
+expr : b+=expr (',' b+=expr)* '>>' c=expr #Send | ID #JustId ;
+ID : 'a' ;
+WS : [ \\t\\n]+ -> skip ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    let helper = extract_fn_body(&output, &"fn _parse_expr_lr_");
+    assert !str_contains(&helper, &"_parse_expr(p)?"),
+        `inner self-ref nested in a Repeat must pass min_prec; bare _parse_expr(p)? leaks the default min_prec=0:\n{helper}`;
+    let scan_helper = extract_fn_body(&output, &"fn scan_expr_lr_");
+    assert !str_contains(&scan_helper, &"scan_expr(tokens, pos, 0)"),
+        `inner scan self-ref nested in a Repeat must pass min_prec; scan_expr(_, _, 0) leaks the default min_prec=0:\n{scan_helper}`;
+}
+
 test "LR parse loop predicts via scan when suffix's first token is shared with the atom" {
     // Same grammar as the scan-side test. On the parse side the suffix call
     // mutates `p.pos`, so the LR loop must consult the scan twin first to

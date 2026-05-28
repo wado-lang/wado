@@ -757,8 +757,15 @@ fn stamp_lr_self_ref_min_prec(lr_alts: &mut Array<LrAlt>, rule_name: &String, ru
                 new_ops.push(rebind_self_ref_min_prec(*op_ref, prec));
                 new_scan.push(rebind_scan_self_ref_min_prec(*se_ref, rule_snake, prec));
             } else {
-                new_ops.push(*op_ref);
-                new_scan.push(*se_ref);
+                // The top-level op is not itself a self-ref, but it may
+                // contain one nested inside a Repeat / Group (e.g. the
+                // `b+=expr` inside `(',' b+=expr)*` from the LR list-label
+                // pattern). Inner self-refs must respect the alt's
+                // conflict floor so the iter / group body terminates
+                // before consuming an outer LR suffix token (the `'>>'`
+                // in `b+=expr (',' b+=expr)* '>>' c=expr`).
+                new_ops.push(deep_stamp_inner_self_refs_op(*op_ref, rule_name, rule_snake, conflict_min));
+                new_scan.push(deep_stamp_inner_self_refs_scan(*se_ref, rule_snake, conflict_min));
             }
         }
         lr_alts[i].suffix.ops = new_ops;
@@ -814,6 +821,139 @@ fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
             inner: rebind_self_ref_min_prec(ll.inner, prec),
             dedup_base: ll.dedup_base,
         }),
+        other => other,
+    };
+}
+
+/// Recursively stamp `min_prec_arg = prec` on every self-recursive
+/// `RuleCall` reachable through container ops (`Repeat`, `Group`,
+/// `ListLabel`). Non-self-refs and leaves are passed through
+/// unchanged.
+///
+/// Distinct from `rebind_self_ref_min_prec`: the latter only walks
+/// `RuleCall` / `ListLabel`, which is enough for the top-level suffix
+/// position chosen by `stamp_lr_self_ref_min_prec`. This walker is
+/// invoked for the OTHER positions — where the top op is a
+/// container — so a self-ref nested inside `(...)+` / `(...)?` /
+/// `(...)*` / a `(... | ...)` group still respects the alt's
+/// conflict floor. The parse side keys on `rule_name` (PascalCase);
+/// the scan side keys on `rule_snake`, so both names are threaded
+/// through together.
+fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String, prec: i32) -> Op {
+    return match op {
+        RuleCall(rc) => {
+            if rc.target_name == *rule_name {
+                Op::RuleCall(RuleCallOp {
+                    target_name: rc.target_name,
+                    target_snake: rc.target_snake,
+                    variant_id: rc.variant_id,
+                    min_prec_arg: Option::<i32>::Some(prec),
+                    field: rc.field,
+                    dedup_base: rc.dedup_base,
+                });
+            } else {
+                Op::RuleCall(rc);
+            }
+        },
+        ListLabel(ll) => Op::ListLabel(ListLabelOp {
+            field: ll.field,
+            inner: deep_stamp_inner_self_refs_op(ll.inner, rule_name, rule_snake, prec),
+            dedup_base: ll.dedup_base,
+        }),
+        Repeat(r) => Op::Repeat(RepeatOp {
+            kind: r.kind,
+            body: deep_stamp_inner_self_refs_op(r.body, rule_name, rule_snake, prec),
+            scan_body: deep_stamp_inner_self_refs_scan(r.scan_body, rule_snake, prec),
+            strategy: r.strategy,
+            field: r.field,
+            caller_follow_first: r.caller_follow_first,
+            position_mask: r.position_mask,
+            k_prefix_mask: r.k_prefix_mask,
+            caller_follow_second: r.caller_follow_second,
+            body_scannable: r.body_scannable,
+            body_has_field: r.body_has_field,
+            body_first_set: r.body_first_set,
+            body_is_single_alt_group: r.body_is_single_alt_group,
+            body_second_position_first: r.body_second_position_first,
+            body_shape: r.body_shape,
+        }),
+        Group(g) => {
+            let mut new_alts: Array<AltBody> = [];
+            for let alt of &g.alts {
+                let mut new_ops: Array<Op> = [];
+                for let inner_op of &alt.ops {
+                    new_ops.push(deep_stamp_inner_self_refs_op(*inner_op, rule_name, rule_snake, prec));
+                }
+                new_alts.push(AltBody {
+                    alt_index: alt.alt_index,
+                    case_name: alt.case_name,
+                    struct_name: alt.struct_name,
+                    ops: new_ops,
+                    fields: alt.fields,
+                    prefix_self_ref_min_prec: alt.prefix_self_ref_min_prec,
+                });
+            }
+            let mut new_scan_alts: Array<ScanBody> = [];
+            for let scan_alt of &g.scan_alts {
+                let mut new_elements: Array<ScanElement> = [];
+                for let se of &scan_alt.elements {
+                    new_elements.push(deep_stamp_inner_self_refs_scan(*se, rule_snake, prec));
+                }
+                new_scan_alts.push(ScanBody { elements: new_elements });
+            }
+            Op::Group(GroupOp {
+                shape: g.shape,
+                alts: new_alts,
+                scan_alts: new_scan_alts,
+                dispatch: g.dispatch,
+                scan_dispatch: g.scan_dispatch,
+            });
+        },
+        other => other,
+    };
+}
+
+/// Scan-side mirror of `deep_stamp_inner_self_refs_op`. Walks
+/// `ScanElement` containers and stamps `min_prec_arg = prec` on every
+/// self-recursive `RuleCall` (keyed by `target_snake`).
+fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
+    return match se {
+        RuleCall(rc) => {
+            if rc.target_snake == *rule_snake {
+                ScanElement::RuleCall(ScanRuleCallElem {
+                    target_snake: rc.target_snake,
+                    variant_id: null,
+                    min_prec_arg: Option::<i32>::Some(prec),
+                });
+            } else {
+                ScanElement::RuleCall(rc);
+            }
+        },
+        Repeat(r) => ScanElement::Repeat(ScanRepeatElem {
+            kind: r.kind,
+            body: deep_stamp_inner_self_refs_scan(r.body, rule_snake, prec),
+            strategy: r.strategy,
+            inner_first: r.inner_first,
+            caller_follow_first: r.caller_follow_first,
+            k_prefix_mask: r.k_prefix_mask,
+        }),
+        Group(g) => {
+            let mut new_alts: Array<ScanBody> = [];
+            for let scan_alt of &g.alts {
+                let mut new_elements: Array<ScanElement> = [];
+                for let inner of &scan_alt.elements {
+                    new_elements.push(deep_stamp_inner_self_refs_scan(*inner, rule_snake, prec));
+                }
+                new_alts.push(ScanBody { elements: new_elements });
+            }
+            ScanElement::Group(ScanGroupElem {
+                alts: new_alts,
+                dispatch: g.dispatch,
+                lenient: g.lenient,
+                alt_first_sets: g.alt_first_sets,
+                wildcard_alt_indices: g.wildcard_alt_indices,
+            });
+        },
         other => other,
     };
 }

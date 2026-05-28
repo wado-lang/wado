@@ -8610,7 +8610,7 @@ fn scan_primary_type_lr_4(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     if pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_primary_type(tokens, pos, 0);
+        pos = scan_primary_type(tokens, pos, 2);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { return -1; }
@@ -16080,7 +16080,7 @@ fn _parse_primary_type_atom(p: &mut Parser) -> Result<PrimaryTypeNode, ParseErro
 fn _parse_primary_type_lr_4(p: &mut Parser, left: PrimaryTypeNode, start: i32) -> Result<PrimaryTypeNode, ParseError> {
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let primary_type_2: Option<PrimaryTypeNode> = if _gale_kind_set_4(p.peek_kind()) {
-        let primary_type = _parse_primary_type(p)?;
+        let primary_type = _parse_primary_type(p, 2)?;
         Option::<PrimaryTypeNode>::Some(primary_type)
     } else {
         null
