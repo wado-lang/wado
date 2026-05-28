@@ -1503,9 +1503,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a bare identifier reference. Local lookup goes through
     /// the per-function context (`FunctionContext::lookup`, walk-order
     /// invariant — Gap 7). Non-local idents (globals, function refs,
-    /// enum / variant ctors) need the use→def edge in
-    /// `sem.bindings.references` to pick the right TIR shape; that
-    /// dispatch is the body-walk pending work.
+    /// enum / variant ctors) read [`super::sem::ModuleDecls`] to pick
+    /// the right TIR shape; full coverage of every kind is staged.
     fn reify_ident(
         &mut self,
         ident: &ast::IdentExpr,
@@ -1514,6 +1513,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::TirExprKind;
 
+        // 1. Local binding (parameter, let, closure param) — walk-order
+        //    invariant guarantees the same index annotate produced.
         if let Some(local) = ctx.lookup(&ident.name) {
             return TirExpr::new(
                 TirExprKind::Local {
@@ -1525,27 +1526,54 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        // TODO(stage-5-bodies): non-local idents need to dispatch on
-        // `sem.bindings.references[ident.id]`:
-        //   - Global (`current_module_globals` / `imported_globals`)
-        //     → `GlobalVarGet`
-        //   - Free function → `FuncRef` (with type_args from
-        //     `sem.types.generic_instantiations[ident.id]` and
-        //     turbofish `ident.type_args` resolved via
-        //     `resolve_type_in_scope`)
-        //   - Enum / payload-less variant ctor → `EnumConstruct` /
-        //     `VariantConstruct` (with type_args from
-        //     `sem.types.generic_instantiations[ident.id]`)
-        //   - Flags member → `IntLiteral` with the bitmask value
-        //   - Associated constant → inlined via
+        // 2. Current-module global.
+        if self
+            .sem
+            .decls
+            .current_module_globals
+            .contains_key(&ident.name)
+        {
+            return TirExpr::new(
+                TirExprKind::GlobalVarGet {
+                    module_source: self.current_module_source.clone(),
+                    name: ident.name.clone(),
+                },
+                recorded_type,
+                ident.span,
+            );
+        }
+
+        // 3. Imported global.
+        if let Some((src, original_name, _ty, _is_mut)) =
+            self.sem.decls.imported_globals.get(&ident.name)
+        {
+            return TirExpr::new(
+                TirExprKind::GlobalVarGet {
+                    module_source: src.clone(),
+                    name: original_name.clone(),
+                },
+                recorded_type,
+                ident.span,
+            );
+        }
+
+        // TODO(stage-5-bodies): the remaining ident kinds —
+        //   - free function → `FuncRef { module_source, name,
+        //     type_args }` (type_args sourced from
+        //     `sem.types.generic_instantiations[ident.id]` plus the
+        //     turbofish `ident.type_args`)
+        //   - payload-less variant ctor → `VariantConstruct`
+        //   - enum case → `EnumConstruct`
+        //   - flags member → `IntLiteral` with the bitmask value
+        //   - associated constant → inlined expr from
         //     `sem.decls.associated_constants`
-        //
-        // The full surface matches `Elaborator::resolve_ident`
-        // (expr.rs ≈300–800); panic with a labelled todo until the
-        // dispatch is ported.
+        // each need a dedicated branch driven by
+        // `sem.bindings.references[(current_module, ident.id)]` →
+        // looking at the def's `Item` kind to decide the TIR shape.
+        // The reified type is already on `recorded_type`.
         let _ = recorded_type;
         todo!(
-            "reify_ident: non-local `{}` pending body-walk reify",
+            "reify_ident: non-local `{}` (kind dispatch pending body-walk reify)",
             ident.name
         )
     }
