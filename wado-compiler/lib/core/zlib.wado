@@ -3255,6 +3255,41 @@ impl GzipHeader {
         };
     }
 
+    /// Returns true if the FTEXT flag is set (payload is probably ASCII text).
+    pub fn text(&self) -> bool {
+        return self.text;
+    }
+
+    /// Returns MTIME (modification time as a Unix timestamp; 0 = unset).
+    pub fn time(&self) -> u32 {
+        return self.time;
+    }
+
+    /// Returns the OS byte (`0xFF` = unknown).
+    pub fn os(&self) -> i32 {
+        return self.os;
+    }
+
+    /// Returns the FEXTRA payload (empty = none).
+    pub fn extra(&self) -> Array<u8> {
+        return self.extra;
+    }
+
+    /// Returns the FNAME (original file name; empty = none).
+    pub fn name(&self) -> String {
+        return self.name;
+    }
+
+    /// Returns the FCOMMENT (empty = none).
+    pub fn comment(&self) -> String {
+        return self.comment;
+    }
+
+    /// Returns true if the FHCRC flag is set (header CRC16 is present).
+    pub fn hcrc(&self) -> bool {
+        return self.hcrc;
+    }
+
     /// Sets the FTEXT flag, indicating the payload is probably ASCII text.
     pub fn set_text(&mut self, text: bool) {
         self.text = text;
@@ -3398,14 +3433,18 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
     return output;
 }
 
-// Helper: build a string from bytes in an array
+// Decode a gzip header byte range (FNAME/FCOMMENT) as a String.
+//
+// RFC 1952 specifies ISO-8859-1 for these fields, but we deliberately decode
+// as UTF-8 to match the bytes the compress side emits and to support
+// non-Latin-1 names. Invalid sequences are replaced with U+FFFD rather than
+// failing the parse, since these fields are best-effort metadata.
 fn bytes_to_string(buf: &Array<u8>, offset: i32, len: i32) -> String {
-    let mut s = String::with_capacity(len);
-    // FIXME: UTF-8 handling
+    let mut slice: Array<u8> = Array::with_capacity(len);
     for let mut i = 0; i < len; i += 1 {
-        s.push(buf[offset + i] as char);
+        slice.push(buf[offset + i]);
     }
-    return s;
+    return String::from_utf8_lossy(slice);
 }
 
 /// Parses and returns the gzip header without decompressing the body.
