@@ -76,7 +76,7 @@ use crate::tir::{
 
 use super::sem::ModuleSemantics;
 use super::tysys::TypeSystem;
-use super::types::FunctionContext;
+use super::types::{FunctionContext, TypeLookup};
 
 /// Per-module reify pass. One instance per loaded module the batch driver
 /// emits TIR for.
@@ -128,6 +128,67 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
 
 #[allow(dead_code)]
 impl<'a, H: CompilerHost> Reify<'a, H> {
+    /// Build a [`TypeLookup`] view over the current module's import
+    /// context and the shared `all_*` tables. Used by `reify_*` helpers
+    /// that need to resolve AST `Type` nodes (e.g. type-param defaults,
+    /// resource method param/return types) the same way the elaborator
+    /// did during annotate — but without the elaborator's
+    /// `record_type_name_reference` side-effect (use→def edges were
+    /// already recorded by annotate and live on
+    /// [`ModuleSemantics::bindings`]).
+    fn type_lookup(&self) -> TypeLookup<'_> {
+        TypeLookup {
+            current_module_source: &self.current_module_source,
+            imported_type_sources: &self.sem.imports.imported_type_sources,
+            import_original_names: &self.sem.imports.import_original_names,
+            all_newtypes: &self.tysys.all_newtypes,
+            all_struct_fields: &self.tysys.all_struct_fields,
+            all_variant_cases: &self.tysys.all_variant_cases,
+            all_enum_cases: &self.tysys.all_enum_cases,
+            all_flags_cases: &self.tysys.all_flags_cases,
+            all_resource_types: &self.tysys.all_resource_types,
+            all_generic_newtypes: &self.tysys.all_generic_newtypes,
+            local_struct_fields: &self.sem.decls.local_struct_fields,
+            local_newtypes: &self.sem.decls.local_newtypes,
+            local_enum_cases: &self.sem.decls.local_enum_cases,
+            local_flags_cases: &self.sem.decls.local_flags_cases,
+            local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
+            local_variant_cases: &self.sem.decls.local_variant_cases,
+        }
+    }
+
+    /// Resolve an AST [`ast::Type`] to a [`TypeId`] without recording
+    /// any use→def edge. Reify uses this for type-level resolutions
+    /// (type-param defaults, resource method params, …) — annotate
+    /// already recorded the edges during its body walk.
+    ///
+    /// Delegates to the existing
+    /// [`super::Elaborator::resolve_type_static`] helper, which is
+    /// host-agnostic and operates over the [`TypeLookup`] view above.
+    fn resolve_type(&mut self, ty: &ast::Type) -> TypeId {
+        let lookup = self.type_lookup();
+        super::Elaborator::<H>::resolve_type_static(
+            ty,
+            &mut self.tysys.type_table.borrow_mut(),
+            &lookup,
+        )
+    }
+
+    /// Like [`Self::resolve_type`] but with an explicit type-parameter
+    /// scope so `T`/`U` in a generic decl's method signature resolve to
+    /// the right `TypeParam` slot. Used by `reify_effect_decl` /
+    /// `reify_resource_decl` for method params and return types, and by
+    /// `reify_variant_decl` for the (unused-here) payload path.
+    fn resolve_type_in_scope(&mut self, ty: &ast::Type, type_params: &[String]) -> TypeId {
+        let lookup = self.type_lookup();
+        super::Elaborator::<H>::resolve_type_static_with_params(
+            ty,
+            &mut self.tysys.type_table.borrow_mut(),
+            &lookup,
+            type_params,
+        )
+    }
+
     /// Reify one module: emit a [`TirModule`] from the AST + the
     /// `ModuleSemantics` `annotate_bodies` populated.
     ///
@@ -309,50 +370,281 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     // ─────────────────────────────────────────────────────────────────
 
     /// Reify a `struct S { … }`. Field types come from
-    /// `tysys.all_struct_fields`; field-default expressions are reified
-    /// through `reify_expr` (Stage 5 follow-up: needs `FunctionContext`
-    /// to mirror annotate's per-default walker scope).
-    #[allow(unused_variables)]
+    /// `tysys.all_struct_fields`; field-default expressions and
+    /// type-param defaults are read from `ModuleSemantics`.
     fn reify_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
-        // TODO(stage-5-bodies): mirror `Elaborator::resolve_struct`
-        // (item.rs:449–533). The walker resolves each field default in a
-        // fresh `FunctionContext` keyed `struct:<name>`, reads the field
-        // type from the decl-interned info, and copies the type-param
-        // table over. All decisions are already in `tysys.all_struct_fields`
-        // and `sem.types.expression_types`; reify reads them and assembles
-        // `TirStruct`.
-        todo!("reify_struct: pending body-walk reify")
+        // Field types are decl-resolved during annotate and live in
+        // `tysys.all_struct_fields`. Read them directly rather than
+        // re-running `resolve_type` over `field.ty`.
+        let field_info = self
+            .tysys
+            .all_struct_fields
+            .get(&self.current_module_source)
+            .and_then(|m| m.get(&struct_decl.name));
+
+        let mut fields = Vec::with_capacity(struct_decl.fields.len());
+        for (index, field) in struct_decl.fields.iter().enumerate() {
+            let type_id = field_info
+                .and_then(|info| info.fields.get(index).map(|(_, t, _)| *t))
+                .unwrap_or(crate::tir::TypeTable::UNKNOWN);
+
+            let serde_rename = field.attrs.iter().find_map(|a| {
+                if a.name == "serde" {
+                    a.kv_value("rename").map(str::to_string)
+                } else {
+                    None
+                }
+            });
+
+            // Stage 5 follow-up: field defaults are AST `Expr`s that
+            // need a full body-walk reify (a per-struct
+            // `FunctionContext` keyed `struct:<name>`, just as
+            // `Elaborator::resolve_struct` builds at item.rs:461). When
+            // `reify_expr` lands, replace the `None` below with
+            // `field.default.as_ref().map(|e| Box::new(self.reify_expr(e, …)))`.
+            let default_expr: Option<Box<TirExpr>> = if field.default.is_some() {
+                None
+            } else {
+                None
+            };
+
+            let serde_default = field.default.is_some()
+                || field
+                    .attrs
+                    .iter()
+                    .any(|a| a.name == "serde" && a.has_arg("default"));
+
+            fields.push(crate::tir::TirField {
+                name: field.name.clone(),
+                is_pub: field.is_pub,
+                type_id,
+                index: index as u32,
+                span: field.span,
+                is_hidden: field.attrs.iter().any(|a| a.name == "hidden"),
+                serde_rename,
+                serde_default,
+                default_expr,
+            });
+        }
+
+        // Type-param defaults are AST `Type`s — resolve via the
+        // import-aware [`TypeLookup`] view (no use→def re-recording).
+        // The base type-param `TypeId`s themselves were interned at
+        // annotate time and are cached on `field_info.type_param_type_ids`,
+        // but `TirTypeParam` only needs the `default: Option<TypeId>`,
+        // so resolve_type each default directly.
+        let type_params: Vec<crate::tir::TirTypeParam> = struct_decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| crate::tir::TirTypeParam {
+                name: p.name.clone(),
+                is_effect: p.is_effect,
+                is_pack: p.is_pack,
+                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                index: i as u32,
+            })
+            .collect();
+
+        let serde_rename_all = struct_decl.attrs.iter().find_map(|a| {
+            if a.name == "serde" {
+                a.kv_value("rename_all").map(str::to_string)
+            } else {
+                None
+            }
+        });
+
+        TirStruct {
+            name: struct_decl.name.clone(),
+            module_source: self.current_module_source.clone(),
+            is_pub: struct_decl.is_pub,
+            type_params,
+            monomorph_info: None,
+            fields,
+            span: struct_decl.span,
+            serde_rename_all,
+        }
     }
 
     /// Reify a `variant V<T> { … }` declaration. Cases' payload types
     /// come from `tysys.all_variant_cases`; the type-param table is
     /// projected from the AST.
-    #[allow(unused_variables)]
     fn reify_variant_decl(&mut self, variant_decl: &ast::VariantDecl) -> TirVariantDecl {
-        // TODO(stage-5-bodies): mirror `Elaborator::resolve_variant_decl`
-        // (item.rs:736–800). Type-param defaults need `reify_type` (they
-        // are AST `Type` nodes resolved against the type-param scope);
-        // payload types come from `tysys.all_variant_cases`.
-        todo!("reify_variant_decl: pending body-walk reify")
+        let case_info = self
+            .tysys
+            .all_variant_cases
+            .get(&self.current_module_source)
+            .and_then(|m| m.get(&variant_decl.name));
+
+        let cases: Vec<tir::TirVariantCase> = variant_decl
+            .cases
+            .iter()
+            .enumerate()
+            .map(|(index, case)| {
+                let payload = case_info
+                    .and_then(|info| info.cases.get(index).map(|c| c.payload))
+                    .unwrap_or(crate::tir::TypeTable::UNIT);
+                tir::TirVariantCase {
+                    name: case.name.clone(),
+                    index: index as u32,
+                    payload,
+                    span: case.span,
+                }
+            })
+            .collect();
+
+        let type_params: Vec<crate::tir::TirTypeParam> = variant_decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| crate::tir::TirTypeParam {
+                name: p.name.clone(),
+                is_effect: p.is_effect,
+                is_pack: p.is_pack,
+                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                index: i as u32,
+            })
+            .collect();
+
+        TirVariantDecl {
+            name: variant_decl.name.clone(),
+            module_source: self.current_module_source.clone(),
+            is_pub: variant_decl.is_pub,
+            type_params,
+            cases,
+            span: variant_decl.span,
+        }
     }
 
-    /// Reify an `interface E { … }` declaration.
-    #[allow(unused_variables)]
+    /// Reify an `interface E { … }` declaration. Effects have no
+    /// `Self` type — `&self` / `&mut self` on an effect method is a
+    /// surface error annotate already diagnosed.
     fn reify_effect_decl(&mut self, decl: &ast::InterfaceDecl) -> tir::TirEffect {
-        // TODO(stage-5-bodies): mirror `Elaborator::resolve_effect_decl`
-        // (item.rs:674–682). Single call to `resolve_effect_ops` with no
-        // resource Self; param types and return types are decl-level
-        // resolutions.
-        todo!("reify_effect_decl: pending body-walk reify")
+        let operations = self.reify_effect_ops(&[], &decl.methods, None);
+        tir::TirEffect {
+            name: decl.name.clone(),
+            is_pub: decl.is_pub,
+            operations,
+            span: decl.span,
+        }
     }
 
-    /// Reify a `resource R<T> { … }` declaration.
-    #[allow(unused_variables)]
+    /// Reify a `resource R<T> { … }` declaration. Resource methods take
+    /// a synthesised `self` parameter (`&Self` or `&mut Self`) at index
+    /// 0; for generic resources `Self = GenericResource<…>` with the
+    /// decl's own `TypeParam`s as type args.
     fn reify_resource_decl(&mut self, decl: &ast::ResourceDecl) -> tir::TirResource {
-        // TODO(stage-5-bodies): mirror `Elaborator::resolve_resource_decl`
-        // (item.rs:684–697). Similar to effect, but with the resource's
-        // own `Self` type threaded into method param resolution.
-        todo!("reify_resource_decl: pending body-walk reify")
+        let module_source = self.current_module_source.clone();
+        let operations = self.reify_effect_ops(
+            &decl.type_params,
+            &decl.methods,
+            Some((decl.name.as_str(), module_source)),
+        );
+        tir::TirResource {
+            name: decl.name.clone(),
+            is_pub: decl.is_pub,
+            operations,
+            span: decl.span,
+        }
+    }
+
+    /// Translation of `Elaborator::resolve_effect_ops` (item.rs:554–672).
+    /// Decl-level method-list resolution — no body walk, no
+    /// `TypeAnnotations` consumption. Type-param scope is established
+    /// per call; the optional `resource_self` adds a synthesised
+    /// receiver parameter for resource methods.
+    fn reify_effect_ops(
+        &mut self,
+        type_params: &[ast::GenericParam],
+        methods: &[ast::InterfaceMethod],
+        resource_self: Option<(&str, ModuleSource)>,
+    ) -> Vec<tir::TirEffectOp> {
+        use crate::ast::SelfKind;
+
+        let param_names: Vec<String> = type_params.iter().map(|p| p.name.clone()).collect();
+
+        // Construct the resource's `Self` type after the param-name list
+        // is known so a generic resource's `GenericResource` instance
+        // references its own `TypeParam`s.
+        let self_type: Option<TypeId> = resource_self.map(|(name, module)| {
+            if type_params.iter().any(|p| !p.is_effect) {
+                let type_arg_ids: Vec<TypeId> = type_params
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| !p.is_effect)
+                    .map(|(i, p)| {
+                        self.tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_type_param(p.name.clone(), i as u32)
+                    })
+                    .collect();
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .intern(crate::tir::ResolvedType::GenericResource {
+                        name: name.to_string(),
+                        module_source: module,
+                        type_args: type_arg_ids,
+                    })
+            } else {
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_resource(name.to_string(), module)
+            }
+        });
+
+        let mut ops = Vec::with_capacity(methods.len());
+        for method in methods {
+            let mut params = Vec::with_capacity(method.params.len());
+            let mut next_local: u32 = 0;
+            for p in &method.params {
+                let type_id = match (p.self_kind, self_type) {
+                    (SelfKind::None, _) => self.resolve_type_in_scope(&p.ty, &param_names),
+                    (SelfKind::Ref, Some(self_t)) => {
+                        self.tysys.type_table.borrow_mut().make_ref(self_t)
+                    }
+                    (SelfKind::MutRef, Some(self_t)) => {
+                        self.tysys.type_table.borrow_mut().make_mut_ref(self_t)
+                    }
+                    _ => continue,
+                };
+                let name = if matches!(p.self_kind, SelfKind::None) {
+                    p.name.clone()
+                } else {
+                    "self".to_string()
+                };
+                params.push(tir::TirParam {
+                    name,
+                    type_id,
+                    local_index: next_local,
+                    is_mut: p.is_mut,
+                    default_expr: None,
+                    span: p.span,
+                });
+                next_local += 1;
+            }
+            let return_type = method
+                .return_type
+                .as_ref()
+                .map(|ty| self.resolve_type_in_scope(ty, &param_names))
+                .unwrap_or(crate::tir::TypeTable::UNIT);
+            let cm_name = method
+                .attrs
+                .iter()
+                .find_map(crate::ast::Attribute::cm_identifier);
+            ops.push(tir::TirEffectOp {
+                name: method.name.clone(),
+                params,
+                return_type,
+                span: method.span,
+                cm_name,
+            });
+        }
+        ops
     }
 
     // ─────────────────────────────────────────────────────────────────
