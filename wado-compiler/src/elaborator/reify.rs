@@ -1817,8 +1817,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_variadic_for_of(for_of, ctx)
             }
             Some(super::sem::types::DesugarKind::ForOfIterator) | None => {
-                let Some(info) = self.sem.types.for_of_iterator.get(&for_of.id).cloned()
-                else {
+                let Some(info) = self.sem.types.for_of_iterator.get(&for_of.id).cloned() else {
                     return vec![TirStmt::new(
                         TirStmtKind::Expr(TirExpr::new(
                             TirExprKind::Unit,
@@ -1904,7 +1903,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
             &self.tysys.type_table,
         );
-        let option_type = self.tysys.type_table.borrow_mut().make_option(info.item_type);
+        let option_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_option(info.item_type);
         let next_call = super::Elaborator::<H>::build_tir_method_call(
             next_receiver,
             info.next.clone(),
@@ -2109,8 +2112,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     | ast::Pattern::MutIdent { id, name, span: _ } => {
                         let is_mut = for_of.is_mut
                             || matches!(&for_of.binding, ast::Pattern::MutIdent { .. });
-                        let local_index =
-                            ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
+                        let local_index = ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
                         block_stmts.push(TirStmt::new(
                             TirStmtKind::Let {
                                 name: name.clone(),
@@ -2208,17 +2210,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Pattern::Ident { id, name, .. } => (name.clone(), Some(*id)),
             ast::Pattern::Tuple(..) => (format!("__pattern_temp_{unique_id}"), None),
             _ => {
-                return vec![TirStmt::new(
-                    TirStmtKind::Expr(iterable),
-                    span,
-                )];
+                return vec![TirStmt::new(TirStmtKind::Expr(iterable), span)];
             }
         };
 
         let is_mut = for_of.is_mut;
         ctx.enter_scope();
-        let binding_local =
-            ctx.add_local(binding_name.clone(), binding_type, is_mut, binding_id);
+        let binding_local = ctx.add_local(binding_name.clone(), binding_type, is_mut, binding_id);
         let body = self.reify_block(&for_of.body, ctx, None);
         ctx.exit_scope();
 
@@ -2234,7 +2232,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         )]
     }
-
 
     /// Reify a C-style `for init; cond; update { body }` loop into
     /// the shape `Elaborator::resolve_for` produces (stmt.rs:3095+).
@@ -4607,12 +4604,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // annotation-free by design".
         if matches!(method_call.method.as_str(), "len" | "zip") {
             let receiver = self.reify_expr(&method_call.receiver, ctx, None);
-            let base_type = self
-                .tysys
-                .type_table
-                .borrow()
-                .get(receiver.type_id)
-                .clone();
+            let base_type = self.tysys.type_table.borrow().get(receiver.type_id).clone();
             let is_tuple_receiver = matches!(
                 base_type,
                 crate::tir::ResolvedType::GenericInstance { ref name, ref module_source, .. }

@@ -444,22 +444,43 @@ migration; see Trade-offs.
       chains), Resume, LabeledBlock, Spread, TryOp (Option +
       same-error-type Result)}`. Receiver adjustment shares
       `adjust_receiver_for_self_kind_static`.
+      Body-walk reify is **558/558 unit-test green on both the
+      default path and the `WADO_REIFY=1` opt-in**, including
+      the stdlib snapshot. Concrete arms cover every
+      `reify_pattern` variant, every `reify_literal` variant
+      (host-driven included), every `reify_ident` shape
+      (local / current+imported globals / assoc constants /
+      free function refs / qualified Variant::Case /
+      Enum::Case / Flags::Member / namespace path), every
+      `reify_stmt` variant (every Let pattern, full
+      Condition::LetChain for If/While/For, all three
+      `ForOf` paths via the tuple-unroll + variadic-defer +
+      iterator dispatch), and every `reify_expr` variant
+      (full Call dispatch — free function / variant ctor /
+      closure-call / indirect-call / namespace-path /
+      qualified static method; full Index — tuple constant /
+      Index trait / IndexValue trait; full Closure with
+      Gap 4 capture replay; full TryOp — Option +
+      same-err Result + mismatched-err Result through
+      `reify_from_call`; ComparisonChain; CompoundAssign;
+      Range; TemplateString; StructLiteral named + anonymous;
+      Matches; Resume; LabeledBlock; Spread; full impl-block
+      walk via Gap 12's `ImplFacts` record).
       Remaining (each carries a labelled `todo!`):
-      `Stmt::ForOf` tuple + variadic paths and `.enumerate()`
-      unwrap (the IntoIterator path is concrete); field-default
-      expressions on `reify_struct`; per-arg `is_mut` /
-      literal-coercion records for `Call` / `MethodCall`;
-      `CompoundAssign` IndexMut-target rewrite;
-      power-assert slot-extraction template; Result `?` with
-      `From::from` error conversion; ComparisonChain
-      non-primitive operator-trait dispatch;
       `MethodCall::IndexMutMethodCall` synthesis (Gap 3
-      desugar; the recording fires, the reify replay is
-      pending); `Expr::WithHandler` (effect handler `with`).
+      desugar; the recording fires, the reify replay needs
+      the inner IndexMut dispatch annotation);
+      `CompoundAssign` IndexMut-target rewrite (same
+      annotation gap); `Expr::WithHandler` (effect handler
+      `with`); field-default expressions on `reify_struct`;
+      per-arg `is_mut` / literal-coercion records for `Call`
+      / `MethodCall`; power-assert slot-extraction template
+      reconstruction; ComparisonChain non-primitive
+      operator-trait dispatch.
       Dead-code removal (drop the existing combined walk's
-      TIR-emission half and the `WADO_REIFY` opt-in gate) is
+      TIR-emission half + flip `WADO_REIFY` default-on) is
       the final cleanup once the residual `todo!`s land and
-      the `WADO_REIFY=1` test suite goes green.
+      the E2E suite confirms equivalence.
 - [ ] **Stage 6 — Liveness and DCE.**
 - [ ] **Stage 7 — Cleanup.**
 
