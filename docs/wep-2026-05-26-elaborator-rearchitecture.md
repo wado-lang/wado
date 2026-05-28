@@ -985,6 +985,124 @@ annotation.
   ref-wrap flags that `MethodDispatch` does not carry. Splitting
   into `operator_dispatch` keeps each map's invariants clean.
 
+#### Gap 12: impl-block resolution facts
+
+`Elaborator::resolve_module`'s `Item::Impl` arm
+(`elaborator.rs:1139–1430`) and the per-method
+`Elaborator::resolve_method` (`item.rs:1331–1600`) together make
+five categories of decision the body-walk reify cannot
+re-derive without re-running impl-resolution logic — which the
+WEP `Reify surface` forbids ("Reify performs no inference, name
+resolution, or method dispatch"). The five decisions:
+
+1. The impl's resolved `Self` type, with impl-block type
+   parameters interned at the right `TypeParam` indices. For
+   non-generic impls this is `Struct { name, module }`; for
+   generic impls it's `GenericInstance { name, module, type_args }`
+   where `type_args` are the impl's own `TypeParam` ids in
+   declaration order. Reify reads this to synthesise `&self` /
+   `&mut self` parameter types via `make_ref` / `make_mut_ref`.
+2. The trait reference's canonical key `(declaring_module,
+   base_trait_name)` and the mangled full name (e.g.
+   `Stream<u8>`). The canonical key disambiguates two modules'
+   same-named traits in `LocalMethodName::base_trait_module`;
+   the mangled name lives on `LocalMethodName::trait_name`.
+   Annotate already computes both via
+   `Elaborator::canonical_decl_key` + `get_type_name_full`;
+   recording them avoids duplicating either helper inside reify.
+3. The impl-block's `TirTypeParam` projection (skipping
+   concrete-typed positions like `impl<i32, T>`), in
+   declaration order. Reify writes this into every method's
+   `TirFunction::impl_type_params`. Annotate already produces
+   the vec inline in the `Item::Impl` arm.
+4. The per-method `is_handler_method` flag, true iff the impl's
+   trait reference names an effect (`interface`) declaration.
+   Reify writes this onto the method's
+   `FunctionContext::in_handler_method` so `resume` validation
+   inside the body matches what annotate enforced.
+5. The `is_ref_impl` flag, true iff the impl target is
+   `&T` / `&mut T`. Method receivers `&self` then have an extra
+   `&` layer; this matches Gap 2's per-call `is_ref_impl` on
+   `MethodDispatch` but is decided at impl-block scope rather
+   than at call-site lookup.
+
+In addition, two `TirModule`-level outputs need a per-module
+recording so `reify_module` can produce them without re-running
+synthesis:
+
+6. Synthesis requests (`impl Trait for Type;`) the elaborator
+   pushes onto `tir_module.synthesis_requests`. Annotate
+   records them on
+   `ModuleSemantics.decls.pending_synthesis_requests`.
+7. Default-method synthesis: when an impl omits methods that
+   the trait declares with a default body, the elaborator
+   synthesises a `TirFunction` per missing default. Annotate
+   records these on
+   `ModuleSemantics.decls.pending_default_methods`.
+
+##### Recording shape
+
+- New `TypeAnnotations::impl_facts: IndexMap<AstId,
+  ImplFacts>`:
+  ```rust
+  pub(crate) struct ImplFacts {
+      pub(crate) self_type: TypeId,
+      pub(crate) trait_name_mangled: Option<String>,
+      pub(crate) trait_canonical: Option<(ModuleSource, String)>,
+      pub(crate) impl_type_params: Vec<TirTypeParam>,
+      pub(crate) assoc_type_bindings: IndexMap<String, TypeId>,
+      pub(crate) is_handler_method: bool,
+      pub(crate) is_ref_impl: bool,
+  }
+  ```
+- New `ModuleDecls::pending_synthesis_requests: Vec<SynthesisRequest>`.
+- New `ModuleDecls::pending_default_methods: Vec<TirFunction>`.
+
+##### Recording sites
+
+- `ImplFacts` is written once per impl block at the end of the
+  `Item::Impl` arm's setup phase
+  (`elaborator.rs:~1240` — after type-param + assoc-type setup
+  and the ref/synth/handler classification), keyed by
+  `impl_block.id`.
+- `pending_synthesis_requests` is pushed at the existing
+  `tir_module.synthesis_requests.push(...)` site, with the
+  recording call replacing the direct push so reify_module
+  reads from `ModuleDecls` instead of from the elaborator's
+  emitted module.
+- `pending_default_methods` is pushed at the default-method
+  synthesis loop's existing emission site, same shape.
+
+##### Reify consumer
+
+- `reify_impl` reads `impl_facts[impl_block.id]` for the
+  full setup; calls `reify_method` per AST `Function`, passing
+  the resolved `self_type` + mangled trait name + impl type
+  params + is_handler / is_ref flags. No re-resolution of
+  the impl target, the trait reference, or the type params.
+- `reify_method`'s body walk runs against a `FunctionContext`
+  with `in_handler_method` set from the recorded flag, and a
+  `trait_ctx.assoc_type_bindings` populated from the recorded
+  bindings (so `Self::Output` etc. resolve inside the body
+  via the shared `resolve_type_in_scope_with_bindings`).
+- `reify_module` reads `pending_synthesis_requests` and
+  `pending_default_methods` from `ModuleDecls`, pushing each
+  onto the emitted `TirModule`'s `synthesis_requests` /
+  function list.
+
+##### Why not just call the elaborator's helpers from reify
+
+The elaborator's setup helpers (`enter_inherited_type_param_scope`,
+`canonical_decl_key`, `register_generic_params`) mutate
+`self.trait_ctx` and `self.tysys.type_table`. Annotating during
+reify would double-write the same `TypeParam` interns and
+re-canonicalise the same trait names, producing duplicate
+`(module, name)` keys in `trait_env` indices. The recording
+pattern keeps `tysys` and `sem` write-once across the two
+walks, matching the WEP `Reify surface` constraint that reify
+only interns "monomorphic instances created on demand" and
+treats trait / impl tables as read-only.
+
 #### Gap 10: stmt-position match and other dispatch shortcuts
 
 `resolve_stmt` dispatches a stmt-position `Expr::Match` directly

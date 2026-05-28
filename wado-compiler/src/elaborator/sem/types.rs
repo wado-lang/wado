@@ -187,6 +187,22 @@ pub(crate) struct TypeAnnotations {
     /// [`crate::tir::TirExprKind::Index`] for this expression. See
     /// [`OperatorDispatch`].
     pub(crate) operator_dispatch: IndexMap<AstId, OperatorDispatch>,
+    /// Impl-block resolution facts (Gap 12 of Stage 5). Keyed by
+    /// the [`crate::ast::ImplBlock`]'s [`AstId`]. Carries the
+    /// resolved `Self` type, the trait reference's canonical and
+    /// mangled forms, the impl's projected
+    /// [`crate::tir::TirTypeParam`] list, associated-type bindings
+    /// for in-body `Self::X` resolution, the handler-method flag
+    /// driving `resume` validation, and the ref-type-impl flag
+    /// for `&self` synthesis. See [`ImplFacts`].
+    ///
+    /// `#[allow(dead_code)]` until the recording sites in the
+    /// `Item::Impl` arm of `elaborator.rs` and the reify consumer
+    /// in `reify_impl` are wired up; the field is introduced with
+    /// the Gap 12 design so the data shape is reviewable
+    /// independently.
+    #[allow(dead_code)]
+    pub(crate) impl_facts: IndexMap<AstId, ImplFacts>,
 }
 
 /// Generic-instantiation decision recorded by the body walk at a call,
@@ -286,6 +302,55 @@ pub(crate) struct AssertSlot {
 pub(crate) struct AssertCaptureInfo {
     pub(crate) slots: Vec<AssertSlot>,
     pub(crate) emitted_slot_indices: Vec<u32>,
+}
+
+/// Impl-block resolution facts recorded once per `impl` block at
+/// annotate time (Gap 12 of Stage 5). Reify reads this entry
+/// keyed by the [`crate::ast::ImplBlock`]'s [`AstId`] and uses
+/// every field verbatim — no re-resolution of the impl target,
+/// the trait reference, the type params, or the associated
+/// types happens inside `reify_impl`.
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct ImplFacts {
+    /// The impl's `Self` type. For non-generic impls a bare
+    /// `Struct { name, module }`; for generic impls a
+    /// `GenericInstance` whose `type_args` are the impl's own
+    /// `TypeParam` ids in declaration order. Reify uses this to
+    /// synthesise `&self` / `&mut self` via `make_ref` /
+    /// `make_mut_ref` without re-interning the type-param ids.
+    pub(crate) self_type: TypeId,
+    /// Full mangled trait name (e.g. `"Stream<u8>"`) — `None` for
+    /// inherent impls. Lives on `FunctionRef::method_info`'s
+    /// `trait_name` field.
+    pub(crate) trait_name_mangled: Option<String>,
+    /// Canonical `(declaring_module, base_trait_name)` key —
+    /// `None` for inherent impls. Lives on
+    /// `LocalMethodName::{base_trait_module, base_trait_name}`
+    /// and disambiguates two modules' same-named traits in the
+    /// `trait_env` dispatch indices.
+    pub(crate) trait_canonical: Option<(crate::module_source::ModuleSource, String)>,
+    /// `TirTypeParam` projection of the impl's generic params, in
+    /// declaration order, with concrete-typed positions skipped
+    /// (e.g. `impl<i32, T>` projects only `T`). Written into
+    /// every method's `TirFunction::impl_type_params`.
+    pub(crate) impl_type_params: Vec<crate::tir::TirTypeParam>,
+    /// Associated-type bindings (`type Output = T;`) resolved
+    /// against the impl's type-param scope. Reify writes them
+    /// onto each method's `trait_ctx.assoc_type_bindings` so
+    /// `Self::X` resolves inside the method body via the shared
+    /// type lookup.
+    pub(crate) assoc_type_bindings: crate::hashmap::IndexMap<String, TypeId>,
+    /// True iff the impl's trait reference names an effect
+    /// (`interface`) declaration — i.e. this is an effect handler
+    /// impl. Reify writes onto `FunctionContext::in_handler_method`
+    /// so `resume` validation matches annotate.
+    pub(crate) is_handler_method: bool,
+    /// True iff the impl target is `&T` / `&mut T` (ref-type
+    /// impl). Method receivers `&self` get an extra `&` layer at
+    /// receiver-adjustment time; mirrors Gap 2's per-call
+    /// `is_ref_impl` but is decided at impl-block scope.
+    pub(crate) is_ref_impl: bool,
 }
 
 /// Operator-dispatch decision recorded when the elaborator lowers a

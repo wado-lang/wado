@@ -625,6 +625,54 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.operator_dispatch.insert(ast_id, info);
     }
 
+    /// Record the impl-block resolution facts (Gap 12 of Stage 5)
+    /// keyed by the [`crate::ast::ImplBlock`]'s [`AstId`]. Reify
+    /// reads the entry verbatim — no re-resolution of the impl
+    /// target, the trait reference, the type params, or the
+    /// associated types happens inside `reify_impl`.
+    /// See [`sem::types::ImplFacts`].
+    ///
+    /// `#[allow(dead_code)]` until the recording site in the
+    /// `Item::Impl` arm of `resolve_module` is wired up and
+    /// reify_impl reads the record.
+    #[allow(dead_code)]
+    pub(super) fn record_impl_facts(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::ImplFacts,
+    ) {
+        self.sem.types.impl_facts.insert(ast_id, info);
+    }
+
+    /// Record an `impl Trait for Type;` synthesis request (Gap 12 /
+    /// Stage 5). `reify_module` reads
+    /// [`sem::decls::ModuleDecls::pending_synthesis_requests`] and
+    /// pushes each onto the emitted [`tir::TirModule::synthesis_requests`].
+    ///
+    /// `#[allow(dead_code)]` until the recording site at the
+    /// elaborator's existing
+    /// `tir_module.synthesis_requests.push(...)` is rerouted
+    /// through here.
+    #[allow(dead_code)]
+    pub(super) fn record_pending_synthesis_request(&mut self, req: tir::SynthesisRequest) {
+        self.sem.decls.pending_synthesis_requests.push(req);
+    }
+
+    /// Record a synthesised default-method `TirFunction` (Gap 12 /
+    /// Stage 5). `reify_module` reads
+    /// [`sem::decls::ModuleDecls::pending_default_methods`] and
+    /// pushes each onto the emitted [`tir::TirModule`]'s function
+    /// list. Decouples the synthesis output from the reify walk so
+    /// reify doesn't re-run the default-method synthesis.
+    ///
+    /// `#[allow(dead_code)]` until the recording site in the
+    /// existing default-method synthesis loop is rerouted
+    /// through here.
+    #[allow(dead_code)]
+    pub(super) fn record_pending_default_method(&mut self, func: tir::TirFunction) {
+        self.sem.decls.pending_default_methods.push(func);
+    }
+
     /// Record a coercion decision for the expression at `ast_id`. Called
     /// from each successful `try_coerce_*` sub-helper so every caller of
     /// those helpers (`try_coerce`, `resolve_cast`, the deferred-coercion
