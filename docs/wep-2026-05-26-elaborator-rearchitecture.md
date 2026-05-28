@@ -460,12 +460,17 @@ migration; see Trade-offs.
       without re-running impl lookup. Under these annotations
       the E2E suite at `-O0` reaches **623 / 1326 fixtures
       passing under `WADO_REIFY=1`** — the remaining failures
-      cluster around the residual `todo!`s below plus the
-      trait-method-name mangling divergence on operator
-      dispatch (`Array<i32>^IndexValue<i32>::index_value` vs
-      `Array^IndexValue<i32>::index_value` — the recorded
-      `FunctionRef` keeps the unmangled struct prefix where
-      WIR build expects the type-arg-mangled one). Default-path E2E
+      cluster around the residual `todo!`s below plus a
+      downstream codegen-time type mismatch (`type mismatch:
+      expected (ref null $type), found i32`) for end-to-end
+      runs of arr-indexing fixtures. Reify's TIR for `arr[i]`
+      matches production byte-for-byte (the
+      `Array<i32>^IndexValue<i32>::index_value` name appears
+      mangled in both, confirmed via `wado dump --tir-resolved`),
+      so the divergence lives downstream of TIR emission —
+      most likely a per-arg `is_mut` flag, a struct field
+      index, or an `address_taken_locals` entry that the
+      reify path doesn't reproduce. Default-path E2E
       behaviour is unchanged. Concrete arms cover every
       `reify_pattern` variant, every `reify_literal` variant
       (host-driven included), every `reify_ident` shape
