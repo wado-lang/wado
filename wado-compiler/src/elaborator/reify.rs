@@ -2056,38 +2056,271 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify the `?` postfix operator. Desugar to:
-    /// ```text
-    /// match expr {
-    ///     Ok(v) | Some(v) => v,
-    ///     Err(e) => return Err(From::from(e)),
-    ///     None    => return None,
-    /// }
-    /// ```
-    /// Stage 5 ports the common Option / Result paths; the
-    /// elaborator's `From::from` conversion synthesis on the error
-    /// path is a Stage 5 follow-up — for now the error is wrapped
-    /// in a `return Err(e)` without the conversion, which matches
-    /// the elaborator output when the function's error type matches
-    /// the operand's error type exactly.
+    /// Reify the `?` postfix operator. The elaborator desugars
+    /// `expr?` based on the operand's type:
+    /// - `Option<T>`: `match expr { Some(v) => v, None => return null }`
+    /// - `Result<T, E>`: `match expr { Ok(v) => v, Err(e) =>
+    ///   return Err(From::from(e)) }`
+    ///
+    /// The annotate-side validation (operand is `Option` / `Result`,
+    /// function return type is compatible) has already fired, so
+    /// reify trusts the recorded shape and produces the matching
+    /// `Match` TIR.
     fn reify_question_mark(
         &mut self,
         qm: &ast::TryOpExpr,
         ctx: &mut FunctionContext,
         _recorded_type: TypeId,
     ) -> TirExpr {
-        // TODO(stage-5-bodies): mirror
-        // `Elaborator::resolve_question_mark[_option|_result]`
-        // (expr.rs:3935+). The desugar produces a `Match` TIR with
-        // arms that `return Err(From::from(e))` / `return None` on
-        // the failure case. The `From::from` synthesis path adds
-        // another method-dispatch site that reify needs annotated
-        // (or reproduced via the existing `reify_call` static-method
-        // path). Until that lands, panic with a labelled tripwire
-        // so reify users see the gap immediately rather than
-        // silently producing wrong TIR.
-        let _ = (qm, ctx);
-        todo!("reify_question_mark: `?` operator desugar pending body-walk reify")
+        use crate::tir::{ResolvedType, TirExprKind, TypeTable};
+
+        let inner = self.reify_expr(&qm.expr, ctx, None);
+        let inner_type = inner.type_id;
+
+        let (is_option, is_result) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.as_option(inner_type).is_some(),
+                matches!(
+                    tt.get(inner_type),
+                    ResolvedType::GenericInstance { name, .. } if name == "Result"
+                ),
+            )
+        };
+
+        if is_option {
+            self.reify_question_mark_option(inner, ctx, qm.span)
+        } else if is_result {
+            self.reify_question_mark_result(inner, ctx, qm.span)
+        } else {
+            // Annotate already diagnosed; produce a Unit-typed
+            // placeholder of `ERROR` so downstream phases see the
+            // same shape annotate's recovery path produced.
+            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span)
+        }
+    }
+
+    /// `Option<T>`'s `?`-op desugar — mirrors
+    /// `Elaborator::resolve_question_mark_option` (expr.rs:4000+).
+    fn reify_question_mark_option(
+        &mut self,
+        inner: TirExpr,
+        ctx: &mut FunctionContext,
+        span: crate::token::Span,
+    ) -> TirExpr {
+        use crate::tir::{TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind, TypeTable};
+
+        let inner_type = inner.type_id;
+        let (some_type, some_name, none_name) = {
+            let tt = self.tysys.type_table.borrow();
+            let some_type = tt.as_option(inner_type).unwrap();
+            let items = tt.compiler_items();
+            (
+                some_type,
+                items
+                    .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+                    .to_string(),
+                items
+                    .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+                    .to_string(),
+            )
+        };
+
+        ctx.enter_scope();
+        let v_local = ctx.add_local("__qm_v".to_string(), some_type, false, None);
+
+        let some_arm = TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: inner_type,
+                variant_name: some_name,
+                bindings: vec![TirPattern::Binding {
+                    name: "__qm_v".to_string(),
+                    local_index: v_local,
+                    type_id: some_type,
+                }],
+                payload_type: some_type,
+            },
+            guard: None,
+            body: TirExpr::new(
+                TirExprKind::Local {
+                    index: v_local,
+                    name: "__qm_v".to_string(),
+                },
+                some_type,
+                span,
+            ),
+            span,
+        };
+
+        let none_arm = TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: inner_type,
+                variant_name: none_name,
+                bindings: vec![],
+                payload_type: TypeTable::UNIT,
+            },
+            guard: None,
+            body: TirExpr::new(
+                TirExprKind::Block(TirBlock::new(
+                    vec![TirStmt::new(
+                        TirStmtKind::Return {
+                            value: Some(TirExpr::new(TirExprKind::Null, inner_type, span)),
+                        },
+                        span,
+                    )],
+                    span,
+                )),
+                TypeTable::NEVER,
+                span,
+            ),
+            span,
+        };
+
+        ctx.exit_scope();
+
+        TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(inner),
+                arms: vec![some_arm, none_arm],
+            },
+            some_type,
+            span,
+        )
+    }
+
+    /// `Result<T, E>`'s `?`-op desugar — mirrors
+    /// `Elaborator::resolve_question_mark_result` (expr.rs:4087+).
+    /// The `From::from` synthesis path on mismatched error types is
+    /// staged for a Stage 5 follow-up; the same-error-type case
+    /// (most common in fixtures) lands here.
+    fn reify_question_mark_result(
+        &mut self,
+        inner: TirExpr,
+        ctx: &mut FunctionContext,
+        span: crate::token::Span,
+    ) -> TirExpr {
+        use crate::tir::{ResolvedType, TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind};
+
+        let inner_type = inner.type_id;
+        let return_type = ctx.return_type;
+
+        let (ok_type, inner_err_type) = match self.tysys.type_table.borrow().get(inner_type) {
+            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+                (type_args[0], type_args[1])
+            }
+            _ => panic!("reify_question_mark_result: ? operand must be Result<T, E>"),
+        };
+        let outer_err_type = match self.tysys.type_table.borrow().get(return_type) {
+            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+                type_args[1]
+            }
+            _ => panic!("reify_question_mark_result: ? return type must be Result<U, F>"),
+        };
+
+        if inner_err_type != outer_err_type {
+            // TODO(stage-5-bodies): `From::from(e)` synthesis path.
+            // The elaborator's `resolve_from_call` builds a synthetic
+            // static-method call to `<OuterErr>::from(<InnerErr>_val)`;
+            // reify needs that synthesis recorded as a generic-call
+            // annotation so it can emit the same `TirExprKind::Call`
+            // shape without re-running dispatch.
+            todo!("reify_question_mark_result: From::from error conversion pending")
+        }
+
+        ctx.enter_scope();
+        let v_local = ctx.add_local("__qm_v".to_string(), ok_type, false, None);
+        let e_local = ctx.add_local("__qm_e".to_string(), inner_err_type, false, None);
+
+        let (ok_name, err_name, err_index) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            let (_, _, ok_n, _ok_i) =
+                items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+            let (_, _, err_n, err_i) =
+                items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+            (ok_n.to_string(), err_n.to_string(), err_i)
+        };
+
+        let ok_arm = TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: inner_type,
+                variant_name: ok_name,
+                bindings: vec![TirPattern::Binding {
+                    name: "__qm_v".to_string(),
+                    local_index: v_local,
+                    type_id: ok_type,
+                }],
+                payload_type: ok_type,
+            },
+            guard: None,
+            body: TirExpr::new(
+                TirExprKind::Local {
+                    index: v_local,
+                    name: "__qm_v".to_string(),
+                },
+                ok_type,
+                span,
+            ),
+            span,
+        };
+
+        let e_expr = TirExpr::new(
+            TirExprKind::Local {
+                index: e_local,
+                name: "__qm_e".to_string(),
+            },
+            inner_err_type,
+            span,
+        );
+        let err_variant = TirExpr::new(
+            TirExprKind::VariantConstruct {
+                variant_type: return_type,
+                case_index: err_index,
+                case_name: err_name.clone(),
+                payload: Some(Box::new(e_expr)),
+            },
+            return_type,
+            span,
+        );
+
+        let err_arm = TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: inner_type,
+                variant_name: err_name,
+                bindings: vec![TirPattern::Binding {
+                    name: "__qm_e".to_string(),
+                    local_index: e_local,
+                    type_id: inner_err_type,
+                }],
+                payload_type: inner_err_type,
+            },
+            guard: None,
+            body: TirExpr::new(
+                TirExprKind::Block(TirBlock::new(
+                    vec![TirStmt::new(
+                        TirStmtKind::Return {
+                            value: Some(err_variant),
+                        },
+                        span,
+                    )],
+                    span,
+                )),
+                crate::tir::TypeTable::NEVER,
+                span,
+            ),
+            span,
+        };
+
+        ctx.exit_scope();
+
+        TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(inner),
+                arms: vec![ok_arm, err_arm],
+            },
+            ok_type,
+            span,
+        )
     }
 
     /// Reify a `matches!`-style expression: `scrutinee matches { PAT
