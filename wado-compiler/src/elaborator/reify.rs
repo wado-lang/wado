@@ -468,6 +468,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .get(&self.current_module_source)
             .and_then(|m| m.get(&struct_decl.name));
 
+        // Field-default expressions resolve in a per-struct
+        // `FunctionContext` keyed `struct:<name>` (no self, no other
+        // fields in scope), matching `Elaborator::resolve_struct` at
+        // item.rs:461 byte-for-byte so the synthesized purity check
+        // and reify see identical TIR.
+        let mut field_ctx = FunctionContext::new(
+            crate::tir::TypeTable::UNIT,
+            format!("struct:{}", struct_decl.name),
+        );
+
         let mut fields = Vec::with_capacity(struct_decl.fields.len());
         for (index, field) in struct_decl.fields.iter().enumerate() {
             let type_id = field_info
@@ -482,14 +492,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             });
 
-            // Stage 5 follow-up: field defaults are AST `Expr`s that
-            // need a full body-walk reify (a per-struct
-            // `FunctionContext` keyed `struct:<name>`, just as
-            // `Elaborator::resolve_struct` builds at item.rs:461). When
-            // `reify_expr` lands, replace the `None` below with
-            // `field.default.as_ref().map(|e| Box::new(self.reify_expr(e, …)))`.
-            let default_expr: Option<Box<TirExpr>> =
-                if field.default.is_some() { None } else { None };
+            let default_expr: Option<Box<TirExpr>> = field
+                .default
+                .as_ref()
+                .map(|default_ast| Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(type_id))));
 
             let serde_default = field.default.is_some()
                 || field
@@ -3005,6 +3011,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::{TirExprKind, TirStructField};
 
+        // `KeyValueLiteralBuilder` coercion: when the elaborator
+        // recorded `key_value_coercions[struct_lit.id]`, the literal
+        // was lowered through `Builder::new_literal` /
+        // `Builder::insert_literal` / `Builder::build`. Reify replays
+        // the same `__kv_lit:` desugar block deterministically.
+        if let Some(facts) = self
+            .sem
+            .types
+            .key_value_coercions
+            .get(&struct_lit.id)
+            .cloned()
+        {
+            return self.reify_key_value_coercion(struct_lit, facts, ctx, struct_lit.span);
+        }
+
         let Some(struct_name) = struct_lit.name.clone() else {
             // Anonymous struct literal `{ x: 1, y: 2 }` — annotate
             // synthesised the struct from the field shape and
@@ -4094,6 +4115,218 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         } else {
             block_expr
         }
+    }
+
+    /// Reify an anonymous-struct-to-map coercion. Mirrors
+    /// `try_coerce_struct_to_map_inner`: `__kv_lit: { let __b =
+    /// Builder::new_literal([N]); __b.insert_literal("k", v); ...;
+    /// break __kv_lit: __b.build() / __b; }`. Walk-order invariant
+    /// keeps `__b` at the same `FunctionContext` index reify
+    /// reserved.
+    fn reify_key_value_coercion(
+        &mut self,
+        struct_lit: &ast::StructLiteralExpr,
+        facts: super::sem::types::KeyValueCoercionFacts,
+        ctx: &mut FunctionContext,
+        span: crate::token::Span,
+    ) -> TirExpr {
+        use crate::name::{LocalMethodName, MethodName};
+        use crate::tir::{
+            CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExprKind, TirStmt, TirStmtKind,
+            TypeTable,
+        };
+
+        let string_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+
+        let label = "__kv_lit".to_string();
+        ctx.enter_scope();
+
+        // --- Builder::new_literal([capacity]) ---
+        let new_method_info = LocalMethodName::new(
+            facts.builder_base_name.clone(),
+            Some(facts.trait_name.clone()),
+            "new_literal".to_string(),
+        )
+        .with_struct_type_args(&facts.type_arg_names);
+        let new_mangled_name = MethodName::format_local(
+            &facts.mangled_builder_name,
+            Some(&facts.trait_name),
+            "new_literal",
+        );
+        let capacity = struct_lit.fields.len() as u64;
+        let new_args = if facts.use_new_api {
+            vec![CallArg::new(
+                TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: capacity,
+                        repr: (capacity as i64).to_string(),
+                    },
+                    TypeTable::I32,
+                    span,
+                ),
+                false,
+            )]
+        } else {
+            vec![]
+        };
+        let new_call = TirExpr::new(
+            TirExprKind::Call {
+                func: FunctionRef {
+                    module_source: facts.impl_module_source.clone(),
+                    name: new_mangled_name,
+                    monomorph_info: if facts.type_arg_ids.is_empty() {
+                        None
+                    } else {
+                        Some(MonomorphInfo {
+                            generic_name: format!("{}::new_literal", facts.builder_base_name),
+                            impl_type_args: facts.type_arg_ids.clone(),
+                            method_type_args: vec![],
+                            is_blanket: false,
+                        })
+                    },
+                    method_info: Some(new_method_info),
+                },
+                type_args: vec![],
+                args: new_args,
+            },
+            facts.builder_type,
+            span,
+        );
+
+        let builder_index = ctx.add_local("__b".to_string(), facts.builder_type, true, None);
+        let mut stmts = vec![TirStmt::new(
+            TirStmtKind::Let {
+                name: "__b".to_string(),
+                local_index: builder_index,
+                is_mut: true,
+                is_reactive: false,
+                type_id: facts.builder_type,
+                value: new_call,
+                skip_value_copy: false,
+            },
+            span,
+        )];
+
+        // --- For each field: __b.insert_literal("name", value) ---
+        let insert_mangled_name = MethodName::format_local(
+            &facts.mangled_builder_name,
+            Some(&facts.trait_name),
+            "insert_literal",
+        );
+        let insert_method_info = LocalMethodName::new(
+            facts.builder_base_name.clone(),
+            Some(facts.trait_name.clone()),
+            "insert_literal".to_string(),
+        );
+
+        for field in &struct_lit.fields {
+            let value = self.reify_expr(&field.value, ctx, Some(facts.value_type));
+            let builder_local = TirExpr::new(
+                TirExprKind::Local {
+                    index: builder_index,
+                    name: "__b".to_string(),
+                },
+                facts.builder_type,
+                span,
+            );
+            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                builder_local,
+                facts.insert_self_kind,
+                false,
+                span,
+                &self.tysys.type_table,
+            );
+            let key_expr = TirExpr::new(
+                TirExprKind::StringLiteral(field.name.clone()),
+                string_type,
+                span,
+            );
+            let insert_call = super::Elaborator::<H>::build_tir_method_call(
+                receiver,
+                FunctionRef {
+                    module_source: facts.impl_module_source.clone(),
+                    name: insert_mangled_name.clone(),
+                    monomorph_info: None,
+                    method_info: Some(insert_method_info.clone()),
+                },
+                vec![],
+                vec![CallArg::new(key_expr, false), CallArg::new(value, false)],
+                TypeTable::UNIT,
+                span,
+            );
+            stmts.push(TirStmt::new(TirStmtKind::Expr(insert_call), span));
+        }
+
+        // --- break __kv_lit: __b.build() (new API) or __b (legacy) ---
+        let builder_local_final = TirExpr::new(
+            TirExprKind::Local {
+                index: builder_index,
+                name: "__b".to_string(),
+            },
+            facts.builder_type,
+            span,
+        );
+        let result_expr = if facts.use_new_api {
+            let build_mangled_name = MethodName::format_local(
+                &facts.mangled_builder_name,
+                Some(&facts.trait_name),
+                "build",
+            );
+            let build_method_info = LocalMethodName::new(
+                facts.builder_base_name.clone(),
+                Some(facts.trait_name.clone()),
+                "build".to_string(),
+            );
+            let build_monomorph = if facts.type_arg_ids.is_empty() {
+                None
+            } else {
+                Some(MonomorphInfo {
+                    generic_name: format!("{}::build", facts.builder_base_name),
+                    impl_type_args: facts.type_arg_ids.clone(),
+                    method_type_args: vec![],
+                    is_blanket: false,
+                })
+            };
+            super::Elaborator::<H>::build_tir_method_call(
+                builder_local_final,
+                FunctionRef {
+                    module_source: facts.impl_module_source.clone(),
+                    name: build_mangled_name,
+                    monomorph_info: build_monomorph,
+                    method_info: Some(build_method_info),
+                },
+                vec![],
+                vec![],
+                facts.target_type,
+                span,
+            )
+        } else {
+            builder_local_final
+        };
+
+        stmts.push(TirStmt::new(
+            TirStmtKind::Break {
+                label: Some(label.clone()),
+                value: Some(result_expr),
+            },
+            span,
+        ));
+
+        ctx.exit_scope();
+
+        TirExpr::new(
+            TirExprKind::LabeledBlock {
+                label,
+                block: TirBlock::new(stmts, span),
+                result_type: facts.target_type,
+            },
+            facts.target_type,
+            span,
+        )
     }
 
     /// signature, and finds the impl's home module by walking the

@@ -254,6 +254,15 @@ pub(crate) struct TypeAnnotations {
     /// reify reserves for it (Gap 7 walk-order invariant).
     #[allow(dead_code)]
     pub(crate) sequence_coercions: IndexMap<AstId, SequenceCoercionFacts>,
+    /// `KeyValueLiteralBuilder` coercion data for an anonymous
+    /// struct literal coerced into a map-style type. Keyed by the
+    /// `Expr::StructLiteral`'s [`AstId`]. Counterpart to
+    /// [`Self::sequence_coercions`] — the elaborator's
+    /// `try_coerce_struct_to_map_inner` records the resolved impl
+    /// info so reify rebuilds the `__kv_lit:` desugar block
+    /// deterministically.
+    #[allow(dead_code)]
+    pub(crate) key_value_coercions: IndexMap<AstId, KeyValueCoercionFacts>,
 }
 
 /// Resolved `SequenceLiteralBuilder` impl data for a tuple-to-sequence
@@ -286,6 +295,39 @@ pub(crate) struct SequenceCoercionFacts {
     /// the builder's output — reify wraps the final `__b.build()` call
     /// in a `Cast` to this newtype `TypeId`.
     pub(crate) newtype_cast_to: Option<crate::tir::TypeId>,
+}
+
+/// Resolved `KeyValueLiteralBuilder` impl data for an anonymous
+/// struct-literal → map coercion site. See
+/// [`TypeAnnotations::key_value_coercions`].
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct KeyValueCoercionFacts {
+    /// The builder struct's [`crate::tir::TypeId`].
+    pub(crate) builder_type: crate::tir::TypeId,
+    /// The value-side [`crate::tir::TypeId`] each `insert_literal`
+    /// call takes.
+    pub(crate) value_type: crate::tir::TypeId,
+    /// `self` kind on the resolved `insert_literal` method.
+    pub(crate) insert_self_kind: crate::ast::SelfKind,
+    /// Fully resolved trait name.
+    pub(crate) trait_name: String,
+    /// The block's resulting type (= target_type).
+    pub(crate) target_type: crate::tir::TypeId,
+    /// Module that hosts the impl block.
+    pub(crate) impl_module_source: crate::module_source::ModuleSource,
+    /// Builder's base struct name.
+    pub(crate) builder_base_name: String,
+    /// Mangled struct name used in `format_local`.
+    pub(crate) mangled_builder_name: String,
+    /// Type-arg `TypeId`s on the builder.
+    pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
+    /// Type-arg display names (mangled) parallel to `type_arg_ids`.
+    pub(crate) type_arg_names: Vec<String>,
+    /// `true` when the trait is `KeyValueLiteralBuilder` (new API
+    /// taking a capacity arg + emitting `__b.build()`); `false` for
+    /// the legacy `KeyValueLiteral` shape that breaks with `__b`.
+    pub(crate) use_new_api: bool,
 }
 
 /// Static-method call dispatch decision. See
