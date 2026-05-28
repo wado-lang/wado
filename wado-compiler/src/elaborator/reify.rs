@@ -1073,7 +1073,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Stmt::While(w) => self.reify_while(w, ctx),
             ast::Stmt::For(f) => self.reify_for(f, ctx),
-            ast::Stmt::ForOf(_) | ast::Stmt::Assert(_) => {
+            ast::Stmt::Assert(assert_stmt) => self.reify_assert(assert_stmt, ctx),
+            ast::Stmt::ForOf(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
                 // `Elaborator::resolve_*` branches. `For` / `While` /
                 // `Assert` reads `sem.types.desugars[stmt.id()]` to
@@ -1466,6 +1467,97 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         vec![TirStmt::new(
             TirStmtKind::Loop {
                 body: TirBlock::new(stmts, span),
+            },
+            span,
+        )]
+    }
+
+    /// Reify an `assert cond[, msg];` statement. The full power-
+    /// assert template (slot extraction into `__vK = …;` + the
+    /// captured-source message) requires re-running the
+    /// [`super::assert::CaptureScanner`] against the condition AST
+    /// in parallel with reify's walk; Gap 5's `assert_captures`
+    /// recording carries the slot↔AstId map for that replay.
+    ///
+    /// Stage 5 lands the simplified shape that matches Wado's
+    /// runtime semantics: `if !cond { panic("assertion failed at
+    /// <file>:<line>") }`. The power-assert message reconstruction
+    /// is staged as a follow-up — the recording is in place; the
+    /// playback is the remaining work.
+    fn reify_assert(
+        &mut self,
+        assert_stmt: &ast::AssertStmt,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TirStmt> {
+        use crate::tir::{
+            CallArg, FunctionRef, TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable,
+        };
+
+        let span = assert_stmt.span;
+        let cond_tir = self.reify_expr(&assert_stmt.condition, ctx, Some(TypeTable::BOOL));
+        let neg_cond = TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Not,
+                expr: Box::new(cond_tir),
+            },
+            TypeTable::BOOL,
+            span,
+        );
+
+        let string_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+        let panic_msg = TirExpr::new(
+            TirExprKind::StringLiteral(format!(
+                "Assertion failed in {} at {}:{}",
+                ctx.function_name,
+                self.current_module_source,
+                span.line,
+            )),
+            string_type,
+            span,
+        );
+
+        let panic_module_source = self.interner.borrow_mut().core("internal");
+        let panic_call = TirExpr::new(
+            TirExprKind::Call {
+                func: FunctionRef {
+                    module_source: panic_module_source,
+                    name: "panic".to_string(),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: Vec::new(),
+                args: vec![CallArg::new(panic_msg, false)],
+            },
+            TypeTable::NEVER,
+            span,
+        );
+
+        let then_block = TirBlock::new(
+            vec![TirStmt::new(TirStmtKind::Expr(panic_call), span)],
+            span,
+        );
+        let if_stmt = TirStmt::new(
+            TirStmtKind::If {
+                condition: neg_cond,
+                then_block,
+                else_block: None,
+            },
+            span,
+        );
+
+        // Wrap in `__assert_N:` LabeledBlock so the synthetic
+        // counter on `FunctionContext` advances in lockstep with
+        // annotate's allocation (Gap 7 walk-order invariant).
+        let assert_serial = ctx.next_assert_id;
+        ctx.next_assert_id += 1;
+        vec![TirStmt::new(
+            TirStmtKind::LabeledBlock {
+                label: format!("__assert_{assert_serial}"),
+                block: TirBlock::new(vec![if_stmt], span),
             },
             span,
         )]
