@@ -405,59 +405,55 @@ migration; see Trade-offs.
       hover path. The stdlib snapshot seeds every map back into
       per-module storage so cached stdlib modules stay consistent.
 - [ ] **Stage 5 — `annotate_bodies` / `reify` split.** _In progress._
-      Recording half landed: `MethodDispatch.is_ref_impl`,
-      `IndexMutMethodCall` / `NewtypeFromCollapse` desugar tags
-      (Gaps 2–3, 9), `closure_captures` / `assert_captures` /
-      `for_of_iterator` (Gaps 4–6), `generic_instantiations` at every
-      generic call / struct-literal / variant-ctor site (Gap 1), and
-      `operator_dispatch` end-to-end for binary expressions (Gap 11 —
-      Index-side wiring still pending).
-      `Reify<'a, H>` introduced in `elaborator/reify.rs` with a
-      complete per-Item dispatch surface and a public `Reify::new`
-      constructor for the orchestration driver. Decl-only items
-      (`Enum`, `Flags`, `Newtype`, `Struct` modulo field defaults,
-      `Variant`, `Interface`, `Resource`, `Global`) are concrete.
-      Body-walk dispatchers cover `reify_function` / `reify_global` /
-      `reify_test_decl` / `reify_block` / `reify_stmt` / `reify_expr`
-      / `reify_pattern`. `reify_pattern` is feature-complete
-      (`Wildcard`, `Ident`, `MutIdent`, `Literal`, `Tuple`,
-      `Variant`, `Or`, `Range`, `Struct`). Body-walk TIR emission
-      covers: `Stmt::{Let (all patterns — irrefutable +
-      destructuring), Expr, Return, TaskReturn, Break, Continue,
-      If (Condition::Expr), Loop, Match, While (Condition::Expr),
-      For (Condition::Expr), LabeledBlock}`; `Expr::{Literal (modulo
-      Location/Include), Block, Ident (local + globals + assoc
-      constants + free function refs + qualified Variant::Case /
-      Enum::Case / Flags::Member), TupleLiteral, Cast, Unary,
-      FieldAccess, MethodCall, Call (free function + variant ctor),
-      Match, Matches, StructLiteral (named), Range, TemplateString,
-      If (Condition::Expr), Assign, CompoundAssign (simple lvalues),
-      Binary (native + operator-trait dispatch), Resume, LabeledBlock,
-      Spread}`. Receiver adjustment is shared via
-      `adjust_receiver_for_self_kind_static` so the elaborator and
-      reify produce the same `Unary{Ref}` / `Unary{MutRef}` / deref
-      wrapping.
-      Remaining (each carries a labelled `todo!` with the
-      `Elaborator::resolve_*` location it mirrors): `reify_impl`
-      (impl-block scaffolding: trait dispatch, synthesis requests,
-      ref-type impl unwrapping); non-local idents (`ns::Type::Case`
-      namespace path); uninitialised `let x: T;`; field-default
-      expressions on `reify_struct`; `Expr::{ComparisonChain,
-      StaticMethodCall, Index, Closure, TryOp, WithHandler}` and
-      closure-call / indirect-call / qualified-callee shapes of
-      `Call`; anonymous-struct literals; `Stmt::{ForOf, Assert}` and
-      `If (Condition::LetChain)` / `While (Condition::LetChain)` /
-      `For (Condition::LetChain)`; the `Literal::{LocationFile,
-      LocationLine, DataSection, IncludeStr, IncludeBytes}`
-      host-driven branches; the Index-side wiring of Gap 11; per-arg
-      `is_mut` / literal-coercion records for `Call` / `MethodCall`;
-      `CompoundAssign` IndexMut-target rewrite.
-      Orchestration switch is the last step: rebind
-      `build_tir_from_state` so the existing combined walk drives
-      annotate_bodies only (and discards its TIR output) while
-      `Reify::reify_module` produces the TirModule. The switch is
-      gated on the residual `todo!`s being either implemented or
-      shown to be unreachable from supported source.
+      Recording half complete: every Gap (1–6, 9, 11) is wired
+      end-to-end. `Reify<'a, H>` lands in `elaborator/reify.rs`
+      with a complete per-Item dispatch surface and the
+      `Reify::new` constructor the orchestration driver needs.
+      Decl items (`Enum`, `Flags`, `Newtype`, `Struct` modulo
+      field defaults, `Variant`, `Interface`, `Resource`,
+      `Global`, `Test`) are concrete. `reify_pattern` is
+      feature-complete (all nine variants). Body-walk TIR
+      emission covers: `Stmt::{Let (all patterns), Expr, Return,
+      TaskReturn, Break, Continue, If (Condition::Expr), Loop,
+      Match, While (Condition::Expr), For (Condition::Expr),
+      Assert (simplified), LabeledBlock}`; `Expr::{Literal (all
+      forms — number, string, char, bool, null, unit,
+      LocationFile/Line/Function, DataSection, IncludeStr,
+      IncludeBytes), Block, Ident (local + current globals +
+      imported globals + assoc constants + current functions +
+      imported functions + qualified Variant::Case / Enum::Case
+      / Flags::Member + namespace-path), TupleLiteral, Cast,
+      Unary, FieldAccess, MethodCall, Call (free function +
+      variant ctor), Match, Matches, StructLiteral (named),
+      Range, TemplateString, If (Condition::Expr), Assign,
+      CompoundAssign (simple lvalues), Binary (native +
+      operator-trait dispatch), Index (tuple + Index trait +
+      IndexValue trait), Closure (Gap 4 capture replay),
+      ComparisonChain (primitive chains), Resume,
+      LabeledBlock, Spread, TryOp (Option + Result with
+      same-error-type)}`. Receiver adjustment shares
+      `adjust_receiver_for_self_kind_static` so the elaborator
+      and reify produce the same `Unary{Ref}` /
+      `Unary{MutRef}` / deref wrapping.
+      Remaining (each carries a labelled `todo!`):
+      `reify_impl` (impl-block scaffolding — trait dispatch,
+      synthesis requests, ref-type impl unwrapping);
+      uninitialised `let x: T;` — _done_; field-default
+      expressions on `reify_struct`; `Expr::{StaticMethodCall,
+      WithHandler}` and closure-call / indirect-call /
+      qualified-callee shapes of `Call`; anonymous-struct
+      literals; `Stmt::ForOf` and `If`/`While`/`For
+      (Condition::LetChain)`; per-arg `is_mut` /
+      literal-coercion records for `Call` / `MethodCall`;
+      `CompoundAssign` IndexMut-target rewrite;
+      power-assert slot-extraction template (the simplified
+      `reify_assert` lands the assertion semantics; the
+      power-assert message reconstruction stays follow-up);
+      Result `?` with `From::from` error conversion;
+      ComparisonChain non-primitive operator-trait dispatch.
+      Orchestration switch (rebind `build_tir_from_state` so
+      reify produces the TirModule) is the final gate; the
+      remaining `todo!`s are the work it waits on.
 - [ ] **Stage 6 — Liveness and DCE.**
 - [ ] **Stage 7 — Cleanup.**
 

@@ -1110,7 +1110,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let is_mut = let_stmt.is_mut
                         || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
                     let local_index = ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
-                    let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
+                    let placeholder =
+                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
                     TirStmt::new(
                         TirStmtKind::Let {
                             name: name.clone(),
@@ -1125,7 +1126,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     )
                 }
                 _ => TirStmt::new(
-                    TirStmtKind::Expr(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span)),
+                    TirStmtKind::Expr(TirExpr::new(
+                        TirExprKind::Unit,
+                        TypeTable::UNIT,
+                        let_stmt.span,
+                    )),
                     let_stmt.span,
                 ),
             };
@@ -1301,7 +1306,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_compound_assign(compound, ctx, recorded_type)
             }
             ast::Expr::TryOp(qm) => self.reify_question_mark(qm, ctx, recorded_type),
-            ast::Expr::Closure(closure) => self.reify_closure(closure, ctx, recorded_type, expected_type),
+            ast::Expr::Closure(closure) => {
+                self.reify_closure(closure, ctx, recorded_type, expected_type)
+            }
             ast::Expr::Index(index) => self.reify_index(index, ctx, recorded_type),
             ast::Expr::ComparisonChain(chain) => self.reify_comparison_chain(chain, ctx),
             ast::Expr::Resume(resume) => {
@@ -1395,8 +1402,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 )
             }
-            ast::Expr::StaticMethodCall(_)
-            | ast::Expr::WithHandler(_) => {
+            ast::Expr::StaticMethodCall(_) | ast::Expr::WithHandler(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
                 // `Elaborator::resolve_expr` arm. Each arm consults
                 // `sem.types.{expression_types, coercions,
@@ -1512,9 +1518,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let panic_msg = TirExpr::new(
             TirExprKind::StringLiteral(format!(
                 "Assertion failed in {} at {}:{}",
-                ctx.function_name,
-                self.current_module_source,
-                span.line,
+                ctx.function_name, self.current_module_source, span.line,
             )),
             string_type,
             span,
@@ -2325,7 +2329,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         span: crate::token::Span,
     ) -> TirExpr {
-        use crate::tir::{ResolvedType, TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind};
+        use crate::tir::{
+            ResolvedType, TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind,
+        };
 
         let inner_type = inner.type_id;
         let return_type = ctx.return_type;
@@ -2337,9 +2343,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             _ => panic!("reify_question_mark_result: ? operand must be Result<T, E>"),
         };
         let outer_err_type = match self.tysys.type_table.borrow().get(return_type) {
-            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
-                type_args[1]
-            }
+            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => type_args[1],
             _ => panic!("reify_question_mark_result: ? return type must be Result<U, F>"),
         };
 
@@ -2798,12 +2802,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // AST (resolved via the outer scope's type-param view); if
         // the expected fn type is available, prefer its param types
         // for cases where the closure has no explicit annotation.
-        let expected_fn_params: Option<Vec<TypeId>> = expected_type.and_then(|t| {
-            match self.tysys.type_table.borrow().get(t) {
+        let expected_fn_params: Option<Vec<TypeId>> =
+            expected_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
                 ResolvedType::Function { params, .. } => Some(params.clone()),
                 _ => None,
-            }
-        });
+            });
         let params: Vec<(String, TypeId)> = closure
             .params
             .iter()
@@ -2822,10 +2825,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect();
 
         // Step 4: reify the body in the closure scope.
-        let body_expected = expected_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
-            ResolvedType::Function { return_type, .. } => Some(*return_type),
-            _ => None,
-        });
+        let body_expected =
+            expected_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
+                ResolvedType::Function { return_type, .. } => Some(*return_type),
+                _ => None,
+            });
         let body = self.reify_expr(&closure.body, &mut closure_ctx, body_expected);
 
         // Step 5: assemble the capture list from the recorded entries.
@@ -2864,10 +2868,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let address_taken_locals = closure_ctx.address_taken_locals;
 
-        let declared_effects = expected_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
-            ResolvedType::Function { effects, .. } if !effects.is_empty() => Some(effects.clone()),
-            _ => None,
-        });
+        let declared_effects =
+            expected_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
+                ResolvedType::Function { effects, .. } if !effects.is_empty() => {
+                    Some(effects.clone())
+                }
+                _ => None,
+            });
 
         let closure_tir = TirExpr::new(
             TirExprKind::Closure {
@@ -3614,11 +3621,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Match the elaborator's recovery shape so reify doesn't
         // panic on a known-bad input.
         let _ = recorded_type;
-        TirExpr::new(
-            TirExprKind::Unit,
-            crate::tir::TypeTable::ERROR,
-            ident.span,
-        )
+        TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, ident.span)
     }
 
     /// Reify a literal expression into its TIR shape. The recorded
@@ -3714,11 +3717,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .and_then(|m| m.data_section())
                     .map(str::to_owned)
                     .unwrap_or_default();
-                return TirExpr::new(
-                    TirExprKind::StringLiteral(data),
-                    string_type,
-                    lit.span,
-                );
+                return TirExpr::new(TirExprKind::StringLiteral(data), string_type, lit.span);
             }
             ast::Literal::IncludeStr(raw_path) => {
                 let string_type = self
@@ -3734,11 +3733,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .and_then(|bytes| std::str::from_utf8(bytes).ok())
                     .map(str::to_owned)
                     .unwrap_or_default();
-                return TirExpr::new(
-                    TirExprKind::StringLiteral(value),
-                    string_type,
-                    lit.span,
-                );
+                return TirExpr::new(TirExprKind::StringLiteral(value), string_type, lit.span);
             }
             ast::Literal::IncludeBytes(raw_path) => {
                 let array_u8_type = self
@@ -3753,11 +3748,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .get(&key)
                     .cloned()
                     .unwrap_or_default();
-                return TirExpr::new(
-                    TirExprKind::BytesLiteral(bytes),
-                    array_u8_type,
-                    lit.span,
-                );
+                return TirExpr::new(TirExprKind::BytesLiteral(bytes), array_u8_type, lit.span);
             }
         };
         TirExpr::new(kind, recorded_type, lit.span)
