@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779979400351,
+  "lastUpdate": 1780001154642,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26985,6 +26985,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8d4627daa13d9eec78d3bb9192852eab55de57f6"
         },
         "date": 1779979399873,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a833e3ff9dd4cd23bc2561ec6786f3e910b7c704",
+          "message": "Merge pull request #1221 from wado-lang/claude/gale-explicit-variant-match\n\nrefactor(gale): replace wildcard arms with explicit variant enumeration on IR transforms",
+          "timestamp": "2026-05-29T05:39:37+09:00",
+          "tree_id": "520599510be16c9d3dcad9de036c1bcc4287fe9f",
+          "url": "https://github.com/wado-lang/wado/commit/a833e3ff9dd4cd23bc2561ec6786f3e910b7c704"
+        },
+        "date": 1780001154320,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
