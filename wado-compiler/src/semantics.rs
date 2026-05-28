@@ -92,6 +92,33 @@ pub struct Semantics {
     /// the inferred type on bindings without explicit annotation. Empty
     /// when resolve did not run or bailed before recording any bindings.
     pub local_types: IndexMap<SymbolKey, TypeId>,
+    /// Resolved [`TypeId`] for every expression visited by the elaborator
+    /// body walk, keyed by the expression's `(module, AstId)` pair. The
+    /// future `reify` pass (Stage 5 of the elaborator re-architecture WEP)
+    /// reads this map to set `TirExpr::type_id` without re-running
+    /// inference; LSP hover can consult it for a type at the cursor.
+    /// Empty when resolve did not run or bailed before any expression was
+    /// visited.
+    pub expression_types: IndexMap<SymbolKey, TypeId>,
+    /// Method-dispatch decisions recorded for each AST
+    /// [`crate::ast::MethodCallExpr`] visited by the body walk, keyed by
+    /// the call expression's `(module, AstId)` pair. See
+    /// [`crate::elaborator::sem::types::MethodDispatch`] for the contract
+    /// (synthetic calls and short-circuiting paths leave no entry).
+    pub(crate) method_dispatch: IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch>,
+    /// Coercion choices recorded for each expression that
+    /// [`crate::elaborator::Elaborator::try_coerce`] adapted into its
+    /// expected type, keyed by the source expression's `(module, AstId)`.
+    /// Expressions that did not need coercion leave no entry. See
+    /// [`crate::elaborator::sem::types::CoercionChoice`] for the data
+    /// shape.
+    pub(crate) coercions: IndexMap<SymbolKey, crate::elaborator::sem::types::CoercionChoice>,
+    /// TIR-direct desugar tags recorded by the body walk at each
+    /// `assert` / `matches` / comparison-chain / for-of / `while` /
+    /// compound-assignment site, keyed by the enclosing AST node's
+    /// `(module, AstId)`. See
+    /// [`crate::elaborator::sem::types::DesugarKind`].
+    pub(crate) desugars: IndexMap<SymbolKey, crate::elaborator::sem::types::DesugarKind>,
     /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `build_tir` did not run or bailed.
@@ -144,6 +171,10 @@ impl Semantics {
         references: IndexMap<SymbolKey, SymbolKey>,
         locals: IndexMap<SymbolKey, Symbol>,
         local_types: IndexMap<SymbolKey, TypeId>,
+        expression_types: IndexMap<SymbolKey, TypeId>,
+        method_dispatch: IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch>,
+        coercions: IndexMap<SymbolKey, crate::elaborator::sem::types::CoercionChoice>,
+        desugars: IndexMap<SymbolKey, crate::elaborator::sem::types::DesugarKind>,
         tir_modules: IndexMap<ModuleSource, TirModule>,
     ) -> Self {
         Self {
@@ -157,6 +188,10 @@ impl Semantics {
             references,
             locals,
             local_types,
+            expression_types,
+            method_dispatch,
+            coercions,
+            desugars,
             tir_modules,
             is_complete: false,
         }
@@ -234,6 +269,137 @@ impl Semantics {
     pub fn local_type_name(&self, key: &SymbolKey) -> Option<String> {
         let type_id = self.local_types.get(key).copied()?;
         Some(self.types.type_name(type_id))
+    }
+
+    /// Resolved [`TypeId`] for the expression at `key`, recorded by the
+    /// elaborator's body walk. Covers every visited [`AstId`] inside a
+    /// function body (including operands of binary ops, call arguments,
+    /// and trailing block values). Returns `None` when the key does not
+    /// name an expression that the elaborator reached — typically an item
+    /// id or a body the elaborator bailed on.
+    #[must_use]
+    pub fn expression_type(&self, key: &SymbolKey) -> Option<TypeId> {
+        self.expression_types.get(key).copied()
+    }
+
+    /// Method-dispatch decision recorded for the `MethodCallExpr` at
+    /// `key`, if any. Synthetic calls (for-of's `.into_iter()` /
+    /// `.next()`) and the short-circuiting paths inside
+    /// `resolve_method_call_with` (tuple `.len()` / `.zip()`,
+    /// static-method-as-instance error) leave no entry. See
+    /// [`crate::elaborator::sem::types::MethodDispatch`] for the data
+    /// shape.
+    ///
+    /// `#[allow(dead_code)]` until the consumer (`reify`, Stage 5 of the
+    /// WEP) lands.
+    #[allow(dead_code)]
+    #[must_use]
+    pub(crate) fn method_dispatch_at(
+        &self,
+        key: &SymbolKey,
+    ) -> Option<&crate::elaborator::sem::types::MethodDispatch> {
+        self.method_dispatch.get(key)
+    }
+
+    /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
+    /// method-dispatch decision at `key`.
+    ///
+    /// Returns `(resolved_function_name, defining_module, self_kind_str)`
+    /// for a `MethodCallExpr` whose dispatch was recorded by the body
+    /// walk, or `None` for synthetic / short-circuited call paths (see
+    /// [`crate::elaborator::sem::types::MethodDispatch`]). Used today as a
+    /// reachability probe in tests; the future `reify` pass / LSP hover
+    /// path consumes the full [`crate::elaborator::sem::types::MethodDispatch`]
+    /// via `pub(crate)` access from inside the crate.
+    #[must_use]
+    pub fn method_dispatch_view(&self, key: &SymbolKey) -> Option<(String, ModuleSource, String)> {
+        let dispatch = self.method_dispatch.get(key)?;
+        let self_kind = match dispatch.self_kind {
+            crate::ast::SelfKind::None => "none",
+            crate::ast::SelfKind::Ref => "ref",
+            crate::ast::SelfKind::MutRef => "mut_ref",
+        };
+        Some((
+            dispatch.function_ref.name.clone(),
+            dispatch.function_ref.module_source.clone(),
+            self_kind.to_string(),
+        ))
+    }
+
+    /// Iterate every recorded method-dispatch decision keyed by the
+    /// `MethodCallExpr`'s `(module, AstId)`. Pair with
+    /// [`Self::method_dispatch_view`] for the stable public view onto
+    /// each entry.
+    pub fn iter_method_dispatch(&self) -> impl Iterator<Item = &SymbolKey> {
+        self.method_dispatch.keys()
+    }
+
+    /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
+    /// coercion choice at `key`.
+    ///
+    /// Returns `(coercion_kind_str, target_type_id)` for an expression
+    /// that the body walk adapted via `try_coerce`, or `None` for
+    /// expressions whose resolved type already matched the expected
+    /// type (or that were resolved without an expected type). See
+    /// [`crate::elaborator::sem::types::CoercionKind`] for the full
+    /// variant set; the returned string mirrors the variant name in
+    /// lowercase-with-underscores form.
+    #[must_use]
+    pub fn coercion_view(&self, key: &SymbolKey) -> Option<(String, TypeId)> {
+        use crate::elaborator::sem::types::CoercionKind;
+        let choice = self.coercions.get(key)?;
+        let kind = match choice.kind {
+            CoercionKind::NumericLiteral => "numeric_literal",
+            CoercionKind::NullToOption => "null_to_option",
+            CoercionKind::StringNewtype => "string_newtype",
+            CoercionKind::ClosureToFnNewtype => "closure_to_fn_newtype",
+            CoercionKind::TupleToSequence => "tuple_to_sequence",
+            CoercionKind::StructToMap => "struct_to_map",
+        };
+        Some((kind.to_string(), choice.target_type))
+    }
+
+    /// Iterate every recorded coercion choice keyed by the source
+    /// expression's `(module, AstId)`. Pair with [`Self::coercion_view`]
+    /// for the stable public view onto each entry.
+    pub fn iter_coercions(&self) -> impl Iterator<Item = &SymbolKey> {
+        self.coercions.keys()
+    }
+
+    /// Stage 4 of WEP 2026-05-26: stable public view onto the recorded
+    /// desugar tag at `key`.
+    ///
+    /// Returns the variant name (`lower_snake_case`) for a TIR-direct
+    /// rewrite site (`assert`, `matches`, comparison chain, for-of,
+    /// `while`, compound assignment) or `None` for nodes that did not
+    /// take a desugar path. See
+    /// [`crate::elaborator::sem::types::DesugarKind`] for the full
+    /// variant set.
+    #[must_use]
+    pub fn desugar_view(&self, key: &SymbolKey) -> Option<String> {
+        use crate::elaborator::sem::types::DesugarKind;
+        let kind = self.desugars.get(key)?;
+        let name = match kind {
+            DesugarKind::Assert => "assert",
+            DesugarKind::Matches => "matches",
+            DesugarKind::ComparisonChain => "comparison_chain",
+            DesugarKind::ForOfTuple => "for_of_tuple",
+            DesugarKind::ForOfVariadic => "for_of_variadic",
+            DesugarKind::ForOfIterator => "for_of_iterator",
+            DesugarKind::CStyleFor => "c_style_for",
+            DesugarKind::While => "while",
+            DesugarKind::WhileLetChain => "while_let_chain",
+            DesugarKind::IfLetChain => "if_let_chain",
+            DesugarKind::CompoundAssign => "compound_assign",
+        };
+        Some(name.to_string())
+    }
+
+    /// Iterate every recorded desugar tag keyed by the enclosing AST
+    /// node's `(module, AstId)`. Pair with [`Self::desugar_view`] for the
+    /// stable public view onto each entry.
+    pub fn iter_desugars(&self) -> impl Iterator<Item = &SymbolKey> {
+        self.desugars.keys()
     }
 
     /// URI (filename) of a module, when the module has one.
@@ -569,6 +735,10 @@ impl Semantics {
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
+            IndexMap::default(),
+            IndexMap::default(),
+            IndexMap::default(),
         )
     }
 }
@@ -664,6 +834,10 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
+            IndexMap::default(),
+            IndexMap::default(),
+            IndexMap::default(),
+            IndexMap::default(),
         );
     }
 
@@ -691,6 +865,10 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             TypeTable::new(),
             interner,
             None,
+            IndexMap::default(),
+            IndexMap::default(),
+            IndexMap::default(),
+            IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
             IndexMap::default(),
@@ -731,14 +909,47 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // Flatten the per-module `ModuleSemantics` into the maps LSP queries
     // consume directly. The Semantics API stays keyed by `SymbolKey`; the
     // per-module storage on `AnnotateState` is the elaborator-side detail
-    // that replaces the previous `Rc<RefCell<…>>` plumbing.
+    // that replaces the previous `Rc<RefCell<…>>` plumbing. The
+    // `expression_types` / `method_dispatch` / `coercions` maps are stored
+    // per-module keyed by raw `AstId` (the body walk's natural index); the
+    // rebind here pairs each id with its owning module so the
+    // Semantics-level lookup matches the other flat maps.
     let mut references: IndexMap<SymbolKey, SymbolKey> = IndexMap::default();
     let mut locals: IndexMap<SymbolKey, Symbol> = IndexMap::default();
     let mut local_types: IndexMap<SymbolKey, TypeId> = IndexMap::default();
-    for sem in state.module_semantics.values_mut() {
+    let mut expression_types: IndexMap<SymbolKey, TypeId> = IndexMap::default();
+    let mut method_dispatch: IndexMap<SymbolKey, crate::elaborator::sem::types::MethodDispatch> =
+        IndexMap::default();
+    let mut coercions: IndexMap<SymbolKey, crate::elaborator::sem::types::CoercionChoice> =
+        IndexMap::default();
+    let mut desugars: IndexMap<SymbolKey, crate::elaborator::sem::types::DesugarKind> =
+        IndexMap::default();
+    for (module_source, sem) in &mut state.module_semantics {
         references.extend(std::mem::take(&mut sem.bindings.references));
         locals.extend(std::mem::take(&mut sem.bindings.local_symbols));
         local_types.extend(std::mem::take(&mut sem.types.local_types));
+        expression_types.extend(
+            std::mem::take(&mut sem.types.expression_types)
+                .into_iter()
+                .map(|(ast_id, type_id)| (SymbolKey::new(module_source.clone(), ast_id), type_id)),
+        );
+        method_dispatch.extend(
+            std::mem::take(&mut sem.types.method_dispatch)
+                .into_iter()
+                .map(|(ast_id, dispatch)| {
+                    (SymbolKey::new(module_source.clone(), ast_id), dispatch)
+                }),
+        );
+        coercions.extend(
+            std::mem::take(&mut sem.types.coercions)
+                .into_iter()
+                .map(|(ast_id, choice)| (SymbolKey::new(module_source.clone(), ast_id), choice)),
+        );
+        desugars.extend(
+            std::mem::take(&mut sem.types.desugars)
+                .into_iter()
+                .map(|(ast_id, kind)| (SymbolKey::new(module_source.clone(), ast_id), kind)),
+        );
     }
 
     Semantics {
@@ -752,6 +963,10 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         references,
         locals,
         local_types,
+        expression_types,
+        method_dispatch,
+        coercions,
+        desugars,
         tir_modules,
         is_complete: lower_ok,
     }

@@ -94,6 +94,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `helper()`'s return type) do not leave a stray value on
                 // the Wasm stack at the join point.
                 let tir = self.resolve_match_expr(match_expr, ctx, Some(TypeTable::UNIT));
+                // `resolve_match_expr` does not go through the
+                // `resolve_expr` wrapper, so the per-AstId expression
+                // type would be missing for stmt-position matches.
+                // Record it explicitly here so LSP hover on the `match`
+                // keyword and Stage 5 reify both see the resolved type
+                // (Unit at stmt position).
+                self.record_expression_type(match_expr.id, tir.type_id);
                 vec![TirStmt::new(TirStmtKind::Expr(tir), match_expr.span)]
             }
             Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt, ctx)],
@@ -1005,6 +1012,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )]
             }
             ast::Condition::LetChain { elements, .. } => {
+                self.record_desugar(if_stmt.id, super::sem::types::DesugarKind::IfLetChain);
                 // Resolve else_block in outer scope (chain bindings are not visible there)
                 let else_block = if_stmt
                     .else_block
@@ -1055,6 +1063,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )]
             }
             ast::Condition::LetChain { elements, .. } => {
+                self.record_desugar(if_stmt.id, super::sem::types::DesugarKind::IfLetChain);
                 let else_block = if_stmt
                     .else_block
                     .as_ref()
@@ -2108,7 +2117,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // same invariant.
         let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
 
-        // Check if the iterable is `.enumerate()` on something
+        // Check if the iterable is `.enumerate()` on something.
+        //
+        // Stage 4 / WEP 2026-05-26 note: the `.enumerate()`
+        // `MethodCallExpr` is unwrapped here at the AST level — the
+        // elaborator never resolves it as a method call, so
+        // `expression_types` and `method_dispatch` carry no entry for
+        // `mc.id`. The future `reify` pass re-detects this pattern by
+        // looking at `for_of.iterable` directly, so missing annotations
+        // on `mc` are intentional (mirroring the `tuple.len()` /
+        // `.zip()` short-circuits documented on `MethodDispatch`).
         let (actual_iterable, is_enumerate) = match &for_of.iterable {
             Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
                 (&mc.receiver, true)
@@ -2143,8 +2161,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     !is_enumerate,
                     "variadic for-of with .enumerate() is not yet supported"
                 );
+                self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfVariadic);
                 self.resolve_variadic_for_of(for_of, iterable, ctx)
             } else {
+                self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfTuple);
                 self.resolve_tuple_for_of(for_of, iterable, &elems, is_enumerate, ctx)
             }
         } else {
@@ -2155,19 +2175,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 inner_type_id = t;
             }
-            if !self.type_implements_trait(iterable_type_id, "IntoIterator")
-                && !self.type_implements_trait(inner_type_id, "IntoIterator")
-                && !matches!(
+            let implements_into_iter = self.type_implements_trait(iterable_type_id, "IntoIterator")
+                || self.type_implements_trait(inner_type_id, "IntoIterator")
+                || matches!(
                     self.tysys.type_table.borrow().get(iterable_type_id),
                     ResolvedType::Unknown | ResolvedType::TypeParam { .. }
-                )
-            {
+                );
+            if !implements_into_iter {
                 let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
                 let _ = self.logger.error(TypeError::MissingTraitImpl {
                     type_name,
                     trait_name: "IntoIterator".to_string(),
                     span: for_of.span,
                 });
+            }
+            // Only record the desugar tag when the iterable actually
+            // supports iteration; tagging an error-path node would lead
+            // Stage 5 reify to expand a TIR shape the elaborator never
+            // produced.
+            if implements_into_iter {
+                self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfIterator);
             }
             self.resolve_iterator_for_of(for_of, ctx)
         };
@@ -2584,6 +2611,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver: into_iter_receiver,
                 method_name: "into_iter",
                 method_id: None,
+                call_id: None,
                 type_args: vec![],
                 args: &[],
                 expected_type: None,
@@ -2645,6 +2673,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver: iter_local_ref,
                 method_name: "next",
                 method_id: None,
+                call_id: None,
                 type_args: vec![],
                 args: &[],
                 expected_type: None,
@@ -2910,6 +2939,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
         let stmts = match &w.condition {
             Condition::Expr(cond_expr) => {
+                self.record_desugar(w.id, super::sem::types::DesugarKind::While);
                 let cond_tir = self.resolve_expr(cond_expr, ctx, Some(TypeTable::BOOL));
                 let cond_span = cond_expr.span();
                 let neg_cond = TirExpr::new(
@@ -2945,6 +2975,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 elements,
                 span: cond_span,
             } => {
+                self.record_desugar(w.id, super::sem::types::DesugarKind::WhileLetChain);
                 // The else-branch unconditionally terminates the loop. Build it as a
                 // TirBlock holding a single `Break` so `resolve_let_chain_stmts`
                 // (shared with `if let` resolution) can splice it in as the
@@ -3020,6 +3051,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// }
     /// ```
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
+        self.record_desugar(f.id, super::sem::types::DesugarKind::CStyleFor);
         let span = f.span;
         let loop_id = ctx.next_loop_id;
         ctx.next_loop_id += 1;

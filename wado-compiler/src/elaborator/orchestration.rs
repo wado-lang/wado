@@ -836,6 +836,36 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 };
                 sem.types.local_types.insert(key.clone(), *type_id);
             }
+            for (key, type_id) in &snap.expression_types {
+                let Some(sem) = module_semantics.get_mut(&key.module) else {
+                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+                    continue;
+                };
+                sem.types.expression_types.insert(key.ast_id, *type_id);
+            }
+            for (key, dispatch) in &snap.method_dispatch {
+                let Some(sem) = module_semantics.get_mut(&key.module) else {
+                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+                    continue;
+                };
+                sem.types
+                    .method_dispatch
+                    .insert(key.ast_id, dispatch.clone());
+            }
+            for (key, choice) in &snap.coercions {
+                let Some(sem) = module_semantics.get_mut(&key.module) else {
+                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+                    continue;
+                };
+                sem.types.coercions.insert(key.ast_id, choice.clone());
+            }
+            for (key, kind) in &snap.desugars {
+                let Some(sem) = module_semantics.get_mut(&key.module) else {
+                    debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
+                    continue;
+                };
+                sem.types.desugars.insert(key.ast_id, *kind);
+            }
         }
 
         let tysys = TypeSystem {

@@ -241,3 +241,356 @@ export fn run() with Stdout {
     );
     assert_eq!(r1.1, "println");
 }
+
+/// Stage 4 of the elaborator re-architecture WEP: every `MethodCallExpr`
+/// the body walk reaches must leave its dispatch decision in
+/// `ModuleSemantics::types.method_dispatch`, surfaced through
+/// `Semantics::method_dispatch_view`. The synthetic helper calls used by
+/// the for-of loop carry `call_id == None` and stay out of the map.
+#[test]
+fn semantics_records_method_dispatch_per_call_site() {
+    let source = r"
+export fn run() {
+    let xs: Array<i32> = [1, 2, 3];
+    let _n = xs.len();
+}
+";
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+
+    // Walk every recorded dispatch and check that one of them is the
+    // `xs.len()` call. Using `iter_method_dispatch` here (rather than a
+    // brittle column lookup that depends on which sub-node sits beneath
+    // the cursor) keeps the test resilient to AstId numbering changes.
+    let hit = sem.iter_method_dispatch().any(|key| {
+        key.module == entry
+            && sem
+                .method_dispatch_view(key)
+                .is_some_and(|(name, _, self_kind)| name.contains("len") && self_kind == "ref")
+    });
+    assert!(
+        hit,
+        "the `xs.len()` MethodCallExpr must record a dispatch decision with self_kind=ref",
+    );
+}
+
+/// Stage 4 of the elaborator re-architecture WEP: each TIR-direct
+/// desugar site (`assert`, `matches`, comparison chain, for-of, `while`,
+/// compound assignment) records its variant in
+/// `ModuleSemantics::types.desugars`. Verify a few representative kinds
+/// land in the map for a small program that exercises them.
+#[test]
+fn semantics_records_desugar_kind_per_ast_id() {
+    // One fixture per `DesugarKind` variant, so a future regression
+    // that drops `record_desugar` from any of the surface sites is
+    // caught by this single test. Each helper expression below targets
+    // exactly one variant. See `crate::elaborator::sem::types::DesugarKind`.
+    let source = r"
+fn helper() -> Option<i32> {
+    return Option::Some(1);
+}
+
+export fn run() {
+    // Assert
+    assert 1 == 1;
+
+    // CompoundAssign
+    let mut x = 0;
+    x += 1;
+
+    // While (Condition::Expr)
+    while x < 5 {
+        x = x + 1;
+    }
+
+    // WhileLetChain (Condition::LetChain)
+    while let Option::Some(v) = helper() {
+        x = v;
+        break;
+    }
+
+    // CStyleFor (no parentheses around the header)
+    for let mut i = 0; i < 3; i += 1 {
+        x = x + i;
+    }
+
+    // ForOfIterator (Array implements IntoIterator)
+    let xs: Array<i32> = [10, 20, 30];
+    for let v of xs {
+        x = x + v;
+    }
+
+    // ForOfTuple (tuple iteration — compile-time expansion)
+    for let v of [10, 20, 30] {
+        x = x + v;
+    }
+
+    // ComparisonChain (only triggered with 2+ comparisons)
+    let _chained = 1 < 2 < 3;
+
+    // Matches
+    let _m = Option::Some(1) matches { Option::Some(_) };
+
+    // IfLetChain (Condition::LetChain on if)
+    if let Option::Some(_v) = helper() {
+        x = x + 1;
+    }
+}
+";
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+
+    let mut kinds: Vec<String> = sem
+        .iter_desugars()
+        .filter(|key| key.module == entry)
+        .filter_map(|key| sem.desugar_view(key))
+        .collect();
+    kinds.sort();
+    kinds.dedup();
+    let expected = [
+        "assert",
+        "c_style_for",
+        "comparison_chain",
+        "compound_assign",
+        "for_of_iterator",
+        "for_of_tuple",
+        "if_let_chain",
+        "matches",
+        "while",
+        "while_let_chain",
+    ];
+    for want in &expected {
+        assert!(
+            kinds.iter().any(|k| k == want),
+            "expected desugar kind {want} in {kinds:?}",
+        );
+    }
+}
+
+/// Stage 4 of the elaborator re-architecture WEP: every successful
+/// branch of `try_coerce` records its [`CoercionKind`] on
+/// `ModuleSemantics::types.coercions`. Verify the numeric-literal
+/// (`1 → u32`) and null-to-option (`null → Option<i32>`) variants both
+/// land in the map.
+#[test]
+fn semantics_records_coercion_choice_per_ast_id() {
+    let source = r"
+export fn run() {
+    let _x: u32 = 1;
+    let _y: Option<i32> = null;
+}
+";
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+
+    let mut saw_numeric = false;
+    let mut saw_null_to_option = false;
+    for key in sem.iter_coercions() {
+        if key.module != entry {
+            continue;
+        }
+        let Some((kind, _target)) = sem.coercion_view(key) else {
+            continue;
+        };
+        if kind == "numeric_literal" {
+            saw_numeric = true;
+        }
+        if kind == "null_to_option" {
+            saw_null_to_option = true;
+        }
+    }
+    assert!(
+        saw_numeric,
+        "`1 → u32` must record a numeric_literal coercion"
+    );
+    assert!(
+        saw_null_to_option,
+        "`null → Option<i32>` must record a null_to_option coercion",
+    );
+}
+
+/// Stage 4 of the elaborator re-architecture WEP: every expression
+/// visited by the body walk must leave its resolved [`TypeId`] in
+/// [`Semantics::expression_types`], keyed by the expression's
+/// `(module, AstId)`. Verify a few representative sub-expressions
+/// (literal, binary op, identifier) all land in the map.
+#[test]
+fn semantics_records_expression_type_per_ast_id() {
+    let source = r"
+export fn run() {
+    let x = 1 + 2;
+    let _y = x;
+}
+";
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+
+    // Line 3: "    let x = 1 + 2;"
+    //          12345678901234567890
+    //                       ^c13  ^c17
+    // Column 13 lands on the `1` literal; column 17 lands on the `2`
+    // literal; the surrounding `1 + 2` binary covers both, so an id
+    // resolved between them should also have an annotation.
+    let one_id = sem
+        .ast_id_at(&entry, 3, 13)
+        .expect("position on `1` literal should resolve to an AstId");
+    let one_key = SymbolKey::new(entry.clone(), one_id);
+    let one_ty = sem
+        .expression_type(&one_key)
+        .expect("the `1` literal must record an expression type");
+    assert_eq!(sem.types.type_name(one_ty), "i32");
+
+    // Line 4: "    let _y = x;"
+    //                     ^c14
+    let x_use_id = sem
+        .ast_id_at(&entry, 4, 14)
+        .expect("position on `x` use should resolve to an AstId");
+    let x_use_key = SymbolKey::new(entry, x_use_id);
+    let x_ty = sem
+        .expression_type(&x_use_key)
+        .expect("the `x` use site must record an expression type");
+    assert_eq!(sem.types.type_name(x_ty), "i32");
+}
+
+/// Stage 4 / WEP 2026-05-26: `try_coerce_*` sub-helpers record the
+/// coercion at the decision point, so the callers that bypass
+/// `try_coerce` (the `as`-cast path in `resolve_cast`, the struct
+/// literal target in `resolve_let`, the deferred coercion fixup for
+/// generic struct fields, and `recoerce_literal_args` after type-arg
+/// inference) still leave a coercion entry. Verify a representative
+/// `[1, 2, 3] as Array<i32>` cast records `tuple_to_sequence`.
+#[test]
+fn semantics_records_coercion_through_cast_bypass() {
+    let source = r"
+export fn run() {
+    let _xs = [10, 20, 30] as Array<i32>;
+}
+";
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+
+    let saw_tuple_to_sequence = sem.iter_coercions().any(|key| {
+        key.module == entry
+            && sem
+                .coercion_view(key)
+                .is_some_and(|(kind, _)| kind == "tuple_to_sequence")
+    });
+    assert!(
+        saw_tuple_to_sequence,
+        "`[1, 2, 3] as Array<i32>` must record a tuple_to_sequence coercion",
+    );
+}
+
+/// Stage 4 / WEP 2026-05-26: post-inference `recoerce_literal_args`
+/// re-coerces generic literal arguments after the type parameter is
+/// resolved; the re-coercion must update `expression_types` so the map
+/// matches the TIR's resolved type (otherwise reify would emit the
+/// pre-inference default i32 instead of the inferred type).
+#[test]
+fn semantics_recoerce_literal_args_updates_expression_type() {
+    let source = r"
+fn two<T>(a: T, b: T) -> T {
+    return a;
+}
+
+export fn run() {
+    let _v = two::<i64>(1, 2);
+}
+";
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+
+    // Every recorded i32 literal in the user module would be a regression
+    // (the only literals are the two `1` / `2` args, which must surface as
+    // i64 after type-arg inference).
+    let any_i32 = sem
+        .expression_types
+        .iter()
+        .any(|(key, &type_id)| key.module == entry && sem.types.type_name(type_id) == "i32");
+    assert!(
+        !any_i32,
+        "post-inference recoerce_literal_args must overwrite the pre-inference i32 entry",
+    );
+    let saw_i64 = sem
+        .expression_types
+        .iter()
+        .any(|(key, &type_id)| key.module == entry && sem.types.type_name(type_id) == "i64");
+    assert!(
+        saw_i64,
+        "post-inference recoerce_literal_args must record the inferred i64 type",
+    );
+}
+
+/// Stage 4 / WEP 2026-05-26: failed method lookup emits a `MethodNotFound`
+/// diagnostic and falls through with a placeholder `MethodInfo` so error
+/// recovery can continue. The dispatch-recording gate must skip writing
+/// to `method_dispatch` in this case — recording a `FunctionRef` whose
+/// mangled name targets a non-existent method would mislead Stage 5
+/// reify into lowering a call to a function that does not exist.
+#[test]
+fn semantics_skips_method_dispatch_when_lookup_failed() {
+    let source = r"
+export fn run() {
+    let xs: Array<i32> = [1, 2, 3];
+    let _ = xs.no_such_method();
+}
+";
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+
+    let saw_bogus = sem.iter_method_dispatch().any(|key| {
+        key.module == entry
+            && sem
+                .method_dispatch_view(key)
+                .is_some_and(|(name, _, _)| name.contains("no_such_method"))
+    });
+    assert!(
+        !saw_bogus,
+        "the MethodNotFound error path must not leave a bogus dispatch entry",
+    );
+}
+
+/// Stage 4 / WEP 2026-05-26: top-level `match` at statement position
+/// goes through `resolve_match_expr` directly (not `resolve_expr`), so
+/// the stmt arm must explicitly record `expression_types` for the match
+/// to keep the per-AstId annotation map populated.
+#[test]
+fn semantics_records_expression_type_for_stmt_position_match() {
+    let source = r"
+export fn run() {
+    let x = Some(1);
+    match x {
+        Some(_) => {},
+        None => {},
+    }
+}
+";
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+
+    let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+
+    // Line 4 column 5 lands on the `match` keyword.
+    let match_id = sem
+        .ast_id_at(&entry, 4, 5)
+        .expect("`match` keyword should resolve to an AstId");
+    let match_key = SymbolKey::new(entry, match_id);
+    let match_ty = sem
+        .expression_type(&match_key)
+        .expect("stmt-position match must record an expression type");
+    assert_eq!(sem.types.type_name(match_ty), "()");
+}

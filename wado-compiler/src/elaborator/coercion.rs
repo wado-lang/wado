@@ -14,7 +14,39 @@ use crate::tir::{
 };
 
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Coerce a numeric literal (or negated numeric literal) to the
+    /// expected integer / float / i128 / u128 type. On success records
+    /// the coercion *and* the resolved expression types at every visited
+    /// AST id (the outer literal, plus the inner literal for the
+    /// `-NUM` shape) so callers that bypass [`Self::resolve_expr`]
+    /// (e.g. [`Self::recoerce_literal_args`] after post-inference
+    /// type-arg substitution, or [`Self::try_coerce`]) still leave a
+    /// complete annotation trail for the future `reify` pass.
     pub(super) fn try_coerce_numeric_literal(
+        &mut self,
+        expr: &Expr,
+        target_type: TypeId,
+    ) -> Option<TirExpr> {
+        let coerced = self.try_coerce_numeric_literal_inner(expr, target_type)?;
+        self.record_coercion(
+            expr.id(),
+            super::sem::types::CoercionKind::NumericLiteral,
+            target_type,
+        );
+        self.record_expression_type(expr.id(), target_type);
+        // `-NUM` consumes both the outer Unary node and the inner Literal
+        // node directly (no recursive resolve_expr fires on the inner),
+        // so record the inner literal's resolved type explicitly. Both
+        // tokens render the same coerced numeric type to LSP hover.
+        if let Expr::Unary(unary) = expr
+            && let Expr::Literal(inner_lit) = &unary.expr
+        {
+            self.record_expression_type(inner_lit.id, target_type);
+        }
+        Some(coerced)
+    }
+
+    fn try_coerce_numeric_literal_inner(
         &mut self,
         expr: &Expr,
         target_type: TypeId,
@@ -372,6 +404,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !is_numeric {
                 continue;
             }
+            // try_coerce_numeric_literal records `expression_types` for
+            // every visited AST id (outer + inner `-NUM` literal) with
+            // the new `expected` type, so the post-inference re-coercion
+            // overwrites the stale pre-inference type that the original
+            // resolve_expr wrapper wrote.
             if let Some(coerced) = self.try_coerce_numeric_literal(raw, expected) {
                 *arg = coerced;
             }
@@ -381,13 +418,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Try to coerce an expression to match the expected type.
     /// Handles numeric literals, null, string newtypes, and tuple-to-array coercion.
     /// Returns `None` if no coercion applies.
+    ///
+    /// Stage 4 of WEP 2026-05-26: each successful branch records the
+    /// chosen [`super::sem::types::CoercionKind`] in
+    /// [`super::sem::types::TypeAnnotations::coercions`] keyed by
+    /// `expr.id()`. The variants that fan out into shared
+    /// `try_coerce_*` sub-helpers (numeric / tuple-to-sequence /
+    /// struct-to-map) record from inside those helpers so direct callers
+    /// (`resolve_cast`, struct-field deferred-coercion, `resolve_let`,
+    /// `recoerce_literal_args`) record uniformly. The variants
+    /// implemented inline in this function (null / string-newtype /
+    /// closure-fn-newtype) record here at the decision point. The future
+    /// `reify` pass replays the same adaptation without re-checking
+    /// expected-type compatibility.
     pub(super) fn try_coerce(
         &mut self,
         expr: &Expr,
         ctx: &mut FunctionContext,
         target_type: TypeId,
     ) -> Option<TirExpr> {
-        // Numeric literal coercion (int, float, i128/u128)
+        // Numeric literal coercion (int, float, i128/u128) — sub-helper
+        // records `NumericLiteral` and `expression_types` for the visited
+        // AST id (and the inner `-NUM` literal id, when applicable).
         if let Some(coerced) = self.try_coerce_numeric_literal(expr, target_type) {
             return Some(coerced);
         }
@@ -402,6 +454,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .as_option(target_type)
                 .is_some()
         {
+            self.record_coercion(
+                expr.id(),
+                super::sem::types::CoercionKind::NullToOption,
+                target_type,
+            );
             return Some(TirExpr::new(TirExprKind::Null, target_type, lit.span));
         }
 
@@ -431,6 +488,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if is_string_newtype {
                 let mut resolved = self.resolve_expr(expr, ctx, None);
                 resolved.type_id = target_type;
+                self.record_coercion(
+                    expr.id(),
+                    super::sem::types::CoercionKind::StringNewtype,
+                    target_type,
+                );
+                // The inner resolve_expr wrote expression_types[expr.id]
+                // with the unwrapped String type; overwrite with the
+                // outer target newtype so the map matches the returned
+                // TirExpr's type_id.
+                self.record_expression_type(expr.id(), target_type);
                 return Some(resolved);
             }
         }
@@ -451,16 +518,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if is_fn_newtype {
                 let mut resolved = self.resolve_expr(expr, ctx, Some(base_id));
                 resolved.type_id = target_type;
+                self.record_coercion(
+                    expr.id(),
+                    super::sem::types::CoercionKind::ClosureToFnNewtype,
+                    target_type,
+                );
+                // Same pattern as StringNewtype above: overwrite the
+                // map's base-fn-type write with the outer newtype.
+                self.record_expression_type(expr.id(), target_type);
                 return Some(resolved);
             }
         }
 
-        // Tuple literal → type implementing SequenceLiteralBuilder (Array<T> and user types)
+        // Tuple literal → type implementing SequenceLiteralBuilder (Array<T> and user types).
+        // The sub-helper records `TupleToSequence` and `expression_types`.
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(expr, ctx, target_type) {
             return Some(coerced);
         }
 
-        // Anonymous struct literal → type implementing KeyValueLiteralBuilder
+        // Anonymous struct literal → type implementing KeyValueLiteralBuilder.
+        // The sub-helper records `StructToMap` and `expression_types`.
         if let Some(coerced) = self.try_coerce_struct_to_map(expr, ctx, target_type) {
             return Some(coerced);
         }
@@ -489,7 +566,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Desugars to a `LabeledBlock` that calls `Builder::new_literal(capacity)`, then
     /// `insert_literal(key, value)` for each field, then `build()`, so the monomorphize
     /// phase naturally discovers the required function instantiations.
+    ///
+    /// Records the coercion choice and resolved expression type at the
+    /// decision point so every caller (`try_coerce`, `resolve_cast`,
+    /// `resolve_let`'s struct-to-map branch) leaves an annotation —
+    /// no caller can bypass recording.
     pub(super) fn try_coerce_struct_to_map(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        target_type: TypeId,
+    ) -> Option<TirExpr> {
+        let coerced = self.try_coerce_struct_to_map_inner(expr, ctx, target_type)?;
+        self.record_coercion(
+            expr.id(),
+            super::sem::types::CoercionKind::StructToMap,
+            target_type,
+        );
+        self.record_expression_type(expr.id(), target_type);
+        Some(coerced)
+    }
+
+    fn try_coerce_struct_to_map_inner(
         &mut self,
         expr: &Expr,
         ctx: &mut FunctionContext,
@@ -816,6 +914,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// and the call site's Wasm validation would fail because the tuple
     /// struct type is unrelated to the expected `Array` struct type.
     pub(super) fn try_coerce_tuple_to_sequence(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        target_type: TypeId,
+    ) -> Option<TirExpr> {
+        let coerced = self.try_coerce_tuple_to_sequence_inner(expr, ctx, target_type)?;
+        self.record_coercion(
+            expr.id(),
+            super::sem::types::CoercionKind::TupleToSequence,
+            target_type,
+        );
+        self.record_expression_type(expr.id(), target_type);
+        Some(coerced)
+    }
+
+    fn try_coerce_tuple_to_sequence_inner(
         &mut self,
         expr: &Expr,
         ctx: &mut FunctionContext,

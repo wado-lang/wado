@@ -132,7 +132,27 @@ enum FuncRefInference {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Resolve an AST expression to its TIR form. Records the resolved
+    /// [`TypeId`] in [`super::sem::TypeAnnotations::expression_types`]
+    /// before returning so the future `reify` pass (Stage 5 of the
+    /// elaborator re-architecture WEP) can read the type without re-running
+    /// inference. All sub-expression recursion routes back through this
+    /// entry point, so every visited [`AstId`] leaves an annotation —
+    /// including operands of binary ops, call arguments, and trailing
+    /// block values.
     pub(super) fn resolve_expr(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TirExpr {
+        let ast_id = expr.id();
+        let resolved = self.resolve_expr_inner(expr, ctx, expected_type);
+        self.record_expression_type(ast_id, resolved.type_id);
+        resolved
+    }
+
+    fn resolve_expr_inner(
         &mut self,
         expr: &Expr,
         ctx: &mut FunctionContext,
@@ -1829,6 +1849,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TirExpr {
         match &if_expr.condition {
             Condition::LetChain { elements, .. } => {
+                self.record_desugar(if_expr.id, super::sem::types::DesugarKind::IfLetChain);
                 // Resolve else_block in outer scope (chain bindings not visible there)
                 let else_block = if_expr
                     .else_block

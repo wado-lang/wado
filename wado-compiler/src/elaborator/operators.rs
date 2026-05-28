@@ -1269,6 +1269,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         compound: &ast::CompoundAssignExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
+        self.record_desugar(compound.id, super::sem::types::DesugarKind::CompoundAssign);
         let op = match compound.op {
             ast::CompoundAssignOp::Add => BinaryOp::Add,
             ast::CompoundAssignOp::Sub => BinaryOp::Sub,
@@ -1306,10 +1307,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         use crate::tir::{TirBlock, TirStmt, TirStmtKind};
 
         if chain.comparisons.is_empty() {
+            // Degenerate parse — no chain expansion fires, so this is not
+            // a desugar site. Do not record `ComparisonChain` here.
             return self.resolve_expr(&chain.first, ctx, None);
         }
 
         // Single comparison: no middle term to bind, just one Binary.
+        // Same reasoning: no chain expansion took place.
         if chain.comparisons.len() == 1 {
             let cmp = &chain.comparisons[0];
             let (left_tir, right_tir) = self.resolve_binary_operands_with_coercion(
@@ -1322,8 +1326,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.build_binary_op_tir(left_tir, cmp.op, right_tir, cmp.op_span);
         }
 
-        // Multi-comparison: enter a fresh scope for the `__mK` bindings so
-        // they don't leak into the surrounding function's local namespace.
+        // Multi-comparison: actual chain expansion. Tag the node so the
+        // future `reify` pass can replay the same `(a < b) && (b < c)`
+        // shape with the same `__mK` middle bindings.
+        self.record_desugar(chain.id, super::sem::types::DesugarKind::ComparisonChain);
+
+        // Enter a fresh scope for the `__mK` bindings so they don't leak
+        // into the surrounding function's local namespace.
         ctx.enter_scope();
         let mut stmts: Vec<TirStmt> = Vec::new();
 

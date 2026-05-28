@@ -26,10 +26,17 @@ use super::types::{FunctionContext, MethodInfo, TypeError};
 /// `method_id == None` signals a synthetic call: no use→def edge is
 /// recorded against any AST node for the method name token. This is what
 /// keeps internal helper calls out of LSP jump-to-definition.
+///
+/// `call_id == None` likewise suppresses recording the dispatch decision
+/// in [`super::sem::TypeAnnotations::method_dispatch`]: the future
+/// `reify` pass (Stage 5 of WEP 2026-05-26) only walks source-level
+/// `MethodCallExpr` nodes, so a synthesised call has no AST id under which
+/// to file an entry.
 pub(super) struct MethodCallInput<'a> {
     pub receiver: TirExpr,
     pub method_name: &'a str,
     pub method_id: Option<AstId>,
+    pub call_id: Option<AstId>,
     pub type_args: Vec<TypeId>,
     pub args: &'a [ast::Expr],
     pub expected_type: Option<TypeId>,
@@ -67,6 +74,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver,
                 method_name: &method_call.method,
                 method_id: Some(method_call.method_id),
+                call_id: Some(method_call.id),
                 type_args,
                 args: &method_call.args,
                 expected_type,
@@ -87,6 +95,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             mut receiver,
             method_name,
             method_id,
+            call_id,
             type_args,
             args: args_ast,
             expected_type,
@@ -284,6 +293,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Get method info (error if method not found)
+        // Track whether the lookup actually found a real method. The
+        // error-recovery branch below fabricates a placeholder MethodInfo
+        // so resolution can continue past a diagnostic, but the
+        // FunctionRef we then build mangles a non-existent method
+        // against the receiver's struct module — we MUST NOT record that
+        // as a successful dispatch in `sem.types.method_dispatch`, or
+        // Stage 5 reify would try to lower a call to a function that
+        // does not exist.
+        let method_found = method_info.is_some();
         let MethodInfo {
             mut return_type,
             self_kind,
@@ -748,14 +766,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_reference_to_decl(method_id, &method_module_source, method_ast_id);
         }
 
+        let func = FunctionRef {
+            module_source: method_module_source,
+            name: mangled_method_name,
+            monomorph_info,
+            method_info: Some(method_info),
+        };
+
+        // Stage 4 of WEP 2026-05-26: record the dispatch decision so the
+        // future `reify` pass can emit the same `MethodCall` TIR without
+        // re-running trait lookup / method-name mangling. Skipped when:
+        //  - `call_id == None` (synthetic call: for-of's `.into_iter()`
+        //    / `.next()`),
+        //  - The early-returning short-circuits above (tuple `.len()` /
+        //    `.zip()`, static-method-as-instance error) returned before
+        //    reaching here, or
+        //  - Method lookup failed and we are in the error-recovery
+        //    placeholder path (`method_found == false`).
+        if method_found {
+            self.record_method_dispatch(call_id, &func, self_kind);
+        }
+
         Self::build_tir_method_call(
             receiver,
-            FunctionRef {
-                module_source: method_module_source,
-                name: mangled_method_name,
-                monomorph_info,
-                method_info: Some(method_info),
-            },
+            func,
             method_type_args, // Use inferred type args
             args.into_iter()
                 .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))

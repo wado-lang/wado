@@ -3464,18 +3464,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_call_module_source =
             method_trait_impl_source.unwrap_or_else(|| output_module_source.clone());
 
+        let func = FunctionRef {
+            module_source: method_call_module_source,
+            name: mangled_method_name,
+            monomorph_info: None,
+            method_info: Some(LocalMethodName::new(
+                output_struct_name,
+                method_trait_name,
+                method_call.method.clone(),
+            )),
+        };
+
+        // Stage 4 of WEP 2026-05-26: the IndexMut rewrite is the only
+        // path that builds the user-visible MethodCall TIR without going
+        // through `resolve_method_call_with`. Record dispatch here so
+        // `m["k"].push(1)` and friends leave the same annotation as the
+        // ordinary path.
+        self.record_method_dispatch(Some(method_call.id), &func, self_kind);
+
         Some(Self::build_tir_method_call(
             receiver_for_method,
-            FunctionRef {
-                module_source: method_call_module_source,
-                name: mangled_method_name,
-                monomorph_info: None,
-                method_info: Some(LocalMethodName::new(
-                    output_struct_name,
-                    method_trait_name,
-                    method_call.method.clone(),
-                )),
-            },
+            func,
             type_args,
             args.into_iter()
                 .zip(

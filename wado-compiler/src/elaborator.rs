@@ -23,7 +23,7 @@ mod method_lookup;
 mod module;
 mod operators;
 pub(crate) mod orchestration;
-mod sem;
+pub(crate) mod sem;
 mod stmt;
 mod template;
 pub(crate) mod trait_env;
@@ -457,6 +457,86 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
         None
+    }
+
+    /// Record the resolved [`TypeId`] for the expression at `ast_id` —
+    /// the per-`AstId` annotation the future `reify` pass (Stage 5 of WEP
+    /// 2026-05-26) reads to set `TirExpr::type_id` without re-running
+    /// inference.
+    ///
+    /// Skipped when the resolution failed (yielding [`TypeTable::ERROR`])
+    /// or when the recorded type still mentions
+    /// [`TypeTable::UNKNOWN`]. Both signal a result the body walk is
+    /// going to revisit (the unknown-typed `null` literal is patched up
+    /// once the surrounding `Option<T>` becomes known by
+    /// [`crate::elaborator::expr::patch_unresolved_null`]); recording
+    /// the sentinel here would leave a stale entry the reify pass cannot
+    /// consume and the post-patch TIR would disagree with.
+    pub(super) fn record_expression_type(&mut self, ast_id: crate::ast::AstId, type_id: TypeId) {
+        if type_id == TypeTable::ERROR {
+            return;
+        }
+        if self.tysys.type_table.borrow().contains_unknown(type_id) {
+            return;
+        }
+        self.sem.types.expression_types.insert(ast_id, type_id);
+    }
+
+    /// Record a method-dispatch decision for the [`crate::ast::MethodCallExpr`]
+    /// at `ast_id`. Centralised here (rather than at the AST wrapper) so
+    /// every TIR-construction path that flows through
+    /// [`Self::build_tir_method_call`] — including the `container[i].method()`
+    /// `IndexMut` rewrite — leaves a single, uniform entry in
+    /// [`sem::types::TypeAnnotations::method_dispatch`].
+    ///
+    /// Synthetic calls (for-of's `.into_iter()` / `.next()`) pass
+    /// `ast_id == None` and skip recording per the
+    /// [`sem::types::MethodDispatch`] contract.
+    pub(super) fn record_method_dispatch(
+        &mut self,
+        ast_id: Option<crate::ast::AstId>,
+        function_ref: &tir::FunctionRef,
+        self_kind: ast::SelfKind,
+    ) {
+        let Some(ast_id) = ast_id else { return };
+        self.sem.types.method_dispatch.insert(
+            ast_id,
+            sem::types::MethodDispatch {
+                function_ref: function_ref.clone(),
+                self_kind,
+            },
+        );
+    }
+
+    /// Record a coercion decision for the expression at `ast_id`. Called
+    /// from each successful `try_coerce_*` sub-helper so every caller of
+    /// those helpers (`try_coerce`, `resolve_cast`, the deferred-coercion
+    /// fixup in struct-literal resolution, and `resolve_let`'s
+    /// struct-to-map path) records the choice at the decision point — no
+    /// branch can bypass it.
+    pub(super) fn record_coercion(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        kind: sem::types::CoercionKind,
+        target_type: TypeId,
+    ) {
+        self.sem
+            .types
+            .coercions
+            .insert(ast_id, sem::types::CoercionChoice { kind, target_type });
+    }
+
+    /// Record a TIR-direct desugar tag for the AST node at `ast_id`.
+    /// Called from each `assert` / `matches` / comparison-chain / for-of
+    /// / `while` / compound-assignment lowering site so the future
+    /// `reify` pass can pick the same expansion path. See
+    /// [`sem::types::DesugarKind`].
+    pub(super) fn record_desugar(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        kind: sem::types::DesugarKind,
+    ) {
+        self.sem.types.desugars.insert(ast_id, kind);
     }
 
     /// Record a local binding's [`Symbol`] and resolved [`TypeId`] so that
