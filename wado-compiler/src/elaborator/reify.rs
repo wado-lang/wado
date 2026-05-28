@@ -5535,20 +5535,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|ty| self.resolve_type(ty))
             .collect();
 
-        // TODO(stage-5-bodies): callee parameter types drive literal
-        // re-coercion + `is_mut` flagging for each argument. Until the
-        // recording for them lands, reify resolves each argument with
-        // `expected = None` and sets `is_mut = false`. This matches the
-        // shape of the elaborator's output for arguments that needed
-        // no coercion / no mut binding, which covers the bulk of real
-        // call sites; the missing cases are flagged in the WEP's
-        // Stage 5 follow-up list.
+        // Per-arg `is_mut` comes from the recorded `MethodDispatch`
+        // (drained from `lookup_method_param_is_mut` at annotate time).
+        // Zip with the AST args so call sites with fewer args than
+        // declared (a Stage-5 recovery shape) still produce the
+        // right is_mut for the args we have.
         let args: Vec<crate::tir::CallArg> = method_call
             .args
             .iter()
-            .map(|a| {
+            .zip(
+                dispatch
+                    .param_is_mut
+                    .iter()
+                    .copied()
+                    .chain(std::iter::repeat(false)),
+            )
+            .map(|(a, is_mut)| {
                 let arg_tir = self.reify_expr(a, ctx, None);
-                crate::tir::CallArg::new(arg_tir, false)
+                crate::tir::CallArg::new(arg_tir, is_mut)
             })
             .collect();
 

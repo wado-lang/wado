@@ -85,6 +85,12 @@ pub(crate) struct MethodDispatch {
     /// `&mut` layer before passing it to the method.
     #[allow(dead_code)]
     pub(crate) is_ref_impl: bool,
+    /// Per-argument `is_mut` flag drained from the resolved method's
+    /// parameter signature (`lookup_method_param_is_mut`). Reify zips
+    /// this with the reified argument exprs to build [`crate::tir::CallArg`]s
+    /// with the same `is_mut` shape annotate produced.
+    #[allow(dead_code)]
+    pub(crate) param_is_mut: Vec<bool>,
 }
 
 /// Which sub-coercion [`super::super::Elaborator::try_coerce`] applied at

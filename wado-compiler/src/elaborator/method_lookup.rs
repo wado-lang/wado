@@ -3521,7 +3521,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `DesugarKind::IndexMutMethodCall` so reify knows to follow the
         // IndexMut expansion path (synthesise `__index_mut_val`) instead
         // of the plain method-call path.
-        self.record_method_dispatch(Some(method_call.id), &func, self_kind, method_is_ref_impl);
+        self.record_method_dispatch(
+            Some(method_call.id),
+            &func,
+            self_kind,
+            method_is_ref_impl,
+            method_param_is_mut.clone(),
+        );
         self.record_desugar(
             method_call.id,
             super::sem::types::DesugarKind::IndexMutMethodCall,
