@@ -276,15 +276,13 @@ fn attach_variant_header(rule: &mut Rule, v: FollowVariant) {
     }
 }
 
-/// Walk a freshly-lowered LR variant rule and re-stamp `variant_id`
-/// on every top-level self-recursive `ScanRuleCall` inside the LR
-/// suffixes. Used by `lower_variant_rules` after `attach_variant_header`
-/// to preserve the pre-Phase-2-F emitter contract: an LR variant's
-/// suffix recurses into the SAME variant function (not the base
-/// `scan_X`, and not whichever per-call-site variant
-/// `intern_follow_variant` happened to register for the local follow).
-///
-/// No-op for non-LR rules — they have no LR suffix to walk.
+/// Re-stamp `variant_id` on every self-recursive `ScanRuleCall`
+/// (top-level or nested in `Repeat` / `Group` / `OptionalLookahead`)
+/// inside the LR suffixes of a freshly-lowered variant rule. Used by
+/// `lower_variant_rules` so the variant's LR suffix recurses into
+/// itself, not the base `scan_X` or whichever per-call-site variant
+/// `intern_follow_variant` registered for the local follow. No-op
+/// for non-LR rules.
 fn attach_variant_id_to_lr_self_refs(rule: &mut Rule, rule_snake: &String, variant_id: i32) {
     if let LeftRecursive(l) = *rule {
         // Walk every suffix once to detect any self-ref (top-level OR
@@ -337,10 +335,10 @@ fn attach_variant_id_to_lr_self_refs(rule: &mut Rule, rule_snake: &String, varia
     }
 }
 
-/// Returns true iff `se` contains a `ScanRuleCall` targeting
-/// `rule_snake`, anywhere reachable through container variants
-/// (`Repeat`, `Group`, `OptionalLookahead`). Mirrors the
-/// container-walking structure of `rebind_scan_self_ref_variant_id_deep`.
+/// Returns true iff `se` carries a `ScanRuleCall` to `rule_snake`
+/// anywhere reachable through `Repeat` / `Group` / `OptionalLookahead`.
+/// Pre-check for the deep walkers so they skip subtrees with no
+/// self-ref (Wado value semantics make the rebuild a deep clone).
 fn scan_element_contains_self_ref(se: &ScanElement, rule_snake: &String) -> bool {
     return match se {
         RuleCall(rc) => rc.target_snake == *rule_snake,
@@ -377,15 +375,10 @@ fn scan_element_contains_self_ref(se: &ScanElement, rule_snake: &String) -> bool
     };
 }
 
-/// Deep counterpart to `rebind_scan_self_ref_variant_id`: walks
-/// `ScanElement` containers (`Repeat`, `Group`, `OptionalLookahead`)
-/// and stamps `variant_id = Some(variant_id)` on every reachable
-/// self-recursive `ScanRuleCall`. Required because variant rule
-/// bodies can carry self-refs nested in containers (the same shape
-/// `deep_stamp_inner_self_refs_scan` handles for `min_prec_arg`);
-/// the original shallow walker missed them and the variant body's
-/// nested scan call leaked to the base `scan_<rule>` rather than the
-/// variant's `scan_<rule>__follow_<id>`.
+/// Walks `ScanElement` containers and stamps
+/// `variant_id = Some(variant_id)` on every reachable self-recursive
+/// `ScanRuleCall`. Pairs with `deep_stamp_inner_self_refs_scan`, which
+/// handles `min_prec_arg` with the same container coverage.
 fn rebind_scan_self_ref_variant_id_deep(se: ScanElement, rule_snake: &String, variant_id: i32) -> ScanElement {
     return match se {
         RuleCall(rc) => {
@@ -850,26 +843,15 @@ fn stamp_lr_self_ref_min_prec(lr_alts: &mut Array<LrAlt>, rule_name: &String, ru
                 new_ops.push(rebind_self_ref_min_prec(*op_ref, prec));
                 new_scan.push(rebind_scan_self_ref_min_prec(*se_ref, rule_snake, prec));
             } else {
-                // The top-level op is not itself a self-ref, but it
-                // may contain one nested inside any container variant
-                // (`Repeat`, `Group`, `Repeat`-of-`Group`, scan-side
-                // `OptionalLookahead`, …). The canonical hit is the
-                // list-label pattern `b+=expr (',' b+=expr)* '>>' c=expr`,
-                // but the same logic applies to `(self ',')+`, `(self)?`,
-                // multi-alt groups containing a self-ref alt, etc.
-                // Inner self-refs must respect the alt's conflict floor
-                // so the container body terminates before consuming an
-                // outer LR suffix token. Always uses `conflict_min` —
-                // the BETWEEN…AND downgrade in `compute_self_ref_prec_from_ops`
-                // applies only at top level (see its docstring).
-                //
-                // Short-circuit when neither side carries a nested
-                // self-ref. Wado's value semantics mean the deep
-                // walkers rebuild every nested struct verbatim even
-                // for self-ref-free subtrees (a Token, an enum-set
-                // `(K_A | K_B)*` group, etc. — common in LR suffixes).
-                // Mirrors the `has_self_ref` pre-scan in
-                // `attach_variant_id_to_lr_self_refs`.
+                // Self-ref nested inside a container (`Repeat`, `Group`,
+                // scan-side `OptionalLookahead`). Use `conflict_min`
+                // unconditionally: an inner self-ref must terminate
+                // before consuming an outer LR suffix token, so the
+                // BETWEEN…AND downgrade in `compute_self_ref_prec_from_ops`
+                // (top-level only) doesn't apply. Short-circuit when
+                // the subtree has no self-ref — the deep walker would
+                // otherwise rebuild every nested struct (value-semantics
+                // deep clone).
                 let needs_op = op_subtree_contains_self_ref(op_ref, rule_name);
                 let needs_scan = scan_element_contains_self_ref(se_ref, rule_snake);
                 if needs_op {
@@ -972,20 +954,12 @@ fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
     };
 }
 
-/// Recursively stamp `min_prec_arg = prec` on every self-recursive
-/// `RuleCall` reachable through container ops (`Repeat`, `Group`,
-/// `ListLabel`). Non-self-refs and leaves are passed through
-/// unchanged.
-///
-/// Distinct from `rebind_self_ref_min_prec`: the latter only walks
-/// `RuleCall` / `ListLabel`, which is enough for the top-level suffix
-/// position chosen by `stamp_lr_self_ref_min_prec`. This walker is
-/// invoked for the OTHER positions — where the top op is a
-/// container — so a self-ref nested inside `(...)+` / `(...)?` /
-/// `(...)*` / a `(... | ...)` group still respects the alt's
-/// conflict floor. The parse side keys on `rule_name` (PascalCase);
-/// the scan side keys on `rule_snake`, so both names are threaded
-/// through together.
+/// Stamp `min_prec_arg = prec` on every self-recursive `RuleCall`
+/// reachable through `Repeat` / `Group` / `ListLabel`. Used by
+/// `stamp_lr_self_ref_min_prec` for top-level positions where the
+/// op is a container (`rebind_self_ref_min_prec` covers direct
+/// `RuleCall` / `ListLabel`). Both name forms are threaded so the
+/// scan-side recursion (`rule_snake`-keyed) stays in sync.
 fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String, prec: i32) -> Op {
     return match op {
         RuleCall(rc) => {
@@ -1066,18 +1040,11 @@ fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String
     };
 }
 
-/// Scan-side mirror of `deep_stamp_inner_self_refs_op`. Walks
-/// `ScanElement` containers and stamps `min_prec_arg = prec` on every
-/// self-recursive `RuleCall` (keyed by `target_snake`).
-///
-/// `variant_id` is preserved verbatim — mirrors the parse-side arm at
-/// `deep_stamp_inner_self_refs_op::RuleCall`. The top-level stamper
-/// `rebind_scan_self_ref_min_prec` clears it because the LR loop's
-/// `min_prec` carries all the disambiguation it needs and the post
-/// pass `attach_variant_id_to_lr_self_refs` will refill it from the
-/// enclosing variant. For nested positions the per-call-site id that
-/// `intern_follow_variant` registered must survive — otherwise the
-/// variant body's nested scan call would lose the local follow mask.
+/// Scan-side mirror of `deep_stamp_inner_self_refs_op`. Preserves
+/// `variant_id` (unlike the top-level `rebind_scan_self_ref_min_prec`
+/// which clears it): a nested self-ref isn't an LR climb, so the
+/// per-call-site id `intern_follow_variant` set for the local follow
+/// must survive.
 fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
     return match se {
         RuleCall(rc) => {
@@ -1154,20 +1121,12 @@ fn collect_lr_suffix_first_tokens_from_lowered(lr_alts: &Array<LrAlt>) -> Array<
     return result;
 }
 
-/// Pick the `min_prec` to pass into a TOP-LEVEL self-recursive call at
-/// position `k` of the suffix's ops. Defaults to `conflict_min`; drops
-/// to `0` for non-trailing self-refs whose immediately following op is
-/// not in `lr_suffix_first_tokens` — the BETWEEN…AND pattern where the
-/// non-final recursive operand has no LR-suffix-delimiter neighbour
-/// to disambiguate it.
-///
-/// Nested self-refs (inside `Repeat` / `Group` / `OptionalLookahead`)
-/// intentionally bypass this helper and use `conflict_min`
-/// unconditionally — see `stamp_lr_self_ref_min_prec`'s `else` branch.
-/// The container body must terminate before consuming an outer LR
-/// suffix token, so the strict floor is the safe choice; loosening
-/// it to `0` would re-introduce the regression fixed by
-/// `LR helper stamps min_prec on a self-ref nested inside a Repeat group`.
+/// Pick the `min_prec` for a TOP-LEVEL self-recursive call at suffix
+/// position `k`. Defaults to `conflict_min`; drops to `0` for
+/// non-trailing self-refs whose next op is not an LR-suffix token
+/// (BETWEEN…AND pattern). Nested self-refs bypass this helper and
+/// use `conflict_min` unconditionally — see
+/// `stamp_lr_self_ref_min_prec`'s container branch.
 fn compute_self_ref_prec_from_ops(ops: &Array<Op>, k: i32, elem_idx: i32, last_self_ref_idx: i32, conflict_min: i32, lr_suffix_first_tokens: &Array<String>) -> i32 {
     let mut prec = conflict_min;
     if elem_idx != last_self_ref_idx && k + 1 < ops.len() {
@@ -2310,18 +2269,12 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
         ops.push(op);
     }
 
-    // For prefix LR alts (e.g. `'-' e` in `e : e '+' e | '-' e | …`),
-    // stamp the trailing self-ref RuleCall's `min_prec_arg` so emit
-    // doesn't need to thread the prec value through `ctx`. The
-    // surrounding alt walker (`gen_op_leaf`) reads
-    // `RuleCallOp.min_prec_arg` directly.
-    //
-    // The shallow `find_self_ref_rule_call` is sufficient here because
-    // `compute_prefix_self_ref_min_prec` → `is_prefix_alt` only returns
-    // a positive prec when the trailing element is a direct (possibly
-    // labeled) self-ref — never a container wrapping one. If
-    // `is_prefix_alt` ever broadens to cover containers, mirror the
-    // depth-walking fallback in `stamp_lr_self_ref_min_prec`.
+    // For prefix LR alts (`'-' e` in `e : e '+' e | '-' e | …`), stamp
+    // the trailing self-ref's `min_prec_arg` so emit reads it directly.
+    // The shallow `find_self_ref_rule_call` is sufficient because
+    // `is_prefix_alt` only accepts a direct (possibly labeled) self-ref
+    // as the trailing element; if it ever broadens to containers,
+    // mirror the depth-walking fallback in `stamp_lr_self_ref_min_prec`.
     let prefix_prec = compute_prefix_self_ref_min_prec(rule, idx);
     if prefix_prec > 0 && !ops.is_empty() {
         let last_idx = ops.len() - 1;

@@ -3921,12 +3921,9 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         let alt_idx = sorted_group[k];
         let is_last = k == last;
-        // Read the lowered `RuleCallOp` to pick up `variant_id` and
-        // `min_prec_arg` baked by `stamp_lr_self_ref_min_prec` /
-        // `attach_variant_id_to_lr_self_refs`. The surface-IR
-        // `RuleRef` carries the source-level name but no resolution
-        // data; emitting straight from it (the pre-fix path) silently
-        // drops self-ref precedence and follow-variant routing.
+        // Read the lowered `RuleCallOp` so `variant_id` and
+        // `min_prec_arg` (baked at lower time) reach emit. The surface
+        // `RuleRef` carries only the source-level name.
         if let RuleCall(rc) = &g_op_alts[alt_idx].ops[0] {
             let fn_name = if let Some(id) = rc.variant_id {
                 `_parse_{rc.target_snake}__follow_{id}`;
