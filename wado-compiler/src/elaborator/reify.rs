@@ -128,6 +128,43 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
 
 #[allow(dead_code)]
 impl<'a, H: CompilerHost> Reify<'a, H> {
+    /// Construct a per-module `Reify` for the orchestration driver.
+    /// The `tysys` clone is the shallow Rc/Arc copy
+    /// [`TypeSystem`] supports; per-module state (`sem`,
+    /// `current_module_*`) is borrowed from
+    /// [`crate::elaborator::orchestration::AnnotateState`] for the
+    /// duration of the reify walk.
+    ///
+    /// `current_module_source` / `current_module_items` are
+    /// placeholders at construction time — the driver overwrites them
+    /// inside [`Self::reify_module`]. Keeping them on the struct
+    /// matches the elaborator's shape (avoids threading them through
+    /// every method signature) and keeps the walk-order invariant
+    /// (Gap 7) tractable.
+    pub(crate) fn new(
+        tysys: TypeSystem,
+        sem: &'a ModuleSemantics,
+        symbols: &'a SymbolTable,
+        loaded_modules: &'a IndexMap<ModuleSource, Module>,
+        logger: &'a Logger<'a, H>,
+        entry_module_source: ModuleSource,
+        interner: Rc<RefCell<ModuleSourceInterner>>,
+        invocations: Rc<crate::kiln::InvocationIndex>,
+    ) -> Self {
+        Self {
+            tysys,
+            sem,
+            symbols,
+            loaded_modules,
+            logger,
+            current_module_source: ModuleSource::entry_point_uninitialized(),
+            current_module_items: &[],
+            interner,
+            invocations,
+            entry_module_source,
+        }
+    }
+
     /// Build a [`TypeLookup`] view over the current module's import
     /// context and the shared `all_*` tables. Used by `reify_*` helpers
     /// that need to resolve AST `Type` nodes (e.g. type-param defaults,
@@ -1225,7 +1262,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_template_string(template, ctx, recorded_type)
             }
             ast::Expr::Matches(m) => self.reify_matches(m, ctx),
-            ast::Expr::CompoundAssign(compound) => self.reify_compound_assign(compound, ctx, recorded_type),
+            ast::Expr::CompoundAssign(compound) => {
+                self.reify_compound_assign(compound, ctx, recorded_type)
+            }
             ast::Expr::TryOp(qm) => self.reify_question_mark(qm, ctx, recorded_type),
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
