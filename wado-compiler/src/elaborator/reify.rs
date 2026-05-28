@@ -1509,6 +1509,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Index(index) => self.reify_index(index, ctx, recorded_type),
             ast::Expr::ComparisonChain(chain) => self.reify_comparison_chain(chain, ctx),
+            ast::Expr::StaticMethodCall(static_call) => self.reify_static_method_call(static_call, ctx, recorded_type),
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
@@ -1600,7 +1601,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 )
             }
-            ast::Expr::StaticMethodCall(_) | ast::Expr::WithHandler(_) => {
+            ast::Expr::WithHandler(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
                 // `Elaborator::resolve_expr` arm. Each arm consults
                 // `sem.types.{expression_types, coercions,
@@ -1658,12 +1659,32 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 stmts.extend(body_block.stmts);
                 stmts
             }
-            ast::Condition::LetChain { .. } => {
-                // TODO(stage-5-bodies): `while let PAT = … { … }`
-                // shares the let-chain expansion with `if let` (see
-                // `reify_if_expr`'s LetChain branch). When that
-                // helper lands it should also drive this arm.
-                todo!("reify_while: LetChain pending body-walk reify")
+            ast::Condition::LetChain {
+                elements,
+                span: cond_span,
+            } => {
+                // Mirror `Elaborator::resolve_while`'s LetChain
+                // arm (stmt.rs:3016+): the else-branch
+                // unconditionally `break`s out of the loop.
+                let break_stmt = TirStmt::new(
+                    TirStmtKind::Break {
+                        label: None,
+                        value: None,
+                    },
+                    span,
+                );
+                let else_block = TirBlock::new(vec![break_stmt], *cond_span);
+                ctx.enter_scope();
+                let body_stmts = self.reify_let_chain_stmts(
+                    elements,
+                    &w.body,
+                    Some(&else_block),
+                    ctx,
+                    None,
+                    *cond_span,
+                );
+                ctx.exit_scope();
+                body_stmts
             }
         };
 
@@ -2054,11 +2075,90 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 s.extend(self.reify_for_update(f.update.as_ref(), ctx));
                 s
             }
-            Some(ast::Condition::LetChain { .. }) => {
-                // TODO(stage-5-bodies): for-let-chain mirrors the
-                // `if let` / `while let` chain expansion. Lands when
-                // `reify_let_chain_stmts` lands.
-                todo!("reify_for: LetChain condition pending body-walk reify")
+            Some(ast::Condition::LetChain {
+                elements,
+                span: cond_span,
+            }) => {
+                // For-let-chain is restricted to a single Let
+                // element (the parser enforces this; mirror
+                // `Elaborator::resolve_for` stmt.rs:3164+). The
+                // expansion shape is a single Match: the pattern
+                // arm's body is the labeled-body + update; the
+                // wildcard arm breaks.
+                use crate::tir::{TirExprKind, TirMatchArm, TirPattern};
+                let single_let = if elements.len() == 1 {
+                    match &elements[0] {
+                        ast::ConditionElement::Let { pattern, expr, span: elem_span } => {
+                            Some((pattern, expr, *elem_span))
+                        }
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+                let Some((pattern, expr, elem_span)) = single_let else {
+                    // Annotate already diagnosed multi-element
+                    // for-let-chain as `InvalidPattern`; emit
+                    // empty to mirror.
+                    ctx.exit_scope();
+                    ctx.for_continue_labels = saved_continue;
+                    return vec![];
+                };
+
+                let scrutinee = self.reify_expr(expr, ctx, None);
+                let scrutinee_type = scrutinee.type_id;
+                ctx.enter_scope();
+                let tir_pattern = self.reify_pattern(pattern, scrutinee_type, ctx);
+                let labeled_body = self.reify_for_labeled_body(&body_label, &f.body, ctx);
+                let update_stmts = self.reify_for_update(f.update.as_ref(), ctx);
+                ctx.exit_scope();
+
+                let mut then_stmts = vec![labeled_body];
+                then_stmts.extend(update_stmts);
+                let then_body = TirExpr::new(
+                    TirExprKind::Block(TirBlock::new(then_stmts, *cond_span)),
+                    TypeTable::UNIT,
+                    *cond_span,
+                );
+                let else_body = TirExpr::new(
+                    TirExprKind::Block(TirBlock::new(
+                        vec![TirStmt::new(
+                            TirStmtKind::Break {
+                                label: None,
+                                value: None,
+                            },
+                            span,
+                        )],
+                        *cond_span,
+                    )),
+                    TypeTable::NEVER,
+                    *cond_span,
+                );
+                let arms = vec![
+                    TirMatchArm {
+                        pattern: tir_pattern,
+                        guard: None,
+                        body: then_body,
+                        span: elem_span,
+                    },
+                    TirMatchArm {
+                        pattern: TirPattern::Wildcard,
+                        guard: None,
+                        body: else_body,
+                        span: *cond_span,
+                    },
+                ];
+                vec![TirStmt::new(
+                    TirStmtKind::Expr(TirExpr::new(
+                        TirExprKind::Match {
+                            expr: Box::new(scrutinee),
+                            arms,
+                        },
+                        TypeTable::UNIT,
+                        *cond_span,
+                    )),
+                    *cond_span,
+                )]
             }
         };
 
@@ -2115,6 +2215,132 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .unwrap_or_default()
     }
 
+    /// Reify a let-chain (`if let PAT = e [&& BOOL]* { … }`) into
+    /// nested Match / If stmts. Mirrors
+    /// `Elaborator::resolve_let_chain_stmts` (stmt.rs:1099+).
+    /// Shared by the LetChain branches of `reify_if_expr`,
+    /// `reify_if_stmt`, and `reify_while`.
+    ///
+    /// Each `Let` element becomes a two-arm Match: the recorded
+    /// pattern arm continues the chain via recursion, the
+    /// wildcard arm falls back to the chain's `else_block`. Each
+    /// `Expr` element becomes a single-branch `If` whose body is
+    /// the recursive continuation. The recursion terminates at
+    /// an empty element list, where the then_block is reified
+    /// directly.
+    fn reify_let_chain_stmts(
+        &mut self,
+        elements: &[ast::ConditionElement],
+        then_block_ast: &ast::Block,
+        else_block: Option<&crate::tir::TirBlock>,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+        span: crate::token::Span,
+    ) -> Vec<TirStmt> {
+        use crate::tir::{
+            TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind, TypeTable,
+        };
+
+        if elements.is_empty() {
+            return self.reify_block(then_block_ast, ctx, expected_type).stmts;
+        }
+
+        match &elements[0] {
+            ast::ConditionElement::Let {
+                pattern,
+                expr,
+                span: elem_span,
+            } => {
+                let scrutinee = self.reify_expr(expr, ctx, None);
+                let scrutinee_type = scrutinee.type_id;
+                let tir_pattern = self.reify_pattern(pattern, scrutinee_type, ctx);
+                let inner_stmts = self.reify_let_chain_stmts(
+                    &elements[1..],
+                    then_block_ast,
+                    else_block,
+                    ctx,
+                    expected_type,
+                    span,
+                );
+                let inner_block = TirBlock::new(inner_stmts, span);
+                let then_type = match inner_block.stmts.last() {
+                    Some(s) => match &s.kind {
+                        TirStmtKind::Expr(e) => e.type_id,
+                        _ => TypeTable::UNIT,
+                    },
+                    None => TypeTable::UNIT,
+                };
+                let else_tir = else_block.cloned();
+                let else_type = match else_tir.as_ref() {
+                    Some(b) => match b.stmts.last() {
+                        Some(s) => match &s.kind {
+                            TirStmtKind::Expr(e) => e.type_id,
+                            _ => TypeTable::UNIT,
+                        },
+                        None => TypeTable::UNIT,
+                    },
+                    None => TypeTable::UNIT,
+                };
+                let else_arm_span = else_tir.as_ref().map_or(span, |b| b.span);
+                let match_type = crate::tir::agree_branch_types(then_type, else_type)
+                    .unwrap_or(TypeTable::UNIT);
+                let then_body = TirExpr::new(TirExprKind::Block(inner_block), then_type, span);
+                let else_body = match else_tir {
+                    Some(b) => {
+                        let b_span = b.span;
+                        TirExpr::new(TirExprKind::Block(b), else_type, b_span)
+                    }
+                    None => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+                };
+                let arms = vec![
+                    TirMatchArm {
+                        pattern: tir_pattern,
+                        guard: None,
+                        body: then_body,
+                        span: *elem_span,
+                    },
+                    TirMatchArm {
+                        pattern: TirPattern::Wildcard,
+                        guard: None,
+                        body: else_body,
+                        span: else_arm_span,
+                    },
+                ];
+                vec![TirStmt::new(
+                    TirStmtKind::Expr(TirExpr::new(
+                        TirExprKind::Match {
+                            expr: Box::new(scrutinee),
+                            arms,
+                        },
+                        match_type,
+                        span,
+                    )),
+                    span,
+                )]
+            }
+            ast::ConditionElement::Expr(expr) => {
+                let condition = self.reify_expr(expr, ctx, Some(TypeTable::BOOL));
+                let inner_stmts = self.reify_let_chain_stmts(
+                    &elements[1..],
+                    then_block_ast,
+                    else_block,
+                    ctx,
+                    expected_type,
+                    span,
+                );
+                let inner_block = TirBlock::new(inner_stmts, span);
+                vec![TirStmt::new(
+                    TirStmtKind::If {
+                        condition,
+                        then_block: inner_block,
+                        else_block: else_block.cloned(),
+                    },
+                    span,
+                )]
+            }
+        }
+    }
+
     /// Reify a stmt-position `if cond { … } else { … }`. Stmt
     /// position never carries an `expected_type` from the surrounding
     /// block (the elaborator switches to `…_with_expected` only on a
@@ -2141,13 +2367,29 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     if_stmt.span,
                 )]
             }
-            ast::Condition::LetChain { .. } => {
-                // TODO(stage-5-bodies): mirror
-                // `Elaborator::resolve_if_stmt`'s `Condition::LetChain`
-                // arm (stmt.rs ≈1014). The expansion shape is the
-                // same as the expression-position chain — share with
-                // `reify_if_expr`'s LetChain branch when it lands.
-                todo!("reify_if_stmt: LetChain pending body-walk reify")
+            ast::Condition::LetChain { elements, .. } => {
+                // Mirror `Elaborator::resolve_if_stmt`'s
+                // `Condition::LetChain` arm (stmt.rs:1014+): the
+                // chain elements lower into nested Match / If
+                // stmts via the shared `reify_let_chain_stmts`.
+                // Else-branch resolves in the outer scope (chain
+                // bindings aren't visible there); the chain body
+                // gets its own scope.
+                let else_block = if_stmt
+                    .else_block
+                    .as_ref()
+                    .map(|b| self.reify_block(b, ctx, None));
+                ctx.enter_scope();
+                let stmts = self.reify_let_chain_stmts(
+                    elements,
+                    &if_stmt.then_block,
+                    else_block.as_ref(),
+                    ctx,
+                    None,
+                    if_stmt.span,
+                );
+                ctx.exit_scope();
+                stmts
             }
         }
     }
@@ -2168,15 +2410,34 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         let cond_expr = match &if_expr.condition {
             ast::Condition::Expr(e) => e,
-            ast::Condition::LetChain { .. } => {
-                // TODO(stage-5-bodies): mirror
-                // `Elaborator::resolve_if_expr`'s `Condition::LetChain`
-                // arm (expr.rs ≈1867–1973). The expansion produces a
-                // `Block` of nested `IfLet` stmts that fall through to
-                // the `else_block`; reify reads the
-                // `DesugarKind::IfLetChain` tag the elaborator already
-                // placed on `if_expr.id` and replays the same shape.
-                todo!("reify_if_expr: LetChain pending body-walk reify")
+            ast::Condition::LetChain { elements, .. } => {
+                // Mirror `Elaborator::resolve_if_expr`'s
+                // `Condition::LetChain` arm (expr.rs:1867+): the
+                // chain reduces to a `Block` of nested Match /
+                // If stmts via `reify_let_chain_stmts`. The
+                // overall block's result type is the recorded
+                // `expected_type` (or `recorded_type` as a
+                // fallback when no expectation propagated).
+                let else_block = if_expr
+                    .else_block
+                    .as_ref()
+                    .map(|b| self.reify_block(b, ctx, expected_type));
+                ctx.enter_scope();
+                let stmts = self.reify_let_chain_stmts(
+                    elements,
+                    &if_expr.then_block,
+                    else_block.as_ref(),
+                    ctx,
+                    expected_type,
+                    if_expr.span,
+                );
+                ctx.exit_scope();
+                let chain_block = crate::tir::TirBlock::new(stmts, if_expr.span);
+                return TirExpr::new(
+                    crate::tir::TirExprKind::Block(chain_block),
+                    recorded_type,
+                    if_expr.span,
+                );
             }
         };
         let condition = self.reify_expr(cond_expr, ctx, Some(crate::tir::TypeTable::BOOL));
@@ -3497,6 +3758,96 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// Reify a `StaticMethodCallExpr` (AST shape:
+    /// `Type::method(args)` with the type parsed as a `Type` node
+    /// rather than a `Call { callee: Ident("Type::method") }`).
+    /// Used for fully-qualified static method calls like
+    /// `Stream<u8>::new()` where the target carries type args.
+    ///
+    /// Reify follows the same shape as the qualified-callee
+    /// branch of `reify_call`: resolve the target type, derive the
+    /// impl module from the resolved struct's `module_source`,
+    /// build the mangled `__Type__method` `FunctionRef`. Type
+    /// args come from the call's turbofish, else from Gap 1's
+    /// `generic_instantiations` record.
+    fn reify_static_method_call(
+        &mut self,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::name::{LocalMethodName, MethodName};
+        use crate::tir::{CallArg, ResolvedType, TirExprKind};
+
+        let target_type_id = self.resolve_type(&static_call.target_type);
+        let (struct_name, struct_module): (String, crate::module_source::ModuleSource) = {
+            let tt = self.tysys.type_table.borrow();
+            match tt.get(target_type_id).clone() {
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    ..
+                }
+                | ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    ..
+                }
+                | ResolvedType::Newtype {
+                    name,
+                    module_source,
+                    ..
+                }
+                | ResolvedType::Variant { name, module_source }
+                | ResolvedType::Flags { name, module_source } => (name, module_source),
+                _ => (String::new(), self.current_module_source.clone()),
+            }
+        };
+
+        let mangled_method_name =
+            MethodName::format_local(&struct_name, None, &static_call.method);
+
+        let explicit_method_type_args: Vec<TypeId> = static_call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+        let type_args: Vec<TypeId> = if !explicit_method_type_args.is_empty() {
+            explicit_method_type_args
+        } else {
+            self.sem
+                .types
+                .generic_instantiations
+                .get(&static_call.id)
+                .map(|gi| gi.type_args.clone())
+                .unwrap_or_default()
+        };
+
+        let args: Vec<CallArg> = static_call
+            .args
+            .iter()
+            .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
+            .collect();
+
+        let method_info =
+            LocalMethodName::new(struct_name.clone(), None, static_call.method.clone());
+
+        TirExpr::new(
+            TirExprKind::Call {
+                func: crate::tir::FunctionRef {
+                    module_source: struct_module,
+                    name: mangled_method_name,
+                    monomorph_info: None,
+                    method_info: Some(method_info),
+                },
+                type_args,
+                args,
+            },
+            recorded_type,
+            static_call.span,
+        )
+    }
+
     /// Reify a `CallExpr`. Stage 5 covers the common shapes: bare-ident
     /// callees that resolve to a current-module or imported free
     /// function (`TirExprKind::Call`), and qualified-ident
@@ -3560,6 +3911,82 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
 
+        // Closure-call shape: bare-ident callee that resolves to a
+        // local with `fn(...)` type. Annotate decides this by
+        // probing `ctx.lookup`; reify reproduces by checking the
+        // ident's local + its resolved type. The same `ctx` reify
+        // built during the body walk has every let-bound local in
+        // place (per the Gap 7 walk-order invariant), so the lookup
+        // returns the same answer.
+        if let ast::Expr::Ident(ident) = &call.callee
+            && !ident.name.contains("::")
+            && let Some(local) = ctx.lookup(&ident.name)
+            && matches!(
+                self.tysys.type_table.borrow().get(local.type_id),
+                crate::tir::ResolvedType::Function { .. },
+            )
+        {
+            let local_index = local.index;
+            let local_type_id = local.type_id;
+            let callee_expr = TirExpr::new(
+                TirExprKind::Local {
+                    index: local_index,
+                    name: ident.name.clone(),
+                },
+                local_type_id,
+                ident.span,
+            );
+            let arg_exprs: Vec<TirExpr> = call
+                .args
+                .iter()
+                .map(|a| self.reify_expr(a, ctx, None))
+                .collect();
+            return TirExpr::new(
+                TirExprKind::IndirectCall {
+                    callee: Box::new(callee_expr),
+                    args: arg_exprs,
+                },
+                recorded_type,
+                span,
+            );
+        }
+
+        // Indirect-call shape: callee is any non-ident expression
+        // whose type resolves to a function (e.g. `arr[i](x)`,
+        // `(foo.bar)(x)`, `(get_fn())(x)`, `(|x| x)(1)`). Mirrors
+        // `Elaborator::resolve_call`'s non-ident-callee path
+        // (call.rs:248+).
+        if !matches!(&call.callee, ast::Expr::Ident(_)) {
+            let callee_expr = self.reify_expr(&call.callee, ctx, None);
+            let is_fn = matches!(
+                self.tysys.type_table.borrow().get(callee_expr.type_id),
+                crate::tir::ResolvedType::Function { .. },
+            );
+            if is_fn {
+                let arg_exprs: Vec<TirExpr> = call
+                    .args
+                    .iter()
+                    .map(|a| self.reify_expr(a, ctx, None))
+                    .collect();
+                return TirExpr::new(
+                    TirExprKind::IndirectCall {
+                        callee: Box::new(callee_expr),
+                        args: arg_exprs,
+                    },
+                    recorded_type,
+                    span,
+                );
+            }
+            // Non-fn-typed non-ident callee — annotate already
+            // diagnosed it (`TypeError::CalleeNotCallable`).
+            // Match the elaborator's recovery shape.
+            return TirExpr::new(
+                TirExprKind::Unit,
+                crate::tir::TypeTable::ERROR,
+                span,
+            );
+        }
+
         // Free-function call: bare-ident callee that names a current-
         // module or imported function.
         if let ast::Expr::Ident(ident) = &call.callee
@@ -3588,15 +4015,59 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .unwrap_or_else(|| ident.name.clone());
                 (import_src, original_name)
             } else {
-                // The callee neither matches a local function nor an
-                // import — it might be a closure-call, static method,
-                // or a misresolved name. The full dispatch lives in
-                // `Elaborator::resolve_call`; route to `todo!` until
-                // the remaining branches port.
-                todo!(
-                    "reify_call: callee `{}` not in current_module / imports — \
-                     closure / static-method / namespace-import dispatch pending",
-                    ident.name
+                // The callee resolves neither as a local fn-typed
+                // value (closure-call branch above) nor as a known
+                // free / imported function. The remaining shapes
+                // are namespaced calls (`ns::foo(x)`, with `ns`
+                // resolved via `sem.imports.namespace_imports`).
+                // Annotate has diagnosed truly-unresolved names.
+                if let Some(double_colon) = ident.name.find("::") {
+                    let ns_prefix = &ident.name[..double_colon];
+                    let rest = &ident.name[double_colon + 2..];
+                    if let Some(ns_source) =
+                        self.sem.imports.namespace_imports.get(ns_prefix).cloned()
+                        && !rest.contains("::")
+                    {
+                        let type_args: Vec<TypeId> = if !call.type_args.is_empty() {
+                            call.type_args
+                                .iter()
+                                .map(|ty| self.resolve_type(ty))
+                                .collect()
+                        } else {
+                            self.sem
+                                .types
+                                .generic_instantiations
+                                .get(&call.id)
+                                .map(|gi| gi.type_args.clone())
+                                .unwrap_or_default()
+                        };
+                        let arg_calls: Vec<CallArg> = call
+                            .args
+                            .iter()
+                            .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
+                            .collect();
+                        return TirExpr::new(
+                            TirExprKind::Call {
+                                func: crate::tir::FunctionRef {
+                                    module_source: ns_source,
+                                    name: rest.to_string(),
+                                    monomorph_info: None,
+                                    method_info: None,
+                                },
+                                type_args,
+                                args: arg_calls,
+                            },
+                            recorded_type,
+                            span,
+                        );
+                    }
+                }
+                // Unresolved: emit recovery shape matching
+                // annotate's diagnostic path.
+                return TirExpr::new(
+                    TirExprKind::Unit,
+                    crate::tir::TypeTable::ERROR,
+                    span,
                 );
             };
 
@@ -3646,14 +4117,113 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        // TODO(stage-5-bodies): closure-call (callee is a local with
-        // fn type), indirect call (non-ident callee), and
-        // qualified-callee static-method / enum-ctor /
-        // flags-constructor (`none()`, `all()`) shapes all live behind
-        // this `todo!`. Each branch in `Elaborator::resolve_call`
-        // (call.rs:200+) maps to its own reify arm; the dispatcher
-        // shape carries through unchanged so partial ports compose.
-        todo!("reify_call: non-free-function callee pending body-walk reify")
+        // Qualified-callee static method `Struct::method(args)`.
+        // Reify resolves the prefix to its module via the type
+        // lookup (struct / namespace / newtype follow chain) and
+        // builds the same mangled `__Struct__method` FunctionRef
+        // the elaborator's `resolve_static_method_call_from_qualified`
+        // produces. The type-arg list comes from Gap 1's record on
+        // the call's AstId (the recording site at call.rs:472
+        // already covers impl-args + method-args concatenation).
+        if let ast::Expr::Ident(ident) = &call.callee
+            && let Some(pos) = ident.name.find("::")
+            && !ident.name[pos + 2..].contains("::")
+        {
+            let prefix = &ident.name[..pos];
+            let suffix = &ident.name[pos + 2..];
+
+            // Flags `Type::none()` / `Type::all()` lower to an
+            // `IntLiteral` with the bitmask value (matches
+            // `Elaborator::resolve_call`'s flags branch at
+            // call.rs:586+).
+            let flags = self.type_lookup().flags_case(prefix).cloned();
+            if let Some(flags_info) = flags
+                && matches!(suffix, "none" | "all")
+            {
+                let member_count = flags_info.members.len() as u32;
+                let value: u64 = match suffix {
+                    "none" => 0,
+                    "all" => u64::from((1u32 << member_count) - 1),
+                    _ => unreachable!(),
+                };
+                return TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value,
+                        repr: value.to_string(),
+                    },
+                    flags_info.type_id,
+                    span,
+                );
+            }
+
+            // Resolve the prefix struct's module so the
+            // FunctionRef points at the impl block's home
+            // module. Follows newtype chains the same way
+            // `Elaborator::resolve_static_method_call`
+            // (method_call.rs:820+) does.
+            let lookup = self.type_lookup();
+            let struct_module = lookup
+                .struct_fields(prefix)
+                .map(|info| info.module_source.clone())
+                .or_else(|| {
+                    lookup
+                        .variant_case(prefix)
+                        .map(|info| info.module_source.clone())
+                })
+                .or_else(|| {
+                    lookup
+                        .resource_type(prefix)
+                        .map(|info| info.module_source.clone())
+                })
+                .unwrap_or_else(|| self.current_module_source.clone());
+
+            let mangled_method_name =
+                crate::name::MethodName::format_local(prefix, None, suffix);
+
+            let type_args: Vec<TypeId> = if !call.type_args.is_empty() {
+                call.type_args
+                    .iter()
+                    .map(|ty| self.resolve_type(ty))
+                    .collect()
+            } else {
+                self.sem
+                    .types
+                    .generic_instantiations
+                    .get(&call.id)
+                    .map(|gi| gi.type_args.clone())
+                    .unwrap_or_default()
+            };
+
+            let arg_calls: Vec<CallArg> = call
+                .args
+                .iter()
+                .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
+                .collect();
+
+            let method_info = crate::name::LocalMethodName::new(
+                prefix.to_string(),
+                None,
+                suffix.to_string(),
+            );
+
+            return TirExpr::new(
+                TirExprKind::Call {
+                    func: crate::tir::FunctionRef {
+                        module_source: struct_module,
+                        name: mangled_method_name,
+                        monomorph_info: None,
+                        method_info: Some(method_info),
+                    },
+                    type_args,
+                    args: arg_calls,
+                },
+                recorded_type,
+                span,
+            );
+        }
+
+        // Unrecognised callee shape — annotate diagnosed it.
+        TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, span)
     }
 
     /// Reify a `MethodCallExpr`. This is the cleanest Stage 5 path:
