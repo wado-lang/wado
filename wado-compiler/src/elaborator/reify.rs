@@ -4921,10 +4921,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg, is_mut)
                 })
                 .collect();
+            // Type args: explicit turbofish on the call expression,
+            // else the inference recorded by Gap 1. Monomorph reads
+            // these to specialize generic free / static methods.
+            let type_args: Vec<TypeId> = if !call.type_args.is_empty() {
+                call.type_args
+                    .iter()
+                    .map(|ty| self.resolve_type(ty))
+                    .collect()
+            } else {
+                self.sem
+                    .types
+                    .generic_instantiations
+                    .get(&call.id)
+                    .map(|gi| gi.type_args.clone())
+                    .unwrap_or_default()
+            };
             return TirExpr::new(
                 TirExprKind::Call {
                     func: dispatch.function_ref,
-                    type_args: vec![],
+                    type_args,
                     args: arg_exprs,
                 },
                 recorded_type,
