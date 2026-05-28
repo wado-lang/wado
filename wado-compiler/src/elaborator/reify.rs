@@ -1093,6 +1093,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
             ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
             ast::Expr::Match(match_expr) => self.reify_match_expr(match_expr, ctx, expected_type, recorded_type),
+            ast::Expr::StructLiteral(struct_lit) => self.reify_struct_literal(struct_lit, ctx, recorded_type),
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
@@ -1191,7 +1192,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             | ast::Expr::Matches(_)
             | ast::Expr::Closure(_)
             | ast::Expr::TemplateString(_)
-            | ast::Expr::StructLiteral(_)
             | ast::Expr::TryOp(_)
             | ast::Expr::Range(_)
             | ast::Expr::WithHandler(_) => {
@@ -1367,6 +1367,99 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             recorded_type,
             binary.span,
+        )
+    }
+
+    /// Reify a named `StructLiteralExpr`. Field types come from
+    /// `tysys.all_struct_fields`; the instance type + type_args for
+    /// generic structs come from Gap 1's
+    /// `sem.types.generic_instantiations[id]` record. Anonymous
+    /// struct literals (`{ x: 1, y: 2 }` with no leading type name)
+    /// flow through a different elaborator helper and are deferred to
+    /// a follow-up.
+    fn reify_struct_literal(
+        &mut self,
+        struct_lit: &ast::StructLiteralExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::tir::{TirExprKind, TirStructField};
+
+        let Some(struct_name) = struct_lit.name.clone() else {
+            // TODO(stage-5-bodies): anonymous struct literal —
+            // `Elaborator::resolve_anonymous_struct_literal` synthesises a
+            // struct based on the expected type's shape. Reify needs to
+            // read the synthesised entry from
+            // `sem.decls.pending_anonymous_structs` keyed off the
+            // recorded type.
+            todo!(
+                "reify_struct_literal: anonymous struct literal pending body-walk reify"
+            )
+        };
+
+        // Field positional info from the decl-interned struct.
+        let lookup = self.type_lookup();
+        let info = lookup.struct_fields(&struct_name);
+        let field_names_to_index: crate::hashmap::IndexMap<String, (u32, TypeId)> = info
+            .map(|info| {
+                info.fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (n, t, _is_pub))| (n.clone(), (i as u32, *t)))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Instance type for generic structs is recorded by Gap 1; for
+        // non-generic structs Gap 1's recording is skipped and we use
+        // the bare struct type from `recorded_type`.
+        let (struct_type, generic_args): (TypeId, Vec<TypeId>) = self
+            .sem
+            .types
+            .generic_instantiations
+            .get(&struct_lit.id)
+            .map(|gi| (gi.instance_type, gi.type_args.clone()))
+            .unwrap_or((recorded_type, Vec::new()));
+
+        let mangled_struct_name = if generic_args.is_empty() {
+            struct_name.clone()
+        } else {
+            let arg_names: Vec<String> = generic_args
+                .iter()
+                .map(|&t| self.tysys.type_table.borrow().type_name(t))
+                .collect();
+            crate::name::mangle_generic_name(&struct_name, &arg_names)
+        };
+
+        // Reify each AST field. Field order in the TIR follows the AST
+        // (source order); the elaborator-side `field_index` lookup
+        // pins the positional slot used by codegen / WIR field
+        // accesses.
+        let fields: Vec<TirStructField> = struct_lit
+            .fields
+            .iter()
+            .map(|f| {
+                let (field_index, expected_field_ty) = field_names_to_index
+                    .get(&f.name)
+                    .copied()
+                    .unwrap_or((0, crate::tir::TypeTable::UNKNOWN));
+                let value = self.reify_expr(&f.value, ctx, Some(expected_field_ty));
+                TirStructField {
+                    name: f.name.clone(),
+                    value,
+                    field_index,
+                }
+            })
+            .collect();
+
+        TirExpr::new(
+            TirExprKind::StructLiteral {
+                struct_type,
+                struct_name: mangled_struct_name,
+                fields,
+            },
+            struct_type,
+            struct_lit.span,
         )
     }
 
