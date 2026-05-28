@@ -950,7 +950,17 @@ fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
             inner: rebind_self_ref_min_prec(ll.inner, prec),
             dedup_base: ll.dedup_base,
         }),
-        other => other,
+        // The caller (`stamp_lr_self_ref_min_prec`) only invokes this
+        // when `find_self_ref_rule_call` already matched the top op,
+        // so non-self-ref / container arms are unreachable in practice.
+        // Listed explicitly so a new `Op` variant fails to compile
+        // here instead of inheriting the silent passthrough.
+        Token(t) => Op::Token(t),
+        Literal(l) => Op::Literal(l),
+        Wildcard(wop) => Op::Wildcard(wop),
+        Excluded(e) => Op::Excluded(e),
+        Repeat(r) => Op::Repeat(r),
+        Group(g) => Op::Group(g),
     };
 }
 
@@ -1674,7 +1684,15 @@ fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
     return match *elem {
         RuleRef(r) => r.name == *rule_name,
         Label(lab) => element_is_self_ref(&lab.element, rule_name),
-        _ => false,
+        // Listed explicitly so a new `Element` variant that could
+        // wrap a self-ref (e.g. a future `Annotated(Element)`) fails
+        // to compile here rather than silently returning false.
+        TokenRef(_) => false,
+        Literal(_) => false,
+        Group(_) => false,
+        Repeat(_) => false,
+        Wildcard(_) => false,
+        Not(_) => false,
     };
 }
 
@@ -3429,7 +3447,15 @@ fn try_optional_scan_guard(inner: &Element, ctx: &mut GenContext) -> Option<Repe
     let needs_guard = match *inner {
         Group(_) => true,
         RuleRef(_) => true,
-        _ => false,
+        // Leaf or non-scannable inners — `Plain` strategy handles them.
+        // Listed explicitly so a new `Element` variant is a compile
+        // error here rather than defaulting to "no scan guard".
+        TokenRef(_) => false,
+        Literal(_) => false,
+        Wildcard(_) => false,
+        Not(_) => false,
+        Label(_) => false,
+        Repeat(_) => false,
     };
     if !needs_guard {
         return null;

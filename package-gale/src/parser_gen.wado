@@ -2150,7 +2150,13 @@ fn inner_walker_follow_for_repeat(rep: &RepeatElement, rep_op: &RepeatOp, elemen
 fn op_is_leaf(op: &Op) -> bool {
     return match op {
         Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => true,
-        _ => false,
+        // Listed explicitly so a new leaf-shape `Op` variant must
+        // be classified here rather than silently inheriting
+        // "non-leaf" and being routed through the container emit
+        // helpers that would panic on it.
+        Repeat(_) => false,
+        Group(_) => false,
+        ListLabel(_) => false,
     };
 }
 
