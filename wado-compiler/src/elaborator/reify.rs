@@ -194,6 +194,40 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
+    /// Resolve an effect-name list into [`crate::tir::EffectRef`]s
+    /// for a function signature. Mirrors
+    /// [`super::Elaborator::resolve_effects`] (elaborator.rs:948+)
+    /// without the use→def recording side-effect (annotate already
+    /// recorded the edges).
+    fn reify_effects(&self, effects: &[String]) -> Vec<crate::tir::EffectRef> {
+        effects
+            .iter()
+            .map(|name| {
+                if let Some(source) = self.sem.imports.effect_sources.get(name).cloned() {
+                    let canonical = self
+                        .symbols
+                        .lookup_in_module(&source, name)
+                        .map(|sym| sym.defined_at.module.clone())
+                        .unwrap_or_else(|| source.clone());
+                    crate::tir::EffectRef::Concrete {
+                        name: name.clone(),
+                        module_source: canonical,
+                    }
+                } else {
+                    let canonical = self
+                        .symbols
+                        .lookup(name)
+                        .map(|sym| sym.defined_at.module.clone())
+                        .unwrap_or_else(|| self.current_module_source.clone());
+                    crate::tir::EffectRef::Concrete {
+                        name: name.clone(),
+                        module_source: canonical,
+                    }
+                }
+            })
+            .collect()
+    }
+
     /// Resolve an AST [`ast::Type`] to a [`TypeId`] without recording
     /// any use→def edge. Reify uses this for type-level resolutions
     /// (type-param defaults, resource method params, …) — annotate
@@ -798,7 +832,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             } else {
                 None
             },
-            effects: vec![],
+            effects: self.reify_effects(&func.effects),
             stores: func.stores.clone(),
             body,
             span: func.span,
@@ -809,11 +843,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
-            is_ambient: false,
-            inline_hint: tir::InlineHint::Auto,
-            compiler_item: None,
-            export_name: None,
-            allocator_tag: None,
+            is_ambient: extract_is_ambient_attr(&func.attrs),
+            inline_hint: extract_inline_hint_attr(&func.attrs),
+            compiler_item: crate::elaborator::item::extract_compiler_item(
+                &func.attrs,
+                func.span,
+                self.logger,
+            ),
+            export_name: extract_export_name_attr(&func.attrs),
+            allocator_tag: extract_allocator_tag_attr(&func.attrs),
             kind: tir::FunctionKind::Regular,
             return_abi: tir::ReturnAbi::Single,
         })
@@ -1007,7 +1045,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             } else {
                 None
             },
-            effects: vec![],
+            effects: self.reify_effects(&func.effects),
             stores: func.stores.clone(),
             body,
             span: func.span,
@@ -1018,11 +1056,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
-            is_ambient: false,
-            inline_hint: crate::tir::InlineHint::Auto,
-            compiler_item: None,
-            export_name: None,
-            allocator_tag: None,
+            is_ambient: extract_is_ambient_attr(&func.attrs),
+            inline_hint: extract_inline_hint_attr(&func.attrs),
+            compiler_item: crate::elaborator::item::extract_compiler_item(
+                &func.attrs,
+                func.span,
+                self.logger,
+            ),
+            export_name: extract_export_name_attr(&func.attrs),
+            allocator_tag: extract_allocator_tag_attr(&func.attrs),
             kind: crate::tir::FunctionKind::Regular,
             return_abi: crate::tir::ReturnAbi::Single,
         })
@@ -5777,6 +5819,43 @@ fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
 /// Map an AST [`ast::UnaryOp`] to its TIR counterpart. The two enums
 /// are 1:1; this helper exists so the dispatch table doesn't repeat
 /// the mapping at every Unary arm.
+/// Free-function attribute extractors — mirror
+/// `Elaborator::extract_*` (item.rs:802+). The elaborator's
+/// instance methods take only `&[Attribute]`, so we reproduce
+/// them as free functions so reify can call them without holding
+/// an Elaborator.
+fn extract_is_ambient_attr(attrs: &[crate::ast::Attribute]) -> bool {
+    attrs.iter().any(|a| a.name == "ambient")
+}
+
+fn extract_inline_hint_attr(attrs: &[crate::ast::Attribute]) -> crate::tir::InlineHint {
+    let Some(attr) = attrs.iter().find(|a| a.name == "inline") else {
+        return crate::tir::InlineHint::Auto;
+    };
+    match attr.args.first().map(crate::ast::AttrArg::as_str) {
+        Some("always") => crate::tir::InlineHint::Always,
+        Some("never") => crate::tir::InlineHint::Never,
+        None => crate::tir::InlineHint::Hint,
+        _ => crate::tir::InlineHint::Auto,
+    }
+}
+
+fn extract_export_name_attr(attrs: &[crate::ast::Attribute]) -> Option<String> {
+    attrs
+        .iter()
+        .find(|a| a.name == "export_name")
+        .and_then(|a| a.args.first())
+        .map(|a| a.as_str().to_string())
+}
+
+fn extract_allocator_tag_attr(attrs: &[crate::ast::Attribute]) -> Option<String> {
+    attrs
+        .iter()
+        .find(|a| a.name == "allocator")
+        .and_then(|a| a.args.first())
+        .map(|a| a.as_str().to_string())
+}
+
 /// Return the base name of an AST [`ast::Type`] for impl-block /
 /// method-name mangling. A free-function variant matching the
 /// elaborator's `Elaborator::get_type_name_static` (module.rs).
