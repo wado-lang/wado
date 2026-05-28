@@ -1075,6 +1075,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_method_call(method_call, ctx, recorded_type)
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
+            ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
@@ -1168,7 +1169,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::CompoundAssign(_)
             | ast::Expr::ComparisonChain(_)
-            | ast::Expr::Call(_)
             | ast::Expr::StaticMethodCall(_)
             | ast::Expr::Index(_)
             | ast::Expr::Match(_)
@@ -1352,6 +1352,161 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             recorded_type,
             binary.span,
         )
+    }
+
+    /// Reify a `CallExpr`. Stage 5 covers the common shapes: bare-ident
+    /// callees that resolve to a current-module or imported free
+    /// function (`TirExprKind::Call`), and qualified-ident
+    /// variant-constructor calls (`Some(x)`, `Result::Ok(v)`)
+    /// emitted as `TirExprKind::VariantConstruct` with a payload.
+    /// Closure-call, indirect-callee, static-method, qualified-enum,
+    /// and qualified-flags shapes route through `todo!` until each
+    /// branch is ported — `Elaborator::resolve_call` (call.rs:200+)
+    /// is the source they mirror.
+    fn reify_call(
+        &mut self,
+        call: &ast::CallExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::tir::{CallArg, TirExprKind};
+
+        let span = call.span;
+
+        // Variant-ctor call shape: `Variant::Case(payload)`. Detected
+        // via the callee being a qualified ident whose prefix names a
+        // variant decl with a matching case. Generic variants pin
+        // their `instance_type` on `sem.types.generic_instantiations`
+        // via Gap 1; non-generic ones use the bare `Variant` type.
+        if let ast::Expr::Ident(ident) = &call.callee
+            && let Some(pos) = ident.name.find("::")
+        {
+            let prefix = &ident.name[..pos];
+            let suffix = &ident.name[pos + 2..];
+            if !suffix.contains("::") {
+                let lookup = self.type_lookup();
+                if let Some(variant_info) = lookup.variant_case(prefix).cloned()
+                    && let Some((case_index, case_data)) = variant_info
+                        .cases
+                        .iter()
+                        .enumerate()
+                        .find(|(_, c)| c.name == suffix)
+                        .map(|(i, c)| (i, c.clone()))
+                {
+                    let variant_type = self
+                        .sem
+                        .types
+                        .generic_instantiations
+                        .get(&call.id)
+                        .map(|gi| gi.instance_type)
+                        .unwrap_or(recorded_type);
+                    let payload = call.args.first().map(|arg_expr| {
+                        Box::new(self.reify_expr(arg_expr, ctx, Some(case_data.payload)))
+                    });
+                    return TirExpr::new(
+                        TirExprKind::VariantConstruct {
+                            variant_type,
+                            case_index: case_index as u32,
+                            case_name: case_data.name.clone(),
+                            payload,
+                        },
+                        variant_type,
+                        span,
+                    );
+                }
+            }
+        }
+
+        // Free-function call: bare-ident callee that names a current-
+        // module or imported function.
+        if let ast::Expr::Ident(ident) = &call.callee
+            && !ident.name.contains("::")
+        {
+            let (callee_module, callee_name) = if self
+                .sem
+                .decls
+                .function_return_types
+                .contains_key(&ident.name)
+            {
+                (self.current_module_source.clone(), ident.name.clone())
+            } else if let Some(import_src) =
+                self.sem.imports.imported_type_sources.get(&ident.name).cloned()
+            {
+                let original_name = self
+                    .sem
+                    .imports
+                    .import_original_names
+                    .get(&ident.name)
+                    .cloned()
+                    .unwrap_or_else(|| ident.name.clone());
+                (import_src, original_name)
+            } else {
+                // The callee neither matches a local function nor an
+                // import — it might be a closure-call, static method,
+                // or a misresolved name. The full dispatch lives in
+                // `Elaborator::resolve_call`; route to `todo!` until
+                // the remaining branches port.
+                todo!(
+                    "reify_call: callee `{}` not in current_module / imports — \
+                     closure / static-method / namespace-import dispatch pending",
+                    ident.name
+                );
+            };
+
+            // Type args: explicit turbofish on the call expression,
+            // else the inference recorded by Gap 1.
+            let type_args: Vec<TypeId> = if !call.type_args.is_empty() {
+                call.type_args
+                    .iter()
+                    .map(|ty| self.resolve_type(ty))
+                    .collect()
+            } else {
+                self.sem
+                    .types
+                    .generic_instantiations
+                    .get(&call.id)
+                    .map(|gi| gi.type_args.clone())
+                    .unwrap_or_default()
+            };
+
+            // TODO(stage-5-bodies): callee param types drive literal
+            // re-coercion + `is_mut` per-arg. Until those records
+            // land, reify resolves each arg with `expected = None`
+            // and emits `is_mut = false`; matches the elaborator's
+            // output for the no-coercion / no-mut common case.
+            let args: Vec<CallArg> = call
+                .args
+                .iter()
+                .map(|a| {
+                    let arg = self.reify_expr(a, ctx, None);
+                    CallArg::new(arg, false)
+                })
+                .collect();
+
+            return TirExpr::new(
+                TirExprKind::Call {
+                    func: crate::tir::FunctionRef {
+                        module_source: callee_module,
+                        name: callee_name,
+                        monomorph_info: None,
+                        method_info: None,
+                    },
+                    type_args,
+                    args,
+                },
+                recorded_type,
+                span,
+            );
+        }
+
+        // TODO(stage-5-bodies): closure-call (callee is a local with
+        // fn type), indirect call (non-ident callee), and
+        // qualified-callee static-method / enum-ctor /
+        // flags-constructor (`none()`, `all()`) shapes all live behind
+        // this `todo!`. Each branch in `Elaborator::resolve_call`
+        // (call.rs:200+) maps to its own reify arm; the dispatcher
+        // shape carries through unchanged so partial ports compose.
+        todo!("reify_call: non-free-function callee pending body-walk reify")
     }
 
     /// Reify a `MethodCallExpr`. This is the cleanest Stage 5 path:
