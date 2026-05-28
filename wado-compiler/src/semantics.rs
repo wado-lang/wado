@@ -15,6 +15,7 @@ use crate::analyze::Analyzer;
 use crate::ast::{AstId, Module};
 use crate::ast_index::AstIndex;
 use crate::compiler_host::{CompilerHost, LogLevel};
+use crate::component_model::CmInterfaceRegistry;
 use crate::elaborator::Elaborator;
 use crate::elaborator::orchestration::AnnotateState;
 use crate::hashmap::IndexMap;
@@ -24,6 +25,7 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
+use crate::world_registry::WorldRegistry;
 
 /// A ready-to-query analysis result.
 ///
@@ -151,6 +153,41 @@ impl Semantics {
     #[must_use]
     pub fn is_complete(&self) -> bool {
         self.is_complete
+    }
+
+    /// Component Model world registry produced during annotate.
+    ///
+    /// Carries every `world` declaration the frontend has seen — stdlib
+    /// (`wasi:cli/command`, `wasi:http/service`, `core:kiln/generator`,
+    /// …) plus any user-declared worlds. Keyed by fully-qualified name.
+    ///
+    /// Returns `None` when no elaborator state was built — that is, when
+    /// parse, load, analyze, or annotate bailed before constructing
+    /// `AnnotateState`. Batch compilation refuses to continue in any of
+    /// those cases via [`Self::is_complete`]; LSP queries proceed
+    /// without world data.
+    ///
+    /// Consumed by the WIT producer (`wado wit` /
+    /// `wado compile --embed-wit=…`) and by world-shape decisions in
+    /// codegen / DCE (see [`crate::flat_package::FlatPackage`]).
+    #[must_use]
+    pub fn world_registry(&self) -> Option<&'static WorldRegistry> {
+        self.state.as_ref().map(|s| s.world_registry)
+    }
+
+    /// Component Model interface registry produced during annotate.
+    ///
+    /// Carries the resolved `#[cm(...)]` / `#[cm_import(...)]` view of
+    /// every CM interface the frontend has seen — `wasi:*`,
+    /// `core:kiln/*`, and any future user-declared interfaces (under the
+    /// post-unification `interface` block syntax). Powers CM binding
+    /// synthesis, lift/lower, and WIT producer-side emission.
+    ///
+    /// Returns `None` under the same conditions as
+    /// [`Self::world_registry`].
+    #[must_use]
+    pub fn cm_interface_registry(&self) -> Option<&'static CmInterfaceRegistry> {
+        self.state.as_ref().map(|s| s.tysys.cm_interface_registry)
     }
 
     /// Construct an empty [`Semantics`] holding only the bookkeeping that

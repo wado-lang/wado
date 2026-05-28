@@ -50,7 +50,7 @@
 //! heuristics here be removed.
 
 use crate::compiler_item::CompilerItem;
-use crate::component_model::WasiRegistry;
+use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexSet;
 use crate::package::Package;
 use crate::synthesis::common::{
@@ -84,7 +84,7 @@ enum Flow {
 
 struct Cx<'a> {
     tt: &'a TypeTable,
-    reg: &'a WasiRegistry,
+    reg: &'a CmInterfaceRegistry,
     /// Mangled names of instance methods whose `self` is taken by value.
     /// Calling such a method transfers ownership of the receiver (e.g.
     /// `Result::unwrap`, which moves the wrapped value out).
@@ -125,7 +125,7 @@ fn result_args(tt: &TypeTable, type_id: TypeId) -> Option<(TypeId, TypeId)> {
 ///
 /// `GenericResource` (`Future` / `Stream`) is excluded: those handles have
 /// their own explicit drop discipline and must not be touched here.
-fn carries_resource(tt: &TypeTable, reg: &WasiRegistry, type_id: TypeId) -> bool {
+fn carries_resource(tt: &TypeTable, reg: &CmInterfaceRegistry, type_id: TypeId) -> bool {
     let base = tt.get_ultimate_base_type(type_id);
     match tt.get(base) {
         ResolvedType::Resource { name, .. } => reg.get_resource_cm_name(name).is_some(),
@@ -147,7 +147,7 @@ fn carries_resource(tt: &TypeTable, reg: &WasiRegistry, type_id: TypeId) -> bool
 /// Treating the receiver as consumed is conservative: the structural drop is
 /// skipped, so the inner resource is released exactly once (through whatever
 /// binding the extraction produced) and never double-freed.
-fn is_resource_aggregate(tt: &TypeTable, reg: &WasiRegistry, type_id: TypeId) -> bool {
+fn is_resource_aggregate(tt: &TypeTable, reg: &CmInterfaceRegistry, type_id: TypeId) -> bool {
     carries_resource(tt, reg, type_id)
         && !matches!(
             tt.get(tt.get_ultimate_base_type(type_id)),
@@ -185,7 +185,7 @@ fn record_owned_self(func: &TirFunction, tt: &TypeTable, out: &mut IndexSet<Stri
 
 /// Entry point: elaborate resource drops for every function in the project.
 pub fn elaborate_resource_drops(project: &mut Package) {
-    let reg = project.wasi_registry;
+    let reg = project.cm_interface_registry;
     let Some(type_table) = project
         .tir_modules
         .values()
@@ -227,7 +227,7 @@ pub fn elaborate_resource_drops(project: &mut Package) {
 fn elaborate_function(
     func: &mut TirFunction,
     tt: &TypeTable,
-    reg: &WasiRegistry,
+    reg: &CmInterfaceRegistry,
     owned_self: &IndexSet<String>,
 ) {
     if func.body.is_none() {
@@ -276,7 +276,7 @@ fn elaborate_function(
 
 /// Cheap pre-check: does the body bind any resource-carrying `let`? Lets the
 /// pass skip the (vast majority of) functions that touch no resources.
-fn body_has_resource(block: &TirBlock, tt: &TypeTable, reg: &WasiRegistry) -> bool {
+fn body_has_resource(block: &TirBlock, tt: &TypeTable, reg: &CmInterfaceRegistry) -> bool {
     block.stmts.iter().any(|stmt| match &stmt.kind {
         TirStmtKind::Let { type_id, .. } => carries_resource(tt, reg, *type_id),
         TirStmtKind::LetDestructure { pattern, .. } => pattern_carries_resource(pattern, tt, reg),
@@ -298,7 +298,7 @@ fn body_has_resource(block: &TirBlock, tt: &TypeTable, reg: &WasiRegistry) -> bo
     })
 }
 
-fn expr_has_resource(expr: &TirExpr, tt: &TypeTable, reg: &WasiRegistry) -> bool {
+fn expr_has_resource(expr: &TirExpr, tt: &TypeTable, reg: &CmInterfaceRegistry) -> bool {
     match &expr.kind {
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
             body_has_resource(block, tt, reg)
@@ -320,7 +320,11 @@ fn expr_has_resource(expr: &TirExpr, tt: &TypeTable, reg: &WasiRegistry) -> bool
     }
 }
 
-fn pattern_carries_resource(pattern: &TirPattern, tt: &TypeTable, reg: &WasiRegistry) -> bool {
+fn pattern_carries_resource(
+    pattern: &TirPattern,
+    tt: &TypeTable,
+    reg: &CmInterfaceRegistry,
+) -> bool {
     match pattern {
         TirPattern::Binding { type_id, .. } => carries_resource(tt, reg, *type_id),
         TirPattern::Tuple(pats, _) | TirPattern::Or(pats) => {
@@ -461,7 +465,11 @@ fn apply_transfers_root(owned: &mut Owned, expr: &TirExpr, root_consuming: bool,
 }
 
 /// Whether matching `pattern` moves a resource out of the scrutinee.
-fn pattern_extracts_resource(pattern: &TirPattern, tt: &TypeTable, reg: &WasiRegistry) -> bool {
+fn pattern_extracts_resource(
+    pattern: &TirPattern,
+    tt: &TypeTable,
+    reg: &CmInterfaceRegistry,
+) -> bool {
     pattern_carries_resource(pattern, tt, reg)
 }
 

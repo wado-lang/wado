@@ -31,7 +31,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::{self, Item, Module, Type};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
-use crate::component_model::WasiRegistry;
+use crate::component_model::CmInterfaceRegistry;
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name};
@@ -74,8 +74,8 @@ pub(crate) struct AnnotateState {
     /// built once at annotate time. See [`TypeSystem`].
     pub(crate) tysys: TypeSystem,
     /// Component-Model world specifications. Built by the same
-    /// [`WasiRegistry::build_from_stdlib`] call that populates
-    /// [`TypeSystem::wasi_registry`], but lives here rather than on
+    /// [`CmInterfaceRegistry::build_from_stdlib`] call that populates
+    /// [`TypeSystem::cm_interface_registry`], but lives here rather than on
     /// `TypeSystem`: the elaborator never asks "what does world X
     /// export?" — only post-elaborator stages (link, synthesis, DCE,
     /// world-existence validation in [`crate::lib`]) do. Keeping it on
@@ -644,9 +644,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let sorted_sources =
             Self::topological_sort_modules(modules, &all_struct_fields, &type_table.borrow());
 
-        let (wasi_registry, world_registry) = {
-            let _span = logger.span("elaborate/wasi_registry");
-            WasiRegistry::build_from_stdlib()
+        let (cm_interface_registry, world_registry) = {
+            let _span = logger.span("elaborate/cm_interface_registry");
+            CmInterfaceRegistry::build_from_stdlib()
         };
         let builtin_registry = {
             let _span = logger.span("elaborate/builtin_registry");
@@ -878,7 +878,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             all_flags_cases,
             all_resource_types,
             trait_env,
-            wasi_registry,
+            cm_interface_registry,
             builtin_registry: Rc::new(builtin_registry),
             included_files,
             known_type_names_cache: Rc::new(known_type_names_cache),

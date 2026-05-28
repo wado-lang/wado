@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 use crate::ast::Type;
 use crate::cm_abi;
-use crate::component_model::{WasiFunctionInfo, WasiRegistry};
+use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::LocalMethodName;
@@ -40,7 +40,7 @@ use super::lower::{
 };
 use super::types::{
     LiftContext, binary_add, cm_param_align, cm_param_size, cm_param_store_plan,
-    flatten_param_type, needs_flat_result_lifting, wasi_type_to_type_id,
+    cm_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
 };
 
 /// Build the binding function name for a WASI import.
@@ -252,7 +252,10 @@ pub(super) fn make_binding_function(
 
 /// Map a WASI return type to the flat return `TypeId` for the binding.
 /// Sync functions with outptr return void from the raw call itself.
-fn wasi_return_type_id(func_info: &WasiFunctionInfo, wasi_registry: &WasiRegistry) -> TypeId {
+fn wasi_return_type_id(
+    func_info: &CmFunctionInfo,
+    cm_interface_registry: &CmInterfaceRegistry,
+) -> TypeId {
     // Truly async imports (e.g., Client::send) use canon lower async and
     // return a subtask handle. Non-async imports with stream/future params
     // use sync lower (handles passed as i32, results returned directly).
@@ -263,7 +266,10 @@ fn wasi_return_type_id(func_info: &WasiFunctionInfo, wasi_registry: &WasiRegistr
     } else {
         let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
             cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
-                || crate::component_model::wasi_named_type_return_needs_outptr(rt, wasi_registry)
+                || crate::component_model::cm_named_type_return_needs_outptr(
+                    rt,
+                    cm_interface_registry,
+                )
         });
         if needs_outptr {
             // Outptr: raw call returns void; result is read from outptr
@@ -293,9 +299,9 @@ fn wasi_return_type_id(func_info: &WasiFunctionInfo, wasi_registry: &WasiRegistr
 /// `Array::with_capacity`) are visible to the monomorphizer.
 fn synthesize_async_lift_function(
     name: String,
-    func_info: &WasiFunctionInfo,
+    func_info: &CmFunctionInfo,
     inner_type_id: TypeId,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     type_table: &RefCell<TypeTable>,
     interner: &RefCell<ModuleSourceInterner>,
 ) -> Rc<RefCell<TirFunction>> {
@@ -316,9 +322,9 @@ fn synthesize_async_lift_function(
     }];
 
     let lifted = if let Some(return_type) = &func_info.return_type {
-        let resolved = wasi_registry.resolve_type(return_type);
+        let resolved = cm_interface_registry.resolve_type(return_type);
         let lift_ctx = LiftContext {
-            wasi_registry,
+            cm_interface_registry,
             type_table,
             cm_package: &func_info.package,
             interner,
@@ -364,8 +370,8 @@ fn synthesize_async_lift_function(
 /// [`synthesize_async_lift_function`]; both are returned via
 /// [`AdapterArtifacts`].
 pub(super) fn synthesize_adapter(
-    func_info: &WasiFunctionInfo,
-    wasi_registry: &WasiRegistry,
+    func_info: &CmFunctionInfo,
+    cm_interface_registry: &CmInterfaceRegistry,
     type_table: &RefCell<TypeTable>,
     interner: &RefCell<ModuleSourceInterner>,
     owner_module: &ModuleSource,
@@ -382,22 +388,22 @@ pub(super) fn synthesize_adapter(
     //
     // For `async fn foo(...) -> AsyncCall<T>` imports, `func_info.return_type`
     // already stores the CM-ABI `T` (the registry strips the `AsyncCall<T>`
-    // wrapper at registration time, see `WasiRegistry::register`). The
+    // wrapper at registration time, see `CmInterfaceRegistry::register`). The
     // wrapping is re-applied below when emitting the Wado-visible adapter
     // return type.
     let cm_return_type: Option<Type> = func_info.return_type.clone();
     let needs_outptr = cm_return_type.as_ref().is_some_and(|rt| {
         cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
-            || crate::component_model::wasi_named_type_return_needs_outptr(rt, wasi_registry)
+            || crate::component_model::cm_named_type_return_needs_outptr(rt, cm_interface_registry)
     });
     let pkg = Some(func_info.package.as_str());
     let outptr_alloc = if needs_outptr {
         cm_return_type.as_ref().map(|rt| {
             // WASI variants need their registry-computed size/align, not the generic cm_size
             if let Type::Named(named) = rt
-                && let Some(sa) = crate::component_model::wasi_variant_cm_size_align_scoped(
+                && let Some(sa) = crate::component_model::cm_variant_size_align_scoped(
                     named,
-                    wasi_registry,
+                    cm_interface_registry,
                     pkg,
                 )
             {
@@ -405,8 +411,16 @@ pub(super) fn synthesize_adapter(
             }
             // Use registry-aware size/align for WASI structs and other complex types
             (
-                crate::component_model::cm_size_with_registry_scoped(rt, wasi_registry, pkg),
-                crate::component_model::cm_align_with_registry_scoped(rt, wasi_registry, pkg),
+                crate::component_model::cm_size_with_registry_scoped(
+                    rt,
+                    cm_interface_registry,
+                    pkg,
+                ),
+                crate::component_model::cm_align_with_registry_scoped(
+                    rt,
+                    cm_interface_registry,
+                    pkg,
+                ),
             )
         })
     } else {
@@ -436,7 +450,7 @@ pub(super) fn synthesize_adapter(
     // Track (start_param_idx, param_count) per WASI param for Pass 2 indexing.
     let mut param_mapping: Vec<(usize, usize)> = Vec::new();
     for (param_name, _, param_type) in &func_info.params {
-        let flat_tys = flatten_param_type(param_type, wasi_registry, &names);
+        let flat_tys = flatten_param_type(param_type, cm_interface_registry, &names);
         if flat_tys.is_empty() {
             continue; // unit param, skip
         }
@@ -492,14 +506,19 @@ pub(super) fn synthesize_adapter(
             Type::Named(n)
                 if n.source_interface.as_deref().is_some_and(|s| {
                     s.starts_with("wasi:")
-                        && wasi_registry
+                        && cm_interface_registry
                             .get_struct_fields_by_source(s, &n.name)
                             .is_some()
                 }) =>
             {
                 let struct_type_id = {
                     let mut tt = type_table.borrow_mut();
-                    wasi_type_to_type_id(param_type, &mut tt, wasi_registry, &func_info.package)
+                    cm_type_to_type_id(
+                        param_type,
+                        &mut tt,
+                        cm_interface_registry,
+                        &func_info.package,
+                    )
                 };
                 params.push(TirParam {
                     name: param_name.clone(),
@@ -517,14 +536,19 @@ pub(super) fn synthesize_adapter(
             Type::Named(n)
                 if n.source_interface.as_deref().is_some_and(|s| {
                     s.starts_with("wasi:")
-                        && wasi_registry
+                        && cm_interface_registry
                             .get_variant_cases_by_source(s, &n.name)
                             .is_some()
                 }) =>
             {
                 let variant_type_id = {
                     let mut tt = type_table.borrow_mut();
-                    wasi_type_to_type_id(param_type, &mut tt, wasi_registry, &func_info.package)
+                    cm_type_to_type_id(
+                        param_type,
+                        &mut tt,
+                        cm_interface_registry,
+                        &func_info.package,
+                    )
                 };
                 params.push(TirParam {
                     name: param_name.clone(),
@@ -542,7 +566,12 @@ pub(super) fn synthesize_adapter(
             Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
                 let option_type_id = {
                     let mut tt = type_table.borrow_mut();
-                    wasi_type_to_type_id(param_type, &mut tt, wasi_registry, &func_info.package)
+                    cm_type_to_type_id(
+                        param_type,
+                        &mut tt,
+                        cm_interface_registry,
+                        &func_info.package,
+                    )
                 };
                 params.push(TirParam {
                     name: param_name.clone(),
@@ -584,7 +613,7 @@ pub(super) fn synthesize_adapter(
     // Intermediate locals (packed i64, etc.) are allocated after all params.
     let mut mapping_idx = 0usize;
     for (param_name, _, param_type) in &func_info.params {
-        let flat_tys = flatten_param_type(param_type, wasi_registry, &names);
+        let flat_tys = flatten_param_type(param_type, cm_interface_registry, &names);
         if flat_tys.is_empty() {
             continue; // unit param, skip
         }
@@ -690,20 +719,24 @@ pub(super) fn synthesize_adapter(
                 // the i32-handle fallback in `cm_abi::cm_size`/`cm_align`.
                 let elem_size = crate::component_model::cm_size_with_registry_scoped(
                     elem_type,
-                    wasi_registry,
+                    cm_interface_registry,
                     Some(&func_info.package),
                 ) as i32;
                 let elem_align = crate::component_model::cm_align_with_registry_scoped(
                     elem_type,
-                    wasi_registry,
+                    cm_interface_registry,
                     Some(&func_info.package),
                 ) as i32;
 
                 // Resolve proper TypeIds for the element and array types
                 let (elem_type_id, array_type_id) = {
                     let mut tt = type_table.borrow_mut();
-                    let elem_tid =
-                        wasi_type_to_type_id(elem_type, &mut tt, wasi_registry, &func_info.package);
+                    let elem_tid = cm_type_to_type_id(
+                        elem_type,
+                        &mut tt,
+                        cm_interface_registry,
+                        &func_info.package,
+                    );
                     let array_tid = tt.make_array(elem_tid);
                     (elem_tid, array_tid)
                 };
@@ -832,7 +865,7 @@ pub(super) fn synthesize_adapter(
                         addr_ref,
                         &mut next_local,
                         &mut locals,
-                        wasi_registry,
+                        cm_interface_registry,
                         &func_info.package,
                         type_table,
                     )
@@ -876,7 +909,7 @@ pub(super) fn synthesize_adapter(
             Type::Named(n)
                 if n.source_interface.as_deref().is_some_and(|s| {
                     s.starts_with("wasi:")
-                        && wasi_registry
+                        && cm_interface_registry
                             .get_struct_fields_by_source(s, &n.name)
                             .is_some()
                 }) =>
@@ -886,13 +919,18 @@ pub(super) fn synthesize_adapter(
                     .source_interface
                     .as_deref()
                     .expect("wasi struct source_interface present");
-                let wado_fields = wasi_registry
+                let wado_fields = cm_interface_registry
                     .get_struct_fields_with_wado_names_by_source(source, &n.name)
                     .expect("struct fields_with_wado_names present when fields are");
                 for (field_idx, (wado_name, _, field_ty)) in wado_fields.iter().enumerate() {
                     let field_type_id = {
                         let mut tt = type_table.borrow_mut();
-                        wasi_type_to_type_id(field_ty, &mut tt, wasi_registry, &func_info.package)
+                        cm_type_to_type_id(
+                            field_ty,
+                            &mut tt,
+                            cm_interface_registry,
+                            &func_info.package,
+                        )
                     };
                     flat_args.push(TirExpr {
                         kind: TirExprKind::FieldAccess {
@@ -910,7 +948,7 @@ pub(super) fn synthesize_adapter(
             Type::Named(n)
                 if n.source_interface.as_deref().is_some_and(|s| {
                     s.starts_with("wasi:")
-                        && wasi_registry
+                        && cm_interface_registry
                             .get_variant_cases_by_source(s, &n.name)
                             .is_some()
                 }) =>
@@ -927,7 +965,7 @@ pub(super) fn synthesize_adapter(
                         &mut body_stmts,
                         &mut locals,
                         &mut flat_args,
-                        wasi_registry,
+                        cm_interface_registry,
                         &func_info.package,
                         type_table,
                     );
@@ -948,7 +986,7 @@ pub(super) fn synthesize_adapter(
                         &mut body_stmts,
                         &mut locals,
                         &mut flat_args,
-                        wasi_registry,
+                        cm_interface_registry,
                         &func_info.package,
                         type_table,
                     );
@@ -991,9 +1029,9 @@ pub(super) fn synthesize_adapter(
             let (async_result_size, async_result_align) = if let Some(return_type) = &cm_return_type
             {
                 if let Type::Named(named) = return_type
-                    && let Some(sa) = crate::component_model::wasi_variant_cm_size_align_scoped(
+                    && let Some(sa) = crate::component_model::cm_variant_size_align_scoped(
                         named,
-                        wasi_registry,
+                        cm_interface_registry,
                         pkg,
                     )
                 {
@@ -1002,12 +1040,12 @@ pub(super) fn synthesize_adapter(
                     (
                         crate::component_model::cm_size_with_registry_scoped(
                             return_type,
-                            wasi_registry,
+                            cm_interface_registry,
                             pkg,
                         ),
                         crate::component_model::cm_align_with_registry_scoped(
                             return_type,
-                            wasi_registry,
+                            cm_interface_registry,
                             pkg,
                         ),
                     )
@@ -1043,7 +1081,7 @@ pub(super) fn synthesize_adapter(
                 .source_interface
                 .as_deref()
                 .is_some_and(|s| s.starts_with("wasi:")
-                    && wasi_registry
+                    && cm_interface_registry
                         .get_variant_cases_by_source(s, &n.name)
                         .is_some()))
                 || matches!(ty, Type::Generic(g) if g.name == "Option" && g.args.len() == 1)
@@ -1060,8 +1098,8 @@ pub(super) fn synthesize_adapter(
             let mut buf_max_align = 1u32;
             let mut param_offsets: Vec<u32> = Vec::with_capacity(func_info.params.len());
             for (_, _, ty) in &func_info.params {
-                let sz = cm_param_size(ty, wasi_registry);
-                let al = cm_param_align(ty, wasi_registry);
+                let sz = cm_param_size(ty, cm_interface_registry);
+                let al = cm_param_align(ty, cm_interface_registry);
                 buf_offset = (buf_offset + al - 1) & !(al - 1);
                 param_offsets.push(buf_offset);
                 buf_offset += sz;
@@ -1097,7 +1135,7 @@ pub(super) fn synthesize_adapter(
                 if let Type::Named(n) = ty
                     && let Some(source) = n.source_interface.as_deref()
                     && source.starts_with("wasi:")
-                    && wasi_registry
+                    && cm_interface_registry
                         .get_variant_cases_by_source(source, &n.name)
                         .is_some()
                 {
@@ -1120,7 +1158,7 @@ pub(super) fn synthesize_adapter(
                         &mut next_local,
                         &mut body_stmts,
                         &mut locals,
-                        wasi_registry,
+                        cm_interface_registry,
                         &func_info.package,
                         type_table,
                     );
@@ -1148,13 +1186,13 @@ pub(super) fn synthesize_adapter(
                         &mut next_local,
                         &mut body_stmts,
                         &mut locals,
-                        wasi_registry,
+                        cm_interface_registry,
                         &func_info.package,
                         type_table,
                     );
                     continue;
                 }
-                let stores = cm_param_store_plan(ty, wasi_registry, &names);
+                let stores = cm_param_store_plan(ty, cm_interface_registry, &names);
                 for (sub_offset, store_name) in &stores {
                     let offset = base_offset + sub_offset;
                     let addr = if offset == 0 {
@@ -1214,7 +1252,7 @@ pub(super) fn synthesize_adapter(
     }
 
     // ---- Build CmRawCall ----
-    let raw_call_return_type = wasi_return_type_id(func_info, wasi_registry);
+    let raw_call_return_type = wasi_return_type_id(func_info, cm_interface_registry);
     let raw_call_expr = cm_raw_call(&local_name, flat_args, raw_call_return_type);
 
     // ---- Handle result ----
@@ -1270,11 +1308,11 @@ pub(super) fn synthesize_adapter(
         // result type (inner T) was computed in `cm_return_type`; for
         // void async we use `()`.
         let inner_type_id = if let Some(return_type) = &cm_return_type {
-            let resolved = wasi_registry.resolve_type(return_type);
-            wasi_type_to_type_id(
+            let resolved = cm_interface_registry.resolve_type(return_type);
+            cm_type_to_type_id(
                 &resolved,
                 &mut type_table.borrow_mut(),
-                wasi_registry,
+                cm_interface_registry,
                 &func_info.package,
             )
         } else {
@@ -1289,7 +1327,7 @@ pub(super) fn synthesize_adapter(
             lift_fn_name.clone(),
             func_info,
             inner_type_id,
-            wasi_registry,
+            cm_interface_registry,
             type_table,
             interner,
         );
@@ -1352,12 +1390,12 @@ pub(super) fn synthesize_adapter(
         let outptr_local = next_local - 1;
 
         let return_type = func_info.return_type.as_ref().unwrap();
-        let resolved = wasi_registry.resolve_type(return_type);
+        let resolved = cm_interface_registry.resolve_type(return_type);
 
         // Inline lifting for all types, including list<T> which uses
         // Array::<T>::with_capacity() and .push() with proper monomorphization info.
         let lift_ctx = LiftContext {
-            wasi_registry,
+            cm_interface_registry,
             type_table,
             cm_package: &func_info.package,
             interner,
@@ -1392,7 +1430,7 @@ pub(super) fn synthesize_adapter(
         body_stmts.push(return_stmt(Some(lifted)));
         adapter_return_type = lifted_type_id; // real type, fixed up at call site if needed
     } else if let Some(return_type) = &func_info.return_type {
-        let resolved = wasi_registry.resolve_type(return_type);
+        let resolved = cm_interface_registry.resolve_type(return_type);
         if needs_flat_result_lifting(&resolved) {
             // Flat return with complex type (e.g., Result<(), ()>): the raw call returns
             // an i32 discriminant on the stack, but the binding needs to return a GC struct.
@@ -1412,7 +1450,12 @@ pub(super) fn synthesize_adapter(
             // which produced invalid TIR if any consumer ran first.
             let result_type_id = {
                 let mut tt = type_table.borrow_mut();
-                wasi_type_to_type_id(&resolved, &mut tt, wasi_registry, &func_info.package)
+                cm_type_to_type_id(
+                    &resolved,
+                    &mut tt,
+                    cm_interface_registry,
+                    &func_info.package,
+                )
             };
             let result_local = alloc_local(&mut next_local, &mut locals, result_type_id);
             body_stmts.push(let_mut_stmt(
@@ -1423,7 +1466,7 @@ pub(super) fn synthesize_adapter(
             ));
 
             let lift_ctx = LiftContext {
-                wasi_registry,
+                cm_interface_registry,
                 type_table,
                 cm_package: &func_info.package,
                 interner,

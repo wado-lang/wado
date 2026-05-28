@@ -103,11 +103,11 @@ fn register_imports(ctx: &mut WirContext<'_>) {
 ///
 /// WASI functions are already lowered at the component level;
 /// the core module imports them from the "wasi" namespace.
-/// Uses `flatten_wasi_param_type` / `return_type_requires_outptr` for CM ABI type flattening.
+/// Uses `flatten_cm_param_type` / `return_type_requires_outptr` for CM ABI type flattening.
 fn register_wasi_imports(ctx: &mut WirContext<'_>) {
-    let wasi_registry = ctx.package.wasi_registry;
+    let cm_interface_registry = ctx.package.cm_interface_registry;
 
-    for interface_info in wasi_registry.interfaces() {
+    for interface_info in cm_interface_registry.interfaces() {
         for func in &interface_info.functions {
             let local_name = func.local_alias_name();
 
@@ -127,7 +127,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             // The general is_function_supported check would reject HTTP [method] functions
             // like Fields::append because their &Resource params aren't supported
             // in the general type checker.
-            if func.package != "http" && !wasi_registry.is_function_supported(func) {
+            if func.package != "http" && !cm_interface_registry.is_function_supported(func) {
                 continue;
             }
 
@@ -142,11 +142,11 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             const MAX_FLAT_ASYNC_PARAMS: usize = 4;
             let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
             for (_, _, ty) in &func.params {
-                let resolved_ty = wasi_registry.resolve_type(ty);
-                crate::component_model::flatten_wasi_param_type(
+                let resolved_ty = cm_interface_registry.resolve_type(ty);
+                crate::component_model::flatten_cm_param_type(
                     &resolved_ty,
                     &mut param_vts,
-                    wasi_registry,
+                    cm_interface_registry,
                 );
             }
 
@@ -172,11 +172,11 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             }
             // Sync functions with complex return types also need an outptr
             else if let Some(ret_ty) = &func.return_type {
-                let resolved_ret_ty = wasi_registry.resolve_type(ret_ty);
+                let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);
                 if crate::component_model::return_type_requires_outptr(&resolved_ret_ty)
-                    || crate::component_model::wasi_named_type_return_needs_outptr(
+                    || crate::component_model::cm_named_type_return_needs_outptr(
                         &resolved_ret_ty,
-                        wasi_registry,
+                        cm_interface_registry,
                     )
                 {
                     param_vts.push(wasm_encoder::ValType::I32);
@@ -190,11 +190,11 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 // Async/streaming functions always return i32 (subtask handle)
                 vec![WirType::I32]
             } else if let Some(ret_ty) = &func.return_type {
-                let resolved_ret_ty = wasi_registry.resolve_type(ret_ty);
+                let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);
                 if crate::component_model::return_type_requires_outptr(&resolved_ret_ty)
-                    || crate::component_model::wasi_named_type_return_needs_outptr(
+                    || crate::component_model::cm_named_type_return_needs_outptr(
                         &resolved_ret_ty,
-                        wasi_registry,
+                        cm_interface_registry,
                     )
                 {
                     // Complex return via outptr — function returns nothing
@@ -202,10 +202,10 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 } else {
                     // Simple return — flatten the return type
                     let mut out = Vec::new();
-                    crate::component_model::flatten_wasi_param_type(
+                    crate::component_model::flatten_cm_param_type(
                         &resolved_ret_ty,
                         &mut out,
-                        wasi_registry,
+                        cm_interface_registry,
                     );
                     out.into_iter().map(valtype_to_wir_type).collect()
                 }

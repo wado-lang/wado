@@ -377,12 +377,12 @@ export fn run() with Stdout {
 
 When no explicit world is declared, generate one from:
 
-1. **Imports**: Collect from `WasiRegistry` (used WASI interfaces via effects)
+1. **Imports**: Collect from `CmInterfaceRegistry` (used WASI interfaces via effects)
 2. **Exports**: Collect from items marked with `export`
 
 ```
 ┌─────────────────────┐    ┌─────────────────────┐
-│    WasiRegistry     │    │   export items      │
+│    CmInterfaceRegistry     │    │   export items      │
 │  (used effects)     │    │  (fn, struct, etc.) │
 └─────────┬───────────┘    └──────────┬──────────┘
           │                           │
@@ -421,7 +421,7 @@ Derived from `wado.toml` when present:
 ### Phase 1: Basic Embedding
 
 - [ ] Add `wit-component` dependency
-- [ ] Generate WIT text from `WasiRegistry` + `export fn`
+- [ ] Generate WIT text from `CmInterfaceRegistry` + `export fn`
 - [ ] Parse with `wit-parser` to get `Resolve`
 - [ ] Call `embed_component_metadata()` in codegen
 

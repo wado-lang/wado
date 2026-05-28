@@ -4,7 +4,7 @@
 //! structure. Built by `wir_build::plan_project`, consumed by `codegen`.
 
 use crate::ast::Type;
-use crate::component_model::{WasiRegistry, is_unit_type};
+use crate::component_model::{CmInterfaceRegistry, is_unit_type};
 use crate::hashmap::IndexMap;
 use crate::tir::TirTest;
 use crate::world_registry::{WorldExportInfo, WorldRegistry};
@@ -114,7 +114,7 @@ pub fn build_component_plan(
     tests: &[TirTest],
     export_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
 ) -> ComponentPlan {
     // Build world exports from registry.
     // For the test world, there are no world exports — only test exports.
@@ -125,7 +125,7 @@ pub fn build_component_plan(
             target_world,
             export_binding_names,
             world_registry,
-            wasi_registry,
+            cm_interface_registry,
         )
     };
 
@@ -173,7 +173,7 @@ fn build_world_export_plans(
     target_world: &str,
     export_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
 ) -> Vec<WorldExportPlan> {
     let world = world_registry.get(target_world);
     let exports: Vec<WorldExportInfo> = world.map(|w| w.exports.clone()).unwrap_or_else(|| {
@@ -202,12 +202,17 @@ fn build_world_export_plans(
             let cm_params = export
                 .params
                 .iter()
-                .map(|(name, ty)| (name.clone(), resolve_cm_export_type(ty, wasi_registry)))
+                .map(|(name, ty)| {
+                    (
+                        name.clone(),
+                        resolve_cm_export_type(ty, cm_interface_registry),
+                    )
+                })
                 .collect();
             let cm_result = export
                 .return_type
                 .as_ref()
-                .map(|ty| resolve_cm_export_type(ty, wasi_registry))
+                .map(|ty| resolve_cm_export_type(ty, cm_interface_registry))
                 .unwrap_or(CmExportType::Unit);
 
             WorldExportPlan {
@@ -236,7 +241,7 @@ fn build_world_export_plans(
 /// originate in stdlib `lib/wasi/**/worlds.wado` and
 /// `lib/core/kiln/worlds.wado`, so any unresolved name indicates a bug in the
 /// stdlib bootstrap rather than user input.
-fn resolve_cm_export_type(ty: &Type, wasi_registry: &WasiRegistry) -> CmExportType {
+fn resolve_cm_export_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry) -> CmExportType {
     if is_unit_type(ty) {
         return CmExportType::Unit;
     }
@@ -253,10 +258,10 @@ fn resolve_cm_export_type(ty: &Type, wasi_registry: &WasiRegistry) -> CmExportTy
         // World bodies (`lib/wasi/**/worlds.wado`, `lib/core/kiln/worlds.wado`)
         // reference type names like `Request` / `RawRequest` directly without
         // a `use { ... } from "..."` import, so `populate_named_type_sources`
-        // leaves `source_interface = None`. `WasiRegistry::resolve_cm_source_for`
+        // leaves `source_interface = None`. `CmInterfaceRegistry::resolve_cm_source_for`
         // already chains the `wasi:*` and `core:kiln/*` by-name lookups for
         // exactly this case — re-use it instead of duplicating the chain.
-        let interface_fq = wasi_registry
+        let interface_fq = cm_interface_registry
             .resolve_cm_source_for(named, None)
             .map(str::to_string)
             .unwrap_or_else(|| {
@@ -266,12 +271,12 @@ fn resolve_cm_export_type(ty: &Type, wasi_registry: &WasiRegistry) -> CmExportTy
                     named.name,
                 )
             });
-        let cm_name = wasi_registry
+        let cm_name = cm_interface_registry
             .get_resource_cm_name_by_source(&interface_fq, &named.name)
-            .or_else(|| wasi_registry.get_variant_cm_name_by_source(&interface_fq, &named.name))
-            .or_else(|| wasi_registry.get_struct_cm_name_by_source(&interface_fq, &named.name))
-            .or_else(|| wasi_registry.get_enum_cm_name_by_source(&interface_fq, &named.name))
-            .or_else(|| wasi_registry.get_flags_cm_name_by_source(&interface_fq, &named.name))
+            .or_else(|| cm_interface_registry.get_variant_cm_name_by_source(&interface_fq, &named.name))
+            .or_else(|| cm_interface_registry.get_struct_cm_name_by_source(&interface_fq, &named.name))
+            .or_else(|| cm_interface_registry.get_enum_cm_name_by_source(&interface_fq, &named.name))
+            .or_else(|| cm_interface_registry.get_flags_cm_name_by_source(&interface_fq, &named.name))
             .unwrap_or_else(|| panic!(
                 "world export type `{}` (interface `{interface_fq}`) has no CM name in the registry",
                 named.name,
@@ -397,7 +402,7 @@ mod tests {
     #[test]
     fn test_resolve_unit_shapes() {
         use resolver_helpers::*;
-        let (registry, _) = crate::component_model::WasiRegistry::build_from_stdlib();
+        let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
         // Bare unit forms
         assert!(matches!(
@@ -423,7 +428,7 @@ mod tests {
     #[test]
     fn test_resolve_handler_result() {
         use resolver_helpers::*;
-        let (registry, _) = crate::component_model::WasiRegistry::build_from_stdlib();
+        let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
         // wasi:http handler shape: Result<Response, ErrorCode>
         let http = result_of(named("Response"), named("ErrorCode"));
@@ -443,7 +448,7 @@ mod tests {
     #[test]
     fn test_resolve_named_resource() {
         use resolver_helpers::*;
-        let (registry, _) = crate::component_model::WasiRegistry::build_from_stdlib();
+        let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
         // `Request` is a resource declared in `wasi:http/types`.
         match resolve_cm_export_type(&named("Request"), registry) {
@@ -464,7 +469,7 @@ mod tests {
     #[test]
     fn test_resolve_named_kiln_record() {
         use resolver_helpers::*;
-        let (registry, _) = crate::component_model::WasiRegistry::build_from_stdlib();
+        let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
         // `RawRequest` is a struct declared in `core:kiln/types` — exercises
         // the `find_kiln_*` half of `resolve_cm_source_for`.

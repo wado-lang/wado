@@ -58,7 +58,7 @@ use std::sync::Arc;
 use crate::ast::{BinaryOp, Expr, Literal, UnaryOp};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
-use crate::component_model::WasiRegistry;
+use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{TypeId, TypeTable};
@@ -101,11 +101,11 @@ pub(crate) struct TypeSystem {
     pub(crate) trait_env: Arc<TraitEnv>,
 
     /// Registries the elaborator queries. The Component-Model
-    /// `WorldRegistry` is built by the same `WasiRegistry::build_from_stdlib`
+    /// `WorldRegistry` is built by the same `CmInterfaceRegistry::build_from_stdlib`
     /// call but lives on [`super::orchestration::AnnotateState`] instead
     /// of here — the elaborator never asks "what does world X export?",
     /// only post-elaborator stages (link, synthesis, DCE) do.
-    pub(crate) wasi_registry: &'static WasiRegistry,
+    pub(crate) cm_interface_registry: &'static CmInterfaceRegistry,
     pub(crate) builtin_registry: Rc<BuiltinRegistry>,
 
     /// Pre-loaded file contents for `#include_str` / `#include_bytes`.

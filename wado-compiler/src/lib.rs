@@ -423,7 +423,7 @@ fn compile_after_load<H: CompilerHost>(
         tysys.trait_env,
         implicit_modules,
         module_name,
-        tysys.wasi_registry,
+        tysys.cm_interface_registry,
         world_registry,
         builtin_registry,
         interner,
@@ -817,8 +817,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         if let Some(resolved_modules) = tir_modules_by_source.clone() {
             let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
-            let (wasi_registry, world_registry) =
-                component_model::WasiRegistry::build_from_stdlib();
+            let (cm_interface_registry, world_registry) =
+                component_model::CmInterfaceRegistry::build_from_stdlib();
 
             let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
             let mut builtin_registry =
@@ -840,7 +840,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 trait_env.expect("trait_env is set when resolve succeeded"),
                 load_result.implicit_modules.clone(),
                 module_name,
-                wasi_registry,
+                cm_interface_registry,
                 world_registry,
                 builtin_registry,
                 interner,

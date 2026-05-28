@@ -13,7 +13,7 @@
 use super::component_context::ComponentModelContext;
 use super::postprocess;
 use crate::ast::Type;
-use crate::component_model::{CmInstanceTypeGen, CmVariantCase, WasiFunctionInfo};
+use crate::component_model::{CmFunctionInfo, CmInstanceTypeGen, CmVariantCase};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir_package::NirPackage;
 use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirPackage};
@@ -139,7 +139,7 @@ pub fn build_component(
                     // WASI imports are already generated (generate_cm_imports runs first),
                     // so we can alias the exported type from the interface instance.
                     let val = if let Some(interface_name) = project
-                        .wasi_registry
+                        .cm_interface_registry
                         .find_interface_for_struct_cm_name(name)
                     {
                         let inst_idx = ctx.instance_idx(&interface_name);
@@ -255,7 +255,7 @@ pub fn build_component(
 
     // Collect available WASI functions
     let mut available_wasi_funcs: IndexSet<String> = IndexSet::default();
-    for interface in project.wasi_registry.interfaces() {
+    for interface in project.cm_interface_registry.interfaces() {
         for func in &interface.functions {
             let local_name = func.local_alias_name();
             if ctx.has_core_func(&local_name) {
@@ -522,7 +522,7 @@ fn emit_cm_val_type(
                     let ok_val = type_gen.ast_type_to_cm(
                         ok,
                         instance_type,
-                        proj.wasi_registry,
+                        proj.cm_interface_registry,
                         &resource_exports,
                     );
                     *local_type_idx = type_gen.next_idx();
@@ -640,7 +640,7 @@ fn emit_cm_val_type(
                 let val = type_gen.ast_type_to_cm(
                     ty,
                     instance_type,
-                    proj.wasi_registry,
+                    proj.cm_interface_registry,
                     &resource_exports,
                 );
                 *local_type_idx = type_gen.next_idx();
@@ -713,14 +713,14 @@ fn build_cm_tuple_types(
 /// Used to build the `needed_resources` list for `generate_cm_imports`.
 fn collect_resources_in_type(
     ty: &Type,
-    wasi_registry: &crate::component_model::WasiRegistry,
+    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
     out: &mut Vec<String>,
 ) {
     match ty {
         Type::Named(named)
             if named.source_interface.as_deref().is_some_and(|s| {
                 s.starts_with("wasi:")
-                    && wasi_registry
+                    && cm_interface_registry
                         .get_resource_cm_name_by_source(s, &named.name)
                         .is_some()
             }) =>
@@ -731,16 +731,16 @@ fn collect_resources_in_type(
         }
         Type::Generic(g) => {
             for arg in &g.args {
-                collect_resources_in_type(arg, wasi_registry, out);
+                collect_resources_in_type(arg, cm_interface_registry, out);
             }
         }
         Type::Tuple(elems) => {
             for elem in elems {
-                collect_resources_in_type(elem, wasi_registry, out);
+                collect_resources_in_type(elem, cm_interface_registry, out);
             }
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
-            collect_resources_in_type(inner, wasi_registry, out);
+            collect_resources_in_type(inner, cm_interface_registry, out);
         }
         _ => {}
     }
@@ -1695,18 +1695,18 @@ fn generate_cm_imports(
     project: &NirPackage,
 ) {
     let cli_version = project
-        .wasi_registry
+        .cm_interface_registry
         .get_cli_version()
         .expect("WASI CLI version not found in registry - lib/wasi/*.wado not loaded?");
 
     // Import wasi:cli/types for shared types (error-code)
     let cli_types_interface = format!("wasi:cli/types@{cli_version}");
     let error_code_cm_name = project
-        .wasi_registry
+        .cm_interface_registry
         .get_enum_cm_name_by_interface(&cli_types_interface, "ErrorCode")
         .expect("ErrorCode CM name not found in wasi:cli/types");
     let error_code_variants = project
-        .wasi_registry
+        .cm_interface_registry
         .get_enum_variants_by_interface(&cli_types_interface, "ErrorCode")
         .expect("ErrorCode enum not found in wasi:cli/types");
     let types_instance_type = ctx.register_type("types-instance-type");
@@ -1739,7 +1739,7 @@ fn generate_cm_imports(
     );
 
     // Generate imports for each interface in the registry
-    for interface_info in project.wasi_registry.interfaces() {
+    for interface_info in project.cm_interface_registry.interfaces() {
         if interface_info.interface == "run" {
             continue;
         }
@@ -1754,7 +1754,7 @@ fn generate_cm_imports(
             .functions
             .iter()
             .filter(|func| {
-                if !project.wasi_registry.is_function_supported(func) {
+                if !project.cm_interface_registry.is_function_supported(func) {
                     return false;
                 }
                 // Use per-function check (same as wir_build) to avoid including
@@ -1773,10 +1773,14 @@ fn generate_cm_imports(
         let mut needed_resources: Vec<String> = Vec::new();
         for func in &supported_functions {
             if let Some(ret_ty) = &func.return_type {
-                collect_resources_in_type(ret_ty, project.wasi_registry, &mut needed_resources);
+                collect_resources_in_type(
+                    ret_ty,
+                    project.cm_interface_registry,
+                    &mut needed_resources,
+                );
             }
             for (_, _, ty) in &func.params {
-                collect_resources_in_type(ty, project.wasi_registry, &mut needed_resources);
+                collect_resources_in_type(ty, project.cm_interface_registry, &mut needed_resources);
             }
         }
 
@@ -1785,7 +1789,7 @@ fn generate_cm_imports(
         // Phase 3). Interfaces that define their own resources (source path == self) are handled here.
         let uses_external_resources = needed_resources.iter().any(|resource_name| {
             project
-                .wasi_registry
+                .cm_interface_registry
                 .get_resource_source_interface(resource_name)
                 .is_some_and(|src| src != interface_info.path.as_str())
         });
@@ -1805,10 +1809,10 @@ fn generate_cm_imports(
             let mut borrow_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
             for resource_name in &needed_resources {
                 if let Some(source) = project
-                    .wasi_registry
+                    .cm_interface_registry
                     .find_wasi_resource_source(resource_name)
                     && let Some(cm_name) = project
-                        .wasi_registry
+                        .cm_interface_registry
                         .get_resource_cm_name_by_source(source, resource_name)
                 {
                     instance_type.export(
@@ -1833,10 +1837,10 @@ fn generate_cm_imports(
             // wasi:sockets/types) vs. using the shared wasi:cli/types error-code via outer alias.
             // ErrorCode may be an enum (cli/types) or a variant (filesystem/types, sockets/types).
             let has_local_error_code = project
-                .wasi_registry
+                .cm_interface_registry
                 .has_enum_in_interface(&interface_info.path, "ErrorCode")
                 || project
-                    .wasi_registry
+                    .cm_interface_registry
                     .variants_for_interface(&interface_info.path)
                     .any(|(name, _, _)| name == "ErrorCode");
 
@@ -1883,7 +1887,7 @@ fn generate_cm_imports(
                 .iter()
                 .filter(|name| {
                     project
-                        .wasi_registry
+                        .cm_interface_registry
                         .get_variant_cases_by_source(iface, name)
                         .is_some()
                         && (name.as_str() != "ErrorCode" || has_local_error_code)
@@ -1896,7 +1900,7 @@ fn generate_cm_imports(
                 .iter()
                 .filter(|name| {
                     project
-                        .wasi_registry
+                        .cm_interface_registry
                         .get_enum_variants_by_source(iface, name)
                         .is_some()
                         && !needed_variants.contains(name)
@@ -1909,7 +1913,7 @@ fn generate_cm_imports(
                 .iter()
                 .filter(|name| {
                     project
-                        .wasi_registry
+                        .cm_interface_registry
                         .get_flags_members_by_source(iface, name)
                         .is_some()
                 })
@@ -1922,7 +1926,7 @@ fn generate_cm_imports(
 
             for enum_name in &needed_enums {
                 if let Some(variants) = project
-                    .wasi_registry
+                    .cm_interface_registry
                     .get_enum_variants_by_interface(interface_path, enum_name)
                 {
                     instance_type
@@ -1934,7 +1938,7 @@ fn generate_cm_imports(
                     enum_type_indices.insert(enum_name.clone(), type_idx);
 
                     if let Some(cm_name) = project
-                        .wasi_registry
+                        .cm_interface_registry
                         .get_enum_cm_name_by_interface(interface_path, enum_name)
                     {
                         instance_type.export(
@@ -1951,7 +1955,7 @@ fn generate_cm_imports(
             let mut variant_export_indices: IndexMap<String, u32> = IndexMap::default();
             // Build a map from wado_name → (cm_name, cases) for this interface's variants
             let interface_variants: IndexMap<String, (String, Vec<CmVariantCase>)> = project
-                .wasi_registry
+                .cm_interface_registry
                 .variants_for_interface(&interface_info.path)
                 .map(|(wado_name, cm_name, cases)| {
                     (wado_name.to_string(), (cm_name.to_string(), cases.to_vec()))
@@ -2019,12 +2023,15 @@ fn generate_cm_imports(
             // Emit flags types in the instance type (scoped to wasi:).
             let mut flags_export_indices: IndexMap<String, u32> = IndexMap::default();
             for flags_name in &needed_flags {
-                let Some(source) = project.wasi_registry.find_wasi_flags_source(flags_name) else {
+                let Some(source) = project
+                    .cm_interface_registry
+                    .find_wasi_flags_source(flags_name)
+                else {
                     continue;
                 };
                 let source = source.to_string();
                 if let Some(members) = project
-                    .wasi_registry
+                    .cm_interface_registry
                     .get_flags_members_by_source(&source, flags_name)
                 {
                     instance_type
@@ -2035,7 +2042,7 @@ fn generate_cm_imports(
                     local_type_idx += 1;
 
                     if let Some(cm_name) = project
-                        .wasi_registry
+                        .cm_interface_registry
                         .get_flags_cm_name_by_source(&source, flags_name)
                     {
                         instance_type.export(
@@ -2100,12 +2107,12 @@ fn generate_cm_imports(
                     .params
                     .iter()
                     .map(|(_, cm_name, ty)| {
-                        let resolved_ty = project.wasi_registry.resolve_type(ty);
+                        let resolved_ty = project.cm_interface_registry.resolve_type(ty);
                         let val_type = if let Type::Named(named) = &resolved_ty
                             && named.source_interface.as_deref().is_some_and(|s| {
                                 s.starts_with("wasi:")
                                     && project
-                                        .wasi_registry
+                                        .cm_interface_registry
                                         .get_struct_fields_by_source(s, &named.name)
                                         .is_some()
                             }) {
@@ -2117,7 +2124,7 @@ fn generate_cm_imports(
                             let val = shared_type_gen.ast_type_to_cm(
                                 &resolved_ty,
                                 &mut instance_type,
-                                project.wasi_registry,
+                                project.cm_interface_registry,
                                 &resource_exports,
                             );
                             local_type_idx = shared_type_gen.next_idx();
@@ -2145,12 +2152,12 @@ fn generate_cm_imports(
                 // Return type: use emit_cm_val_type for unified recursive type definition,
                 // with shared_type_gen for struct (record) return types.
                 let result_type = func.return_type.as_ref().map(|ty| {
-                    let resolved_ty = project.wasi_registry.resolve_type(ty);
+                    let resolved_ty = project.cm_interface_registry.resolve_type(ty);
                     if let Type::Named(named) = &resolved_ty
                         && named.source_interface.as_deref().is_some_and(|s| {
                             s.starts_with("wasi:")
                                 && project
-                                    .wasi_registry
+                                    .cm_interface_registry
                                     .get_struct_fields_by_source(s, &named.name)
                                     .is_some()
                         })
@@ -2163,7 +2170,7 @@ fn generate_cm_imports(
                         let val = shared_type_gen.ast_type_to_cm(
                             &resolved_ty,
                             &mut instance_type,
-                            project.wasi_registry,
+                            project.cm_interface_registry,
                             &resource_exports,
                         );
                         local_type_idx = shared_type_gen.next_idx();
@@ -2218,10 +2225,10 @@ fn generate_cm_imports(
         // wasi:filesystem/types::descriptor) to alias them via `alias outer`.
         for resource_name in &needed_resources {
             if let Some(source) = project
-                .wasi_registry
+                .cm_interface_registry
                 .find_wasi_resource_source(resource_name)
                 && let Some(cm_name) = project
-                    .wasi_registry
+                    .cm_interface_registry
                     .get_resource_cm_name_by_source(source, resource_name)
             {
                 let resource_type_name = format!("resource:{cm_name}");
@@ -2240,10 +2247,10 @@ fn generate_cm_imports(
         // Different interfaces (cli, filesystem, sockets) define different error-code types.
         // We register them with source-qualified keys (e.g., "filesystem-error-code").
         let interface_has_error_code = project
-            .wasi_registry
+            .cm_interface_registry
             .has_enum_in_interface(&interface_info.path, "ErrorCode")
             || project
-                .wasi_registry
+                .cm_interface_registry
                 .variants_for_interface(&interface_info.path)
                 .any(|(name, _, _)| name == "ErrorCode");
         if interface_has_error_code {
@@ -2260,7 +2267,7 @@ fn generate_cm_imports(
 
         for func in &supported_functions {
             let local_name = project
-                .wasi_registry
+                .cm_interface_registry
                 .get_local_name(&interface_info.path, &func.wasi_func_name)
                 .cloned()
                 .unwrap_or_else(|| format!("{}-{}", interface_info.interface, func.wasi_func_name));
@@ -2297,7 +2304,7 @@ fn import_http_types_for_service(
 ) {
     // Collect HTTP resources from the registry
     let http_resources: Vec<(String, String)> = project
-        .wasi_registry
+        .cm_interface_registry
         .resources_for_interface("wasi:http/types")
         .map(|(wado, cm)| (wado.to_string(), cm.to_string()))
         .collect();
@@ -2321,7 +2328,7 @@ fn import_http_types_for_service(
         // (e.g., ErrorCode exists in http, filesystem, sockets).
         let resource_count = http_resources.len() as u32;
         let http_version = project
-            .wasi_registry
+            .cm_interface_registry
             .get_package_version("http")
             .expect("WASI HTTP version not found in registry");
         let http_types_interface = format!("wasi:http/types@{http_version}");
@@ -2338,8 +2345,8 @@ fn import_http_types_for_service(
             .map(|(wado, _)| wado.as_str())
             .collect();
 
-        let all_funcs: Vec<WasiFunctionInfo> = project
-            .wasi_registry
+        let all_funcs: Vec<CmFunctionInfo> = project
+            .cm_interface_registry
             .interfaces()
             .find(|i| i.package == "http" && i.interface == "types")
             .map(|i| i.functions)
@@ -2348,7 +2355,7 @@ fn import_http_types_for_service(
         // Emit constructor/static functions from registry metadata.
         // Processing their parameter and return types triggers on-demand emission of
         // all dependent types (error-code variant and its payload record types).
-        let is_constructor_or_static = |f: &WasiFunctionInfo| {
+        let is_constructor_or_static = |f: &CmFunctionInfo| {
             http_resource_names.contains(f.interface_name.as_str())
                 && (f.wasi_func_name.starts_with("[constructor]")
                     || f.wasi_func_name.starts_with("[static]"))
@@ -2357,7 +2364,7 @@ fn import_http_types_for_service(
             let resolved_return = func
                 .return_type
                 .as_ref()
-                .map(|ty| project.wasi_registry.resolve_type(ty));
+                .map(|ty| project.cm_interface_registry.resolve_type(ty));
 
             let cm_params: Vec<(String, ComponentValType)> = func
                 .params
@@ -2366,7 +2373,7 @@ fn import_http_types_for_service(
                     let cm_type = type_gen.ast_type_to_cm(
                         ty,
                         &mut instance_type,
-                        project.wasi_registry,
+                        project.cm_interface_registry,
                         &resource_exports,
                     );
                     (cm_name.clone(), cm_type)
@@ -2377,7 +2384,7 @@ fn import_http_types_for_service(
                 type_gen.ast_type_to_cm(
                     ty,
                     &mut instance_type,
-                    project.wasi_registry,
+                    project.cm_interface_registry,
                     &resource_exports,
                 )
             });
@@ -2401,7 +2408,7 @@ fn import_http_types_for_service(
             );
         }
 
-        let resource_methods: Vec<WasiFunctionInfo> = all_funcs
+        let resource_methods: Vec<CmFunctionInfo> = all_funcs
             .iter()
             .filter(|f| {
                 // Skip functions already emitted in the constructor/static block
@@ -2431,7 +2438,7 @@ fn import_http_types_for_service(
             let resolved_return = func
                 .return_type
                 .as_ref()
-                .map(|ty| project.wasi_registry.resolve_type(ty));
+                .map(|ty| project.cm_interface_registry.resolve_type(ty));
 
             let cm_params: Vec<(String, ComponentValType)> = func
                 .params
@@ -2440,7 +2447,7 @@ fn import_http_types_for_service(
                     let cm_type = type_gen.ast_type_to_cm(
                         ty,
                         &mut instance_type,
-                        project.wasi_registry,
+                        project.cm_interface_registry,
                         &resource_exports,
                     );
                     (cm_name.clone(), cm_type)
@@ -2451,7 +2458,7 @@ fn import_http_types_for_service(
                 type_gen.ast_type_to_cm(
                     ty,
                     &mut instance_type,
-                    project.wasi_registry,
+                    project.cm_interface_registry,
                     &resource_exports,
                 )
             });
@@ -2480,7 +2487,7 @@ fn import_http_types_for_service(
 
     ctx.register_instance("http-types");
     let http_version = project
-        .wasi_registry
+        .cm_interface_registry
         .get_package_version("http")
         .expect("WASI HTTP version not found in registry");
     let http_types_import_path = format!("wasi:http/types@{http_version}");
@@ -2503,11 +2510,11 @@ fn import_http_types_for_service(
     // The HTTP error type is unambiguous: pin it to wasi:http/types via the
     // source-disambiguated lookup.
     let http_error_code_cm = project
-        .wasi_registry
+        .cm_interface_registry
         .get_variant_cm_name_by_interface(&http_types_import_path, "ErrorCode")
         .or_else(|| {
             project
-                .wasi_registry
+                .cm_interface_registry
                 .get_enum_cm_name_by_interface(&http_types_import_path, "ErrorCode")
         })
         .expect("ErrorCode CM name not found for HTTP");
@@ -2520,11 +2527,11 @@ fn import_http_types_for_service(
 
     // Alias constructor/static functions needed for lowering
     let fields_cm = project
-        .wasi_registry
+        .cm_interface_registry
         .get_resource_cm_name("Fields")
         .unwrap();
     let response_cm = project
-        .wasi_registry
+        .cm_interface_registry
         .get_resource_cm_name("Response")
         .unwrap();
     let constructor_fields = format!("[constructor]{fields_cm}");
@@ -2551,7 +2558,7 @@ fn import_http_types_for_service(
             .map(|(wado, _)| wado.as_str())
             .collect();
         let resource_funcs: Vec<(String, String)> = project
-            .wasi_registry
+            .cm_interface_registry
             .interfaces()
             .find(|i| i.package == "http" && i.interface == "types")
             .map(|i| {
@@ -2626,7 +2633,7 @@ fn import_http_client(
     let handler_result_type_idx = ctx.type_idx("http-handler-result");
 
     let client_iface = project
-        .wasi_registry
+        .cm_interface_registry
         .interfaces()
         .find(|i| i.package == "http" && i.interface == "client")
         .expect("wasi:http/client interface not found in registry");
@@ -2678,7 +2685,7 @@ fn import_http_client(
 
     ctx.register_instance("http-client");
     let http_version = project
-        .wasi_registry
+        .cm_interface_registry
         .get_package_version("http")
         .expect("WASI HTTP version not found in registry");
     let client_import_path = format!("wasi:http/client@{http_version}");
@@ -2690,7 +2697,7 @@ fn import_http_client(
     // Alias each function from the instance
     for func in &client_funcs {
         let local_name = project
-            .wasi_registry
+            .cm_interface_registry
             .get_local_name(&client_import_path, &func.wasi_func_name)
             .cloned()
             .unwrap_or_else(|| format!("wasi:http/Client::{}", func.method_name));
@@ -2706,7 +2713,7 @@ fn import_http_client(
 fn import_interface_with_resource(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    interface_info: &crate::component_model::WasiInterfaceInfo,
+    interface_info: &crate::component_model::CmInterfaceInfo,
     project: &NirPackage,
 ) {
     let Some((_resource_wado_name, resource_cm_name)) = &interface_info.resource_type else {
@@ -2803,7 +2810,7 @@ fn import_interfaces_with_resources(
     project: &NirPackage,
 ) {
     let interfaces_with_resources: Vec<_> = project
-        .wasi_registry
+        .cm_interface_registry
         .interfaces()
         .filter(|info| info.resource_type.is_some() && info.package != "http")
         .collect();
@@ -2816,7 +2823,7 @@ fn import_interfaces_with_resources(
         };
 
         let Some(source_path) = project
-            .wasi_registry
+            .cm_interface_registry
             .get_resource_source_interface(resource_wado_name)
         else {
             continue;
@@ -2839,7 +2846,7 @@ fn import_interfaces_with_resources(
         imported_source_interfaces.insert(source_path.to_string());
 
         let Some(resource_cm_name) = project
-            .wasi_registry
+            .cm_interface_registry
             .get_resource_cm_name(resource_wado_name)
         else {
             continue;
@@ -2851,11 +2858,11 @@ fn import_interfaces_with_resources(
 
         // Check if this source interface defines ErrorCode
         let source_has_error_code = project
-            .wasi_registry
+            .cm_interface_registry
             .variants_for_interface(source_path)
             .any(|(name, _, _)| name == "ErrorCode")
             || project
-                .wasi_registry
+                .cm_interface_registry
                 .has_enum_in_interface(source_path, "ErrorCode");
 
         let instance_type_name = format!("{}-instance-type", cm_import.interface);
@@ -2875,7 +2882,7 @@ fn import_interfaces_with_resources(
             // for Transmission future types.
             if source_has_error_code {
                 let interface_variants: Vec<_> = project
-                    .wasi_registry
+                    .cm_interface_registry
                     .variants_for_interface(source_path)
                     .filter(|(name, _, _)| *name == "ErrorCode")
                     .collect();
@@ -2946,10 +2953,10 @@ fn import_interfaces_with_resources(
     // These are needed by Transmission future types (future<result<_, error-code>>).
     for interface_info in &interfaces_with_resources {
         let has_error_code = project
-            .wasi_registry
+            .cm_interface_registry
             .has_enum_in_interface(&interface_info.path, "ErrorCode")
             || project
-                .wasi_registry
+                .cm_interface_registry
                 .variants_for_interface(&interface_info.path)
                 .any(|(name, _, _)| name == "ErrorCode");
         if has_error_code {
@@ -2982,7 +2989,7 @@ fn import_resource_using_interfaces(
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
 ) {
-    for interface_info in project.wasi_registry.interfaces() {
+    for interface_info in project.cm_interface_registry.interfaces() {
         if interface_info.interface == "run" {
             continue;
         }
@@ -2997,7 +3004,7 @@ fn import_resource_using_interfaces(
             .functions
             .iter()
             .filter(|func| {
-                if !project.wasi_registry.is_function_supported(func) {
+                if !project.cm_interface_registry.is_function_supported(func) {
                     return false;
                 }
                 let func_key = format!("{}::{}", func.interface_name, func.method_name);
@@ -3013,10 +3020,14 @@ fn import_resource_using_interfaces(
         let mut needed_resources: Vec<String> = Vec::new();
         for func in &supported_functions {
             if let Some(ret_ty) = &func.return_type {
-                collect_resources_in_type(ret_ty, project.wasi_registry, &mut needed_resources);
+                collect_resources_in_type(
+                    ret_ty,
+                    project.cm_interface_registry,
+                    &mut needed_resources,
+                );
             }
             for (_, _, ty) in &func.params {
-                collect_resources_in_type(ty, project.wasi_registry, &mut needed_resources);
+                collect_resources_in_type(ty, project.cm_interface_registry, &mut needed_resources);
             }
         }
 
@@ -3050,10 +3061,10 @@ fn import_resource_using_interfaces(
         // instance type emitted below, not aliased through an outer scope.
         for resource_name in &needed_resources {
             if let Some(source) = project
-                .wasi_registry
+                .cm_interface_registry
                 .find_wasi_resource_source(resource_name)
                 && let Some(cm_name) = project
-                    .wasi_registry
+                    .cm_interface_registry
                     .get_resource_cm_name_by_source(source, resource_name)
             {
                 let outer_resource_type_name = format!("resource:{cm_name}");
@@ -3061,7 +3072,7 @@ fn import_resource_using_interfaces(
                     continue; // already imported
                 }
                 let Some(source_path) = project
-                    .wasi_registry
+                    .cm_interface_registry
                     .get_resource_source_interface(resource_name)
                 else {
                     continue;
@@ -3122,15 +3133,15 @@ fn import_resource_using_interfaces(
 
             for resource_name in &needed_resources {
                 if let Some(source) = project
-                    .wasi_registry
+                    .cm_interface_registry
                     .find_wasi_resource_source(resource_name)
                     && let Some(cm_name) = project
-                        .wasi_registry
+                        .cm_interface_registry
                         .get_resource_cm_name_by_source(source, resource_name)
                 {
                     let outer_resource_type_name = format!("resource:{cm_name}");
                     let source_is_self = project
-                        .wasi_registry
+                        .cm_interface_registry
                         .get_resource_source_interface(resource_name)
                         .is_some_and(|src| src == interface_info.path.as_str());
                     if source_is_self {
@@ -3208,7 +3219,7 @@ fn import_resource_using_interfaces(
                         {
                             ComponentValType::Type(idx)
                         } else {
-                            let resolved = project.wasi_registry.resolve_type(ty);
+                            let resolved = project.cm_interface_registry.resolve_type(ty);
                             emit_cm_val_type(
                                 &resolved,
                                 &mut instance_type,
@@ -3227,7 +3238,7 @@ fn import_resource_using_interfaces(
                     .collect();
 
                 let result_type = func.return_type.as_ref().map(|ty| {
-                    let resolved_ty = project.wasi_registry.resolve_type(ty);
+                    let resolved_ty = project.cm_interface_registry.resolve_type(ty);
                     emit_cm_val_type(
                         &resolved_ty,
                         &mut instance_type,
@@ -3277,7 +3288,7 @@ fn import_resource_using_interfaces(
 
         for func in &supported_functions {
             let local_name = project
-                .wasi_registry
+                .cm_interface_registry
                 .get_local_name(&interface_info.path, &func.wasi_func_name)
                 .cloned()
                 .unwrap_or_else(|| format!("{}-{}", interface_info.interface, func.wasi_func_name));
@@ -3297,7 +3308,7 @@ fn lower_wasi_functions(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
 ) {
-    for interface_info in project.wasi_registry.interfaces() {
+    for interface_info in project.cm_interface_registry.interfaces() {
         for func in &interface_info.functions {
             let local_name = func.local_alias_name();
 
@@ -3316,7 +3327,7 @@ fn lower_wasi_functions(
                 options.push(CanonicalOption::Async);
             }
 
-            let needs_memory = func.needs_memory_with_registry(project.wasi_registry);
+            let needs_memory = func.needs_memory_with_registry(project.cm_interface_registry);
             let needs_realloc = needs_memory;
 
             if needs_memory {
@@ -3341,26 +3352,26 @@ fn append_http_handler_export(
     let handle_func_idx = ctx.comp_func_idx("handle");
 
     let request_cm = project
-        .wasi_registry
+        .cm_interface_registry
         .get_resource_cm_name("Request")
         .unwrap();
     let response_cm = project
-        .wasi_registry
+        .cm_interface_registry
         .get_resource_cm_name("Response")
         .unwrap();
     // Pin `ErrorCode` to wasi:http/types — same disambiguation as the
     // import side a few hundred lines up.
     let http_version_for_error = project
-        .wasi_registry
+        .cm_interface_registry
         .get_package_version("http")
         .expect("WASI HTTP version not found in registry");
     let http_types_iface = format!("wasi:http/types@{http_version_for_error}");
     let error_code_cm = project
-        .wasi_registry
+        .cm_interface_registry
         .get_variant_cm_name_by_interface(&http_types_iface, "ErrorCode")
         .or_else(|| {
             project
-                .wasi_registry
+                .cm_interface_registry
                 .get_enum_cm_name_by_interface(&http_types_iface, "ErrorCode")
         })
         .unwrap();
@@ -3385,7 +3396,7 @@ fn append_http_handler_export(
 
     let mut exports = ComponentExportSection::new();
     let http_version = project
-        .wasi_registry
+        .cm_interface_registry
         .get_package_version("http")
         .expect("WASI HTTP version not found in registry");
     let handler_path = format!("wasi:http/handler@{http_version}");

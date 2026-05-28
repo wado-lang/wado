@@ -2,7 +2,7 @@
 //!
 //! This module provides pure functions for computing sizes, alignments, and
 //! field offsets according to the Canonical ABI specification. It operates on
-//! AST `Type`s (which is what `WasiRegistry` stores for WASI function signatures).
+//! AST `Type`s (which is what `CmInterfaceRegistry` stores for WASI function signatures).
 //!
 //! Reference: <https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md>
 
@@ -231,7 +231,7 @@ pub fn layout_result(ok: &Type, err: &Type) -> CmLayout {
 /// Registry-aware layout for option<T>.
 pub fn layout_option_with_registry(
     inner: &Type,
-    registry: &crate::component_model::WasiRegistry,
+    registry: &crate::component_model::CmInterfaceRegistry,
 ) -> CmLayout {
     layout_option_with_registry_scoped(inner, registry, None)
 }
@@ -239,7 +239,7 @@ pub fn layout_option_with_registry(
 /// Package-scoped registry-aware layout for option<T>.
 pub fn layout_option_with_registry_scoped(
     inner: &Type,
-    registry: &crate::component_model::WasiRegistry,
+    registry: &crate::component_model::CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> CmLayout {
     let payload_align =
@@ -260,7 +260,7 @@ pub fn layout_option_with_registry_scoped(
 pub fn layout_result_with_registry(
     ok: &Type,
     err: &Type,
-    registry: &crate::component_model::WasiRegistry,
+    registry: &crate::component_model::CmInterfaceRegistry,
 ) -> CmLayout {
     layout_result_with_registry_scoped(ok, err, registry, None)
 }
@@ -269,7 +269,7 @@ pub fn layout_result_with_registry(
 pub fn layout_result_with_registry_scoped(
     ok: &Type,
     err: &Type,
-    registry: &crate::component_model::WasiRegistry,
+    registry: &crate::component_model::CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> CmLayout {
     let payload_align =

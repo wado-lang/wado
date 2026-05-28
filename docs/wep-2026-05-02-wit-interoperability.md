@@ -44,54 +44,43 @@ be consumed without compiler changes. Concretely:
 There is no separate registry of "known WASI modules". The set of supported
 worlds equals the set of WITs the compiler has parsed during this compilation.
 
-## Key Decision: Unify `effect` (declaration) into `interface`
+## Key Decision: Unify `effect` block declarations into `interface`
 
 WIT's organizing primitive is `interface`: a named group of free functions,
-resources (with their methods), and types. Wado split this into two keywords —
-`effect` for the import side (with effect tracking) and `interface` for the
-export side (pure CM grouping). The split was justified in WEP: WIT and Wado
-Mapping under the assumption that the import side carries Wado-level meaning
-(effect tracking) while the export side does not.
+resources (with their methods), and types. Wado previously had `effect` as a
+parallel block-declaration keyword (`effect Foo { ... }`). For WIT
+interoperability the block form collapses into `interface`:
 
-In practice, `effect` blocks already contain free functions, resources, and
-types. The keyword name no longer matches the contents, and the producer-side
-`interface` keyword (a pure grouping) becomes a separate concept the user has
-to learn.
+- `effect Foo { ... }` → `interface Foo { ... }`.
 
-This WEP collapses the two:
+```wado
+interface Stdout { ... }       // formerly effect Stdout { ... }
+```
 
-- `effect <Name> { ... }` declarations become `interface <Name> { ... }`.
-- An interface contains free functions, resources, and types — exactly the
-  WIT shape.
-- The `with` clause continues to take interface names. `fn foo() with Stdout`
-  reads as "this function uses the Stdout interface, which is effectful".
-  Effect tracking semantics are unchanged.
-- Worlds `import` and `export` interfaces by name. Each `import Foo` resolves
-  to a known `pub interface Foo` declaration that carries `#[cm(...)]` and is
-  therefore traceable back to its WIT FQ name.
+The `with` clause continues to take interface names. Effect tracking
+semantics are unchanged.
 
-The `effect` keyword is retained for one purpose only: **polymorphic effect
-parameters**, e.g.
+The `effect` keyword is retained for one purpose: polymorphic effect
+parameters (`<effect E>`). Here `E` is a type-level binder over effect
+rows — a different concept from a CM interface, and one WIT does not have
+an equivalent for. Keeping the keyword for this case makes the distinction
+explicit and avoids overloading `interface` with a meaning it does not
+have in WIT.
 
 ```wado
 fn wrapper<effect E>(f: fn() with E) with E { f(); }
 ```
 
-Here `E` is an effect variable, not an interface declaration. This is a
-genuinely different concept (a type-level binder over effect rows) and keeping
-the keyword for this case avoids overloading `interface` with a meaning it does
-not have in WIT.
-
 ### What this resolves
 
-- Effect-vs-interface ambiguity: `interface` is the single concept; `effect` is
-  a binder for polymorphic effect parameters only.
-- Producer-side keyword duplication: there is one keyword for both sides.
-  `pub interface Geometry { ... }` defines and groups; `export Geometry` from a
-  world publishes it.
-- World import information loss (see Current State below): `import Foo` in a
-  world is now a reference to an `interface Foo` declaration, which carries
-  `#[cm(...)]`. The interface FQ name is preserved by construction.
+- One keyword (`interface`) for both the import and export block forms,
+  matching WIT's vocabulary directly. `effect` keeps a narrow, well-defined
+  role (polymorphic effect parameters).
+- `pub interface Geometry { ... }` defines and groups; `export Geometry`
+  from a world publishes it. No producer-side keyword duplication.
+- World import information loss is gone: `import Foo` in a world is a
+  reference to an `interface Foo` declaration carrying `#[cm(...)]`, so
+  the FQ name is preserved by construction.
 
 ### Cross-package disambiguation (resolved by omission)
 
@@ -127,12 +116,15 @@ The migration runs on a single feature branch and lands as one merge:
       `lib/wasi/**`, `lib/core/**`, `wado-compiler` internals, examples, fixtures,
       and docs.
 - [x] Update `wado-from-idl` so its generated stdlib emits `interface` blocks.
-- [x] Keep the `effect` keyword in the parser for `<effect E>` polymorphic effect
-      parameters only. Remove `effect` as a declaration form.
 - [x] Add `cm_interface_fq` to `WorldImportInfo` and populate it from the
       referenced interface's `#[cm(...)]`.
 - [x] World imports/exports are bare WIT-faithful interface refs (`import Foo;`
       / `export Foo;`); the brace-block form has been removed.
+- [x] Retain the `effect` keyword for polymorphic effect parameters
+      (`<effect E>`). The block-declaration unification does not extend
+      to type parameters: an effect variable binds an effect row, which
+      is a Wado-specific concept WIT has no equivalent for. The current
+      parser support stays.
 - [ ] Update WEP: WIT and Wado Mapping to mark the interface/effect split as
       superseded.
 
@@ -178,7 +170,7 @@ form is unambiguous and minimal.
 | Aspect                                               | Mechanism                                                                                          |
 | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | World definitions                                    | Parsed from `lib/wasi/**/worlds.wado`; `#[cm("...")]` carries the FQ name.                         |
-| Interface → CM import binding (currently `effect`)   | Each method declares `#[cm_import("wasi:cli/stdout@...#write-via-stream")]`.                       |
+| Interface → CM import binding                        | Each method declares `#[cm_import("wasi:cli/stdout@...#write-via-stream")]`.                       |
 | Resources, structs, enums, variants, flags, newtypes | Registered from stdlib `.wado` parsing; `#[cm(...)]` carries CM-side names.                        |
 | Entry function names (`run`, `handle`)               | Pulled from the world's declared `export` items, not hardcoded strings.                            |
 | HTTP detection                                       | Namespace prefix `wasi:http/` plus return-type shape (`Result<Response, _>`).                      |
@@ -201,13 +193,19 @@ form is unambiguous and minimal.
   new WASI/CM library currently requires either putting the binding `.wado`
   in this list or feeding it through `CompilerHost`. Neither path reads
   embedded WIT directly.
-- Cargo dependencies do not yet include `wit-parser` / `wit-component`. The
-  compiler relies on `wado-from-idl`-generated `.wado` files as the source of
-  truth.
+- `wit-parser` is in `[workspace.dependencies]` but is consumed only by
+  `wado-from-idl` (WIT → Wado, build-time). `wit-component` and
+  `wit-encoder` are not yet added; they are required by the producer-side
+  work in §"Producer Side: WIT Generation and Embedding" and by future
+  consumer-side `component-type` parsing for external `.wasm` imports.
+  `wado-compiler` itself still relies on `wado-from-idl`-generated `.wado`
+  files as the source of truth.
 - Producer-side WIT embedding (the `component-type` custom section described
   in [WIT Bundling](./wep-2026-03-21-wit-bundling.md)) is designed but not
   yet implemented in codegen. Without it, a Wado-compiled component cannot
-  be consumed via the embedded-WIT path described in this WEP's Goal.
+  be consumed via the embedded-WIT path described in this WEP's Goal. The
+  detailed design lives in §"Producer Side: WIT Generation and Embedding"
+  below; implementation is staged into Phases 0–3.
 
 ### Stale items already cleaned up
 
@@ -217,6 +215,299 @@ form is unambiguous and minimal.
 - `synthesize_result_export_adapter` has been renamed to
   `synthesize_result_export_binding`. Naming is now consistent with
   `synthesize_void_export_binding` and `synthesize_general_export_binding`.
+
+## Producer Side: WIT Generation and Embedding
+
+This section is the detailed design for the producer-side roadmap item
+"embed `component-type` in output". It implements the format spec from
+[WIT Bundling](./wep-2026-03-21-wit-bundling.md) and the Wado↔WIT mapping
+from [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md). Anything
+left open in those two documents (default behavior, CLI shape, where the
+generator hooks into the pipeline) is resolved here.
+
+### Position in the pipeline
+
+WIT generation is a function of the _frontend output_. Describing a
+component's interface — declared interfaces, exported items, the active
+world, the type table — is fully determined by name resolution and type
+resolution. Monomorphization, lowering (TIR → NIR → WIR), optimization,
+and codegen do not contribute information that belongs in WIT.
+
+The producer side therefore takes [`Semantics`](../wado-compiler/src/semantics.rs)
+plus the target world FQ and produces:
+
+- A WIT text document (consumed by `wado wit`).
+- A `component-type` custom section payload, derived from that WIT text
+  via `wit-parser` + `wit-component::metadata::encode` (consumed by
+  `wado compile --embed-wit=<scope>`).
+
+Codegen is unaffected. The `codegen.rs` principle ("emits `Package` as is,
+without knowledge of earlier phases") still holds; the WIT bundle is
+appended as a postprocess step that takes the completed component bytes
+plus the precomputed WIT text.
+
+### Semantics additions
+
+`Semantics` is the contract output of the frontend, so every fact needed
+to emit WIT lives on it. Phase 0 has landed the registry accessors; the
+interface / exported-item indices land in Phase 1 alongside their
+`wit_emit` consumer.
+
+Phase 0 (landed):
+
+| Accessor                             | Returns                                                                 |
+| ------------------------------------ | ----------------------------------------------------------------------- |
+| `Semantics::world_registry()`        | `Option<&'static WorldRegistry>` — the parsed `world` table.            |
+| `Semantics::cm_interface_registry()` | `Option<&'static CmInterfaceRegistry>` — the parsed CM interface table. |
+
+Both registries are already built by `Elaborator::annotate_modules` (which
+calls `CmInterfaceRegistry::build_from_stdlib`, an `OnceLock`-cached
+singleton) and live on `AnnotateState`. The accessors surface them
+without re-running stdlib parsing, so LSP, `wado wit`, and batch
+compilation share the same instance. `FlatPackage` / `Package` /
+`NirPackage` continue to carry the same `&'static` references they
+already held — Phase 0 added access without changing how the data is
+threaded.
+
+Phase 1 (planned):
+
+| Accessor                                 | Returns                                                                                                                  |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `Semantics::interfaces()`                | Index of `pub interface Foo { ... }` decls with their `#[cm("...")]` FQ.                                                 |
+| `Semantics::exported_items()`            | Index of `export fn / export struct / export interface / ...` keyed by source key.                                       |
+| `WitEmitOptions::default_interface_name` | `[package].name` from `wado.toml`, or entry-file stem — a CLI option threaded into the emitter, not a `Semantics` field. |
+
+`interfaces()` and `exported_items()` are derived in a single pass over
+the loaded TIR modules and add no work to the LSP path that does not use
+them. `default_interface_name` is intentionally a `WitEmitOptions` field
+rather than a `Semantics` accessor: it is a project-level configuration
+input, not a frontend-derived fact.
+
+The wir-build / codegen path continues to consume `Package` as today. The
+new WIT path is a sibling reader of `Semantics`; it does not touch
+`Package`.
+
+### Module layout
+
+Two new modules under `wado-compiler/src/`:
+
+- `wit_emit.rs` — `emit_wit_text(&Semantics, &WitEmitOptions) -> Result<String, WitEmitError>`.
+- `wit_bundle.rs` — `embed_component_type(component_bytes: &[u8], &Semantics, &WitEmitOptions) -> Result<Vec<u8>, WitEmitError>`.
+
+`wit_emit` depends on `wit-encoder` for WIT text production. `wit_bundle`
+depends on `wit_emit` for text, parses it with `wit-parser` into a
+`Resolve`, encodes the component-type via `wit-component::metadata::encode`,
+and appends the custom section to the component the codegen already
+produced.
+
+`wit-encoder` and `wit-component` are pinned in `[workspace.dependencies]`
+alongside the existing `wit-parser` (all at generation `0.246`, matching
+wasmtime's tree). `wado-compiler` adds them to its own `Cargo.toml` in
+Phase 1.
+
+### Type mapping
+
+Implements the table in
+[WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md) §"WIT to Wado
+Type Mapping". Direction here is Wado → WIT (the existing table reads in
+both directions, but the producer only needs one).
+
+Out of scope for the first cut: closures, polymorphic effect parameters in
+exported signatures, generics with non-WIT-representable bounds.
+Encountering one in an exported signature is a compile error with a
+diagnostic that names the offending parameter and points at its source
+span.
+
+Name conversion: Wado identifiers (`distance`, `MyApi`, `set_level`) become
+WIT kebab-case (`distance`, `my-api`, `set-level`). Conflicts after
+kebabification (e.g. two declarations colliding) are a compile error at WIT
+emit time with both source spans surfaced.
+
+### Interface grouping
+
+Drives off the `pub interface` and `export interface` shapes already
+established in [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md):
+
+- Bare `export fn` / `export struct` / ... form a **default interface**
+  named after `default_interface_name`. If only functions are exported
+  (no types), they become direct world exports instead.
+- `export interface Foo { item1, item2, ... }` blocks group named items
+  into one WIT interface. Items are defined elsewhere; the block lists
+  names.
+- World-conformance entry points (`fn run` for `wasi:cli/command`,
+  `fn handle` for `wasi:http/service`) are always direct world exports.
+- Types referenced transitively by exported signatures are pulled into
+  the owning interface even if not explicitly listed.
+- `#![no_default_interface]` disables the default-interface fallback;
+  every non-entry-point export must live in an explicit `export interface`.
+
+### Imported interface resolution and scope
+
+For every `import Foo;` in the target world, the emitter looks up the
+referenced `pub interface Foo` via `Semantics::interfaces`, reads its
+`#[cm("...")]` FQ name, and uses that FQ name in `world { import ...; }`.
+
+What the WIT document contains for each referenced interface depends on
+the requested emit scope:
+
+| Scope   | Behavior                                                                                                      |
+| ------- | ------------------------------------------------------------------------------------------------------------- |
+| `full`  | Inline the full body of every interface referenced by the world (user-authored _and_ stdlib WASI/CM).         |
+| `local` | Inline only user-authored interfaces. Stdlib references appear as `import wasi:cli/stdout@<v>;` with no body. |
+
+`full` matches the `wit_component::metadata::encode` toolchain convention
+and produces a self-describing component that `wasm-tools component wit`
+can decode without a registry. `local` produces a smaller WIT focused on
+the package's own contract; consumers need an external WIT registry to
+resolve `wasi:*` references. Both are well-defined; the choice is
+deployment-policy, not technical.
+
+The scope is required at the CLI; there is no built-in default. A
+project-level default may be set in `wado.toml`:
+
+```toml
+[wit]
+scope = "full"   # or "local"
+```
+
+When `wado.toml` provides `[wit].scope`, the CLI flag may be omitted and
+inherits that value. Without a manifest-level setting _and_ without a CLI
+flag, the command errors out asking the user to choose.
+
+Stdlib interfaces under `lib/wasi/**` are emitted with the same machinery
+as user interfaces; there is no special-case "stdlib" code path. Each
+`pub interface` is a uniform building block.
+
+### Embedding target and format
+
+Wado emits a complete component in a single pass, so there is no
+intermediate "core module with bindings" step analogous to
+`wit-bindgen + wasm-tools component new`. The `component-type` custom
+section is therefore added to the _outer component_, not to a nested core
+module.
+
+The section payload matches `wit_component::metadata::encode()` exactly:
+
+1. A serialized component binary typing the world.
+2. A `wit-component-encoding` subsection declaring UTF-8 (Wado's native
+   string encoding).
+3. A `producers` subsection identifying the Wado compiler version.
+
+Consumers extract via `wasm-tools component wit output.wasm`. Round-trip
+verification (Wado emits → wasm-tools decodes → matches the text from
+`wado wit`) is a required fixture for every world shape.
+
+### CLI surfaces
+
+`wado wit` — standalone WIT text:
+
+```sh
+wado wit --scope full file.wado                          # stdout
+wado wit --scope local -o file.wit file.wado             # file output
+wado wit --scope full --world wasi:http/service file.wado
+```
+
+Backed by `wit_emit::emit_wit_text`. Runs `semantics_of` and stops; no
+TIR build, no monomorphize, no lower, no codegen. Mirrors `wado dump` in
+pipeline depth.
+
+`--scope` is required when `wado.toml` does not provide `[wit].scope`.
+
+`wado compile --embed-wit=<scope>` / `--no-wit` — embed WIT in the
+compiled component:
+
+```sh
+wado compile --embed-wit=full file.wado    # self-describing component
+wado compile --embed-wit=local file.wado   # user-only WIT, refs upstream
+wado compile --no-wit file.wado            # explicit opt-out
+wado compile file.wado                     # Phase 1: same as --no-wit
+```
+
+`--embed-wit` always takes a value. `--embed-wit` without a value is a
+CLI error. `--no-wit` takes no value.
+
+Rollout:
+
+- Phase 1 (this WEP): embedding is opt-in via `--embed-wit=<scope>`.
+  Plain `wado compile` does not embed.
+- Phase 2: when a `wado.toml` has `[wit].scope`, plain `wado compile`
+  embeds with that scope. `--no-wit` overrides the manifest. The CLI
+  default in single-file mode remains "no embedding" because there is no
+  manifest to read.
+
+There is no global "default-on" step. The scope is policy that lives in
+the manifest, and the manifest is what turns embedding on by default for
+a project.
+
+### Implementation phases
+
+Each phase ends with green E2E tests for the listed fixtures.
+
+- [x] Phase 0 — Dependencies and `Semantics` groundwork
+  - [x] Add `wit-encoder` and `wit-component` to `[workspace.dependencies]`,
+        matching the existing `wit-parser` generation (currently `0.246`).
+        No crate consumes them yet; Phase 1 pulls them into
+        `wado-compiler`.
+  - [x] Expose `Semantics::world_registry()` and
+        `Semantics::cm_interface_registry()`. The registries are already
+        built by `Elaborator::annotate_modules` and live on
+        `AnnotateState`; the accessors surface them for the WIT producer
+        (Phase 1) and LSP without re-running stdlib parsing. Both
+        registries stay as `OnceLock`-cached `&'static` singletons —
+        `FlatPackage` reads the same instance the accessors hand out, so
+        no threading change is required downstream.
+  - [x] Rename the legacy `WasiRegistry` to `CmInterfaceRegistry`, and
+        the CM-general functions/types named `wasi_*` / `Wasi*` to
+        `cm_*` / `Cm*`. The old names were stale after the
+        effect→interface unification: the registry and the surrounding
+        helpers cover every CM interface (`wasi:*`, `core:kiln/*`,
+        future user-declared interfaces), not just WASI. Methods with
+        genuinely WASI-namespace-scoped semantics
+        (`find_wasi_struct_source` and siblings, `resolve_wasi_source_for`)
+        keep their `wasi_` prefix.
+  - [x] All existing tests still pass; Phase 0 is a non-breaking
+        surface addition.
+
+- [ ] Phase 1 — `wado wit` text emission
+  - [ ] Pull `wit-encoder` and `wit-component` into
+        `wado-compiler/Cargo.toml`.
+  - [ ] Extend `Semantics`: `Semantics::interfaces()` (index of
+        `pub interface Foo { ... }` decls with their `#[cm("...")]` FQ)
+        and `Semantics::exported_items()` (`export fn / export struct /
+        export interface / ...` keyed by source key). Threaded via the
+        same `state: AnnotateState` path as the Phase 0 accessors.
+  - [ ] `wado-compiler/src/wit_emit.rs`: type mapping, kebabification,
+        interface grouping, transitive-type closure, both `full` and
+        `local` scopes.
+  - [ ] `WitEmitOptions::default_interface_name` — `[package].name`
+        from `wado.toml` or entry-file stem, threaded in from the CLI
+        rather than read off `Semantics`.
+  - [ ] `wado-cli/src/wit.rs` subcommand + `Cmd::Wit` registration in
+        `wado-cli/src/main.rs`.
+  - [ ] E2E fixtures under `wado-compiler/tests/fixtures/wit/`: empty
+        world, default-interface, explicit-interface, multiple-interfaces,
+        `wasi:cli/command`, `wasi:http/service`, `core:kiln/generator`.
+  - [ ] Each fixture is parsed back with `wit-parser` to confirm the
+        emitted text is syntactically valid WIT.
+
+- [ ] Phase 2 — `wado compile --embed-wit=<scope>`
+  - [ ] `wado-compiler/src/wit_bundle.rs`: text → `Resolve` →
+        `wit_component::metadata::encode` → custom-section append.
+  - [ ] `--embed-wit=<scope>` and `--no-wit` flags on `CompileOptions`
+        with the mutual-exclusion check.
+  - [ ] Postprocess hook in `codegen/postprocess.rs` (or the immediate
+        caller of `build_component`).
+  - [ ] Round-trip fixture: for every Phase 1 fixture, compile with
+        `--embed-wit=full`, then run `wasm-tools component wit` on the
+        output and assert it matches `wado wit --scope full`.
+
+- [ ] Phase 3 — Manifest-driven enable
+  - [ ] Parse `[wit].scope` in `wado-manifest`.
+  - [ ] `wado compile` reads the manifest scope when no CLI flag is
+        given; `--no-wit` overrides.
+  - [ ] Update WEP: WIT Bundling status from "designed" to "implemented"
+        and reconcile its "default-on" wording with the manifest-driven
+        rule documented here.
 
 ## Open Design Questions
 
@@ -263,25 +554,30 @@ This WEP is a roadmap document. Each item below either has its own WEP or
 will get one when work starts.
 
 - [x] Type-driven CM binding synthesis (WEP: TIR-Level CM Binding Synthesis).
-- [x] Unify `effect` declarations into `interface` (single-branch migration;
-      see Migration Plan above). Retain `effect` keyword for `<effect E>`
-      polymorphic effect parameters.
+- [x] Unify `effect` block declarations into `interface` (landed; see
+      Migration Plan above). The `effect` keyword survives in polymorphic
+      effect parameters (`<effect E>`) — see Migration Plan for the
+      rationale.
 - [x] World imports/exports are bare WIT-faithful interface refs
       (`import Foo;` / `export Foo;`); brace-form removed. `WorldImportInfo`
       and `WorldExportInfo` carry `cm_interface_fq` resolved from the
       referenced `pub interface Foo`'s `#[cm(...)]`.
-- [ ] Producer side: embed `component-type` in output (WEP: WIT Bundling).
-      Designed but not implemented — required before round-trip Wado-to-Wado
-      consumption via the embedded-WIT path can work.
+- [ ] Producer side: emit WIT text and embed `component-type` in output
+      (WEP: WIT Bundling for the format; this WEP §"Producer Side: WIT
+      Generation and Embedding" for the detailed design). Designed; Phase 0
+      is a `Semantics` refactor, Phase 1 is `wado wit`, Phase 2 is
+      `wado compile --embed-wit=<scope>`, Phase 3 reads
+      `[wit].scope` from `wado.toml`.
 - [ ] Decide world structure faithfulness level (L2 vs L3) and document.
 - [ ] Implement `contract` declaration with the chosen scope rules (revise
       WEP: World Conformance accordingly).
 - [ ] Decouple HTTP handler specialization from codegen: drive it from
       `WorldExportInfo::from_interface_fq` rather than the return-type sniffer
       (`returns_http_response`) and the post-hoc `append_http_handler_export`.
-- [ ] Add `wit-parser` / `wit-component` as compiler dependencies, behind a
-      use-resolver entry point that reads embedded `component-type` from
-      external `.wasm` imports.
+- [ ] Add `wit-component` as a `wado-compiler` dependency (consumer side).
+      `wit-parser` is already in `[workspace.dependencies]` for
+      `wado-from-idl`; the consumer-side use-resolver reads embedded
+      `component-type` from external `.wasm` imports via the same crate.
 - [ ] Construct world / interface / resource entries in the existing
       registries directly from parsed WIT, on the same code path as
       stdlib-derived entries.
@@ -300,11 +596,12 @@ will get one when work starts.
 
 - A single, documented end-to-end goal for WIT support replaces a scatter of
   point WEPs.
-- One keyword (`interface`) for both the import and export sides, matching
-  WIT's vocabulary directly. The `effect` keyword keeps a narrow,
-  well-defined role (polymorphic effect parameters).
+- One keyword (`interface`) for block declarations on both the import and
+  export sides, matching WIT's vocabulary directly. The `effect` keyword
+  keeps a narrow, well-defined role (polymorphic effect parameters
+  `<effect E>`).
 - World imports are traceable to WIT FQ names by construction, removing the
-  fragile method-name-based disambiguation in `WasiRegistry`.
+  fragile method-name-based disambiguation in `CmInterfaceRegistry`.
 - Adding a new WASI or third-party CM library no longer requires patching the
   compiler or the stdlib list.
 - The producer (WIT Bundling) and consumer (this WEP) sides become
@@ -313,10 +610,10 @@ will get one when work starts.
 
 ### Negative
 
-- A one-shot rename of `effect` to `interface` touches the entire stdlib and
-  any user code that declared effects. There is no migration period; this is
-  a single-branch change.
-- Bringing `wit-parser` / `wit-component` into the compiler increases the
+- The block-form rename `effect Foo { ... }` → `interface Foo { ... }` is
+  a one-shot, no-deprecation change against the stdlib, fixtures, and any
+  user code. It has already landed.
+- Bringing `wit-encoder` / `wit-component` into the compiler increases the
   dependency surface and binary size of the compiler itself.
 - L3 world scoping changes the meaning of `use`: a `use` of an interface not
   in the active world's imports becomes a compile error. This is a

@@ -84,6 +84,49 @@ export fn run() {
 }
 
 #[test]
+fn semantics_exposes_world_and_cm_interface_registries() {
+    let source = "export fn run() {}\n";
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+
+    assert!(
+        sem.is_complete(),
+        "semantics should complete for a trivial program"
+    );
+
+    let world_registry = sem
+        .world_registry()
+        .expect("world_registry is populated when annotate completes");
+    assert!(
+        world_registry.has_world("wasi:cli/command"),
+        "stdlib `wasi:cli/command` world should be registered on Semantics"
+    );
+    assert!(
+        world_registry.has_world("wasi:http/service"),
+        "stdlib `wasi:http/service` world should be registered on Semantics"
+    );
+
+    // Both registries come from the same `OnceLock`-cached
+    // `build_from_stdlib` singleton, so the references the accessors
+    // hand out are identical to a fresh `build_from_stdlib()` call.
+    // This is what lets the WIT producer (Phase 1) and codegen treat
+    // them as a single frontend-derived view.
+    let (expected_cm_interface, expected_world) =
+        wado_compiler::component_model::CmInterfaceRegistry::build_from_stdlib();
+    let cm_interface_registry = sem
+        .cm_interface_registry()
+        .expect("cm_interface_registry is populated when annotate completes");
+    assert!(
+        std::ptr::eq(cm_interface_registry, expected_cm_interface),
+        "cm_interface_registry accessor returns the build_from_stdlib singleton",
+    );
+    assert!(
+        std::ptr::eq(world_registry, expected_world),
+        "world_registry accessor returns the build_from_stdlib singleton",
+    );
+}
+
+#[test]
 fn semantics_resolves_position_to_ast_id() {
     let source = "export fn run() {}\n";
     let host = InMemoryHost::new();
