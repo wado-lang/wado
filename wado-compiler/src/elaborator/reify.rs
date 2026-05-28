@@ -783,17 +783,99 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a `test "…" { … }` block. Returns the synthesised
-    /// `TirFunction` plus the `TirTest` metadata.
-    #[allow(unused_variables)]
+    /// `TirFunction` plus the `TirTest` metadata. Mirrors
+    /// `Elaborator::resolve_test_decl` (item.rs:1233+): the function
+    /// name encodes test_index + attributes (`expect_trap`, `TODO`,
+    /// `timeout_ms`); the body reifies into a unit-returning
+    /// no-parameter function.
     fn reify_test_decl(
         &mut self,
         test_decl: &ast::TestDecl,
         test_index: usize,
         module_is_todo: bool,
     ) -> Option<(TirFunction, TirTest)> {
-        // TODO(stage-5-bodies): mirror `Elaborator::resolve_test_decl`
-        // (item.rs:1233+).
-        todo!("reify_test_decl: pending body-walk reify")
+        use crate::tir::{FunctionKind, InlineHint, ReturnAbi, TypeTable};
+
+        let expect_trap = test_decl.attributes.iter().any(|a| a.name == "expect_trap");
+        let is_todo = module_is_todo || test_decl.attributes.iter().any(|a| a.name == "TODO");
+        let timeout_ms = test_decl.attributes.iter().find_map(|a| {
+            if a.name == "timeout_ms" {
+                a.args
+                    .first()
+                    .and_then(|arg| arg.as_str().parse::<u64>().ok())
+            } else {
+                None
+            }
+        });
+
+        let prefix = match (is_todo, expect_trap, timeout_ms) {
+            (true, _, Some(ms)) => format!("__test_todo_tm{ms}"),
+            (true, _, None) => "__test_todo".to_string(),
+            (_, true, Some(ms)) => format!("__test_trap_tm{ms}"),
+            (_, true, None) => "__test_trap".to_string(),
+            (_, _, Some(ms)) => format!("__test_tm{ms}"),
+            (_, _, None) => "__test".to_string(),
+        };
+        let function_name = match &test_decl.name {
+            Some(name) => {
+                let snake_name: String = name
+                    .chars()
+                    .map(|c| if c.is_alphanumeric() { c } else { '_' })
+                    .collect::<String>()
+                    .to_lowercase();
+                format!("{prefix}_{test_index}_{snake_name}")
+            }
+            None => format!("{prefix}_{test_index}"),
+        };
+
+        let return_type = TypeTable::UNIT;
+        let mut ctx = FunctionContext::new(return_type, function_name.clone());
+        let body = self.reify_block(&test_decl.body, &mut ctx, None);
+
+        let tir_func = TirFunction {
+            module_source: ModuleSource::default(),
+            name: function_name.clone(),
+            is_pub: false,
+            is_export: false,
+            is_async: false,
+            type_params: vec![],
+            impl_type_params: vec![],
+            monomorph_info: None,
+            method_info: None,
+            params: vec![],
+            return_type,
+            task_return_type: None,
+            effects: vec![],
+            stores: vec![],
+            body: Some(body),
+            span: test_decl.span,
+            local_count: ctx.next_local,
+            locals: ctx.locals.clone(),
+            address_taken_locals: ctx.address_taken_locals,
+            stores_aliased_locals: crate::hashmap::IndexSet::default(),
+            is_cm_binding: false,
+            is_dispatch_wrapper: false,
+            is_cm_export: false,
+            is_ambient: false,
+            inline_hint: InlineHint::Auto,
+            compiler_item: None,
+            export_name: None,
+            allocator_tag: None,
+            kind: FunctionKind::Regular,
+            return_abi: ReturnAbi::default(),
+        };
+
+        let tir_test = TirTest {
+            name: test_decl.name.clone(),
+            function_name,
+            line: test_decl.span.line,
+            span: test_decl.span,
+            expect_trap,
+            is_todo,
+            timeout_ms,
+        };
+
+        Some((tir_func, tir_test))
     }
 
     /// Reify a `global g: T = expr;` declaration. The declared type
