@@ -686,9 +686,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut params = Vec::with_capacity(func.params.len());
         for param in &func.params {
             let type_id = self.resolve_type_in_scope(&param.ty, &type_param_names);
-            let default_expr = param.default.as_ref().map(|default_ast| {
-                Box::new(self.reify_expr(default_ast, &mut ctx, Some(type_id)))
-            });
+            let default_expr = param
+                .default
+                .as_ref()
+                .map(|default_ast| Box::new(self.reify_expr(default_ast, &mut ctx, Some(type_id))));
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             params.push(tir::TirParam {
                 name: param.name.clone(),
@@ -742,7 +743,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             method_info: None,
             params,
             return_type,
-            task_return_type: if func.is_async { Some(return_type) } else { None },
+            task_return_type: if func.is_async {
+                Some(return_type)
+            } else {
+                None
+            },
             effects: vec![],
             stores: func.stores.clone(),
             body,
@@ -883,7 +888,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Stmt::TaskReturn(tr_stmt) => {
                 let expected = ctx.task_return_type;
                 let value = self.reify_expr(&tr_stmt.value, ctx, expected);
-                vec![TirStmt::new(TirStmtKind::TaskReturn { value }, tr_stmt.span)]
+                vec![TirStmt::new(
+                    TirStmtKind::TaskReturn { value },
+                    tr_stmt.span,
+                )]
             }
             ast::Stmt::Break(break_stmt) => vec![TirStmt::new(
                 TirStmtKind::Break {
@@ -1034,11 +1042,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .iter()
                     .map(|e| self.reify_expr(e, ctx, None))
                     .collect();
-                TirExpr::new(
-                    TirExprKind::TupleLiteral { elements },
-                    recorded_type,
-                    span,
-                )
+                TirExpr::new(TirExprKind::TupleLiteral { elements }, recorded_type, span)
             }
             ast::Expr::Cast(cast) => {
                 // `expr as Ty` — emit `Cast` with the recorded target
@@ -1067,7 +1071,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 )
             }
-            ast::Expr::MethodCall(method_call) => self.reify_method_call(method_call, ctx, recorded_type),
+            ast::Expr::MethodCall(method_call) => {
+                self.reify_method_call(method_call, ctx, recorded_type)
+            }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
@@ -1123,7 +1129,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // diagnosed a stray spread.
                 panic!("reify_expr: bare Spread is invalid outside TupleLiteral")
             }
-            ast::Expr::If(if_expr) => self.reify_if_expr(if_expr, ctx, expected_type, recorded_type),
+            ast::Expr::If(if_expr) => {
+                self.reify_if_expr(if_expr, ctx, expected_type, recorded_type)
+            }
             ast::Expr::Assign(assign) => {
                 // `target = value` — both sides walked recursively; the
                 // expression's type is `Unit` (assignment is a stmt-shape
@@ -1189,16 +1197,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// branches). `Condition::LetChain` mirrors the expression-level
     /// `IfLetChain` desugar; the chain expansion lives behind the
     /// same `todo!` as `reify_if_expr`.
-    fn reify_if_stmt(
-        &mut self,
-        if_stmt: &ast::IfStmt,
-        ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
+    fn reify_if_stmt(&mut self, if_stmt: &ast::IfStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         use crate::tir::TirStmtKind;
         match &if_stmt.condition {
             ast::Condition::Expr(cond_expr) => {
-                let condition =
-                    self.reify_expr(cond_expr, ctx, Some(crate::tir::TypeTable::BOOL));
+                let condition = self.reify_expr(cond_expr, ctx, Some(crate::tir::TypeTable::BOOL));
                 let then_block = self.reify_block(&if_stmt.then_block, ctx, None);
                 let else_block = if_stmt
                     .else_block
@@ -1251,8 +1254,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 todo!("reify_if_expr: LetChain pending body-walk reify")
             }
         };
-        let condition =
-            self.reify_expr(cond_expr, ctx, Some(crate::tir::TypeTable::BOOL));
+        let condition = self.reify_expr(cond_expr, ctx, Some(crate::tir::TypeTable::BOOL));
         let then_branch = self.reify_block(&if_expr.then_block, ctx, expected_type);
         let else_branch = if_expr
             .else_block
@@ -1415,14 +1417,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // shares the adjuster with the elaborator so the same TIR shape
         // (Unary{Ref}/Unary{MutRef}/Deref wrapping) lands.
         let raw_receiver = self.reify_expr(&method_call.receiver, ctx, None);
-        let adjusted_receiver =
-            super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
-                raw_receiver,
-                dispatch.self_kind,
-                dispatch.is_ref_impl,
-                method_call.span,
-                &self.tysys.type_table,
-            );
+        let adjusted_receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+            raw_receiver,
+            dispatch.self_kind,
+            dispatch.is_ref_impl,
+            method_call.span,
+            &self.tysys.type_table,
+        );
 
         // Explicit method-level type args resolved against the current
         // type-param scope. Inferred type args (the generic-instantiation
@@ -1469,11 +1470,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// lookup failure so reify doesn't panic on a type the dispatch
     /// hasn't ported yet — the produced TIR is wrong, but downstream
     /// validation flags it loudly.
-    fn lookup_struct_field_index(
-        &self,
-        receiver_type: TypeId,
-        field_name: &str,
-    ) -> (u32, String) {
+    fn lookup_struct_field_index(&self, receiver_type: TypeId, field_name: &str) -> (u32, String) {
         use crate::tir::ResolvedType;
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
         let struct_name = match resolved {
@@ -1606,9 +1603,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Literal::Bool(b) => TirExprKind::BoolLiteral(*b),
             ast::Literal::Null => TirExprKind::Null,
             ast::Literal::Unit => TirExprKind::Unit,
-            ast::Literal::LocationFunction => {
-                TirExprKind::StringLiteral(ctx.function_name.clone())
-            }
+            ast::Literal::LocationFunction => TirExprKind::StringLiteral(ctx.function_name.clone()),
             ast::Literal::LocationFile
             | ast::Literal::LocationLine
             | ast::Literal::DataSection

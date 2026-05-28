@@ -1570,7 +1570,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        Self::build_tir_method_call(receiver, function_ref, vec![], call_args, resolved.return_type, span)
+        Self::build_tir_method_call(
+            receiver,
+            function_ref,
+            vec![],
+            call_args,
+            resolved.return_type,
+            span,
+        )
     }
 
     /// Wrap an `Ord::cmp` method call into a `bool` by comparing the returned
