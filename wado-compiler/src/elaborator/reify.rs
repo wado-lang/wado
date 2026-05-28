@@ -908,6 +908,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Stmt::Let(let_stmt) => vec![self.reify_let(let_stmt, ctx)],
             ast::Stmt::If(if_stmt) => self.reify_if_stmt(if_stmt, ctx),
+            ast::Stmt::Match(match_expr) => {
+                // Stmt-position match — `Elaborator::resolve_stmt`
+                // pins `expected_type = Some(Unit)` and records the
+                // result type explicitly (stmt.rs ≈84–105). Reify
+                // mirrors: reify the expression at Unit, then wrap as
+                // an `Expr` stmt. The reified expression's
+                // `type_id` will already be `Unit` (annotate's
+                // `expression_types` records the stmt-position type),
+                // so the WIR builder drops each arm body's value.
+                let tir = self.reify_match_expr(
+                    match_expr,
+                    ctx,
+                    Some(crate::tir::TypeTable::UNIT),
+                    crate::tir::TypeTable::UNIT,
+                );
+                vec![TirStmt::new(TirStmtKind::Expr(tir), match_expr.span)]
+            }
             ast::Stmt::Loop(loop_stmt) => {
                 // `loop { … }` — direct lowering. The
                 // `for_continue_labels` save/restore mirrors
@@ -920,7 +937,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Stmt::While(_)
             | ast::Stmt::For(_)
             | ast::Stmt::ForOf(_)
-            | ast::Stmt::Match(_)
             | ast::Stmt::Assert(_)
             | ast::Stmt::LabeledBlock(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
@@ -1076,6 +1092,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
             ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
+            ast::Expr::Match(match_expr) => self.reify_match_expr(match_expr, ctx, expected_type, recorded_type),
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
@@ -1171,7 +1188,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             | ast::Expr::ComparisonChain(_)
             | ast::Expr::StaticMethodCall(_)
             | ast::Expr::Index(_)
-            | ast::Expr::Match(_)
             | ast::Expr::Matches(_)
             | ast::Expr::Closure(_)
             | ast::Expr::TemplateString(_)
@@ -1351,6 +1367,55 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             recorded_type,
             binary.span,
+        )
+    }
+
+    /// Reify a `MatchExpr`. The scrutinee is walked; each arm enters
+    /// its own scope, reifies the pattern (which adds bindings to
+    /// `ctx`), reifies the optional guard at `Bool`, and reifies the
+    /// body at the match's `expected_type`. The result `TypeId` is
+    /// the recorded type — annotate already unified arm body types
+    /// into it.
+    fn reify_match_expr(
+        &mut self,
+        match_expr: &ast::MatchExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::tir::{TirExprKind, TirMatchArm, TypeTable};
+
+        let scrutinee = self.reify_expr(&match_expr.expr, ctx, None);
+        let scrutinee_type = scrutinee.type_id;
+
+        let arms: Vec<TirMatchArm> = match_expr
+            .arms
+            .iter()
+            .map(|arm| {
+                ctx.enter_scope();
+                let pattern = self.reify_pattern(&arm.pattern, scrutinee_type, ctx);
+                let guard = arm
+                    .guard
+                    .as_ref()
+                    .map(|g| self.reify_expr(g, ctx, Some(TypeTable::BOOL)));
+                let body = self.reify_expr(&arm.body, ctx, expected_type);
+                ctx.exit_scope();
+                TirMatchArm {
+                    pattern,
+                    guard,
+                    body,
+                    span: arm.span,
+                }
+            })
+            .collect();
+
+        TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(scrutinee),
+                arms,
+            },
+            recorded_type,
+            match_expr.span,
         )
     }
 
