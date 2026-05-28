@@ -1017,13 +1017,37 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // `let _ = expr;` discards. Lower as an Expr stmt.
                 TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
             }
-            _ => {
+            ast::Pattern::Tuple(_, _)
+            | ast::Pattern::Struct { .. }
+            | ast::Pattern::Variant { .. } => {
+                // Destructuring `let [a, b] = …;` / `let Point { x, y }
+                // = …;` / `let Some(x) = …;`. The TIR uses
+                // `TirStmtKind::LetDestructure` rather than `Let`. The
+                // shared `reify_pattern` adds the sub-pattern bindings
+                // to `ctx`; the value's recorded type drives the
+                // pattern's per-binding type lookups.
+                let pattern = self.reify_pattern(&let_stmt.pattern, type_id, ctx);
+                TirStmt::new(
+                    TirStmtKind::LetDestructure {
+                        pattern,
+                        is_mut: let_stmt.is_mut,
+                        value,
+                    },
+                    let_stmt.span,
+                )
+            }
+            ast::Pattern::Literal(_) | ast::Pattern::Or(_) | ast::Pattern::Range { .. } => {
                 let _ = type_id;
                 let _ = TypeTable::UNKNOWN;
-                // TODO(stage-5-bodies): tuple / struct / variant
-                // destructuring (`resolve_let` calls
-                // `resolve_destructure_pattern`).
-                todo!("reify_let: destructuring pattern pending body-walk reify")
+                // `let 42 = expr;` etc. are refutable patterns and the
+                // elaborator rejects them at annotate time (only
+                // irrefutable patterns are valid in `let`). Hitting
+                // this branch means annotate let a refutable pattern
+                // through — surface the invariant violation here.
+                panic!(
+                    "reify_let: refutable pattern {:?} in let binding (annotate should have rejected)",
+                    let_stmt.pattern
+                )
             }
         }
     }
