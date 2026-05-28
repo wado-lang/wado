@@ -1060,6 +1060,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Expr::MethodCall(method_call) => self.reify_method_call(method_call, ctx, recorded_type),
+            ast::Expr::If(if_expr) => self.reify_if_expr(if_expr, ctx, expected_type, recorded_type),
+            ast::Expr::Assign(assign) => {
+                // `target = value` — both sides walked recursively; the
+                // expression's type is `Unit` (assignment is a stmt-shape
+                // expression in Wado, mirroring Rust).
+                let target = self.reify_expr(&assign.target, ctx, None);
+                let value = self.reify_expr(&assign.value, ctx, Some(target.type_id));
+                TirExpr::new(
+                    TirExprKind::Assign {
+                        target: Box::new(target),
+                        value: Box::new(value),
+                    },
+                    recorded_type,
+                    span,
+                )
+            }
             ast::Expr::FieldAccess(field_access) => {
                 // The `field_index` and `field_name` on `FieldAccess`
                 // TIR are positional; the elaborator looks them up from
@@ -1080,13 +1096,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Expr::Binary(_)
-            | ast::Expr::Assign(_)
             | ast::Expr::CompoundAssign(_)
             | ast::Expr::ComparisonChain(_)
             | ast::Expr::Call(_)
             | ast::Expr::StaticMethodCall(_)
             | ast::Expr::Index(_)
-            | ast::Expr::If(_)
             | ast::Expr::Match(_)
             | ast::Expr::Matches(_)
             | ast::Expr::Closure(_)
@@ -1107,6 +1121,51 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 todo!("reify_expr: {:?} variant pending body-walk reify", expr)
             }
         }
+    }
+
+    /// Reify an `if cond { … } else { … }` expression. The `cond`
+    /// shape is restricted to `Condition::Expr` here; `Condition::LetChain`
+    /// dispatches through the `IfLetChain` desugar (`sem.types.desugars`
+    /// records the tag at annotate time — `Elaborator::resolve_if_expr`
+    /// at expr.rs:1860). The chain expansion needs `let`-binding +
+    /// branch-merging logic that mirrors `resolve_let_chain_stmts` and
+    /// is deferred to a follow-up.
+    fn reify_if_expr(
+        &mut self,
+        if_expr: &ast::IfExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        let cond_expr = match &if_expr.condition {
+            ast::Condition::Expr(e) => e,
+            ast::Condition::LetChain { .. } => {
+                // TODO(stage-5-bodies): mirror
+                // `Elaborator::resolve_if_expr`'s `Condition::LetChain`
+                // arm (expr.rs ≈1867–1973). The expansion produces a
+                // `Block` of nested `IfLet` stmts that fall through to
+                // the `else_block`; reify reads the
+                // `DesugarKind::IfLetChain` tag the elaborator already
+                // placed on `if_expr.id` and replays the same shape.
+                todo!("reify_if_expr: LetChain pending body-walk reify")
+            }
+        };
+        let condition =
+            self.reify_expr(cond_expr, ctx, Some(crate::tir::TypeTable::BOOL));
+        let then_branch = self.reify_block(&if_expr.then_block, ctx, expected_type);
+        let else_branch = if_expr
+            .else_block
+            .as_ref()
+            .map(|b| self.reify_block(b, ctx, expected_type));
+        TirExpr::new(
+            crate::tir::TirExprKind::If {
+                condition: Box::new(condition),
+                then_branch,
+                else_branch,
+            },
+            recorded_type,
+            if_expr.span,
+        )
     }
 
     /// Reify a `MethodCallExpr`. This is the cleanest Stage 5 path:
