@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780001154642,
+  "lastUpdate": 1780007323264,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27029,6 +27029,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a833e3ff9dd4cd23bc2561ec6786f3e910b7c704"
         },
         "date": 1780001154320,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3fe162b17e51d21684c8ff3a6a93b05201fd0328",
+          "message": "Merge pull request #1222 from wado-lang/claude/kiln-debug-warning-5Zaah\n\nfix(kiln): demote per-file regeneration notice to debug",
+          "timestamp": "2026-05-29T07:22:26+09:00",
+          "tree_id": "eb8a10fd542ff7a14359ef927714170b31d729a1",
+          "url": "https://github.com/wado-lang/wado/commit/3fe162b17e51d21684c8ff3a6a93b05201fd0328"
+        },
+        "date": 1780007322792,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
