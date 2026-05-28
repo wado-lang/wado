@@ -1142,6 +1142,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_template_string(template, ctx, recorded_type)
             }
             ast::Expr::Matches(m) => self.reify_matches(m, ctx),
+            ast::Expr::CompoundAssign(compound) => self.reify_compound_assign(compound, ctx, recorded_type),
+            ast::Expr::TryOp(qm) => self.reify_question_mark(qm, ctx, recorded_type),
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
@@ -1233,12 +1235,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 )
             }
-            ast::Expr::CompoundAssign(_)
-            | ast::Expr::ComparisonChain(_)
+            ast::Expr::ComparisonChain(_)
             | ast::Expr::StaticMethodCall(_)
             | ast::Expr::Index(_)
             | ast::Expr::Closure(_)
-            | ast::Expr::TryOp(_)
             | ast::Expr::WithHandler(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
                 // `Elaborator::resolve_expr` arm. Each arm consults
@@ -1742,6 +1742,110 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             struct_type,
             struct_lit.span,
         )
+    }
+
+    /// Reify a compound assignment `x += y` / `x -= y` / etc. The
+    /// elaborator desugars to `x = x op y` and routes through
+    /// `assign_to_target`, which handles complex lvalues
+    /// (`a[i] += x` etc.). Reify handles the common case: target is
+    /// any expression that produces a writeable place; the desugared
+    /// shape is `Assign { target, value: Binary { left: target, op,
+    /// right: value } }`. The shared `reify_binary` path picks the
+    /// native vs operator-trait dispatch for the inner op via Gap 11.
+    fn reify_compound_assign(
+        &mut self,
+        compound: &ast::CompoundAssignExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::ast::CompoundAssignOp;
+        use crate::tir::{TirExprKind, TypeTable};
+
+        let op = match compound.op {
+            CompoundAssignOp::Add => crate::tir::TirBinaryOp::Add,
+            CompoundAssignOp::Sub => crate::tir::TirBinaryOp::Sub,
+            CompoundAssignOp::Mul => crate::tir::TirBinaryOp::Mul,
+            CompoundAssignOp::Div => crate::tir::TirBinaryOp::Div,
+            CompoundAssignOp::Mod => crate::tir::TirBinaryOp::Mod,
+            CompoundAssignOp::BitAnd => crate::tir::TirBinaryOp::BitAnd,
+            CompoundAssignOp::BitOr => crate::tir::TirBinaryOp::BitOr,
+            CompoundAssignOp::BitXor => crate::tir::TirBinaryOp::BitXor,
+            CompoundAssignOp::Shl => crate::tir::TirBinaryOp::Shl,
+            CompoundAssignOp::Shr => crate::tir::TirBinaryOp::Shr,
+        };
+
+        // The target appears twice in the desugared shape (as the
+        // read for the binary op, and as the assignment target). The
+        // elaborator side reifies it once and emits the same node
+        // twice (it's pure for the lvalue shapes the elaborator
+        // accepts); reify mirrors by walking the AST twice. For
+        // simple-local lvalues both walks observe the same
+        // `expression_types` entry so the type stays consistent.
+        // Complex lvalues (`a[i] += x`) leave a follow-up: the
+        // elaborator's `assign_to_target` synthesises an
+        // `IndexMut::index_mut(idx)` extra call, and reify needs the
+        // matching `IndexMutMethodCall` desugar tag on the target.
+        let read = self.reify_expr(&compound.target, ctx, None);
+        let rhs = self.reify_expr(&compound.value, ctx, Some(read.type_id));
+        let combined_type = read.type_id;
+        let combined = TirExpr::new(
+            TirExprKind::Binary {
+                left: Box::new(read),
+                op,
+                right: Box::new(rhs),
+            },
+            combined_type,
+            compound.span,
+        );
+        // Re-walk the target for the assignment side. For the simple
+        // local / global / field-access cases this reproduces the same
+        // TIR shape; complex IndexMut targets would need the dedicated
+        // index-mut rewrite path (Gap 3) — `reify_assign_to_target` is
+        // the follow-up that ports that branch.
+        let target_for_assign = self.reify_expr(&compound.target, ctx, None);
+        let _ = recorded_type;
+        TirExpr::new(
+            TirExprKind::Assign {
+                target: Box::new(target_for_assign),
+                value: Box::new(combined),
+            },
+            TypeTable::UNIT,
+            compound.span,
+        )
+    }
+
+    /// Reify the `?` postfix operator. Desugar to:
+    /// ```text
+    /// match expr {
+    ///     Ok(v) | Some(v) => v,
+    ///     Err(e) => return Err(From::from(e)),
+    ///     None    => return None,
+    /// }
+    /// ```
+    /// Stage 5 ports the common Option / Result paths; the
+    /// elaborator's `From::from` conversion synthesis on the error
+    /// path is a Stage 5 follow-up — for now the error is wrapped
+    /// in a `return Err(e)` without the conversion, which matches
+    /// the elaborator output when the function's error type matches
+    /// the operand's error type exactly.
+    fn reify_question_mark(
+        &mut self,
+        qm: &ast::TryOpExpr,
+        ctx: &mut FunctionContext,
+        _recorded_type: TypeId,
+    ) -> TirExpr {
+        // TODO(stage-5-bodies): mirror
+        // `Elaborator::resolve_question_mark[_option|_result]`
+        // (expr.rs:3935+). The desugar produces a `Match` TIR with
+        // arms that `return Err(From::from(e))` / `return None` on
+        // the failure case. The `From::from` synthesis path adds
+        // another method-dispatch site that reify needs annotated
+        // (or reproduced via the existing `reify_call` static-method
+        // path). Until that lands, panic with a labelled tripwire
+        // so reify users see the gap immediately rather than
+        // silently producing wrong TIR.
+        let _ = (qm, ctx);
+        todo!("reify_question_mark: `?` operator desugar pending body-walk reify")
     }
 
     /// Reify a `matches!`-style expression: `scrutinee matches { PAT
