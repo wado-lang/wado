@@ -1092,8 +1092,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
             ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
-            ast::Expr::Match(match_expr) => self.reify_match_expr(match_expr, ctx, expected_type, recorded_type),
-            ast::Expr::StructLiteral(struct_lit) => self.reify_struct_literal(struct_lit, ctx, recorded_type),
+            ast::Expr::Match(match_expr) => {
+                self.reify_match_expr(match_expr, ctx, expected_type, recorded_type)
+            }
+            ast::Expr::StructLiteral(struct_lit) => {
+                self.reify_struct_literal(struct_lit, ctx, recorded_type)
+            }
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
@@ -1392,9 +1396,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // read the synthesised entry from
             // `sem.decls.pending_anonymous_structs` keyed off the
             // recorded type.
-            todo!(
-                "reify_struct_literal: anonymous struct literal pending body-walk reify"
-            )
+            todo!("reify_struct_literal: anonymous struct literal pending body-walk reify")
         };
 
         // Field positional info from the decl-interned struct.
@@ -1587,8 +1589,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .contains_key(&ident.name)
             {
                 (self.current_module_source.clone(), ident.name.clone())
-            } else if let Some(import_src) =
-                self.sem.imports.imported_type_sources.get(&ident.name).cloned()
+            } else if let Some(import_src) = self
+                .sem
+                .imports
+                .imported_type_sources
+                .get(&ident.name)
+                .cloned()
             {
                 let original_name = self
                     .sem
@@ -1918,7 +1924,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ident.span,
             );
         }
-        if let Some(import_src) = self.sem.imports.imported_type_sources.get(&ident.name).cloned()
+        if let Some(import_src) = self
+            .sem
+            .imports
+            .imported_type_sources
+            .get(&ident.name)
+            .cloned()
         {
             let original_name = self
                 .sem
@@ -2136,8 +2147,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         match pattern {
             ast::Pattern::Wildcard => TirPattern::Wildcard,
             ast::Pattern::Ident { id, name, span: _ } => {
-                let local_index =
-                    ctx.add_local(name.clone(), scrutinee_type, /* is_mut */ false, Some(*id));
+                let local_index = ctx.add_local(
+                    name.clone(),
+                    scrutinee_type,
+                    /* is_mut */ false,
+                    Some(*id),
+                );
                 TirPattern::Binding {
                     name: name.clone(),
                     local_index,
@@ -2145,8 +2160,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             }
             ast::Pattern::MutIdent { id, name, span: _ } => {
-                let local_index =
-                    ctx.add_local(name.clone(), scrutinee_type, /* is_mut */ true, Some(*id));
+                let local_index = ctx.add_local(
+                    name.clone(),
+                    scrutinee_type,
+                    /* is_mut */ true,
+                    Some(*id),
+                );
                 TirPattern::Binding {
                     name: name.clone(),
                     local_index,
@@ -2173,8 +2192,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .iter()
                     .enumerate()
                     .map(|(i, p)| {
-                        let elem_ty =
-                            elem_types.get(i).copied().unwrap_or(crate::tir::TypeTable::UNKNOWN);
+                        let elem_ty = elem_types
+                            .get(i)
+                            .copied()
+                            .unwrap_or(crate::tir::TypeTable::UNKNOWN);
                         self.reify_pattern(p, elem_ty, ctx)
                     })
                     .collect();
@@ -2211,13 +2232,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             module_source,
                             type_args,
                         } => (name, (type_args, module_source)),
-                        _ => (String::new(), (Vec::new(), self.current_module_source.clone())),
+                        _ => (
+                            String::new(),
+                            (Vec::new(), self.current_module_source.clone()),
+                        ),
                     };
-                    let payload = self.get_variant_case_payload_type(
-                        &decl_name,
-                        &case_name,
-                        &type_args.0,
-                    );
+                    let payload =
+                        self.get_variant_case_payload_type(&decl_name, &case_name, &type_args.0);
                     (payload, type_args.1)
                 };
 
@@ -2232,16 +2253,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     payload_type,
                 }
             }
-            ast::Pattern::Struct { .. }
-            | ast::Pattern::Or(_)
-            | ast::Pattern::Range { .. } => {
+            ast::Pattern::Struct { .. } | ast::Pattern::Or(_) | ast::Pattern::Range { .. } => {
                 // TODO(stage-5-bodies): Struct / Or / Range pattern
                 // dispatch. `Struct` needs `tysys.all_struct_fields`
                 // for field-name → index resolution; `Range` needs the
                 // start/end literals decoded into i128 / u128 + the
                 // signedness flag from `scrutinee_type`; `Or`
                 // recursively reifies each alternative.
-                todo!("reify_pattern: {:?} variant pending body-walk reify", pattern)
+                todo!(
+                    "reify_pattern: {:?} variant pending body-walk reify",
+                    pattern
+                )
             }
         }
     }

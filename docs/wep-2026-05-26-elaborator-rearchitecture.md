@@ -412,38 +412,44 @@ migration; see Trade-offs.
       generic call / struct-literal / variant-ctor site (Gap 1), and
       `operator_dispatch` end-to-end for binary expressions (Gap 11 —
       Index-side wiring still pending).
-      `Reify<'a, H>` introduced in `elaborator/reify.rs` with a complete
-      per-Item dispatch surface. Decl-only items (`Enum`, `Flags`,
-      `Newtype`, `Struct` modulo field defaults, `Variant`,
-      `Interface`, `Resource`) are concrete. Body-walk dispatchers
-      cover `reify_function` / `reify_global` / `reify_block` /
+      `Reify<'a, H>` introduced in `elaborator/reify.rs` with a
+      complete per-Item dispatch surface. Decl-only items (`Enum`,
+      `Flags`, `Newtype`, `Struct` modulo field defaults, `Variant`,
+      `Interface`, `Resource`, `Global`) are concrete. Body-walk
+      dispatchers cover `reify_function` / `reify_block` /
       `reify_stmt` / `reify_expr` / `reify_pattern` and emit TIR for:
       `Stmt::{Let (Ident/MutIdent/Wildcard), Expr, Return, TaskReturn,
-      Break, Continue, If (Condition::Expr), Loop}`;
-      `Expr::{Literal, Block, Ident (local), TupleLiteral, Cast,
-      Unary, FieldAccess, MethodCall, If (Condition::Expr), Assign,
-      Binary (native + operator-trait dispatch), Resume, LabeledBlock,
-      Spread}`; `Pattern::Wildcard`. Receiver adjustment is shared
-      via `adjust_receiver_for_self_kind_static` so the elaborator and
+      Break, Continue, If (Condition::Expr), Loop, Match}`;
+      `Expr::{Literal (modulo Location/Include), Block, Ident
+      (local + globals + assoc constants + free function refs +
+      qualified Variant::Case / Enum::Case / Flags::Member),
+      TupleLiteral, Cast, Unary, FieldAccess, MethodCall, Call
+      (free function + variant ctor), Match, StructLiteral (named),
+      If (Condition::Expr), Assign, Binary (native + operator-trait
+      dispatch), Resume, LabeledBlock, Spread}`;
+      `Pattern::{Wildcard, Ident, MutIdent, Literal, Tuple,
+      Variant}`. Receiver adjustment is shared via
+      `adjust_receiver_for_self_kind_static` so the elaborator and
       reify produce the same `Unary{Ref}` / `Unary{MutRef}` / deref
       wrapping.
       Remaining (each carries a labelled `todo!` with the
       `Elaborator::resolve_*` location it mirrors): non-local idents
-      (globals / func refs / variant ctors / enum cases / flags
-      members / assoc constants); destructuring `let` patterns and
-      uninitialised `let x: T;`; field-default expressions on
-      `reify_struct`; `Expr::{CompoundAssign, ComparisonChain, Call,
-      StaticMethodCall, Index, Match, Matches, Closure, TemplateString,
-      StructLiteral, TryOp, Range, WithHandler}`;
-      `Stmt::{While, For, ForOf, Match, Assert, LabeledBlock}` and
-      `If (Condition::LetChain)`; `Pattern::*` except `Wildcard`;
+      (`ns::Type::Case` namespace path); destructuring `let` patterns
+      and uninitialised `let x: T;`; field-default expressions on
+      `reify_struct`; `Expr::{CompoundAssign, ComparisonChain,
+      StaticMethodCall, Index, Matches, Closure, TemplateString,
+      TryOp, Range, WithHandler}` and closure-call / indirect-call /
+      qualified-callee shapes of `Call`; anonymous-struct literals;
+      `Stmt::{While, For, ForOf, Assert, LabeledBlock}` and `If
+      (Condition::LetChain)`; `Pattern::{Struct, Or, Range}`;
       `reify_impl` / `reify_test_decl`; the `Literal::{LocationFile,
-      LocationLine, DataSection, IncludeStr, IncludeBytes}` host-driven
-      branches.
+      LocationLine, DataSection, IncludeStr, IncludeBytes}`
+      host-driven branches; the Index-side wiring of Gap 11; per-arg
+      `is_mut` / literal-coercion records for `Call` / `MethodCall`.
       Once the body-walk surface closes, the orchestration switch
-      promotes `annotate_bodies` from a wrapper around the
-      existing combined walk to a TIR-discarding pass, and
-      `reify_modules` becomes the TIR producer.
+      promotes `annotate_bodies` from a wrapper around the existing
+      combined walk to a TIR-discarding pass, and `reify_modules`
+      becomes the TIR producer.
 - [ ] **Stage 6 — Liveness and DCE.**
 - [ ] **Stage 7 — Cleanup.**
 
