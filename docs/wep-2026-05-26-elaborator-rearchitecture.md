@@ -446,12 +446,26 @@ migration; see Trade-offs.
       `adjust_receiver_for_self_kind_static`.
       Body-walk reify is **558/558 unit-test green on both the
       default path and the `WADO_REIFY=1` opt-in**, including
-      the stdlib snapshot. E2E suite under `WADO_REIFY=1`
-      reaches 620 / ~2654 fixtures passing — the remaining
-      failures cluster around the residual `todo!`s below
-      (IndexMut method calls, bundled handler bindings,
-      per-arg `is_mut` divergence, power-assert template,
-      ComparisonChain trait dispatch). Default-path E2E
+      the stdlib snapshot. Stdlib bypass landed —
+      `Core` / `Wasi` / `Wasm` modules and snapshot-build
+      itself stay on the production path, isolating reify to
+      user-module compilation while it grows coverage.
+      `function_effects` records the canonicalised `with`
+      clause at the annotate phase so reify can reproduce the
+      `Vec<EffectRef>` shape without needing the transient
+      `current_effect_param_decls` scope. `static_method_dispatch`
+      records every resolved free / namespaced / static-method
+      `FunctionRef` so reify replays the same TIR `Call` shape
+      (module_source, mangled name, monomorph_info, method_info)
+      without re-running impl lookup. Under these annotations
+      the E2E suite at `-O0` reaches **623 / 1326 fixtures
+      passing under `WADO_REIFY=1`** — the remaining failures
+      cluster around the residual `todo!`s below plus the
+      trait-method-name mangling divergence on operator
+      dispatch (`Array<i32>^IndexValue<i32>::index_value` vs
+      `Array^IndexValue<i32>::index_value` — the recorded
+      `FunctionRef` keeps the unmangled struct prefix where
+      WIR build expects the type-arg-mangled one). Default-path E2E
       behaviour is unchanged. Concrete arms cover every
       `reify_pattern` variant, every `reify_literal` variant
       (host-driven included), every `reify_ident` shape
