@@ -3257,15 +3257,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             _ => panic!("reify_question_mark_result: ? return type must be Result<U, F>"),
         };
 
-        if inner_err_type != outer_err_type {
-            // TODO(stage-5-bodies): `From::from(e)` synthesis path.
-            // The elaborator's `resolve_from_call` builds a synthetic
-            // static-method call to `<OuterErr>::from(<InnerErr>_val)`;
-            // reify needs that synthesis recorded as a generic-call
-            // annotation so it can emit the same `TirExprKind::Call`
-            // shape without re-running dispatch.
-            todo!("reify_question_mark_result: From::from error conversion pending")
-        }
+        // When inner and outer error types differ, synthesise a
+        // `<OuterErr>::from(<InnerErr>_val)` call. Mirrors
+        // `Elaborator::resolve_from_call` (expr.rs:4263+); the
+        // module source for the impl is looked up via the same
+        // search annotate runs (walk impl blocks across loaded
+        // modules to find a matching `impl From<InnerErr> for
+        // OuterErr`).
+        let need_from_conversion = inner_err_type != outer_err_type;
 
         ctx.enter_scope();
         let v_local = ctx.add_local("__qm_v".to_string(), ok_type, false, None);
@@ -3312,12 +3311,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             inner_err_type,
             span,
         );
+        let converted_err = if need_from_conversion {
+            self.reify_from_call(outer_err_type, inner_err_type, e_expr, span)
+        } else {
+            e_expr
+        };
         let err_variant = TirExpr::new(
             TirExprKind::VariantConstruct {
                 variant_type: return_type,
                 case_index: err_index,
                 case_name: err_name.clone(),
-                payload: Some(Box::new(e_expr)),
+                payload: Some(Box::new(converted_err)),
             },
             return_type,
             span,
@@ -3814,6 +3818,120 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             func_type,
             span,
         )
+    }
+
+    /// Synthesise a `<TargetType>::from(<value>)` call for the `?`
+    /// operator's error-conversion path. Mirrors
+    /// `Elaborator::resolve_from_call` (expr.rs:4263+): builds a
+    /// mangled `__<Target>__From<From>__from` method name with the
+    /// `LocalMethodName` carrying the canonical From-impl
+    /// signature, and finds the impl's home module by walking the
+    /// current module + loaded modules looking for a matching
+    /// `impl From<From> for Target`.
+    fn reify_from_call(
+        &mut self,
+        target_type: TypeId,
+        from_type: TypeId,
+        value: TirExpr,
+        span: crate::token::Span,
+    ) -> TirExpr {
+        use crate::name::{LocalMethodName, MethodName};
+        use crate::tir::{CallArg, FunctionRef, TirExprKind};
+
+        let (target_name, from_name, from_trait_name) = {
+            let tt = self.tysys.type_table.borrow();
+            let target = tt.type_name(target_type);
+            let from = tt.type_name(from_type);
+            let trait_n = tt
+                .compiler_items()
+                .trait_name(crate::compiler_item::CompilerItem::From)
+                .to_string();
+            (target, from, trait_n)
+        };
+
+        let from_trait = format!("{from_trait_name}<{from_name}>");
+        let method_name = MethodName::format_local(&target_name, Some(&from_trait), "from");
+        let module_source = self.find_from_impl_module(&target_name, &from_name, &from_trait_name);
+
+        TirExpr::new(
+            TirExprKind::Call {
+                func: FunctionRef {
+                    module_source,
+                    name: method_name,
+                    monomorph_info: None,
+                    method_info: Some(LocalMethodName {
+                        struct_name: target_name.clone(),
+                        base_struct_name: target_name,
+                        trait_name: Some(from_trait),
+                        base_trait_name: Some(from_trait_name),
+                        base_trait_module: None,
+                        trait_type_args: vec![],
+                        method_name: "from".to_string(),
+                        method_type_args: vec![],
+                        is_type_param_receiver: false,
+                        is_ref_impl: false,
+                        cm_name: None,
+                    }),
+                },
+                type_args: vec![],
+                args: vec![CallArg::new(value, false)],
+            },
+            target_type,
+            span,
+        )
+    }
+
+    /// Find the module that hosts `impl From<From> for Target`.
+    /// Mirrors `Elaborator::find_from_impl_module` (expr.rs:4319+);
+    /// walks current-module items + all loaded modules looking for
+    /// a matching `impl_block`. Falls back to the current module
+    /// when no impl is found (the synthesis path expects a
+    /// late-bound impl; codegen produces the body).
+    fn find_from_impl_module(
+        &self,
+        target_name: &str,
+        from_name: &str,
+        from_trait_name: &str,
+    ) -> ModuleSource {
+        let check_impl = |impl_block: &ast::ImplBlock| -> bool {
+            let impl_target = ast_type_name_static(&impl_block.ty);
+            if impl_target != target_name {
+                return false;
+            }
+            let Some(trait_type) = &impl_block.trait_type else {
+                return false;
+            };
+            let base = ast_type_name_static(trait_type);
+            if base != from_trait_name {
+                return false;
+            }
+            if let ast::Type::Generic(g) = trait_type
+                && let Some(arg) = g.args.first()
+            {
+                return ast_type_name_static(arg) == from_name;
+            }
+            false
+        };
+
+        for item in self.current_module_items {
+            if let ast::Item::Impl(impl_block) = item
+                && check_impl(impl_block)
+            {
+                return self.current_module_source.clone();
+            }
+        }
+
+        for (source, module) in self.loaded_modules {
+            for item in &module.items {
+                if let ast::Item::Impl(impl_block) = item
+                    && check_impl(impl_block)
+                {
+                    return source.clone();
+                }
+            }
+        }
+
+        self.current_module_source.clone()
     }
 
     /// Reify a `matches!`-style expression: `scrutinee matches { PAT
@@ -5463,6 +5581,32 @@ fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
 /// Map an AST [`ast::UnaryOp`] to its TIR counterpart. The two enums
 /// are 1:1; this helper exists so the dispatch table doesn't repeat
 /// the mapping at every Unary arm.
+/// Return the base name of an AST [`ast::Type`] for impl-block /
+/// method-name mangling. A free-function variant matching the
+/// elaborator's `Elaborator::get_type_name_static` (module.rs).
+/// Used by `Reify::find_from_impl_module` to recognise an
+/// `impl From<Source> for Target` block by its AST shape.
+fn ast_type_name_static(ty: &ast::Type) -> String {
+    use crate::tir::TypeTable;
+    match ty {
+        ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
+        ast::Type::Named(named) => named.name.clone(),
+        ast::Type::Generic(generic) => generic.name.clone(),
+        ast::Type::Reference(_) => "&".to_string(),
+        ast::Type::MutReference(_) => "&mut".to_string(),
+        ast::Type::Tuple(elems) => {
+            if elems.is_empty() {
+                TypeTable::UNIT_TYPE_NAME.to_string()
+            } else {
+                TypeTable::TUPLE_TYPE_NAME.to_string()
+            }
+        }
+        ast::Type::Function(_)
+        | ast::Type::NamespacedGeneric(_)
+        | ast::Type::TypePackSpread(_, _) => "Unknown".to_string(),
+    }
+}
+
 fn ast_unary_op_to_tir(op: ast::UnaryOp) -> crate::tir::TirUnaryOp {
     use crate::tir::TirUnaryOp;
     match op {
