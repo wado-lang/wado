@@ -573,6 +573,438 @@ the consumer. Removing those allows when Stage 5 lands gives a
 mechanical "what data is actually consumed" audit; any field that
 stays unread by then is a Stage 4 over-record.
 
+### Design notes (Stage 5)
+
+Stage 5 is the cut from "annotate also emits TIR" to "annotate
+populates `ModuleSemantics`, reify reads it and emits TIR." Stage 4
+covered the four obviously-needed maps (`expression_types`,
+`method_dispatch`, `coercions`, `desugars`); the body walk also makes
+several other TIR-shaping decisions that the current code captures
+implicitly inside the emitted `TirExpr`/`TirStmt` shape. These
+sub-sections enumerate each remaining gap, name the new
+`ModuleSemantics` field, pin the recording site, and pin the reify
+consumer. The list is the design contract Stage 5 implements; no
+gap is left to be re-derived inside reify, because the WEP's
+Decision §`Reify` insists that reify perform no inference, name
+resolution, or dispatch decisions.
+
+#### Gap inventory ground rules
+
+Each gap is described by four facts. Implementations that skip any
+of the four are not Stage 5.
+
+- A name for the decision the body walk makes.
+- The `ModuleSemantics` field that records it, with a concrete type
+  sketch and the sub-struct it belongs on
+  (`bindings` / `imports` / `types` / `decls`).
+- The recording site in today's code — file + the choke-point
+  helper, per the Stage 4 §`Recording sits at the choke point`
+  pattern.
+- The reify consumer — which TIR-construction site reads the field.
+
+New fields live on `TypeAnnotations` unless the data is plainly a
+declaration fact (then `ModuleDecls`) or a binding edge (then
+`ModuleBindings`).
+
+#### Gap 1: generic instantiation type arguments
+
+`Elaborator::infer_fn_type_args` (`call.rs:440–580`),
+`infer_static_method_type_args` and `infer_variant_type_args`
+(`expr.rs:973–1051`), and the struct-literal path
+`infer_struct_type_args` (`expr.rs:3422–3520`) decide concrete
+`TypeId`s for the generic parameters at each call / construction
+site. The decision flows into `FunctionRef::monomorph_info`,
+`TirExprKind::Call::type_args`, the variant-ctor TIR shape, and the
+mangled `TirExprKind::StructLiteral::struct_name`. No
+`ModuleSemantics` field carries it today.
+
+- Field: `TypeAnnotations::generic_instantiations:
+  IndexMap<AstId, GenericInstantiation>`, with
+  `GenericInstantiation { type_args: Vec<TypeId>, instance_type:
+  TypeId }`. `instance_type` is the `make_generic_instance` /
+  `make_struct` / `make_variant` result; recording it saves the
+  same lookup at reify time and pins the mangled-name input.
+- Recording sites: each `infer_*` return path, plus the explicit
+  `type_args` branch (`fn f::<i32, T>(x)`). The recording helper
+  matches the Stage 4 choke-point pattern: one
+  `record_generic_instantiation(ast_id, type_args, instance_type)`
+  on `Elaborator`, called from `resolve_call`, `resolve_struct_literal`,
+  `resolve_variant_ctor`, and `infer_static_method_type_args`.
+- Reify consumer: `reify_call`, `reify_struct_literal`,
+  `reify_variant_ctor`. Each reads `generic_instantiations[ast_id]`
+  and emits `TirExprKind::Call { type_args, … }` /
+  `TirExprKind::StructLiteral { struct_type, struct_name, … }` /
+  `TirVariantConstruct` directly.
+
+#### Gap 2: receiver adjustment for self-kind
+
+`adjust_receiver_for_self_kind` (`method_lookup.rs:1596–1700`)
+decides whether to insert `Unary { Ref }`, `Unary { MutRef }`, a
+`deref_to_value` chain, or nothing, based on the receiver's
+resolved type, the dispatched `SelfKind`, and the impl's
+ref-receiver flag. Today this is implicit in the TIR shape; reify
+needs to know whether to wrap. `MethodDispatch.self_kind` alone is
+not enough — the ref-impl flag determines an _additional_ layer
+(e.g. `&&T` for `&self` on `impl Trait for &T`).
+
+- Field: extend `MethodDispatch` (in `sem/types.rs`) with
+  `is_ref_impl: bool`. The wrap depth is then fully derivable from
+  `self_kind` × `is_ref_impl` × the receiver's resolved type
+  (which reify already has from `expression_types`).
+- Recording site: `lookup_method_info` records the `is_ref_impl`
+  flag on its result; `record_method_dispatch` passes it through.
+- Reify consumer: `reify_method_call` constructs the receiver
+  TIR, then routes it through a `reify_receiver_adjustment` helper
+  that mirrors today's `adjust_receiver_for_self_kind` — purely
+  mechanical because the inputs are all on hand.
+
+#### Gap 3: IndexMut rewrite of `container[i].method()`
+
+`try_resolve_index_mut_method_call`
+(`method_lookup.rs:3390–3455`) rewrites `container[i].method()`
+into a TIR shape that materialises a `let __index_mut_val = …;`
+local and dispatches the method through it. Today the rewrite
+fabricates both the `TirStmt::Let` and the `TirExprKind::Local`
+that follows. The rewrite is a method-call decision that
+`MethodDispatch` already covers (`IndexMut::index_mut` is the
+dispatched method), but reify also needs to know that the call
+expanded — not contracted — and to thread the synthesised local
+through.
+
+- Field: tag the `MethodCallExpr`'s `AstId` with a
+  `DesugarKind::IndexMutMethodCall` variant (the existing
+  `desugars` map; the variant is new). The receiver-side
+  `IndexExpr` keeps its own `expression_types` entry so reify
+  emits the `__index_mut_val` initialiser type correctly.
+- Recording site: `try_resolve_index_mut_method_call` calls
+  `record_desugar(method_call_ast_id, IndexMutMethodCall)` once
+  per successful rewrite (alongside its existing
+  `record_method_dispatch`).
+- Reify consumer: `reify_method_call` checks `desugars` for the
+  call's id; on hit it follows the IndexMut expansion path
+  instead of the plain method-call path, synthesising
+  `__index_mut_val` through the per-function context (gap 7).
+
+#### Gap 4: closure capture analysis
+
+`resolve_closure` (`closure.rs:127–250`) runs
+`collect_mutated_vars` to decide which outer bindings need
+`&mut T` capture, materialises a `let __ref_<v> = &mut <v>;` per
+mut-captured binding in the _outer_ scope, opens a closure scope
+with `deref_overrides`, and finally collects the capture list from
+`closure_ctx.get_captures()`. Today every step is a side effect of
+the body walk; reify cannot reproduce the capture list without
+running the same scan + scope plumbing.
+
+- Field: `TypeAnnotations::closure_captures: IndexMap<AstId,
+  ClosureCaptureInfo>`, with
+  ```rust
+  pub(crate) struct ClosureCaptureInfo {
+      // Outer locals captured by mutating reference. Each entry
+      // names the original binding and the synthesised `__ref_*`
+      // binding that proxies it. `outer_index` is the outer
+      // function's local-table index at annotate time; reify
+      // recomputes the same index from its own walk (see Gap 7).
+      pub(crate) mut_captures: Vec<MutCapture>,
+      // Final list of captures the closure surfaces, in the order
+      // `closure_ctx.get_captures()` produces them. Each entry is
+      // (name, kind, type_id); kind is Value / RefDeref.
+      pub(crate) captures: Vec<CaptureEntry>,
+      // True when any capture is mutating — drives the
+      // `fn mut(...)` vs `fn(...)` choice at the closure type.
+      pub(crate) is_mutating: bool,
+  }
+  ```
+- Recording site: `resolve_closure` records the info on the
+  closure's `AstId` once Step 6 produces the final capture list.
+  The `mut_captures` list is filled in Step 2 just before
+  `ctx.address_taken_locals.insert`.
+- Reify consumer: `reify_closure` re-materialises the
+  `let __ref_<v> = &mut <v>;` statements from `mut_captures`,
+  opens a fresh `FunctionContext::new_closure` with the same
+  `deref_overrides`, walks the body via `reify_expr` (which
+  consumes `expression_types` / `coercions` as usual), and emits
+  the `TirCapture` list from `captures`. The `is_mutating` flag
+  decides the closure type's `fn mut` vs `fn` tag.
+
+#### Gap 5: assert capture-slot mapping
+
+`desugar_assert` (`assert.rs:62–250`) scans the condition with
+`CaptureScanner` to decide which sub-expressions become
+`let __vK = …;` bindings, then resolves the condition with a
+side-channel hook (`FunctionContext::assert_capture_ctx`) that
+captures sub-expressions as they are walked. Today the
+slot↔`AstId` map and the `__vK` local indices both live on
+`AssertCaptureContext` and dissolve after the assert lowers.
+
+- Field: `TypeAnnotations::assert_captures: IndexMap<AstId,
+  AssertCaptureInfo>` keyed by the `AssertStmt`'s `AstId`, with
+  ```rust
+  pub(crate) struct AssertCaptureInfo {
+      // Sub-expression AstIds the scanner flagged, in inner-first
+      // order. Each slot index (0..n) maps to one entry; the
+      // `__vK` local name follows the slot index.
+      pub(crate) slots: Vec<AssertSlot>,
+      // Subset of slots whose AST node survived resolution
+      // (cf. the `emitted` flag in `desugar_assert`). Slots
+      // outside this set produce no `let __vK = …;` binding —
+      // template interpolation skips them.
+      pub(crate) emitted_slot_indices: Vec<u32>,
+  }
+  pub(crate) struct AssertSlot {
+      pub(crate) ast_id: AstId,
+      pub(crate) capture_label: String,  // user-facing label in
+                                         // the panic template
+  }
+  ```
+- Recording site: `desugar_assert` records the info just after
+  `ctx.assert_capture_ctx.take()` returns, with `slots` /
+  `emitted_slot_indices` derived from the `emitted_lets` it has
+  just produced.
+- Reify consumer: `reify_assert` (a new helper invoked when
+  `desugars[stmt.id] == Assert`) walks the condition AST,
+  consults `assert_captures[stmt.id].slots` to decide which
+  sub-expressions get a `let __vK = …;` binding, threads the
+  surviving slot indices into the panic template, and emits the
+  guard `if !__cond { panic(…) }` directly.
+
+#### Gap 6: for-of iterator method selection
+
+`resolve_for_of` (`stmt.rs:2107–2200`) classifies the iterable as
+`ForOfTuple` / `ForOfVariadic` / `ForOfIterator`; Stage 4 already
+tags this on the `ForOfStmt`'s `AstId` via `DesugarKind`. The
+remaining decision the elaborator makes silently is _which_
+`.into_iter()` and `.next()` implementations the iterator path
+picks. `resolve_iterator_for_of` synthesises both calls through
+`resolve_method_call_with(method_id: None, call_id: None)`, so
+neither call leaves an entry in `method_dispatch`. Reify needs
+the dispatch result to emit the same calls.
+
+- Field: `TypeAnnotations::for_of_iterator: IndexMap<AstId,
+  ForOfIteratorInfo>` keyed by the `ForOfStmt`'s `AstId`, with
+  the `FunctionRef` for `into_iter` and `next` (each carrying its
+  own `SelfKind` / monomorph info), plus the iterator's
+  `Item` associated type as a `TypeId`.
+- Recording site: `resolve_iterator_for_of` records the info
+  immediately before it builds the synthetic method calls — once
+  per `ForOfStmt`, after the `IntoIterator` trait check passes.
+- Reify consumer: `reify_for_of` reads
+  `for_of_iterator[stmt.id]` to construct the same
+  `TirExprKind::MethodCall { function_ref: into_iter, … }` and
+  the loop body's `next` call without re-dispatching.
+
+#### Gap 7: per-function local-frame walk-order invariant
+
+`FunctionContext::locals` (`types.rs:1131–1202`) is the function-
+wide local-table built incrementally by `add_local`. Every
+`TirExprKind::Local::index`, every `TirStmtKind::Let::local_index`,
+the `outer_index` on `TirCapture`, and the `local_types` on
+`TirFunction` / `TirGlobal` are stable references into this
+vector. Serialising the vector into `ModuleSemantics` would either
+duplicate the entire per-function frame state or break the
+source-of-truth invariant — neither is acceptable.
+
+Stage 5 keeps `FunctionContext` ephemeral and instead requires
+annotate and reify to agree on **walk order**:
+
+- The body-walk visit order is the source of truth.
+- Reify mirrors annotate's walk order one-for-one: every `let`,
+  every pattern binding, every synthetic local
+  (`__assert_K` / `__for_N_body` / `__ref_v` / `__index_mut_val`
+  / `__tuple_for_of_N` / `__cond`) is added at the same logical
+  point in both passes.
+- The synthetic-local naming counters
+  (`FunctionContext::next_assert_id`, `next_loop_id`, the
+  per-closure ref counter) move with the walk; reify maintains
+  its own counters that increment in lockstep with annotate's by
+  walking the same nodes in the same order.
+
+This is the invariant that lets `TirCapture::outer_index`,
+`TirExprKind::Local::index`, and similar fields remain
+non-recorded. The unit-test contract for Stage 5 is that for any
+function `f`, the `Vec<TirLocal>` annotate would have emitted
+equals the `Vec<TirLocal>` reify does emit. The WIR golden
+fixtures bind this transitively, but a focused reify-only test
+(see §`Equivalence validation`) makes regressions easy to
+diagnose.
+
+The single ordering hazard worth calling out separately: the
+closure capture pre-pass (Gap 4) materialises `__ref_<v>` locals
+in the _outer_ function's frame, before the closure body is
+walked. Reify must add those locals at the same point —
+specifically, immediately before `reify_expr` recurses into the
+closure body. The recorded `closure_captures` info names the
+locals in order; reify replays the `add_local` calls in that
+order.
+
+#### Gap 8: struct-literal deferred field coercion
+
+`resolve_struct_literal` (`expr.rs:3422–3520`) performs a
+two-pass coercion for generic struct literals: the first pass
+resolves field values with the unsubstituted `TypeParam` field
+types, and the second pass re-runs `try_coerce_tuple_to_sequence`
+once concrete `type_args` are known. Stage 4's per-`AstId`
+`coercions` map records each successful coercion at its AST
+node, so the second-pass coercion _is_ already recorded on the
+field-value's `AstId`. The remaining concern is ordering:
+
+- The second-pass coercion's `coercions[field_value_ast_id]`
+  entry overwrites the first-pass entry. Stage 4 already
+  guarantees idempotence under `try_coerce` re-entry; the same
+  property carries through here because the second pass only
+  fires when the first-pass result didn't match the substituted
+  field type, and the recording site is the `try_coerce_*`
+  sub-helper either way.
+
+No new field is needed. The contract is documented here so a
+future review doesn't insist on a `deferred_coercions` map: the
+existing `coercions` map is the right place, the choke-point
+recording pattern keeps it correct.
+
+#### Gap 9: newtype `T::from(T_val)` reflexive collapse
+
+When the elaborator sees `Newtype::from(x)` and `x` is already of
+the newtype's base type, it collapses the call to `x` itself
+(`expr.rs:1920–1970`). The outer `Call` AST node evaporates —
+its `expression_types` entry is recorded against the _inner_
+expression, not the call site. Reify would otherwise emit a
+spurious `TirExprKind::Call` that the elaborator never did.
+
+- Field: tag the outer call's `AstId` with
+  `DesugarKind::NewtypeFromCollapse` (the existing `desugars`
+  map; the variant is new).
+- Recording site: the collapse branch in the newtype-ctor call
+  path records `record_desugar(call.id, NewtypeFromCollapse)`
+  alongside its existing argument resolution.
+- Reify consumer: `reify_call` checks `desugars` first; on
+  `NewtypeFromCollapse` it emits the inner argument's TIR
+  directly (the inner `expression_types` entry already names the
+  right type) and skips the call construction entirely.
+
+#### Gap 10: stmt-position match and other dispatch shortcuts
+
+`resolve_stmt` dispatches a stmt-position `Expr::Match` directly
+to `resolve_match_expr` (documented in Stage 4 §`Recording sits
+at the choke point`); the stmt arm records `expression_types`
+explicitly. Reify mirrors the same dispatch: `reify_stmt` on a
+stmt-position match calls `reify_match_expr` and wraps the
+result in `TirStmtKind::Expr`. No new field; the design contract
+is the dispatch parity itself, called out here so a future
+refactor doesn't reintroduce the "stmt-position match has no
+expr-position twin" asymmetry.
+
+#### Synthetic call sites stay annotation-free by design
+
+Three call shapes evaporate during annotate before a
+`MethodCallExpr` is ever resolved, and so leave no
+`expression_types` / `method_dispatch` entry. Reify re-detects
+each from the AST shape and the receiver type:
+
+- `.enumerate()` inside a for-of head — unwrapped at
+  `stmt.rs:2130–2135`. Reify reads `for_of.iterable` directly.
+- `tuple.len()` / `tuple.zip(...)` — short-circuited at the
+  receiver-type level in `method_call.rs`. Reify recognises
+  tuple-typed receivers and emits `TirExprKind::TupleLen` /
+  `TirExprKind::TupleZip`.
+- Static-method-as-instance error (`T::method(x)` written with
+  instance syntax) — the elaborator emits a diagnostic and the
+  call's `expression_types` resolves to `ERROR`; reify reads
+  the absence of an entry as "the call failed, drop the
+  enclosing TIR construction."
+
+These are not gaps in Stage 5; they are the dual of the
+synthetic-call recording contract on `MethodDispatch` from
+Stage 4. Listed here because every "reify needs to know X"
+review question circles back to one of them.
+
+#### Reify pipeline structure
+
+`reify_module(module: &Module, tysys: &mut TypeSystem,
+sem: &ModuleSemantics, symbols: &SymbolTable, …) -> TirModule`
+mirrors `Elaborator::resolve_module` in dispatch shape:
+
+- The per-Item loop pattern-matches on `Item::*` exactly as
+  `resolve_module` does. Decl-only items (`Enum`, `Flags`,
+  `Newtype`, `Variant`, `Effect`, `Resource`, `Struct`) dispatch
+  into `reify_enum_decl` / `reify_struct` / `reify_variant_decl`
+  / `reify_effect_decl` / `reify_resource_decl`. Each reads
+  decl-interned types from `TypeSystem.all_*` and produces TIR
+  without consulting `TypeAnnotations`.
+- Function / impl-method / test / global bodies dispatch into
+  `reify_function` / `reify_method` / `reify_test_decl` /
+  `reify_global`. Each builds a fresh `FunctionContext` and
+  walks the AST via `reify_block` / `reify_stmt` / `reify_expr`
+  / `reify_pattern`.
+- `reify_expr` consults `ModuleSemantics.types`:
+  - `expression_types[id]` → `TirExpr::type_id`
+  - `method_dispatch[id]` → dispatch target + `self_kind` +
+    `is_ref_impl` (Gap 2)
+  - `coercions[id]` → coercion wrapper to emit around the raw
+    expression
+  - `desugars[id]` → which expansion path to take (assert /
+    matches / for-of / while / compound-assign / comparison
+    chain / IndexMut method call / newtype-from collapse)
+  - `generic_instantiations[id]` → `type_args` for
+    call / struct / variant constructions
+  - `closure_captures[id]` → closure capture list and
+    `__ref_*` materialisation
+  - `assert_captures[id]` → assert slot map
+  - `for_of_iterator[id]` → for-of iterator dispatch target
+
+Reify never re-runs inference, never looks at
+`TypeSystem.trait_env`'s impl tables, and never mutates
+`TypeTable` except to intern new monomorphic instances that
+arise during reify itself (e.g. a mangled `Container<i32>`
+first reached here). The Decision §`Reify surface` constraint
+holds: "Monomorphic instances created during reify intern
+through `&mut TypeSystem`."
+
+#### `TypeSystem` ownership across the two passes
+
+`Elaborator::annotate_bodies` takes `&mut TypeSystem` because it
+interns new types during inference. `reify_module` takes
+`&mut TypeSystem` too — not because reify re-runs inference, but
+because reify still needs to intern monomorphic struct/variant
+instances that the post-substitution paths reach for the first
+time (see the `make_generic_instance` calls in `resolve_call`
+and `resolve_struct_literal` that the recorded
+`generic_instantiations.instance_type` already covers — but the
+mangled-name registry on the `TypeSystem` may still need new
+entries when the body walk uses a less-specific type and reify
+crystallises a more-specific one). The `Decision §Reify surface`
+note already calls this out; the contract is sharpened to "reify
+may intern but not query trait/impl tables for resolution
+decisions."
+
+#### Equivalence validation
+
+The WIR golden fixtures and E2E suite carry the full equivalence
+guarantee, as the WEP's §`Migration Plan` Stage 5 entry already
+states. Stage 5 adds one targeted developer-only assertion that
+makes regressions easier to diagnose without spending the cost
+on every compile:
+
+- A `#[cfg(test)]` helper in `wado-compiler/tests/` that, for
+  selected fixtures, runs both `annotate_bodies → reify` and
+  the legacy combined walk (kept under a feature flag during
+  the migration window) and asserts the resulting
+  `TirModule`s compare equal under a structural eq that
+  ignores `Span`. The helper retires the moment `optimize/dce`
+  retires from its current role (Stage 6); the WIR golden
+  fixtures + E2E suite remain the long-term contract.
+
+#### Out of scope for Stage 5
+
+- The full removal of the combined walk. That is Stage 7
+  cleanup, gated on Stage 6's liveness pass.
+- Recording the trait-impl-selection rationale (which blanket
+  impl won, which bound check succeeded). Reify reads the
+  recorded `FunctionRef` and `is_ref_impl` flag and trusts
+  them; the rationale survives only as the absence of
+  ambiguity at the recorded dispatch target.
+- Performance optimisation of the two-walk pipeline. The
+  trade-off is taken as decided in the WEP's §`Trade-offs`.
+
 ## Consequences
 
 ### Benefits
