@@ -1069,6 +1069,60 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::MethodCall(method_call) => self.reify_method_call(method_call, ctx, recorded_type),
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
+            ast::Expr::Resume(resume) => {
+                // `resume value` inside a handler method. Reify the
+                // value with the function's return type as expected
+                // (matches `Elaborator::resolve_resume` at
+                // handlers.rs:445), then emit `TirExprKind::Resume`.
+                let expected = if ctx.in_handler_method {
+                    Some(ctx.return_type)
+                } else {
+                    None
+                };
+                let value = self.reify_expr(&resume.value, ctx, expected);
+                TirExpr::new(
+                    TirExprKind::Resume {
+                        value: Box::new(value),
+                    },
+                    crate::tir::TypeTable::UNIT,
+                    span,
+                )
+            }
+            ast::Expr::LabeledBlock(lb) => {
+                // Match `Elaborator::resolve_expr`'s `LabeledBlock`
+                // arm (expr.rs:234–305): push a `LabeledBlockTarget`
+                // so any `break label: expr` inside lowers via this
+                // frame, walk the inner block, pop the frame, emit
+                // `TirExprKind::LabeledBlock`. The result type is the
+                // recorded `expression_types[lb.id]`; annotate already
+                // unified break types into it.
+                use crate::elaborator::types::LabeledBlockTarget;
+                ctx.labeled_block_targets.push(LabeledBlockTarget {
+                    label: lb.label.clone(),
+                    break_types: Vec::new(),
+                    expected_type,
+                });
+                ctx.active_labels.push(lb.label.clone());
+                let tir_block = self.reify_block(&lb.block, ctx, expected_type);
+                ctx.active_labels.pop();
+                let _target = ctx.labeled_block_targets.pop();
+                TirExpr::new(
+                    TirExprKind::LabeledBlock {
+                        label: lb.label.clone(),
+                        block: tir_block,
+                        result_type: recorded_type,
+                    },
+                    recorded_type,
+                    span,
+                )
+            }
+            ast::Expr::Spread(_, _) => {
+                // `Spread` is only valid inside a tuple literal; the
+                // elaborator panics if it sees one at top level.
+                // Mirror the panic — annotate would have already
+                // diagnosed a stray spread.
+                panic!("reify_expr: bare Spread is invalid outside TupleLiteral")
+            }
             ast::Expr::If(if_expr) => self.reify_if_expr(if_expr, ctx, expected_type, recorded_type),
             ast::Expr::Assign(assign) => {
                 // `target = value` — both sides walked recursively; the
@@ -1114,12 +1168,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             | ast::Expr::Closure(_)
             | ast::Expr::TemplateString(_)
             | ast::Expr::StructLiteral(_)
-            | ast::Expr::LabeledBlock(_)
             | ast::Expr::TryOp(_)
-            | ast::Expr::Spread(_, _)
             | ast::Expr::Range(_)
-            | ast::Expr::WithHandler(_)
-            | ast::Expr::Resume(_) => {
+            | ast::Expr::WithHandler(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
                 // `Elaborator::resolve_expr` arm. Each arm consults
                 // `sem.types.{expression_types, coercions,
