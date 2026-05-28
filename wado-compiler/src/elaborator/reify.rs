@@ -4343,6 +4343,45 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let span = call.span;
 
+        // Static-method / builtin dispatch (`Type::method(args)`,
+        // `builtin::fn(args)`): the elaborator recorded the resolved
+        // `FunctionRef` on `sem.types.static_method_dispatch` so reify
+        // can reproduce the same TIR `Call` shape without re-running
+        // impl lookup, mangled-name construction, or monomorph-info
+        // shaping (none of which are tractable from the AST alone).
+        if let Some(dispatch) = self
+            .sem
+            .types
+            .static_method_dispatch
+            .get(&call.id)
+            .cloned()
+        {
+            let arg_exprs: Vec<CallArg> = call
+                .args
+                .iter()
+                .zip(
+                    dispatch
+                        .param_is_mut
+                        .iter()
+                        .copied()
+                        .chain(std::iter::repeat(false)),
+                )
+                .map(|(a, is_mut)| {
+                    let arg = self.reify_expr(a, ctx, None);
+                    CallArg::new(arg, is_mut)
+                })
+                .collect();
+            return TirExpr::new(
+                TirExprKind::Call {
+                    func: dispatch.function_ref,
+                    type_args: vec![],
+                    args: arg_exprs,
+                },
+                recorded_type,
+                span,
+            );
+        }
+
         // Variant-ctor call shape: `Variant::Case(payload)`. Detected
         // via the callee being a qualified ident whose prefix names a
         // variant decl with a matching case. Generic variants pin

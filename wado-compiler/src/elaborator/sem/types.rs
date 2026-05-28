@@ -230,6 +230,34 @@ pub(crate) struct TypeAnnotations {
     /// reproduce faithfully).
     #[allow(dead_code)]
     pub(crate) function_effects: IndexMap<AstId, Vec<crate::tir::EffectRef>>,
+    /// Resolved static-method call dispatch
+    /// (`Type::method(args)` / `builtin::fn(args)` shape) recorded by
+    /// the body walk. Keyed by the [`crate::ast::CallExpr`]'s [`AstId`].
+    /// Carries the resolved [`crate::tir::FunctionRef`] (with mangled
+    /// name, `module_source`, `method_info`, and any monomorphisation
+    /// info) plus the per-arg `is_mut` flags the elaborator drained
+    /// from the looked-up parameter signature. Reify reads this to
+    /// reproduce the same TIR `Call` shape without re-running
+    /// `locate_static_method_impl` / `MethodName::format_local` and
+    /// without consulting the trait-impl index.
+    #[allow(dead_code)]
+    pub(crate) static_method_dispatch: IndexMap<AstId, StaticMethodDispatch>,
+}
+
+/// Static-method call dispatch decision. See
+/// [`TypeAnnotations::static_method_dispatch`].
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct StaticMethodDispatch {
+    /// The resolved callee — `module_source`, mangled `name`,
+    /// `method_info`, `monomorph_info` — as the elaborator constructed
+    /// it after impl lookup and mangling.
+    pub(crate) function_ref: crate::tir::FunctionRef,
+    /// Per-argument `is_mut` flag derived from the resolved parameter
+    /// signature (`lookup_static_method_param_is_mut`). Reify zips this
+    /// with the reified argument exprs to build [`crate::tir::CallArg`]s
+    /// with the same `is_mut` shape annotate produced.
+    pub(crate) param_is_mut: Vec<bool>,
 }
 
 /// Generic-instantiation decision recorded by the body walk at a call,

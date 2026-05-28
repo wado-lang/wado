@@ -597,7 +597,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                return self.resolve_static_method_call_from_qualified(
+                let tir_call = self.resolve_static_method_call_from_qualified(
                     prefix,
                     suffix,
                     &mangled_name,
@@ -607,6 +607,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     call.span,
                     ctx,
                 );
+                // Stage 5 (WEP 2026-05-26): record the resolved
+                // `FunctionRef` so reify can reproduce the same TIR
+                // shape without re-running impl lookup, mangled-name
+                // construction, or monomorph-info shaping. Reify cannot
+                // reconstruct these from the AST alone — they depend on
+                // trait-impl resolution that lives only in the elaborator.
+                if let crate::tir::TirExprKind::Call { func, args: tir_args, .. } = &tir_call.kind {
+                    let func_ref = func.clone();
+                    let param_is_mut: Vec<bool> = tir_args.iter().map(|a| a.is_mut).collect();
+                    self.sem.types.static_method_dispatch.insert(
+                        call.id,
+                        super::sem::types::StaticMethodDispatch {
+                            function_ref: func_ref,
+                            param_is_mut,
+                        },
+                    );
+                }
+                return tir_call;
             }
             // Check if this is a flags type method call: Perms::none(), Perms::all()
             else if let Some(flags_info) = self.lookup_flags_case(prefix).cloned()
