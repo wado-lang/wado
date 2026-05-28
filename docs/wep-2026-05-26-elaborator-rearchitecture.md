@@ -417,35 +417,36 @@ migration; see Trade-offs.
       `Flags`, `Newtype`, `Struct` modulo field defaults, `Variant`,
       `Interface`, `Resource`, `Global`) are concrete. Body-walk
       dispatchers cover `reify_function` / `reify_block` /
-      `reify_stmt` / `reify_expr` / `reify_pattern` and emit TIR for:
-      `Stmt::{Let (Ident/MutIdent/Wildcard), Expr, Return, TaskReturn,
-      Break, Continue, If (Condition::Expr), Loop, Match}`;
-      `Expr::{Literal (modulo Location/Include), Block, Ident
-      (local + globals + assoc constants + free function refs +
-      qualified Variant::Case / Enum::Case / Flags::Member),
-      TupleLiteral, Cast, Unary, FieldAccess, MethodCall, Call
-      (free function + variant ctor), Match, StructLiteral (named),
-      If (Condition::Expr), Assign, Binary (native + operator-trait
-      dispatch), Resume, LabeledBlock, Spread}`;
-      `Pattern::{Wildcard, Ident, MutIdent, Literal, Tuple,
-      Variant}`. Receiver adjustment is shared via
+      `reify_stmt` / `reify_expr` / `reify_pattern`. `reify_pattern`
+      is feature-complete (`Wildcard`, `Ident`, `MutIdent`, `Literal`,
+      `Tuple`, `Variant`, `Or`, `Range`, `Struct`). Body-walk TIR
+      emission covers: `Stmt::{Let (all patterns — irrefutable +
+      destructuring), Expr, Return, TaskReturn, Break, Continue,
+      If (Condition::Expr), Loop, Match, While (Condition::Expr),
+      LabeledBlock}`; `Expr::{Literal (modulo Location/Include),
+      Block, Ident (local + globals + assoc constants + free function
+      refs + qualified Variant::Case / Enum::Case / Flags::Member),
+      TupleLiteral, Cast, Unary, FieldAccess, MethodCall, Call (free
+      function + variant ctor), Match, Matches, StructLiteral (named),
+      Range, TemplateString, If (Condition::Expr), Assign, Binary
+      (native + operator-trait dispatch), Resume, LabeledBlock,
+      Spread}`. Receiver adjustment is shared via
       `adjust_receiver_for_self_kind_static` so the elaborator and
       reify produce the same `Unary{Ref}` / `Unary{MutRef}` / deref
       wrapping.
       Remaining (each carries a labelled `todo!` with the
       `Elaborator::resolve_*` location it mirrors): non-local idents
-      (`ns::Type::Case` namespace path); destructuring `let` patterns
-      and uninitialised `let x: T;`; field-default expressions on
-      `reify_struct`; `Expr::{CompoundAssign, ComparisonChain,
-      StaticMethodCall, Index, Matches, Closure, TemplateString,
-      TryOp, Range, WithHandler}` and closure-call / indirect-call /
+      (`ns::Type::Case` namespace path); uninitialised `let x: T;`;
+      field-default expressions on `reify_struct`; `Expr::{CompoundAssign,
+      ComparisonChain, StaticMethodCall, Index, Closure, TryOp,
+      WithHandler}` and closure-call / indirect-call /
       qualified-callee shapes of `Call`; anonymous-struct literals;
-      `Stmt::{While, For, ForOf, Assert, LabeledBlock}` and `If
-      (Condition::LetChain)`; `Pattern::{Struct, Or, Range}`;
-      `reify_impl` / `reify_test_decl`; the `Literal::{LocationFile,
-      LocationLine, DataSection, IncludeStr, IncludeBytes}`
-      host-driven branches; the Index-side wiring of Gap 11; per-arg
-      `is_mut` / literal-coercion records for `Call` / `MethodCall`.
+      `Stmt::{For, ForOf, Assert}` and `If (Condition::LetChain)` /
+      `While (Condition::LetChain)`; `reify_impl` / `reify_test_decl`;
+      the `Literal::{LocationFile, LocationLine, DataSection,
+      IncludeStr, IncludeBytes}` host-driven branches; the Index-side
+      wiring of Gap 11; per-arg `is_mut` / literal-coercion records
+      for `Call` / `MethodCall`.
       Once the body-walk surface closes, the orchestration switch
       promotes `annotate_bodies` from a wrapper around the existing
       combined walk to a TIR-discarding pass, and `reify_modules`

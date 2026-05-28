@@ -1258,11 +1258,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `DesugarKind::While` tags. `for_continue_labels` is saved /
     /// restored around the body walk so naked `continue` inside
     /// `while` targets this loop (not an enclosing C-style `for`).
-    fn reify_while(
-        &mut self,
-        w: &ast::WhileStmt,
-        ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
+    fn reify_while(&mut self, w: &ast::WhileStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         use crate::tir::{TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable};
 
         let span = w.span;
@@ -1517,8 +1513,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let mut combined = String::new();
             for part in &template.parts {
                 if let ast::TemplatePart::String(s) = part {
-                    let unescaped =
-                        super::util::unescape_template_string(s).unwrap_or_default();
+                    let unescaped = super::util::unescape_template_string(s).unwrap_or_default();
                     combined.push_str(&unescaped);
                 }
             }
@@ -1633,11 +1628,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if matches!(range.kind, RangeKind::Inclusive) {
             fields.push(TirStructField {
                 name: "exhausted".to_string(),
-                value: TirExpr::new(
-                    TirExprKind::BoolLiteral(false),
-                    TypeTable::BOOL,
-                    range.span,
-                ),
+                value: TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, range.span),
                 field_index: 2,
             });
         }
@@ -1758,11 +1749,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// annotate time) into a two-arm match: pattern → true, wildcard
     /// → false. Mirror `Elaborator::desugar_matches_expr`
     /// (matches.rs:25+).
-    fn reify_matches(
-        &mut self,
-        m: &ast::MatchesExpr,
-        ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    fn reify_matches(&mut self, m: &ast::MatchesExpr, ctx: &mut FunctionContext) -> TirExpr {
         use crate::tir::{TirExprKind, TirMatchArm, TirPattern, TypeTable};
 
         let scrutinee = self.reify_expr(&m.expr, ctx, None);
@@ -2631,7 +2618,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 fields,
                 has_rest,
                 ..
-            } => self.reify_struct_pattern(type_name.as_deref(), fields, *has_rest, scrutinee_type, ctx),
+            } => self.reify_struct_pattern(
+                type_name.as_deref(),
+                fields,
+                *has_rest,
+                scrutinee_type,
+                ctx,
+            ),
         }
     }
 
