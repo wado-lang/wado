@@ -1303,6 +1303,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::TryOp(qm) => self.reify_question_mark(qm, ctx, recorded_type),
             ast::Expr::Closure(closure) => self.reify_closure(closure, ctx, recorded_type, expected_type),
             ast::Expr::Index(index) => self.reify_index(index, ctx, recorded_type),
+            ast::Expr::ComparisonChain(chain) => self.reify_comparison_chain(chain, ctx),
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
@@ -1394,8 +1395,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 )
             }
-            ast::Expr::ComparisonChain(_)
-            | ast::Expr::StaticMethodCall(_)
+            ast::Expr::StaticMethodCall(_)
             | ast::Expr::WithHandler(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
                 // `Elaborator::resolve_expr` arm. Each arm consults
@@ -2446,6 +2446,164 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             ok_type,
             span,
+        )
+    }
+
+    /// Reify a comparison chain `a < b < c …`. Mirrors
+    /// `Elaborator::desugar_comparison_chain` (operators.rs:1313+):
+    /// each middle term `m_k` binds to a `__m{k}` local so it is
+    /// not re-evaluated, and the chain reduces to
+    /// `(a < m_0) && (m_0 < m_1) && … && (m_{n-1} < tail)` wrapped
+    /// in a block that holds the `__mK` bindings.
+    ///
+    /// Native primitive comparisons emit `TirExprKind::Binary`
+    /// directly; non-primitive operands route through trait
+    /// dispatch in the elaborator. The trait-dispatch path inside
+    /// the chain is staged for a Stage 5 follow-up: the synthesised
+    /// inner comparisons have no source AST id, so Gap 11's
+    /// `operator_dispatch` record (keyed by AstId) doesn't catch
+    /// them. The primitive-only path covers the common fixture
+    /// shape (`x < y && y < z`); non-primitive chains fall to the
+    /// recovery shape (native Binary on whatever types the operands
+    /// land at, plus the elaborator's `RequiresTrait` diagnostic
+    /// will have already fired on the annotate side).
+    fn reify_comparison_chain(
+        &mut self,
+        chain: &ast::ComparisonChainExpr,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        use crate::tir::{TirBinaryOp, TirBlock, TirExprKind, TirStmtKind, TypeTable};
+
+        if chain.comparisons.is_empty() {
+            // Degenerate parse — annotate emits `chain.first` as-is.
+            return self.reify_expr(&chain.first, ctx, None);
+        }
+
+        if chain.comparisons.len() == 1 {
+            let cmp = &chain.comparisons[0];
+            let left = self.reify_expr(&chain.first, ctx, None);
+            let right = self.reify_expr(&cmp.right, ctx, Some(left.type_id));
+            let recorded_type = self
+                .sem
+                .types
+                .expression_types
+                .get(&chain.id)
+                .copied()
+                .unwrap_or(TypeTable::BOOL);
+            return TirExpr::new(
+                TirExprKind::Binary {
+                    left: Box::new(left),
+                    op: ast_binary_op_to_tir(cmp.op),
+                    right: Box::new(right),
+                },
+                recorded_type,
+                cmp.op_span,
+            );
+        }
+
+        ctx.enter_scope();
+        let mut stmts: Vec<TirStmt> = Vec::new();
+
+        let cmp0 = &chain.comparisons[0];
+        let first_tir = self.reify_expr(&chain.first, ctx, None);
+        let right0_tir = self.reify_expr(&cmp0.right, ctx, Some(first_tir.type_id));
+
+        // Bind first middle to `__m0`.
+        let m0_type = right0_tir.type_id;
+        let m0_name = "__m0".to_string();
+        let m0_index = ctx.add_local(m0_name.clone(), m0_type, false, None);
+        stmts.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: m0_name.clone(),
+                local_index: m0_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id: m0_type,
+                value: right0_tir,
+                skip_value_copy: false,
+            },
+            chain.span,
+        ));
+        let m0_ref = TirExpr::new(
+            TirExprKind::Local {
+                index: m0_index,
+                name: m0_name,
+            },
+            m0_type,
+            chain.span,
+        );
+
+        let mut acc_tir = TirExpr::new(
+            TirExprKind::Binary {
+                left: Box::new(first_tir),
+                op: ast_binary_op_to_tir(cmp0.op),
+                right: Box::new(m0_ref.clone()),
+            },
+            TypeTable::BOOL,
+            cmp0.op_span,
+        );
+        let mut prev_tir = m0_ref;
+
+        let last_idx = chain.comparisons.len() - 1;
+        for idx in 1..chain.comparisons.len() {
+            let cmp = &chain.comparisons[idx];
+            let raw_right = self.reify_expr(&cmp.right, ctx, Some(prev_tir.type_id));
+            let right_tir = if idx == last_idx {
+                raw_right
+            } else {
+                let m_type = raw_right.type_id;
+                let m_name = format!("__m{idx}");
+                let m_index = ctx.add_local(m_name.clone(), m_type, false, None);
+                stmts.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: m_name.clone(),
+                        local_index: m_index,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: m_type,
+                        value: raw_right,
+                        skip_value_copy: false,
+                    },
+                    chain.span,
+                ));
+                TirExpr::new(
+                    TirExprKind::Local {
+                        index: m_index,
+                        name: m_name,
+                    },
+                    m_type,
+                    chain.span,
+                )
+            };
+            let next_prev = right_tir.clone();
+            let cmp_tir = TirExpr::new(
+                TirExprKind::Binary {
+                    left: Box::new(prev_tir),
+                    op: ast_binary_op_to_tir(cmp.op),
+                    right: Box::new(right_tir),
+                },
+                TypeTable::BOOL,
+                cmp.op_span,
+            );
+            acc_tir = TirExpr::new(
+                TirExprKind::Binary {
+                    left: Box::new(acc_tir),
+                    op: TirBinaryOp::And,
+                    right: Box::new(cmp_tir),
+                },
+                TypeTable::BOOL,
+                chain.span,
+            );
+            prev_tir = next_prev;
+        }
+
+        ctx.exit_scope();
+
+        stmts.push(TirStmt::new(TirStmtKind::Expr(acc_tir), chain.span));
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, chain.span)),
+            TypeTable::BOOL,
+            chain.span,
         )
     }
 
