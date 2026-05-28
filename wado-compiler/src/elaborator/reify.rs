@@ -952,10 +952,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     labeled_block.span,
                 )]
             }
-            ast::Stmt::While(_)
-            | ast::Stmt::For(_)
-            | ast::Stmt::ForOf(_)
-            | ast::Stmt::Assert(_) => {
+            ast::Stmt::While(w) => self.reify_while(w, ctx),
+            ast::Stmt::For(_) | ast::Stmt::ForOf(_) | ast::Stmt::Assert(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
                 // `Elaborator::resolve_*` branches. `For` / `While` /
                 // `Assert` reads `sem.types.desugars[stmt.id()]` to
@@ -1251,6 +1249,74 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 todo!("reify_expr: {:?} variant pending body-walk reify", expr)
             }
         }
+    }
+
+    /// Reify a `while cond { body }` statement. Mirrors
+    /// `Elaborator::resolve_while`'s `Condition::Expr` arm
+    /// (stmt.rs:2982+): the loop lowers into
+    /// `Loop { if !cond { break; } body }`, which is the desugar
+    /// `DesugarKind::While` tags. `for_continue_labels` is saved /
+    /// restored around the body walk so naked `continue` inside
+    /// `while` targets this loop (not an enclosing C-style `for`).
+    fn reify_while(
+        &mut self,
+        w: &ast::WhileStmt,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TirStmt> {
+        use crate::tir::{TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable};
+
+        let span = w.span;
+        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
+
+        let stmts = match &w.condition {
+            ast::Condition::Expr(cond_expr) => {
+                let cond_span = cond_expr.span();
+                let cond_tir = self.reify_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                let neg_cond = TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Not,
+                        expr: Box::new(cond_tir),
+                    },
+                    TypeTable::BOOL,
+                    cond_span,
+                );
+                let break_stmt = TirStmt::new(
+                    TirStmtKind::Break {
+                        label: None,
+                        value: None,
+                    },
+                    span,
+                );
+                let if_break = TirStmt::new(
+                    TirStmtKind::If {
+                        condition: neg_cond,
+                        then_block: TirBlock::new(vec![break_stmt], span),
+                        else_block: None,
+                    },
+                    span,
+                );
+                let body_block = self.reify_block(&w.body, ctx, None);
+                let mut stmts = Vec::with_capacity(1 + body_block.stmts.len());
+                stmts.push(if_break);
+                stmts.extend(body_block.stmts);
+                stmts
+            }
+            ast::Condition::LetChain { .. } => {
+                // TODO(stage-5-bodies): `while let PAT = … { … }`
+                // shares the let-chain expansion with `if let` (see
+                // `reify_if_expr`'s LetChain branch). When that
+                // helper lands it should also drive this arm.
+                todo!("reify_while: LetChain pending body-walk reify")
+            }
+        };
+
+        ctx.for_continue_labels = saved_continue;
+        vec![TirStmt::new(
+            TirStmtKind::Loop {
+                body: TirBlock::new(stmts, span),
+            },
+            span,
+        )]
     }
 
     /// Reify a stmt-position `if cond { … } else { … }`. Stmt
