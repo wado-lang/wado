@@ -1141,6 +1141,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::TemplateString(template) => {
                 self.reify_template_string(template, ctx, recorded_type)
             }
+            ast::Expr::Matches(m) => self.reify_matches(m, ctx),
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
@@ -1236,7 +1237,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             | ast::Expr::ComparisonChain(_)
             | ast::Expr::StaticMethodCall(_)
             | ast::Expr::Index(_)
-            | ast::Expr::Matches(_)
             | ast::Expr::Closure(_)
             | ast::Expr::TryOp(_)
             | ast::Expr::WithHandler(_) => {
@@ -1750,6 +1750,54 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             struct_type,
             struct_lit.span,
+        )
+    }
+
+    /// Reify a `matches!`-style expression: `scrutinee matches { PAT
+    /// [if guard] }`. Desugars (tagged `DesugarKind::Matches` at
+    /// annotate time) into a two-arm match: pattern → true, wildcard
+    /// → false. Mirror `Elaborator::desugar_matches_expr`
+    /// (matches.rs:25+).
+    fn reify_matches(
+        &mut self,
+        m: &ast::MatchesExpr,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        use crate::tir::{TirExprKind, TirMatchArm, TirPattern, TypeTable};
+
+        let scrutinee = self.reify_expr(&m.expr, ctx, None);
+        let scrutinee_type = scrutinee.type_id;
+
+        ctx.enter_scope();
+        let pattern_tir = self.reify_pattern(&m.pattern, scrutinee_type, ctx);
+        let arm_body = match &m.guard {
+            Some(guard) => self.reify_expr(guard, ctx, Some(TypeTable::BOOL)),
+            None => TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, m.span),
+        };
+        ctx.exit_scope();
+
+        let arms = vec![
+            TirMatchArm {
+                pattern: pattern_tir,
+                guard: None,
+                body: arm_body,
+                span: m.span,
+            },
+            TirMatchArm {
+                pattern: TirPattern::Wildcard,
+                guard: None,
+                body: TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, m.span),
+                span: m.span,
+            },
+        ];
+
+        TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(scrutinee),
+                arms,
+            },
+            TypeTable::BOOL,
+            m.span,
         )
     }
 
