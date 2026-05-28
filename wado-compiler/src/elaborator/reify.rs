@@ -652,15 +652,116 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a free function. Builds a fresh `FunctionContext`, walks
     /// params + body, and assembles `TirFunction`. All inference
     /// decisions are read from `sem.types`; reify only emits TIR.
-    #[allow(unused_variables)]
+    ///
+    /// Stage 5 staging: the function shape is implemented (return type
+    /// from `sem.decls.function_return_types`, parameters added in
+    /// declaration order to pin the walk-order invariant, body
+    /// delegated to [`Self::reify_block`]). Generic-bound checking,
+    /// effect-param scoping, the `<F: fn(…)>` bound realisation pass,
+    /// and `extract_*` attribute helpers are left to a follow-up — they
+    /// are pure projections that don't depend on the body walk, but
+    /// would duplicate `Elaborator` helpers and balloon this file.
     fn reify_function(&mut self, func: &ast::Function) -> Option<TirFunction> {
-        // TODO(stage-5-bodies): mirror `Elaborator::resolve_function`.
-        // Construct a `FunctionContext` with the function's return
-        // type (read from `sem.decls.function_return_types[&func.name]`).
-        // Add params via `ctx.add_local` in declaration order — this
-        // pins the `FunctionContext::locals` walk-order invariant.
-        // Walk the body via `reify_block`; emit `TirFunction`.
-        todo!("reify_function: pending body-walk reify")
+        let return_type = self
+            .sem
+            .decls
+            .function_return_types
+            .get(&func.name)
+            .copied()
+            .unwrap_or(crate::tir::TypeTable::UNIT);
+
+        let mut ctx = FunctionContext::new(return_type, func.name.clone());
+        if func.is_async {
+            ctx.is_async = true;
+            ctx.task_return_type = Some(return_type);
+        }
+
+        let type_param_names: Vec<String> = func
+            .type_params
+            .iter()
+            .filter(|p| !p.is_effect)
+            .map(|p| p.name.clone())
+            .collect();
+
+        let mut params = Vec::with_capacity(func.params.len());
+        for param in &func.params {
+            let type_id = self.resolve_type_in_scope(&param.ty, &type_param_names);
+            let default_expr = param.default.as_ref().map(|default_ast| {
+                Box::new(self.reify_expr(default_ast, &mut ctx, Some(type_id)))
+            });
+            let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
+            params.push(tir::TirParam {
+                name: param.name.clone(),
+                type_id,
+                local_index: index,
+                is_mut: param.is_mut,
+                default_expr,
+                span: param.span,
+            });
+        }
+
+        let body = func
+            .body
+            .as_ref()
+            .map(|b| self.reify_block(b, &mut ctx, None));
+
+        let mut non_effect_non_fn_idx: u32 = 0;
+        let type_params: Vec<crate::tir::TirTypeParam> = func
+            .type_params
+            .iter()
+            .filter_map(|p| {
+                if p.is_effect {
+                    return None;
+                }
+                if p.bounds.iter().any(|b| b.fn_signature.is_some()) {
+                    return None;
+                }
+                let idx = non_effect_non_fn_idx;
+                non_effect_non_fn_idx += 1;
+                let default = p.default.as_ref().map(|ty| self.resolve_type(ty));
+                Some(crate::tir::TirTypeParam {
+                    name: p.name.clone(),
+                    is_effect: p.is_effect,
+                    is_pack: p.is_pack,
+                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                    default,
+                    index: idx,
+                })
+            })
+            .collect();
+
+        Some(TirFunction {
+            module_source: ModuleSource::default(),
+            name: func.name.clone(),
+            is_pub: func.is_pub,
+            is_export: func.is_export,
+            is_async: func.is_async,
+            type_params,
+            impl_type_params: vec![],
+            monomorph_info: None,
+            method_info: None,
+            params,
+            return_type,
+            task_return_type: if func.is_async { Some(return_type) } else { None },
+            effects: vec![],
+            stores: func.stores.clone(),
+            body,
+            span: func.span,
+            local_count: ctx.next_local,
+            locals: ctx.locals.clone(),
+            address_taken_locals: ctx.address_taken_locals,
+            stores_aliased_locals: crate::hashmap::IndexSet::default(),
+            is_cm_binding: false,
+            is_dispatch_wrapper: false,
+            is_cm_export: false,
+            is_ambient: false,
+            inline_hint: tir::InlineHint::Auto,
+            compiler_item: None,
+            export_name: None,
+            allocator_tag: None,
+            kind: tir::FunctionKind::Regular,
+            return_abi: tir::ReturnAbi::Single,
+        })
     }
 
     /// Reify every method (regular + synthesised default) on an `impl`
@@ -690,14 +791,37 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         todo!("reify_test_decl: pending body-walk reify")
     }
 
-    /// Reify a `global g: T = expr;` declaration.
-    #[allow(unused_variables)]
+    /// Reify a `global g: T = expr;` declaration. The declared type
+    /// was already resolved by annotate_decls and lives on
+    /// `sem.decls.current_module_globals`; reify reads it back and
+    /// walks the initializer through a minimal `FunctionContext`.
+    /// `is_nullable` / `lazy_init` are populated by the lower phase
+    /// (kept `false` here, matching `Elaborator::resolve_global`).
     fn reify_global(&mut self, global_decl: &ast::GlobalDecl) -> Option<TirGlobal> {
-        // TODO(stage-5-bodies): mirror `Elaborator::resolve_global`
-        // (item.rs:700–733). Single-expression initializer in a minimal
-        // `FunctionContext`; the type was already resolved by annotate
-        // and is on `sem.decls.current_module_globals`.
-        todo!("reify_global: pending body-walk reify")
+        let ty = self
+            .sem
+            .decls
+            .current_module_globals
+            .get(&global_decl.name)
+            .map(|(t, _)| *t)
+            .unwrap_or_else(|| self.resolve_type(&global_decl.ty));
+
+        let mut ctx = FunctionContext::new(ty, format!("global:{}", global_decl.name));
+        let initializer = self.reify_expr(&global_decl.initializer, &mut ctx, Some(ty));
+
+        Some(TirGlobal {
+            name: global_decl.name.clone(),
+            ty,
+            initializer,
+            mutable: global_decl.mutable,
+            wado_mutable: global_decl.mutable,
+            is_pub: global_decl.is_pub,
+            module_source: self.current_module_source.clone(),
+            span: global_decl.span,
+            is_nullable: false,
+            lazy_init: false,
+            locals: ctx.locals.clone(),
+        })
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -706,34 +830,91 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a block expression — walks each statement in order so
     /// `FunctionContext::locals` matches what annotate produced.
-    #[allow(unused_variables)]
     pub(super) fn reify_block(
         &mut self,
         block: &ast::Block,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TirBlock {
-        // TODO(stage-5-bodies): walk `block.stmts` via `reify_stmt`;
-        // handle the trailing expression's type via
-        // `sem.types.expression_types[trailing.id()]`.
-        todo!("reify_block: pending body-walk reify")
+        ctx.enter_scope();
+        let len = block.stmts.len();
+        let mut stmts = Vec::new();
+        for (i, s) in block.stmts.iter().enumerate() {
+            // Propagate expected type to the last expression-form
+            // statement for coercion, mirroring
+            // `Elaborator::resolve_block` (stmt.rs:31–69).
+            if expected_type.is_some() && i == len - 1 {
+                if let ast::Stmt::Expr(expr_stmt) = s {
+                    let expr = self.reify_expr(&expr_stmt.expr, ctx, expected_type);
+                    stmts.push(TirStmt::new(
+                        crate::tir::TirStmtKind::Expr(expr),
+                        expr_stmt.span,
+                    ));
+                    continue;
+                }
+            }
+            stmts.extend(self.reify_stmt(s, ctx));
+        }
+        ctx.exit_scope();
+        TirBlock::new(stmts, block.span)
     }
 
     /// Reify a statement. Dispatches on `Stmt::*`; `Let` adds a local
     /// (preserving walk-order), `For` / `While` / `Assert` consult
     /// `sem.types.desugars` to pick the right expansion path.
-    #[allow(unused_variables)]
     pub(super) fn reify_stmt(
         &mut self,
         stmt: &ast::Stmt,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
-        // TODO(stage-5-bodies): mirror `Elaborator::resolve_stmt`. The
-        // for-of / while / if-let / assert / compound-assign branches
-        // consult `sem.types.desugars[stmt.id()]` to pick the recorded
-        // expansion path; the iterator path reads
-        // `sem.types.for_of_iterator`.
-        todo!("reify_stmt: pending body-walk reify")
+        use crate::tir::TirStmtKind;
+        match stmt {
+            ast::Stmt::Expr(expr_stmt) => {
+                let expr = self.reify_expr(&expr_stmt.expr, ctx, None);
+                vec![TirStmt::new(TirStmtKind::Expr(expr), expr_stmt.span)]
+            }
+            ast::Stmt::Return(ret_stmt) => {
+                let value = ret_stmt
+                    .value
+                    .as_ref()
+                    .map(|e| self.reify_expr(e, ctx, Some(ctx.return_type)));
+                vec![TirStmt::new(TirStmtKind::Return { value }, ret_stmt.span)]
+            }
+            ast::Stmt::TaskReturn(tr_stmt) => {
+                let expected = ctx.task_return_type;
+                let value = self.reify_expr(&tr_stmt.value, ctx, expected);
+                vec![TirStmt::new(TirStmtKind::TaskReturn { value }, tr_stmt.span)]
+            }
+            ast::Stmt::Break(break_stmt) => vec![TirStmt::new(
+                TirStmtKind::Break {
+                    label: break_stmt.label.clone(),
+                    value: break_stmt
+                        .value
+                        .as_ref()
+                        .map(|e| self.reify_expr(e, ctx, None)),
+                },
+                break_stmt.span,
+            )],
+            ast::Stmt::Continue(continue_stmt) => {
+                vec![TirStmt::new(TirStmtKind::Continue, continue_stmt.span)]
+            }
+            ast::Stmt::Let(_)
+            | ast::Stmt::If(_)
+            | ast::Stmt::While(_)
+            | ast::Stmt::For(_)
+            | ast::Stmt::ForOf(_)
+            | ast::Stmt::Loop(_)
+            | ast::Stmt::Match(_)
+            | ast::Stmt::Assert(_)
+            | ast::Stmt::LabeledBlock(_) => {
+                // TODO(stage-5-bodies): mirror the corresponding
+                // `Elaborator::resolve_*` branches. `For` / `While` /
+                // `Assert` reads `sem.types.desugars[stmt.id()]` to
+                // pick the recorded expansion path; the iterator path
+                // additionally reads `sem.types.for_of_iterator`.
+                todo!("reify_stmt: {:?} variant pending body-walk reify", stmt)
+            }
+        }
     }
 
     /// Reify an expression. Reads `sem.types.expression_types` for the
@@ -742,34 +923,143 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `sem.types.desugars` for desugar expansions, and
     /// `sem.types.generic_instantiations` for generic call /
     /// struct-literal / variant-ctor type args.
-    #[allow(unused_variables)]
     pub(super) fn reify_expr(
         &mut self,
         expr: &ast::Expr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
-        // TODO(stage-5-bodies): the longest method in this file. Mirrors
-        // `Elaborator::resolve_expr`'s `Expr::*` dispatch but reads each
-        // decision from `sem.types` instead of recomputing.
-        //
-        // For each arm:
-        // - Look up `sem.types.expression_types[expr.id()]` for the
-        //   resolved type.
-        // - If `sem.types.coercions[expr.id()]` is Some, the underlying
-        //   expression is built first and then wrapped per the recorded
-        //   `CoercionKind`.
-        // - If `sem.types.desugars[expr.id()]` is Some, follow the
-        //   recorded desugar path (NewtypeFromCollapse / IndexMutMethodCall
-        //   / Matches / ComparisonChain / …).
-        // - Method calls read `sem.types.method_dispatch[expr.id()]` for
-        //   the dispatch target and feed receiver adjustment from
-        //   `self_kind` + `is_ref_impl`.
-        // - Closures read `sem.types.closure_captures[expr.id()]` for the
-        //   capture list.
-        // - Generic call / struct / variant sites read
-        //   `sem.types.generic_instantiations[expr.id()]` for type_args.
-        todo!("reify_expr: pending body-walk reify")
+        use crate::tir::{TirExprKind, TypeTable};
+
+        // The expression's recorded type is the source of truth for
+        // `TirExpr::type_id`. Falls back to `expected_type` (or
+        // `UNKNOWN` when neither is available) for AST shapes that
+        // evaporated during annotate (e.g. a stmt-position match
+        // whose recorder fires only at the stmt level).
+        let recorded_type = self
+            .sem
+            .types
+            .expression_types
+            .get(&expr.id())
+            .copied()
+            .or(expected_type)
+            .unwrap_or(TypeTable::UNKNOWN);
+        let span = expr.span();
+
+        match expr {
+            ast::Expr::Literal(lit) => self.reify_literal(lit, recorded_type, ctx),
+            ast::Expr::Block(block) => {
+                let block_tir = self.reify_block(block, ctx, expected_type);
+                TirExpr::new(TirExprKind::Block(block_tir), recorded_type, span)
+            }
+            ast::Expr::Ident(_)
+            | ast::Expr::Binary(_)
+            | ast::Expr::Unary(_)
+            | ast::Expr::Assign(_)
+            | ast::Expr::CompoundAssign(_)
+            | ast::Expr::ComparisonChain(_)
+            | ast::Expr::Call(_)
+            | ast::Expr::MethodCall(_)
+            | ast::Expr::StaticMethodCall(_)
+            | ast::Expr::FieldAccess(_)
+            | ast::Expr::Index(_)
+            | ast::Expr::If(_)
+            | ast::Expr::Match(_)
+            | ast::Expr::Matches(_)
+            | ast::Expr::Closure(_)
+            | ast::Expr::TemplateString(_)
+            | ast::Expr::Cast(_)
+            | ast::Expr::StructLiteral(_)
+            | ast::Expr::TupleLiteral(_)
+            | ast::Expr::LabeledBlock(_)
+            | ast::Expr::TryOp(_)
+            | ast::Expr::Spread(_, _)
+            | ast::Expr::Range(_)
+            | ast::Expr::WithHandler(_)
+            | ast::Expr::Resume(_) => {
+                // TODO(stage-5-bodies): mirror the corresponding
+                // `Elaborator::resolve_expr` arm. Each arm consults
+                // `sem.types.{expression_types, coercions,
+                // method_dispatch, desugars, generic_instantiations,
+                // closure_captures, assert_captures, for_of_iterator}`
+                // as documented at the call site.
+                todo!("reify_expr: {:?} variant pending body-walk reify", expr)
+            }
+        }
+    }
+
+    /// Reify a literal expression into its TIR shape. The recorded
+    /// `TypeId` from `sem.types.expression_types` carries the final
+    /// numeric type (e.g. an `i32` literal coerced to `i64` is recorded
+    /// as `i64`), so this helper does not re-run literal-type defaulting.
+    fn reify_literal(
+        &mut self,
+        lit: &ast::LiteralExpr,
+        recorded_type: TypeId,
+        ctx: &FunctionContext,
+    ) -> TirExpr {
+        use crate::tir::{TirExprKind, TypeTable};
+        let kind = match &lit.value {
+            ast::Literal::Number(repr) => {
+                // The recorded type tells us whether to emit an Int or
+                // a Float TIR literal. Parsing the digits is done here
+                // (same logic as `Elaborator::resolve_numeric_literal`
+                // at expr.rs ≈648–765, sans the type-defaulting tree).
+                if recorded_type == TypeTable::F32 || recorded_type == TypeTable::F64 {
+                    let value: f64 = repr.parse().unwrap_or(0.0);
+                    TirExprKind::FloatLiteral {
+                        value,
+                        repr: repr.clone(),
+                    }
+                } else {
+                    let value: u64 = if let Some(stripped) = repr.strip_prefix("0x") {
+                        u64::from_str_radix(stripped, 16).unwrap_or(0)
+                    } else if let Some(stripped) = repr.strip_prefix("0o") {
+                        u64::from_str_radix(stripped, 8).unwrap_or(0)
+                    } else if let Some(stripped) = repr.strip_prefix("0b") {
+                        u64::from_str_radix(stripped, 2).unwrap_or(0)
+                    } else {
+                        repr.parse::<u64>().unwrap_or(0)
+                    };
+                    TirExprKind::IntLiteral {
+                        value,
+                        repr: repr.clone(),
+                    }
+                }
+            }
+            ast::Literal::String(s) => TirExprKind::StringLiteral(s.clone()),
+            ast::Literal::Char(s) => {
+                // The Char literal is the raw source text (e.g. "'a'").
+                // Strip the quotes and decode escapes the same way the
+                // elaborator does. Stage 5 follow-up: share the decoder
+                // with `Elaborator::resolve_char_literal` instead of
+                // re-implementing here.
+                let inner = s.trim_start_matches('\'').trim_end_matches('\'');
+                let ch = inner.chars().next().unwrap_or('\0');
+                TirExprKind::CharLiteral(ch)
+            }
+            ast::Literal::Bool(b) => TirExprKind::BoolLiteral(*b),
+            ast::Literal::Null => TirExprKind::Null,
+            ast::Literal::Unit => TirExprKind::Unit,
+            ast::Literal::LocationFunction => {
+                TirExprKind::StringLiteral(ctx.function_name.clone())
+            }
+            ast::Literal::LocationFile
+            | ast::Literal::LocationLine
+            | ast::Literal::DataSection
+            | ast::Literal::IncludeStr(_)
+            | ast::Literal::IncludeBytes(_) => {
+                // TODO(stage-5-bodies): mirror the host-driven branches
+                // of `Elaborator::resolve_literal`. `#file`/`#line`
+                // need the logger's current file context;
+                // `#include_str("path")` and `#include_bytes("path")`
+                // additionally need the resolved bytes from
+                // `tysys.included_files`. `#data` reads from
+                // `Module::data_section`.
+                todo!("reify_literal: location / include / data-section pending")
+            }
+        };
+        TirExpr::new(kind, recorded_type, lit.span)
     }
 
     /// Reify a pattern in a `let`, `match`, `if let`, or `while let`.
@@ -782,8 +1072,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         scrutinee_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> TirPattern {
-        // TODO(stage-5-bodies): mirror `Elaborator::resolve_if_pattern_inner`
-        // and the pattern paths inside `resolve_match_expr`.
-        todo!("reify_pattern: pending body-walk reify")
+        match pattern {
+            ast::Pattern::Wildcard => TirPattern::Wildcard,
+            _ => {
+                // TODO(stage-5-bodies): mirror
+                // `Elaborator::resolve_if_pattern_inner`'s remaining
+                // arms (Ident, Tuple, Struct, Variant, Enum, Literal,
+                // Range, Or, Binding).
+                todo!("reify_pattern: variant pending body-walk reify")
+            }
+        }
     }
 }
