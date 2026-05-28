@@ -13,25 +13,56 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  tidy:
-    name: Tidy
-    if: github.event.pull_request.head.repo.full_name == github.repository
+  # Detects when the latest commit on the PR was produced by this workflow
+  # itself ("chore: tidy" by a GitHub App bot). In that case the heavy tidy
+  # jobs are skipped and the aggregator `tidy` job short-circuits to success.
+  # This avoids re-running tidy on its own output (which is idempotent by
+  # construction) and prevents a buggy step from producing an infinite
+  # push loop.
+  precheck:
+    name: Precheck
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should-run: ${{ steps.check.outputs.should-run }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 1
+
+      - id: check
+        run: |
+          msg=$(git log -1 --pretty=%s)
+          email=$(git log -1 --pretty=%ae)
+          if [ "$msg" = "chore: tidy" ] && [[ "$email" == *"[bot]"* ]]; then
+            echo "Latest commit is a tidy bot commit; short-circuiting."
+            echo "should-run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should-run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Tasks that don't need the `wado` binary built first. Runs in parallel
+  # with `tidy-wado`. Uploads its diff as an artifact for the aggregator
+  # to apply.
+  #
+  # `format-md` lives here (rather than in `tidy-wado`) to balance wall-clock
+  # time between the two parallel jobs. The boundary is no longer strictly
+  # "does this step need the wado binary?" — `format-md` does need
+  # wado-dev-tools, but `cargo run -p wado-dev-tools` builds it on demand and
+  # the cost is dwarfed by tidy-wado's `cargo build` + golden regeneration.
+  tidy-rust:
+    name: Tidy (Rust)
+    needs: precheck
+    if: needs.precheck.outputs.should-run == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: "${{ secrets.GH_APP_ID }}"
-          private-key: "${{ secrets.GH_APP_PRIVATE_KEY }}"
-          permission-contents: write
-
       - uses: actions/checkout@v6
         with:
-          token: "${{ steps.app-token.outputs.token }}"
-          ref: "${{ github.head_ref }}"
+          ref: ${{ github.head_ref }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -45,33 +76,187 @@ jobs:
           MISE_VERBOSE: ${{ runner.debug }}
 
       - run: mise run clippy-fix
+      - run: cargo fmt --all
+      - run: cargo run -p wado-dev-tools --quiet -- format-md
+
+      - name: Capture diff
+        run: |
+          git add -A
+          git diff --cached --binary > tidy-rust.patch
+          touch tidy-rust.patch
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tidy-rust-patch
+          path: tidy-rust.patch
+          retention-days: 1
+          include-hidden-files: false
+
+  # Tasks that require `wado` / `wado-dev-tools` binaries to be built.
+  # `wado doc -f markdown` is itself dprint-stable (see wado-cli/src/doc.rs),
+  # so the regenerated `docs/stdlib-*.md` files do not need a follow-up
+  # format pass — committed stdlib docs are always dprint-stable, so the
+  # `format-md` step in tidy-rust is a no-op against them and the two
+  # parallel patches do not conflict on `docs/stdlib-*.md`.
+  tidy-wado:
+    name: Tidy (Wado)
+    needs: precheck
+    if: needs.precheck.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+
+      - uses: jdx/mise-action@v4
+        with:
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          MISE_VERBOSE: ${{ runner.debug }}
+
       - run: cargo build --bin wado --bin wado-dev-tools
       - run: mise run update-golden-fixtures
       - run: mise run update-golden-format-fixtures
       - run: mise run doc-stdlib
-      # Refresh the Gale kiln caches (package-gale/tests/generated/**/*.kiln.json).
-      # Their generator_source_hash goes stale whenever package-gale/src/* (or a
-      # merge of it) changes; the Gale O1/O2/O3 jobs then cache-miss on every
-      # fixture and run slow without ever failing. Regenerating here keeps the
-      # committed caches in sync, mirroring how WIR golden fixtures are handled.
-      # `--no-run` skips the wasmtime execution phase — Phase 1 (compile) is all
-      # that's needed to rewrite each `<primary>.kiln.json`, and the actual Gale
-      # test matrix already runs in `ci.yml`.
+      # See tidy.yml history for the rationale of refreshing Gale kiln caches
+      # (package-gale/tests/generated/**/*.kiln.json) on every tidy run.
       - run: ./target/debug/wado test --no-run package-gale
-      - run: mise run format
 
-      - name: Commit and push changes
+      - name: Capture diff
+        run: |
+          git add -A
+          git diff --cached --binary > tidy-wado.patch
+          touch tidy-wado.patch
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tidy-wado-patch
+          path: tidy-wado.patch
+          retention-days: 1
+          include-hidden-files: false
+
+  # Aggregator. Required-check name stays "Tidy" for branch protection
+  # compatibility. Behavior:
+  # - If `precheck.should-run=false` (latest commit is a tidy bot commit),
+  #   short-circuit to success immediately.
+  # - Otherwise apply both upstream patches. If the result differs from
+  #   HEAD:
+  #     * On an internal PR (head repo == this repo), push a `chore: tidy`
+  #       commit. The push retriggers this workflow; the next run hits the
+  #       short-circuit and goes green.
+  #     * On a fork PR (no write access, secrets unavailable), skip the
+  #       push and emit guidance for the fork author.
+  #   Either way, the job exits non-zero so the check is red until tidy
+  #   is satisfied.
+  tidy:
+    name: Tidy
+    needs: [precheck, tidy-rust, tidy-wado]
+    if: always() && needs.precheck.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Short-circuit when latest commit is a tidy bot commit
+        if: needs.precheck.outputs.should-run == 'false'
+        run: echo "Latest commit was produced by tidy; nothing to do."
+
+      - name: Fail if upstream tidy jobs did not succeed
+        if: >-
+          needs.precheck.outputs.should-run == 'true' &&
+          (needs.tidy-rust.result != 'success' || needs.tidy-wado.result != 'success')
+        run: |
+          echo "tidy-rust: ${{ needs.tidy-rust.result }}"
+          echo "tidy-wado: ${{ needs.tidy-wado.result }}"
+          exit 1
+
+      - name: Determine push capability
+        id: cap
+        if: needs.precheck.outputs.should-run == 'true'
+        run: |
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" = "${{ github.repository }}" ]; then
+            echo "can-push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can-push=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate GitHub App token
+        id: app-token
+        if: needs.precheck.outputs.should-run == 'true' && steps.cap.outputs.can-push == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: "${{ secrets.GH_APP_ID }}"
+          private-key: "${{ secrets.GH_APP_PRIVATE_KEY }}"
+          permission-contents: write
+
+      - uses: actions/checkout@v6
+        if: needs.precheck.outputs.should-run == 'true'
+        with:
+          token: "${{ steps.app-token.outputs.token || github.token }}"
+          ref: "${{ github.head_ref }}"
+
+      - uses: actions/download-artifact@v4
+        if: needs.precheck.outputs.should-run == 'true'
+        with:
+          name: tidy-rust-patch
+
+      - uses: actions/download-artifact@v4
+        if: needs.precheck.outputs.should-run == 'true'
+        with:
+          name: tidy-wado-patch
+
+      - name: Apply patches
+        if: needs.precheck.outputs.should-run == 'true'
+        run: |
+          set -e
+          if [ -s tidy-rust.patch ]; then
+            git apply --index --whitespace=nowarn tidy-rust.patch
+          fi
+          if [ -s tidy-wado.patch ]; then
+            git apply --index --whitespace=nowarn tidy-wado.patch
+          fi
+
+      - name: Detect changes
+        id: changes
+        if: needs.precheck.outputs.should-run == 'true'
+        run: |
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected:"
+            git diff --cached --stat
+          fi
+
+      - name: Commit and push (internal PR only)
+        if: >-
+          needs.precheck.outputs.should-run == 'true' &&
+          steps.changes.outputs.changed == 'true' &&
+          steps.cap.outputs.can-push == 'true'
         env:
           GH_TOKEN: "${{ steps.app-token.outputs.token }}"
           APP_SLUG: "${{ steps.app-token.outputs.app-slug }}"
         run: |
-          git add -A
-          if git diff --cached --quiet; then
-            echo "Working tree is clean"
-            exit 0
-          fi
           user_id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
           git commit -m "chore: tidy"
           git push
+
+      - name: Fail if changes were needed
+        if: >-
+          needs.precheck.outputs.should-run == 'true' &&
+          steps.changes.outputs.changed == 'true'
+        run: |
+          if [ "${{ steps.cap.outputs.can-push }}" = "true" ]; then
+            echo "::error::Tidy produced changes and pushed a 'chore: tidy' commit. Pull the latest before continuing."
+          else
+            echo "::error::Tidy produced changes. Fork PRs cannot be auto-pushed; run 'mise run clippy-fix && cargo fmt --all && mise run update-golden-fixtures && mise run update-golden-format-fixtures && mise run doc-stdlib && cargo run -p wado-dev-tools -- format-md' locally and push the result."
+          fi
+          exit 1
