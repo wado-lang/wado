@@ -5653,17 +5653,65 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::TirExprKind;
 
-        // 1. Local binding (parameter, let, closure param) — walk-order
-        //    invariant guarantees the same index annotate produced.
-        if let Some(local) = ctx.lookup(&ident.name) {
-            return TirExpr::new(
-                TirExprKind::Local {
-                    index: local.index,
-                    name: ident.name.clone(),
-                },
-                recorded_type,
-                ident.span,
-            );
+        // 1. Local binding (parameter, let, closure param) and closure
+        //    captures. `lookup_or_capture` mirrors production's
+        //    `resolve_ident` (expr.rs:534+): inside a closure, an outer
+        //    binding lands as `TirExprKind::Capture` (or a `Deref` of a
+        //    capture for `&mut` proxies via the `__ref_v` mut-capture
+        //    pre-pass). Outside a closure the lookup behaves like
+        //    `ctx.lookup` and returns `VarRef::Local`.
+        if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
+            match var_ref {
+                super::types::VarRef::Local {
+                    index, type_id, ..
+                } => {
+                    let _ = type_id;
+                    return TirExpr::new(
+                        TirExprKind::Local {
+                            index,
+                            name: ident.name.clone(),
+                        },
+                        recorded_type,
+                        ident.span,
+                    );
+                }
+                super::types::VarRef::Capture {
+                    index, type_id, ..
+                } => {
+                    let _ = type_id;
+                    return TirExpr::new(
+                        TirExprKind::Capture {
+                            index,
+                            name: ident.name.clone(),
+                        },
+                        recorded_type,
+                        ident.span,
+                    );
+                }
+                super::types::VarRef::DerefCapture {
+                    index,
+                    ref_type_id,
+                    inner_type_id,
+                    ..
+                } => {
+                    let capture_expr = TirExpr::new(
+                        TirExprKind::Capture {
+                            index,
+                            name: format!("__deref_cap_{index}"),
+                        },
+                        ref_type_id,
+                        ident.span,
+                    );
+                    return TirExpr::new(
+                        TirExprKind::Unary {
+                            op: crate::tir::TirUnaryOp::Deref,
+                            expr: Box::new(capture_expr),
+                        },
+                        inner_type_id,
+                        ident.span,
+                    );
+                }
+            }
         }
 
         // 2. Current-module global.
