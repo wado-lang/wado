@@ -405,8 +405,16 @@ migration; see Trade-offs.
       hover path. The stdlib snapshot seeds every map back into
       per-module storage so cached stdlib modules stay consistent.
 - [ ] **Stage 5 — `annotate_bodies` / `reify` split.** _In progress._
-      Recording half complete: every Gap (1–6, 9, 11) is wired
-      end-to-end. `Reify<'a, H>` lands in `elaborator/reify.rs`
+      Recording half complete: every Gap (1–6, 9, 11, 12) is
+      wired end-to-end. Orchestration scaffold landed —
+      `WADO_REIFY=1` env-var opt-in routes
+      `build_tir_from_state` through `Reify::reify_module` after
+      the existing `resolve_module` walk populates
+      `ModuleSemantics`. Default-path tests (558) unchanged;
+      `WADO_REIFY=1` tests pass 556/558 (the two
+      `stdlib_snapshot` cases hit the residual tuple-for-of
+      `todo!`, the only common variant still pending).
+      `Reify<'a, H>` lands in `elaborator/reify.rs`
       with a complete per-Item dispatch surface and the
       `Reify::new` constructor the orchestration driver needs.
       Decl items (`Enum`, `Flags`, `Newtype`, `Struct` modulo
@@ -437,14 +445,9 @@ migration; see Trade-offs.
       same-error-type Result)}`. Receiver adjustment shares
       `adjust_receiver_for_self_kind_static`.
       Remaining (each carries a labelled `todo!`):
-      `reify_impl` (impl-block scaffolding — trait dispatch,
-      synthesis requests, ref-type impl unwrapping);
-      field-default expressions on `reify_struct`;
-      `Expr::{StaticMethodCall, WithHandler}` and closure-call /
-      indirect-call shapes of `Call`; `Stmt::ForOf` tuple +
-      variadic paths and `.enumerate()` unwrap (the
-      IntoIterator path is concrete); `If` / `While` / `For
-      (Condition::LetChain)`; per-arg `is_mut` /
+      `Stmt::ForOf` tuple + variadic paths and `.enumerate()`
+      unwrap (the IntoIterator path is concrete); field-default
+      expressions on `reify_struct`; per-arg `is_mut` /
       literal-coercion records for `Call` / `MethodCall`;
       `CompoundAssign` IndexMut-target rewrite;
       power-assert slot-extraction template; Result `?` with
@@ -452,12 +455,11 @@ migration; see Trade-offs.
       non-primitive operator-trait dispatch;
       `MethodCall::IndexMutMethodCall` synthesis (Gap 3
       desugar; the recording fires, the reify replay is
-      pending).
-      Orchestration switch (rebind `build_tir_from_state` so
-      reify produces the TirModule and the existing combined
-      walk's TIR-emission half retires as dead code) is the
-      final gate; the remaining `todo!`s are the work it
-      waits on.
+      pending); `Expr::WithHandler` (effect handler `with`).
+      Dead-code removal (drop the existing combined walk's
+      TIR-emission half and the `WADO_REIFY` opt-in gate) is
+      the final cleanup once the residual `todo!`s land and
+      the `WADO_REIFY=1` test suite goes green.
 - [ ] **Stage 6 — Liveness and DCE.**
 - [ ] **Stage 7 — Cleanup.**
 

@@ -1002,7 +1002,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             method_info: Some(method_info),
             params,
             return_type,
-            task_return_type: if func.is_async { Some(return_type) } else { None },
+            task_return_type: if func.is_async {
+                Some(return_type)
+            } else {
+                None
+            },
             effects: vec![],
             stores: func.stores.clone(),
             body,
@@ -1509,7 +1513,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Index(index) => self.reify_index(index, ctx, recorded_type),
             ast::Expr::ComparisonChain(chain) => self.reify_comparison_chain(chain, ctx),
-            ast::Expr::StaticMethodCall(static_call) => self.reify_static_method_call(static_call, ctx, recorded_type),
+            ast::Expr::StaticMethodCall(static_call) => {
+                self.reify_static_method_call(static_call, ctx, recorded_type)
+            }
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
@@ -2088,9 +2094,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 use crate::tir::{TirExprKind, TirMatchArm, TirPattern};
                 let single_let = if elements.len() == 1 {
                     match &elements[0] {
-                        ast::ConditionElement::Let { pattern, expr, span: elem_span } => {
-                            Some((pattern, expr, *elem_span))
-                        }
+                        ast::ConditionElement::Let {
+                            pattern,
+                            expr,
+                            span: elem_span,
+                        } => Some((pattern, expr, *elem_span)),
                         _ => None,
                     }
                 } else {
@@ -2237,9 +2245,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         expected_type: Option<TypeId>,
         span: crate::token::Span,
     ) -> Vec<TirStmt> {
-        use crate::tir::{
-            TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind, TypeTable,
-        };
+        use crate::tir::{TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind, TypeTable};
 
         if elements.is_empty() {
             return self.reify_block(then_block_ast, ctx, expected_type).stmts;
@@ -2282,8 +2288,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     None => TypeTable::UNIT,
                 };
                 let else_arm_span = else_tir.as_ref().map_or(span, |b| b.span);
-                let match_type = crate::tir::agree_branch_types(then_type, else_type)
-                    .unwrap_or(TypeTable::UNIT);
+                let match_type =
+                    crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
                 let then_body = TirExpr::new(TirExprKind::Block(inner_block), then_type, span);
                 let else_body = match else_tir {
                     Some(b) => {
@@ -3798,14 +3804,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source,
                     ..
                 }
-                | ResolvedType::Variant { name, module_source }
-                | ResolvedType::Flags { name, module_source } => (name, module_source),
+                | ResolvedType::Variant {
+                    name,
+                    module_source,
+                }
+                | ResolvedType::Flags {
+                    name,
+                    module_source,
+                } => (name, module_source),
                 _ => (String::new(), self.current_module_source.clone()),
             }
         };
 
-        let mangled_method_name =
-            MethodName::format_local(&struct_name, None, &static_call.method);
+        let mangled_method_name = MethodName::format_local(&struct_name, None, &static_call.method);
 
         let explicit_method_type_args: Vec<TypeId> = static_call
             .type_args
@@ -3980,11 +3991,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Non-fn-typed non-ident callee — annotate already
             // diagnosed it (`TypeError::CalleeNotCallable`).
             // Match the elaborator's recovery shape.
-            return TirExpr::new(
-                TirExprKind::Unit,
-                crate::tir::TypeTable::ERROR,
-                span,
-            );
+            return TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, span);
         }
 
         // Free-function call: bare-ident callee that names a current-
@@ -4064,11 +4071,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
                 // Unresolved: emit recovery shape matching
                 // annotate's diagnostic path.
-                return TirExpr::new(
-                    TirExprKind::Unit,
-                    crate::tir::TypeTable::ERROR,
-                    span,
-                );
+                return TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, span);
             };
 
             // Type args: explicit turbofish on the call expression,
@@ -4177,8 +4180,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 })
                 .unwrap_or_else(|| self.current_module_source.clone());
 
-            let mangled_method_name =
-                crate::name::MethodName::format_local(prefix, None, suffix);
+            let mangled_method_name = crate::name::MethodName::format_local(prefix, None, suffix);
 
             let type_args: Vec<TypeId> = if !call.type_args.is_empty() {
                 call.type_args
@@ -4200,11 +4202,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
                 .collect();
 
-            let method_info = crate::name::LocalMethodName::new(
-                prefix.to_string(),
-                None,
-                suffix.to_string(),
-            );
+            let method_info =
+                crate::name::LocalMethodName::new(prefix.to_string(), None, suffix.to_string());
 
             return TirExpr::new(
                 TirExprKind::Call {

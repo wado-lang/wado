@@ -1361,15 +1361,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         let is_handler_method = trait_canonical
                             .as_ref()
                             .map(|key| {
-                                self.tysys
-                                    .trait_env
-                                    .effect_decl_index
-                                    .contains_key(key)
-                                    || self
-                                        .tysys
-                                        .trait_env
-                                        .resource_decl_index
-                                        .contains_key(key)
+                                self.tysys.trait_env.effect_decl_index.contains_key(key)
+                                    || self.tysys.trait_env.resource_decl_index.contains_key(key)
                             })
                             .unwrap_or(false);
                         let is_ref_impl = matches!(
