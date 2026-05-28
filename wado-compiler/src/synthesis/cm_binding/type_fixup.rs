@@ -14,7 +14,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::Type;
-use crate::component_model::{CmInterfaceRegistry, WasiFunctionInfo};
+use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
@@ -25,7 +25,7 @@ use crate::tir::{
 use crate::synthesis::common::{cast, i32_const, option_none, synth_span};
 
 use super::types::{
-    flatten_param_type, is_gc_passthrough_param, is_wasm_flat_type, wasi_type_to_type_id,
+    cm_type_to_type_id, flatten_param_type, is_gc_passthrough_param, is_wasm_flat_type,
 };
 
 /// Recursively replace WASI-derived types with user types in the binding.
@@ -43,7 +43,7 @@ fn replace_wasi_derived_type_recursive(
         super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     let old_type = {
         let mut tt = type_table.borrow_mut();
-        wasi_type_to_type_id(wasi_type, &mut tt, cm_interface_registry, wasi_package)
+        cm_type_to_type_id(wasi_type, &mut tt, cm_interface_registry, wasi_package)
     };
     if old_type != user_type && old_type != TypeTable::I32 && old_type != TypeTable::UNIT {
         // Skip replacement if the user type resolves to the same base type
@@ -150,12 +150,12 @@ fn replace_wasi_derived_type_recursive(
 
 /// Fix up WASI-derived types in the binding body to match the user's types.
 ///
-/// The binding body uses `TypeIds` from `wasi_type_to_type_id` (e.g., `Array<Tuple<String, Array<u8>>>`).
+/// The binding body uses `TypeIds` from `cm_type_to_type_id` (e.g., `Array<Tuple<String, Array<u8>>>`).
 /// The call site uses user types with newtype aliases (e.g., `Array<Tuple<FieldName, FieldValue>>`).
 /// This function computes the WASI-derived `TypeId` for each param and replaces it in the body.
 fn fixup_wasi_derived_types_in_adapter(
     adapter: &mut TirFunction,
-    func_info: &WasiFunctionInfo,
+    func_info: &CmFunctionInfo,
     call_args: &[TirExpr],
     user_return_type: TypeId,
     type_table: &RefCell<TypeTable>,
@@ -188,7 +188,7 @@ fn fixup_wasi_derived_types_in_adapter(
     // that return non-flat types (tuples, variants). Their return TypeId was set
     // precisely by synthesis and should not be modified by the recursive type
     // replacement, which can produce different TypeIds for the same logical type
-    // through different wasi_type_to_type_id resolution paths.
+    // through different cm_type_to_type_id resolution paths.
     if !adapter.is_cm_binding
         && let Some(return_type) = &func_info.return_type
     {
@@ -222,7 +222,7 @@ fn replace_type_in_adapter(adapter: &mut TirFunction, old_type: TypeId, new_type
     }
     // Don't replace the return type of CM binding adapters.
     // The return type was set by synthesis with precise TypeIds from the entry
-    // module's TypeTable. Replacing it with a TypeId computed by wasi_type_to_type_id
+    // module's TypeTable. Replacing it with a TypeId computed by cm_type_to_type_id
     // (which may produce different TypeIds for Stream/Future/Result composition)
     // corrupts the type and causes WIR build failures.
     if !adapter.is_cm_binding && adapter.return_type == old_type {
@@ -1187,7 +1187,7 @@ fn rewrite_calls_in_expr(
                         if matches!(arg.expr.kind, TirExprKind::Null) {
                             let (option_type_id, none_expr) = {
                                 let mut tt = type_table.borrow_mut();
-                                let option_type_id = wasi_type_to_type_id(
+                                let option_type_id = cm_type_to_type_id(
                                     param_type,
                                     &mut tt,
                                     cm_interface_registry,
@@ -1339,7 +1339,7 @@ fn rewrite_calls_in_expr(
                         if matches!(arg.kind, TirExprKind::Null) {
                             let (option_type_id, none_expr) = {
                                 let mut tt = type_table.borrow_mut();
-                                let option_type_id = wasi_type_to_type_id(
+                                let option_type_id = cm_type_to_type_id(
                                     param_type,
                                     &mut tt,
                                     cm_interface_registry,

@@ -103,7 +103,7 @@ fn extract_cm_params_attr(attrs: &[crate::ast::Attribute]) -> Vec<String> {
 
 /// Information about a WASI function from an interface method
 #[derive(Debug, Clone)]
-pub struct WasiFunctionInfo {
+pub struct CmFunctionInfo {
     /// Effect name (e.g., "Stdout")
     pub interface_name: String,
     /// Method name in Wado (e.g., "`write_via_stream`")
@@ -122,7 +122,7 @@ pub struct WasiFunctionInfo {
     pub return_type: Option<Type>,
 }
 
-impl WasiFunctionInfo {
+impl CmFunctionInfo {
     /// Build the local alias name for Component Model imports.
     ///
     /// Format: `wasi:{package}/{interface_name}::{method_name}`
@@ -276,7 +276,7 @@ pub fn build_local_alias_name(package: &str, interface_name: &str, method_name: 
 
 /// Information about a WASI interface (grouping functions by interface)
 #[derive(Debug, Clone)]
-pub struct WasiInterfaceInfo {
+pub struct CmInterfaceInfo {
     /// Interface path (e.g., "wasi:cli/stdout@0.3.0-rc-2025-09-16")
     pub path: String,
     /// Namespace (e.g., "wasi")
@@ -288,7 +288,7 @@ pub struct WasiInterfaceInfo {
     /// Version (e.g., "0.3.0-rc-2025-09-16")
     pub version: Option<String>,
     /// Functions in this interface
-    pub functions: Vec<WasiFunctionInfo>,
+    pub functions: Vec<CmFunctionInfo>,
     /// Resource type exported by this interface (if any).
     /// Format: (Wado name, CM kebab-case name)
     /// e.g., ("`TerminalInput`", "terminal-input")
@@ -303,11 +303,11 @@ pub struct WasiInterfaceInfo {
 #[derive(Debug, Clone, Default)]
 pub struct CmInterfaceRegistry {
     /// `Effect::method` -> function info
-    effect_to_func: IndexMap<String, WasiFunctionInfo>,
+    effect_to_func: IndexMap<String, CmFunctionInfo>,
 
     /// Interface path -> list of functions
     /// Using `BTreeMap` for deterministic ordering
-    interfaces: BTreeMap<String, Vec<WasiFunctionInfo>>,
+    interfaces: BTreeMap<String, Vec<CmFunctionInfo>>,
 
     /// Local alias -> (`interface_path`, `wasi_func_name`)
     /// Key format: `wasi:{package}/{interface_name}::{method_name`}
@@ -1411,7 +1411,7 @@ impl CmInterfaceRegistry {
     /// a Wado type name, return the full registered source interface that
     /// matches in any type kind. Used by TIR → AST conversion to recover the
     /// exact versioned `source_interface` from a coarser `ModuleSource`.
-    pub fn find_wasi_source_under_prefix(&self, prefix: &str, name: &str) -> Option<&str> {
+    pub fn find_source_under_prefix(&self, prefix: &str, name: &str) -> Option<&str> {
         find_unique_source_with_prefix(&self.structs, prefix, name)
             .or_else(|| find_unique_source_with_prefix(&self.variants, prefix, name))
             .or_else(|| find_unique_source_with_prefix(&self.enums, prefix, name))
@@ -1749,7 +1749,7 @@ impl CmInterfaceRegistry {
     ///
     /// This uses the registry's known enums and resources to determine if
     /// all types in the function signature are supported.
-    pub fn is_function_supported(&self, func: &WasiFunctionInfo) -> bool {
+    pub fn is_function_supported(&self, func: &CmFunctionInfo) -> bool {
         // Build sets of known enum, variant, flags, and resource names
         // (bare name is enough here — the sets are only used as a membership check).
         let enums: IndexSet<&str> = self
@@ -1812,7 +1812,7 @@ impl CmInterfaceRegistry {
             .into_iter()
             .map(|(name, cm_name, ty)| (name, cm_name, self.resolve_type(&ty)))
             .collect();
-        let func_info = WasiFunctionInfo {
+        let func_info = CmFunctionInfo {
             interface_name: interface_name.to_string(),
             method_name: method_name.to_string(),
             wasi_func_name: wasi_func_name.clone(),
@@ -1874,14 +1874,14 @@ impl CmInterfaceRegistry {
     }
 
     /// Get function info by qualified name
-    pub fn get_function(&self, name: &str) -> Option<&WasiFunctionInfo> {
+    pub fn get_function(&self, name: &str) -> Option<&CmFunctionInfo> {
         self.effect_to_func.get(name)
     }
 
     /// Get all interfaces that need to be imported
     ///
     /// Returns interfaces in deterministic order (sorted by path)
-    pub fn interfaces(&self) -> impl Iterator<Item = WasiInterfaceInfo> + '_ {
+    pub fn interfaces(&self) -> impl Iterator<Item = CmInterfaceInfo> + '_ {
         self.interfaces.iter().map(|(path, functions)| {
             // Parse the interface path to extract components
             let wasi = CmImport::parse(path);
@@ -1891,7 +1891,7 @@ impl CmInterfaceRegistry {
                 .iter()
                 .find_map(|func| self.get_resource_from_return_type(&func.return_type));
 
-            WasiInterfaceInfo {
+            CmInterfaceInfo {
                 path: path.clone(),
                 namespace: wasi
                     .as_ref()
@@ -2697,8 +2697,8 @@ impl CmInstanceTypeGen {
 /// registration to ensure types are pre-resolved.
 ///
 /// Note: This returns a SINGLE `ValType`. For compound types that lower to
-/// multiple core values (like String → ptr+len), use `flatten_wasi_param_type` instead.
-pub fn wasi_type_to_valtype(ty: &Type) -> ValType {
+/// multiple core values (like String → ptr+len), use `flatten_cm_param_type` instead.
+pub fn cm_type_to_valtype(ty: &Type) -> ValType {
     match ty {
         Type::Named(named) => match named.name.as_str() {
             "i32" | "u32" | "bool" | "char" | "u8" | "i8" | "u16" | "i16" => ValType::I32,
@@ -2722,14 +2722,14 @@ pub fn wasi_type_to_valtype(ty: &Type) -> ValType {
             "Array" => ValType::I32,
             // Option<T> is represented as i32 discriminant
             "Option" => ValType::I32,
-            other => panic!("unknown generic type in wasi_type_to_valtype: {other}"),
+            other => panic!("unknown generic type in cm_type_to_valtype: {other}"),
         },
         Type::Reference(_) | Type::MutReference(_) => {
             // borrow<resource> or own<resource> - just an i32 handle
             ValType::I32
         }
         Type::Tuple(_) => ValType::I32,
-        other => panic!("unsupported type variant in wasi_type_to_valtype: {other:?}"),
+        other => panic!("unsupported type variant in cm_type_to_valtype: {other:?}"),
     }
 }
 
@@ -2751,7 +2751,7 @@ fn join_val_types(a: Option<ValType>, b: Option<ValType>) -> ValType {
 /// Compound types like String and `Array<T>` are lowered to (ptr: i32, len: i32)
 /// in the Component Model core ABI. This function pushes the appropriate number
 /// of `ValType`s for each parameter.
-pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmInterfaceRegistry) {
+pub fn flatten_cm_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmInterfaceRegistry) {
     match ty {
         Type::Named(named) => match named.name.as_str() {
             // String is lowered to (ptr: i32, len: i32) in CM core ABI
@@ -2788,7 +2788,7 @@ pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmI
                     .get_struct_fields_by_source(source, name)
                     .expect("already matched above");
                 for (_, field_ty) in fields {
-                    flatten_wasi_param_type(field_ty, out, registry);
+                    flatten_cm_param_type(field_ty, out, registry);
                 }
             }
             // Variant types flatten to: discriminant i32 + union(max payload)
@@ -2812,7 +2812,7 @@ pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmI
                     for case in cases {
                         if let Some(payload_ty) = &case.payload {
                             let mut case_flat = Vec::new();
-                            flatten_wasi_param_type(payload_ty, &mut case_flat, registry);
+                            flatten_cm_param_type(payload_ty, &mut case_flat, registry);
                             let len = case_flat.len().max(max_flat.len());
                             for i in 0..len {
                                 let old = max_flat.get(i).copied();
@@ -2842,15 +2842,15 @@ pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmI
             // option<T> flattens to: discriminant i32 + flatten(T)
             "Option" if generic.args.len() == 1 => {
                 out.push(ValType::I32); // discriminant
-                flatten_wasi_param_type(&generic.args[0], out, registry);
+                flatten_cm_param_type(&generic.args[0], out, registry);
             }
             // result<T, E> flattens to: discriminant i32 + union(flatten(T), flatten(E))
             "Result" if generic.args.len() == 2 => {
                 out.push(ValType::I32); // discriminant
                 let mut ok_flat = Vec::new();
                 let mut err_flat = Vec::new();
-                flatten_wasi_param_type(&generic.args[0], &mut ok_flat, registry);
-                flatten_wasi_param_type(&generic.args[1], &mut err_flat, registry);
+                flatten_cm_param_type(&generic.args[0], &mut ok_flat, registry);
+                flatten_cm_param_type(&generic.args[1], &mut err_flat, registry);
                 let max_len = ok_flat.len().max(err_flat.len());
                 for i in 0..max_len {
                     let ok_val = ok_flat.get(i).copied();
@@ -3095,7 +3095,7 @@ pub fn is_return_type_supported(ty: &Type) -> bool {
 
 /// Check if all types in a WASI function are supported for Component Model generation
 /// (without enum/resource knowledge - use `CmInterfaceRegistry::is_function_supported` instead)
-pub fn is_wasi_function_supported(func: &WasiFunctionInfo) -> bool {
+pub fn is_cm_function_supported(func: &CmFunctionInfo) -> bool {
     // Check all parameter types (Result not allowed in params)
     for (_, _, ty) in &func.params {
         if !is_param_type_supported(ty) {
@@ -3153,7 +3153,7 @@ pub fn return_type_requires_outptr(ty: &Type) -> bool {
 /// `MAX_FLAT_RESULTS` core values, so they must be returned via an outptr.
 /// Generic `cm_flat_types` doesn't know about WASI variant cases; this
 /// registry-aware check fills that gap.
-pub fn wasi_named_type_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
+pub fn cm_named_type_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
     if let Type::Named(named) = ty
         && let Some(source) = registry.resolve_wasi_source_for(named, None)
     {
@@ -3200,7 +3200,7 @@ pub fn cm_size_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 {
                 }
                 return crate::cm_abi::align_to(offset, max_align);
             }
-            if let Some(sa) = wasi_variant_cm_size_align(named, registry) {
+            if let Some(sa) = cm_variant_size_align(named, registry) {
                 return sa.0;
             }
             if let Some(variants) = registry.get_enum_variants_by_source(source, &named.name) {
@@ -3254,7 +3254,7 @@ pub fn cm_align_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 
                 }
                 return max_align;
             }
-            if let Some(sa) = wasi_variant_cm_size_align(named, registry) {
+            if let Some(sa) = cm_variant_size_align(named, registry) {
                 return sa.1;
             }
             if let Some(variants) = registry.get_enum_variants_by_source(source, &named.name) {
@@ -3284,21 +3284,21 @@ pub fn cm_align_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 
 /// - discriminant: 1 byte (u8) for variants with ≤ 256 cases
 /// - payload: at `align_to(1, max_payload_align)`
 /// - total: `align_to(payload_offset + max_payload_size, max_payload_align)`
-pub fn wasi_variant_cm_size_align(
+pub fn cm_variant_size_align(
     named: &crate::ast::NamedType,
     registry: &CmInterfaceRegistry,
 ) -> Option<(u32, u32)> {
-    wasi_variant_cm_size_align_scoped(named, registry, None)
+    cm_variant_size_align_scoped(named, registry, None)
 }
 
-/// Package-scoped variant of `wasi_variant_cm_size_align`.
+/// Package-scoped variant of `cm_variant_size_align`.
 ///
 /// When the reference's `source_interface` is populated (stdlib bootstrap),
 /// that exact source is used. Otherwise the unique `wasi:*` registrant for
 /// the name is used. `wasi_package` is kept as a parameter so that existing
 /// callers can still supply it; it is currently unused here because source
 /// resolution is already unambiguous.
-pub fn wasi_variant_cm_size_align_scoped(
+pub fn cm_variant_size_align_scoped(
     named: &crate::ast::NamedType,
     registry: &CmInterfaceRegistry,
     _wasi_package: Option<&str>,
@@ -3358,7 +3358,7 @@ pub fn cm_size_with_registry_scoped(
                 }
                 return crate::cm_abi::align_to(offset, max_align);
             }
-            if let Some(sa) = wasi_variant_cm_size_align_scoped(named, registry, wasi_package) {
+            if let Some(sa) = cm_variant_size_align_scoped(named, registry, wasi_package) {
                 return sa.0;
             }
             if let Some(variants) = registry.get_enum_variants_by_source(source, &named.name) {
@@ -3422,7 +3422,7 @@ pub fn cm_align_with_registry_scoped(
                 }
                 return max_align;
             }
-            if let Some(sa) = wasi_variant_cm_size_align_scoped(named, registry, wasi_package) {
+            if let Some(sa) = cm_variant_size_align_scoped(named, registry, wasi_package) {
                 return sa.1;
             }
             if let Some(variants) = registry.get_enum_variants_by_source(source, &named.name) {
@@ -3645,7 +3645,7 @@ mod tests {
 
     #[test]
     fn test_func_info_local_alias_name() {
-        let func_info = WasiFunctionInfo {
+        let func_info = CmFunctionInfo {
             interface_name: "Stdout".to_string(),
             method_name: "write_via_stream".to_string(),
             wasi_func_name: "write-via-stream".to_string(),

@@ -28,8 +28,7 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    binary_add, flatten_param_type, kebab_to_pascal, variant_tag, variant_test,
-    wasi_type_to_type_id,
+    binary_add, cm_type_to_type_id, flatten_param_type, kebab_to_pascal, variant_tag, variant_test,
 };
 
 /// Synthesize TIR statements that store a Wado value into linear memory.
@@ -249,7 +248,7 @@ pub(super) fn synthesize_lower_tuple(
         // Determine the type_id for this field
         let field_type_id = {
             let mut tt = type_table.borrow_mut();
-            wasi_type_to_type_id(elem_ty, &mut tt, cm_interface_registry, wasi_package)
+            cm_type_to_type_id(elem_ty, &mut tt, cm_interface_registry, wasi_package)
         };
 
         // Extract the i-th field from the tuple using FieldAccess
@@ -366,7 +365,7 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
         if let Some(payload_ty) = &case.payload {
             let payload_type_id = {
                 let mut tt = type_table.borrow_mut();
-                wasi_type_to_type_id(payload_ty, &mut tt, cm_interface_registry, wasi_package)
+                cm_type_to_type_id(payload_ty, &mut tt, cm_interface_registry, wasi_package)
             };
             let binding_local = alloc_local(next_local, locals, payload_type_id);
             let binding_name = format!("__variant_payload_{binding_local}");
@@ -490,7 +489,7 @@ pub(super) fn synthesize_lower_option_to_memory(
     // need for a wildcard else.
     let inner_type_id = {
         let mut tt = type_table.borrow_mut();
-        wasi_type_to_type_id(inner_type, &mut tt, cm_interface_registry, wasi_package)
+        cm_type_to_type_id(inner_type, &mut tt, cm_interface_registry, wasi_package)
     };
 
     let payload_binding_local = alloc_local(next_local, locals, inner_type_id);
@@ -677,7 +676,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                     if let Some(payload_ty) = &case.payload {
                         let payload_type_id = {
                             let mut tt = type_table.borrow_mut();
-                            wasi_type_to_type_id(
+                            cm_type_to_type_id(
                                 payload_ty,
                                 &mut tt,
                                 cm_interface_registry,
@@ -840,7 +839,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     // `Option<T>` so no wildcard is required.
     let inner_type_id = {
         let mut tt = type_table.borrow_mut();
-        wasi_type_to_type_id(inner_type, &mut tt, cm_interface_registry, wasi_package)
+        cm_type_to_type_id(inner_type, &mut tt, cm_interface_registry, wasi_package)
     };
     let payload_binding_local = alloc_local(next_local, locals, inner_type_id);
     let payload_binding_name = format!("__opt_payload_{payload_binding_local}");
@@ -972,7 +971,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                     offset = cm_abi::align_to(offset, fa);
                     let field_type_id = {
                         let mut tt = type_table.borrow_mut();
-                        wasi_type_to_type_id(field_ty, &mut tt, cm_interface_registry, wasi_package)
+                        cm_type_to_type_id(field_ty, &mut tt, cm_interface_registry, wasi_package)
                     };
                     let field_expr = TirExpr {
                         kind: TirExprKind::FieldAccess {

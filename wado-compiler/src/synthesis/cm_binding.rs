@@ -43,8 +43,8 @@ use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
 };
 pub use types::{
-    LiftContext, cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size, flatten_param_type,
-    wasi_type_to_type_id,
+    LiftContext, cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size, cm_type_to_type_id,
+    flatten_param_type,
 };
 use types::{cm_val_type_to_type_id, compute_export_flat_return_types};
 

@@ -103,7 +103,7 @@ fn register_imports(ctx: &mut WirContext<'_>) {
 ///
 /// WASI functions are already lowered at the component level;
 /// the core module imports them from the "wasi" namespace.
-/// Uses `flatten_wasi_param_type` / `return_type_requires_outptr` for CM ABI type flattening.
+/// Uses `flatten_cm_param_type` / `return_type_requires_outptr` for CM ABI type flattening.
 fn register_wasi_imports(ctx: &mut WirContext<'_>) {
     let cm_interface_registry = ctx.package.cm_interface_registry;
 
@@ -143,7 +143,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
             for (_, _, ty) in &func.params {
                 let resolved_ty = cm_interface_registry.resolve_type(ty);
-                crate::component_model::flatten_wasi_param_type(
+                crate::component_model::flatten_cm_param_type(
                     &resolved_ty,
                     &mut param_vts,
                     cm_interface_registry,
@@ -174,7 +174,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             else if let Some(ret_ty) = &func.return_type {
                 let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);
                 if crate::component_model::return_type_requires_outptr(&resolved_ret_ty)
-                    || crate::component_model::wasi_named_type_return_needs_outptr(
+                    || crate::component_model::cm_named_type_return_needs_outptr(
                         &resolved_ret_ty,
                         cm_interface_registry,
                     )
@@ -192,7 +192,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             } else if let Some(ret_ty) = &func.return_type {
                 let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);
                 if crate::component_model::return_type_requires_outptr(&resolved_ret_ty)
-                    || crate::component_model::wasi_named_type_return_needs_outptr(
+                    || crate::component_model::cm_named_type_return_needs_outptr(
                         &resolved_ret_ty,
                         cm_interface_registry,
                     )
@@ -202,7 +202,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 } else {
                     // Simple return — flatten the return type
                     let mut out = Vec::new();
-                    crate::component_model::flatten_wasi_param_type(
+                    crate::component_model::flatten_cm_param_type(
                         &resolved_ret_ty,
                         &mut out,
                         cm_interface_registry,

@@ -13,7 +13,7 @@
 use super::component_context::ComponentModelContext;
 use super::postprocess;
 use crate::ast::Type;
-use crate::component_model::{CmInstanceTypeGen, CmVariantCase, WasiFunctionInfo};
+use crate::component_model::{CmFunctionInfo, CmInstanceTypeGen, CmVariantCase};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir_package::NirPackage;
 use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirPackage};
@@ -2345,7 +2345,7 @@ fn import_http_types_for_service(
             .map(|(wado, _)| wado.as_str())
             .collect();
 
-        let all_funcs: Vec<WasiFunctionInfo> = project
+        let all_funcs: Vec<CmFunctionInfo> = project
             .cm_interface_registry
             .interfaces()
             .find(|i| i.package == "http" && i.interface == "types")
@@ -2355,7 +2355,7 @@ fn import_http_types_for_service(
         // Emit constructor/static functions from registry metadata.
         // Processing their parameter and return types triggers on-demand emission of
         // all dependent types (error-code variant and its payload record types).
-        let is_constructor_or_static = |f: &WasiFunctionInfo| {
+        let is_constructor_or_static = |f: &CmFunctionInfo| {
             http_resource_names.contains(f.interface_name.as_str())
                 && (f.wasi_func_name.starts_with("[constructor]")
                     || f.wasi_func_name.starts_with("[static]"))
@@ -2408,7 +2408,7 @@ fn import_http_types_for_service(
             );
         }
 
-        let resource_methods: Vec<WasiFunctionInfo> = all_funcs
+        let resource_methods: Vec<CmFunctionInfo> = all_funcs
             .iter()
             .filter(|f| {
                 // Skip functions already emitted in the constructor/static block
@@ -2713,7 +2713,7 @@ fn import_http_client(
 fn import_interface_with_resource(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    interface_info: &crate::component_model::WasiInterfaceInfo,
+    interface_info: &crate::component_model::CmInterfaceInfo,
     project: &NirPackage,
 ) {
     let Some((_resource_wado_name, resource_cm_name)) = &interface_info.resource_type else {

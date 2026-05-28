@@ -152,7 +152,7 @@ pub struct LiftContext<'a> {
 /// (e.g., `Array::<String>::with_capacity()`). The monomorphizer requires
 /// concrete `TypeId`s in `MonomorphInfo::type_args` to instantiate generic
 /// methods.
-pub fn wasi_type_to_type_id(
+pub fn cm_type_to_type_id(
     ty: &Type,
     type_table: &mut TypeTable,
     registry: &CmInterfaceRegistry,
@@ -202,8 +202,7 @@ pub fn wasi_type_to_type_id(
                 .struct_name(crate::compiler_item::CompilerItem::Array)
                 .to_string();
             if g.name.as_str() == array_name && g.args.len() == 1 {
-                let elem_type =
-                    wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let elem_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 return type_table.make_array(elem_type);
             }
             let option_name = type_table
@@ -215,29 +214,25 @@ pub fn wasi_type_to_type_id(
                 .variant_name(crate::compiler_item::CompilerItem::Result)
                 .to_string();
             if g.name.as_str() == option_name && g.args.len() == 1 {
-                let inner_type =
-                    wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let inner_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 return type_table.make_option(inner_type);
             }
             if g.name.as_str() == result_name && g.args.len() == 2 {
-                let ok_type = wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                let err_type = wasi_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
+                let ok_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let err_type = cm_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
                 return type_table.make_result(ok_type, err_type);
             }
             match g.name.as_str() {
                 "Stream" if g.args.len() == 1 => {
-                    let inner =
-                        wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    let inner = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                     type_table.make_stream(inner)
                 }
                 "Future" if g.args.len() == 1 => {
-                    let inner =
-                        wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    let inner = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                     type_table.make_future(inner)
                 }
                 "AsyncCall" if g.args.len() == 1 => {
-                    let inner =
-                        wasi_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    let inner = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                     type_table.make_async_call(inner)
                 }
                 // Own/Borrow are handle types represented as i32
@@ -249,7 +244,7 @@ pub fn wasi_type_to_type_id(
         Type::Tuple(types) => {
             let resolved: Vec<TypeId> = types
                 .iter()
-                .map(|t| wasi_type_to_type_id(t, type_table, registry, wasi_package))
+                .map(|t| cm_type_to_type_id(t, type_table, registry, wasi_package))
                 .collect();
             type_table.make_tuple(resolved)
         }
