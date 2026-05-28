@@ -446,7 +446,13 @@ migration; see Trade-offs.
       `adjust_receiver_for_self_kind_static`.
       Body-walk reify is **558/558 unit-test green on both the
       default path and the `WADO_REIFY=1` opt-in**, including
-      the stdlib snapshot. Concrete arms cover every
+      the stdlib snapshot. E2E suite under `WADO_REIFY=1`
+      reaches 620 / ~2654 fixtures passing — the remaining
+      failures cluster around the residual `todo!`s below
+      (IndexMut method calls, bundled handler bindings,
+      per-arg `is_mut` divergence, power-assert template,
+      ComparisonChain trait dispatch). Default-path E2E
+      behaviour is unchanged. Concrete arms cover every
       `reify_pattern` variant, every `reify_literal` variant
       (host-driven included), every `reify_ident` shape
       (local / current+imported globals / assoc constants /

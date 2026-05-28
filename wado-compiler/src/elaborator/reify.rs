@@ -3939,9 +3939,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         with_expr: &ast::WithHandlerExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        use crate::tir::{
-            EffectRef, ResolvedType, TirExprKind, TirHandlerBinding, TypeTable,
-        };
+        use crate::tir::{EffectRef, ResolvedType, TirExprKind, TirHandlerBinding, TypeTable};
 
         let mut bindings: Vec<TirHandlerBinding> = Vec::with_capacity(with_expr.handlers.len());
         for binding in &with_expr.handlers {
