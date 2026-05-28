@@ -625,6 +625,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.operator_dispatch.insert(ast_id, info);
     }
 
+    /// Record the handler-binding resolution facts (Gap 13 of
+    /// Stage 5) keyed by the
+    /// [`crate::ast::EffectHandlerBinding`]'s [`AstId`]. Reify
+    /// reads this entry to enumerate the same `TirHandlerBinding`
+    /// list annotate's combined walk produces, without re-running
+    /// `collect_effect_impls_for_type` or the explicit-form
+    /// trait_env validation. See [`sem::types::HandlerBindingFacts`].
+    ///
+    /// `#[allow(dead_code)]` until the recording sites in
+    /// `resolve_explicit_handler_binding` /
+    /// `resolve_bundled_handler_binding` are wired through.
+    #[allow(dead_code)]
+    pub(super) fn record_handler_binding_facts(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::HandlerBindingFacts,
+    ) {
+        self.sem.types.handler_bindings.insert(ast_id, info);
+    }
+
     /// Record the impl-block resolution facts (Gap 12 of Stage 5)
     /// keyed by the [`crate::ast::ImplBlock`]'s [`AstId`]. Reify
     /// reads the entry verbatim — no re-resolution of the impl

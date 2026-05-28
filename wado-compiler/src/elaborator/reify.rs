@@ -3981,58 +3981,35 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         with_expr: &ast::WithHandlerExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        use crate::tir::{EffectRef, ResolvedType, TirExprKind, TirHandlerBinding, TypeTable};
+        use crate::tir::{EffectRef, TirExprKind, TirHandlerBinding, TypeTable};
 
         let mut bindings: Vec<TirHandlerBinding> = Vec::with_capacity(with_expr.handlers.len());
         for binding in &with_expr.handlers {
-            let Some(effect_ty) = &binding.effect else {
-                // TODO(stage-5-bodies): bundled handler form. The
-                // elaborator expands one binding per effect the
-                // handler value's type implements
-                // (`trait_env.iter_effects_implemented_by`); reify
-                // needs that enumeration recorded as a per-binding
-                // annotation. Until then, skip — annotate would
-                // have already produced TIR via the combined walk
-                // path; reify only fires under `WADO_REIFY=1`.
+            // Gap 13: annotate recorded the binding's effect
+            // enumeration on `sem.types.handler_bindings`. Reify
+            // reifies the handler expression and stitches one
+            // `TirHandlerBinding` per recorded effect entry.
+            let Some(facts) = self.sem.types.handler_bindings.get(&binding.id).cloned() else {
+                // Annotate didn't record this binding — either it
+                // bailed (diagnosed type) or the binding shape is
+                // unsupported; skip to mirror the elaborator's
+                // recovery.
                 continue;
             };
-
-            let effect_name = ast_type_name_static(effect_ty);
-            let (module, canonical_name) = self.canonical_decl_key(&effect_name);
             let handler = self.reify_expr(&binding.handler, ctx, None);
-            let handler_type = {
-                let tt = self.tysys.type_table.borrow();
-                let mut t = handler.type_id;
-                loop {
-                    match tt.get(t).clone() {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                            t = inner;
-                        }
-                        _ => break,
-                    }
-                }
-                t
-            };
-            // Type args on `Stream<u8>` etc. The elaborator
-            // extracts them from `effect_ty` if it's a Generic
-            // shape; reify reproduces.
-            let trait_type_args: Vec<TypeId> = if let ast::Type::Generic(g) = effect_ty {
-                g.args.iter().map(|t| self.resolve_type(t)).collect()
-            } else {
-                Vec::new()
-            };
-
-            bindings.push(TirHandlerBinding {
-                effect: Some(EffectRef::Concrete {
-                    name: canonical_name,
-                    module_source: module,
-                }),
-                trait_type_args,
-                handler,
-                handler_type,
-                span: binding.span,
-                bundle_group: None,
-            });
+            for entry in &facts.effects {
+                bindings.push(TirHandlerBinding {
+                    effect: Some(EffectRef::Concrete {
+                        name: entry.name.clone(),
+                        module_source: entry.module_source.clone(),
+                    }),
+                    trait_type_args: entry.trait_type_args.clone(),
+                    handler: handler.clone(),
+                    handler_type: facts.handler_type,
+                    span: binding.span,
+                    bundle_group: facts.bundle_group,
+                });
+            }
         }
 
         ctx.enter_scope();

@@ -187,6 +187,21 @@ pub(crate) struct TypeAnnotations {
     /// [`crate::tir::TirExprKind::Index`] for this expression. See
     /// [`OperatorDispatch`].
     pub(crate) operator_dispatch: IndexMap<AstId, OperatorDispatch>,
+    /// Handler-binding resolution facts (Gap 13 of Stage 5).
+    /// Keyed by the [`crate::ast::EffectHandlerBinding`]'s
+    /// [`AstId`]. Carries the list of effects this binding
+    /// installs (one per element for explicit form; many for
+    /// bundled form where the handler value's type implements
+    /// multiple effects), plus the shared `bundle_group` id for
+    /// the bundled case. Reify reads this to enumerate the
+    /// expanded `TirHandlerBinding`s without re-running
+    /// `collect_effect_impls_for_type`.
+    ///
+    /// `#[allow(dead_code)]` until reify_with_handler reads it
+    /// and the recording sites in `resolve_with_handler` /
+    /// `resolve_handler_binding` are wired through.
+    #[allow(dead_code)]
+    pub(crate) handler_bindings: IndexMap<AstId, HandlerBindingFacts>,
     /// Impl-block resolution facts (Gap 12 of Stage 5). Keyed by
     /// the [`crate::ast::ImplBlock`]'s [`AstId`]. Carries the
     /// resolved `Self` type, the trait reference's canonical and
@@ -302,6 +317,47 @@ pub(crate) struct AssertSlot {
 pub(crate) struct AssertCaptureInfo {
     pub(crate) slots: Vec<AssertSlot>,
     pub(crate) emitted_slot_indices: Vec<u32>,
+}
+
+/// Handler-binding resolution facts recorded once per
+/// [`crate::ast::EffectHandlerBinding`] at annotate time (Gap 13
+/// of Stage 5). Reify reads this entry to enumerate the same
+/// `TirHandlerBinding` list annotate's combined walk produces,
+/// without re-running `collect_effect_impls_for_type` or the
+/// explicit-form trait_env validation.
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct HandlerBindingFacts {
+    /// One entry per effect this binding installs. For the
+    /// explicit form (`Effect => handler_expr`) this is a
+    /// single element; for the bundled form
+    /// (`with handler_expr do { ... }`) one element per effect
+    /// the handler value's type implements.
+    pub(crate) effects: Vec<HandlerEffectEntry>,
+    /// Shared `bundle_group` id when this binding came from a
+    /// bundled clause. `None` for the explicit form. Reify
+    /// writes this onto every emitted `TirHandlerBinding`'s
+    /// `bundle_group` field so dispatch synthesis allocates one
+    /// shared `__h_<bundle>` local across all the effects this
+    /// bundled clause installs.
+    pub(crate) bundle_group: Option<u32>,
+    /// The handler value's underlying type after reference
+    /// peeling. Reify writes this onto every emitted
+    /// `TirHandlerBinding`'s `handler_type` field so codegen
+    /// routes to the right `impl E for T` methods.
+    pub(crate) handler_type: TypeId,
+}
+
+/// One effect a handler binding installs. Mirrors the per-effect
+/// component the elaborator computes inside
+/// `resolve_explicit_handler_binding` /
+/// `resolve_bundled_handler_binding` (handlers.rs:108+, 236+).
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct HandlerEffectEntry {
+    pub(crate) name: String,
+    pub(crate) module_source: crate::module_source::ModuleSource,
+    pub(crate) trait_type_args: Vec<TypeId>,
 }
 
 /// Impl-block resolution facts recorded once per `impl` block at
