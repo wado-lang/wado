@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779940118907,
+  "lastUpdate": 1779979400351,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -26941,6 +26941,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6b6b3dfa3b13496fd61cbe84603dce5fce10fd7b"
         },
         "date": 1779940118466,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8d4627daa13d9eec78d3bb9192852eab55de57f6",
+          "message": "Merge pull request #1220 from wado-lang/claude/package-gale-lr-list-label-u8T7f\n\ndocs(agents): note that the dev profile is tuned; avoid `--release` in the inner loop",
+          "timestamp": "2026-05-28T23:36:48+09:00",
+          "tree_id": "3099fb0d384ebdf25434ccd16f7c1032cd2b6074",
+          "url": "https://github.com/wado-lang/wado/commit/8d4627daa13d9eec78d3bb9192852eab55de57f6"
+        },
+        "date": 1779979399873,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
