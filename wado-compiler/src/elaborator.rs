@@ -1268,7 +1268,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                     }
 
-                    // `impl Trait for Type;` — record synthesis request and skip
+                    // `impl Trait for Type;` — record synthesis request and skip.
+                    // Stage 5 / Gap 12: the synthesis-request push lands both
+                    // on the existing `tir_module.synthesis_requests` (so the
+                    // current combined walk's behaviour is preserved) and on
+                    // `sem.decls.pending_synthesis_requests` (so reify_module
+                    // reads it once the orchestration switch flips). The
+                    // duplication is intentional and goes away when the
+                    // existing push is retired alongside the combined walk.
                     if impl_block.is_synthesize_request {
                         if let Some(ref trait_type) = impl_block.trait_type {
                             let synth_trait_name = self.get_type_name_full(trait_type);
@@ -1279,15 +1286,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .iter()
                                 .map(|(name, &(index, type_id))| (name.clone(), index, type_id))
                                 .collect();
-                            tir_module
-                                .synthesis_requests
-                                .push(crate::tir::SynthesisRequest {
-                                    trait_name: synth_trait_name,
-                                    target_type_name: struct_name.clone(),
-                                    target_type_id,
-                                    type_params,
-                                    span: impl_block.span,
-                                });
+                            let req = crate::tir::SynthesisRequest {
+                                trait_name: synth_trait_name,
+                                target_type_name: struct_name.clone(),
+                                target_type_id,
+                                type_params,
+                                span: impl_block.span,
+                            };
+                            tir_module.synthesis_requests.push(req.clone());
+                            self.record_pending_synthesis_request(req);
                         }
                         self.trait_ctx = saved_trait_ctx;
                         continue;
@@ -1335,6 +1342,70 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     );
                             }
                         }
+                    }
+
+                    // Stage 5 / Gap 12: record the impl-block
+                    // resolution facts so `reify_impl` can read them
+                    // verbatim. All inputs are already computed by
+                    // the setup above; the recording is one call
+                    // that snapshots the resolved Self type, the
+                    // trait canonical / mangled forms, the impl's
+                    // TIR type-param projection, the assoc-type
+                    // bindings, and the handler / ref-impl flags.
+                    {
+                        let self_type = self.resolve_type(&impl_block.ty);
+                        let trait_canonical = impl_block.trait_type.as_ref().map(|t| {
+                            let base = self.get_type_name(t);
+                            self.canonical_decl_key(&base)
+                        });
+                        let is_handler_method = trait_canonical
+                            .as_ref()
+                            .map(|key| {
+                                self.tysys
+                                    .trait_env
+                                    .effect_decl_index
+                                    .contains_key(key)
+                                    || self
+                                        .tysys
+                                        .trait_env
+                                        .resource_decl_index
+                                        .contains_key(key)
+                            })
+                            .unwrap_or(false);
+                        let is_ref_impl = matches!(
+                            &impl_block.ty,
+                            ast::Type::Reference(_) | ast::Type::MutReference(_),
+                        );
+                        let impl_type_params_tir: Vec<crate::tir::TirTypeParam> = impl_block
+                            .type_params
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(i, p)| {
+                                if self.tysys.is_known_type_name(&p.name) {
+                                    return None;
+                                }
+                                Some(crate::tir::TirTypeParam {
+                                    name: p.name.clone(),
+                                    is_effect: p.is_effect,
+                                    is_pack: p.is_pack,
+                                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                                    default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                                    index: i as u32,
+                                })
+                            })
+                            .collect();
+                        self.record_impl_facts(
+                            impl_block.id,
+                            sem::types::ImplFacts {
+                                self_type,
+                                trait_name_mangled: trait_name.clone(),
+                                trait_canonical,
+                                impl_type_params: impl_type_params_tir,
+                                assoc_type_bindings: self.trait_ctx.assoc_type_bindings.clone(),
+                                is_handler_method,
+                                is_ref_impl,
+                            },
+                        );
                     }
 
                     // Collect explicitly provided method names
@@ -1393,6 +1464,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 // in the AST, but they should be treated as pub since they are
                                 // part of a trait implementation
                                 tir_func.is_pub = true;
+                                // Stage 5 / Gap 12: record the
+                                // synthesised default-method
+                                // function so reify_module reads
+                                // it from `sem.decls.pending_default_methods`
+                                // when the orchestration switch
+                                // flips. Until then, the existing
+                                // `tir_module.add_function` keeps
+                                // the combined walk's behaviour.
+                                self.record_pending_default_method(tir_func.clone());
                                 tir_module.add_function(tir_func);
                             }
                         }
