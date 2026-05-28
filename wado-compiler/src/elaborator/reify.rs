@@ -1090,10 +1090,44 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `todo!`.
     fn reify_let(&mut self, let_stmt: &ast::LetStmt, ctx: &mut FunctionContext) -> TirStmt {
         use crate::tir::{TirStmtKind, TypeTable};
-        // Uninitialised `let x: T;` is rare and routes to its own
-        // helper in the elaborator; reify follows suit.
+        // Uninitialised `let x: T;` — the parser guarantees `ty`
+        // is present. The WIR builder zero-initialises the slot;
+        // reify emits a Unit placeholder as the `value` and the
+        // `type_id` field carries the user-declared type. Refutable
+        // patterns in this position are rejected at annotate; the
+        // recovery path emits an Expr-Unit placeholder to mirror.
         let Some(ast_value) = let_stmt.value.as_ref() else {
-            todo!("reify_let: uninitialised `let x: T;` pending")
+            use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
+            let type_id = let_stmt
+                .ty
+                .as_ref()
+                .map(|t| self.resolve_type(t))
+                .unwrap_or(TypeTable::UNKNOWN);
+            return match &let_stmt.pattern {
+                ast::Pattern::Ident { id, name, span: _ }
+                | ast::Pattern::MutIdent { id, name, span: _ } => {
+                    let is_mut = let_stmt.is_mut
+                        || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
+                    let local_index = ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
+                    let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
+                    TirStmt::new(
+                        TirStmtKind::Let {
+                            name: name.clone(),
+                            local_index,
+                            is_mut,
+                            is_reactive: let_stmt.is_reactive,
+                            type_id,
+                            value: placeholder,
+                            skip_value_copy: false,
+                        },
+                        let_stmt.span,
+                    )
+                }
+                _ => TirStmt::new(
+                    TirStmtKind::Expr(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span)),
+                    let_stmt.span,
+                ),
+            };
         };
 
         let annotated_type = let_stmt.ty.as_ref().map(|t| self.resolve_type(t));
@@ -2953,14 +2987,95 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
 
-        // TODO(stage-5-bodies): namespace-imported `ns::Type::Case`
-        // path — strip the `ns::` prefix via
-        // `sem.imports.namespace_imports`, then route through the
-        // qualified-case branch above against the namespace's module.
+        // 7. Namespace-imported path `ns::Type::Case` (and variants
+        //    with type args). The `ns::` prefix maps via
+        //    `sem.imports.namespace_imports` to the namespace's
+        //    source module; reify then resolves against the
+        //    namespace's `tysys.all_*` tables (rather than the
+        //    current module's).
+        if let Some(double_colon) = ident.name.find("::") {
+            let ns_prefix = &ident.name[..double_colon];
+            let rest = &ident.name[double_colon + 2..];
+            if let Some(ns_source) = self.sem.imports.namespace_imports.get(ns_prefix).cloned()
+                && let Some(inner_double_colon) = rest.find("::")
+            {
+                let type_name = &rest[..inner_double_colon];
+                let case_name = &rest[inner_double_colon + 2..];
+
+                // Variant case in the namespace's module.
+                if let Some(variant_info) = self
+                    .tysys
+                    .all_variant_cases
+                    .get(&ns_source)
+                    .and_then(|m| m.get(type_name))
+                    .cloned()
+                    && let Some((case_index, case_data)) = variant_info
+                        .cases
+                        .iter()
+                        .enumerate()
+                        .find(|(_, c)| c.name == case_name)
+                        .map(|(i, c)| (i, c.clone()))
+                {
+                    let variant_type = self
+                        .sem
+                        .types
+                        .generic_instantiations
+                        .get(&ident.id)
+                        .map(|gi| gi.instance_type)
+                        .unwrap_or_else(|| {
+                            self.tysys.type_table.borrow_mut().make_variant(
+                                variant_info.name.clone(),
+                                variant_info.module_source.clone(),
+                            )
+                        });
+                    return TirExpr::new(
+                        TirExprKind::VariantConstruct {
+                            variant_type,
+                            case_index: case_index as u32,
+                            case_name: case_data.name,
+                            payload: None,
+                        },
+                        variant_type,
+                        ident.span,
+                    );
+                }
+
+                // Enum case in the namespace's module.
+                if let Some(enum_info) = self
+                    .tysys
+                    .all_enum_cases
+                    .get(&ns_source)
+                    .and_then(|m| m.get(type_name))
+                    .cloned()
+                    && let Some(case_data) = enum_info.find_case(case_name).cloned()
+                {
+                    let enum_type = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_enum(enum_info.name.clone(), enum_info.module_source);
+                    return TirExpr::new(
+                        TirExprKind::EnumConstruct {
+                            enum_type,
+                            case_index: case_data.index,
+                            case_name: case_data.name,
+                        },
+                        enum_type,
+                        ident.span,
+                    );
+                }
+            }
+        }
+
+        // No remaining recognised ident kind — the elaborator would
+        // have diagnosed an unknown identifier at annotate time.
+        // Match the elaborator's recovery shape so reify doesn't
+        // panic on a known-bad input.
         let _ = recorded_type;
-        todo!(
-            "reify_ident: non-local `{}` (kind dispatch pending body-walk reify)",
-            ident.name
+        TirExpr::new(
+            TirExprKind::Unit,
+            crate::tir::TypeTable::ERROR,
+            ident.span,
         )
     }
 
@@ -3018,19 +3133,89 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Literal::Null => TirExprKind::Null,
             ast::Literal::Unit => TirExprKind::Unit,
             ast::Literal::LocationFunction => TirExprKind::StringLiteral(ctx.function_name.clone()),
-            ast::Literal::LocationFile
-            | ast::Literal::LocationLine
-            | ast::Literal::DataSection
-            | ast::Literal::IncludeStr(_)
-            | ast::Literal::IncludeBytes(_) => {
-                // TODO(stage-5-bodies): mirror the host-driven branches
-                // of `Elaborator::resolve_literal`. `#file`/`#line`
-                // need the logger's current file context;
-                // `#include_str("path")` and `#include_bytes("path")`
-                // additionally need the resolved bytes from
-                // `tysys.included_files`. `#data` reads from
-                // `Module::data_section`.
-                todo!("reify_literal: location / include / data-section pending")
+            ast::Literal::LocationFile => {
+                // `#file` — current module source as a string.
+                let string_type = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+                return TirExpr::new(
+                    TirExprKind::StringLiteral(self.current_module_source.to_string()),
+                    string_type,
+                    lit.span,
+                );
+            }
+            ast::Literal::LocationLine => {
+                // `#line` — 1-indexed line number; matches the
+                // elaborator's `I32` typing.
+                let line = lit.span.line as u64;
+                return TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: line,
+                        repr: line.to_string(),
+                    },
+                    crate::tir::TypeTable::I32,
+                    lit.span,
+                );
+            }
+            ast::Literal::DataSection => {
+                // `#data` — the loaded module's `__DATA__` section.
+                let string_type = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+                let data = self
+                    .loaded_modules
+                    .get(&self.current_module_source)
+                    .and_then(|m| m.data_section())
+                    .map(str::to_owned)
+                    .unwrap_or_default();
+                return TirExpr::new(
+                    TirExprKind::StringLiteral(data),
+                    string_type,
+                    lit.span,
+                );
+            }
+            ast::Literal::IncludeStr(raw_path) => {
+                let string_type = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let value = self
+                    .tysys
+                    .included_files
+                    .get(&key)
+                    .and_then(|bytes| std::str::from_utf8(bytes).ok())
+                    .map(str::to_owned)
+                    .unwrap_or_default();
+                return TirExpr::new(
+                    TirExprKind::StringLiteral(value),
+                    string_type,
+                    lit.span,
+                );
+            }
+            ast::Literal::IncludeBytes(raw_path) => {
+                let array_u8_type = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_array(crate::tir::TypeTable::U8);
+                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let bytes = self
+                    .tysys
+                    .included_files
+                    .get(&key)
+                    .cloned()
+                    .unwrap_or_default();
+                return TirExpr::new(
+                    TirExprKind::BytesLiteral(bytes),
+                    array_u8_type,
+                    lit.span,
+                );
             }
         };
         TirExpr::new(kind, recorded_type, lit.span)
