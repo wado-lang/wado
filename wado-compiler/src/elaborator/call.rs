@@ -1126,17 +1126,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let param_is_mut = self.lookup_function_param_is_mut(&call.callee);
         let call_args: Vec<CallArg> = args
             .into_iter()
-            .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
+            .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
             .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
             .collect();
+        let func_ref = FunctionRef {
+            module_source: callee.module,
+            name: callee.name,
+            monomorph_info: None,
+            method_info: None, // Free function call,
+        };
+        // Stage 5 (WEP 2026-05-26): record the resolved callee for the
+        // free / builtin / namespaced call paths so reify reproduces
+        // the same FunctionRef shape (module_source, mangled name,
+        // method_info) without re-running the dispatch logic. The
+        // static-method path already records via the early-return at
+        // the `is_static_method` arm; this covers the remaining
+        // shapes (`println(x)`, `builtin::array_new(n)`,
+        // `ns::foo(x)` for use-namespaced imports).
+        self.sem.types.static_method_dispatch.insert(
+            call.id,
+            super::sem::types::StaticMethodDispatch {
+                function_ref: func_ref.clone(),
+                param_is_mut: param_is_mut.iter().copied().collect(),
+            },
+        );
         TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
-                    module_source: callee.module,
-                    name: callee.name,
-                    monomorph_info: None,
-                    method_info: None, // Free function call,
-                },
+                func: func_ref,
                 type_args,
                 args: call_args,
             },
