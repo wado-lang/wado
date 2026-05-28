@@ -44,31 +44,38 @@ be consumed without compiler changes. Concretely:
 There is no separate registry of "known WASI modules". The set of supported
 worlds equals the set of WITs the compiler has parsed during this compilation.
 
-## Key Decision: Unify `effect` into `interface`
+## Key Decision: Unify `effect` block declarations into `interface`
 
 WIT's organizing primitive is `interface`: a named group of free functions,
-resources (with their methods), and types. Wado previously used `effect` as a
-parallel keyword in two places — block declarations (`effect Foo { ... }`)
-and polymorphic effect parameters (`<effect E>`). For WIT interoperability
-both collapse into `interface`:
+resources (with their methods), and types. Wado previously had `effect` as a
+parallel block-declaration keyword (`effect Foo { ... }`). For WIT
+interoperability the block form collapses into `interface`:
 
-- `effect Foo { ... }` → `interface Foo { ... }` (block declarations).
-- `<effect E>` → `<interface E>` (polymorphic interface parameter; this was
-  previously `<effect E>`, renamed for WIT interoperability).
+- `effect Foo { ... }` → `interface Foo { ... }`.
 
 ```wado
-fn wrapper<interface E>(f: fn() with E) with E { f(); }
+interface Stdout { ... }       // formerly effect Stdout { ... }
 ```
 
 The `with` clause continues to take interface names. Effect tracking
-semantics are unchanged; only the spelling.
+semantics are unchanged.
 
-The `effect` keyword is removed.
+The `effect` keyword is retained for one purpose: polymorphic effect
+parameters (`<effect E>`). Here `E` is a type-level binder over effect
+rows — a different concept from a CM interface, and one WIT does not have
+an equivalent for. Keeping the keyword for this case makes the distinction
+explicit and avoids overloading `interface` with a meaning it does not
+have in WIT.
+
+```wado
+fn wrapper<effect E>(f: fn() with E) with E { f(); }
+```
 
 ### What this resolves
 
-- One keyword (`interface`) for both the import and export sides, matching
-  WIT's vocabulary directly.
+- One keyword (`interface`) for both the import and export block forms,
+  matching WIT's vocabulary directly. `effect` keeps a narrow, well-defined
+  role (polymorphic effect parameters).
 - `pub interface Geometry { ... }` defines and groups; `export Geometry`
   from a world publishes it. No producer-side keyword duplication.
 - World import information loss is gone: `import Foo` in a world is a
@@ -113,12 +120,11 @@ The migration runs on a single feature branch and lands as one merge:
       referenced interface's `#[cm(...)]`.
 - [x] World imports/exports are bare WIT-faithful interface refs (`import Foo;`
       / `export Foo;`); the brace-block form has been removed.
-- [ ] Rename `<effect E>` to `<interface E>` and remove the `effect` keyword
-      entirely. Touches the parser, AST/TIR/NIR effect-parameter nodes, the
-      elaborator's effect-row plumbing, `lib/core/iter.wado` and other stdlib
-      `<effect E>` sites, examples, fixtures, and dependent WEPs
-      ([Closure Implementation](./wep-2026-01-16-closure-implementation.md),
-      [Effect Handler](./wep-2026-04-11-effect-handler.md), etc.).
+- [x] Retain the `effect` keyword for polymorphic effect parameters
+      (`<effect E>`). The block-declaration unification does not extend
+      to type parameters: an effect variable binds an effect row, which
+      is a Wado-specific concept WIT has no equivalent for. The current
+      parser support stays.
 - [ ] Update WEP: WIT and Wado Mapping to mark the interface/effect split as
       superseded.
 
@@ -164,7 +170,7 @@ form is unambiguous and minimal.
 | Aspect                                               | Mechanism                                                                                          |
 | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | World definitions                                    | Parsed from `lib/wasi/**/worlds.wado`; `#[cm("...")]` carries the FQ name.                         |
-| Interface → CM import binding (currently `effect`)   | Each method declares `#[cm_import("wasi:cli/stdout@...#write-via-stream")]`.                       |
+| Interface → CM import binding                        | Each method declares `#[cm_import("wasi:cli/stdout@...#write-via-stream")]`.                       |
 | Resources, structs, enums, variants, flags, newtypes | Registered from stdlib `.wado` parsing; `#[cm(...)]` carries CM-side names.                        |
 | Entry function names (`run`, `handle`)               | Pulled from the world's declared `export` items, not hardcoded strings.                            |
 | HTTP detection                                       | Namespace prefix `wasi:http/` plus return-type shape (`Result<Response, _>`).                      |
@@ -242,28 +248,40 @@ plus the precomputed WIT text.
 
 ### Semantics additions
 
-`Semantics` is the contract output of the frontend. It must therefore carry
-every fact needed to emit WIT. Today it does not:
-[`WorldRegistry::new`](../wado-compiler/src/world_registry.rs) is constructed
-inside [`component_model.rs`](../wado-compiler/src/component_model.rs) on
-the batch path, after annotate has already returned. The frontend handing
-back `Semantics` without the registry means LSP and `wado wit` cannot share
-the same input.
+`Semantics` is the contract output of the frontend, so every fact needed
+to emit WIT lives on it. Phase 0 has landed the registry accessors; the
+interface / exported-item indices land in Phase 1 alongside their
+`wit_emit` consumer.
 
-This is fixed by moving registry construction into `semantics_of` and
-exposing the result on `Semantics`. The added fields are:
+Phase 0 (landed):
 
-| Field                                    | Source                                                            |
-| ---------------------------------------- | ----------------------------------------------------------------- |
-| `worlds: WorldRegistry`                  | Built from parsed `world` declarations + `pub interface #[cm]`.   |
-| `interfaces: PubInterfaceIndex`          | Index of `pub interface Foo { ... }` with `#[cm("...")]` FQ.      |
-| `exported_items: ExportedItemIndex`      | `export fn / export struct / export interface / ...` keyed by FQ. |
-| `default_interface_name: Option<String>` | `[package].name` from the manifest, or entry-file stem.           |
+| Accessor                             | Returns                                                                 |
+| ------------------------------------ | ----------------------------------------------------------------------- |
+| `Semantics::world_registry()`        | `Option<&'static WorldRegistry>` — the parsed `world` table.            |
+| `Semantics::cm_interface_registry()` | `Option<&'static CmInterfaceRegistry>` — the parsed CM interface table. |
 
-These indices are derived in a single pass over the loaded TIR modules and
-add no work to the LSP path that does not use them. `FlatPackage` borrows
-the registry from `Semantics` instead of holding a `&'static` reference;
-batch compilation already owns `Semantics` for the duration of the build.
+Both registries are already built by `Elaborator::annotate_modules` (which
+calls `CmInterfaceRegistry::build_from_stdlib`, an `OnceLock`-cached
+singleton) and live on `AnnotateState`. The accessors surface them
+without re-running stdlib parsing, so LSP, `wado wit`, and batch
+compilation share the same instance. `FlatPackage` / `Package` /
+`NirPackage` continue to carry the same `&'static` references they
+already held — Phase 0 added access without changing how the data is
+threaded.
+
+Phase 1 (planned):
+
+| Accessor                                 | Returns                                                                                                                  |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `Semantics::interfaces()`                | Index of `pub interface Foo { ... }` decls with their `#[cm("...")]` FQ.                                                 |
+| `Semantics::exported_items()`            | Index of `export fn / export struct / export interface / ...` keyed by source key.                                       |
+| `WitEmitOptions::default_interface_name` | `[package].name` from `wado.toml`, or entry-file stem — a CLI option threaded into the emitter, not a `Semantics` field. |
+
+`interfaces()` and `exported_items()` are derived in a single pass over
+the loaded TIR modules and add no work to the LSP path that does not use
+them. `default_interface_name` is intentionally a `WitEmitOptions` field
+rather than a `Semantics` accessor: it is a project-level configuration
+input, not a frontend-derived fact.
 
 The wir-build / codegen path continues to consume `Package` as today. The
 new WIT path is a sibling reader of `Semantics`; it does not touch
@@ -525,9 +543,9 @@ will get one when work starts.
 
 - [x] Type-driven CM binding synthesis (WEP: TIR-Level CM Binding Synthesis).
 - [x] Unify `effect` block declarations into `interface` (landed; see
-      Migration Plan above).
-- [ ] Rename `<effect E>` to `<interface E>` and retire the `effect`
-      keyword entirely. Tracked in Migration Plan.
+      Migration Plan above). The `effect` keyword survives in polymorphic
+      effect parameters (`<effect E>`) — see Migration Plan for the
+      rationale.
 - [x] World imports/exports are bare WIT-faithful interface refs
       (`import Foo;` / `export Foo;`); brace-form removed. `WorldImportInfo`
       and `WorldExportInfo` carry `cm_interface_fq` resolved from the
@@ -566,9 +584,10 @@ will get one when work starts.
 
 - A single, documented end-to-end goal for WIT support replaces a scatter of
   point WEPs.
-- One keyword (`interface`) for block declarations and for polymorphic
-  parameters (`<interface E>`), matching WIT's vocabulary directly. The
-  `effect` keyword is retired.
+- One keyword (`interface`) for block declarations on both the import and
+  export sides, matching WIT's vocabulary directly. The `effect` keyword
+  keeps a narrow, well-defined role (polymorphic effect parameters
+  `<effect E>`).
 - World imports are traceable to WIT FQ names by construction, removing the
   fragile method-name-based disambiguation in `CmInterfaceRegistry`.
 - Adding a new WASI or third-party CM library no longer requires patching the
@@ -579,10 +598,9 @@ will get one when work starts.
 
 ### Negative
 
-- Retiring `effect` is a two-step rename: block declarations have already
-  landed; `<effect E>` → `<interface E>` still has to land. Both are
-  one-shot, no-deprecation changes against the stdlib, fixtures, and any
-  user code.
+- The block-form rename `effect Foo { ... }` → `interface Foo { ... }` is
+  a one-shot, no-deprecation change against the stdlib, fixtures, and any
+  user code. It has already landed.
 - Bringing `wit-encoder` / `wit-component` into the compiler increases the
   dependency surface and binary size of the compiler itself.
 - L3 world scoping changes the meaning of `use`: a `use` of an interface not

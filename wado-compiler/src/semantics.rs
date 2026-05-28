@@ -134,10 +134,11 @@ impl Semantics {
     /// (`wasi:cli/command`, `wasi:http/service`, `core:kiln/generator`,
     /// …) plus any user-declared worlds. Keyed by fully-qualified name.
     ///
-    /// Returns `None` only when annotate bailed before constructing the
-    /// elaborator state. Batch compilation refuses to continue in that
-    /// case via [`Self::is_complete`]; LSP queries proceed without world
-    /// data.
+    /// Returns `None` when no elaborator state was built — that is, when
+    /// parse, load, analyze, or annotate bailed before constructing
+    /// `AnnotateState`. Batch compilation refuses to continue in any of
+    /// those cases via [`Self::is_complete`]; LSP queries proceed
+    /// without world data.
     ///
     /// Consumed by the WIT producer (`wado wit` /
     /// `wado compile --embed-wit=…`) and by world-shape decisions in
@@ -151,11 +152,12 @@ impl Semantics {
     ///
     /// Carries the resolved `#[cm(...)]` / `#[cm_import(...)]` view of
     /// every CM interface the frontend has seen — `wasi:*`,
-    /// `core:kiln/*`, and any future user-declared interfaces under the
-    /// unified WIT vocabulary (post-`effect` retirement). Powers CM
-    /// binding synthesis, lift/lower, and WIT producer-side emission.
+    /// `core:kiln/*`, and any future user-declared interfaces (under the
+    /// post-unification `interface` block syntax). Powers CM binding
+    /// synthesis, lift/lower, and WIT producer-side emission.
     ///
-    /// Returns `None` only when annotate bailed; see [`Self::world_registry`].
+    /// Returns `None` under the same conditions as
+    /// [`Self::world_registry`].
     #[must_use]
     pub fn cm_interface_registry(&self) -> Option<&'static CmInterfaceRegistry> {
         self.state.as_ref().map(|s| s.tysys.cm_interface_registry)
