@@ -320,6 +320,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             tir_module.add_struct(anon_struct.clone());
         }
 
+        // Stage 5 / Gap 12: forward the per-module synthesis
+        // requests and default-method synthesis output annotate
+        // recorded on `ModuleDecls`. Same shape the existing
+        // combined walk pushes during the `Item::Impl` arm; the
+        // recording side already mirrors both writes so reify
+        // produces the same `TirModule` content.
+        for req in &self.sem.decls.pending_synthesis_requests {
+            tir_module.synthesis_requests.push(req.clone());
+        }
+        for default_method in &self.sem.decls.pending_default_methods {
+            tir_module.add_function(default_method.clone());
+        }
+
         tir_module.wasm_module = module.wasm_module().map(String::from);
 
         self.logger.ok_or_bail(tir_module)
@@ -806,17 +819,209 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
-    /// Reify every method (regular + synthesised default) on an `impl`
-    /// block. Returns the resulting `TirFunction`s in the same order
-    /// `Elaborator::resolve_module` emits them.
-    #[allow(unused_variables)]
+    /// Reify every method on an `impl` block. Reads the impl-block
+    /// resolution facts annotate recorded
+    /// (`sem.types.impl_facts[impl_block.id]`, Gap 12) and threads
+    /// them into [`Self::reify_method`] per AST `Function`.
+    ///
+    /// Synthesis-request impls (`impl Trait for Type;`) emit no
+    /// methods — the request itself lives on
+    /// `sem.decls.pending_synthesis_requests` and is forwarded to
+    /// `TirModule::synthesis_requests` at [`Self::reify_module`].
+    ///
+    /// Default-method synthesis is also out of scope here: the
+    /// synthesised `TirFunction`s live on
+    /// `sem.decls.pending_default_methods` and forward through the
+    /// per-module path. This keeps the responsibility split clean
+    /// (per-impl-block code in `reify_impl`, per-module aggregation
+    /// in `reify_module`).
     fn reify_impl(&mut self, impl_block: &ast::ImplBlock) -> Vec<TirFunction> {
-        // TODO(stage-5-bodies): mirror the `Item::Impl` arm of
-        // `Elaborator::resolve_module` (elaborator.rs:1022–1238). Includes
-        // synthesis-request handling, associated-type binding setup,
-        // explicit + inferred type-param registration, regular-method
-        // resolution, and the default-method synthesis pass.
-        todo!("reify_impl: pending body-walk reify")
+        if impl_block.is_synthesize_request {
+            return Vec::new();
+        }
+        let Some(facts) = self.sem.types.impl_facts.get(&impl_block.id).cloned() else {
+            // Annotate did not record facts — the impl block was
+            // diagnosed by annotate (e.g. unknown trait reference)
+            // and skipped. Reify follows by emitting no methods.
+            return Vec::new();
+        };
+
+        impl_block
+            .methods
+            .iter()
+            .filter_map(|method| self.reify_method(method, &facts))
+            .collect()
+    }
+
+    /// Reify a single method inside an `impl` block. The method's
+    /// body walk shares the structure with [`Self::reify_function`];
+    /// the difference is that the receiver (`&self` / `&mut self`)
+    /// is synthesised from the recorded [`super::sem::types::ImplFacts::self_type`]
+    /// (no re-resolution of the impl target), and the resulting
+    /// [`TirFunction`] carries the `method_info` /
+    /// `impl_type_params` reify reads from the same recorded facts.
+    fn reify_method(
+        &mut self,
+        func: &ast::Function,
+        facts: &super::sem::types::ImplFacts,
+    ) -> Option<TirFunction> {
+        use crate::ast::SelfKind;
+        use crate::name::{LocalMethodName, MethodName};
+        use crate::tir::TypeTable;
+
+        // Method type-param scope unions the impl's projected
+        // type params with the method's own (skipping effect
+        // params, mirroring `reify_function`'s filter).
+        let mut type_param_names: Vec<String> = facts
+            .impl_type_params
+            .iter()
+            .map(|p| p.name.clone())
+            .collect();
+        for p in &func.type_params {
+            if !p.is_effect && !type_param_names.contains(&p.name) {
+                type_param_names.push(p.name.clone());
+            }
+        }
+
+        // Derive the mangler's base-struct-name input from the
+        // resolved `Self` type. The mangler wants the bare name
+        // (`Box`, not `Box<T>`); the type table's
+        // `type_name(self_type)` returns the mangled form, so
+        // truncate at the first `<`.
+        let struct_name_for_mangle: String =
+            self.tysys.type_table.borrow().type_name(facts.self_type);
+        let base_struct_name = struct_name_for_mangle
+            .split('<')
+            .next()
+            .unwrap_or(&struct_name_for_mangle)
+            .to_string();
+        let mangled_name = MethodName::format_local(
+            &base_struct_name,
+            facts.trait_name_mangled.as_deref(),
+            &func.name,
+        );
+        let method_info = {
+            let mut info = LocalMethodName::new(
+                base_struct_name,
+                facts.trait_name_mangled.clone(),
+                func.name.clone(),
+            );
+            info.is_ref_impl = facts.is_ref_impl;
+            if let Some((module, base)) = facts.trait_canonical.clone() {
+                info.base_trait_module = Some(module);
+                info.base_trait_name = Some(base);
+            }
+            info
+        };
+
+        let return_type = func
+            .return_type
+            .as_ref()
+            .map(|t| self.resolve_type_in_scope(t, &type_param_names))
+            .unwrap_or(TypeTable::UNIT);
+
+        let mut ctx = FunctionContext::new(return_type, func.name.clone());
+        ctx.in_handler_method = facts.is_handler_method;
+        if func.is_async {
+            ctx.is_async = true;
+            ctx.task_return_type = Some(return_type);
+        }
+
+        let mut params = Vec::with_capacity(func.params.len());
+        for p in &func.params {
+            let type_id = match p.self_kind {
+                SelfKind::None => self.resolve_type_in_scope(&p.ty, &type_param_names),
+                SelfKind::Ref => self.tysys.type_table.borrow_mut().make_ref(facts.self_type),
+                SelfKind::MutRef => self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_mut_ref(facts.self_type),
+            };
+            let name = if matches!(p.self_kind, SelfKind::None) {
+                p.name.clone()
+            } else {
+                "self".to_string()
+            };
+            let default_expr = p
+                .default
+                .as_ref()
+                .map(|d| Box::new(self.reify_expr(d, &mut ctx, Some(type_id))));
+            let local_index = ctx.add_local(name.clone(), type_id, p.is_mut, Some(p.id));
+            params.push(crate::tir::TirParam {
+                name,
+                type_id,
+                local_index,
+                is_mut: p.is_mut,
+                default_expr,
+                span: p.span,
+            });
+        }
+
+        let body = func
+            .body
+            .as_ref()
+            .map(|b| self.reify_block(b, &mut ctx, None));
+
+        // Method-level type-param projection: same filter as
+        // `reify_function`'s (skip effect params and `<F: fn(...)>`
+        // bounds, which are realised eagerly).
+        let mut non_effect_non_fn_idx: u32 = 0;
+        let type_params: Vec<crate::tir::TirTypeParam> = func
+            .type_params
+            .iter()
+            .filter_map(|p| {
+                if p.is_effect {
+                    return None;
+                }
+                if p.bounds.iter().any(|b| b.fn_signature.is_some()) {
+                    return None;
+                }
+                let idx = non_effect_non_fn_idx;
+                non_effect_non_fn_idx += 1;
+                Some(crate::tir::TirTypeParam {
+                    name: p.name.clone(),
+                    is_effect: p.is_effect,
+                    is_pack: p.is_pack,
+                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                    default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                    index: idx,
+                })
+            })
+            .collect();
+
+        Some(TirFunction {
+            module_source: ModuleSource::default(),
+            name: mangled_name,
+            is_pub: func.is_pub,
+            is_export: false,
+            is_async: func.is_async,
+            type_params,
+            impl_type_params: facts.impl_type_params.clone(),
+            monomorph_info: None,
+            method_info: Some(method_info),
+            params,
+            return_type,
+            task_return_type: if func.is_async { Some(return_type) } else { None },
+            effects: vec![],
+            stores: func.stores.clone(),
+            body,
+            span: func.span,
+            local_count: ctx.next_local,
+            locals: ctx.locals.clone(),
+            address_taken_locals: ctx.address_taken_locals,
+            stores_aliased_locals: crate::hashmap::IndexSet::default(),
+            is_cm_binding: false,
+            is_dispatch_wrapper: false,
+            is_cm_export: false,
+            is_ambient: false,
+            inline_hint: crate::tir::InlineHint::Auto,
+            compiler_item: None,
+            export_name: None,
+            allocator_tag: None,
+            kind: crate::tir::FunctionKind::Regular,
+            return_abi: crate::tir::ReturnAbi::Single,
+        })
     }
 
     /// Reify a `test "…" { … }` block. Returns the synthesised
