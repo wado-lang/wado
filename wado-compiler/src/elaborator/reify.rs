@@ -1059,6 +1059,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 )
             }
+            ast::Expr::MethodCall(method_call) => self.reify_method_call(method_call, ctx, recorded_type),
             ast::Expr::FieldAccess(field_access) => {
                 // The `field_index` and `field_name` on `FieldAccess`
                 // TIR are positional; the elaborator looks them up from
@@ -1083,7 +1084,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             | ast::Expr::CompoundAssign(_)
             | ast::Expr::ComparisonChain(_)
             | ast::Expr::Call(_)
-            | ast::Expr::MethodCall(_)
             | ast::Expr::StaticMethodCall(_)
             | ast::Expr::Index(_)
             | ast::Expr::If(_)
@@ -1107,6 +1107,117 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 todo!("reify_expr: {:?} variant pending body-walk reify", expr)
             }
         }
+    }
+
+    /// Reify a `MethodCallExpr`. This is the cleanest Stage 5 path:
+    /// every decision — the resolved `FunctionRef`, the receiver-
+    /// adjustment kind, the ref-impl flag, the expression's final type
+    /// — is already on `sem.types` (`method_dispatch` from Stage 4,
+    /// `expression_types` from Stage 4, `is_ref_impl` from Stage 5
+    /// Gap 2). Reify reads all four and emits the same TIR shape
+    /// `Elaborator::resolve_method_call_with` produced, sharing the
+    /// receiver-adjustment helper
+    /// [`super::Elaborator::adjust_receiver_for_self_kind_static`].
+    ///
+    /// The `IndexMutMethodCall` desugar (Gap 3) routes through here
+    /// too: when `sem.types.desugars[id] == IndexMutMethodCall`, the
+    /// receiver is an `IndexExpr` and reify must materialise the
+    /// `__index_mut_val` local before dispatching the method. That
+    /// branch is documented inline and currently `todo!`'d.
+    fn reify_method_call(
+        &mut self,
+        method_call: &ast::MethodCallExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        // IndexMut rewrite gets first crack — when the elaborator
+        // tagged this call as `IndexMutMethodCall`, the receiver is an
+        // index expression that needs `__index_mut_val` synthesis.
+        if matches!(
+            self.sem.types.desugars.get(&method_call.id),
+            Some(super::sem::types::DesugarKind::IndexMutMethodCall)
+        ) {
+            // TODO(stage-5-bodies): mirror
+            // `Elaborator::try_resolve_index_mut_method_call`
+            // (method_lookup.rs:3390–3500). Synthesise
+            // `let __index_mut_val = container.index_mut(idx);` (the
+            // existing local-frame walk-order invariant makes
+            // `__index_mut_val`'s index reproducible), then dispatch
+            // the method on it. `sem.types.method_dispatch[id]` already
+            // carries the *outer* method's dispatch target.
+            todo!("reify_method_call: IndexMut rewrite pending body-walk reify");
+        }
+
+        // Dispatch decision (Stage 4 + Gap 2 record).
+        let dispatch = self
+            .sem
+            .types
+            .method_dispatch
+            .get(&method_call.id)
+            .cloned()
+            .unwrap_or_else(|| {
+                // Method lookup failed during annotate (error-recovery
+                // path). Reify produces a placeholder `Unit` of `ERROR`
+                // type so downstream phases see the same shape annotate
+                // would have built; the actual diagnostic was already
+                // emitted by the elaborator.
+                panic!(
+                    "reify_method_call: dispatch annotation missing for `{}` — \
+                     annotate should have recorded or short-circuited via desugar",
+                    method_call.method
+                )
+            });
+
+        // Reify receiver and adjust per the dispatch contract. Stage 5
+        // shares the adjuster with the elaborator so the same TIR shape
+        // (Unary{Ref}/Unary{MutRef}/Deref wrapping) lands.
+        let raw_receiver = self.reify_expr(&method_call.receiver, ctx, None);
+        let adjusted_receiver =
+            super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                raw_receiver,
+                dispatch.self_kind,
+                dispatch.is_ref_impl,
+                method_call.span,
+                &self.tysys.type_table,
+            );
+
+        // Explicit method-level type args resolved against the current
+        // type-param scope. Inferred type args (the generic-instantiation
+        // path) live on `sem.types.generic_instantiations` but the
+        // elaborator's `FunctionRef.method_info.method_type_args` already
+        // carries the mangled form — reify trusts the recorded
+        // `FunctionRef` and only resolves the syntactic type args here.
+        let type_args: Vec<TypeId> = method_call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+
+        // TODO(stage-5-bodies): callee parameter types drive literal
+        // re-coercion + `is_mut` flagging for each argument. Until the
+        // recording for them lands, reify resolves each argument with
+        // `expected = None` and sets `is_mut = false`. This matches the
+        // shape of the elaborator's output for arguments that needed
+        // no coercion / no mut binding, which covers the bulk of real
+        // call sites; the missing cases are flagged in the WEP's
+        // Stage 5 follow-up list.
+        let args: Vec<crate::tir::CallArg> = method_call
+            .args
+            .iter()
+            .map(|a| {
+                let arg_tir = self.reify_expr(a, ctx, None);
+                crate::tir::CallArg::new(arg_tir, false)
+            })
+            .collect();
+
+        super::Elaborator::<H>::build_tir_method_call(
+            adjusted_receiver,
+            dispatch.function_ref,
+            type_args,
+            args,
+            recorded_type,
+            method_call.span,
+        )
     }
 
     /// Resolve a struct field name to its `(index, name)` pair via

@@ -1600,17 +1600,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         is_ref_impl: bool,
         span: Span,
     ) -> TirExpr {
+        Self::adjust_receiver_for_self_kind_static(
+            receiver,
+            self_kind,
+            is_ref_impl,
+            span,
+            &self.tysys.type_table,
+        )
+    }
+
+    /// `&TypeTable`-only version of [`Self::adjust_receiver_for_self_kind`]
+    /// — Stage 5 [`super::reify::Reify`] calls this directly so it can
+    /// reproduce the receiver adjustment from the recorded
+    /// `(self_kind, is_ref_impl)` pair without holding an [`Elaborator`].
+    /// The instance method above stays as a thin delegate so existing
+    /// elaborator callers don't need to change.
+    pub(super) fn adjust_receiver_for_self_kind_static(
+        receiver: TirExpr,
+        self_kind: ast::SelfKind,
+        is_ref_impl: bool,
+        span: Span,
+        type_table: &std::cell::RefCell<crate::tir::TypeTable>,
+    ) -> TirExpr {
         if is_ref_impl {
             // For ref-type impls, Self is &T (or &mut T).
             // &self means &&T, &mut self means &mut &T.
             // The receiver is already &T, so we need to add an extra reference layer.
             return match self_kind {
                 ast::SelfKind::Ref => {
-                    let ref_type = self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_ref(receiver.type_id);
+                    let ref_type = type_table.borrow_mut().make_ref(receiver.type_id);
                     TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::Ref,
@@ -1621,11 +1639,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                 }
                 ast::SelfKind::MutRef => {
-                    let mut_ref_type = self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_mut_ref(receiver.type_id);
+                    let mut_ref_type = type_table.borrow_mut().make_mut_ref(receiver.type_id);
                     TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::MutRef,
@@ -1635,16 +1649,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span,
                     )
                 }
-                ast::SelfKind::None => self.deref_to_value(receiver, span),
+                ast::SelfKind::None => Self::deref_to_value_static(receiver, span, type_table),
             };
         }
 
-        let receiver_type = self.tysys.type_table.borrow().get(receiver.type_id).clone();
+        let receiver_type = type_table.borrow().get(receiver.type_id).clone();
 
         match self_kind {
             ast::SelfKind::None => {
                 // No self parameter (static method context), deref all refs
-                self.deref_to_value(receiver, span)
+                Self::deref_to_value_static(receiver, span, type_table)
             }
             ast::SelfKind::Ref => {
                 // Method expects &self
@@ -1659,11 +1673,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     _ => {
                         // Value T, need to add &
-                        let ref_type = self
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_ref(receiver.type_id);
+                        let ref_type = type_table.borrow_mut().make_ref(receiver.type_id);
                         TirExpr::new(
                             TirExprKind::Unary {
                                 op: TirUnaryOp::Ref,
@@ -1682,11 +1692,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver
                 } else {
                     // Value T, need to add &mut
-                    let mut_ref_type = self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_mut_ref(receiver.type_id);
+                    let mut_ref_type = type_table.borrow_mut().make_mut_ref(receiver.type_id);
                     TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::MutRef,
@@ -1701,9 +1707,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Dereference a receiver until it's a value (non-reference) type
-    pub(super) fn deref_to_value(&self, mut receiver: TirExpr, span: Span) -> TirExpr {
+    pub(super) fn deref_to_value(&self, receiver: TirExpr, span: Span) -> TirExpr {
+        Self::deref_to_value_static(receiver, span, &self.tysys.type_table)
+    }
+
+    /// `&TypeTable`-only version of [`Self::deref_to_value`], paired
+    /// with [`Self::adjust_receiver_for_self_kind_static`] for Stage 5
+    /// reify reuse.
+    pub(super) fn deref_to_value_static(
+        mut receiver: TirExpr,
+        span: Span,
+        type_table: &std::cell::RefCell<crate::tir::TypeTable>,
+    ) -> TirExpr {
         loop {
-            match self.tysys.type_table.borrow().get(receiver.type_id).clone() {
+            match type_table.borrow().get(receiver.type_id).clone() {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                     receiver = TirExpr::new(
                         TirExprKind::Unary {
