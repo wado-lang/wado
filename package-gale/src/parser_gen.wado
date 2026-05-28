@@ -2150,7 +2150,9 @@ fn inner_walker_follow_for_repeat(rep: &RepeatElement, rep_op: &RepeatOp, elemen
 fn op_is_leaf(op: &Op) -> bool {
     return match op {
         Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => true,
-        _ => false,
+        Repeat(_) => false,
+        Group(_) => false,
+        ListLabel(_) => false,
     };
 }
 

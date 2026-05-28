@@ -950,7 +950,12 @@ fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
             inner: rebind_self_ref_min_prec(ll.inner, prec),
             dedup_base: ll.dedup_base,
         }),
-        other => other,
+        Token(t) => Op::Token(t),
+        Literal(l) => Op::Literal(l),
+        Wildcard(wop) => Op::Wildcard(wop),
+        Excluded(e) => Op::Excluded(e),
+        Repeat(r) => Op::Repeat(r),
+        Group(g) => Op::Group(g),
     };
 }
 
@@ -1674,7 +1679,12 @@ fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
     return match *elem {
         RuleRef(r) => r.name == *rule_name,
         Label(lab) => element_is_self_ref(&lab.element, rule_name),
-        _ => false,
+        TokenRef(_) => false,
+        Literal(_) => false,
+        Group(_) => false,
+        Repeat(_) => false,
+        Wildcard(_) => false,
+        Not(_) => false,
     };
 }
 
@@ -3429,7 +3439,12 @@ fn try_optional_scan_guard(inner: &Element, ctx: &mut GenContext) -> Option<Repe
     let needs_guard = match *inner {
         Group(_) => true,
         RuleRef(_) => true,
-        _ => false,
+        TokenRef(_) => false,
+        Literal(_) => false,
+        Wildcard(_) => false,
+        Not(_) => false,
+        Label(_) => false,
+        Repeat(_) => false,
     };
     if !needs_guard {
         return null;
