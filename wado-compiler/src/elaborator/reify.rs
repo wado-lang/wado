@@ -1116,6 +1116,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_struct_literal(struct_lit, ctx, recorded_type)
             }
             ast::Expr::Range(range) => self.reify_range(range, ctx, recorded_type),
+            ast::Expr::TemplateString(template) => {
+                self.reify_template_string(template, ctx, recorded_type)
+            }
             ast::Expr::Resume(resume) => {
                 // `resume value` inside a handler method. Reify the
                 // value with the function's return type as expected
@@ -1213,7 +1216,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             | ast::Expr::Index(_)
             | ast::Expr::Matches(_)
             | ast::Expr::Closure(_)
-            | ast::Expr::TemplateString(_)
             | ast::Expr::TryOp(_)
             | ast::Expr::WithHandler(_) => {
                 // TODO(stage-5-bodies): mirror the corresponding
@@ -1389,6 +1391,85 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             recorded_type,
             binary.span,
         )
+    }
+
+    /// Reify a template string `"…{expr}…"`. Mirrors
+    /// `Elaborator::resolve_template_string` (template.rs:16+):
+    /// - Constant fast path: no interpolations → concatenate the
+    ///   string parts at reify time and emit a `StringLiteral`.
+    /// - Single-`String`-typed interpolation with no format spec →
+    ///   forward the resolved expression unchanged.
+    /// - General case: build a `Vec<TirTemplatePart>` where each
+    ///   `Interpolation` part carries an optional
+    ///   [`crate::tir::TemplateFormatSpec`] parsed by
+    ///   [`super::template::parse_format_spec`].
+    fn reify_template_string(
+        &mut self,
+        template: &ast::TemplateStringExpr,
+        ctx: &mut FunctionContext,
+        _recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::tir::{TirExprKind, TirTemplatePart};
+
+        let string_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+        let span = template.span;
+
+        let has_interpolation = template
+            .parts
+            .iter()
+            .any(|p| matches!(p, ast::TemplatePart::Interpolation { .. }));
+
+        if !has_interpolation {
+            let mut combined = String::new();
+            for part in &template.parts {
+                if let ast::TemplatePart::String(s) = part {
+                    let unescaped =
+                        super::util::unescape_template_string(s).unwrap_or_default();
+                    combined.push_str(&unescaped);
+                }
+            }
+            return TirExpr::new(TirExprKind::StringLiteral(combined), string_type, span);
+        }
+
+        if template.parts.len() == 1
+            && let ast::TemplatePart::Interpolation { expr, format: None } = &template.parts[0]
+        {
+            let resolved = self.reify_expr(expr, ctx, None);
+            if resolved.type_id == string_type {
+                return resolved;
+            }
+        }
+
+        let mut parts = Vec::new();
+        for part in &template.parts {
+            match part {
+                ast::TemplatePart::String(s) => {
+                    if !s.is_empty() {
+                        let unescaped =
+                            super::util::unescape_template_string(s).unwrap_or_default();
+                        if !unescaped.is_empty() {
+                            parts.push(TirTemplatePart::Literal(unescaped));
+                        }
+                    }
+                }
+                ast::TemplatePart::Interpolation { expr, format } => {
+                    let resolved = self.reify_expr(expr, ctx, None);
+                    let format_spec = format
+                        .as_ref()
+                        .map(|f| super::template::parse_format_spec(&f.spec));
+                    parts.push(TirTemplatePart::Interpolation {
+                        expr: Box::new(resolved),
+                        format_spec,
+                    });
+                }
+            }
+        }
+
+        TirExpr::new(TirExprKind::TemplateString { parts }, string_type, span)
     }
 
     /// Reify a `a..<b` / `a..=b` range expression. The elaborator
