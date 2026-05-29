@@ -1571,6 +1571,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .unwrap_or(TypeTable::UNKNOWN);
         let span = expr.span();
 
+        // Replay an i128 / u128 numeric-literal coercion: annotate
+        // recorded it on `sem.types.coercions`, and unlike every other
+        // `NumericLiteral` coercion (which only retags the literal's
+        // type) the 128-bit structs need an explicit constructor call.
+        if let Some(tir) = self.try_reify_int128_coercion(expr) {
+            return tir;
+        }
+
         match expr {
             ast::Expr::Literal(lit) => self.reify_literal(lit, recorded_type, ctx),
             ast::Expr::Block(block) => {
@@ -1605,11 +1613,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirExpr::new(TirExprKind::TupleLiteral { elements }, recorded_type, span)
             }
             ast::Expr::Cast(cast) => {
+                let target_type = self.resolve_type(&cast.target_type);
+                // `expr as i128/u128` lowers to a `from_u64` / `from_i64`
+                // / `from_pair` constructor call rather than a bare cast,
+                // since the 128-bit types are prelude structs. Mirrors
+                // `Elaborator::resolve_cast`'s int128 branch.
+                if let Some(tir) = self.try_reify_int128_cast(cast, target_type, ctx) {
+                    return tir;
+                }
                 // `expr as Ty` — emit `Cast` with the recorded target
                 // type. Numeric vs newtype-cast handling is downstream;
                 // reify just produces the shape.
                 let inner = self.reify_expr(&cast.expr, ctx, None);
-                let target_type = self.resolve_type(&cast.target_type);
                 TirExpr::new(
                     TirExprKind::Cast {
                         expr: Box::new(inner),
@@ -1791,7 +1806,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // info from `tysys.all_struct_fields` keyed by the
                 // receiver's resolved struct name.
                 let inner = self.reify_expr(&field_access.expr, ctx, None);
-                let (field_index, field_name) =
+                let (field_index, field_name, field_type) =
                     self.lookup_struct_field_index(inner.type_id, &field_access.field);
                 TirExpr::new(
                     TirExprKind::FieldAccess {
@@ -1799,7 +1814,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         field_index,
                         field_name,
                     },
-                    recorded_type,
+                    field_type.unwrap_or(recorded_type),
                     span,
                 )
             }
@@ -6092,34 +6107,64 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// lookup failure so reify doesn't panic on a type the dispatch
     /// hasn't ported yet — the produced TIR is wrong, but downstream
     /// validation flags it loudly.
-    fn lookup_struct_field_index(&self, receiver_type: TypeId, field_name: &str) -> (u32, String) {
+    /// Resolve a field access to its `(index, canonical_name,
+    /// field_type)` against the receiver's struct decl. The field type is
+    /// generic-substituted with the receiver's `type_args` and is the
+    /// authoritative source for the access's `TirExpr::type_id` — unlike
+    /// `expression_types[field.id]`, which collides across template
+    /// sub-parsers (WEP 2026-05-26 gotcha #1). `None` for the type means
+    /// the receiver was not a known struct; the caller falls back to the
+    /// recorded type.
+    fn lookup_struct_field_index(
+        &self,
+        receiver_type: TypeId,
+        field_name: &str,
+    ) -> (u32, String, Option<TypeId>) {
         use crate::tir::ResolvedType;
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
-        let struct_name = match resolved {
-            ResolvedType::Struct { name, .. } => name,
-            ResolvedType::GenericInstance { name, .. } => name,
+        let (struct_name, type_args): (String, Vec<TypeId>) = match resolved {
+            ResolvedType::Struct { name, .. } => (name, vec![]),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => (name, type_args),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                let inner_resolved = self.tysys.type_table.borrow().get(inner).clone();
-                match inner_resolved {
-                    ResolvedType::Struct { name, .. } => name,
-                    ResolvedType::GenericInstance { name, .. } => name,
-                    _ => return (0, field_name.to_string()),
+                match self.tysys.type_table.borrow().get(inner).clone() {
+                    ResolvedType::Struct { name, .. } => (name, vec![]),
+                    ResolvedType::GenericInstance {
+                        name, type_args, ..
+                    } => (name, type_args),
+                    _ => return (0, field_name.to_string(), None),
                 }
             }
-            _ => return (0, field_name.to_string()),
+            _ => return (0, field_name.to_string(), None),
         };
 
-        let lookup = self.type_lookup();
-        if let Some(info) = lookup.struct_fields(&struct_name)
-            && let Some((idx, (n, _, _))) = info
-                .fields
-                .iter()
-                .enumerate()
-                .find(|(_, (n, _, _))| n == field_name)
-        {
-            return (idx as u32, n.clone());
-        }
-        (0, field_name.to_string())
+        let found = {
+            let lookup = self.type_lookup();
+            lookup.struct_fields(&struct_name).and_then(|info| {
+                info.fields
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (n, _, _))| n == field_name)
+                    .map(|(idx, (n, ty, _))| (idx as u32, n.clone(), *ty))
+            })
+        };
+        let Some((idx, canonical, raw_field_type)) = found else {
+            return (0, field_name.to_string(), None);
+        };
+
+        let field_type = if type_args.is_empty() {
+            raw_field_type
+        } else {
+            let substitution: crate::hashmap::IndexMap<u32, TypeId> = (0..type_args.len() as u32)
+                .zip(type_args.iter().copied())
+                .collect();
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .substitute_type_params(raw_field_type, &substitution)
+        };
+        (idx, canonical, Some(field_type))
     }
 
     /// Reify a bare identifier reference. Local lookup goes through
@@ -6487,6 +6532,166 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `TypeId` from `sem.types.expression_types` carries the final
     /// numeric type (e.g. an `i32` literal coerced to `i64` is recorded
     /// as `i64`), so this helper does not re-run literal-type defaulting.
+    /// Replay an `i128` / `u128` numeric-literal coercion recorded by
+    /// annotate (`coercion::try_coerce_numeric_literal`). Returns `None`
+    /// for every other shape so the caller falls through to the normal
+    /// walk. The 128-bit types are prelude structs, so the coerced value
+    /// is materialized by a `from_u64` / `from_i64` / `from_pair` call
+    /// rather than a bare literal; all other `NumericLiteral` coercions
+    /// are free (the literal already carries the coerced type).
+    fn try_reify_int128_coercion(&self, expr: &ast::Expr) -> Option<TirExpr> {
+        let choice = self.sem.types.coercions.get(&expr.id())?;
+        if choice.kind != super::sem::types::CoercionKind::NumericLiteral {
+            return None;
+        }
+        let target_type = choice.target_type;
+        let name = match self.tysys.type_table.borrow().get(target_type).clone() {
+            crate::tir::ResolvedType::Struct { name, .. } if name == "u128" || name == "i128" => {
+                name
+            }
+            _ => return None,
+        };
+
+        // Plain literal, or the negated `-NUM` shape whose coercion is
+        // keyed on the enclosing `Unary` node.
+        let (repr, negated) = match expr {
+            ast::Expr::Literal(ast::LiteralExpr {
+                value: ast::Literal::Number(repr),
+                ..
+            }) => (repr.clone(), false),
+            ast::Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => match &unary.expr {
+                ast::Expr::Literal(ast::LiteralExpr {
+                    value: ast::Literal::Number(repr),
+                    ..
+                }) => (repr.clone(), true),
+                _ => return None,
+            },
+            _ => return None,
+        };
+
+        let parse_result = if name == "u128" {
+            super::util::parse_u128_literal(&repr).map(|v| v as i128)
+        } else if negated {
+            super::util::parse_i128_literal(&format!("-{repr}"))
+        } else {
+            super::util::parse_i128_literal(&repr)
+        };
+        let value = parse_result.ok()?;
+
+        Some(super::coercion::build_int128_literal_call(
+            &name,
+            value,
+            &repr,
+            !negated,
+            target_type,
+            expr.span(),
+        ))
+    }
+
+    /// Replay an `expr as i128/u128` cast. Literal and negated-literal
+    /// operands construct the value directly; a general numeric operand
+    /// becomes `name::from_u64/from_i64(operand as u64/i64)`. Returns
+    /// `None` for non-128-bit targets (normal cast) and for non-numeric
+    /// operands (the caller's bare-cast fallback handles those). Mirrors
+    /// `Elaborator::resolve_cast`.
+    fn try_reify_int128_cast(
+        &mut self,
+        cast: &ast::CastExpr,
+        target_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> Option<TirExpr> {
+        let name = match self.tysys.type_table.borrow().get(target_type).clone() {
+            crate::tir::ResolvedType::Struct { name, .. } if name == "u128" || name == "i128" => {
+                name
+            }
+            _ => return None,
+        };
+
+        // Literal operand: `1042 as u128`.
+        if let ast::Expr::Literal(ast::LiteralExpr {
+            value: ast::Literal::Number(repr),
+            ..
+        }) = &cast.expr
+            && !super::util::is_float_only_literal(repr)
+        {
+            let parsed = if name == "u128" {
+                super::util::parse_u128_literal(repr).map(|v| v as i128)
+            } else {
+                super::util::parse_i128_literal(repr)
+            };
+            if let Ok(value) = parsed {
+                return Some(super::coercion::build_int128_literal_call(
+                    &name,
+                    value,
+                    repr,
+                    true,
+                    target_type,
+                    cast.span,
+                ));
+            }
+        }
+
+        // Negated literal operand (i128 only): `-170... as i128`.
+        if name == "i128"
+            && let ast::Expr::Unary(unary) = &cast.expr
+            && unary.op == ast::UnaryOp::Neg
+            && let ast::Expr::Literal(ast::LiteralExpr {
+                value: ast::Literal::Number(repr),
+                ..
+            }) = &unary.expr
+            && !super::util::is_float_only_literal(repr)
+            && let Ok(value) = super::util::parse_i128_literal(&format!("-{repr}"))
+        {
+            return Some(super::coercion::build_int128_literal_call(
+                &name,
+                value,
+                repr,
+                false,
+                target_type,
+                unary.span,
+            ));
+        }
+
+        // General numeric operand: `x as u128` →
+        // `u128::from_u64(x as u64)`. `inner` is reified once here; a
+        // non-numeric operand (no valid construction) emits the bare cast
+        // directly rather than re-reifying through the caller's fallback.
+        let inner = self.reify_expr(&cast.expr, ctx, None);
+        let source_is_numeric = {
+            let tt = self.tysys.type_table.borrow();
+            tt.is_integer(inner.type_id) || tt.is_float(inner.type_id)
+        };
+        if !source_is_numeric {
+            return Some(TirExpr::new(
+                crate::tir::TirExprKind::Cast {
+                    expr: Box::new(inner),
+                    target_type,
+                },
+                target_type,
+                cast.span,
+            ));
+        }
+        let intermediate_type = if name == "u128" {
+            crate::tir::TypeTable::U64
+        } else {
+            crate::tir::TypeTable::I64
+        };
+        let casted = TirExpr::new(
+            crate::tir::TirExprKind::Cast {
+                expr: Box::new(inner),
+                target_type: intermediate_type,
+            },
+            intermediate_type,
+            cast.span,
+        );
+        Some(super::coercion::build_int128_from_intermediate(
+            &name,
+            casted,
+            target_type,
+            cast.span,
+        ))
+    }
+
     fn reify_literal(
         &mut self,
         lit: &ast::LiteralExpr,

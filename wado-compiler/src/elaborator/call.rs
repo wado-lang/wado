@@ -9,7 +9,6 @@ use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable,
 };
-use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
@@ -1663,59 +1662,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .make_compiler_struct(crate::compiler_item::CompilerItem::String)
-    }
-
-    /// Build a `from_pair` call for i128/u128 large literal construction
-    pub(super) fn build_from_pair_call(
-        &self,
-        type_name: &str,
-        low: u64,
-        high: i64,
-        target_type: TypeId,
-        span: Span,
-    ) -> TirExpr {
-        let low_literal = TirExpr::new(
-            TirExprKind::IntLiteral {
-                value: low,
-                repr: low.to_string(),
-            },
-            TypeTable::U64,
-            span,
-        );
-        let high_literal = TirExpr::new(
-            TirExprKind::IntLiteral {
-                value: high.cast_unsigned(),
-                repr: high.to_string(),
-            },
-            if type_name == "u128" {
-                TypeTable::U64
-            } else {
-                TypeTable::I64
-            },
-            span,
-        );
-
-        let method_info =
-            LocalMethodName::new(type_name.to_string(), None, "from_pair".to_string());
-        let mangled_func_name = method_info.to_mangled_name();
-
-        TirExpr::new(
-            TirExprKind::Call {
-                func: FunctionRef {
-                    module_source: ModuleSource::int128(),
-                    name: mangled_func_name,
-                    monomorph_info: None,
-                    method_info: Some(method_info),
-                },
-                type_args: vec![],
-                args: vec![
-                    CallArg::new(low_literal, false),
-                    CallArg::new(high_literal, false),
-                ],
-            },
-            target_type,
-            span,
-        )
     }
 
     /// Get the return type of a builtin function

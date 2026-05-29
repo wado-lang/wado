@@ -129,9 +129,7 @@ pub(crate) enum CoercionKind {
 /// type. See [`CoercionKind`] for the variants.
 #[derive(Clone)]
 pub(crate) struct CoercionChoice {
-    #[allow(dead_code)]
     pub(crate) kind: CoercionKind,
-    #[allow(dead_code)]
     pub(crate) target_type: TypeId,
 }
 
