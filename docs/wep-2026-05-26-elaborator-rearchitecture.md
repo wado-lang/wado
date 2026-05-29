@@ -513,26 +513,32 @@ Largest first, by fixture-name prefix (after the landings above):
   CM-related impl blocks plus the resource-method binding
   generators.
 - **Generic-impl builder monomorphization (from_literal ~8, serde
-  ~16).** A generic impl whose type parameter is implicit in the self
-  type — `impl KeyValueLiteralBuilder for TagMap<Tag, V>` (no explicit
-  `impl<V>`) — reifies its methods with `V` resolved to `unknown`
-  (return type `TagMap<String, unknown>`), so the
-  `TagMap<Tag,i32>^…::new_literal` call is `[WIR] unresolved`. The
-  elaborator collects implicit type params from the self type's generic
-  args (`elaborator.rs:1292+`) and registers them with self-arg-position
-  indices, but `ImplFacts.impl_type_params` records only the explicit
-  `impl<…>` clause, and reify resolves impl-method types positionally.
-  The correct fix is a unified type-param scope: record the impl's full
-  `(name → index)` scope (explicit + implicit-from-self-type, matching
-  the elaborator's indices) on `ImplFacts` and have reify resolve
-  impl-method types via that map rather than positionally. Care needed:
-  the existing recording already has an index-convention skew for
-  `impl<i32, T>` (the projection's `enumerate` index vs the elaborator's
-  `actual_idx`), so this must unify both — a bolt-on hack risks
-  regressing the explicit-param impls that currently pass. (The earlier
-  "DCE drops the method" hypothesis was wrong: the drop was the
-  `&unknown`-typed signature from the unresolved type param / assoc
-  type; landing #5 fixed the assoc-type half and cleared index_trait.)
+  ~16).** `impl KeyValueLiteralBuilder for TagMap<Tag, V>` (no explicit
+  `impl<V>`) reifies its methods with `V` resolved to `unknown` (return
+  `TagMap<String, unknown>`), so `TagMap<Tag,i32>^…::new_literal` is
+  `[WIR] unresolved`. Full diagnosis: the elaborator's _method-emission_
+  path (`item.rs:1378–1402`) treats **every** `Named` arg of a generic
+  self type as a positional impl type param — `TagMap<Tag, V>` registers
+  `Tag → TypeParam{0}` and `V → TypeParam{1}` (it does _not_ skip the
+  newtype-aliased `Tag`), and the recorded
+  `KeyValueCoercionFacts.type_arg_ids = [String, i32]` (the builder
+  instance's full type args, by self-arg position) is what monomorph
+  substitutes positionally (`TypeParam{i} → type_arg_ids[i]`). reify
+  instead resolves `Tag` as a newtype (→`String`) and `V` as `unknown`,
+  with `impl_type_params` from the explicit `impl<…>` clause (empty
+  here). The fix is to mirror `item.rs:1370–1462` in reify: rebuild
+  `impl_type_params` + the type-param scope from the AST self type
+  (`impl_block.ty`), registering each `Named` self-type arg as
+  `TypeParam{position}`, and resolve impl-method types with that scope
+  taking precedence over newtype resolution (the resolver checks
+  newtypes before type params, so `Tag` would otherwise resolve to its
+  alias). This is a core-resolver change touching every generic-self-type
+  impl, so it needs a full e2e regression run; `impl<T> Foo for Bar<T>`
+  and the concrete `impl … for ReadOnlyBox` (Named self type) are
+  unaffected. (The earlier "DCE drops the method" and "`trait_type_args`"
+  hypotheses were both wrong: the drop was the `&unknown`-typed
+  signature; landing #5 fixed the assoc-type half and cleared
+  index_trait.)
 - **fn_ref (10).** Power-assert capture of fn-typed sub-expressions
   reaches `unknown^Inspect::inspect`; needs the assert-capture path
   to skip / specially handle fn-typed operands.
