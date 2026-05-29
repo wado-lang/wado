@@ -5306,6 +5306,53 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let span = call.span;
 
+        // Variant-ctor call shape (checked first): `Variant::Case(payload)`.
+        // Detected via the callee being a qualified ident whose prefix
+        // names a variant decl with a matching case. Annotate's
+        // common-path also records this call's `static_method_dispatch`
+        // entry (call.rs:1146+), but for a variant constructor the
+        // recorded shape is wrong — it would emit a `Call` against the
+        // synthesized `Option::Some` function rather than a
+        // `VariantConstruct`. Variant detection has to win.
+        if let ast::Expr::Ident(ident) = &call.callee
+            && let Some(pos) = ident.name.find("::")
+        {
+            let prefix = &ident.name[..pos];
+            let suffix = &ident.name[pos + 2..];
+            if !suffix.contains("::") {
+                let lookup = self.type_lookup();
+                if let Some(variant_info) = lookup.variant_case(prefix).cloned()
+                    && let Some((case_index, case_data)) = variant_info
+                        .cases
+                        .iter()
+                        .enumerate()
+                        .find(|(_, c)| c.name == suffix)
+                        .map(|(i, c)| (i, c.clone()))
+                {
+                    let variant_type = self
+                        .sem
+                        .types
+                        .generic_instantiations
+                        .get(&call.id)
+                        .map(|gi| gi.instance_type)
+                        .unwrap_or(recorded_type);
+                    let payload = call.args.first().map(|arg_expr| {
+                        Box::new(self.reify_expr(arg_expr, ctx, Some(case_data.payload)))
+                    });
+                    return TirExpr::new(
+                        TirExprKind::VariantConstruct {
+                            variant_type,
+                            case_index: case_index as u32,
+                            case_name: case_data.name.clone(),
+                            payload,
+                        },
+                        variant_type,
+                        span,
+                    );
+                }
+            }
+        }
+
         // Static-method / builtin dispatch (`Type::method(args)`,
         // `builtin::fn(args)`): the elaborator recorded the resolved
         // `FunctionRef` on `sem.types.static_method_dispatch` so reify
@@ -5365,50 +5412,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 recorded_type,
                 span,
             );
-        }
-
-        // Variant-ctor call shape: `Variant::Case(payload)`. Detected
-        // via the callee being a qualified ident whose prefix names a
-        // variant decl with a matching case. Generic variants pin
-        // their `instance_type` on `sem.types.generic_instantiations`
-        // via Gap 1; non-generic ones use the bare `Variant` type.
-        if let ast::Expr::Ident(ident) = &call.callee
-            && let Some(pos) = ident.name.find("::")
-        {
-            let prefix = &ident.name[..pos];
-            let suffix = &ident.name[pos + 2..];
-            if !suffix.contains("::") {
-                let lookup = self.type_lookup();
-                if let Some(variant_info) = lookup.variant_case(prefix).cloned()
-                    && let Some((case_index, case_data)) = variant_info
-                        .cases
-                        .iter()
-                        .enumerate()
-                        .find(|(_, c)| c.name == suffix)
-                        .map(|(i, c)| (i, c.clone()))
-                {
-                    let variant_type = self
-                        .sem
-                        .types
-                        .generic_instantiations
-                        .get(&call.id)
-                        .map(|gi| gi.instance_type)
-                        .unwrap_or(recorded_type);
-                    let payload = call.args.first().map(|arg_expr| {
-                        Box::new(self.reify_expr(arg_expr, ctx, Some(case_data.payload)))
-                    });
-                    return TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type,
-                            case_index: case_index as u32,
-                            case_name: case_data.name.clone(),
-                            payload,
-                        },
-                        variant_type,
-                        span,
-                    );
-                }
-            }
         }
 
         // Closure-call shape: bare-ident callee that resolves to a
