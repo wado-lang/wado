@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780024971581,
+  "lastUpdate": 1780045540288,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27161,6 +27161,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0748fb8ab62ed08a9ce181a41f9e29c8d89486ba"
         },
         "date": 1780024971273,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "205c6286a08644516c973977ba3467374a2946c4",
+          "message": "Merge pull request #1225 from wado-lang/claude/intelligent-volta-LG8X0\n\nelaborator: reify — Stage 5 progress, 1757/2654 (878.5 per level, +106.5 from baseline)",
+          "timestamp": "2026-05-29T17:59:09+09:00",
+          "tree_id": "12692455622f9b50d8ec42a389bfb81fdbea1ae4",
+          "url": "https://github.com/wado-lang/wado/commit/205c6286a08644516c973977ba3467374a2946c4"
+        },
+        "date": 1780045539815,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
