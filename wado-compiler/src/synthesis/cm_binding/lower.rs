@@ -31,6 +31,19 @@ use super::types::{
     binary_add, cm_type_to_type_id, flatten_param_type, kebab_to_pascal, variant_tag, variant_test,
 };
 
+/// Zero constant matching a CM flat slot type (i32/i64/f32/f64).
+fn flat_slot_zero(tid: TypeId) -> TirExpr {
+    if tid == TypeTable::I64 {
+        i64_const(0)
+    } else if tid == TypeTable::F32 {
+        super::types::cm_zero(cm_abi::CmValType::F32)
+    } else if tid == TypeTable::F64 {
+        super::types::cm_zero(cm_abi::CmValType::F64)
+    } else {
+        i32_const(0)
+    }
+}
+
 /// Synthesize TIR statements that store a Wado value into linear memory.
 ///
 /// For primitives, this is a single `builtin::i32_store` (or similar).
@@ -650,17 +663,30 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 .unwrap_or(0);
 
             if max_flat_count > 0 {
-                // Allocate mutable locals for each payload flat slot, initialized to 0
+                // Per-slot joined flat types for the payload (skip the leading
+                // discriminant slot). Using these — rather than hardcoding i32 —
+                // keeps an i64/f64-carrying case from being truncated into an i32
+                // local, and matches the flat signature `flatten_param_type`
+                // declares for this variant.
+                let payload_slot_types: Vec<TypeId> = {
+                    let joined = flatten_param_type(&resolved, cm_interface_registry, &names);
+                    joined.get(1..).map(<[TypeId]>::to_vec).unwrap_or_default()
+                };
+                // Allocate mutable locals for each payload flat slot, zero-init.
                 let mut payload_locals: Vec<(u32, TypeId)> = Vec::new();
                 for i in 0..max_flat_count {
-                    let local = alloc_local(next_local, locals, TypeTable::I32);
+                    let slot_ty = payload_slot_types
+                        .get(i)
+                        .copied()
+                        .unwrap_or(TypeTable::I32);
+                    let local = alloc_local(next_local, locals, slot_ty);
                     stmts.push(let_mut_stmt(
                         &format!("{prefix}_p{i}"),
                         local,
-                        TypeTable::I32,
-                        i32_const(0),
+                        slot_ty,
+                        flat_slot_zero(slot_ty),
                     ));
-                    payload_locals.push((local, TypeTable::I32));
+                    payload_locals.push((local, slot_ty));
                 }
 
                 // Single TIR Match over the materialised variant: one
@@ -704,9 +730,16 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                         for (i, flat_val) in case_flat.into_iter().enumerate() {
                             if i < payload_locals.len() {
                                 let (pl, pt) = payload_locals[i];
+                                // A case may produce a narrower flat than the
+                                // joined slot (e.g. i32 into an i64 slot); cast.
+                                let v = if flat_val.type_id != pt {
+                                    cast(flat_val, pt)
+                                } else {
+                                    flat_val
+                                };
                                 case_stmts.push(expr_stmt(assign(
                                     local_ref(pl, &format!("{prefix}_p{i}"), pt),
-                                    flat_val,
+                                    v,
                                 )));
                             }
                         }

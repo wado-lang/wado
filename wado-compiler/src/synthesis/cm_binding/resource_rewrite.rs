@@ -24,6 +24,7 @@ use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind,
     TirTemplatePart, TypeId, TypeTable,
 };
+use crate::tir_visitor::TirRefVisitor;
 
 use crate::synthesis::common::{
     assign, binary, break_stmt, builtin_call, cast, cm_raw_call, entry_call, expr_stmt, i32_const,
@@ -121,85 +122,51 @@ pub(super) fn synthesize_record_stream_reads(project: &mut Package) {
 }
 
 /// Find all stream-read method calls that return Array<T> where T is not u8.
+///
+/// Coverage must match `rewrite_cm_methods_in_expr`, which descends into every
+/// container expression (if/match/block/binary/...) when rewriting a record
+/// `stream-read` into a call to `__cm_stream_read_<T>`. A `TirRefVisitor` gives
+/// that exhaustive traversal for free, so a read nested in (e.g.) an
+/// `if`-expression branch is still discovered and its binding function
+/// synthesized — otherwise the rewrite would target a function that was never
+/// generated, producing an unresolved-call panic at WIR build.
 fn find_record_stream_reads(
     block: &TirBlock,
     tt: &TypeTable,
     results: &mut IndexMap<String, (TypeId, TypeId)>,
 ) {
-    for stmt in &block.stmts {
-        find_record_stream_reads_in_stmt(stmt, tt, results);
-    }
+    let mut finder = RecordStreamReadFinder { tt, results };
+    finder.visit_block(block);
 }
 
-fn find_record_stream_reads_in_stmt(
-    stmt: &TirStmt,
-    tt: &TypeTable,
-    results: &mut IndexMap<String, (TypeId, TypeId)>,
-) {
-    match &stmt.kind {
-        TirStmtKind::Let { value, .. } => find_record_stream_reads_in_expr(value, tt, results),
-        TirStmtKind::Expr(value) => find_record_stream_reads_in_expr(value, tt, results),
-        TirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                find_record_stream_reads_in_expr(v, tt, results);
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            find_record_stream_reads_in_expr(condition, tt, results);
-            find_record_stream_reads(then_block, tt, results);
-            if let Some(blk) = else_block {
-                find_record_stream_reads(blk, tt, results);
-            }
-        }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            find_record_stream_reads(body, tt, results);
-        }
-        _ => {}
-    }
+struct RecordStreamReadFinder<'a> {
+    tt: &'a TypeTable,
+    results: &'a mut IndexMap<String, (TypeId, TypeId)>,
 }
 
-fn find_record_stream_reads_in_expr(
-    expr: &TirExpr,
-    tt: &TypeTable,
-    results: &mut IndexMap<String, (TypeId, TypeId)>,
-) {
-    // Recurse into sub-expressions
-    match &expr.kind {
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            find_record_stream_reads_in_expr(receiver, tt, results);
-            for arg in args {
-                find_record_stream_reads_in_expr(&arg.expr, tt, results);
+impl TirRefVisitor for RecordStreamReadFinder<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        // Check this node, then recurse via the exhaustive default walk.
+        // `cm_name` is carried on both MethodCall and Call `method_info`,
+        // mirroring the rewriter's extraction in `rewrite_cm_methods_in_expr`.
+        let cm_name = match &expr.kind {
+            TirExprKind::MethodCall { func, .. } | TirExprKind::Call { func, .. } => {
+                func.method_info.as_ref().and_then(|m| m.cm_name.clone())
+            }
+            _ => None,
+        };
+        if cm_name.as_deref() == Some("stream-read") && !is_u8_array_type(expr.type_id, self.tt) {
+            // Extract element type from Array<T>
+            if let Some(type_args) = self.tt.generic_type_args(expr.type_id)
+                && let Some(&elem_type_id) = type_args.first()
+            {
+                let elem_name = self.tt.base_type_name(elem_type_id);
+                self.results
+                    .entry(elem_name)
+                    .or_insert((elem_type_id, expr.type_id));
             }
         }
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                find_record_stream_reads_in_expr(&arg.expr, tt, results);
-            }
-        }
-        _ => {}
-    }
-
-    // Check if this is a stream-read call with non-u8 element type
-    let cm_name = match &expr.kind {
-        TirExprKind::MethodCall { func, .. } => {
-            func.method_info.as_ref().and_then(|m| m.cm_name.clone())
-        }
-        _ => None,
-    };
-    if cm_name.as_deref() == Some("stream-read") && !is_u8_array_type(expr.type_id, tt) {
-        // Extract element type from Array<T>
-        if let Some(type_args) = tt.generic_type_args(expr.type_id)
-            && let Some(&elem_type_id) = type_args.first()
-        {
-            let elem_name = tt.base_type_name(elem_type_id);
-            results
-                .entry(elem_name)
-                .or_insert((elem_type_id, expr.type_id));
-        }
+        self.walk_expr(expr);
     }
 }
 
