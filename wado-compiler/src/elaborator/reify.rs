@@ -284,7 +284,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Like [`Self::resolve_type_in_scope`] but resolves bare `Self`
     /// (anywhere in the type tree) to `self_type`. Reify has no
-    /// `trait_ctx.self_type` equivalent (production: type_resolution.rs:240),
+    /// `trait_ctx.self_type` equivalent (production: `type_resolution.rs:240`),
     /// so impl-method param/return types substitute it explicitly.
     fn resolve_type_with_self(
         &mut self,
