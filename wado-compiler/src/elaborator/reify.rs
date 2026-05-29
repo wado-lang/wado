@@ -7543,10 +7543,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     };
                 }
 
-                // Resolve the variant decl + case payload.
+                // Resolve the variant decl + case payload. A method that
+                // takes `&self` matches on a reference (`match self { … }`
+                // where `self: &Option<T>`); peel references so the
+                // variant decl + payload type resolve through the
+                // underlying `Option<T>` rather than falling to the
+                // unknown-payload `_` arm.
                 let (payload_type, _payload_decl_module) = {
                     use crate::tir::ResolvedType;
-                    let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
+                    let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+                    let resolved = self.tysys.type_table.borrow().get(peeled).clone();
                     let (decl_name, type_args) = match resolved {
                         ResolvedType::Variant {
                             name,
