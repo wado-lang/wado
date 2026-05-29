@@ -28,16 +28,16 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
 # "1" cannot float up to a newer generation and drag a parallel wast/wasm-encoder
 # tree back in through both wado and wasmtime's wasm-compose. `mise run
 # check-deps` enforces this; re-align when bumping wasmtime (see AGENTS.md).
-wat = { version = "~1.248" }
-wasm-encoder = { version = "0.248" }
-wasmparser = { version = "0.248" }
-wasmprinter = { version = "0.248" }
+wat = { version = "~1.251" }
+wasm-encoder = { version = "0.251" }
+wasmparser = { version = "0.251" }
+wasmprinter = { version = "0.251" }
 walrus = { version = "0.26" }
-wit-parser = { version = "0.248" }
-# wasmtime is vendored from our fork (wado-lang/wasmtime, branch gfx/wasmtime-45)
-# via vendor/wasmtime so we can carry a Cranelift fix for the safepoint-spiller
-# regression (bytecodealliance/wasmtime#13461). Not published to crates.io, so
-# path dependencies on the submodule are fine.
+wit-parser = { version = "0.251" }
+# wasmtime is vendored at vendor/wasmtime (pinned to upstream main, 46.0.0-dev)
+# via path dependencies. We track main rather than a release because the copying
+# GC collector — which wado uses by default — is only the default and fully
+# functional on main. Not published to crates.io, so path deps are fine.
 wasmtime = { path = "vendor/wasmtime/crates/wasmtime", features = ["async", "component-model", "component-model-async"] }
 wasmtime-wasi = { path = "vendor/wasmtime/crates/wasi", features = ["p3"] }
 wasmtime-wasi-http = { path = "vendor/wasmtime/crates/wasi-http", features = ["p3"] }
