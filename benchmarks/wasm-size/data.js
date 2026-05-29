@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780052621158,
+  "lastUpdate": 1780058649598,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27293,6 +27293,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e2c26167f24c3d016cfcea8181a7fa3d4fc6a09c"
         },
         "date": 1780052620677,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2ad5a7ee06fbf070195c6b204a648fc2a708c9a4",
+          "message": "Merge pull request #1175 from wado-lang/gfx/wasmtime-45\n\nperf: track wasmtime main, default to the copying GC collector",
+          "timestamp": "2026-05-29T21:35:24+09:00",
+          "tree_id": "fb22bf56e99b8cca44c0a4f0a9d21ac6f0944571",
+          "url": "https://github.com/wado-lang/wado/commit/2ad5a7ee06fbf070195c6b204a648fc2a708c9a4"
+        },
+        "date": 1780058649127,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
