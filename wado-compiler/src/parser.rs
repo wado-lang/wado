@@ -4713,6 +4713,9 @@ impl Parser {
 
             // Check if this is an associated type binding: `type Name = Type;`
             if self.check(&TokenKind::Type) {
+                // Alloc-at-start (like every other node) so a leading comment
+                // attaches here, not to the inner type or the following item.
+                let assoc_id = self.alloc_ast_id();
                 let type_span = self.peek().span;
                 self.advance();
                 let assoc_name = self.consume_ident()?;
@@ -4720,7 +4723,7 @@ impl Parser {
                 let assoc_ty = self.parse_type()?;
                 let end = self.expect(&TokenKind::Semicolon)?.span;
                 associated_types.push(AssociatedTypeBinding {
-                    id: self.alloc_ast_id(),
+                    id: assoc_id,
                     name: assoc_name,
                     ty: assoc_ty,
                     span: type_span.merge(&end),
@@ -4735,6 +4738,9 @@ impl Parser {
 
                 // Check if this is an associated constant: `[pub] const NAME: Type = expr;`
                 if self.check(&TokenKind::Const) {
+                    // Alloc-at-start (like every other node) so a leading comment
+                    // attaches here, not to the inner value or the following item.
+                    let const_id = self.alloc_ast_id();
                     let const_span = self.peek().span;
                     self.advance();
                     let const_name = self.consume_ident()?;
@@ -4744,7 +4750,7 @@ impl Parser {
                     let const_value = self.parse_expr()?;
                     let end = self.expect(&TokenKind::Semicolon)?.span;
                     constants.push(AssociatedConst {
-                        id: self.alloc_ast_id(),
+                        id: const_id,
                         name: const_name,
                         is_pub,
                         ty: const_ty,

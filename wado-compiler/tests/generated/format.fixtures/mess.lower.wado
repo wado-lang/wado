@@ -17501,7 +17501,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
 }
 
 pub fn Formatter::new(buf: &mut String) -> Formatter with stores[buf] {
-    return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: -1, precision: -1, indent: 0, buf: buf };
+    return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: -1, precision: -2, indent: 0, buf: buf };
 }
 
 pub fn Formatter::write_str(self: &mut Formatter, s: &String) {
@@ -17750,17 +17750,34 @@ pub fn Formatter::close_brace(self: &mut Formatter, close: String) {
 }
 
 pub fn "String^Display::fmt"(self: &String, f: &mut Formatter) {
-    f.Formatter::pad(*self);
+    if (f.precision >= 0) {
+        let mut capped: String = "$value_copy$T21"(*self);
+        capped.String::truncate_chars(f.precision);
+        f.Formatter::pad(capped);
+    } else {
+        f.Formatter::pad(*self);
+    }
 }
 
 pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
+    let limit: i32 = if (f.precision == -2) {
+        256;
+    } else {
+        f.precision;
+    };
     f.Formatter::write_char('"');
-    __for_of_2: {
-        let mut __iter_2: StrCharIter = *self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"();
+    let mut count: i32 = 0;
+    let mut truncated: bool = false;
+    __for_of_5: {
+        let mut __iter_5: StrCharIter = *self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __match_4: Option<char> = __iter_2."StrCharIter^Iterator::next"();
-            match __match_4 {
+            let __match_7: Option<char> = __iter_5."StrCharIter^Iterator::next"();
+            match __match_7 {
                 Some(c) => {
+                    if ((limit >= 0) && (count >= limit)) {
+                        truncated = true;
+                        break;
+                    }
                     if (c == '"') {
                         f.Formatter::write_char('\\');
                         f.Formatter::write_char('"');
@@ -17787,6 +17804,7 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
                             }
                         }
                     }
+                    count = (count + 1);
                 },
                 _ => {
                     break;
@@ -17795,6 +17813,9 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
         }
     }
     f.Formatter::write_char('"');
+    if truncated {
+        f.Formatter::write_str(&"...");
+    }
 }
 
 pub fn "String^InspectAlt::inspect_alt"(self: &String, f: &mut Formatter) {

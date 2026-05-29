@@ -1,0 +1,32 @@
+// Precision specifier as max-length for String and Array.
+//
+// - Display (`{s:.N}`) truncates to N characters with no marker.
+// - Inspect (`{s:.N?}`) truncates to the same N characters and appends a
+//   `...` marker (outside the quotes) when truncation actually happened.
+// - Array Inspect (`{a:.N?}`) keeps at most N elements and appends `, ...`.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let s = "hello world";
+
+    // Display: truncate to 5 chars, no marker.
+    println(`{s:.5}`);
+    // Inspect: truncate to the same 5 chars, with marker outside the quotes.
+    println(`{s:.5?}`);
+    // Display: precision >= length leaves the string unchanged.
+    println(`{s:.20}`);
+    // Inspect: precision >= length, so no marker.
+    println(`{s:.20?}`);
+
+    let a: Array<i32> = [1, 2, 3, 4, 5];
+
+    // Array Inspect: keep 3 elements, mark the rest.
+    println(`{a:.3?}`);
+    // Array Inspect: precision >= length, no marker.
+    println(`{a:.10?}`);
+    // Array Display: keep 3 elements, no marker.
+    println(`{a:.3}`);
+}
+
+__DATA__
+{"stdout": "hello\n\"hello\"...\nhello world\n\"hello world\"\n[1, 2, 3, ...]\n[1, 2, 3, 4, 5]\n[1, 2, 3]\n"}

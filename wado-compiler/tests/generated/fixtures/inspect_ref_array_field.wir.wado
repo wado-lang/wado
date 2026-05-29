@@ -71,23 +71,23 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(25)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(26)
+type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<i32>" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(26)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(27)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(28)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(28)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(29)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(29)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(30)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::inspect" = fn(ref "wado-compiler/tests/fixtures/inspect_ref_array_field.wado//Wrapper", ref "core:prelude/format.wado//Formatter");  // TypeId(31)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(31)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(32)
+type "functype//wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::inspect" = fn(ref "wado-compiler/tests/fixtures/inspect_ref_array_field.wado//Wrapper", ref "core:prelude/format.wado//Formatter");  // TypeId(32)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(33)
 
-type "functype//core:prelude/format.wado/Array<i32>^Inspect::inspect" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(34)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(34)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
 
@@ -115,7 +115,7 @@ fn "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/run"() with Stdout
     let __local_4: ref "core:prelude/format.wado//Formatter";
     __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     w = struct.new "wado-compiler/tests/fixtures/inspect_ref_array_field.wado//Wrapper" { data: __b_0 };
-    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 }; "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::inspect"(w, __local_4); __local_3);
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::inspect"(w, __local_4); __local_3);
 }
 
 fn "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -250,6 +250,62 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
     }
 }
 
+fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<i32>"(arr, f, marker, limit) {
+    let shown: i32;
+    let truncated: bool;
+    let i: i32;
+    let s_11: ref "core:prelude/string.wado//String";
+    let s_19: ref "core:prelude/string.wado//String";
+    let s_21: ref "core:prelude/string.wado//String";
+    let __sroa_self_value: i32;
+    let _licm_used_25: i32;
+    let _licm_repr_26: ref builtin::array<i32>;
+    "core:prelude/string.wado/String::push"(f.buf, 91);
+    shown = 0;
+    truncated = 0;
+    i = 0;
+    _licm_used_25 = arr.used;
+    _licm_repr_26 = arr.repr;
+    b13: block {
+        l14: loop {
+            if i >= _licm_used_25 {
+                break b13;
+            }
+            if (if limit >= 0 -> i32 {
+                shown >= limit;
+            } else {
+                0;
+            }) {
+                truncated = 1;
+                break b13;
+            }
+            if shown > 0 {
+                s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
+                "core:prelude/string.wado/String::push_str"(f.buf, s_11);
+            }
+            __sroa_self_value = builtin::array_get<i32>(_licm_repr_26, i);
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, f);
+            shown = shown + 1;
+            i = i + 1;
+            continue l14;
+        };
+    };
+    if (if marker -> i32 {
+        truncated;
+    } else {
+        0;
+    }) {
+        if shown > 0 {
+            s_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", ..."), used: 5 };
+            "core:prelude/string.wado/String::push_str"(f.buf, s_19);
+        } else {
+            s_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
+            "core:prelude/string.wado/String::push_str"(f.buf, s_21);
+        }
+    }
+    "core:prelude/string.wado/String::push"(f.buf, 93);
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -338,7 +394,8 @@ fn "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::i
     let s_5: ref "core:prelude/string.wado//String";
     let self_6: ref "core:prelude//Array<i32>";
     let s_10: ref "core:prelude/string.wado//String";
-    let s_12: ref "core:prelude/string.wado//String";
+    let limit: i32;
+    let s_15: ref "core:prelude/string.wado//String";
     s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Wrapper { "), used: 10 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_3);
     s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("data: "), used: 6 };
@@ -346,9 +403,14 @@ fn "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::i
     self_6 = self.data;
     s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&"), used: 1 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_10);
-    "core:prelude/format.wado/Array<i32>^Inspect::inspect"(self_6, f);
-    s_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
-    "core:prelude/string.wado/String::push_str"(f.buf, s_12);
+    limit = (if f.precision == -2 -> i32 {
+        256;
+    } else {
+        f.precision;
+    });
+    "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<i32>"(self_6, f, 1, limit);
+    s_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_15);
 }
 
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
@@ -356,14 +418,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b21: block {
-        l22: loop {
+    b31: block {
+        l32: loop {
             if i >= n {
-                break b21;
+                break b31;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l22;
+            continue l32;
         };
     };
 }
@@ -446,34 +508,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
-}
-
-fn "core:prelude/format.wado/Array<i32>^Inspect::inspect"(self, f) {
-    let i: i32;
-    let s: ref "core:prelude/string.wado//String";
-    let __sroa_self_value: i32;
-    let _licm_used_17: i32;
-    let _licm_repr_18: ref builtin::array<i32>;
-    "core:prelude/string.wado/String::push"(f.buf, 91);
-    i = 0;
-    _licm_used_17 = self.used;
-    _licm_repr_18 = self.repr;
-    b41: block {
-        l42: loop {
-            if i >= _licm_used_17 {
-                break b41;
-            }
-            if i > 0 {
-                s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
-                "core:prelude/string.wado/String::push_str"(f.buf, s);
-            }
-            __sroa_self_value = builtin::array_get<i32>(_licm_repr_18, i);
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, f);
-            i = i + 1;
-            continue l42;
-        };
-    };
-    "core:prelude/string.wado/String::push"(f.buf, 93);
 }
 
 export fn "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/__cm_export__run" as "run"

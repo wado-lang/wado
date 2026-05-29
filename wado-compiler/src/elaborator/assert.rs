@@ -326,6 +326,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     sign_plus: false,
                     alternate: false,
                     zero_pad: false,
+                    // No precision: the `:?` dump lets sequence Inspect apply
+                    // its default cap, leaving floats etc. rendered naturally.
                     width: None,
                     precision: None,
                     type_char: Some('?'),

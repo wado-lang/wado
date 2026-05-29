@@ -14265,21 +14265,21 @@ fn template_strings(name: String, pi: f64, n: i32) {
     let d: String = __tmpl: {
         let mut __r: String = "core::prelude/string.wado::String::with_capacity"(31);
         __r.String::push_str(&"Right-aligned: ");
-        let mut __f: Formatter = Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: 10, precision: -1, indent: 0, buf: &mut __r };
+        let mut __f: Formatter = Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: 10, precision: -2, indent: 0, buf: &mut __r };
         Box<i32> { value: n }."i32^Display::fmt"(&mut __f);
         break __tmpl: __r;
     };
     let e: String = __tmpl: {
         let mut __r: String = "core::prelude/string.wado::String::with_capacity"(29);
         __r.String::push_str(&"Zero-padded: ");
-        let mut __f: Formatter = Formatter { fill: '0', align: Alignment::Right, sign_plus: false, zero_pad: true, width: 8, precision: -1, indent: 0, buf: &mut __r };
+        let mut __f: Formatter = Formatter { fill: '0', align: Alignment::Right, sign_plus: false, zero_pad: true, width: 8, precision: -2, indent: 0, buf: &mut __r };
         Box<i32> { value: n }."i32^Display::fmt"(&mut __f);
         break __tmpl: __r;
     };
     let f: String = __tmpl: {
         let mut __r: String = "core::prelude/string.wado::String::with_capacity"(24);
         __r.String::push_str(&"Signed: ");
-        let mut __f: Formatter = Formatter { fill: ' ', align: Alignment::Right, sign_plus: true, zero_pad: false, width: -1, precision: -1, indent: 0, buf: &mut __r };
+        let mut __f: Formatter = Formatter { fill: ' ', align: Alignment::Right, sign_plus: true, zero_pad: false, width: -1, precision: -2, indent: 0, buf: &mut __r };
         Box<i32> { value: n }."i32^Display::fmt"(&mut __f);
         break __tmpl: __r;
     };
@@ -19024,7 +19024,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
 }
 
 pub fn Formatter::new(buf: &mut String) -> Formatter with stores[buf] {
-    return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: -1, precision: -1, indent: 0, buf: buf };
+    return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: -1, precision: -2, indent: 0, buf: buf };
 }
 
 pub fn Formatter::write_str(self: &mut Formatter, s: &String) {
@@ -19273,17 +19273,34 @@ pub fn Formatter::close_brace(self: &mut Formatter, close: String) {
 }
 
 pub fn "String^Display::fmt"(self: &String, f: &mut Formatter) {
-    f.Formatter::pad(*self);
+    if (f.precision >= 0) {
+        let mut capped: String = "$value_copy$T34"(*self);
+        capped.String::truncate_chars(f.precision);
+        f.Formatter::pad(capped);
+    } else {
+        f.Formatter::pad(*self);
+    }
 }
 
 pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
+    let limit: i32 = if (f.precision == -2) {
+        256;
+    } else {
+        f.precision;
+    };
     f.Formatter::write_char('"');
-    __for_of_2: {
-        let mut __iter_2: StrCharIter = *self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"();
+    let mut count: i32 = 0;
+    let mut truncated: bool = false;
+    __for_of_5: {
+        let mut __iter_5: StrCharIter = *self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __match_4: Option<char> = __iter_2."StrCharIter^Iterator::next"();
-            match __match_4 {
+            let __match_7: Option<char> = __iter_5."StrCharIter^Iterator::next"();
+            match __match_7 {
                 Some(c) => {
+                    if ((limit >= 0) && (count >= limit)) {
+                        truncated = true;
+                        break;
+                    }
                     if (c == '"') {
                         f.Formatter::write_char('\\');
                         f.Formatter::write_char('"');
@@ -19310,6 +19327,7 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
                             }
                         }
                     }
+                    count = (count + 1);
                 },
                 _ => {
                     break;
@@ -19318,6 +19336,9 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
         }
     }
     f.Formatter::write_char('"');
+    if truncated {
+        f.Formatter::write_str(&"...");
+    }
 }
 
 pub fn "String^InspectAlt::inspect_alt"(self: &String, f: &mut Formatter) {
