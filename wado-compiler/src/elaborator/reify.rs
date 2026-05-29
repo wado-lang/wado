@@ -283,23 +283,33 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Like [`Self::resolve_type_in_scope`] but resolves bare `Self`
-    /// (anywhere in the type tree) to `self_type`. Reify has no
-    /// `trait_ctx.self_type` equivalent (production: `type_resolution.rs:240`),
-    /// so impl-method param/return types substitute it explicitly.
+    /// (anywhere in the type tree) to `self_type` and `Self::AssocType`
+    /// to the impl's recorded associated-type binding. Reify has no
+    /// `trait_ctx` equivalent (production: `type_resolution.rs:127`), so
+    /// impl-method param/return types substitute both explicitly.
     fn resolve_type_with_self(
         &mut self,
         ty: &ast::Type,
         type_params: &[String],
         self_type: TypeId,
+        assoc_type_bindings: &crate::hashmap::IndexMap<String, TypeId>,
     ) -> TypeId {
         match ty {
             ast::Type::Named(named) if named.name == "Self" => self_type,
+            // `Self::Output` — the impl's `type Output = …;` binding,
+            // resolved by annotate and recorded on `ImplFacts`.
+            ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => assoc_type_bindings
+                .get(&ns.name)
+                .copied()
+                .unwrap_or_else(|| self.resolve_type_in_scope(ty, type_params)),
             ast::Type::Reference(inner) => {
-                let inner_id = self.resolve_type_with_self(inner, type_params, self_type);
+                let inner_id =
+                    self.resolve_type_with_self(inner, type_params, self_type, assoc_type_bindings);
                 self.tysys.type_table.borrow_mut().make_ref(inner_id)
             }
             ast::Type::MutReference(inner) => {
-                let inner_id = self.resolve_type_with_self(inner, type_params, self_type);
+                let inner_id =
+                    self.resolve_type_with_self(inner, type_params, self_type, assoc_type_bindings);
                 self.tysys.type_table.borrow_mut().make_mut_ref(inner_id)
             }
             _ => self.resolve_type_in_scope(ty, type_params),
@@ -1020,7 +1030,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let return_type = func
             .return_type
             .as_ref()
-            .map(|t| self.resolve_type_with_self(t, &type_param_names, facts.self_type))
+            .map(|t| {
+                self.resolve_type_with_self(
+                    t,
+                    &type_param_names,
+                    facts.self_type,
+                    &facts.assoc_type_bindings,
+                )
+            })
             .unwrap_or(TypeTable::UNIT);
 
         let mut ctx = FunctionContext::new(return_type, func.name.clone());
@@ -1033,9 +1050,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut params = Vec::with_capacity(func.params.len());
         for p in &func.params {
             let type_id = match p.self_kind {
-                SelfKind::None => {
-                    self.resolve_type_with_self(&p.ty, &type_param_names, facts.self_type)
-                }
+                SelfKind::None => self.resolve_type_with_self(
+                    &p.ty,
+                    &type_param_names,
+                    facts.self_type,
+                    &facts.assoc_type_bindings,
+                ),
                 SelfKind::Ref => self.tysys.type_table.borrow_mut().make_ref(facts.self_type),
                 SelfKind::MutRef => self
                     .tysys
