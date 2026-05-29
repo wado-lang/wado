@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2038 / 2664 fixtures passing under
+      suite reaches **2334 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 626 remaining failures are all reify-specific). The
+      so the 330 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -512,14 +512,47 @@ Landed:
     recorded `type_arg_ids` lines up. Cleared the `from_literal`,
     `index_value`, `sequence_literal`, and `template_string_generic`
     builder fixtures (zero net regressions on a full run).
+11. **Async task-return type carried for store inference.** An async
+    function's wasm return type is erased to `()`; the recorded
+    `function_return_types` held that erased unit, so reify's
+    `task_return_type` was unit and the resource-store inference in
+    `effect_check` could not see resources in the declared return
+    (`missing resource 'Response' required by '__cm_binding__Response_new'`
+    on the `wasi:http/service` fixtures). annotate now records the
+    declared return on `function_task_returns`; reify reads it.
+12. **Static-method dispatch reuse + recorded-type variant ctors.**
+    reify rebuilt every `StaticMethodCallExpr` from scratch, losing the
+    mangled name / `cm_name` / monomorph info and collapsing turbofish
+    targets (`Future::<T>::new`, `Result::<…>::Ok`) to an empty struct
+    name (`::new` / `::Ok` unresolved). annotate now records the
+    resolved `FunctionRef` on `static_method_dispatch` keyed by the
+    static-call AstId and reify reuses it; turbofish variant ctors take
+    their variant name + instance type from the call's recorded
+    expression type. This was the largest single lift of the session
+    (**2038 → 2334**): it cleared the entire CM / HTTP / stream cluster
+    and every `Result` / `Option` / `Future` turbofish ctor and static
+    call across the suite. Zero net regressions on a full run.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above):
+Largest first, by fixture-name prefix (after the landings above; the
+CM / HTTP / stream cluster is now resolved):
 
-- **CM / HTTP / stream binding synthesis (~45).** `http_request`,
-  `http_fields`, `http_client`, `http_response`, `stream_*` —
-  unchanged from the handover analysis; needs a reify pass over
+- **fn_ref (~10).** Power-assert capture of fn-typed sub-expressions
+  reaches `unknown^Inspect::inspect`.
+- **serde (~14).** `serde_json` / `serde_serialize`: method-level
+  generic monomorphization (`serialize<S: Serializer>`) + derive-
+  synthesized impls.
+- **cross_module (~6), effect_propagation / effect_handler (~9),
+  match_literal / match_ergonomics (~7), variadic / type_param /
+  trait_default / iterator_generic / inspect** and smaller tails.
+
+<!-- superseded: the CM binding cluster below is resolved by landings
+11-12; kept for the original diagnosis trail. -->
+
+- **CM / HTTP / stream binding synthesis (RESOLVED by #11/#12).**
+  `http_request`, `http_fields`, `http_client`, `http_response`,
+  `stream_*` — originally diagnosed as needing a reify pass over
   CM-related impl blocks plus the resource-method binding
   generators.
 - **Serde derive + non-`Named` self-type args (serde ~16,
