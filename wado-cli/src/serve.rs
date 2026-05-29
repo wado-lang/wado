@@ -62,19 +62,9 @@ pub struct ServeOptions {
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
     pub allocator: Option<String>,
-<<<<<<< HEAD
     pub collector: wasmtime::Collector,
-    /// Preopened directories as `(host_path, guest_path)` pairs. Empty by
-    /// default — services rarely need filesystem access, so unlike `wado run`
-    /// we do NOT preopen the cwd unless the user passes `--dir`.
-||||||| ea70f9adf
-    /// Preopened directories as `(host_path, guest_path)` pairs. Empty by
-    /// default — services rarely need filesystem access, so unlike `wado run`
-    /// we do NOT preopen the cwd unless the user passes `--dir`.
-=======
     /// Empty by default: unlike `wado run`, services don't preopen cwd
     /// automatically — the user must pass `--dir`.
->>>>>>> origin/main
     pub preopened_dirs: Vec<(String, String)>,
     pub timeout_secs: u64,
     /// `None` ⇒ one worker per CPU.

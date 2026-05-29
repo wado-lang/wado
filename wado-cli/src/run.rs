@@ -27,12 +27,8 @@ pub struct RunOptions {
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
     pub allocator: Option<String>,
-<<<<<<< HEAD
     pub collector: wasmtime::Collector,
-||||||| ea70f9adf
-=======
     pub no_cache: bool,
->>>>>>> origin/main
 }
 
 #[derive(Clone, Copy)]
@@ -190,12 +186,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
     let mut allocator: Option<String> = None;
-<<<<<<< HEAD
     let mut collector = runtime::DEFAULT_COLLECTOR;
-||||||| ea70f9adf
-=======
     let mut no_cache = false;
->>>>>>> origin/main
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -260,12 +252,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
         inline_threshold,
         opt_iterations,
         allocator,
-<<<<<<< HEAD
         collector,
-||||||| ea70f9adf
-=======
         no_cache,
->>>>>>> origin/main
     })
 }
 
