@@ -9,7 +9,7 @@ fn main() {
     let data = std::fs::read("json_twitter/twitter.json")
         .expect("failed to read json_twitter/twitter.json");
     let size = data.len();
-    let iterations = 10;
+    let iterations = 100;
 
     println!("zlib {size} bytes x {iterations} iterations");
 

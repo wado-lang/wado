@@ -86,6 +86,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file("json_canada/canada.json");
     let mut b = Benchmark::new("json-canada");
     b.input_size = Option::Some(json_data.len());
+    b.iterations = 10;
 
     let total_points = b.run("", || count_points(json_data));
     assert total_points == 55563;
