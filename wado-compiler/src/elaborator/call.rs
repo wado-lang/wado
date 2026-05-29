@@ -2066,8 +2066,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// unbound, because `T` never appears in a parameter type. For each bound
     /// `Owner: Trait<Assoc = Target>` whose `Owner` is already inferred to a
     /// concrete type, project that type's `Assoc` to bind `Target`. Without
-    /// this, `T` would survive monomorphization and trap codegen with an
-    /// "unsubstituted TypeParam" panic. Iterates to a fixpoint so chained
+    /// this, `T` would survive monomorphization and trap codegen as an
+    /// unsubstituted type parameter. Iterates to a fixpoint so chained
     /// bounds resolve regardless of declaration order.
     fn infer_type_args_from_assoc_bounds(&mut self, callee: &CalleeRef, type_args: &mut [TypeId]) {
         let params = self.lookup_function_type_params(callee);
