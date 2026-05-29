@@ -1010,16 +1010,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .args
                 .iter()
                 .enumerate()
-                .filter_map(|(i, arg)| match arg {
-                    ast::Type::Named(named) => Some(crate::tir::TirTypeParam {
-                        name: named.name.clone(),
+                .map(|(i, arg)| {
+                    // Every self-type arg occupies a positional impl
+                    // type-param slot so monomorph's positional
+                    // substitution against `type_arg_ids` stays aligned.
+                    // A non-`Named` arg (`Array<String>` in
+                    // `NestedMap<Array<String>, V>`) is concrete in the
+                    // body, so its slot just holds the position with a
+                    // synthesized name that the body never references.
+                    let name = match arg {
+                        ast::Type::Named(named) => named.name.clone(),
+                        _ => format!("__impl_arg{i}"),
+                    };
+                    crate::tir::TirTypeParam {
+                        name: name.clone(),
                         is_effect: false,
                         is_pack: false,
-                        bounds: bounds_for(&named.name),
+                        bounds: bounds_for(&name),
                         default: None,
                         index: i as u32,
-                    }),
-                    _ => None,
+                    }
                 })
                 .collect(),
             ast::Type::Named(named)
