@@ -5394,7 +5394,59 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
     ) -> TirExpr {
         use crate::name::{LocalMethodName, MethodName};
-        use crate::tir::{CallArg, ResolvedType, TirExprKind};
+        use crate::tir::{CallArg, ResolvedType, TirExprKind, TypeId};
+
+        // Reuse the static-method `FunctionRef` annotate resolved
+        // (mangled name + `cm_name` for CM binding synthesis). reify's
+        // own target-type resolution can lose these for imported / CM
+        // generic targets (`Future::<T>::new`, `Result::<…>::Ok`),
+        // collapsing the struct name to empty and emitting an
+        // unresolvable `::new` call. Variant-constructor turbofish shapes
+        // are not recorded here (annotate returns before the static-call
+        // path), so they fall through to the variant detection below.
+        if let Some(dispatch) = self
+            .sem
+            .types
+            .static_method_dispatch
+            .get(&static_call.id)
+            .cloned()
+        {
+            let type_args: Vec<TypeId> = if static_call.type_args.is_empty() {
+                self.sem
+                    .types
+                    .generic_instantiations
+                    .get(&static_call.id)
+                    .map(|gi| gi.type_args.clone())
+                    .unwrap_or_default()
+            } else {
+                static_call
+                    .type_args
+                    .iter()
+                    .map(|ty| self.resolve_type(ty))
+                    .collect()
+            };
+            let args: Vec<CallArg> = static_call
+                .args
+                .iter()
+                .zip(
+                    dispatch
+                        .param_is_mut
+                        .iter()
+                        .copied()
+                        .chain(std::iter::repeat(false)),
+                )
+                .map(|(a, is_mut)| CallArg::new(self.reify_expr(a, ctx, None), is_mut))
+                .collect();
+            return TirExpr::new(
+                TirExprKind::Call {
+                    func: dispatch.function_ref,
+                    type_args,
+                    args,
+                },
+                recorded_type,
+                static_call.span,
+            );
+        }
 
         let target_type_id = self.resolve_type(&static_call.target_type);
         let (struct_name, struct_module): (String, crate::module_source::ModuleSource) = {
@@ -5448,13 +5500,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `Result::<T, E>::Ok(v)`): the target type is a variant and the
         // method names one of its cases. Must beat the static-method
         // dispatch below, which would emit an unresolved `Option::Some`
-        // call. Mirrors `reify_call`'s plain-ident ctor detection.
-        let target_type_args: Vec<TypeId> =
-            match self.tysys.type_table.borrow().get(target_type_id).clone() {
-                ResolvedType::GenericInstance { type_args, .. } => type_args,
-                _ => Vec::new(),
-            };
-        if let Some(variant_info) = self.type_lookup().variant_case(&struct_name).cloned()
+        // call. The variant name + instance type come from the call's
+        // recorded expression type (a `GenericInstance` / `Variant`) when
+        // available — reify's own resolution of the turbofish target can
+        // collapse to an empty name for imported / CM args — falling back
+        // to the resolved target type.
+        let (variant_name, variant_type, variant_type_args): (String, TypeId, Vec<TypeId>) = {
+            let tt = self.tysys.type_table.borrow();
+            match tt.get(recorded_type).clone() {
+                ResolvedType::GenericInstance {
+                    name, type_args, ..
+                } => (name, recorded_type, type_args),
+                ResolvedType::Variant { name, .. } => (name, recorded_type, Vec::new()),
+                _ => {
+                    let args = match tt.get(target_type_id).clone() {
+                        ResolvedType::GenericInstance { type_args, .. } => type_args,
+                        _ => Vec::new(),
+                    };
+                    (struct_name.clone(), target_type_id, args)
+                }
+            }
+        };
+        if let Some(variant_info) = self.type_lookup().variant_case(&variant_name).cloned()
             && let Some((case_index, case_data)) = variant_info
                 .cases
                 .iter()
@@ -5463,9 +5530,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .map(|(i, c)| (i, c.clone()))
         {
             let payload_type = self.get_variant_case_payload_type(
-                &struct_name,
+                &variant_name,
                 &static_call.method,
-                &target_type_args,
+                &variant_type_args,
             );
             let payload = static_call
                 .args
@@ -5473,12 +5540,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .map(|a| Box::new(self.reify_expr(a, ctx, Some(payload_type))));
             return TirExpr::new(
                 TirExprKind::VariantConstruct {
-                    variant_type: target_type_id,
+                    variant_type,
                     case_index: case_index as u32,
                     case_name: case_data.name,
                     payload,
                 },
-                target_type_id,
+                variant_type,
                 static_call.span,
             );
         }
