@@ -6903,6 +6903,122 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Binding patterns add locals to `ctx` in the same order annotate
     /// did (per the walk-order invariant). The variant binding order
     /// mirrors `Elaborator::resolve_if_pattern_inner`'s recursion.
+    /// Resolve a nullary qualified pattern (`TokenKind::FOO`, `i32::MAX`)
+    /// to its associated-constant value, mirroring the elaborator's
+    /// pattern lowering (stmt.rs:1428+). Integer constants become
+    /// `Literal` patterns (signed/unsigned per the scrutinee) so they
+    /// benefit from switch lowering; everything else becomes a
+    /// `ConstantValue`. Returns `None` when the name is not a recorded
+    /// associated constant (i.e. it is a real variant case).
+    fn reify_associated_const_pattern(
+        &mut self,
+        variant_name: &str,
+        variant_qualifier: Option<&ast::Type>,
+        scrutinee_type: TypeId,
+        span: crate::token::Span,
+        ctx: &mut FunctionContext,
+    ) -> Option<TirPattern> {
+        use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirLiteralPattern};
+
+        // Key matches `Elaborator::format_assoc_const_key`: bare name when
+        // unqualified, else `<base>::<name>` using the qualifier's base
+        // type name.
+        let key = match variant_qualifier {
+            None => variant_name.to_string(),
+            Some(ast::Type::Named(t)) => format!("{}::{}", t.name, variant_name),
+            Some(ast::Type::Generic(t)) => format!("{}::{}", t.name, variant_name),
+            Some(ast::Type::NamespacedGeneric(t)) => format!("{}::{}", t.name, variant_name),
+            Some(_) => variant_name.to_string(),
+        };
+
+        let (const_ty, const_expr) = self.sem.decls.associated_constants.get(&key).cloned()?;
+
+        let type_id = self.resolve_type(&const_ty);
+        let resolved = self.reify_expr(&const_expr, ctx, Some(type_id));
+        match &resolved.kind {
+            TirExprKind::IntLiteral { repr, .. } => {
+                let is_unsigned = matches!(
+                    self.tysys.type_table.borrow().get(scrutinee_type),
+                    ResolvedType::Primitive(
+                        crate::tir::PrimitiveType::U8
+                            | crate::tir::PrimitiveType::U16
+                            | crate::tir::PrimitiveType::U32
+                            | crate::tir::PrimitiveType::U64
+                            | crate::tir::PrimitiveType::U128
+                    ),
+                ) || matches!(
+                    self.tysys.type_table.borrow().get(scrutinee_type),
+                    ResolvedType::Struct { name, .. } if name == "u128",
+                );
+                if is_unsigned {
+                    if let Ok(v) = super::util::parse_u128_literal(repr) {
+                        return Some(TirPattern::Literal(TirLiteralPattern::U128(v)));
+                    }
+                } else if let Ok(v) = super::util::parse_i128_literal(repr) {
+                    return Some(TirPattern::Literal(TirLiteralPattern::I128(v)));
+                }
+            }
+            TirExprKind::BoolLiteral(v) => {
+                return Some(TirPattern::Literal(TirLiteralPattern::Bool(*v)));
+            }
+            TirExprKind::CharLiteral(v) => {
+                return Some(TirPattern::Literal(TirLiteralPattern::Char(*v)));
+            }
+            _ => {}
+        }
+        Some(TirPattern::ConstantValue {
+            expr: Box::new(TirExpr::new(resolved.kind, type_id, span)),
+        })
+    }
+
+    /// Resolve a range-pattern endpoint to its `i128` value. Literal
+    /// endpoints parse directly; an associated-constant endpoint
+    /// (`i32::MIN`, `TokenKind::FOO`) resolves through
+    /// `sem.decls.associated_constants` — mirroring the elaborator, which
+    /// inlines const range bounds to their values.
+    fn pattern_endpoint_value(
+        &mut self,
+        endpoint: &ast::Pattern,
+        ctx: &mut FunctionContext,
+    ) -> i128 {
+        use crate::tir::TirExprKind;
+        if let ast::Pattern::Variant {
+            variant_name,
+            variant_qualifier,
+            bindings,
+            ..
+        } = endpoint
+            && bindings.is_empty()
+        {
+            // Builtin primitive const (`i32::MIN`, `u8::MAX`): not in the
+            // user `associated_constants` map, resolved by value.
+            if let Some(v) =
+                super::stmt::primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
+            {
+                return v;
+            }
+            let key = match variant_qualifier {
+                None => variant_name.clone(),
+                Some(ast::Type::Named(t)) => format!("{}::{}", t.name, variant_name),
+                Some(ast::Type::Generic(t)) => format!("{}::{}", t.name, variant_name),
+                Some(ast::Type::NamespacedGeneric(t)) => format!("{}::{}", t.name, variant_name),
+                Some(_) => variant_name.clone(),
+            };
+            if let Some((const_ty, const_expr)) =
+                self.sem.decls.associated_constants.get(&key).cloned()
+            {
+                let type_id = self.resolve_type(&const_ty);
+                let resolved = self.reify_expr(&const_expr, ctx, Some(type_id));
+                if let TirExprKind::IntLiteral { repr, .. } = &resolved.kind {
+                    return super::util::parse_i128_literal(repr)
+                        .or_else(|_| super::util::parse_u128_literal(repr).map(|v| v as i128))
+                        .unwrap_or(0);
+                }
+            }
+        }
+        pattern_endpoint_to_i128(endpoint)
+    }
+
     pub(super) fn reify_pattern(
         &mut self,
         pattern: &ast::Pattern,
@@ -6968,9 +7084,30 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Pattern::Variant {
                 variant_name,
+                variant_qualifier,
                 bindings,
+                span,
                 ..
             } => {
+                // Associated-constant pattern (`TokenKind::FOO`,
+                // `i32::MAX`): a nullary qualified name that resolves to a
+                // recorded associated constant rather than a variant case.
+                // The elaborator inlines it to the constant's value
+                // (stmt.rs:1428+); reify reproduces the same lowering from
+                // `sem.decls.associated_constants`. Real variant cases are
+                // never in that map, so the lookup distinguishes the two.
+                if bindings.is_empty()
+                    && let Some(const_pat) = self.reify_associated_const_pattern(
+                        variant_name,
+                        variant_qualifier.as_ref(),
+                        scrutinee_type,
+                        *span,
+                        ctx,
+                    )
+                {
+                    return const_pat;
+                }
+
                 // Variant patterns appear in `match Some(x) { Some(v) => …
                 // }` etc. The case's payload type lives on
                 // `tysys.all_variant_cases`; reify reads it to give
@@ -7036,8 +7173,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 use crate::ast::RangeKind;
                 use crate::tir::{PrimitiveType, ResolvedType};
                 let inclusive = matches!(kind, RangeKind::Inclusive);
-                let start_val = pattern_endpoint_to_i128(start);
-                let end_val = pattern_endpoint_to_i128(end);
+                let start_val = self.pattern_endpoint_value(start, ctx);
+                let end_val = self.pattern_endpoint_value(end, ctx);
                 let is_unsigned = matches!(
                     self.tysys.type_table.borrow().get(scrutinee_type),
                     ResolvedType::Primitive(
