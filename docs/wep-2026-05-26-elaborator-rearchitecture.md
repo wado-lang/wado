@@ -493,13 +493,22 @@ Largest first, by fixture-name prefix:
   is not recognized, so the method is pruned and the call is
   `[WIR] unresolved`. The call name and the definition name match
   (`{module}^{Trait<Args>}::method`), and DCE's def-side
-  `function_id_for` and call-side `FunctionId::Method` keying
-  _appear_ to agree on `(module, struct_name, trait_name,
-  method_name)` — the divergence is subtler and is the next thing
-  to chase (compare the lowered-NIR MethodCall edge for a
-  one-method `impl Index<i32> for ReadOnlyBox` fixture against
-  production). Cracking this should unlock index_trait + from_literal
-  - serde at once.
+  `function_id_for` and call-side `FunctionId::Method` keying agree on
+  `(module, struct_name, trait_name, method_name)`. Ruled out this
+  session: the def-side `LocalMethodName.trait_type_args` differs
+  (prod `[i32]`, reify `[]`), but it is **not** the cause — the call
+  side has `[]` in _both_ prod and reify (both build it via
+  `build_trait_op_method_call_on_resolved`, which never sets
+  `trait_type_args`), and populating the def's `trait_type_args` from a
+  new `ImplFacts` field did not resolve the call. The drop is therefore
+  in lower → DCE reachability itself, not the method-name keying. Next
+  step: instrument `optimize/dce.rs`'s reachable-set membership
+  (compare the def node's `FunctionId` against the inserted callee id
+  at the moment of pruning) for prod vs reify on the one-method
+  `impl Index<i32> for ReadOnlyBox` fixture; the post-mono TIR is
+  identical-shaped, so the divergence is in how the lowered NIR call
+  edge is keyed or in a pre-DCE lower pass. Cracking this should unlock
+  index_trait + from_literal + serde at once.
 - **fn_ref (10).** Power-assert capture of fn-typed sub-expressions
   reaches `unknown^Inspect::inspect`; needs the assert-capture path
   to skip / specially handle fn-typed operands.
@@ -510,8 +519,8 @@ Largest first, by fixture-name prefix:
   per-monomorph struct registrations missing under `-O0`.
 - **match_variant / match_or / match_literal (~12).** Pattern-side
   annotation channels.
-- __cross_module (6), default_field (5), wasi_filesystem (9),
-  variadic / type_param / trait__ (smaller tails)._*
+- **cross_module (6), default_field (5), wasi_filesystem (9),
+  variadic / type_param / trait** (smaller tails)._*
 
 ### Stage 5 handover
 
