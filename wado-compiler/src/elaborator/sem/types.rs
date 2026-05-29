@@ -241,6 +241,15 @@ pub(crate) struct TypeAnnotations {
     /// reproduce faithfully).
     #[allow(dead_code)]
     pub(crate) function_effects: IndexMap<AstId, Vec<crate::tir::EffectRef>>,
+    /// Declared (pre-erasure) return [`TypeId`] for every `async`
+    /// function / method, keyed by the function's [`AstId`]. An async
+    /// function's wasm-level `return_type` is erased to `()` (the value
+    /// travels via `task return`), so reify cannot recover the real type
+    /// from `function_return_types` (which records the erased unit).
+    /// reify reads this to set `TirFunction::task_return_type` — needed
+    /// for resource-store inference over the return type (e.g. an async
+    /// `handle` returning `Result<Response, _>` must surface `Response`).
+    pub(crate) function_task_returns: IndexMap<AstId, TypeId>,
     /// Resolved static-method call dispatch
     /// (`Type::method(args)` / `builtin::fn(args)` shape) recorded by
     /// the body walk. Keyed by the [`crate::ast::CallExpr`]'s [`AstId`].

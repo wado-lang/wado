@@ -896,8 +896,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             method_info: None,
             params,
             return_type,
+            // Async functions erase `return_type` to `()`; the real
+            // (declared) return travels via `task return` and is recorded
+            // by annotate in `function_task_returns`. Resource-store
+            // inference (effect_check) walks `task_return_type`, so it
+            // must carry the real type, not the erased unit. (Methods are
+            // not recorded there and fall back to `return_type`.)
             task_return_type: if func.is_async {
-                Some(return_type)
+                Some(
+                    self.sem
+                        .types
+                        .function_task_returns
+                        .get(&func.id)
+                        .copied()
+                        .unwrap_or(return_type),
+                )
             } else {
                 None
             },
@@ -1203,8 +1216,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             method_info: Some(method_info),
             params,
             return_type,
+            // Async functions erase `return_type` to `()`; the real
+            // (declared) return travels via `task return` and is recorded
+            // by annotate in `function_task_returns`. Resource-store
+            // inference (effect_check) walks `task_return_type`, so it
+            // must carry the real type, not the erased unit. (Methods are
+            // not recorded there and fall back to `return_type`.)
             task_return_type: if func.is_async {
-                Some(return_type)
+                Some(
+                    self.sem
+                        .types
+                        .function_task_returns
+                        .get(&func.id)
+                        .copied()
+                        .unwrap_or(return_type),
+                )
             } else {
                 None
             },
