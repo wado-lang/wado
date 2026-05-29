@@ -3903,6 +3903,79 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let cmp = &chain.comparisons[0];
             let left = self.reify_expr(&chain.first, ctx, None);
             let right = self.reify_expr(&cmp.right, ctx, Some(left.type_id));
+
+            // Operator-trait dispatch path (Gap 11): non-primitive
+            // comparison routes through `Eq::eq` / `Ord::cmp`. The
+            // recording fires on `chain.id` (operators.rs:1346 branch)
+            // when production's `build_binary_op_tir` takes the trait
+            // path. Reify reproduces the MethodCall + Ord wrap shape.
+            if let Some(dispatch) = self.sem.types.operator_dispatch.get(&chain.id).cloned() {
+                let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                    left,
+                    dispatch.self_kind,
+                    /* is_ref_impl */ false,
+                    chain.span,
+                    &self.tysys.type_table,
+                );
+                let args = vec![right];
+                let call_args: Vec<crate::tir::CallArg> = args
+                    .into_iter()
+                    .zip(dispatch.arg_ref_wraps.iter().copied())
+                    .map(|(arg, wrap)| {
+                        let arg_expr = if wrap {
+                            let arg_ref_type = self
+                                .tysys
+                                .type_table
+                                .borrow_mut()
+                                .intern(crate::tir::ResolvedType::Ref(arg.type_id));
+                            TirExpr::new(
+                                TirExprKind::Unary {
+                                    op: crate::tir::TirUnaryOp::Ref,
+                                    expr: Box::new(arg),
+                                },
+                                arg_ref_type,
+                                chain.span,
+                            )
+                        } else {
+                            arg
+                        };
+                        crate::tir::CallArg::new(arg_expr, false)
+                    })
+                    .collect();
+                let method_call = super::Elaborator::<H>::build_tir_method_call(
+                    receiver,
+                    dispatch.function_ref,
+                    vec![],
+                    call_args,
+                    dispatch.return_type,
+                    chain.span,
+                );
+
+                // For Ord ops (`<`, `>`, `<=`, `>=`) the dispatch
+                // returns `Ordering`; wrap with `cmp == Less` etc.
+                // (mirrors `Elaborator::ord_bool_from_cmp`,
+                // operators.rs:1605+). For `!=` via `Eq::eq`, wrap
+                // with `!`.
+                use ast::BinaryOp;
+                if matches!(
+                    cmp.op,
+                    BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
+                ) {
+                    return self.wrap_ord_bool_from_cmp(method_call, cmp.op, chain.span);
+                }
+                if cmp.op == BinaryOp::NotEq && method_call.type_id == TypeTable::BOOL {
+                    return TirExpr::new(
+                        TirExprKind::Unary {
+                            op: crate::tir::TirUnaryOp::Not,
+                            expr: Box::new(method_call),
+                        },
+                        TypeTable::BOOL,
+                        chain.span,
+                    );
+                }
+                return method_call;
+            }
+
             let recorded_type = self
                 .sem
                 .types
@@ -5291,6 +5364,66 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             args.push(crate::tir::CallArg::new(resolved, false));
             subs.insert(name, default_expr);
         }
+    }
+
+    /// Wrap an `Ord::cmp` method call result into a `bool` by
+    /// comparing the returned `Ordering` variant against the one
+    /// that makes the operator true. Mirrors
+    /// [`super::Elaborator::ord_bool_from_cmp`] (operators.rs:1605+).
+    /// `<`   → `cmp == Less`, `>` → `cmp == Greater`,
+    /// `<=`  → `cmp != Greater`, `>=` → `cmp != Less`.
+    fn wrap_ord_bool_from_cmp(
+        &mut self,
+        cmp_call: TirExpr,
+        op: ast::BinaryOp,
+        span: crate::token::Span,
+    ) -> TirExpr {
+        use crate::compiler_item::CompilerItem;
+        use crate::tir::{TirBinaryOp, TirExprKind, TypeTable};
+
+        let ordering_type_id = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_compiler_enum(CompilerItem::Ordering);
+        let (less_name, less_index, greater_name, greater_index) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            let (_, _, less_name, less_index) = items.require_enum_case(CompilerItem::OrderingLess);
+            let (_, _, greater_name, greater_index) =
+                items.require_enum_case(CompilerItem::OrderingGreater);
+            (
+                less_name.to_string(),
+                less_index,
+                greater_name.to_string(),
+                greater_index,
+            )
+        };
+        let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {
+            ast::BinaryOp::Lt => (TirBinaryOp::Eq, less_name, less_index),
+            ast::BinaryOp::Gt => (TirBinaryOp::Eq, greater_name, greater_index),
+            ast::BinaryOp::LtEq => (TirBinaryOp::NotEq, greater_name, greater_index),
+            ast::BinaryOp::GtEq => (TirBinaryOp::NotEq, less_name, less_index),
+            _ => unreachable!("wrap_ord_bool_from_cmp called with non-Ord op {:?}", op),
+        };
+        let ordering_variant = TirExpr::new(
+            TirExprKind::EnumConstruct {
+                enum_type: ordering_type_id,
+                case_name,
+                case_index,
+            },
+            ordering_type_id,
+            span,
+        );
+        TirExpr::new(
+            TirExprKind::Binary {
+                op: compare_op,
+                left: Box::new(cmp_call),
+                right: Box::new(ordering_variant),
+            },
+            TypeTable::BOOL,
+            span,
+        )
     }
 
     /// Reify a `CallExpr`. Stage 5 covers the common shapes: bare-ident

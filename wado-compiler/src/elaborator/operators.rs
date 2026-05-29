@@ -1352,7 +1352,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ctx,
                 None,
             );
-            return self.build_binary_op_tir(left_tir, cmp.op, right_tir, cmp.op_span);
+            // Stage 5 (Gap 11 / WEP 2026-05-26): when the comparison
+            // takes the operator-trait dispatch path inside
+            // `build_binary_op_tir` (non-primitive operands → Eq /
+            // Ord trait methods), tag the recording with the chain's
+            // AstId so reify can replay the same method-call + Ord
+            // wrap shape. Cleared on every path so a later
+            // synthesised binary call doesn't pick up a stale id.
+            self.pending_operator_ast_id = Some(chain.id);
+            let result = self.build_binary_op_tir(left_tir, cmp.op, right_tir, cmp.op_span);
+            self.pending_operator_ast_id = None;
+            return result;
         }
 
         // Multi-comparison: actual chain expansion. Tag the node so the
