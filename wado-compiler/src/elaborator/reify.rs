@@ -5296,6 +5296,45 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         };
 
+        // Variant constructor in turbofish form (`Option::<T>::Some(x)`,
+        // `Result::<T, E>::Ok(v)`): the target type is a variant and the
+        // method names one of its cases. Must beat the static-method
+        // dispatch below, which would emit an unresolved `Option::Some`
+        // call. Mirrors `reify_call`'s plain-ident ctor detection.
+        let target_type_args: Vec<TypeId> =
+            match self.tysys.type_table.borrow().get(target_type_id).clone() {
+                ResolvedType::GenericInstance { type_args, .. } => type_args,
+                _ => Vec::new(),
+            };
+        if let Some(variant_info) = self.type_lookup().variant_case(&struct_name).cloned()
+            && let Some((case_index, case_data)) = variant_info
+                .cases
+                .iter()
+                .enumerate()
+                .find(|(_, c)| c.name == static_call.method)
+                .map(|(i, c)| (i, c.clone()))
+        {
+            let payload_type = self.get_variant_case_payload_type(
+                &struct_name,
+                &static_call.method,
+                &target_type_args,
+            );
+            let payload = static_call
+                .args
+                .first()
+                .map(|a| Box::new(self.reify_expr(a, ctx, Some(payload_type))));
+            return TirExpr::new(
+                TirExprKind::VariantConstruct {
+                    variant_type: target_type_id,
+                    case_index: case_index as u32,
+                    case_name: case_data.name,
+                    payload,
+                },
+                target_type_id,
+                static_call.span,
+            );
+        }
+
         let mangled_method_name = MethodName::format_local(&struct_name, None, &static_call.method);
 
         let explicit_method_type_args: Vec<TypeId> = static_call
