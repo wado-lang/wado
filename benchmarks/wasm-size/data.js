@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780012989729,
+  "lastUpdate": 1780024971581,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27117,6 +27117,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6bac7a00935b39da1a6d028f6f0645fec8068e3e"
         },
         "date": 1780012989354,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0748fb8ab62ed08a9ce181a41f9e29c8d89486ba",
+          "message": "Merge pull request #1224 from wado-lang/claude/wado-test-case-filtering-3irgI\n\nfeat(cli): wado test --test-name to filter by test-case name",
+          "timestamp": "2026-05-29T12:16:34+09:00",
+          "tree_id": "53448905482d182d81dd443d38bf025e16f2e5ea",
+          "url": "https://github.com/wado-lang/wado/commit/0748fb8ab62ed08a9ce181a41f9e29c8d89486ba"
+        },
+        "date": 1780024971273,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
