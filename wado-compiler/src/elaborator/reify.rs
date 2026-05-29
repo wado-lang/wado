@@ -7019,6 +7019,106 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         pattern_endpoint_to_i128(endpoint)
     }
 
+    /// Discriminant index of `case_name` when `scrutinee_type` is an
+    /// enum that declares it. Drives lowering a bare/qualified enum-case
+    /// pattern to `TirPattern::Enum`.
+    fn scrutinee_enum_case_index(&self, scrutinee_type: TypeId, case_name: &str) -> Option<u32> {
+        use crate::tir::ResolvedType;
+        let decl_name = match self.tysys.type_table.borrow().get(scrutinee_type).clone() {
+            ResolvedType::Enum { name, .. } => name,
+            _ => return None,
+        };
+        let lookup = self.type_lookup();
+        lookup
+            .enum_case(&decl_name)?
+            .case_index
+            .get(case_name)
+            .copied()
+    }
+
+    /// True when `scrutinee_type` is a variant (directly or as a generic
+    /// instance) whose cases include `case_name`.
+    fn scrutinee_has_variant_case(&self, scrutinee_type: TypeId, case_name: &str) -> bool {
+        use crate::tir::ResolvedType;
+        let decl_name = match self.tysys.type_table.borrow().get(scrutinee_type).clone() {
+            ResolvedType::Variant { name, .. } | ResolvedType::GenericInstance { name, .. } => name,
+            _ => return false,
+        };
+        self.type_lookup()
+            .variant_case(&decl_name)
+            .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name))
+    }
+
+    /// Lower a nullary variant-case pattern (e.g. `None`) to
+    /// `TirPattern::Variant` with no bindings, resolving the case's
+    /// payload type from the scrutinee's variant decl. Shared by the
+    /// bare-ident and qualified-`Variant` arms.
+    fn reify_nullary_variant_case(
+        &mut self,
+        scrutinee_type: TypeId,
+        case_name: &str,
+    ) -> TirPattern {
+        use crate::tir::ResolvedType;
+        let (decl_name, type_args) =
+            match self.tysys.type_table.borrow().get(scrutinee_type).clone() {
+                ResolvedType::Variant { name, .. } => (name, Vec::<TypeId>::new()),
+                ResolvedType::GenericInstance {
+                    name, type_args, ..
+                } => (name, type_args),
+                _ => (String::new(), Vec::new()),
+            };
+        let payload_type = self.get_variant_case_payload_type(&decl_name, case_name, &type_args);
+        TirPattern::Variant {
+            enum_type: scrutinee_type,
+            variant_name: case_name.to_string(),
+            bindings: vec![],
+            payload_type,
+        }
+    }
+
+    /// A bare ident naming an immutable global lowers to a
+    /// `ConstantValue` comparison against that global rather than a
+    /// binding (mirrors `Elaborator::resolve_if_pattern_inner`,
+    /// stmt.rs:1290+). Mutable globals are not constants and fall through
+    /// to a binding.
+    fn reify_immutable_global_pattern(
+        &self,
+        name: &str,
+        span: crate::token::Span,
+    ) -> Option<TirPattern> {
+        use crate::tir::{TirExpr, TirExprKind};
+        if let Some(&(ty, mutable)) = self.sem.decls.current_module_globals.get(name)
+            && !mutable
+        {
+            return Some(TirPattern::ConstantValue {
+                expr: Box::new(TirExpr::new(
+                    TirExprKind::GlobalVarGet {
+                        module_source: self.current_module_source.clone(),
+                        name: name.to_string(),
+                    },
+                    ty,
+                    span,
+                )),
+            });
+        }
+        if let Some((source_module, original_name, ty, mutable)) =
+            self.sem.decls.imported_globals.get(name)
+            && !*mutable
+        {
+            return Some(TirPattern::ConstantValue {
+                expr: Box::new(TirExpr::new(
+                    TirExprKind::GlobalVarGet {
+                        module_source: source_module.clone(),
+                        name: original_name.clone(),
+                    },
+                    *ty,
+                    span,
+                )),
+            });
+        }
+        None
+    }
+
     pub(super) fn reify_pattern(
         &mut self,
         pattern: &ast::Pattern,
@@ -7027,7 +7127,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirPattern {
         match pattern {
             ast::Pattern::Wildcard => TirPattern::Wildcard,
-            ast::Pattern::Ident { id, name, span: _ } => {
+            ast::Pattern::Ident { id, name, span } => {
+                // A bare ident in a pattern is ambiguous: a nullary
+                // enum/variant case (`None`, `Red`), an immutable global
+                // constant, or a fresh binding. Disambiguate in the same
+                // order as `Elaborator::resolve_if_pattern_inner`
+                // (stmt.rs:1255+): known case first, then immutable
+                // global, then binding.
+                if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, name) {
+                    return TirPattern::Enum {
+                        enum_type: scrutinee_type,
+                        case_name: name.clone(),
+                        case_index,
+                    };
+                }
+                if self.scrutinee_has_variant_case(scrutinee_type, name) {
+                    return self.reify_nullary_variant_case(scrutinee_type, name);
+                }
+                if let Some(const_pat) = self.reify_immutable_global_pattern(name, *span) {
+                    return const_pat;
+                }
                 let local_index = ctx.add_local(
                     name.clone(),
                     scrutinee_type,
@@ -7119,6 +7238,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .next()
                     .unwrap_or(variant_name)
                     .to_string();
+
+                // Enum-case pattern (plain discriminant, no payload):
+                // `Color::Red`. The elaborator emits `TirPattern::Enum`
+                // with the case's discriminant index (stmt.rs:1562+);
+                // reify reproduces it when the scrutinee is an enum.
+                if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, &case_name)
+                {
+                    return TirPattern::Enum {
+                        enum_type: scrutinee_type,
+                        case_name,
+                        case_index,
+                    };
+                }
 
                 // Resolve the variant decl + case payload.
                 let (payload_type, _payload_decl_module) = {
