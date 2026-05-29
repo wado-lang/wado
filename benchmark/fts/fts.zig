@@ -1,5 +1,5 @@
 // Float-to-string benchmark
-// Converts 500K random f64 values to decimal strings using {d:.6} format.
+// Converts 5M random f64 values to decimal strings using {d:.6} format.
 // Uses a linear congruential generator for deterministic float sequence.
 //
 // How to run:
@@ -8,7 +8,7 @@
 const std = @import("std");
 
 pub fn main() !void {
-    const n: u32 = 500_000;
+    const n: u32 = 5_000_000;
     var state: u32 = 42;
     var total_bytes: u64 = 0;
     var byte_sum: u64 = 0;

@@ -11,7 +11,7 @@ const jsonData = fs.readFileSync(
   path.join(__dirname, "citm_catalog.json"),
   "utf-8",
 );
-const iterations = 1;
+const iterations = 10;
 
 console.log(`json-catalog: ${jsonData.length} bytes, ${iterations} iterations`);
 

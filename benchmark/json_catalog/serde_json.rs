@@ -97,7 +97,7 @@ struct CitmCatalog {
 fn main() {
     let json_data = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/citm_catalog.json"))
         .expect("Failed to read citm_catalog.json");
-    let iterations = 1;
+    let iterations = 10;
 
     println!(
         "json-catalog: {} bytes, {} iterations",
