@@ -6242,24 +6242,31 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
             match var_ref {
                 super::types::VarRef::Local { index, type_id, .. } => {
-                    let _ = type_id;
+                    // Use the local's stored type rather than
+                    // `recorded_type`. Template-string interpolation
+                    // parsers (parser.rs:5175) build a fresh `Parser`
+                    // per `{expr}` whose `next_ast_id` restarts at 0,
+                    // so two interpolations like `{g}` and `{n1}`
+                    // collide on `AstId(0)` and the second resolution
+                    // overwrites the first in `expression_types`.
+                    // The Local was added with its declared type, so
+                    // it's the only authoritative source here.
                     return TirExpr::new(
                         TirExprKind::Local {
                             index,
                             name: ident.name.clone(),
                         },
-                        recorded_type,
+                        type_id,
                         ident.span,
                     );
                 }
                 super::types::VarRef::Capture { index, type_id, .. } => {
-                    let _ = type_id;
                     return TirExpr::new(
                         TirExprKind::Capture {
                             index,
                             name: ident.name.clone(),
                         },
-                        recorded_type,
+                        type_id,
                         ident.span,
                     );
                 }
