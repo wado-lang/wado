@@ -4,13 +4,11 @@ Performance comparison of Wado (Wasm/wasmtime) against native compilers.
 
 Environment: Wado 2026-05-29, wasmtime 44.0.0, gcc 13.3.0, rustc 1.95.0, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
 
-All figures are the **best of three runs** per implementation (cloud VMs
-are noisy; the fastest run is the cleanest estimate of true capacity).
-To keep every result in whole milliseconds, the lightest workloads are
-scaled up: the sieve runs to 100M, float-to-string does 5M conversions,
-the JSON parsers iterate ×10, and zlib iterates ×100. JSON and zlib
-figures are totals over those iterations, so they reflect warm
-steady-state throughput rather than a single cold parse.
+All figures are the **best of three runs** per implementation. To keep
+every result in whole milliseconds, the lightest workloads are scaled up:
+sieve to 100M, float-to-string to 5M conversions, the JSON parsers ×10,
+and zlib ×100. JSON/zlib figures are totals over those iterations (warm
+steady-state, not a single cold parse).
 
 ## Prime Counting
 
