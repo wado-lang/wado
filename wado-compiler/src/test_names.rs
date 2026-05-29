@@ -32,15 +32,12 @@ pub fn encode<'a>(entries: impl IntoIterator<Item = (&'a str, Option<&'a str>)>)
     out.extend_from_slice(&(entries.len() as u32).to_le_bytes());
     for (export_name, original_name) in entries {
         push_str(&mut out, export_name);
-        match original_name {
-            Some(name) => {
-                out.push(1);
-                push_str(&mut out, name);
-            }
-            None => {
-                out.push(0);
-                out.extend_from_slice(&0u32.to_le_bytes());
-            }
+        if let Some(name) = original_name {
+            out.push(1);
+            push_str(&mut out, name);
+        } else {
+            out.push(0);
+            out.extend_from_slice(&0u32.to_le_bytes());
         }
     }
     out
@@ -118,7 +115,7 @@ mod tests {
 
     #[test]
     fn round_trips_named_and_unnamed() {
-        let entries = vec![
+        let entries = [
             ("test-0-hello-world", Some("Hello, World!")),
             ("test-1", None),
             ("test-2-cafe", Some("café résumé")),

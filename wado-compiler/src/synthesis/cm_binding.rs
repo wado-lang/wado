@@ -503,7 +503,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
         // Map each test's mangled function name → its original (lossless) name
         // so `--test-name` matches against what the user wrote, not the
         // ASCII-folded export name.
-        let original_names: std::collections::HashMap<&str, Option<&str>> = entry_module
+        let original_names: crate::hashmap::IndexMap<&str, Option<&str>> = entry_module
             .tests
             .iter()
             .map(|t| (t.function_name.as_str(), t.name.as_deref()))

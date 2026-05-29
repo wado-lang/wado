@@ -852,7 +852,7 @@ fn load_module(
             // the compiler embeds. Keyed by kebab export name. The compiler
             // emits an entry for every test export, so a discovered test
             // export missing here is an internal inconsistency → panic.
-            let original_names: std::collections::HashMap<String, Option<String>> =
+            let original_names: wado_compiler::hashmap::IndexMap<String, Option<String>> =
                 wado_compiler::test_names::read_from_component(&artifact.wasm)
                     .unwrap_or_default()
                     .into_iter()
