@@ -68,11 +68,7 @@ fn "wado-compiler/tests/fixtures/variant_cross_module_pattern.wado/run"() with S
     let ord: "core:prelude/traits.wado//enum:Ordering";
     let ord2: "core:prelude/traits.wado//enum:Ordering";
     let ord3: "core:prelude/traits.wado//enum:Ordering";
-    ord = __inline_compare_2: block -> "core:prelude/traits.wado//enum:Ordering" {
-        break __inline_compare_2: 0;
-        break __inline_compare_2: 1;
-        unreachable;
-    };
+    ord = 0;
     if ord == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("1 < 2"), used: 5 });
     } else {
@@ -82,11 +78,7 @@ fn "wado-compiler/tests/fixtures/variant_cross_module_pattern.wado/run"() with S
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("3 == 3"), used: 6 });
     } else {
     }
-    ord3 = __inline_compare_4: block -> "core:prelude/traits.wado//enum:Ordering" {
-        break __inline_compare_4: 2;
-        break __inline_compare_4: 1;
-        unreachable;
-    };
+    ord3 = 2;
     if ord3 == 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("5 > 1"), used: 5 });
     } else {
@@ -133,17 +125,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l5: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l5;
-            };
+    i = 0;
+    b4: block {
+        l5: loop {
+            if i >= len {
+                break b4;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l5;
         };
     };
 }

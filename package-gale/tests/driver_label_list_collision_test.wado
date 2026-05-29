@@ -1,0 +1,33 @@
+use g from "./grammars/label_list_collision.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/label_list_collision",
+        },
+    };
+use { normalize_tree } from "./grammars/label_list_collision.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = g::parse(input).unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+// First labelled element collects one TAG; the Repeat that follows
+// collects the remainder into a deduplicated second container. The CST
+// to_string_tree just flattens the children, so the assertions read as
+// `(stream tag tag tag …)`.
+test "single TAG: only the mandatory first label fires" {
+    assert_tree(&"tag", &"(stream tag)");
+}
+
+test "two TAGs: first label + one Repeat iteration" {
+    assert_tree(&"tag tag", &"(stream tag tag)");
+}
+
+test "many TAGs exercise the Repeat's iter body" {
+    assert_tree(&"tag tag tag tag", &"(stream tag tag tag tag)");
+}

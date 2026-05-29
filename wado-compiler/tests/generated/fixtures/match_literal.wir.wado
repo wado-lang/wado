@@ -70,25 +70,17 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/match_literal.wado/match_literal_i128"() with Stdout {
     let r1: ref "core:prelude/string.wado//String";
-    r1 = (if __inline_i128_Eq__eq_2: block -> bool {
-        if 42_i64 == 0_i64 -> i32 {
-            0_i64 == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_i128_Eq__eq_2;
-        unreachable;
-    } -> ref "core:prelude/string.wado//String" {
+    r1 = (if (if 42_i64 == 0_i64 -> i32 {
+        0_i64 == 0_i64;
+    } else {
+        0;
+    }) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("zero"), used: 4 };
-    } else if __inline_i128_Eq__eq_4: block -> bool {
-        if 42_i64 == 42_i64 -> i32 {
-            0_i64 == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_i128_Eq__eq_4;
-        unreachable;
-    } -> ref "core:prelude/string.wado//String" {
+    } else if (if 42_i64 == 42_i64 -> i32 {
+        0_i64 == 0_i64;
+    } else {
+        0;
+    }) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
@@ -116,25 +108,17 @@ fn "wado-compiler/tests/fixtures/match_literal.wado/match_literal_negative"() wi
 
 fn "wado-compiler/tests/fixtures/match_literal.wado/match_literal_u128"() with Stdout {
     let r1: ref "core:prelude/string.wado//String";
-    r1 = (if __inline_u128_Eq__eq_2: block -> bool {
-        if 42_i64 == 0_i64 -> i32 {
-            0_i64 == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_u128_Eq__eq_2;
-        unreachable;
-    } -> ref "core:prelude/string.wado//String" {
+    r1 = (if (if 42_i64 == 0_i64 -> i32 {
+        0_i64 == 0_i64;
+    } else {
+        0;
+    }) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("zero"), used: 4 };
-    } else if __inline_u128_Eq__eq_4: block -> bool {
-        if 42_i64 == 42_i64 -> i32 {
-            0_i64 == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_u128_Eq__eq_4;
-        unreachable;
-    } -> ref "core:prelude/string.wado//String" {
+    } else if (if 42_i64 == 42_i64 -> i32 {
+        0_i64 == 0_i64;
+    } else {
+        0;
+    }) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
@@ -278,17 +262,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l10: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l10;
-            };
+    i = 0;
+    b9: block {
+        l10: loop {
+            if i >= len {
+                break b9;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l10;
         };
     };
 }

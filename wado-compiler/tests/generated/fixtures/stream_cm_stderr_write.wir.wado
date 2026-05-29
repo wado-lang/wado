@@ -71,19 +71,14 @@ import fn wasi/future-read:transmission-cli from "wasi/future-read:transmission-
 fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/run"() with Stderr {
     let subtask: i32;
     let __b_3: ref "core:prelude//Array<u8>";
-    let data: ref "core:prelude//Array<u8>";
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
     subtask = "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_binding__Stderr_write_via_stream"(__mv_lo_1);
-    data = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __b_3 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };
-        break __seq_lit: __b_3;
-        unreachable;
-    };
-    "core:internal/cm_stream_write_u8"(__mv_hi_1, data);
+    __b_3 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };
+    "core:internal/cm_stream_write_u8"(__mv_hi_1, __b_3);
     "wasi/stream-drop-writable"(__mv_hi_1);
     let __fr_ptr_2: i32;
     let __fr_result_2: i32;
@@ -126,17 +121,15 @@ fn "wado-compiler/tests/fixtures/stream_cm_stderr_write.wado/__cm_export__run"()
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l4: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l4;
-            };
+    i = 0;
+    b3: block {
+        l4: loop {
+            if i >= len {
+                break b3;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l4;
         };
     };
 }
@@ -169,12 +162,9 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {
     let result: i32;
     let data_9: ref builtin::array<u8>;
     let len_10: i32;
-    packed = __inline_cm_lower_array_u8_0: block -> i64 {
-        data_9 = data.repr;
-        len_10 = data.used;
-        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(data_9, len_10);
-        unreachable;
-    };
+    data_9 = data.repr;
+    len_10 = data.used;
+    packed = "core:internal/cm_lower_list_u8"(data_9, len_10);
     ptr = builtin::i32_wrap_i64(packed);
     len_4 = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, len_4);

@@ -1,10 +1,10 @@
-//! Constant folding optimization for Wado TIR.
+//! Constant folding optimization for Wado NIR.
 //!
-//! Walks every function body and applies the [`tiri::Interpreter`]
+//! Walks every function body and applies the [`niri::Interpreter`]
 //! rewrite rules at each visited node. All reduction logic
 //! (literal folding, integer cast collapsing, short-circuit identity
 //! rules, env-aware local lookup, **field-aware local-field reads**)
-//! lives in [`crate::tiri`]; this module is only the visitor glue
+//! lives in [`crate::niri`]; this module is only the visitor glue
 //! that drives `reduce_local` across function bodies and feeds the
 //! interpreter's local-variable env *and* its `field_env` from
 //! `Let` / `Assign` statements, struct-literal RHSs, and recognized
@@ -31,8 +31,8 @@ use crate::nir_package::NirPackage;
 use crate::nir_visitor::{
     NirOptVisitor, NirRefVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt,
 };
+use crate::niri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
 use crate::tir::{TypeId, TypeTable};
-use crate::tiri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
 
 use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_copy};
 
@@ -208,7 +208,7 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
 
     fn visit_expr(&mut self, expr: &mut NirExpr) -> bool {
         // `Assign { target, value }` is special-cased: the OUTER `target`
-        // expression is an lvalue (write position) and tiri's leaf
+        // expression is an lvalue (write position) and niri's leaf
         // rewrites — particularly the `FieldAccess(Local, field)`
         // arm — would happily fold a known field-value into the LHS,
         // turning `obj.f = newval` into `5 = newval`. Only `target`'s

@@ -7,10 +7,6 @@ Open work towards full ANTLR4 compatibility and the performance budget it implie
 
 This file lists what is **not yet done**. Closed work belongs in commit history.
 
-## Generated parser bugs
-
-(none currently)
-
 ## LL prediction — remaining gaps
 
 ### Iter-body K-prefix for `Repeat` inner `RuleRef`s
@@ -54,15 +50,30 @@ Reduces coupling between the codegen walk and the analysis layer; no behaviour c
 
 All 17 `CompositeLexers` / `CompositeParsers` upstream descriptors auto-skip today. The bottleneck is _not_ multi-input plumbing (`extract_antlr4_descriptors.wado`'s `parsed.slave_grammars.len() > 0` short-circuit could be lifted; Kiln already supports multi-input). Every composite descriptor's `[output]` is a host-side artefact — `<writeln(...)>` action-body prints (`S.a`, `M.b`, `T.y`), `Token.toString` dumps (`[@0,0:2='abc',<1>,1:0]`), or empty `[output]`. None survive `normalize_output_for_stage_b`. Re-evaluate this entry once Stage C lands.
 
-## Descriptor importer expansion (no Stage C required)
+## Descriptor importer — infrastructure gaps
 
-The Stage A parse-accepts-input drivers cover 206 / 345 descriptors. The remaining importable test modes are:
+- **Composite (slave-grammar) descriptors.** 17 descriptors short-circuit on `parsed.slave_grammars.len() > 0`. Kiln's `use t from "<C>/<Name>.g4" with { ... }` directive needs to resolve `import S;` against sibling `<Name>.slaveN.g4` files. Once that lands the short-circuit comes out.
+- **Captured action output (Stage C deliverable).** Parser descriptors whose `[output]` is purely action-print stdout (e.g. `<writeln("S.a")>`) get claim (b) but no `[output]` comparison. Needs Stage C action-body translation in `codegen.wado` plus a parser-side `accumulated_output: String` API.
 
-- **Stage E (parse-must-error)** for `LexerErrors` / `ParserErrors` (46 descriptors): `g::parse(&input)` must return `Err`. Optionally tighten by matching line/col against `[errors]`.
-- **Stage L (token-stream equivalence)** for lexer-only descriptors (`LexerExec` 42, `Performance` 7, `SemPredEvalLexer` 8, lexer half of `Sets`): add a `to_lexer_string(&Array<Token>) -> String` helper that mimics ANTLR4's `Token.toString()` / token-name-per-line dumps, then assert `g::tokenize(&input).to_lexer_string() == expected` (modulo skip-channel filtering).
-- **Sub-tree Stage B** (`<ToStringTree("$X.ctx"):writeln()>` pattern, ~11 descriptors across `ParseTrees` / `FullContextParsing`): teach the extractor to recognise the `@after` print, look up the labeled element in the start rule, and emit a Stage B test that drills into the corresponding subtree.
+## Gale bugs surfaced by Stage A drivers
 
-Each axis gets its own `status.toml` bucket pair (`[stage_e_*]`, `[stage_l_*]`, …). Composite (slave-grammar) descriptors require multi-input plumbing in the emitter on top of those modes, and most of their `[output]`s are still Stage C territory.
+Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Roughly ordered by impact:
+
+### Parser codegen
+
+- **LR rule with `returns` + list-label combination.** `LeftRecursion/ReturnValueAndActionsList1_{2,4}`: parse stops at the first comma in the input list. Investigate the LR-alt-rewrite path's interaction with list-label storage.
+- **LR operator-precedence chain.** `Performance/DropLoopEntryBranchInLRRule_4`: Gale picks the wrong precedence chain for an or-then-and expression.
+- **Non-greedy `??` prediction layer.** `ParserExec/IfIfElseNonGreedyBinding1`: the emit shape is `Option<T>` (compile-blocker gone) but the dispatch reuses the greedy first-set predictor, so the dangling `else` binds to the inner `if` instead of the outer one ANTLR4 picks. Needs either a follow-guarded Optional dispatcher or runtime ATN simulation.
+
+### Lexer codegen
+
+- **EOF-suffixed rule priority.** `LexerExec/EOFSuffixInFirstRule_2`: when two rules can match the same prefix (`A : 'a' EOF;` vs `B : 'a';`), ANTLR4 prefers the one that consumes the trailing EOF. Gale picks the lexically-later rule. Fix in the longest-match tiebreaker.
+- **Recursive lexer rule with `.+?` / `.*?` wildcard.** `LexerExec/RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`: nested `/* /*...*/ */` comments mistokenize because the recursive call doesn't re-enter under the non-greedy bound.
+- **`-> more, mode(...)` chain across modes.** `LexerExec/ZeroLengthToken`: a token built via `-> more, pushMode(...)` followed by `-> more, mode(...)` should merge into a single token spanning all the `more`'d chars, but Gale emits the final piece only.
+
+### Runtime gaps (test compiles, fails at runtime)
+
+- **Non-default-channel tokens don't appear in `to_lexer_string`** — `LexerExec/ReservedWordsEscaping`. Fix: either land non-default-channel tokens in the main stream (with a channel attribute) and have the parser filter, or extend `to_lexer_string` to walk `Token.leading_trivia` in source order.
 
 ## Stage C — action / predicate execution
 

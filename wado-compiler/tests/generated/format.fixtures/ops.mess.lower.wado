@@ -1698,17 +1698,15 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
 
 pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     let arr: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-    __for_0: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < len) {
-                break __for_0;
-            }
-            __for_0_body: {
-                core::builtin::array_set_u8(arr, i, core::builtin::i32_load8_u((ptr + i)) as u8);
-            }
-            i = (i + 1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
         }
+        __for_0_body: {
+            core::builtin::array_set_u8(arr, i, core::builtin::i32_load8_u((ptr + i)) as u8);
+        }
+        i = (i + 1);
     }
     return arr;
 }
@@ -1719,17 +1717,15 @@ pub fn memory_to_gc_string(ptr: i32, len: i32) -> String {
 }
 
 pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
-    __for_1: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < len) {
-                break __for_1;
-            }
-            __for_1_body: {
-                core::builtin::i32_store8((ptr + i), core::builtin::array_get_u8(arr, i));
-            }
-            i = (i + 1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
         }
+        __for_0_body: {
+            core::builtin::i32_store8((ptr + i), core::builtin::array_get_u8(arr, i));
+        }
+        i = (i + 1);
     }
 }
 
@@ -3674,16 +3670,14 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     let mut d: u64 = 0;
     let mut frac: i32 = 0;
     let digit_start: i32 = i;
-    __for_0: {
-        loop {
-            if !(((i < len) && (s.String::get_byte_unchecked(i) >= '0' as u8)) && (s.String::get_byte_unchecked(i) <= '9' as u8)) {
-                break __for_0;
-            }
-            __for_0_body: {
-                d = ((d * 10) + (s.String::get_byte_unchecked(i) - '0' as u8) as u64);
-            }
-            i = (i + 1);
+    loop {
+        if !(((i < len) && (s.String::get_byte_unchecked(i) >= '0' as u8)) && (s.String::get_byte_unchecked(i) <= '9' as u8)) {
+            break;
         }
+        __for_0_body: {
+            d = ((d * 10) + (s.String::get_byte_unchecked(i) - '0' as u8) as u64);
+        }
+        i = (i + 1);
     }
     let int_digits: i32 = (i - digit_start);
     if ((i < len) && (s.String::get_byte_unchecked(i) == '.' as u8)) {
@@ -3692,17 +3686,15 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         }
         i = (i + 1);
         let frac_start: i32 = i;
-        __for_1: {
-            loop {
-                if !(((i < len) && (s.String::get_byte_unchecked(i) >= '0' as u8)) && (s.String::get_byte_unchecked(i) <= '9' as u8)) {
-                    break __for_1;
-                }
-                __for_1_body: {
-                    d = ((d * 10) + (s.String::get_byte_unchecked(i) - '0' as u8) as u64);
-                    frac = (frac + 1);
-                }
-                i = (i + 1);
+        loop {
+            if !(((i < len) && (s.String::get_byte_unchecked(i) >= '0' as u8)) && (s.String::get_byte_unchecked(i) <= '9' as u8)) {
+                break;
             }
+            __for_1_body: {
+                d = ((d * 10) + (s.String::get_byte_unchecked(i) - '0' as u8) as u64);
+                frac = (frac + 1);
+            }
+            i = (i + 1);
         }
         if (i == frac_start) {
             return null;
@@ -3730,16 +3722,14 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         if ((i >= len) || ((len - i) > 3)) {
             return null;
         }
-        __for_2: {
-            loop {
-                if !(((i < len) && (s.String::get_byte_unchecked(i) >= '0' as u8)) && (s.String::get_byte_unchecked(i) <= '9' as u8)) {
-                    break __for_2;
-                }
-                __for_2_body: {
-                    p = ((p * 10) + (s.String::get_byte_unchecked(i) - '0' as u8) as i32);
-                }
-                i = (i + 1);
+        loop {
+            if !(((i < len) && (s.String::get_byte_unchecked(i) >= '0' as u8)) && (s.String::get_byte_unchecked(i) <= '9' as u8)) {
+                break;
             }
+            __for_2_body: {
+                p = ((p * 10) + (s.String::get_byte_unchecked(i) - '0' as u8) as i32);
+            }
+            i = (i + 1);
         }
         if (i == exp_start) {
             return null;
@@ -4309,34 +4299,30 @@ fn u128::fmt_decimal(self: &u128, f: &mut Formatter) {
     let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
     let mut temp: u128 = "$value_copy$T73"(*self);
     let mut digit_count: i32 = 0;
-    __for_0: {
-        let mut temp: u128 = "$value_copy$T73"(*self);
-        loop {
-            if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
-                break __for_0;
-            }
-            __for_0_body: {
-                digit_count = (digit_count + 1);
-            }
-            temp = temp."u128^Div::div"(&ten);
+    let mut temp: u128 = "$value_copy$T73"(*self);
+    loop {
+        if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
+            break;
         }
+        __for_0_body: {
+            digit_count = (digit_count + 1);
+        }
+        temp = temp."u128^Div::div"(&ten);
     }
     let offset: i32 = f.Formatter::prepare_int_write(false, "", digit_count);
     let arr: builtin::array<u8> = f.buf.String::internal_raw_bytes();
     let mut pos: i32 = (offset + digit_count);
-    __for_1: {
-        let mut temp: u128 = "$value_copy$T73"(*self);
-        loop {
-            if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
-                break __for_1;
-            }
-            __for_1_body: {
-                pos = (pos - 1);
-                let digit: i32 = temp."u128^Rem::rem"(&ten).u128::low() as i64 as i32;
-                core::builtin::array_set_u8(arr, pos, ('0' as i32 + digit) as u8);
-            }
-            temp = temp."u128^Div::div"(&ten);
+    let mut temp: u128 = "$value_copy$T73"(*self);
+    loop {
+        if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
+            break;
         }
+        __for_1_body: {
+            pos = (pos - 1);
+            let digit: i32 = temp."u128^Rem::rem"(&ten).u128::low() as i64 as i32;
+            core::builtin::array_set_u8(arr, pos, ('0' as i32 + digit) as u8);
+        }
+        temp = temp."u128^Div::div"(&ten);
     }
 }
 
@@ -4755,35 +4741,31 @@ fn i128::fmt_decimal(self: &i128, f: &mut Formatter) {
     let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
     let mut temp: u128 = "$value_copy$T73"(abs_val);
     let mut digit_count: i32 = 0;
-    __for_2: {
-        let mut temp: u128 = "$value_copy$T73"(abs_val);
-        loop {
-            if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
-                break __for_2;
-            }
-            __for_2_body: {
-                digit_count = (digit_count + 1);
-            }
-            temp = temp."u128^Div::div"(&ten);
+    let mut temp: u128 = "$value_copy$T73"(abs_val);
+    loop {
+        if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
+            break;
         }
+        __for_0_body: {
+            digit_count = (digit_count + 1);
+        }
+        temp = temp."u128^Div::div"(&ten);
     }
     let offset: i32 = f.Formatter::prepare_int_write(is_neg, "", digit_count);
     let arr: builtin::array<u8> = f.buf.String::internal_raw_bytes();
     let mut pos: i32 = (offset + digit_count);
     temp = "$value_copy$T73"(abs_val);
-    __for_3: {
-        let mut temp: u128 = "$value_copy$T73"(abs_val);
-        loop {
-            if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
-                break __for_3;
-            }
-            __for_3_body: {
-                pos = (pos - 1);
-                let digit: i32 = temp."u128^Rem::rem"(&ten).u128::low() as i64 as i32;
-                core::builtin::array_set_u8(arr, pos, ('0' as i32 + digit) as u8);
-            }
-            temp = temp."u128^Div::div"(&ten);
+    let mut temp: u128 = "$value_copy$T73"(abs_val);
+    loop {
+        if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
+            break;
         }
+        __for_1_body: {
+            pos = (pos - 1);
+            let digit: i32 = temp."u128^Rem::rem"(&ten).u128::low() as i64 as i32;
+            core::builtin::array_set_u8(arr, pos, ('0' as i32 + digit) as u8);
+        }
+        temp = temp."u128^Div::div"(&ten);
     }
 }
 
@@ -5393,25 +5375,23 @@ pub fn parse_u64_digits(s: &String, start: i32, end: i32, radix: u32) -> Result<
     let max_digit_for_overflow: u64 = (18446744073709551615 - (max_before_mul * r));
     let bytes: builtin::array<u8> = s.String::internal_raw_bytes();
     let mut acc: u64 = 0;
-    __for_0: {
-        let mut i: i32 = start;
-        loop {
-            if !(i < end) {
-                break __for_0;
-            }
-            __for_0_body: {
-                let d: i32 = "core::prelude/intparse.wado::digit_value"(core::builtin::array_get_u8(bytes, i));
-                if ((d < 0) || (d >= radix as i32)) {
-                    return Result<u64, IntErrorKind>::Err(IntErrorKind::InvalidDigit);
-                }
-                let d64: u64 = d as u64;
-                if ((acc > max_before_mul) || ((acc == max_before_mul) && (d64 > max_digit_for_overflow))) {
-                    return Result<u64, IntErrorKind>::Err(IntErrorKind::PosOverflow);
-                }
-                acc = ((acc * r) + d64);
-            }
-            i = (i + 1);
+    let mut i: i32 = start;
+    loop {
+        if !(i < end) {
+            break;
         }
+        __for_0_body: {
+            let d: i32 = "core::prelude/intparse.wado::digit_value"(core::builtin::array_get_u8(bytes, i));
+            if ((d < 0) || (d >= radix as i32)) {
+                return Result<u64, IntErrorKind>::Err(IntErrorKind::InvalidDigit);
+            }
+            let d64: u64 = d as u64;
+            if ((acc > max_before_mul) || ((acc == max_before_mul) && (d64 > max_digit_for_overflow))) {
+                return Result<u64, IntErrorKind>::Err(IntErrorKind::PosOverflow);
+            }
+            acc = ((acc * r) + d64);
+        }
+        i = (i + 1);
     }
     return Result<u64, IntErrorKind>::Ok(acc);
 }
@@ -5427,25 +5407,23 @@ pub fn parse_u128_digits(s: &String, start: i32, end: i32, radix: u32) -> Result
     let max_digit_for_overflow: u128 = divmod.1;
     let bytes: builtin::array<u8> = s.String::internal_raw_bytes();
     let mut acc: u128 = "core::prelude/int128.wado::u128::from_u64"(0);
-    __for_1: {
-        let mut i: i32 = start;
-        loop {
-            if !(i < end) {
-                break __for_1;
-            }
-            __for_1_body: {
-                let d: i32 = "core::prelude/intparse.wado::digit_value"(core::builtin::array_get_u8(bytes, i));
-                if ((d < 0) || (d >= radix as i32)) {
-                    return Result<u128, IntErrorKind>::Err(IntErrorKind::InvalidDigit);
-                }
-                let d128: u128 = "core::prelude/int128.wado::u128::from_u64"(d as u64);
-                if ((acc."u128^Ord::cmp"(&max_before_mul) == Ordering::Greater) || (acc."u128^Eq::eq"(&max_before_mul) && (d128."u128^Ord::cmp"(&max_digit_for_overflow) == Ordering::Greater))) {
-                    return Result<u128, IntErrorKind>::Err(IntErrorKind::PosOverflow);
-                }
-                acc = acc."u128^Mul::mul"(&r)."u128^Add::add"(&d128);
-            }
-            i = (i + 1);
+    let mut i: i32 = start;
+    loop {
+        if !(i < end) {
+            break;
         }
+        __for_0_body: {
+            let d: i32 = "core::prelude/intparse.wado::digit_value"(core::builtin::array_get_u8(bytes, i));
+            if ((d < 0) || (d >= radix as i32)) {
+                return Result<u128, IntErrorKind>::Err(IntErrorKind::InvalidDigit);
+            }
+            let d128: u128 = "core::prelude/int128.wado::u128::from_u64"(d as u64);
+            if ((acc."u128^Ord::cmp"(&max_before_mul) == Ordering::Greater) || (acc."u128^Eq::eq"(&max_before_mul) && (d128."u128^Ord::cmp"(&max_digit_for_overflow) == Ordering::Greater))) {
+                return Result<u128, IntErrorKind>::Err(IntErrorKind::PosOverflow);
+            }
+            acc = acc."u128^Mul::mul"(&r)."u128^Add::add"(&d128);
+        }
+        i = (i + 1);
     }
     return Result<u128, IntErrorKind>::Ok(acc);
 }
@@ -5933,17 +5911,15 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
 
 fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     let arr: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-    __for_0: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < len) {
-                break __for_0;
-            }
-            __for_0_body: {
-                core::builtin::array_set_u8(arr, i, core::builtin::i32_load8_u((ptr + i)) as u8);
-            }
-            i = (i + 1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
         }
+        __for_0_body: {
+            core::builtin::array_set_u8(arr, i, core::builtin::i32_load8_u((ptr + i)) as u8);
+        }
+        i = (i + 1);
     }
     return arr;
 }
@@ -5953,17 +5929,15 @@ fn count_digits_i64(val: i64) -> i32 {
         return 1;
     }
     let mut n: i32 = 0;
-    __for_1: {
-        let mut t: i64 = val;
-        loop {
-            if !(t > 0) {
-                break __for_1;
-            }
-            __for_1_body: {
-                n = (n + 1);
-            }
-            t = (t / 10);
+    let mut t: i64 = val;
+    loop {
+        if !(t > 0) {
+            break;
         }
+        __for_0_body: {
+            n = (n + 1);
+        }
+        t = (t / 10);
     }
     return n;
 }
@@ -5973,18 +5947,16 @@ fn write_decimal_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digi
     if (abs_val == 0) {
         core::builtin::array_set_u8(arr, offset, '0' as u8);
     } else {
-        __for_2: {
-            let mut temp: i64 = abs_val;
-            loop {
-                if !(temp > 0) {
-                    break __for_2;
-                }
-                __for_2_body: {
-                    pos = (pos - 1);
-                    core::builtin::array_set_u8(arr, pos, ('0' as i32 + (temp % 10) as i32) as u8);
-                }
-                temp = (temp / 10);
+        let mut temp: i64 = abs_val;
+        loop {
+            if !(temp > 0) {
+                break;
             }
+            __for_0_body: {
+                pos = (pos - 1);
+                core::builtin::array_set_u8(arr, pos, ('0' as i32 + (temp % 10) as i32) as u8);
+            }
+            temp = (temp / 10);
         }
     }
 }
@@ -5995,28 +5967,26 @@ fn write_base_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digit_c
     if (abs_val == 0) {
         core::builtin::array_set_u8(arr, offset, '0' as u8);
     } else {
-        __for_3: {
-            let mut temp: i64 = abs_val;
-            loop {
-                if !(temp > 0) {
-                    break __for_3;
-                }
-                __for_3_body: {
-                    pos = (pos - 1);
-                    let digit: i32 = (temp % base64) as i32;
-                    let ch: i32 = if (digit < 10) {
-                        ('0' as i32 + digit);
-                    } else {
-                        if upper {
-                            (('A' as i32 + digit) - 10);
-                        } else {
-                            (('a' as i32 + digit) - 10);
-                        };
-                    };
-                    core::builtin::array_set_u8(arr, pos, ch as u8);
-                }
-                temp = (temp / base64);
+        let mut temp: i64 = abs_val;
+        loop {
+            if !(temp > 0) {
+                break;
             }
+            __for_0_body: {
+                pos = (pos - 1);
+                let digit: i32 = (temp % base64) as i32;
+                let ch: i32 = if (digit < 10) {
+                    ('0' as i32 + digit);
+                } else {
+                    if upper {
+                        (('A' as i32 + digit) - 10);
+                    } else {
+                        (('a' as i32 + digit) - 10);
+                    };
+                };
+                core::builtin::array_set_u8(arr, pos, ch as u8);
+            }
+            temp = (temp / base64);
         }
     }
 }
@@ -6027,17 +5997,15 @@ fn count_digits_base(val: i64, base: i32) -> i32 {
     }
     let base64: i64 = base as i64;
     let mut n: i32 = 0;
-    __for_4: {
-        let mut t: i64 = val;
-        loop {
-            if !(t > 0) {
-                break __for_4;
-            }
-            __for_4_body: {
-                n = (n + 1);
-            }
-            t = (t / base64);
+    let mut t: i64 = val;
+    loop {
+        if !(t > 0) {
+            break;
         }
+        __for_0_body: {
+            n = (n + 1);
+        }
+        t = (t / base64);
     }
     return n;
 }
@@ -9224,17 +9192,15 @@ pub fn String::internal_append_from_memory(self: &mut String, ptr: i32, len: i32
     if core::builtin::unlikely((new_used > core::builtin::array_len(self.repr))) {
         self.String::grow(new_used);
     }
-    __for_0: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < len) {
-                break __for_0;
-            }
-            __for_0_body: {
-                core::builtin::array_set_u8(self.repr, (self.used + i), core::builtin::i32_load8_u((ptr + i)));
-            }
-            i = (i + 1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
         }
+        __for_0_body: {
+            core::builtin::array_set_u8(self.repr, (self.used + i), core::builtin::i32_load8_u((ptr + i)));
+        }
+        i = (i + 1);
     }
     self.used = new_used;
 }
@@ -9316,19 +9282,17 @@ pub fn "String^Eq::eq"(self: &String, other: &String) -> bool {
 }
 
 fn "String^Eq::eq_bytes"(a: builtin::array<u8>, b: builtin::array<u8>, len: i32) -> bool {
-    __for_1: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < len) {
-                break __for_1;
-            }
-            __for_1_body: {
-                if (core::builtin::array_get_u8(a, i) != core::builtin::array_get_u8(b, i)) {
-                    return false;
-                }
-            }
-            i = (i + 1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
         }
+        __for_0_body: {
+            if (core::builtin::array_get_u8(a, i) != core::builtin::array_get_u8(b, i)) {
+                return false;
+            }
+        }
+        i = (i + 1);
     }
     return true;
 }
@@ -9339,24 +9303,22 @@ pub fn "String^Ord::cmp"(self: &String, other: &String) -> Ordering {
     let min_len: i32 = "core::prelude/string.wado::i32_min"(len_a, len_b);
     let a_repr: builtin::array<u8> = self.String::internal_raw_bytes();
     let b_repr: builtin::array<u8> = other.String::internal_raw_bytes();
-    __for_2: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < min_len) {
-                break __for_2;
-            }
-            __for_2_body: {
-                let a_byte: u8 = core::builtin::array_get_u8(a_repr, i);
-                let b_byte: u8 = core::builtin::array_get_u8(b_repr, i);
-                if (a_byte < b_byte) {
-                    return Ordering::Less;
-                }
-                if (a_byte > b_byte) {
-                    return Ordering::Greater;
-                }
-            }
-            i = (i + 1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < min_len) {
+            break;
         }
+        __for_0_body: {
+            let a_byte: u8 = core::builtin::array_get_u8(a_repr, i);
+            let b_byte: u8 = core::builtin::array_get_u8(b_repr, i);
+            if (a_byte < b_byte) {
+                return Ordering::Less;
+            }
+            if (a_byte > b_byte) {
+                return Ordering::Greater;
+            }
+        }
+        i = (i + 1);
     }
     if (len_a < len_b) {
         return Ordering::Less;
@@ -10162,21 +10124,19 @@ pub fn String::eq_ignore_ascii_case(self: &String, other: String) -> bool {
     }
     let a: builtin::array<u8> = self.String::internal_raw_bytes();
     let b: builtin::array<u8> = other.String::internal_raw_bytes();
-    __for_3: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < len) {
-                break __for_3;
-            }
-            __for_3_body: {
-                let ab: u8 = core::builtin::array_get_u8(a, i);
-                let bb: u8 = core::builtin::array_get_u8(b, i);
-                if ("core::prelude/string.wado::byte_to_ascii_lowercase"(ab) != "core::prelude/string.wado::byte_to_ascii_lowercase"(bb)) {
-                    return false;
-                }
-            }
-            i = (i + 1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
         }
+        __for_0_body: {
+            let ab: u8 = core::builtin::array_get_u8(a, i);
+            let bb: u8 = core::builtin::array_get_u8(b, i);
+            if ("core::prelude/string.wado::byte_to_ascii_lowercase"(ab) != "core::prelude/string.wado::byte_to_ascii_lowercase"(bb)) {
+                return false;
+            }
+        }
+        i = (i + 1);
     }
     return true;
 }
@@ -10301,19 +10261,17 @@ pub fn String::starts_with(self: &String, pat: String) -> bool {
         return false;
     }
     let pat_repr: builtin::array<u8> = pat.String::internal_raw_bytes();
-    __for_4: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < pat_len) {
-                break __for_4;
-            }
-            __for_4_body: {
-                if (core::builtin::array_get_u8(self.repr, i) != core::builtin::array_get_u8(pat_repr, i)) {
-                    return false;
-                }
-            }
-            i = (i + 1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < pat_len) {
+            break;
         }
+        __for_0_body: {
+            if (core::builtin::array_get_u8(self.repr, i) != core::builtin::array_get_u8(pat_repr, i)) {
+                return false;
+            }
+        }
+        i = (i + 1);
     }
     return true;
 }
@@ -10325,19 +10283,17 @@ pub fn String::ends_with(self: &String, pat: String) -> bool {
     }
     let offset: i32 = (self.used - pat_len);
     let pat_repr: builtin::array<u8> = pat.String::internal_raw_bytes();
-    __for_5: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < pat_len) {
-                break __for_5;
-            }
-            __for_5_body: {
-                if (core::builtin::array_get_u8(self.repr, (offset + i)) != core::builtin::array_get_u8(pat_repr, i)) {
-                    return false;
-                }
-            }
-            i = (i + 1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < pat_len) {
+            break;
         }
+        __for_0_body: {
+            if (core::builtin::array_get_u8(self.repr, (offset + i)) != core::builtin::array_get_u8(pat_repr, i)) {
+                return false;
+            }
+        }
+        i = (i + 1);
     }
     return true;
 }
@@ -10352,35 +10308,31 @@ pub fn String::find(self: &String, pat: String) -> Option<i32> {
     }
     let pat_repr: builtin::array<u8> = pat.String::internal_raw_bytes();
     let limit: i32 = (self.used - pat_len);
-    __for_6: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i <= limit) {
-                break __for_6;
-            }
-            __for_6_body: {
-                let mut matched: bool = true;
-                __for_7: {
-                    let mut j: i32 = 0;
-                    loop {
-                        if !(j < pat_len) {
-                            break __for_7;
-                        }
-                        __for_7_body: {
-                            if (core::builtin::array_get_u8(self.repr, (i + j)) != core::builtin::array_get_u8(pat_repr, j)) {
-                                matched = false;
-                                break __for_7;
-                            }
-                        }
-                        j = (j + 1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i <= limit) {
+            break;
+        }
+        __for_0_body: {
+            let mut matched: bool = true;
+            let mut j: i32 = 0;
+            loop {
+                if !(j < pat_len) {
+                    break;
+                }
+                __for_1_body: {
+                    if (core::builtin::array_get_u8(self.repr, (i + j)) != core::builtin::array_get_u8(pat_repr, j)) {
+                        matched = false;
+                        break;
                     }
                 }
-                if matched {
-                    return Option<i32>::Some(i);
-                }
+                j = (j + 1);
             }
-            i = (i + 1);
+            if matched {
+                return Option<i32>::Some(i);
+            }
         }
+        i = (i + 1);
     }
     return null;
 }
@@ -10397,20 +10349,18 @@ pub fn String::rfind(self: &String, pat: String) -> Option<i32> {
     let mut i: i32 = (self.used - pat_len);
     loop {
         let mut matched: bool = true;
-        __for_8: {
-            let mut j: i32 = 0;
-            loop {
-                if !(j < pat_len) {
-                    break __for_8;
-                }
-                __for_8_body: {
-                    if (core::builtin::array_get_u8(self.repr, (i + j)) != core::builtin::array_get_u8(pat_repr, j)) {
-                        matched = false;
-                        break __for_8;
-                    }
-                }
-                j = (j + 1);
+        let mut j: i32 = 0;
+        loop {
+            if !(j < pat_len) {
+                break;
             }
+            __for_0_body: {
+                if (core::builtin::array_get_u8(self.repr, (i + j)) != core::builtin::array_get_u8(pat_repr, j)) {
+                    matched = false;
+                    break;
+                }
+            }
+            j = (j + 1);
         }
         if matched {
             return Option<i32>::Some(i);
@@ -10445,24 +10395,22 @@ pub fn String::contains_char(self: &String, ch: char) -> bool {
 
 pub fn String::find_char(self: &String, pred: fn mut(char) -> bool) -> Option<i32> {
     let mut iter: StrCharIter = self.String::chars();
-    __for_9: {
-        let mut byte_index: i32 = 0;
-        loop {
-            let __match_5: Option<char> = iter."StrCharIter^Iterator::next"();
-            match __match_5 {
-                Some(c) => {
-                    __for_9_body: {
-                        if pred(c) {
-                            return Option<i32>::Some(byte_index);
-                        }
+    let mut byte_index: i32 = 0;
+    loop {
+        let __match_5: Option<char> = iter."StrCharIter^Iterator::next"();
+        match __match_5 {
+            Some(c) => {
+                __for_0_body: {
+                    if pred(c) {
+                        return Option<i32>::Some(byte_index);
                     }
-                    byte_index = (byte_index + Box<char> { value: c }.char::len_utf8());
-                },
-                _ => {
-                    break __for_9;
-                },
-            };
-        }
+                }
+                byte_index = (byte_index + Box<char> { value: c }.char::len_utf8());
+            },
+            _ => {
+                break;
+            },
+        };
     }
     return null;
 }
@@ -10684,17 +10632,15 @@ pub fn String::repeat(self: &String, n: i32) -> String {
     }
     let total: i32 = (self.used * n);
     let repr: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(total);
-    __for_10: {
-        let mut r: i32 = 0;
-        loop {
-            if !(r < n) {
-                break __for_10;
-            }
-            __for_10_body: {
-                "core::builtin::core/builtin/array_copy<u8>"(repr, (r * self.used), self.repr, 0, self.used);
-            }
-            r = (r + 1);
+    let mut r: i32 = 0;
+    loop {
+        if !(r < n) {
+            break;
         }
+        __for_0_body: {
+            "core::builtin::core/builtin/array_copy<u8>"(repr, (r * self.used), self.repr, 0, self.used);
+        }
+        r = (r + 1);
     }
     return String { repr: repr, used: total };
 }
@@ -10723,20 +10669,18 @@ pub fn String::replacen(self: &String, from: String, to: String, count: i32) -> 
             break;
         }
         let mut matched: bool = true;
-        __for_11: {
-            let mut j: i32 = 0;
-            loop {
-                if !(j < from_len) {
-                    break __for_11;
-                }
-                __for_11_body: {
-                    if (core::builtin::array_get_u8(self.repr, (pos + j)) != core::builtin::array_get_u8(from_repr, j)) {
-                        matched = false;
-                        break __for_11;
-                    }
-                }
-                j = (j + 1);
+        let mut j: i32 = 0;
+        loop {
+            if !(j < from_len) {
+                break;
             }
+            __for_0_body: {
+                if (core::builtin::array_get_u8(self.repr, (pos + j)) != core::builtin::array_get_u8(from_repr, j)) {
+                    matched = false;
+                    break;
+                }
+            }
+            j = (j + 1);
         }
         if matched {
             if (to_len > 0) {
@@ -10793,20 +10737,18 @@ pub fn "StrSplitIter^Iterator::next"(self: &mut StrSplitIter) -> Option<String> 
             break;
         }
         let mut matched: bool = true;
-        __for_12: {
-            let mut j: i32 = 0;
-            loop {
-                if !(j < self.sep_len) {
-                    break __for_12;
-                }
-                __for_12_body: {
-                    if (core::builtin::array_get_u8(self.repr, (i + j)) != core::builtin::array_get_u8(self.sep_repr, j)) {
-                        matched = false;
-                        break __for_12;
-                    }
-                }
-                j = (j + 1);
+        let mut j: i32 = 0;
+        loop {
+            if !(j < self.sep_len) {
+                break;
             }
+            __for_0_body: {
+                if (core::builtin::array_get_u8(self.repr, (i + j)) != core::builtin::array_get_u8(self.sep_repr, j)) {
+                    matched = false;
+                    break;
+                }
+            }
+            j = (j + 1);
         }
         if matched {
             let len: i32 = (i - self.pos);
@@ -11035,20 +10977,18 @@ pub fn "StrSplitNIter^Iterator::next"(self: &mut StrSplitNIter) -> Option<String
             break;
         }
         let mut matched: bool = true;
-        __for_13: {
-            let mut j: i32 = 0;
-            loop {
-                if !(j < self.sep_len) {
-                    break __for_13;
-                }
-                __for_13_body: {
-                    if (core::builtin::array_get_u8(self.repr, (i + j)) != core::builtin::array_get_u8(self.sep_repr, j)) {
-                        matched = false;
-                        break __for_13;
-                    }
-                }
-                j = (j + 1);
+        let mut j: i32 = 0;
+        loop {
+            if !(j < self.sep_len) {
+                break;
             }
+            __for_0_body: {
+                if (core::builtin::array_get_u8(self.repr, (i + j)) != core::builtin::array_get_u8(self.sep_repr, j)) {
+                    matched = false;
+                    break;
+                }
+            }
+            j = (j + 1);
         }
         if matched {
             let len: i32 = (i - self.pos);
@@ -14575,7 +14515,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
 }
 
 pub fn Formatter::new(buf: &mut String) -> Formatter with stores[buf] {
-    return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: -1, precision: -1, indent: 0, buf: buf };
+    return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, zero_pad: false, width: -1, precision: -2, indent: 0, buf: buf };
 }
 
 pub fn Formatter::write_str(self: &mut Formatter, s: &String) {
@@ -14587,17 +14527,15 @@ pub fn Formatter::write_char(self: &mut Formatter, c: char) {
 }
 
 pub fn Formatter::write_char_n(self: &mut Formatter, c: char, n: i32) {
-    __for_0: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < n) {
-                break __for_0;
-            }
-            __for_0_body: {
-                self.buf.String::push(c);
-            }
-            i = (i + 1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < n) {
+            break;
         }
+        __for_0_body: {
+            self.buf.String::push(c);
+        }
+        i = (i + 1);
     }
 }
 
@@ -14665,17 +14603,15 @@ pub fn Formatter::apply_padding(self: &mut Formatter, start_pos: i32) {
                 self.buf.String::set_byte_unchecked(((start_pos + left_pad) + i), self.buf.String::get_byte_unchecked((start_pos + i)));
                 i = (i - 1);
             }
-            __for_1: {
-                let mut j: i32 = 0;
-                loop {
-                    if !(j < left_pad) {
-                        break __for_1;
-                    }
-                    __for_1_body: {
-                        self.buf.String::set_byte_unchecked((start_pos + j), fill_byte);
-                    }
-                    j = (j + 1);
+            let mut j: i32 = 0;
+            loop {
+                if !(j < left_pad) {
+                    break;
                 }
+                __for_0_body: {
+                    self.buf.String::set_byte_unchecked((start_pos + j), fill_byte);
+                }
+                j = (j + 1);
             }
             self.buf.String::append_byte_filled(fill_byte, right_pad);
         } else {
@@ -14688,17 +14624,15 @@ pub fn Formatter::apply_padding(self: &mut Formatter, start_pos: i32) {
                 self.buf.String::set_byte_unchecked(((start_pos + padding) + i), self.buf.String::get_byte_unchecked((start_pos + i)));
                 i = (i - 1);
             }
-            __for_2: {
-                let mut j: i32 = 0;
-                loop {
-                    if !(j < padding) {
-                        break __for_2;
-                    }
-                    __for_2_body: {
-                        self.buf.String::set_byte_unchecked((start_pos + j), fill_byte);
-                    }
-                    j = (j + 1);
+            let mut j: i32 = 0;
+            loop {
+                if !(j < padding) {
+                    break;
                 }
+                __for_1_body: {
+                    self.buf.String::set_byte_unchecked((start_pos + j), fill_byte);
+                }
+                j = (j + 1);
             }
         }
     }
@@ -14710,17 +14644,15 @@ pub fn Formatter::write_from_memory(self: &mut Formatter, ptr: i32, len: i32) {
         return;
     }
     let arr: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-    __for_3: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < len) {
-                break __for_3;
-            }
-            __for_3_body: {
-                core::builtin::array_set_u8(arr, i, core::builtin::i32_load8_u((ptr + i)));
-            }
-            i = (i + 1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
         }
+        __for_0_body: {
+            core::builtin::array_set_u8(arr, i, core::builtin::i32_load8_u((ptr + i)));
+        }
+        i = (i + 1);
     }
     let s: String = "core::prelude/string.wado::String::internal_from_utf8_raw"(arr, len);
     self.Formatter::pad(s);
@@ -14803,17 +14735,15 @@ pub fn Formatter::prepare_int_write(self: &mut Formatter, is_negative: bool, pre
 }
 
 pub fn Formatter::write_indent(self: &mut Formatter) {
-    __for_4: {
-        let mut i: i32 = 0;
-        loop {
-            if !(i < self.indent) {
-                break __for_4;
-            }
-            __for_4_body: {
-                self.Formatter::write_str(&"  ");
-            }
-            i = (i + 1);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < self.indent) {
+            break;
         }
+        __for_0_body: {
+            self.Formatter::write_str(&"  ");
+        }
+        i = (i + 1);
     }
 }
 
@@ -14834,17 +14764,34 @@ pub fn Formatter::close_brace(self: &mut Formatter, close: String) {
 }
 
 pub fn "String^Display::fmt"(self: &String, f: &mut Formatter) {
-    f.Formatter::pad(*self);
+    if (f.precision >= 0) {
+        let mut capped: String = "$value_copy$T25"(*self);
+        capped.String::truncate_chars(f.precision);
+        f.Formatter::pad(capped);
+    } else {
+        f.Formatter::pad(*self);
+    }
 }
 
 pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
+    let limit: i32 = if (f.precision == -2) {
+        256;
+    } else {
+        f.precision;
+    };
     f.Formatter::write_char('"');
-    __for_of_2: {
-        let mut __iter_2: StrCharIter = *self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"();
+    let mut count: i32 = 0;
+    let mut truncated: bool = false;
+    __for_of_5: {
+        let mut __iter_5: StrCharIter = *self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __match_4: Option<char> = __iter_2."StrCharIter^Iterator::next"();
-            match __match_4 {
+            let __match_7: Option<char> = __iter_5."StrCharIter^Iterator::next"();
+            match __match_7 {
                 Some(c) => {
+                    if ((limit >= 0) && (count >= limit)) {
+                        truncated = true;
+                        break;
+                    }
                     if (c == '"') {
                         f.Formatter::write_char('\\');
                         f.Formatter::write_char('"');
@@ -14871,6 +14818,7 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
                             }
                         }
                     }
+                    count = (count + 1);
                 },
                 _ => {
                     break;
@@ -14879,6 +14827,9 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
         }
     }
     f.Formatter::write_char('"');
+    if truncated {
+        f.Formatter::write_str(&"...");
+    }
 }
 
 pub fn "String^InspectAlt::inspect_alt"(self: &String, f: &mut Formatter) {

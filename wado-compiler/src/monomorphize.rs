@@ -360,7 +360,7 @@ impl Monomorphizer {
                 let concrete = {
                     // Issue #1110 (1)(2): every producer sets
                     // `FunctionRef::module_source` to the body's home
-                    // module — `resolver::method_call::resolve_method_call`,
+                    // module — `elaborator::method_call::resolve_method_call`,
                     // `synthesis::traits` (via `resolve_impl_module_via_env`),
                     // `synthesis::template::trait_impl_module`, and
                     // `monomorphize/func_inst::resolve_method_call_substitution`

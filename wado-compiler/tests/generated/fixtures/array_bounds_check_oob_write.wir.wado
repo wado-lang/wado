@@ -71,17 +71,12 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/array_bounds_check_oob_write.wado/run"() {
     let __b_0: ref "core:prelude//Array<i32>";
-    let arr: ref "core:prelude//Array<i32>";
-    arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
-        __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
-        break __seq_lit: __b_0;
-        unreachable;
-    };
+    __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     block {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     };
-    builtin::array_set<i32>(arr.repr, 3, 99);
+    builtin::array_set<i32>(__b_0.repr, 3, 99);
 }
 
 fn "wado-compiler/tests/fixtures/array_bounds_check_oob_write.wado/__cm_export__run"() {
@@ -91,17 +86,15 @@ fn "wado-compiler/tests/fixtures/array_bounds_check_oob_write.wado/__cm_export__
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l2: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l2;
-            };
+    i = 0;
+    b1: block {
+        l2: loop {
+            if i >= len {
+                break b1;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l2;
         };
     };
 }

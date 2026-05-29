@@ -1,0 +1,20 @@
+// Default Inspect length cap for sequences (no explicit precision).
+//
+// `{s}` (Display) is never capped by default, so a 300-char string renders in
+// full (300 bytes). `{s:?}` (Inspect) falls back to DEFAULT_SEQ_LIMIT (256),
+// so the output is `"` + 256 chars + `"` + `...` = 261 bytes.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut s = "";
+    for let mut i = 0; i < 300; i += 1 {
+        s.push('a');
+    }
+    let disp = `{s}`;
+    let insp = `{s:?}`;
+    println(`{disp.len()}`);
+    println(`{insp.len()}`);
+}
+
+__DATA__
+{"stdout": "300\n261\n"}

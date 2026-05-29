@@ -43,15 +43,15 @@ use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
 };
 pub use types::{
-    LiftContext, cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size, flatten_param_type,
-    wasi_type_to_type_id,
+    LiftContext, cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size, cm_type_to_type_id,
+    flatten_param_type,
 };
 use types::{cm_val_type_to_type_id, compute_export_flat_return_types};
 
 /// Build a `(module_source, name)` set for every effect/resource declared in
 /// the loaded TIR modules. The CM binding synthesizer uses this to attach the
 /// owning effect to each generated binding using the same `module_source` the
-/// resolver assigns to user-written `with E` clauses.
+/// elaborator assigns to user-written `with E` clauses.
 ///
 /// Keying by `(module_source, name)` (rather than name alone) prevents
 /// collisions when two modules declare an effect or resource with the same
@@ -122,7 +122,11 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
-                collect_effect_calls_in_block(body, &mut seen_effects, project.wasi_registry);
+                collect_effect_calls_in_block(
+                    body,
+                    &mut seen_effects,
+                    project.cm_interface_registry,
+                );
             }
         }
     }
@@ -137,7 +141,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
         // Map effect/resource name → defining module source. Used to attach the
         // canonical owner as an effect on each generated binding so the
         // checker's `(module_source, name)` identity matches user-written
-        // `with E` clauses (which the resolver also canonicalises to the
+        // `with E` clauses (which the elaborator also canonicalises to the
         // defining module).
         let owner_sources = effect_owner_module_sources(&project.tir_modules);
         let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
@@ -147,7 +151,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
         // participate in monomorphize / lower / DCE like normal functions.
         let mut auxiliary_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
         for qualified_name in &seen_effects {
-            if let Some(func_info) = project.wasi_registry.get_function(qualified_name) {
+            if let Some(func_info) = project.cm_interface_registry.get_function(qualified_name) {
                 let func_info = func_info.clone();
                 let binding_name =
                     binding_func_name(&func_info.interface_name, &func_info.method_name);
@@ -159,7 +163,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                 .unwrap_or_else(|| project.interner.borrow_mut().wasi(&func_info.package));
                 let produced = synthesize_adapter(
                     &func_info,
-                    project.wasi_registry,
+                    project.cm_interface_registry,
                     &entry_type_table,
                     &project.interner,
                     &owner_module,
@@ -201,7 +205,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                         body,
                         &adapter_map,
                         &entry_source,
-                        project.wasi_registry,
+                        project.cm_interface_registry,
                         &entry_type_table,
                     );
                 }
@@ -288,6 +292,55 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                         }
                     }
 
+                    // Validate return-type compatibility with the world. The
+                    // dispatch below routes a `Result<_, _>`-returning world
+                    // export to dedicated adapters for the async, Result, and
+                    // `()` user return shapes; any other user return type
+                    // falls through to `synthesize_general_export_binding`,
+                    // which lowers the user's return value directly into the
+                    // world's task-return slots. When the world expects only
+                    // a discriminant (`Result<(), ()>`, the wasi:cli/command
+                    // shape) but the user supplies, say, `i32`, the general
+                    // adapter emits an extra flat value beyond what the
+                    // runtime declares for task-return — surfacing as an
+                    // opaque "values remaining on stack" wasm-validation
+                    // panic at codegen. Catch the mismatch here with a
+                    // readable diagnostic instead.
+                    {
+                        let user_func = user_func_rc.borrow();
+                        let tt = entry_type_table.borrow();
+                        let user_is_unit =
+                            matches!(tt.get(user_func.return_type), ResolvedType::Unit);
+                        let result_name = tt
+                            .compiler_items()
+                            .variant_name(crate::compiler_item::CompilerItem::Result)
+                            .to_string();
+                        let user_is_result = matches!(
+                            tt.get(user_func.return_type),
+                            ResolvedType::GenericInstance { name, .. } if *name == result_name
+                        );
+                        let world_expects_result = matches!(
+                            &export.return_type,
+                            Some(crate::ast::Type::Generic(g)) if g.name == result_name
+                        );
+                        if world_expects_result
+                            && !user_func.is_async
+                            && !user_is_unit
+                            && !user_is_result
+                        {
+                            let user_return_name = tt.type_name(user_func.return_type);
+                            drop(tt);
+                            return Err(format!(
+                                "export function `{}` has return type `{user_return_name}`, \
+                                 but the world expects a `{result_name}<_, _>` (or unit, \
+                                 which is automatically wrapped as `{result_name}<(), _>`). \
+                                 Change the signature to return a `{result_name}` or remove \
+                                 the explicit return type.",
+                                export.name
+                            ));
+                        }
+                    }
+
                     // Check if user function is `export async fn`
                     let is_async_export = {
                         let user_func = user_func_rc.borrow();
@@ -311,7 +364,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &flat_types,
                                 &project.tir_modules,
                                 &entry_type_table,
-                                project.wasi_registry,
+                                project.cm_interface_registry,
                                 &binding_cm_package,
                                 &project.interner,
                             );
@@ -323,7 +376,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             &project.tir_modules,
                             &entry_type_table,
                             &export.params,
-                            project.wasi_registry,
+                            project.cm_interface_registry,
                             &binding_cm_package,
                             &project.interner,
                         )
@@ -361,7 +414,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &project.tir_modules,
                                 &entry_type_table,
                                 &export.params,
-                                project.wasi_registry,
+                                project.cm_interface_registry,
                                 &binding_cm_package,
                                 &project.interner,
                             )
@@ -391,7 +444,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                     &project.tir_modules,
                                     &entry_type_table,
                                     &export.params,
-                                    project.wasi_registry,
+                                    project.cm_interface_registry,
                                     &binding_cm_package,
                                     &project.interner,
                                 )
@@ -441,18 +494,38 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     // Step 6: Synthesize export bindings for test functions (__test_*)
     // Only when targeting the test world — in other worlds, tests are dead code.
     if project.is_test_world() {
+        let test_name_filters = project.test_name_filters.clone();
         let entry_module = project
             .tir_modules
             .get_mut(&entry_source)
             .expect("entry module should exist");
 
+        // Map each test's mangled function name → its original (lossless) name
+        // so `--test-name` matches against what the user wrote, not the
+        // ASCII-folded export name.
+        let original_names: crate::hashmap::IndexMap<&str, Option<&str>> = entry_module
+            .tests
+            .iter()
+            .map(|t| (t.function_name.as_str(), t.name.as_deref()))
+            .collect();
+
         // Collect test functions first to avoid borrow conflict.
         // Test functions have is_export=false (they're not world exports),
         // but they need adapters for task-return when called via `wado test`.
+        // Only selected tests get an adapter: an unselected test then has no
+        // `is_cm_export` root, so early DCE drops its body — that is what makes
+        // `--test-name` speed up compilation.
         let test_funcs: Vec<(String, Rc<RefCell<TirFunction>>)> = entry_module
             .functions
             .iter()
-            .filter(|f| f.borrow().name.starts_with("__test_"))
+            .filter(|f| {
+                let name = f.borrow().name.clone();
+                name.starts_with("__test_")
+                    && crate::package::test_selected(
+                        original_names.get(name.as_str()).copied().flatten(),
+                        &test_name_filters,
+                    )
+            })
             .map(|f| (f.borrow().name.clone(), f.clone()))
             .collect();
 
@@ -465,7 +538,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     }
 
     // Strip remaining TaskReturn from all modules.
-    // `task return` is only valid inside `async fn` (checked by resolver).
+    // `task return` is only valid inside `async fn` (checked by elaborator).
     // Step 5 expands TaskReturn into CM calls for async exports that match the
     // target world. Any remaining async fn (unmatched exports, imported modules)
     // will be DCE'd — strip their TaskReturn stmts so they don't reach monomorphize.
@@ -508,7 +581,7 @@ mod tests {
     use super::*;
     use crate::ast::{NamedType, Type};
     use crate::cm_abi;
-    use crate::component_model::WasiRegistry;
+    use crate::component_model::CmInterfaceRegistry;
     use crate::synthesis::common::{
         builtin_call, cm_raw_call, i32_const, i64_const, internal_call, let_stmt, synth_span,
     };
@@ -527,7 +600,7 @@ mod tests {
     /// items against the relevant prelude modules so `make_option` /
     /// `make_result` and the type-identity reads inside `lift` /
     /// `cm_binding` succeed in unit tests. Production resolution wires
-    /// these up when the stdlib resolver visits `core:prelude`.
+    /// these up when the stdlib elaborator visits `core:prelude`.
     fn register_option_result_for_tests(tt: &mut TypeTable) {
         use crate::compiler_item::{CompilerItem, Resolved};
         let _ = tt.compiler_items_mut().register(
@@ -600,7 +673,7 @@ mod tests {
     /// Mirrors the production `LiftContext` shape so the lift code paths
     /// run end-to-end in unit tests.
     struct LiftCtxFixture {
-        registry: WasiRegistry,
+        registry: CmInterfaceRegistry,
         type_table: std::cell::RefCell<TypeTable>,
         interner: std::cell::RefCell<ModuleSourceInterner>,
     }
@@ -609,12 +682,12 @@ mod tests {
         fn new() -> Self {
             // Register the Option/Result compiler-items so `make_option` /
             // `make_result` succeed during unit-test lifts. Production
-            // gets these registered when the stdlib resolver visits
+            // gets these registered when the stdlib elaborator visits
             // `core:prelude`.
             let mut tt = TypeTable::new();
             register_option_result_for_tests(&mut tt);
             Self {
-                registry: WasiRegistry::new(),
+                registry: CmInterfaceRegistry::new(),
                 type_table: std::cell::RefCell::new(tt),
                 interner: std::cell::RefCell::new(ModuleSourceInterner::new()),
             }
@@ -622,7 +695,7 @@ mod tests {
 
         fn ctx(&self) -> LiftContext<'_> {
             LiftContext {
-                wasi_registry: &self.registry,
+                cm_interface_registry: &self.registry,
                 type_table: &self.type_table,
                 cm_package: "",
                 interner: &self.interner,
@@ -632,7 +705,7 @@ mod tests {
 
     #[test]
     fn flatten_param_i32() {
-        let reg = WasiRegistry::new();
+        let reg = CmInterfaceRegistry::new();
         assert_eq!(
             flatten_param_type(&named_type("i32"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I32]
@@ -641,7 +714,7 @@ mod tests {
 
     #[test]
     fn flatten_param_i64() {
-        let reg = WasiRegistry::new();
+        let reg = CmInterfaceRegistry::new();
         assert_eq!(
             flatten_param_type(&named_type("i64"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
@@ -650,7 +723,7 @@ mod tests {
 
     #[test]
     fn flatten_param_f64() {
-        let reg = WasiRegistry::new();
+        let reg = CmInterfaceRegistry::new();
         assert_eq!(
             flatten_param_type(&named_type("f64"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::F64]
@@ -659,7 +732,7 @@ mod tests {
 
     #[test]
     fn flatten_param_string() {
-        let reg = WasiRegistry::new();
+        let reg = CmInterfaceRegistry::new();
         assert_eq!(
             flatten_param_type(&named_type("String"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I32, TypeTable::I32]
@@ -668,7 +741,7 @@ mod tests {
 
     #[test]
     fn flatten_param_bool() {
-        let reg = WasiRegistry::new();
+        let reg = CmInterfaceRegistry::new();
         assert_eq!(
             flatten_param_type(&named_type("bool"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I32]
@@ -677,7 +750,7 @@ mod tests {
 
     #[test]
     fn flatten_param_unit() {
-        let reg = WasiRegistry::new();
+        let reg = CmInterfaceRegistry::new();
         assert!(
             flatten_param_type(&Type::Tuple(vec![]), &reg, &CmStdlibNames::for_tests()).is_empty()
         );
@@ -685,7 +758,7 @@ mod tests {
 
     #[test]
     fn flatten_param_newtype_u64() {
-        let (reg, _) = WasiRegistry::build_from_stdlib();
+        let (reg, _) = CmInterfaceRegistry::build_from_stdlib();
         assert_eq!(
             flatten_param_type(&named_type("Duration"), reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
@@ -899,7 +972,7 @@ mod tests {
             visit_block(stmts, target)
         }
 
-        let (registry, _) = WasiRegistry::build_from_stdlib();
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
         let elem_ty = named_type("IpAddress");
         let expected_size = u64::from(crate::component_model::cm_size_with_registry_scoped(
             &elem_ty,
@@ -914,7 +987,7 @@ mod tests {
         let type_table = std::cell::RefCell::new(tt);
         let interner = std::cell::RefCell::new(ModuleSourceInterner::new());
         let ctx = LiftContext {
-            wasi_registry: registry,
+            cm_interface_registry: registry,
             type_table: &type_table,
             cm_package: "sockets",
             interner: &interner,

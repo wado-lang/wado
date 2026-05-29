@@ -450,7 +450,7 @@ impl Parser {
     ///
     /// `name_id` / `name_span` identify the case-name identifier (the `Some`
     /// in `Some(x)`, or the `Some` part of `Option::Some(x)`). They are used
-    /// by the resolver to record use→def references for LSP navigation.
+    /// by the elaborator to record use→def references for LSP navigation.
     fn parse_variant_pattern(
         &mut self,
         name: String,
@@ -2330,7 +2330,7 @@ impl Parser {
         } else if let Some(name) = self.peek_kind().as_ident_name() {
             // Accept identifiers and contextual keywords (flags, type) as pattern names.
             // Case does NOT affect parsing: disambiguation between variant cases and
-            // variable bindings is deferred to the resolver using type information.
+            // variable bindings is deferred to the elaborator using type information.
             let name = name.to_string();
             let start_span = self.peek().span;
             self.advance();
@@ -2347,7 +2347,7 @@ impl Parser {
                 self.parse_struct_pattern_fields(Some(name))
             } else {
                 // Bare identifier: could be a variable binding or a variant/enum case
-                // without payload. The resolver disambiguates using type information.
+                // without payload. The elaborator disambiguates using type information.
                 Ok(Pattern::Ident {
                     id: self.alloc_ast_id(),
                     name,
@@ -3615,7 +3615,7 @@ impl Parser {
     }
 
     /// Parse a `resume value` expression. Valid only inside an effect handler
-    /// method body; the resolver (later phase) is responsible for that check.
+    /// method body; the elaborator (later phase) is responsible for that check.
     /// `resume` is a contextual keyword: the lexer hands it to us as an Ident,
     /// so we consume it by name rather than via a dedicated `TokenKind`.
     fn parse_resume_expr(&mut self) -> ParseResult<Expr> {
@@ -4713,6 +4713,9 @@ impl Parser {
 
             // Check if this is an associated type binding: `type Name = Type;`
             if self.check(&TokenKind::Type) {
+                // Alloc-at-start (like every other node) so a leading comment
+                // attaches here, not to the inner type or the following item.
+                let assoc_id = self.alloc_ast_id();
                 let type_span = self.peek().span;
                 self.advance();
                 let assoc_name = self.consume_ident()?;
@@ -4720,7 +4723,7 @@ impl Parser {
                 let assoc_ty = self.parse_type()?;
                 let end = self.expect(&TokenKind::Semicolon)?.span;
                 associated_types.push(AssociatedTypeBinding {
-                    id: self.alloc_ast_id(),
+                    id: assoc_id,
                     name: assoc_name,
                     ty: assoc_ty,
                     span: type_span.merge(&end),
@@ -4735,6 +4738,9 @@ impl Parser {
 
                 // Check if this is an associated constant: `[pub] const NAME: Type = expr;`
                 if self.check(&TokenKind::Const) {
+                    // Alloc-at-start (like every other node) so a leading comment
+                    // attaches here, not to the inner value or the following item.
+                    let const_id = self.alloc_ast_id();
                     let const_span = self.peek().span;
                     self.advance();
                     let const_name = self.consume_ident()?;
@@ -4744,7 +4750,7 @@ impl Parser {
                     let const_value = self.parse_expr()?;
                     let end = self.expect(&TokenKind::Semicolon)?.span;
                     constants.push(AssociatedConst {
-                        id: self.alloc_ast_id(),
+                        id: const_id,
                         name: const_name,
                         is_pub,
                         ty: const_ty,
@@ -4800,7 +4806,7 @@ impl Parser {
         //
         // Only bounded type params are added to type_params. Params without bounds are either
         // concrete types (like `i32` in `impl IndexValue<i32>`) or bare type params handled by
-        // the resolver. Adding bare params would shift the index of real type params, breaking
+        // the elaborator. Adding bare params would shift the index of real type params, breaking
         // associated type resolution (e.g., `type Output = T` for `impl IndexValue<i32> for Array<T>`).
         let start_span = self.peek().span;
         let name = self.consume_ident()?;
@@ -6243,7 +6249,7 @@ line 2
     #[test]
     fn test_pattern_bare_identifier_always_ident() {
         // Bare identifiers (no parens, no braces) are always Pattern::Ident
-        // regardless of case — the resolver disambiguates
+        // regardless of case — the elaborator disambiguates
         let upper = parse_pattern_from("None");
         let lower = parse_pattern_from("none");
         assert!(matches!(&upper, Pattern::Ident { name, .. } if name == "None"));

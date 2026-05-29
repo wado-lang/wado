@@ -1,0 +1,31 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source descriptor: LexerExec/ReservedWordsEscaping (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (d): t::tokenize(&input) renders to the same ANTLR4-format
+// dump as the descriptor's [output] block.
+
+use t from "../../grammars/LexerExec/ReservedWordsEscaping.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/antlr4_compat_a/LexerExec/ReservedWordsEscaping",
+        },
+    };
+use { TK_EOF } from "../../grammars/LexerExec/ReservedWordsEscaping.g4";
+
+#[TODO]
+// triage: tokens-equivalence: expected output includes a `channel=N` token but Gale's lexer codegen routes non-default-channel tokens to `Token.leading_trivia` rather than the main stream, so `to_lexer_string` does not emit them. Gap: either land non-default-channel tokens in the main stream with a channel attribute (have the parser filter), or extend `to_lexer_string` to walk trivia in source order.
+test "stage_a_tokens: LexerExec/ReservedWordsEscaping" {
+    let input = "ab";
+    let expected = "[@0,0:0='a',<1>,1:0]
+[@1,1:1='b',<2>,channel=2,1:1]
+[@2,2:1='<EOF>',<-1>,1:2]
+";
+    let tokens = t::tokenize(&input);
+    let actual = t::to_lexer_string(&tokens, &input, TK_EOF);
+    assert actual == expected, `actual:\n{actual}\nexpected:\n{expected}`;
+}

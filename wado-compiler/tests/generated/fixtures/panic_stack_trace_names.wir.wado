@@ -74,17 +74,15 @@ fn "wado-compiler/tests/fixtures/panic_stack_trace_names.wado/__cm_export__run"(
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l1: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l1;
-            };
+    i = 0;
+    b0: block {
+        l1: loop {
+            if i >= len {
+                break b0;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l1;
         };
     };
 }

@@ -694,24 +694,28 @@ impl<'a> Unparser<'a> {
 
         self.with_braced_body(i.span, |this| {
             for assoc in &i.associated_types {
-                this.write_indent();
-                this.output.push_str("type ");
-                this.output.push_str(&assoc.name);
-                this.output.push_str(" = ");
-                this.unparse_type(&assoc.ty);
-                this.output.push_str(";\n");
+                this.emit_member(assoc.id, assoc.span, &[], |this| {
+                    this.write_indent();
+                    this.output.push_str("type ");
+                    this.output.push_str(&assoc.name);
+                    this.output.push_str(" = ");
+                    this.unparse_type(&assoc.ty);
+                    this.output.push(';');
+                });
             }
 
             for assoc_const in &i.constants {
-                this.write_indent();
-                this.emit_kw_if(assoc_const.is_pub, "pub ");
-                this.output.push_str("const ");
-                this.output.push_str(&assoc_const.name);
-                this.output.push_str(": ");
-                this.unparse_type(&assoc_const.ty);
-                this.output.push_str(" = ");
-                this.unparse_expr(&assoc_const.value);
-                this.output.push_str(";\n");
+                this.emit_member(assoc_const.id, assoc_const.span, &[], |this| {
+                    this.write_indent();
+                    this.emit_kw_if(assoc_const.is_pub, "pub ");
+                    this.output.push_str("const ");
+                    this.output.push_str(&assoc_const.name);
+                    this.output.push_str(": ");
+                    this.unparse_type(&assoc_const.ty);
+                    this.output.push_str(" = ");
+                    this.unparse_expr(&assoc_const.value);
+                    this.output.push(';');
+                });
             }
 
             // Force one blank line between an associated-type / constant
@@ -4187,7 +4191,7 @@ impl<'a> TirUnparser<'a> {
                 args,
                 ..
             } => {
-                // The resolver wraps `self` receivers in `&`/`&mut` automatically;
+                // The elaborator wraps `self` receivers in `&`/`&mut` automatically;
                 // strip that wrapper so the rendering reflects the source value.
                 let actual_receiver = match &receiver.kind {
                     TirExprKind::Unary {
@@ -4275,7 +4279,7 @@ impl<'a> TirUnparser<'a> {
                 ..
             } => {
                 // Functor structs are rendered as `&Name { ... }` to mirror the
-                // reference type that the resolver attached.
+                // reference type that the elaborator attached.
                 if matches!(
                     self.type_table.get(expr.type_id),
                     crate::tir::ResolvedType::Ref(_)

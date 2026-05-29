@@ -324,7 +324,20 @@ fn record_struct_lit_def(
 
 /// Unwrap a `LabeledBlock` expression to find the value from its break statement.
 /// `LABEL: { ...; break LABEL: expr; }` → `expr`
+///
+/// Also unwraps a plain `Block { ...; tail_expr }` to `tail_expr`. This shape
+/// appears after `branch_prune::prune_expr` flattens a tail-break-only labeled
+/// block into a plain stmt list with the broken value as the trailing
+/// expression statement.
 fn unwrap_labeled_block_value(expr: &NirExpr) -> &NirExpr {
+    if let NirExprKind::Block(block) = &expr.kind
+        && let Some(NirStmt {
+            kind: NirStmtKind::Expr(tail),
+            ..
+        }) = block.stmts.last()
+    {
+        return unwrap_labeled_block_value(tail);
+    }
     if let NirExprKind::LabeledBlock { block, label, .. } = &expr.kind {
         // Find the break statement that returns a value from this block
         for stmt in &block.stmts {
@@ -523,7 +536,7 @@ fn record_defs_from_expr(expr: &NirExpr, defs: &mut DefMap) {
 }
 
 /// Eliminate implied-false conditions within a statement.
-/// TIR visitor that eliminates loop-guard-implied false bounds checks.
+/// NIR visitor that eliminates loop-guard-implied false bounds checks.
 ///
 /// When a loop guard proves `i < bound`, inner conditions `i >= bound` are
 /// replaced with `false`. Dominating if-conditions are also tracked to extend
@@ -605,7 +618,7 @@ impl NirOptVisitor for ConditionEliminator<'_> {
     }
 }
 
-/// TIR visitor that eliminates bitmask-bounded false bounds checks.
+/// NIR visitor that eliminates bitmask-bounded false bounds checks.
 ///
 /// Pattern: `if (x & MASK) >= BOUND { panic(...) }` where `BOUND > MASK >= 0`
 /// Since `(x & MASK)` is always in `[0, MASK]`, the condition is always false.

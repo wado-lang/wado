@@ -1,0 +1,23 @@
+// Verify that niri's Stage 2.5 match-fold collapses a constant-scrutinee
+// `match` into the chosen arm body. We use prime-number arm bodies
+// unlikely to appear in stdlib WIR, so a `wir_not_expect` check on the
+// "wrong" arms confirms the match was actually folded away (rather
+// than left as an if-chain that O2 happens to dead-code-eliminate).
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let result = match 2 {
+        1 => 1009,
+        2 => 1013,
+        _ => 1019,
+    };
+    println(`{result}`);
+}
+
+__DATA__
+{
+    "stdout": "1013\n",
+    "wir_expect:O2": ["1013"],
+    "wir_not_expect:O2": ["1009", "1019"]
+}

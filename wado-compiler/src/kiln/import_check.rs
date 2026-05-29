@@ -52,11 +52,11 @@ pub fn check_loaded<H: CompilerHost>(
 
 /// If the target world is `core:kiln/generator` and the entry module
 /// declares `pub struct Options`, ensure an `impl Deserialize for Options;`
-/// forward-decl is present so the resolver registers the trait impl and
+/// forward-decl is present so the elaborator registers the trait impl and
 /// `bind_request::<Options>` typechecks. Idempotent: skipped when the
 /// user already wrote the impl.
 ///
-/// Runs post-load, pre-annotate so the resolver sees the synthesized
+/// Runs post-load, pre-annotate so the elaborator sees the synthesized
 /// `Item::Impl` during its ordinary walk. The injected AST ids come
 /// from [`Module::alloc_ast_id`], which extends the parser's dense
 /// per-module range — any symbol-lookup machinery keyed on

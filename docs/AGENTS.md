@@ -103,7 +103,7 @@ It may include TODOs on WIP.
 - [Generic `AsyncCall<T>` for CM async imports](./wep-2026-04-22-subtask-generic.md)
 - [Synopsis Tests](./wep-2026-04-26-synopsis-tests.md)
 - [Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md)
-- [TIR Interpreter (`tiri`) Evolution Plan](./wep-2026-04-27-tir-interpreter.md)
+- [NIR Interpreter (`niri`) Evolution Plan](./wep-2026-04-27-nir-interpreter.md)
 - [Resource Inheritance and Downcast (`resource extends`)](./wep-2026-04-28-resource-inheritance.md)
 - [Test Discovery](./wep-2026-05-02-test-discovery.md)
 - [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md)
@@ -112,3 +112,4 @@ It may include TODOs on WIP.
 - [String API — checked / unchecked / internal Discipline](./wep-2026-05-16-string-checked-unchecked-discipline.md)
 - [Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md)
 - [Resource Ownership and a Resource-Scoped Borrow Checker](./wep-2026-05-21-resource-ownership.md)
+- [Elaborator Re-architecture — TypeSystem / Annotate / Reify](./wep-2026-05-26-elaborator-rearchitecture.md)

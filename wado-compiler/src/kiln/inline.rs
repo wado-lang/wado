@@ -26,7 +26,7 @@ use super::options_check::{CanonicalOptions, validate};
 /// under `build/kiln/<synthetic_id>` unless it declares its own `output_dir`.
 pub const DEFAULT_INLINE_OUTPUT_DIR_PREFIX: &str = "build/kiln";
 
-/// Resolver-side lookup table that redirects a `use ... from "<from>"` whose
+/// Elaborator-side lookup table that redirects a `use ... from "<from>"` whose
 /// `<from>` path matches an inline Kiln invocation's primary source to the
 /// invocation's generated entry module.
 ///
@@ -82,7 +82,7 @@ impl InvocationIndex {
     }
 
     /// Returns `true` when no invocations have been recorded. Consumers
-    /// (e.g. the resolver) can short-circuit the redirect check.
+    /// (e.g. the elaborator) can short-circuit the redirect check.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
@@ -106,11 +106,14 @@ impl InvocationIndex {
 /// # Errors
 /// Every shape mismatch, options-validation error, and dedup conflict is
 /// reported through the returned `Vec<Diagnostic>`.
-pub fn collect_inline_invocations(
-    modules: &IndexMap<String, Module>,
+pub fn collect_inline_invocations<'a, I>(
+    modules: I,
     descriptors: &IndexMap<String, OptionsDescriptor>,
     manifest_root: &str,
-) -> Result<Vec<Invocation>, Vec<Diagnostic>> {
+) -> Result<Vec<Invocation>, Vec<Diagnostic>>
+where
+    I: IntoIterator<Item = (&'a str, &'a Module)>,
+{
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
     let mut by_tuple: IndexMap<String, Invocation> = IndexMap::default();
     let mut by_from: IndexMap<String, (Invocation, String)> = IndexMap::default();
@@ -150,7 +153,7 @@ pub fn collect_inline_invocations(
                         continue;
                     }
                     by_tuple.insert(tuple_key.clone(), invocation.clone());
-                    by_from.insert(from_key, (invocation, module_path.clone()));
+                    by_from.insert(from_key, (invocation, module_path.to_string()));
                 }
                 Err(mut errs) => diagnostics.append(&mut errs),
             }
@@ -331,7 +334,7 @@ fn lower_inline(
 ///   loader does for the `from` slot two lines above.
 /// - `<ns>:<name>[@<ver>]` — registry / stdlib namespace identifier.
 ///   Stored verbatim as a [`GeneratorModule::Spec`] string until the
-///   build-dependency resolver lands.
+///   build-dependency elaborator lands.
 ///
 /// A bare relative name without `./` is rejected with a hint to add the
 /// prefix — the same diagnostic regular `use` clauses produce.
@@ -359,7 +362,7 @@ fn lower_module_specifier(
     }
     // Namespaced specifier (`ns:name@ver`, `core:foo`, `wasi:foo`, …).
     // The compiler does not interpret the body here — the build-dep
-    // resolver / provider does.
+    // elaborator / provider does.
     if let Some(colon) = spec.find(':')
         && colon > 0
         && spec[..colon]
@@ -518,7 +521,12 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let result = collect_inline_invocations(&mods, &IndexMap::default(), "").unwrap();
+        let result = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        )
+        .unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].from.as_str(), "schema.proto");
         assert!(matches!(&result[0].module, GeneratorModule::Spec(s) if s == "ns:gen@1.0.0"));
@@ -532,7 +540,12 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let errs = collect_inline_invocations(&mods, &IndexMap::default(), "").unwrap_err();
+        let errs = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        )
+        .unwrap_err();
         assert!(
             errs.iter()
                 .any(|d| d.message.contains("requires a `module` field"))
@@ -550,7 +563,12 @@ mod tests {
         mods.insert("src/a.wado".to_string(), mk());
         mods.insert("src/b.wado".to_string(), mk());
 
-        let result = collect_inline_invocations(&mods, &IndexMap::default(), "").unwrap();
+        let result = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        )
+        .unwrap();
         assert_eq!(result.len(), 1);
     }
 
@@ -568,7 +586,12 @@ mod tests {
         mods.insert("src/a.wado".to_string(), a);
         mods.insert("src/b.wado".to_string(), b);
 
-        let errs = collect_inline_invocations(&mods, &IndexMap::default(), "").unwrap_err();
+        let errs = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        )
+        .unwrap_err();
         assert!(errs.iter().any(|d| d.message.contains("disagree")));
     }
 
@@ -580,7 +603,12 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let result = collect_inline_invocations(&mods, &IndexMap::default(), "").unwrap();
+        let result = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        )
+        .unwrap();
         assert_eq!(result.len(), 1);
         match &result[0].module {
             GeneratorModule::LocalPath(p) => assert_eq!(p.as_str(), "gen.wado"),
@@ -598,7 +626,12 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let result = collect_inline_invocations(&mods, &IndexMap::default(), "").unwrap();
+        let result = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        )
+        .unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].output_dir.as_str(), "src/generated");
     }
@@ -613,7 +646,12 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let errs = collect_inline_invocations(&mods, &IndexMap::default(), "").unwrap_err();
+        let errs = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        )
+        .unwrap_err();
         assert!(errs.iter().any(|d| {
             d.message
                 .contains("`generator.output_dir` must be a string")

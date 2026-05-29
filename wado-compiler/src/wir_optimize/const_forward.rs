@@ -235,6 +235,20 @@ fn update_knowledge_from_instr(instr: &WirInstr, known: &mut FieldKnowledge<'_>)
                         known.record_struct_new(name, type_id, &fields);
                     }
                 }
+                // Seq whose tail is a LocalGet: copy knowledge from that local.
+                // Seq whose tail is a StructNew: record its fields.
+                //
+                // This case appears after `branch_prune` flattens a labeled
+                // value block (`label: block -> T { …; break label: V; }`)
+                // into a plain stmt list — the NIR `Block` translates to a
+                // WIR `Seq`, and the tail expression is the result.
+                WirInstr::Seq(body) => {
+                    if let Some(source_name) = extract_seq_result_local(body) {
+                        copy_field_knowledge(known, &source_name, name);
+                    } else if let Some((type_id, fields)) = extract_seq_result_struct_new(body) {
+                        known.record_struct_new(name, type_id, &fields);
+                    }
+                }
                 // LocalGet: copy knowledge from source local
                 WirInstr::LocalGet { name: source, .. } => {
                     copy_field_knowledge(known, source, name);
@@ -424,6 +438,26 @@ fn extract_block_result_struct_new(body: &[WirInstr]) -> Option<(WirTypeId, Vec<
     let body = skip_trailing_unreachable(body);
     if let Some(WirInstr::Seq(seq)) = body.last() {
         return extract(seq);
+    }
+    None
+}
+
+/// Extract the local name from a Seq's result value: the tail instruction is
+/// `LocalGet { name }`. Trailing `Unreachable` instructions are skipped.
+fn extract_seq_result_local(body: &[WirInstr]) -> Option<String> {
+    let body = skip_trailing_unreachable(body);
+    if let Some(WirInstr::LocalGet { name, .. }) = body.last() {
+        return Some(name.clone());
+    }
+    None
+}
+
+/// Extract a `StructNew` from a Seq's result value: the tail instruction is
+/// `StructNew { ... }`. Trailing `Unreachable` instructions are skipped.
+fn extract_seq_result_struct_new(body: &[WirInstr]) -> Option<(WirTypeId, Vec<WirInstr>)> {
+    let body = skip_trailing_unreachable(body);
+    if let Some(WirInstr::StructNew { type_id, fields }) = body.last() {
+        return Some((type_id.clone(), fields.clone()));
     }
     None
 }

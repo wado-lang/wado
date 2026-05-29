@@ -1,0 +1,51 @@
+// Issue #1181: `Self::method(arg)` rewriting in resolve_call previously
+// rebuilt a synthetic CallExpr and recursed, causing the assert capture
+// hook to fire twice on each scanner-flagged sub-expression of the
+// arguments and emit duplicate `let __vK = ...` bindings into the assert
+// prelude.
+//
+// After the refactor, the prefix rewriting is hoisted before
+// `lookup_function_param_types` / arg resolution, so each scanner-flagged
+// sub-expression of the args is captured exactly once.
+
+struct Doubler {
+    seed: i32,
+}
+
+impl Doubler {
+    fn double(x: i32) -> i32 {
+        return x * 2;
+    }
+
+    fn check(value: i32) {
+        // Self::double(value + 1) sits directly inside `assert`. The
+        // scanner flags `value + 1` (Binary, non-root) for capture as
+        // __v0. Before the fix, resolve_call's synthetic-rewrite
+        // recursion fired the capture hook twice and emitted two
+        // identical `let __v0 = (value + 1);` bindings into the assert
+        // prelude. After the fix, exactly one binding is emitted.
+        assert Self::double(value + 1) == 8;
+    }
+}
+
+test "assert with Self::method arg does not duplicate capture lets" {
+    Doubler::check(3);
+}
+
+test "and the same via a direct concrete call" {
+    let w = Doubler::double(5);
+    assert w == 10;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_not_expect:O0": [
+        "__v0_3",
+        "__v1_4"
+    ],
+    "wir_not_expect:O2": [
+        "__v0_3",
+        "__v1_4"
+    ]
+}

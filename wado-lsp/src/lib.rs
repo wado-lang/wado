@@ -1,34 +1,103 @@
+mod macros;
+
 mod definition;
 mod diagnostics;
 mod document_highlight;
 pub mod host;
 mod hover;
+mod inlay_hints;
 pub mod kiln;
 mod location;
+mod query;
 mod references;
 pub mod semantic_tokens;
 pub mod server;
+#[doc(hidden)]
+pub mod test_support;
+pub mod text;
+pub mod uri;
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use indexmap::IndexMap;
-use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic};
+use wado_compiler::semantics::Semantics;
+use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, LogLevel};
+
+use crate::query::QueryContext;
 
 pub use definition::DefinitionResult;
 pub use diagnostics::{Diagnostic, Position, Range, Severity};
 pub use document_highlight::{DocumentHighlight, HighlightKind};
 pub use host::FilesystemCompilerHost;
 pub use hover::{HoverResult, MarkupContent, MarkupKind};
+pub use inlay_hints::{InlayHint, InlayHintKind};
 pub use references::ReferenceLocation;
+pub use text::PositionEncoding;
+pub use uri::{Uri, UriScheme};
 
 /// Language service engine backing both the `wado-lsp` binary and direct
 /// library consumers.
 ///
 /// Manages open documents and answers LSP-style queries (diagnostics, hover,
-/// definition, references, document highlight, semantic tokens). `Engine`
-/// itself performs no I/O: every query takes a `&impl CompilerHost`, so the
-/// caller decides how imported modules are loaded.
+/// definition, references, document highlight, semantic tokens, inlay
+/// hints). `Engine` itself performs no I/O: every query takes a `&impl
+/// CompilerHost`, so the caller decides how imported modules are loaded.
+///
+/// ## Snapshot cache
+///
+/// Each open document keeps a lazily-computed [`Snapshot`] bundling the
+/// `Semantics` produced by composing `wado_compiler::parse` →
+/// `wado_compiler::load` → `wado_compiler::semantics_of` (see
+/// [`build_semantics`]) and the `CompilerDiagnostic`s emitted during
+/// that run. Every query —
+/// diagnostics included — consumes the cache, so one document version
+/// triggers at most one semantics pass. Mutators
+/// (`update_document` / `close_document`) invalidate every document's
+/// snapshot: cross-file imports mean editing `bar.wado` may have
+/// changed what `foo.wado` resolves to, so per-document invalidation
+/// would silently return stale answers for `foo.wado`.
 pub struct Engine {
-    /// Open documents: URI → source text
-    documents: IndexMap<String, String>,
+    documents: IndexMap<String, Document>,
+    /// Position encoding negotiated with the LSP client. Defaults to
+    /// `utf-16` per LSP 3.18 §general.positionEncodings; the stdio server
+    /// updates this from the `initialize` request before dispatching any
+    /// position-bearing query.
+    position_encoding: PositionEncoding,
+}
+
+/// One semantics pass over a document. Bundles the analysis result with
+/// the diagnostics emitted during the same pass so `Engine::diagnostics`
+/// returns from cache instead of re-running it.
+///
+/// Internal to the crate: external consumers reach the underlying
+/// `Semantics` through the typed query methods on [`Engine`] (`definition`,
+/// `hover`, …) rather than the raw bundle.
+pub(crate) struct Snapshot {
+    pub(crate) sem: Semantics,
+    pub(crate) diagnostics: Vec<CompilerDiagnostic>,
+}
+
+struct Document {
+    text: String,
+    /// Cached snapshot for the current `text`. Cleared whenever any
+    /// document is updated/closed, so cross-file edits don't leave a
+    /// stale `Semantics` against changed imports.
+    snapshot: RefCell<Option<Rc<Snapshot>>>,
+}
+
+impl Document {
+    fn new(text: String) -> Self {
+        Self {
+            text,
+            snapshot: RefCell::new(None),
+        }
+    }
+
+    fn replace_text(&mut self, text: String) {
+        self.text = text;
+        self.snapshot.get_mut().take();
+    }
 }
 
 impl Engine {
@@ -36,61 +105,150 @@ impl Engine {
     pub fn new() -> Self {
         Self {
             documents: IndexMap::new(),
+            position_encoding: PositionEncoding::default(),
         }
     }
 
+    /// Set the LSP position encoding negotiated during `initialize`.
+    /// The stdio server calls this once before dispatching position-bearing
+    /// requests; library consumers that drive `Engine` directly default to
+    /// `utf-16` to match the spec.
+    pub fn set_position_encoding(&mut self, encoding: PositionEncoding) {
+        self.position_encoding = encoding;
+    }
+
+    #[must_use]
+    pub fn position_encoding(&self) -> PositionEncoding {
+        self.position_encoding
+    }
+
     pub fn open_document(&mut self, uri: &str, text: String) {
-        self.documents.insert(uri.to_string(), text);
+        self.invalidate_all_snapshots();
+        self.documents.insert(uri.to_string(), Document::new(text));
     }
 
     pub fn update_document(&mut self, uri: &str, text: String) {
-        self.documents.insert(uri.to_string(), text);
+        self.invalidate_all_snapshots();
+        match self.documents.get_mut(uri) {
+            Some(doc) => doc.replace_text(text),
+            None => {
+                self.documents.insert(uri.to_string(), Document::new(text));
+            }
+        }
     }
 
     pub fn close_document(&mut self, uri: &str) {
+        self.invalidate_all_snapshots();
         self.documents.shift_remove(uri);
+    }
+
+    /// Drop every cached snapshot. Called whenever document state changes,
+    /// so a cached `Semantics` never out-lives the imported modules it
+    /// resolved against. Cheap when nothing was cached.
+    fn invalidate_all_snapshots(&mut self) {
+        for (_, doc) in &mut self.documents {
+            doc.snapshot.get_mut().take();
+        }
     }
 
     /// Get the source text for an open document.
     #[must_use]
     pub fn get_document(&self, uri: &str) -> Option<&str> {
-        self.documents.get(uri).map(String::as_str)
+        self.documents.get(uri).map(|d| d.text.as_str())
+    }
+
+    /// Compute (or reuse) a [`Snapshot`] for the given document.
+    ///
+    /// On a cache hit returns the same `Rc` so call sites that issue
+    /// back-to-back queries on the same document version pay the
+    /// semantics pipeline's cost only once. The snapshot also captures
+    /// every `CompilerDiagnostic` emitted during that pass, so
+    /// `diagnostics` can answer from the same cache without re-running
+    /// the pipeline.
+    pub(crate) async fn snapshot<H: CompilerHost>(
+        &self,
+        uri: &str,
+        host: &H,
+    ) -> Option<Rc<Snapshot>> {
+        let doc = self.documents.get(uri)?;
+        // Drop the borrow before the `await` below — the `if let`
+        // scrutinee is a temporary that goes out of scope at the end of
+        // this block.
+        if let Some(cached) = doc.snapshot.borrow().clone() {
+            return Some(cached);
+        }
+        let filename = Uri::new(uri).to_filename();
+        let collecting_host = DiagnosticCollector::new(host);
+        // Three-stage composition: parse once, derive kiln invocations
+        // from the parsed entry AST, then drive load + semantics_of with
+        // the shared parse result. This avoids the second lex+parse of
+        // the entry source that the `wado_compiler::semantics`
+        // convenience would otherwise do, and threads the
+        // InvocationIndex through without the LSP having to know the
+        // loader's source-based entry point.
+        let sem = build_semantics(&doc.text, &filename, &collecting_host).await;
+        let snapshot = Rc::new(Snapshot {
+            sem,
+            diagnostics: collecting_host.take_diagnostics(),
+        });
+        *doc.snapshot.borrow_mut() = Some(snapshot.clone());
+        Some(snapshot)
+    }
+
+    /// Build a [`QueryContext`] for the given document and hand it to
+    /// `f`. Returns `default` when the document is closed or its
+    /// semantics snapshot cannot be computed.
+    ///
+    /// Every position-bearing query — `definition`, `hover`, `references`,
+    /// `document_highlight` — goes through here. The shared closure body
+    /// keeps the snapshot cache lookup and `QueryContext` construction
+    /// in one place; feature functions take a single `&QueryContext`
+    /// instead of threading the five inputs by hand.
+    async fn with_query_ctx<H, F, R>(&self, uri: &str, host: &H, default: R, f: F) -> R
+    where
+        H: CompilerHost,
+        F: FnOnce(&QueryContext<'_>) -> R,
+    {
+        let Some(snapshot) = self.snapshot(uri, host).await else {
+            return default;
+        };
+        let Some(doc_text) = self.documents.get(uri).map(|d| d.text.as_str()) else {
+            return default;
+        };
+        let ctx = QueryContext {
+            sem: &snapshot.sem,
+            source: doc_text,
+            uri,
+            encoding: self.position_encoding,
+        };
+        f(&ctx)
     }
 
     /// Find the definition of the symbol at the given position.
-    ///
-    /// Runs the compiler's `annotate` pipeline so cross-file imports resolve
-    /// correctly. The provided `host` is used to load imported modules.
     pub async fn definition<H: CompilerHost>(
         &self,
         uri: &str,
         position: Position,
         host: &H,
     ) -> Option<DefinitionResult> {
-        let source = self.documents.get(uri)?;
-        definition::find_definition(source, position, uri, host).await
+        self.with_query_ctx(uri, host, None, |ctx| {
+            definition::find_definition(ctx, position)
+        })
+        .await
     }
 
     /// Compute hover information for the symbol at the given position.
-    ///
-    /// Runs the compiler's `annotate` pipeline to access resolved type
-    /// information; for symbols from imported modules, the `host` is used to
-    /// load their sources.
     pub async fn hover<H: CompilerHost>(
         &self,
         uri: &str,
         position: Position,
         host: &H,
     ) -> Option<HoverResult> {
-        let source = self.documents.get(uri)?;
-        hover::find_hover(source, position, uri, host).await
+        self.with_query_ctx(uri, host, None, |ctx| hover::find_hover(ctx, position))
+            .await
     }
 
     /// Find every reference to the symbol named at the given position.
-    ///
-    /// When `include_declaration` is true, the defining occurrence is included
-    /// in the result. Returns an empty vector when the cursor is not on a
-    /// known symbol or when the document is not open.
     pub async fn references<H: CompilerHost>(
         &self,
         uri: &str,
@@ -98,10 +256,10 @@ impl Engine {
         include_declaration: bool,
         host: &H,
     ) -> Vec<ReferenceLocation> {
-        let Some(source) = self.documents.get(uri) else {
-            return Vec::new();
-        };
-        references::find_references(source, position, uri, include_declaration, host).await
+        self.with_query_ctx(uri, host, Vec::new(), |ctx| {
+            references::find_references(ctx, position, include_declaration)
+        })
+        .await
     }
 
     /// Find every occurrence of the symbol named at the given position
@@ -113,10 +271,28 @@ impl Engine {
         position: Position,
         host: &H,
     ) -> Vec<DocumentHighlight> {
-        let Some(source) = self.documents.get(uri) else {
-            return Vec::new();
-        };
-        document_highlight::document_highlight(source, position, uri, host).await
+        self.with_query_ctx(uri, host, Vec::new(), |ctx| {
+            document_highlight::document_highlight(ctx, position)
+        })
+        .await
+    }
+
+    /// Compute inlay hints in the requested `range` of the document.
+    ///
+    /// Returns inferred-type hints for `let` / closure / `for-of` bindings
+    /// that lack an explicit annotation, plus parameter-name hints for
+    /// free-function and method call sites. Hints anchored outside the
+    /// requested `range` are filtered out.
+    pub async fn inlay_hints<H: CompilerHost>(
+        &self,
+        uri: &str,
+        range: Range,
+        host: &H,
+    ) -> Vec<InlayHint> {
+        self.with_query_ctx(uri, host, Vec::new(), |ctx| {
+            inlay_hints::inlay_hints(ctx, range)
+        })
+        .await
     }
 
     /// Resolve a `core:` / `wasi:` URI to its bundled stdlib source.
@@ -128,10 +304,18 @@ impl Engine {
     /// emit when round-tripping the URI through their parser.
     #[must_use]
     pub fn text_document_content(&self, uri: &str) -> Option<&'static str> {
-        let (scheme, rest) = uri.split_once(':')?;
-        if scheme != "core" && scheme != "wasi" {
-            return None;
-        }
+        let parsed = Uri::new(uri);
+        let scheme = match parsed.scheme() {
+            UriScheme::Core => "core",
+            UriScheme::Wasi => "wasi",
+            _ => return None,
+        };
+        // `Uri::scheme` returned Core/Wasi, so the URI is guaranteed to
+        // contain `:`; the helper unwraps the same split rather than
+        // doing it twice.
+        let rest = parsed
+            .rest()
+            .expect("scheme matched, so `:` is present in the URI");
         // Canonical form (`core:cli`) hits get_stdlib_module without an
         // intermediate allocation; only the normalised form (`core:/cli`)
         // needs its slash stripped and the URI re-formed.
@@ -147,43 +331,47 @@ impl Engine {
     /// This is a lightweight operation (lex + parse only, no compilation).
     #[must_use]
     pub fn semantic_tokens(&self, uri: &str) -> Vec<u32> {
-        let Some(source) = self.documents.get(uri) else {
+        let Some(doc) = self.documents.get(uri) else {
             return Vec::new();
         };
-        let tokens = semantic_tokens::compute(source);
-        semantic_tokens::delta_encode(&tokens)
+        let tokens = semantic_tokens::compute(&doc.text);
+        semantic_tokens::delta_encode(&tokens, &doc.text, self.position_encoding)
     }
 
     /// Compute diagnostics for the given document.
     ///
-    /// Runs the compiler's `annotate` pipeline (parse → bind → desugar → load
-    /// → analyze → resolve) with a silent host that collects diagnostics
-    /// without printing. Codegen and downstream phases are intentionally
-    /// skipped: they can panic on compiler-internal bugs (e.g. invalid Wasm
-    /// emitted from an unusual entry module) and produce nothing useful for
-    /// editor feedback even when they succeed. All user-actionable
-    /// diagnostics — type errors, undefined symbols, prelude collisions,
-    /// effect violations — surface during `annotate`.
+    /// Reads from the snapshot cache populated by [`Engine::snapshot`].
+    /// The semantics pipeline runs at most once per document version
+    /// regardless of which queries the client issued first. Each
+    /// diagnostic's column is re-encoded against the source whose file
+    /// matches its
+    /// `span.file` — cross-file diagnostics keep the compiler's codepoint
+    /// columns, the entry document is re-expressed in the negotiated
+    /// position encoding.
     pub async fn diagnostics<H: CompilerHost>(&self, uri: &str, host: &H) -> Vec<Diagnostic> {
-        let Some(source) = self.documents.get(uri) else {
+        let Some(snapshot) = self.snapshot(uri, host).await else {
             return Vec::new();
         };
-
-        let filename = uri_to_filename(uri);
-        let collecting_host = DiagnosticCollector::new(host);
-        let invocations = kiln::prepare_invocations(&filename, source, &collecting_host);
-        let _ = wado_compiler::annotate_with_invocations(
-            source,
-            &collecting_host,
-            Some(&filename),
-            invocations,
-        )
-        .await;
-
-        collecting_host
-            .take_diagnostics()
-            .into_iter()
-            .filter_map(|d| diagnostics::from_compiler_diagnostic(&d, uri))
+        let filename = Uri::new(uri).to_filename();
+        let encoding = self.position_encoding;
+        let entry_text = self.documents.get(uri).map(|d| d.text.as_str());
+        snapshot
+            .diagnostics
+            .iter()
+            .filter_map(|d| {
+                // Only re-encode against the entry document's text when
+                // the diagnostic actually points at it. Diagnostics from
+                // imported modules carry codepoint columns relative to
+                // the OTHER module's source, which we don't have on
+                // hand; passing `None` keeps them as raw codepoint
+                // indices (correct under UTF-32 / ASCII).
+                let source = d
+                    .span
+                    .as_ref()
+                    .filter(|s| s.file == filename)
+                    .and(entry_text);
+                diagnostics::from_compiler_diagnostic(d, uri, source, encoding)
+            })
             .collect()
     }
 }
@@ -194,20 +382,11 @@ impl Default for Engine {
     }
 }
 
-/// Extract a filename from a URI for compiler error messages.
-///
-/// For `file:///path/to/foo.wado`, returns `foo.wado` (or the full path).
-/// For non-file URIs, returns the URI as-is.
-fn uri_to_filename(uri: &str) -> String {
-    if let Some(path) = uri.strip_prefix("file://") {
-        path.to_string()
-    } else {
-        uri.to_string()
-    }
-}
-
-/// A `CompilerHost` wrapper that delegates file loading to an inner host
-/// while silently collecting all diagnostics.
+/// A `CompilerHost` wrapper that forwards file loading and diagnostic
+/// emission to an inner host, while also capturing every emitted
+/// diagnostic into an internal buffer. Forwarding preserves the inner
+/// host's side effects (logging, error counting) so wrapping is
+/// observationally invisible to it.
 struct DiagnosticCollector<'a, H> {
     inner: &'a H,
     diagnostics: std::sync::Mutex<Vec<CompilerDiagnostic>>,
@@ -222,7 +401,13 @@ impl<'a, H> DiagnosticCollector<'a, H> {
     }
 
     fn take_diagnostics(self) -> Vec<CompilerDiagnostic> {
-        self.diagnostics.into_inner().unwrap()
+        // Recover from poisoning: a panic inside the inner host's
+        // `emit_diagnostic` would otherwise propagate via `unwrap()`
+        // and kill every subsequent snapshot build for the rest of the
+        // process — fatal for a long-running LSP server.
+        self.diagnostics
+            .into_inner()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 
@@ -232,13 +417,57 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
     }
 
     fn emit_diagnostic(&self, diagnostic: CompilerDiagnostic) {
-        self.diagnostics.lock().unwrap().push(diagnostic);
+        // Capture for the snapshot cache, then forward so the inner host's
+        // own side effects (e.g. CLI stderr logging) still happen.
+        // Recover from a poisoned lock so a panic in a prior `inner.emit_diagnostic`
+        // call doesn't take down every subsequent capture.
+        self.diagnostics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(diagnostic.clone());
+        self.inner.emit_diagnostic(diagnostic);
+    }
+}
+
+/// Drive the compiler frontend's three stages — `parse`, `load`,
+/// `semantics_of` — over `source`, interleaving kiln invocation
+/// discovery between parse and load so the entry AST is shared instead
+/// of parsed twice.
+///
+/// Every failure path emits its diagnostic directly through `host` and
+/// returns [`Semantics::empty`], so callers see a uniformly-shaped
+/// (possibly empty) snapshot regardless of which stage bailed.
+async fn build_semantics<H: CompilerHost>(source: &str, filename: &str, host: &H) -> Semantics {
+    let parsed = match wado_compiler::parse(source) {
+        Ok(p) => p,
+        Err(e) => {
+            host.emit_diagnostic(wado_compiler::parse_failure_diagnostic(&e, Some(filename)));
+            return Semantics::empty();
+        }
+    };
+    let invocations = kiln::prepare_invocations(filename, &parsed.ast, host);
+    match wado_compiler::load(
+        parsed,
+        Some(filename),
+        host,
+        invocations,
+        LogLevel::default(),
+    )
+    .await
+    {
+        Ok(loaded) => wado_compiler::semantics_of(loaded, host, LogLevel::default()),
+        Err(e) => {
+            host.emit_diagnostic(e.into());
+            Semantics::empty()
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::MapHost;
+    use futures::executor::block_on;
 
     #[test]
     fn test_open_and_close_document() {
@@ -261,12 +490,78 @@ mod tests {
     }
 
     #[test]
-    fn test_uri_to_filename() {
-        assert_eq!(
-            uri_to_filename("file:///home/user/test.wado"),
-            "/home/user/test.wado"
+    fn test_update_invalidates_snapshot_cache() {
+        // Populate the cache via snapshot() first, then verify
+        // update_document drops it. Without populating, a tautological
+        // assertion would pass even if the invalidation logic were
+        // removed.
+        let mut engine = Engine::new();
+        engine.open_document("file:///t.wado", "fn a() {}".to_string());
+        let host = MapHost::empty();
+        let _ = block_on(engine.snapshot("file:///t.wado", &host)).expect("snapshot");
+        assert!(
+            engine
+                .documents
+                .get("file:///t.wado")
+                .unwrap()
+                .snapshot
+                .borrow()
+                .is_some(),
+            "snapshot should populate the cache",
         );
-        assert_eq!(uri_to_filename("untitled:1"), "untitled:1");
+        engine.update_document("file:///t.wado", "fn b() {}".to_string());
+        assert!(
+            engine
+                .documents
+                .get("file:///t.wado")
+                .unwrap()
+                .snapshot
+                .borrow()
+                .is_none(),
+            "update should invalidate the cache",
+        );
+    }
+
+    #[test]
+    fn test_update_invalidates_cross_document_snapshots() {
+        // Cross-file imports mean a cached Semantics for foo.wado may
+        // depend on bar.wado's text. Editing bar.wado must invalidate
+        // foo.wado's cache, otherwise hover/definition return stale
+        // type info indefinitely.
+        let mut engine = Engine::new();
+        engine.open_document("file:///foo.wado", "fn a() {}".to_string());
+        engine.open_document("file:///bar.wado", "fn b() {}".to_string());
+        let host = MapHost::empty();
+        let _ = block_on(engine.snapshot("file:///foo.wado", &host)).expect("foo snapshot");
+        let _ = block_on(engine.snapshot("file:///bar.wado", &host)).expect("bar snapshot");
+        engine.update_document("file:///bar.wado", "fn bb() {}".to_string());
+        assert!(
+            engine
+                .documents
+                .get("file:///foo.wado")
+                .unwrap()
+                .snapshot
+                .borrow()
+                .is_none(),
+            "editing bar.wado must invalidate foo.wado's snapshot",
+        );
+    }
+
+    #[test]
+    fn diagnostic_collector_forwards_to_inner_host() {
+        // The collector wraps the user-provided host. Inner host's
+        // emit_diagnostic must still receive every diagnostic — its
+        // side effects (logging, error counting) would otherwise vanish
+        // silently when Engine::snapshot wraps the host.
+        let text = "fn f() -> i32 { return \"oops\"; }";
+        let host = MapHost::single("/t.wado", text);
+        let mut engine = Engine::new();
+        engine.open_document("file:///t.wado", text.to_string());
+        let _ = block_on(engine.snapshot("file:///t.wado", &host)).expect("snapshot");
+        assert!(
+            !host.emitted().is_empty(),
+            "inner host should have received forwarded diagnostics",
+        );
     }
 
     #[test]

@@ -1,6 +1,5 @@
 use std::fmt::Write as _;
 use std::io::BufWriter;
-use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -21,21 +20,26 @@ pub struct RunOptions {
     pub opt_level: OptLevel,
     pub log_level: LogLevel,
     pub profile: ProfileMode,
-    /// Preopened directories as `(host_path, guest_path)` pairs.
-    /// Populated by `--dir host_path[::guest_path]`.
+    /// `(host_path, guest_path)` pairs from `--dir host[::guest]`.
     pub preopened_dirs: Vec<(String, String)>,
-    /// Arguments passed to the guest program via `wasi:cli/environment.get-arguments`.
+    /// Arguments forwarded to the guest via `wasi:cli/environment.get-arguments`.
     pub program_args: Vec<String>,
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
     pub allocator: Option<String>,
+<<<<<<< HEAD
     pub collector: wasmtime::Collector,
+||||||| ea70f9adf
+=======
+    pub no_cache: bool,
+>>>>>>> origin/main
 }
 
 #[derive(Clone, Copy)]
 enum Opt {
     Dir,
     NoDir,
+    NoCache,
     OptLevel,
     InlineThreshold,
     OptIterations,
@@ -50,6 +54,7 @@ impl Opt {
     const ALL: &[Self] = &[
         Self::Dir,
         Self::NoDir,
+        Self::NoCache,
         Self::OptLevel,
         Self::InlineThreshold,
         Self::OptIterations,
@@ -62,8 +67,8 @@ impl Opt {
 
     const fn spec(self) -> args::OptSpec {
         match self {
-            // `run` overrides the shared --dir description because it
-            // ALSO documents the implicit "preopen cwd by default" rule.
+            // Override the shared --dir description to also document the
+            // implicit "preopen cwd by default" rule.
             Self::Dir => args::OptSpec {
                 long: Some("dir"),
                 short: None,
@@ -71,6 +76,7 @@ impl Opt {
                 desc: "Preopen directory for WASI filesystem access\nUse --dir host::guest to specify different guest path\nOverrides the default of preopening the current directory",
             },
             Self::NoDir => args::NO_DIR_SPEC,
+            Self::NoCache => args::NO_CACHE_SPEC,
             Self::OptLevel => args::OPT_LEVEL_SPEC,
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
@@ -136,13 +142,7 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Parse a `--profile` argument value into a [`ProfileMode`].
-///
-/// Shared by the `run` and `serve` subcommands.
-///
-/// # Errors
-///
-/// Returns an error if the profile mode string is unrecognized.
+/// Parse `--profile`. Shared by `run` and `serve`.
 pub fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
     if s == "jitdump" {
         return Ok(ProfileMode::JitDump);
@@ -177,11 +177,6 @@ pub fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
     )))
 }
 
-/// Parse command-line arguments for the `run` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let usage = format_usage();
     let mut input: Option<String> = None;
@@ -195,7 +190,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
     let mut allocator: Option<String> = None;
+<<<<<<< HEAD
     let mut collector = runtime::DEFAULT_COLLECTOR;
+||||||| ea70f9adf
+=======
+    let mut no_cache = false;
+>>>>>>> origin/main
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -205,6 +205,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
                     explicit_dirs = true;
                 }
                 Opt::NoDir => no_dir = true,
+                Opt::NoCache => no_cache = true,
                 Opt::OptLevel => opt_level = compile::parse_opt_level_arg(&mut parser)?,
                 Opt::InlineThreshold => {
                     inline_threshold = Some(args::parse_inline_threshold_arg(
@@ -232,8 +233,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
             }
         } else if let Value(val) = arg {
             input = Some(val.to_string_lossy().into_owned());
-            // Once the input file is captured, all remaining arguments
-            // (including --flags) are passed to the guest program.
+            // Everything after the input file (flags included) is forwarded to the guest.
             if let Some(raw) = parser.try_raw_args() {
                 for raw_arg in raw {
                     program_args.push(raw_arg.to_string_lossy().into_owned());
@@ -260,7 +260,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
         inline_threshold,
         opt_iterations,
         allocator,
+<<<<<<< HEAD
         collector,
+||||||| ea70f9adf
+=======
+        no_cache,
+>>>>>>> origin/main
     })
 }
 
@@ -277,7 +282,6 @@ async fn run_cli_component(
     let linker = runtime::create_linker(&engine)?;
     let mut store = runtime::create_store(&engine, preopened_dirs, program_args)?;
 
-    // Set up guest profiler if requested.
     let profiler = if let ProfileMode::Guest { interval_ms, .. } = profile {
         let interval = Duration::from_millis(*interval_ms);
         let profiler = GuestProfiler::new_component(
@@ -289,7 +293,6 @@ async fn run_cli_component(
         )?;
         let profiler = Arc::new(Mutex::new(Some(profiler)));
 
-        // Register epoch deadline callback for sampling.
         let profiler_for_cb = profiler.clone();
         store.epoch_deadline_callback(move |store_ctx| {
             if let Some(ref mut p) = *profiler_for_cb.lock().unwrap() {
@@ -299,7 +302,6 @@ async fn run_cli_component(
         });
         store.set_epoch_deadline(1);
 
-        // Start epoch-bumping thread.
         let stop = Arc::new(AtomicBool::new(false));
         let stop_clone = stop.clone();
         let engine_clone = engine.clone();
@@ -320,7 +322,6 @@ async fn run_cli_component(
 
     let (result,) = run_func.call_async(&mut store, ()).await?;
 
-    // Finish guest profiling.
     if let Some((profiler_arc, stop)) = profiler {
         stop.store(true, Ordering::Relaxed);
 
@@ -338,10 +339,9 @@ async fn run_cli_component(
     Ok(())
 }
 
-pub async fn run(opts: RunOptions) {
-    // `wado run` always targets `wasi:cli/command`; pass `None` so the
-    // compiler picks its default world (and bump allocator unless the
-    // caller overrode it via --allocator).
+pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
+    // Pass `target_world: None` so the compiler picks the cli/command default
+    // (and bump allocator unless overridden).
     let flags = CompileFlags {
         opt_level: opts.opt_level,
         log_level: opts.log_level,
@@ -350,11 +350,13 @@ pub async fn run(opts: RunOptions) {
         inline_threshold: opts.inline_threshold,
         opt_iterations: opts.opt_iterations,
         allocator: opts.allocator,
+        no_cache: opts.no_cache,
+        test_name_filters: Vec::new(),
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
-    let wasm = compile::compile(&opts.input, &flags).await;
+    let wasm = compile::compile(&opts.input, &flags).await?;
 
-    if let Err(e) = run_cli_component(
+    run_cli_component(
         &wasm,
         cranelift_opt,
         &opts.profile,
@@ -363,8 +365,5 @@ pub async fn run(opts: RunOptions) {
         opts.collector,
     )
     .await
-    {
-        eprintln!("Runtime error: {e:?}");
-        process::exit(1);
-    }
+    .map_err(|e| CliExit::error(format!("Runtime error: {e:?}")))
 }

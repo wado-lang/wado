@@ -9,7 +9,7 @@ use t from "../../grammars/ParserExec/BuildParseTree_TRUE.g4"
         generator: {
             module: "../../../../src/generator.wado",
             options: { highlight: false },
-            output_dir: "tests/generated/antlr4_compat/ParserExec/BuildParseTree_TRUE",
+            output_dir: "tests/generated/antlr4_compat_b/ParserExec/BuildParseTree_TRUE",
         },
     };
 use { normalize_tree } from "../../grammars/ParserExec/BuildParseTree_TRUE.g4";
@@ -17,7 +17,7 @@ use { normalize_tree } from "../../grammars/ParserExec/BuildParseTree_TRUE.g4";
 test "stage_b: ParserExec/BuildParseTree_TRUE" {
     let input = "A B";
     let expected = "(r (a A) (b B))";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_r(&input).unwrap();
     let actual = t::to_tree(&root).to_string_tree();
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;

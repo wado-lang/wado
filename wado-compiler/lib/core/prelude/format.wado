@@ -29,7 +29,8 @@ pub enum Alignment {
 /// Format specification fields match Rust's format syntax:
 /// `[[fill]align][sign][#][0][width][.precision]type`
 ///
-/// Width and precision use -1 as sentinel for "not specified".
+/// Width uses -1 for "not specified"; precision uses the sentinels on
+/// `impl Formatter`.
 #[compiler_item("formatter")]
 pub struct Formatter {
     /// Fill character for padding (default: ' ')
@@ -42,7 +43,8 @@ pub struct Formatter {
     pub zero_pad: bool,
     /// Minimum field width (-1 = no minimum)
     pub width: i32,
-    /// Precision for floats (decimal places) or strings (max width) (-1 = default)
+    /// Decimal places for floats; max rendered length for sequences (chars /
+    /// elements). Negative values are the sentinels on `impl Formatter`.
     pub precision: i32,
     /// Current indentation level for pretty-printing (used by InspectAlt)
     pub indent: i32,
@@ -51,7 +53,14 @@ pub struct Formatter {
 }
 
 impl Formatter {
-    /// Create a new Formatter with default format spec that writes into the given buffer.
+    /// No precision given: sequence Inspect uses `DEFAULT_SEQ_LIMIT`, others ignore.
+    pub const PRECISION_DEFAULT: i32 = -2;
+    /// Render uncapped: sequence Inspect skips truncation.
+    pub const PRECISION_INFINITE: i32 = -1;
+    /// Default sequence Inspect cap: chars for `String`, elements for `Array`.
+    pub const DEFAULT_SEQ_LIMIT: i32 = 256;
+
+    /// Create a Formatter with the default spec, writing into the given buffer.
     pub fn new(buf: &mut String) -> Formatter with stores[buf] {
         return Formatter {
             fill: ' ',
@@ -59,7 +68,7 @@ impl Formatter {
             sign_plus: false,
             zero_pad: false,
             width: -1,
-            precision: -1,
+            precision: Formatter::PRECISION_DEFAULT,
             indent: 0,
             buf,
         };
@@ -287,14 +296,31 @@ impl Formatter {
 
 impl Display for String {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.pad(*self);
+        // Precision caps the length in characters (Rust's `{:.N}`); no marker.
+        if f.precision >= 0 {
+            let mut capped = *self;
+            capped.truncate_chars(f.precision);
+            f.pad(capped);
+        } else {
+            f.pad(*self);
+        }
     }
 }
 
 impl Inspect for String {
     pub fn inspect(&self, f: &mut Formatter) {
+        // Caps to N chars and appends `...` outside the quotes when truncated
+        // (the marker doesn't count toward N). PRECISION_DEFAULT uses the
+        // default cap; negatives below it mean no cap.
+        let limit = if f.precision == Formatter::PRECISION_DEFAULT { Formatter::DEFAULT_SEQ_LIMIT } else { f.precision };
         f.write_char('"');
+        let mut count = 0;
+        let mut truncated = false;
         for let c of (*self).chars() {
+            if limit >= 0 && count >= limit {
+                truncated = true;
+                break;
+            }
             if c == '"' {
                 f.write_char('\\');
                 f.write_char('"');
@@ -313,27 +339,53 @@ impl Inspect for String {
             } else {
                 f.write_char(c);
             }
+            count += 1;
         }
         f.write_char('"');
+        if truncated {
+            f.write_str(&"...");
+        }
     }
+}
+
+// Shared Array Inspect/Display rendering. `limit` is the resolved element cap
+// (negative = none); `marker` appends `, ...` when elements are dropped.
+fn write_array_inspect<T: Inspect>(arr: &Array<T>, f: &mut Formatter, marker: bool, limit: i32) {
+    f.write_char('[');
+    let mut shown = 0;
+    let mut truncated = false;
+    for let mut i = 0; i < arr.len(); i += 1 {
+        if limit >= 0 && shown >= limit {
+            truncated = true;
+            break;
+        }
+        if shown > 0 {
+            f.write_str(&", ");
+        }
+        arr[i].inspect(f);
+        shown += 1;
+    }
+    if marker && truncated {
+        if shown > 0 {
+            f.write_str(&", ...");
+        } else {
+            f.write_str(&"...");
+        }
+    }
+    f.write_char(']');
 }
 
 impl<T: Inspect> Inspect for Array<T> {
     pub fn inspect(&self, f: &mut Formatter) {
-        f.write_char('[');
-        for let mut i = 0; i < self.len(); i += 1 {
-            if i > 0 {
-                f.write_str(&", ");
-            }
-            self[i].inspect(f);
-        }
-        f.write_char(']');
+        let limit = if f.precision == Formatter::PRECISION_DEFAULT { Formatter::DEFAULT_SEQ_LIMIT } else { f.precision };
+        write_array_inspect(self, f, true, limit);
     }
 }
 
 impl<T: Inspect> Display for Array<T> {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.inspect(f);
+        // Display never applies the default cap; raw precision caps only if >= 0.
+        write_array_inspect(self, f, false, f.precision);
     }
 }
 
@@ -359,25 +411,44 @@ impl InspectAlt for String {
     }
 }
 
+// Pretty-printed counterpart of `write_array_inspect`: `marker` appends a
+// `...` line when elements are dropped.
+fn write_array_inspect_alt<T: InspectAlt>(arr: &Array<T>, f: &mut Formatter, marker: bool, limit: i32) {
+    if arr.is_empty() {
+        f.write_str(&"[]");
+        return;
+    }
+    f.open_brace("[");
+    let mut shown = 0;
+    let mut truncated = false;
+    for let mut i = 0; i < arr.len(); i += 1 {
+        if limit >= 0 && shown >= limit {
+            truncated = true;
+            break;
+        }
+        f.write_newline_indent();
+        arr[i].inspect_alt(f);
+        f.write_char(',');
+        shown += 1;
+    }
+    if marker && truncated {
+        f.write_newline_indent();
+        f.write_str(&"...");
+    }
+    f.close_brace("]");
+}
+
 impl<T: InspectAlt> InspectAlt for Array<T> {
     pub fn inspect_alt(&self, f: &mut Formatter) {
-        if self.is_empty() {
-            f.write_str(&"[]");
-            return;
-        }
-        f.open_brace("[");
-        for let mut i = 0; i < self.len(); i += 1 {
-            f.write_newline_indent();
-            self[i].inspect_alt(f);
-            f.write_char(',');
-        }
-        f.close_brace("]");
+        let limit = if f.precision == Formatter::PRECISION_DEFAULT { Formatter::DEFAULT_SEQ_LIMIT } else { f.precision };
+        write_array_inspect_alt(self, f, true, limit);
     }
 }
 
 impl<T: InspectAlt> DisplayAlt for Array<T> {
     pub fn fmt_alt(&self, f: &mut Formatter) {
-        self.inspect_alt(f);
+        // DisplayAlt never applies the default sequence cap (see Display).
+        write_array_inspect_alt(self, f, false, f.precision);
     }
 }
 

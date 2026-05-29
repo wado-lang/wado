@@ -102,6 +102,56 @@ For integers in exponential notation, precision specifies significant digits:
 println(`{12345:.2e}`);     // => "1.23e4"
 ```
 
+For strings, precision specifies the maximum length in characters, matching
+Rust's `{:.N}`. `Display` truncates silently; `Inspect` (`:?`) truncates to the
+same characters and appends a `...` marker (outside the quotes) when truncation
+actually happened. The marker does not count toward the precision:
+
+```wado
+let s = "hello world";
+println(`{s:.5}`);          // => "hello"
+println(`{s:.5?}`);         // => "hello"...   (note: with surrounding quotes)
+println(`{s:.20}`);         // => "hello world" (precision >= length: unchanged)
+```
+
+For arrays, precision specifies the maximum number of elements. `Display`
+truncates silently; `Inspect` appends `, ...` when elements are dropped:
+
+```wado
+let a: Array<i32> = [1, 2, 3, 4, 5];
+println(`{a:.3?}`);         // => "[1, 2, 3, ...]"
+println(`{a:.3}`);          // => "[1, 2, 3]"
+```
+
+The truncation point is uniform across collection-like types: precision caps the
+number of rendered items (characters for `String`, elements for `Array`). A
+shared `Formatter` flows into nested element rendering, so an explicit precision
+also bounds elements inside collections (e.g. long `String` elements of an
+`Array`). Tuples and structs are fixed-size, so their own arity is never capped,
+but their `String` / `Array` fields still honor the active precision.
+
+##### Default Inspect cap and the precision sentinels
+
+`Inspect` / `InspectAlt` (`:?` / `:#?`) of a `String` or `Array` apply a default
+length cap of `DEFAULT_SEQ_LIMIT` (256 items) even when no precision is given, so
+debug output — including power-assert operand dumps — stays readable. `Display`
+never applies the default cap: a plain `{s}` renders the full value.
+
+To make this work, `Formatter.precision` uses two negative sentinels instead of a
+single "unspecified" value:
+
+- `PRECISION_DEFAULT` (-2): no precision in the spec. Sequence `Inspect` falls
+  back to `DEFAULT_SEQ_LIMIT`; every other type (floats, ints, `Display`) treats
+  it the same as unset (its `precision >= 0` check stays false).
+- `PRECISION_INFINITE` (-1): render with no cap; sequence `Inspect` skips
+  truncation. There is no surface syntax for it yet (the `.N` grammar cannot
+  produce a negative value), so it is currently reachable only by constructing a
+  `Formatter` directly — see the TODO in `format.wado`.
+
+This keeps precision's meaning intact per type (decimal places for floats, max
+length for sequences) while letting `:?` cap sequences by default without
+affecting non-sequence operands.
+
 #### Sign
 
 | Syntax    | Description                 | Example   | Output  |

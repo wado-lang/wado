@@ -72,16 +72,7 @@ fn "wado-compiler/tests/fixtures/escape_brace.wado/run"() with Stdout {
     let name: ref "core:prelude/string.wado//String";
     let __local_1: ref "core:prelude/string.wado//String";
     name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
-    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
-        "core:prelude/string.wado/String::push"(__local_1, 123);
-        "core:prelude/string.wado/String::push"(__local_1, 34);
-        "core:prelude/string.wado/String::push_str"(__local_1, name);
-        "core:prelude/string.wado/String::push"(__local_1, 34);
-        "core:prelude/string.wado/String::push"(__local_1, 125);
-        break __tmpl: __local_1;
-        unreachable;
-    });
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }; "core:prelude/string.wado/String::push"(__local_1, 123); "core:prelude/string.wado/String::push"(__local_1, 34); "core:prelude/string.wado/String::push_str"(__local_1, name); "core:prelude/string.wado/String::push"(__local_1, 34); "core:prelude/string.wado/String::push"(__local_1, 125); __local_1);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"key\": \"value\"}"), used: 16 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("plain { and }"), used: 13 });
 }
@@ -126,17 +117,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l2: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l2;
-            };
+    i = 0;
+    b1: block {
+        l2: loop {
+            if i >= len {
+                break b1;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l2;
         };
     };
 }
@@ -187,15 +176,9 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a_5 = __inline_i32_max_1: block -> i32 {
-            a_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
-            unreachable;
-        };
-        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
-        unreachable;
-    };
+    a_7 = capacity * 2;
+    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
+    new_capacity = select i32(a_5 > 8, a_5, 8);
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;

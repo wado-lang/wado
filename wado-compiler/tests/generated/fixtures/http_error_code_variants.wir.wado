@@ -671,17 +671,15 @@ fn "wado-compiler/tests/fixtures/http_error_code_variants.wado/__cm_export__hand
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l62: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l62;
-            };
+    i = 0;
+    b61: block {
+        l62: loop {
+            if i >= len {
+                break b61;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l62;
         };
     };
 }

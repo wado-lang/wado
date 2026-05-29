@@ -9,7 +9,7 @@ use t from "../../grammars/ParserExec/PredictionIssue334.g4"
         generator: {
             module: "../../../../src/generator.wado",
             options: { highlight: false },
-            output_dir: "tests/generated/antlr4_compat/ParserExec/PredictionIssue334",
+            output_dir: "tests/generated/antlr4_compat_b/ParserExec/PredictionIssue334",
         },
     };
 use { normalize_tree } from "../../grammars/ParserExec/PredictionIssue334.g4";
@@ -17,7 +17,7 @@ use { normalize_tree } from "../../grammars/ParserExec/PredictionIssue334.g4";
 test "stage_b: ParserExec/PredictionIssue334" {
     let input = "a";
     let expected = "(file_ (item a))";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_file_(&input).unwrap();
     let actual = t::to_tree(&root).to_string_tree();
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;

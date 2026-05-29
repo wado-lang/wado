@@ -2,6 +2,8 @@
 
 This document describes the optimization passes implemented in the Wado compiler. Each pass description links to a representative E2E fixture under `wado-compiler/tests/fixtures/`.
 
+The optimizer rewrites the Normalized IR (NIR; see [WEP: NIR Layer](./wep-2026-05-11-nir.md)) in place before lowering to WIR. Pass span names used by `WADO_LIST_PASSES` / `WADO_SKIP_PASS` / `WADO_DUMP_PASS_*` carry a `nir/` prefix.
+
 ## Philosophy
 
 When WebAssembly provides a native instruction for a feature, prefer it over a complex compiler transformation. This keeps the compiler small, leverages runtime JIT optimizations, and produces smaller output.
@@ -12,50 +14,54 @@ Examples: `select` for branchless conditionals, `array.copy`/`array.fill` for bu
 
 All levels run DCE (Dead Code Elimination) on functions, types, and globals.
 
-| Flag            | Iterations | Inline Threshold | Notes                    |
-| --------------- | ---------- | ---------------- | ------------------------ |
-| `-O0`           | 0          | N/A              | DCE only                 |
-| `-O1`           | 2          | 5                |                          |
-| `-O2` (default) | 10         | 12               |                          |
-| `-O3`           | 100        | 30               |                          |
-| `-Os`           | 10         | 12               | strips Wasm name section |
+| Flag            | Iterations | Inline Threshold | Notes                                             |
+| --------------- | ---------- | ---------------- | ------------------------------------------------- |
+| `-O0`           | 0          | N/A              | DCE only + `match_to_switch` + post-loop rewrites |
+| `-O1`           | 2          | 4                |                                                   |
+| `-O2` (default) | 10         | 13               |                                                   |
+| `-O3`           | 30         | 32               |                                                   |
+| `-Os`           | 10         | 13               | strips Wasm name section                          |
 
-Optimization passes run in a fixed-point loop with early exit on convergence.
+Optimization passes run in a fixed-point loop with early exit on convergence. The post-loop rewrites the Wasm backend depends on (`match_to_switch`, `select_lowering`, `multi_value_return`) run at every level, including `-O0`.
 
 ## Pipeline
 
-The optimizer runs after lowering and before Wasm emission. `optimize.rs` orchestrates steps 1–5; `wir_optimize.rs` handles step 6.
+The optimizer runs after lowering and before Wasm emission. `optimize.rs` orchestrates steps 1–6; `wir_optimize.rs` handles step 7.
 
 1. Early DCE — remove unreachable functions/types/globals (all levels).
 2. Fixed-point iteration loop (skipped at `-O0`):
-   1. Container SROA
-   2. Value-Copy Elision
-   3. Value-Copy Demotion
-   4. Short `push_str` Simplification
-   5. Function Inlining
-   6. LabeledBlock Fusion
-   7. Reference Elimination
-   8. SROA
-   9. Copy Propagation
-   10. Dead Argument Elimination
-   11. Dead Return Value Elimination
-   12. Write-Only Local Elimination
-   13. Common Subexpression Elimination
-   14. Store-to-Load Forwarding
-   15. Constant Folding
-   16. Constant Global Promotion
-   17. Constant Branch Pruning
-   18. Loop-Invariant Code Motion
-   19. Condition Implication
-   20. Template String Buffer Hoisting
+   1. Match → Switch
+   2. Container SROA
+   3. Value-Copy Elision
+   4. Value-Copy Demotion
+   5. Short `push_str` Simplification
+   6. Single-Field Parameter SROA
+   7. Function Inlining
+   8. Adjacent-Use Box-Local Elision
+   9. LabeledBlock Fusion
+   10. Reference Elimination
+   11. SROA
+   12. Copy Propagation
+   13. Dead Argument Elimination
+   14. Dead Return Value Elimination
+   15. Write-Only Local Elimination
+   16. Common Subexpression Elimination
+   17. Store-to-Load Forwarding
+   18. Constant Folding
+   19. Constant Global Promotion
+   20. Constant Branch Pruning
+   21. Loop-Invariant Code Motion
+   22. Condition Implication
+   23. Template String Buffer Hoisting
 3. Hot Field Scalarization — runs once after the loop converges.
 4. Final DCE — clean up code made dead by optimizations.
 5. Select Lowering — post-optimization rewrite (all levels).
-6. WIR-level optimizations — see [WIR Optimizations](#wir-optimizations).
+6. Multi-Value Return classification — marks tuple/struct-returning functions whose every return site is a fresh literal and every call site destructures, so WIR build can emit the Wasm multi-value ABI (all levels).
+7. WIR-level optimizations — see [WIR Optimizations](#wir-optimizations).
 
-## TIR Optimization Passes
+## NIR Optimization Passes
 
-All TIR passes live in `wado-compiler/src/optimize/`.
+All NIR passes live in `wado-compiler/src/optimize/`. The optimizer module-level doc (`src/optimize.rs`) is the authoritative pass index; the sections below add E2E fixture pointers and per-pass design notes.
 
 ### Function Inlining (`inline.rs`)
 
@@ -63,13 +69,23 @@ Replaces small pure-function calls with their body, sized by an expression-count
 
 E2E: [opt_inline.wado](../wado-compiler/tests/fixtures/opt_inline.wado), [opt_inline_backtrack_miscompile.wado](../wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado).
 
+### Single-Field Parameter SROA (`sroa_param.rs`)
+
+Rewrites internal functions whose parameter type is `&S` / `&mut S` for some single-field struct `S` (with `Box<T>` from `&primitive` auto-boxing the canonical case) to take the inner scalar `T` directly. At call sites, the corresponding `StructLiteral S { field: val }` allocation is replaced with `val`, eliminating heap traffic. Runs immediately before `inline` so the rewritten signature propagates through the rest of the fix-point loop.
+
+Pins exports, CM bridges, dispatch wrappers, trait methods, allocator entry points, closure-functor `__call` methods, and `$value_copy$T<id>` helpers — all carry ABI / alias contracts the rewrite must not disturb. Validates each candidate's body to reject param writes (direct `Local` write, `Local.field = …`, `Local[i] = …`, `*Local = …`) and forwards through chained Call / MethodCall positions that are themselves SROA candidates. When the SROA'd parameter is the receiver of a MethodCall, the call is converted to a plain Call so that NIR DCE — which dispatches non-monomorphized MethodCalls by receiver type — still finds the rewritten callee. The receiver / arg's auto-ref wrapper (`&local` / `&mut local` synthesised by the lower phase) is peeled before the FieldAccess wrap, otherwise the inliner's type-driven param binding would emit `let self: T = &x.field;`. NIR analog of the legacy `wir_optimize/sroa_param.rs`.
+
+### Adjacent-Use Box-Local Elision (`elide_box_local.rs`)
+
+Targets the common `Box<T>` pattern produced by `lower::translate::wrap_in_box` once `sroa_param` strips the receiver / arg side down to a scalar: `let x = Box{value: inner}; … x.value …`. When `x` is defined exactly once and read exactly once via `FieldAccess { Local(x), field_name }`, this pass substitutes the single-field initializer at the use site and drops the `Let`. Soundness is witnessed by `mod_ref::can_move_past` on every intervening sibling statement (linear control transfer, no read of the candidate, no clobber of any local / global / heap / memory location the inner reads, no trap that races with one in the inner). The identity-escape gate consults `NirFunction::address_taken_locals` and `stores_aliased_locals`. NIR analog of the retired WIR-level `elide_adjacent_single_use_struct_locals` — at NIR the substituted expressions feed back into the same fix-point loop where `copy_prop` / `const_fold` / `dce` can fold them further. E2E: [opt_elide_adjacent_struct_local.wado](../wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado), [opt_elide_adjacent_struct_local_intervening_copy.wado](../wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local_intervening_copy.wado).
+
 ### Value-Copy Elision (`value_copy_elide.rs`)
 
 Strips the synthesized `$value_copy$T<id>(arg)` wrapper from `let x = $value_copy$T(arg)` (and the equivalent `Assign`) bindings whose target is observably read-only — when the source root that `arg` reads from is not assigned, field-mutated, or captured for the rest of the function, eliding the wrapper aliases storage in a way that's externally indistinguishable from the freshly-allocated copy.
 
-Runs once per fixed-point iteration, before `tir/inline`. The inliner expands every reachable `$value_copy$T` body into a labeled block, after which the `Call($value_copy$T, [arg])` shape the elider matches on no longer exists; running before inline is what lets the elider strip wrappers around `match make()? { Ok(v) => v, Err(e) => return Err(e) }`-style `?` desugarings (without the pre-inline ordering, the wrappers in every `parse_*` `?` site would survive through codegen). The only way a fresh wrapper `Call` shape can appear after lowering is for the inliner to expand a function whose body still contains a wrapper — those are caught by the next iteration's run, and if the loop converges (no pass returned `changed`) the inliner did nothing this round so no new wrappers were introduced.
+Runs once per fixed-point iteration, before `inline`. The inliner expands every reachable `$value_copy$T` body into a labeled block, after which the `Call($value_copy$T, [arg])` shape the elider matches on no longer exists; running before inline is what lets the elider strip wrappers around `match make()? { Ok(v) => v, Err(e) => return Err(e) }`-style `?` desugarings (without the pre-inline ordering, the wrappers in every `parse_*` `?` site would survive through codegen). The only way a fresh wrapper `Call` shape can appear after lowering is for the inliner to expand a function whose body still contains a wrapper — those are caught by the next iteration's run, and if the loop converges (no pass returned `changed`) the inliner did nothing this round so no new wrappers were introduced.
 
-The strip walker descends through every TIR expression that can syntactically embed a `TirBlock` (`If`, `Match`, `Switch`, `Block`, `LabeledBlock`, calls, struct/tuple/variant literals, …) so wrappers nested inside `let x = if cond { let y = $value_copy$T(...); ... } else { ... };` patterns — common in `parse_*` rule bodies — are reached.
+The strip walker descends through every NIR expression that can syntactically embed a `NirBlock` (`If`, `Match`, `Switch`, `Block`, `LabeledBlock`, calls, struct/tuple/variant literals, …) so wrappers nested inside `let x = if cond { let y = $value_copy$T(...); ... } else { ... };` patterns — common in `parse_*` rule bodies — are reached.
 
 E2E: [value_copy_elide_qmark.wado](../wado-compiler/tests/fixtures/value_copy_elide_qmark.wado).
 
@@ -80,6 +96,9 @@ Demotes a deep `$value_copy$T` of an `Array<E>` to a shallow spine copy when the
 The precondition is verified by an element-immutability analysis. A `&mut self` method (`Array::sort`, `push`, …) is _element-immutable_ when, by a taint walk over its body, no value derived from `self` (its spine or an element) is field-written, `&mut`-borrowed, or handed to an opaque callee — only spine builtins and `&`-immutable forwarding are allowed. The demote site itself is eligible when every use of the bound handle (and of the source the copy reads from) is element-clean: spine-only methods, index/field reads, by-value or `&` argument passing.
 
 The analysis is conservative — an unrecognized shape rejects demotion (no change), never miscompiles. Naming compiler intrinsics (`builtin::array_*`) is sound because they are not stdlib identifiers; stdlib method behaviour is _derived_ from the body, never hardcoded by name.
+
+<!-- TODO(optimizer): expose the element-immutability analysis to `container_sroa` so its hardcoded `push`/`is_empty`/`len`/indexing whitelist can be replaced by a query that accepts any element-immutable `&self`/`&mut self` method. -->
+<!-- TODO(optimizer): support nested-container demotion (`Array<Array<T>>`). The recursion guard at `is_element_immutable_method` returns `false` for any recursive call site, so the immutability proof bottoms out at the first unknown shape. -->
 
 E2E: [value_copy_demote.wado](../wado-compiler/tests/fixtures/value_copy_demote.wado).
 
@@ -93,11 +112,12 @@ E2E: [opt_container_sroa_struct.wado](../wado-compiler/tests/fixtures/opt_contai
 
 Future directions:
 
-- [ ] Nested containers (`Array<Array<T>>`).
+- [ ] Nested containers (`Array<Array<T>>`). Tracked at `container_sroa.rs:16`.
 - [ ] Container fields of structs (via HFS hoisting).
 - [ ] Push-to-literal fusion with `array.new_fixed`.
 - [ ] Parallel index-assign coalescing.
 - [ ] Cross-function propagation via `stores`-aware summaries.
+- [ ] Consult `value_copy_demote`'s element-immutability analysis instead of the hardcoded use-shape whitelist; would accept arbitrary element-immutable methods.
 
 ### LabeledBlock Fusion (`labeled_block_fusion.rs`)
 
@@ -170,23 +190,23 @@ E2E: [opt_hfs_stores_ref_sync.wado](../wado-compiler/tests/fixtures/opt_hfs_stor
 
 ### Constant Folding (`const_folding.rs`)
 
-A thin TIR visitor that walks each function body via `opt_walk_expr` and asks the [TIR Interpreter (`tiri`)](#tir-interpreter-tiri) to apply its local rewrite rules at every node. All reduction logic — literal folding, integer cast collapsing, the `&&` / `||` short-circuit identity rules, and `GlobalVarGet` rewriting for immutable globals — lives in `tiri`; this pass owns no rewrite logic of its own.
+A thin NIR visitor that walks each function body via `opt_walk_expr` and asks the [NIR Interpreter (`niri`)](#nir-interpreter-niri) to apply its local rewrite rules at every node. All reduction logic — literal folding, integer cast collapsing, the `&&` / `||` short-circuit identity rules, and `GlobalVarGet` rewriting for immutable globals — lives in `niri`; this pass owns no rewrite logic of its own.
 
 E2E: [const_fold.wado](../wado-compiler/tests/fixtures/const_fold.wado), [opt_const_fold_div_zero.wado](../wado-compiler/tests/fixtures/opt_const_fold_div_zero.wado).
 
-### TIR Interpreter (`tiri`)
+### NIR Interpreter (`niri`)
 
-`tiri` (`src/tiri.rs`) is the partial evaluator that backs constant folding. The canonical entry point is
+`niri` (`src/niri.rs`) is the partial evaluator that backs constant folding. The canonical entry point is
 
 ```rust
-Interpreter::new(type_table).reduce(&expr) -> TirExpr
+Interpreter::new(type_table).reduce(&expr) -> NirExpr
 ```
 
-`reduce` is idempotent and monotone: it always returns a (possibly identical) `TirExpr`, leaving literal leaves with their original lexical repr (`0xFF` is not rewritten to `255`). Visitor drivers that already walk every TIR kind via `tir_visitor::opt_walk_expr` use `reduce_local(&mut TirExpr) -> bool` instead, which performs only the single-node rewrite at `expr`. Unit tests can use `reduce_to_value(&TirExpr) -> Option<Value>` to extract a `Value` directly.
+`reduce` is idempotent and monotone: it always returns a (possibly identical) `NirExpr`, leaving literal leaves with their original lexical repr (`0xFF` is not rewritten to `255`). Visitor drivers that already walk every NIR kind via `nir_visitor::opt_walk_expr` use `reduce_local(&mut NirExpr) -> bool` instead, which performs only the single-node rewrite at `expr`. Unit tests can use `reduce_to_value(&NirExpr) -> Option<Value>` to extract a `Value` directly.
 
-Today the engine reduces literal-only Binary / Unary / Cast expressions, the short-circuit identity rules `false || X → X` and `true && X → X` (and their right-hand variants), `let`-bound locals via a per-function `env`, `if` expressions and statements (constant-condition splice and both-arms-equal collapse), and `match` expressions over payload-free patterns (constant-scrutinee chosen-arm splice and all-arms-equal collapse, covering wildcard / integer / bool / char literals, integer and char ranges, or-patterns, and `ConstantValue`). Future work — payload-aware variant matching, bounded loop unrolling, pure function inlining, and a complementary wasm-CTFE backend — is described in [WEP: TIR Interpreter Evolution Plan](./wep-2026-04-27-tir-interpreter.md).
+Today the engine reduces literal-only Binary / Unary / Cast expressions, the short-circuit identity rules `false || X → X` and `true && X → X` (and their right-hand variants), `let`-bound locals via a per-function `env`, `if` expressions and statements (constant-condition splice; bool-arms collapse — `if cond { true } else { false } → cond` and the inverted `→ !cond`; both-arms-equal collapse), and `match` expressions over payload-free patterns (constant-scrutinee chosen-arm splice; the two-arm `match X { Enum::Case => true, _ => false } → X == Enum::Case` collapse that subsumes the `matches` operator's shape for enum scrutinees; all-arms-equal collapse, covering wildcard / integer / bool / char literals, integer and char ranges, or-patterns, and `ConstantValue`). Future work — payload-aware variant matching, bounded loop unrolling, pure function inlining, and a complementary wasm-CTFE backend — is described in [WEP: NIR Interpreter Evolution Plan](./wep-2026-04-27-nir-interpreter.md).
 
-Unit tests: [`wado-compiler/tests/tiri.rs`](../wado-compiler/tests/tiri.rs).
+Unit tests: [`wado-compiler/tests/niri.rs`](../wado-compiler/tests/niri.rs).
 
 ### Constant Global Promotion (`const_global_promotion.rs`)
 
@@ -196,9 +216,18 @@ E2E: [opt_const.wado](../wado-compiler/tests/fixtures/opt_const.wado).
 
 ### Constant Branch Pruning (`const_branch_prune.rs`)
 
-Eliminates branches with compile-time-known boolean conditions and simplifies degenerate block patterns (single-expression blocks, trivial labeled blocks, empty blocks). Also performs labeled-block copy propagation: when a block starts with `let x = y` and neither name is modified within, `x` is replaced by `y` and the binding is dropped — flattening residual parameter copies left by inlining.
+Eliminates branches with compile-time-known boolean conditions and simplifies degenerate block patterns:
 
-E2E: [opt_wir_dead_if_zero.wado](../wado-compiler/tests/fixtures/opt_wir_dead_if_zero.wado), [array_bounds_elim_const_wir.wado](../wado-compiler/tests/fixtures/array_bounds_elim_const_wir.wado).
+- Empty blocks → `()`.
+- Single-expression blocks (`{ expr }`) → `expr`.
+- Tail-break-only labeled blocks (`label: { stmts...; break label: V }`) → `{ stmts...; V }` when the only reference to `label` is the trailing break.
+- Stmt-position tail-break-only labeled blocks (`label: { stmts...; break label; }`) → straight-line `stmts...`.
+- Dead statements after a `break` / `continue` / `return` in the same stmt list.
+- Labeled-block copy propagation: when a block starts with `let x = y` and neither name is modified within, `x` is substituted by `y` and the binding is dropped — flattening residual parameter copies left by inlining.
+
+`__tmpl:` labeled blocks are carved out during the optimizer fixpoint so that `tmpl_hoist` can anchor on them. A separate post-fixpoint invocation (`nir/branch_prune_final`) flattens them once `tmpl_hoist` has finished, iterating until convergence.
+
+E2E: [opt_wir_dead_if_zero.wado](../wado-compiler/tests/fixtures/opt_wir_dead_if_zero.wado), [array_bounds_elim_const_wir.wado](../wado-compiler/tests/fixtures/array_bounds_elim_const_wir.wado), [opt_dce_break_then_unreachable.wado](../wado-compiler/tests/fixtures/opt_dce_break_then_unreachable.wado), [opt_dce_tail_break_flatten.wado](../wado-compiler/tests/fixtures/opt_dce_tail_break_flatten.wado), [opt_dce_trap_preserved_unread_let.wado](../wado-compiler/tests/fixtures/opt_dce_trap_preserved_unread_let.wado).
 
 ### Loop-Invariant Code Motion (`licm.rs`)
 
@@ -208,7 +237,7 @@ E2E: [opt_licm_immut_ref.wado](../wado-compiler/tests/fixtures/opt_licm_immut_re
 
 ### Condition Implication (`condition_implication.rs`)
 
-Eliminates conditions implied false by dominating guards. Subsumes the former WIR-level bounds-check elimination at the TIR level. Handles:
+Eliminates conditions implied false by dominating guards. Subsumes the former WIR-level bounds-check elimination at the NIR level. Handles:
 
 - Loop guards: `while i < bound { ... }` proves any inner `i >= bound` false.
 - Dominating ifs: `if (var + offset) < bound { ... }` proves `(var + k) >= bound` false for `k <= offset` inside the then-block.
@@ -241,19 +270,35 @@ Removes unreachable functions, types, unused string literals, and unused WASI im
 
 E2E: [global_dce.wado](../wado-compiler/tests/fixtures/global_dce.wado), [global_dce_cross_module.wado](../wado-compiler/tests/fixtures/global_dce_cross_module.wado).
 
+### Match → Switch (`match_to_switch.rs`)
+
+Rewrites `match` expressions whose scrutinee is a dense integer or enum into a `Switch` node, which lowers to a Wasm `br_table` rather than a chain of `br_if`. Runs first in every fixed-point iteration so subsequent passes see the `Switch` shape their variant-walking arms already handle, and also at `-O0` so the `br_table` path stays live when the optimizer loop is skipped.
+
 ### Select Lowering (`select_lowering.rs`)
 
-Rewrites `if cond { a } else { b }` with two pure branches into `builtin::select(cond, a, b)`, which emits the Wasm `select` instruction. Runs after the fixed-point loop at all levels.
+Rewrites `if cond { a } else { b }` with two leaf-pure branches into `builtin::select(cond, a, b)`, which emits the Wasm `select` instruction. Runs after the fixed-point loop at all levels.
 
-E2E: [select_basic.wado](../wado-compiler/tests/fixtures/select_basic.wado), [select_no_opt.wado](../wado-compiler/tests/fixtures/select_no_opt.wado).
+Leaf-pure shapes: duplicable leaves (`Local`, integer / float / bool / char literals), `Unary { Neg | Not | BitNot }` over a leaf-pure operand, `Binary { non-Div, non-Mod }` over two leaf-pure operands, and `Cast` of a leaf-pure value. Calls, `Deref`, `Ref` / `MutRef`, division, modulo, and aggregate constructors stay branched — they either trap or have side effects that an unconditionally-evaluated arm cannot replicate safely.
+
+E2E: [select_basic.wado](../wado-compiler/tests/fixtures/select_basic.wado), [select_extended_arms.wado](../wado-compiler/tests/fixtures/select_extended_arms.wado), [select_no_opt.wado](../wado-compiler/tests/fixtures/select_no_opt.wado), [select_no_opt_trapping_arms.wado](../wado-compiler/tests/fixtures/select_no_opt_trapping_arms.wado).
+
+### Multi-Value Return Classification (`multi_value_return.rs`)
+
+Marks tuple- or user-struct-returning functions whose every return site is a fresh literal (`TupleLiteral` / `StructLiteral`) and whose every call site destructures via `FieldAccess` on the bound temp. WIR build (`wir_build::translate::try_emit_multi_value_let`) reads the marker to emit the multi-value Wasm signature on the function definition and to rewrite call-site `let __tmp = Call(f)` into `MultiValueLocalBind [__tmp_0, …] = Call(f)` with subsequent `FieldAccess` reads going to the split locals directly. Runs after every other NIR transformation so the analysis sees the final shape.
+
+The variant-return path is a WIR-level rewrite (`wir_optimize::variant_return_sroa`); see [Phase 1: Type Representation](#phase-1-type-representation).
+
+<!-- TODO(optimizer): the analysis conservatively requires literal returns at every return site and field-destructuring at every call site (multi_value_return.rs:311, 491). Adding a per-callee summary that promotes once-bound multi-value temps to direct destructures would unlock multi-value for the common "build a result struct, return it" pattern wrapped in helper layers. -->
 
 ### Visitor Infrastructure
 
-`tir_visitor.rs` and `wir_visitor.rs` provide shared `*MutVisitor` / `*RefVisitor` / `TirOptVisitor` traits used by every pass. Centralizing Block/Loop/If/Seq traversal here keeps individual passes free of duplicated walk logic. `TirOptVisitor` exposes change-tracking (`-> bool`) for fixed-point convergence.
+`nir_visitor.rs` and `wir_visitor.rs` provide shared `*MutVisitor` / `*RefVisitor` / `*OptVisitor` traits used by every pass that does plain pre/post-order traversal. Centralizing Block/Loop/If/Seq traversal here keeps individual passes free of duplicated walk logic. `NirOptVisitor` exposes change-tracking (`-> bool`) for fixed-point convergence; free functions `opt_walk_block/_stmt/_expr/_pattern` recurse into children, and `visit_project_functions` drives a visitor across every function body in a `NirPackage`.
+
+Passes that need flow-sensitive state (per-block scope tracking, per-iteration dataflow lattices, branch-join state convergence) keep their own walkers — `field_scalarize`, `licm`, `tmpl_hoist`, `value_copy_demote`, and `store_load_forward` fall in this bucket and intentionally do not use the generic visitor.
 
 ## Lowering Optimizations
 
-TIR→WIR lowering (`wir_build/`) also avoids emitting redundant shapes in a few targeted spots. These are not fixed-point passes; they fire once while the cascade is being built and are effective at all optimization levels including `-O0`.
+NIR→WIR lowering (`wir_build/`) also avoids emitting redundant shapes in a few targeted spots. These are not fixed-point passes; they fire once while the cascade is being built and are effective at all optimization levels including `-O0`.
 
 ### Exhaustive Match Last-Arm Elision (`wir_build/pattern_match.rs`)
 
@@ -271,8 +316,9 @@ E2E: [pattern_match_exhaustive_variant_last_arm.wado](../wado-compiler/tests/fix
 
 - Nullable ref optimization — rewrites type-level representations for nullable references.
 - Pre-SROA copy propagation — inlines trivial `alias = source` so SROA can see direct variant access (RefTest/RefCast on source).
-- Variant-return SROA — rewrites functions returning a small variant (`(i32 disc, payload_0, ...)` lowering, total arity 2–4) to use Wasm multi-value returns, eliminating the boundary GC allocation. Tuple- and user-struct-return ABIs are decided by the TIR-level `optimize::multi_value_return` classifier; this pass handles only the variant case, whose layout (shared-vs-per-case payload offsets) is WIR-specific.
-- Single-field parameter SROA — rewrites `ref null S` parameters (single-field struct) to take the scalar field directly. Primary trigger is `Box<T>` from template string interpolation. E2E: [opt_sroa_box_parameter.wado](../wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado), [opt_sroa_single_field.wado](../wado-compiler/tests/fixtures/opt_sroa_single_field.wado).
+- Variant-return SROA — rewrites functions returning a small variant (`(i32 disc, payload_0, ...)` lowering, total arity 2–4) to use Wasm multi-value returns, eliminating the boundary GC allocation. Tuple- and user-struct-return ABIs are decided by the NIR-level `optimize::multi_value_return` classifier; this pass handles only the variant case, whose layout (shared-vs-per-case payload offsets) is WIR-specific.
+
+Single-field parameter SROA used to live here; it moved to NIR (`optimize::sroa_param`) so the rewritten signature feeds the rest of the NIR fix-point loop (inline / copy_prop / dce / cse / const_fold) instead of running once after WIR build. E2E (still valid): [opt_sroa_box_parameter.wado](../wado-compiler/tests/fixtures/opt_sroa_box_parameter.wado), [opt_sroa_single_field.wado](../wado-compiler/tests/fixtures/opt_sroa_single_field.wado).
 
 ### Phase 2: Single-Field Struct Local Elimination (Round 1)
 
@@ -280,8 +326,7 @@ Substitutes `StructGet(LocalGet(x), field)` with the inner value when `x` is def
 
 Two complementary variants run in sequence:
 
-- Re-evaluation-safe elision (`elide_single_field_struct_locals`) — substitutes when the inner field initializer is referentially transparent (no heap reads, no calls, no allocations). Safe regardless of how far apart def and use are.
-- Adjacent-use elision (`elide_adjacent_single_use_struct_locals`) — relaxes the purity check by relying on adjacency instead. Fires when the local has exactly one def + one use, the use is the immediately-following sibling instruction (skipping intervening `Nop`s), and the use is the leftmost-evaluated descendant of that instruction. Recovers the very common `Box<T>` boxing+inlining pattern (e.g. `Box<char> { value: <heap-reading block> }` followed by `.value`) where the inner reads heap state but no intervening operation could mutate it.
+- Re-evaluation-safe elision (`elide_single_field_struct_locals`) — substitutes when the inner field initializer is referentially transparent (no heap reads, no calls, no allocations). Safe regardless of how far apart def and use are. The relaxed adjacent-use variant that used to follow this pass moved to NIR (`optimize::elide_box_local`); see the NIR section below.
 
 ### Phase 3: Data Flow
 
@@ -303,13 +348,17 @@ Two complementary variants run in sequence:
 
 ### Phase 6: Write-Only Local Elimination (WIR-synthesised locals)
 
-DAE / DRVE were moved to TIR (`optimize::dae`, `optimize::drve`) so they can interact with `inline` / `copy_prop` / `const_fold` / `dce` inside the same fixed-point loop. The WIR-level copies are gone.
+Write-only-local elimination is split across two layers. The NIR pass (`optimize::elide_local`) handles locals that originate at NIR (user `let`, SROA / variant-lowering shadow temps); it lives in the fixed-point loop so the freshly dead expressions feed `copy_prop` / `const_fold` / `dce` in the same iteration. The WIR pass here in Phase 6 handles locals that the WIR builder synthesises during lowering — `__match_scrut_N` for match scrutinee binding, `__pair_temp_N` and `__mv_lo_N` / `__mv_hi_N` for Future / Stream pair returns and wide-int multi-value bindings — that no NIR pass can reach. Both passes rewrite `LocalSet(x, v)` to `Drop(v)` (or `Nop` when `v` is pure) only when `x` is never read.
 
-Write-only-local elimination is split across both layers. The TIR pass (`optimize::elide_local`) handles locals that originate at TIR (user `let`, SROA / variant-lowering shadow temps). The WIR pass (`wir_optimize::elide_local`, kept here in Phase 6) handles locals that the WIR builder synthesises during lowering — `__match_scrut_N` for match scrutinee binding, `__pair_temp_N` and `__mv_lo_N` / `__mv_hi_N` for Future / Stream pair returns and wide-int multi-value bindings — that no TIR pass can reach. Both passes are narrow: each rewrites `LocalSet(x, v)` to `Drop(v)` (or `Nop` when `v` is pure) only when `x` is never read.
+DAE and DRVE live at NIR (`optimize::dae`, `optimize::drve`) alongside `inline` / `copy_prop` / `const_fold` / `dce`.
 
 ### Phase 7: Global Cleanup
 
 Trivial init-guard removal — removes compiler-generated module-initialization guard blocks when no actual initialization remains.
+
+### Shared facilities
+
+- Per-expression mod/ref summary (`optimize/mod_ref.rs`) — `ModRef::of_expr(...)` / `ModRef::of_stmt(...)` returns a conservative `(local_reads, local_writes, global_reads, global_writes, heap, memory, control, calls, allocates, may_trap)` summary of a `NirExpr` or `NirStmt` and its sub-tree. Passes consume it through three predicates: `is_re_evaluation_safe` (can the expression be moved to a later program point?), `may_clobber` (could `self`'s writes invalidate `other`'s reads?), and the `can_move_past` convenience (the common "skip an intervening statement while erasing a candidate local" check used by `elide_box_local`). Wasm-semantics-accurate on calls: callees cannot reach the caller's Wasm locals, so a call clobbers only `global_reads` / `heap.reads` / `memory.reads`. Unrelated to Wado's algebraic-effect / `with`-clause machinery in `effect_check.rs`; the name follows the LLVM `ModRefInfo` / GCC `mod`/`ref` convention from classical compiler optimization. Granularity is intentionally coarse for now (single read/write bits per heap and memory channel, "calls clobber everything-but-locals"); refining the internal representation does not require call-site churn because passes never inspect it directly. The WIR-level predecessor lived at `wir_optimize/mod_ref.rs` and was retired when its sole consumer (`elide_adjacent_single_use_struct_locals`) moved to NIR.
 
 ### Phase 8: Final DCE and Compaction
 
@@ -326,7 +375,6 @@ Trivial init-guard removal — removes compiler-generated module-initialization 
 - [ ] Dead Store Elimination.
 - [ ] Strength Reduction — loop induction-variable optimization.
 - [ ] Cross-block Copy Propagation.
-- [ ] Return Scalarization via Multi-Value Returns for user-defined functions (already done for builtins).
 - [ ] Function Specialization for known constant arguments.
 - [ ] Argument Promotion — promote `&T` fields to scalar parameters.
 - [ ] Jump Threading.

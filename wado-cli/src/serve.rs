@@ -3,7 +3,6 @@ use std::fmt::Write as _;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::{Pin, pin};
-use std::process;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::task::{Context, Poll};
@@ -38,28 +37,21 @@ use crate::manifest;
 use crate::runtime::{self, Preopens, ProfileMode, WasiState};
 use wado_compiler::LogLevel;
 
-/// Default per-request timeout in seconds. A guest that fails to produce a
-/// response head within this window is cut short by a first-byte timeout
-/// (see `dispatch_request`); a guest that runs away in pure wasm is
-/// trapped by the epoch deadline (see `worker_loop`).
+/// First-byte timeout cuts off guests stuck in the host; the epoch
+/// deadline (see `worker_loop`) catches runaway pure-wasm loops.
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
-/// Epoch ticker interval. A background thread bumps the engine epoch every
-/// tick; a worker store's deadline counts these ticks, giving
-/// second-granularity runaway-guest detection.
+/// Engine epoch is bumped every tick; deadlines count ticks, so this
+/// is the granularity of runaway-guest detection.
 const EPOCH_TICK_MS: u64 = 1000;
 
-/// Default number of requests a worker instance handles before it is
-/// recycled (torn down and re-instantiated). Recycling resets state that
-/// accumulates in a long-lived instance — chiefly the component resource
-/// table (see issue #1133). Measured throughput is flat across recycle
-/// thresholds from ~1k to ~100k requests, so this is sized for infrequent
-/// recycling. `0` disables recycling.
+/// Recycling resets state that accumulates in a long-lived instance,
+/// notably the component resource table (issue #1133). Throughput is
+/// flat from ~1k to ~100k requests so recycling is sized rare. `0` disables.
 const DEFAULT_RECYCLE_REQUESTS: u64 = 10000;
 
-/// Default ceiling on concurrently in-flight requests. Each in-flight
-/// request needs an async fiber stack from the pooling allocator, so this
-/// also sizes the engine's stack pool.
+/// Each in-flight request needs an async fiber stack from the pooling
+/// allocator, so this also sizes the engine's stack pool.
 const DEFAULT_MAX_CONCURRENCY: usize = 1024;
 
 pub struct ServeOptions {
@@ -70,21 +62,28 @@ pub struct ServeOptions {
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
     pub allocator: Option<String>,
+<<<<<<< HEAD
     pub collector: wasmtime::Collector,
     /// Preopened directories as `(host_path, guest_path)` pairs. Empty by
     /// default — services rarely need filesystem access, so unlike `wado run`
     /// we do NOT preopen the cwd unless the user passes `--dir`.
+||||||| ea70f9adf
+    /// Preopened directories as `(host_path, guest_path)` pairs. Empty by
+    /// default — services rarely need filesystem access, so unlike `wado run`
+    /// we do NOT preopen the cwd unless the user passes `--dir`.
+=======
+    /// Empty by default: unlike `wado run`, services don't preopen cwd
+    /// automatically — the user must pass `--dir`.
+>>>>>>> origin/main
     pub preopened_dirs: Vec<(String, String)>,
-    /// Per-request timeout in seconds.
     pub timeout_secs: u64,
-    /// Number of worker instances. `None` means "one per CPU".
+    /// `None` ⇒ one worker per CPU.
     pub workers: Option<usize>,
-    /// Recycle a worker after this many requests; `0` disables recycling.
+    /// Recycle a worker after this many requests; `0` disables.
     pub recycle_requests: u64,
-    /// Ceiling on concurrently in-flight requests.
     pub max_concurrency: usize,
-    /// Guest profiling mode. `--profile guest` samples a single worker.
     pub profile: ProfileMode,
+    pub no_cache: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -102,6 +101,7 @@ enum Opt {
     RecycleRequests,
     MaxConcurrency,
     Profile,
+    NoCache,
     Help,
 }
 
@@ -155,6 +155,7 @@ impl Opt {
         Self::RecycleRequests,
         Self::MaxConcurrency,
         Self::Profile,
+        Self::NoCache,
         Self::Help,
     ];
 
@@ -183,6 +184,7 @@ impl Opt {
             Self::RecycleRequests => RECYCLE_REQUESTS_SPEC,
             Self::MaxConcurrency => MAX_CONCURRENCY_SPEC,
             Self::Profile => PROFILE_SPEC,
+            Self::NoCache => args::NO_CACHE_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -233,11 +235,6 @@ fn parse_count_arg(
     Ok(n)
 }
 
-/// Parse command-line arguments for the `serve` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let usage = format_usage();
     let mut input: Option<String> = None;
@@ -254,6 +251,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut recycle_requests: u64 = DEFAULT_RECYCLE_REQUESTS;
     let mut max_concurrency: usize = DEFAULT_MAX_CONCURRENCY;
     let mut profile = ProfileMode::None;
+    let mut no_cache = false;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -309,6 +307,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                         ));
                     }
                 }
+                Opt::NoCache => no_cache = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -345,15 +344,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         recycle_requests,
         max_concurrency,
         profile,
+        no_cache,
     })
 }
 
-/// Outcome the spawned handler task delivers to the request entry point.
-///
-/// `Streaming` is the success path: response head plus a `Receiver` that
-/// will yield each body frame as the guest produces it. The other variants
-/// are terminal failure modes that have to be rendered as a synthetic 5xx
-/// because no part of the response has been put on the wire yet.
+/// `Streaming` is the success path — head + body receiver. The other
+/// variants are pre-head failures that must be rendered as a synthetic 5xx.
 enum HandlerOutcome {
     Streaming(http::response::Parts, mpsc::Receiver<Frame<Bytes>>),
     GuestError(wasmtime_wasi_http::p3::bindings::http::types::ErrorCode),
@@ -361,11 +357,9 @@ enum HandlerOutcome {
     Timeout,
 }
 
-/// `http_body::Body` implementation backed by a tokio `mpsc::Receiver` of
-/// frames. Used to stream the guest's response body to hyper one frame at
-/// a time without buffering the full body in memory.
-///
-/// Trailers travel through the same channel as `Frame::trailers(...)`.
+/// `http_body::Body` over a tokio `mpsc::Receiver` — frames flow one at a
+/// time, so the full body never sits in memory. Trailers piggyback on the
+/// same channel as `Frame::trailers(...)`.
 struct ChannelBody {
     rx: mpsc::Receiver<Frame<Bytes>>,
 }
@@ -396,35 +390,26 @@ fn error_response(status: u16, msg: String) -> HyperResponse<StreamingBody> {
         .expect("static status code should always build successfully")
 }
 
-/// A request handed to the engine task for processing on the shared
-/// component instance.
 struct RequestJob {
     wasi_req: WasiRequest,
     io: Pin<Box<dyn Future<Output = Result<(), HttpErrorCode>> + Send>>,
     resp_tx: oneshot::Sender<HandlerOutcome>,
 }
 
-/// Processes one HTTP request on the long-lived component instance.
+/// One HTTP request, spawned (via `Accessor::spawn`) onto the long-lived
+/// component instance — so guest state persists across requests, exactly
+/// like a conventional HTTP server daemon.
 ///
-/// The component is instantiated once at server startup; every request
-/// runs as a task spawned (via `Accessor::spawn`) onto that single shared
-/// instance. Guest state therefore persists across requests — managing it
-/// is the Wado program's responsibility, exactly as for a conventional
-/// HTTP server daemon.
-///
-/// As soon as the response head is available the task hands it — plus a
-/// body-frame channel — back to `dispatch_request` over a oneshot; from
-/// then on hyper drains body frames directly from that channel while the
-/// task keeps producing them. The channel is bounded (capacity 8), so a
-/// slow consumer back-pressures the guest.
+/// As soon as the response head is ready the task hands it — plus a
+/// body-frame channel — back to `dispatch_request` over a oneshot. Hyper
+/// then drains body frames directly from the bounded (cap 8) channel,
+/// back-pressuring a slow consumer onto the guest.
 struct HandlerTask {
     service: Arc<Service>,
     job: RequestJob,
-    /// Idle timeout for the body pump. A `frame_tx.send` that stalls longer
-    /// than this — a client that stops draining the response but keeps the
-    /// connection open — aborts the pump, so a non-draining client cannot
-    /// pin this task's fiber stack indefinitely (issue #1138). The timeout
-    /// is applied per frame, so a slow-but-progressing client is unaffected.
+    /// Per-frame idle timeout on the body pump. A non-draining client
+    /// (issue #1138) cannot pin this task's fiber stack indefinitely;
+    /// a slow-but-progressing client is unaffected.
     idle_timeout: Duration,
 }
 
@@ -1184,7 +1169,7 @@ fn log_connection_join_error(res: Result<(), tokio::task::JoinError>) {
     }
 }
 
-pub async fn run(opts: ServeOptions) {
+pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     let flags = CompileFlags {
         opt_level: opts.opt_level,
         log_level: opts.log_level,
@@ -1193,9 +1178,11 @@ pub async fn run(opts: ServeOptions) {
         inline_threshold: opts.inline_threshold,
         opt_iterations: opts.opt_iterations,
         allocator: opts.allocator,
+        no_cache: opts.no_cache,
+        test_name_filters: Vec::new(),
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
-    let wasm = compile::compile(&opts.input, &flags).await;
+    let wasm = compile::compile(&opts.input, &flags).await?;
 
     let timeout = Duration::from_secs(opts.timeout_secs);
     // An explicit `--workers` is already validated against `--max-concurrency`
@@ -1215,7 +1202,7 @@ pub async fn run(opts: ServeOptions) {
         eprintln!("Profiling: forcing --workers 1");
         workers = 1;
     }
-    if let Err(e) = run_http_server(
+    run_http_server(
         wasm,
         &opts.addr,
         cranelift_opt,
@@ -1228,8 +1215,5 @@ pub async fn run(opts: ServeOptions) {
         opts.collector,
     )
     .await
-    {
-        eprintln!("Server error: {e}");
-        process::exit(1);
-    }
+    .map_err(|e| CliExit::error(format!("Server error: {e}")))
 }

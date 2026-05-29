@@ -4,7 +4,6 @@
 //! and integration with the compiler.
 
 use predicates::prelude::*;
-use std::fs;
 
 mod common;
 use common::wado;
@@ -48,210 +47,16 @@ fn test_unknown_command() {
 }
 
 #[test]
-fn test_compile_help() {
-    wado()
-        .args(["compile", "--help"])
-        .assert()
-        .success()
-        .stderr(predicate::str::contains("Usage: wado compile"));
-}
-
-#[test]
-fn test_compile_missing_input() {
-    // The repo root carries a `wado.toml` with no `[package].command` so the
-    // resolver can't synthesise an input file; the user gets a focused error.
-    wado()
-        .arg("compile")
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "wado.toml found but [package].command is not set",
-        ));
-}
-
-#[test]
-fn test_compile_file_not_found() {
-    wado()
-        .args(["compile", "nonexistent.wado"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("nonexistent.wado"));
-}
-
-#[test]
-fn test_compile_output_wasm() {
-    let dir = tempfile::tempdir().unwrap();
-    let output_path = dir.path().join("out.wasm");
-
-    wado()
-        .args([
-            "compile",
-            "-o",
-            output_path.to_str().unwrap(),
-            "example/hello.wado",
-        ])
-        .assert()
-        .success()
-        .stderr(predicate::str::contains("Generated:"));
-
-    let content = fs::read(&output_path).unwrap();
-    // Component model starts with \0asm but version differs from core wasm.
-    assert!(content.len() > 4, "Wasm file should have content");
-}
-
-#[test]
-fn test_compile_output_wat() {
-    let dir = tempfile::tempdir().unwrap();
-    let output_path = dir.path().join("out.wat");
-
-    wado()
-        .args([
-            "compile",
-            "-o",
-            output_path.to_str().unwrap(),
-            "example/hello.wado",
-        ])
-        .assert()
-        .success()
-        .stderr(predicate::str::contains("Generated:"));
-
-    let content = fs::read_to_string(&output_path).unwrap();
-    assert!(
-        content.contains("(component"),
-        "WAT file should contain component"
-    );
-}
-
-#[test]
-fn test_compile_format_wat() {
-    // Non-`.wat` extension forces format selection by `--format`, not by suffix.
-    let dir = tempfile::tempdir().unwrap();
-    let output_path = dir.path().join("out.txt");
-
-    wado()
-        .args([
-            "compile",
-            "--format",
-            "wat",
-            "-o",
-            output_path.to_str().unwrap(),
-            "example/hello.wado",
-        ])
-        .assert()
-        .success();
-
-    let content = fs::read_to_string(&output_path).unwrap();
-    assert!(
-        content.contains("(component"),
-        "Should be WAT format regardless of extension"
-    );
-}
-
-#[test]
-fn test_compile_format_wasm() {
-    let dir = tempfile::tempdir().unwrap();
-    let output_path = dir.path().join("out.bin");
-
-    wado()
-        .args([
-            "compile",
-            "--format",
-            "wasm",
-            "-o",
-            output_path.to_str().unwrap(),
-            "example/hello.wado",
-        ])
-        .assert()
-        .success();
-
-    let content = fs::read(&output_path).unwrap();
-    assert!(content.len() > 4, "Wasm file should have content");
-}
-
-#[test]
 fn test_compile_wat_to_stdout() {
+    // Subprocess-only because `--wat-to-stdout` writes to actual stdout;
+    // capturing it in-process would require redirecting std file
+    // descriptors, which we have not done yet. The file-output and
+    // opt-level variants moved to `tests/run_inprocess.rs`.
     wado()
         .args(["compile", "--wat-to-stdout", "example/hello.wado"])
         .assert()
         .success()
         .stdout(predicate::str::contains("(component"));
-}
-
-#[test]
-fn test_compile_invalid_format() {
-    wado()
-        .args(["compile", "--format", "invalid", "example/hello.wado"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("unknown format"));
-}
-
-#[test]
-fn test_compile_unknown_option() {
-    wado()
-        .args(["compile", "--unknown", "example/hello.wado"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("invalid option"));
-}
-
-#[test]
-fn test_compile_opt_level_o0() {
-    wado()
-        .args(["compile", "-O0", "--wat-to-stdout", "example/hello.wado"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("(component"));
-}
-
-#[test]
-fn test_compile_opt_level_o2() {
-    wado()
-        .args(["compile", "-O2", "--wat-to-stdout", "example/hello.wado"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("(component"));
-}
-
-#[test]
-fn test_compile_opt_level_os() {
-    wado()
-        .args(["compile", "-Os", "--wat-to-stdout", "example/hello.wado"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("(component"));
-}
-
-#[test]
-fn test_compile_opt_level_invalid() {
-    wado()
-        .args(["compile", "-Ox", "example/hello.wado"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("unknown optimization level"));
-}
-
-#[test]
-fn test_run_help() {
-    wado()
-        .args(["run", "--help"])
-        .assert()
-        .success()
-        .stderr(predicate::str::contains("Usage: wado run"));
-}
-
-#[test]
-fn test_run_missing_input() {
-    // Same story as `test_compile_missing_input`: the repo root has a
-    // `wado.toml` without `[package].command`, so the entry-point resolver
-    // surfaces a more specific failure.
-    wado()
-        .arg("run")
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "wado.toml found but [package].command is not set",
-        ));
 }
 
 #[test]
@@ -261,34 +66,6 @@ fn test_run_hello() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Hello, world!"));
-}
-
-#[test]
-fn test_run_file_not_found() {
-    wado()
-        .args(["run", "nonexistent.wado"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("nonexistent.wado"));
-}
-
-#[test]
-fn test_run_unknown_option() {
-    wado()
-        .args(["run", "--unknown", "example/hello.wado"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("invalid option"));
-}
-
-#[test]
-fn test_test_help() {
-    wado()
-        .args(["test", "--help"])
-        .assert()
-        .success()
-        .stderr(predicate::str::contains("Usage: wado test"))
-        .stderr(predicate::str::contains("--filter"));
 }
 
 #[test]
@@ -384,15 +161,6 @@ fn test_test_no_run_skips_phase_two() {
 }
 
 #[test]
-fn test_test_no_run_help_lists_flag() {
-    wado()
-        .args(["test", "--help"])
-        .assert()
-        .success()
-        .stderr(predicate::str::contains("--no-run"));
-}
-
-#[test]
 fn test_test_no_run_surfaces_todo_compile_errors() {
     // A `#![TODO]` module whose expected compile error fires is
     // module-level TODO-pending. Under `--no-run` we can't observe
@@ -459,47 +227,4 @@ fn test_test_parallel_long_option() {
         .assert()
         .success()
         .stdout(predicate::str::contains("2 passed, 0 failed"));
-}
-
-#[test]
-fn test_test_parallel_invalid() {
-    // Test with invalid parallel count
-    wado()
-        .args([
-            "test",
-            "-p",
-            "0",
-            "wado-compiler/tests/fixtures/test_decl.wado",
-        ])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "--parallel requires a positive integer",
-        ));
-}
-
-#[test]
-fn test_test_parallel_non_numeric() {
-    // Test with non-numeric parallel count
-    wado()
-        .args([
-            "test",
-            "-p",
-            "abc",
-            "wado-compiler/tests/fixtures/test_decl.wado",
-        ])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "--parallel requires a positive integer",
-        ));
-}
-
-#[test]
-fn test_test_help_shows_parallel_option() {
-    wado()
-        .args(["test", "--help"])
-        .assert()
-        .success()
-        .stderr(predicate::str::contains("-p, --parallel"));
 }

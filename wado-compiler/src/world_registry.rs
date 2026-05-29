@@ -257,7 +257,7 @@ impl WorldRegistry {
     /// registered without that export); this happens when the referenced
     /// interface declaration is not yet known.
     ///
-    /// `lookup_interface_import` is the analogous resolver for `import Foo;`
+    /// `lookup_interface_import` is the analogous elaborator for `import Foo;`
     /// and only needs to surface the CM FQ (the methods are tree-shaken from
     /// usage). Returning `None` leaves `cm_interface_fq` unfilled.
     ///
@@ -432,7 +432,8 @@ mod tests {
         // when registering the `wasi:cli/command` world. Without it,
         // `export Run;` would expand to zero methods (lookup callback returns
         // `None`).
-        let (_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
+        let (_registry, world_registry) =
+            crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
         assert!(
             world_registry.has_world("wasi:cli/command"),
@@ -454,7 +455,8 @@ mod tests {
 
     #[test]
     fn test_kiln_generator_world_registered() {
-        let (_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
+        let (_registry, world_registry) =
+            crate::component_model::CmInterfaceRegistry::build_from_stdlib();
         assert!(
             world_registry.has_world("core:kiln/generator"),
             "core:kiln/generator world should be registered"
@@ -529,7 +531,8 @@ mod tests {
         // `import KilnHost { ... }` in `lib/core/kiln/worlds.wado`, so the
         // populated registry must surface that import. The cli Command world
         // imports several effects (Stdout, Stdin, Environment, ...).
-        let (_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
+        let (_registry, world_registry) =
+            crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
         let kiln = world_registry
             .get("core:kiln/generator")

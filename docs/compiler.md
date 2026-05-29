@@ -10,7 +10,7 @@ The Wado compiler (`wado-compiler/`) translates `.wado` source into a Wasm compo
 
 ```
 Source (.wado)
-  → Lex → Parse → Bind → Desugar          (per module, in loader)
+  → Lex → Parse → Bind                    (per module, in loader)
   → Annotate (Analyze + Resolve + lower TIR)
   → Default-purity Check
   → Synthesis (auto-derives, template, From, serde, pre-CM effect dispatch, CM bindings)
@@ -30,9 +30,8 @@ The driver is `compile_after_load` in `src/lib.rs`.
 | ---------------------- | --------------- | ------------------------------------------------ |
 | Lex / Parse            | AST             | `lexer.rs`, `parser.rs`, `token.rs`, `syntax.rs` |
 | Bind                   | AST + bindings  | `bind.rs`                                        |
-| Desugar                | AST             | `desugar.rs`                                     |
 | Loader                 | All modules     | `loader.rs`                                      |
-| Annotate               | TIR + facts     | `annotate.rs`, `analyze.rs`, `resolver/`         |
+| Annotate               | TIR + facts     | `semantics.rs`, `analyze.rs`, `elaborator/`      |
 | Default-purity Check   | (validation)    | `effect_check.rs::check_default_purity`          |
 | Synthesis              | TIR (extended)  | `synthesis/`                                     |
 | Effect / Stores        | TIR (validated) | `effect_check.rs`                                |
@@ -60,20 +59,21 @@ Codegen takes `&NirPackage` + `&WirPackage` (`emit_wasm`) and has no knowledge o
 
 ## Frontend (per-module)
 
-The loader runs `lexer → parser → bind → desugar` on every loaded module:
+The loader runs `lexer → parser → bind` on every loaded module:
 
 - The lexer extracts the optional `__DATA__` section and tokenizes the rest.
-- The parser builds a faithful AST. Compound assigns, comparison chains, struct shorthand, and `&self` parameters are kept verbatim so `wado format` round-trips; sugar is removed in `desugar.rs`.
+- The parser builds a faithful AST. Compound assigns, comparison chains, struct shorthand, and `&self` parameters are kept verbatim so `wado format` round-trips.
 - `bind.rs` performs local name resolution, scope/mutability checking, and use-before-define detection.
-- `desugar.rs` rewrites `x += y` to `x = x + y`, for/while loops to explicit loop blocks, and other purely syntactic constructs. The `assert` statement, the `matches` operator, the comparison chain `a < b < c`, and `use … namespace` prefixes (`helper::foo`) are deferred to the resolver (`desugar_assert`, `desugar_matches_expr`, `desugar_comparison_chain` in `resolver/{assert,matches,operators}.rs`; `Resolver::strip_ns_prefix` in `resolver.rs`) because they either need typed sub-expressions or rely on the canonical `imported_functions` / `namespace_imports` tables. Keeping the AST intact also lets LSP queries land on the user's text.
+
+The AST is parser-immutable from this point on. The desugar-replacement surface rewrites — compound assignment (`x += y` → `x = x + y`), `while` / C-style `for` → explicit `loop`, `for x of expr` iteration (the `.into_iter()` / `.next()` dispatch and the `match Some(x) => body, _ => break` shape), the `assert` statement, the `matches` operator, the comparison chain `a < b < c`, template-string interpolations, `use … namespace` prefix stripping (`helper::foo`), and `Self::method` / `T::method` (T bound to concrete) static-call dispatch — happen inside the elaborator and are built TIR-direct: each rewrite resolves the user AST and constructs `TirExpr` / `TirStmt` nodes directly without producing synthetic AST. The implementations live in `elaborator/{stmt,operators,assert,matches}.rs` (`resolve_while`, `resolve_for`, `resolve_iterator_for_of`, `resolve_compound_assign`, `desugar_assert`, `desugar_matches_expr`, `desugar_comparison_chain`), `Elaborator::strip_ns_prefix` in `elaborator.rs`, and `CalleeIdentKind` / `classify_call_callee` in `elaborator/call.rs` (the prefix is resolved to its concrete type name before parameter-type lookup so argument resolution runs once with the correct expected-type hints). Synthetic call sites that need to dispatch a method on an already-resolved receiver TIR (the for-of `.into_iter()` / `.next()` calls today) reuse the AST-driven method dispatch via `Elaborator::resolve_method_call_with` (`elaborator/method_call.rs`) — that helper takes a pre-resolved receiver plus a method name and signals "no source AST" with `method_id: None` so no use→def edge is recorded against the synthesis site. Keeping the AST parser-shaped is what lets LSP queries land on the user's text rather than on a synthesised replacement.
 
 ## Annotate (Analyze + Resolve + TIR Lowering)
 
-`annotate_loaded` (`annotate.rs`) is the entry point shared by LSP and batch compilation. It runs `analyze.rs` for symbol-table construction and `resolver/` for type checking; bodies are then lowered into TIR.
+`semantics_of` (`semantics.rs`) is the entry point shared by LSP and batch compilation. It runs `analyze.rs` for symbol-table construction and `elaborator/` for type checking; bodies are then lowered into TIR.
 
-The result, `Annotated`, carries the TIR modules plus an `AstIndex` and a use→def map (`(ModuleSource, AstId) → SymbolKey`). This is what makes the architecture LSP-friendly: facts are attached to AST nodes without mutating them, so cross-file navigation, hover, and rename all fall out of the same data the batch compiler uses. See the [LSP](#lsp) section below.
+The result, `Semantics`, carries the TIR modules plus an `AstIndex` and a use→def map (`(ModuleSource, AstId) → SymbolKey`). This is what makes the architecture LSP-friendly: facts are attached to AST nodes without mutating them, so cross-file navigation, hover, and rename all fall out of the same data the batch compiler uses. See the [LSP](#lsp) section below.
 
-The resolver covers trait selection, generic inference, method dispatch, coercion, and effect typing. All trait calls are resolved statically — by the end of the pipeline every call targets a concrete monomorphized function. There is no runtime vtable.
+The elaborator covers trait selection, generic inference, method dispatch, coercion, and effect typing. All trait calls are resolved statically — by the end of the pipeline every call targets a concrete monomorphized function. There is no runtime vtable.
 
 ## Synthesis
 
@@ -187,19 +187,19 @@ The loader canonicalizes paths (RFC 3986, project-root-relative with `/` separat
 
 ## Component Model Registries
 
-Three registries collect declarative information from the standard library and feed both the resolver and codegen:
+Three registries collect declarative information from the standard library and feed both the elaborator and codegen:
 
-- `WasiRegistry` (`component_model.rs`) — extracts WASI interfaces from `lib/wasi/*.wado`: version pins, async flags, canonical method names, supported types. Codegen drives import generation from this registry; only interfaces whose types are fully supported are imported.
+- `CmInterfaceRegistry` (`component_model.rs`) — extracts WASI interfaces from `lib/wasi/*.wado`: version pins, async flags, canonical method names, supported types. Codegen drives import generation from this registry; only interfaces whose types are fully supported are imported.
 - `WorldRegistry` (`world_registry.rs`) — collects world definitions (e.g., the `Command` world from `wasi/cli.wado`) and provides export signatures.
 - `BuiltinRegistry` (`builtin_registry.rs`) — collects function signatures from `lib/core/builtin.wado`. Functions tagged `#[canonical("ns", "name")]` import a CM canonical builtin (`wasi`, `mem`, or `bundled`); untagged builtins compile directly to Wasm instructions.
 
 ## LSP
 
-The language server (`wado-lsp/`) is a thin layer on top of `wado_compiler::annotate`. The `Engine` holds open documents and answers LSP queries (diagnostics, hover, go-to-definition, references, document highlight, semantic tokens). Each query:
+The language server (`wado-lsp/`) is a thin layer on top of `wado_compiler::semantics`. The `Engine` holds open documents and answers LSP queries (diagnostics, hover, go-to-definition, references, document highlight, semantic tokens). Each query:
 
-1. Calls `annotate_with_invocations(source, host, …)` to obtain an `Annotated` snapshot.
-2. Uses `Annotated::cursor_at(module, line, col) → Cursor` to translate a (line, col) into a `SymbolKey`.
-3. Reads pre-computed facts off `Cursor` / `Annotated` (`def_key`, `def_name_span`, `references_to_def`, `is_write_target`, …).
+1. Composes `parse(source)` → `load(parsed, …, invocations, …)` → `semantics_of(loaded, host, …)` to obtain a `Semantics` snapshot (kiln invocation discovery runs against the parsed entry AST between stages).
+2. Uses `Semantics::cursor_at(module, line, col) → Cursor` to translate a (line, col) into a `SymbolKey`.
+3. Reads pre-computed facts off `Cursor` / `Semantics` (`def_key`, `def_name_span`, `references_to_def`, `is_write_target`, …).
 
 `Engine` itself performs no I/O — every query takes an `&impl CompilerHost`, so the caller decides how imported modules are loaded. `wado-lsp` ships a `FilesystemCompilerHost`; embeddings (VS Code Wasm, browser playground) supply their own host. The `wado-compiler` crate must compile to `wasm32-unknown-unknown` to support those bundled deployments; CI enforces this. See [WEP 2026-04-18: LSP Architecture](./wep-2026-04-18-lsp-architecture.md).
 
@@ -256,7 +256,7 @@ Three allocators live in `lib/core/allocator.wado`, each tagged `#[allocator("na
 
 - [ ] Variant pattern matching: struct payloads not yet supported (single-payload and tuple-payload work).
 - [ ] Function types: parser supports `fn(T) -> U` and closure codegen works, but full first-class function types are incomplete.
-- [ ] Stream/Future: resource declarations exist in `core:prelude/types.wado`, but method resolution (`.new()`, `.read()`, `.write()`, `.close()`, `.drop()`) is still hardcoded in `resolver/method_call.rs` rather than driven by the resource declarations.
+- [ ] Stream/Future: resource declarations exist in `core:prelude/types.wado`, but method resolution (`.new()`, `.read()`, `.write()`, `.close()`, `.drop()`) is still hardcoded in `elaborator/method_call.rs` rather than driven by the resource declarations.
 
 ## Known Limitations
 

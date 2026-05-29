@@ -6,15 +6,15 @@ mod common;
 
 use common::InMemoryHost;
 use wado_compiler::ModuleSource;
-use wado_compiler::annotate;
 use wado_compiler::kiln::{CanonicalValue, OptionsType, extract_options_descriptor};
+use wado_compiler::semantics::{Semantics, semantics};
 
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Runtime::new().unwrap().block_on(future)
 }
 
-fn entry(annotated: &wado_compiler::Annotated) -> ModuleSource {
-    annotated.interner.borrow_mut().entry_point("entry.wado")
+fn entry(sem: &Semantics) -> ModuleSource {
+    sem.interner.borrow_mut().entry_point("entry.wado")
 }
 
 #[test]
@@ -29,8 +29,8 @@ pub struct Options {
 pub fn generate() {}
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
-    let desc = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    let desc = extract_options_descriptor(&sem, &entry(&sem)).unwrap();
     assert_eq!(desc.fields.len(), 3);
 
     assert_eq!(desc.fields[0].name, "highlight");
@@ -56,8 +56,8 @@ pub struct Options {
 pub fn generate() {}
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
-    let desc = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    let desc = extract_options_descriptor(&sem, &entry(&sem)).unwrap();
     assert_eq!(desc.fields.len(), 1);
     match &desc.fields[0].ty {
         OptionsType::Option(inner) => assert!(matches!(inner.as_ref(), OptionsType::String)),
@@ -81,8 +81,8 @@ pub struct Options {
 pub fn generate() {}
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
-    let desc = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    let desc = extract_options_descriptor(&sem, &entry(&sem)).unwrap();
     assert_eq!(desc.fields.len(), 1);
     match &desc.fields[0].ty {
         OptionsType::Enum { name, variants } => {
@@ -112,8 +112,8 @@ pub struct Options {
 pub fn generate() {}
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
-    let desc = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    let desc = extract_options_descriptor(&sem, &entry(&sem)).unwrap();
     assert_eq!(desc.fields.len(), 1);
     let OptionsType::Struct { name, descriptor } = &desc.fields[0].ty else {
         panic!("expected nested Struct field");
@@ -136,8 +136,8 @@ fn descriptor_missing_options_struct_errors() {
 pub fn generate() {}
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
-    let err = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap_err();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    let err = extract_options_descriptor(&sem, &entry(&sem)).unwrap_err();
     assert!(
         err.iter()
             .any(|d| d.message.contains("does not declare `pub struct Options`"))
@@ -152,8 +152,8 @@ pub struct Options {
 }
 ";
     let host = InMemoryHost::new();
-    let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
-    let err = extract_options_descriptor(&annotated, &entry(&annotated)).unwrap_err();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    let err = extract_options_descriptor(&sem, &entry(&sem)).unwrap_err();
     assert!(
         err.iter()
             .any(|d| d.message.contains("does not declare `generate` function"))

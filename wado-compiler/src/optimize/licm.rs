@@ -1,4 +1,4 @@
-//! Loop-Invariant Code Motion (LICM) for Wado TIR
+//! Loop-Invariant Code Motion (LICM) for Wado NIR
 //!
 //! This module hoists loop-invariant computations out of loops to improve performance.
 //! It identifies field accesses on variables that don't change within a loop and moves
@@ -100,18 +100,35 @@ fn licm_function(func: &mut NirFunction, type_table: &TypeTable) -> bool {
     };
     let mut local_count = func.local_count;
     let mut locals = func.locals.clone();
-    let changed = licm_block(body, &mut local_count, &mut locals, type_table);
+    let mut outer_aliases: Vec<(u32, u32)> = Vec::new();
+    let changed = licm_block(
+        body,
+        &mut local_count,
+        &mut locals,
+        type_table,
+        &mut outer_aliases,
+    );
     func.local_count = local_count;
     func.locals = locals;
     changed
 }
 
-/// Apply LICM to all loops in a block
+/// Apply LICM to all loops in a block.
+///
+/// `outer_aliases` accumulates `let x = y` (and `&y` / `&mut y` / labeled-
+/// or plain-block tail equivalents) pairs from let-statements that
+/// precede each loop. The fixpoint loop in `licm_loop` consumes these so
+/// that a write to one alias inside the loop body invalidates hoist
+/// candidates targeting the other alias — otherwise LICM hoists a snapshot
+/// of `local63.pos` (where `local63` is a `&mut Parser` alias of the real
+/// `local0`) and the body's `local63.pos = local63.pos + 1` write isn't
+/// recognised as invalidating the snapshot.
 fn licm_block(
     block: &mut NirBlock,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
+    outer_aliases: &mut Vec<(u32, u32)>,
 ) -> bool {
     let mut changed = false;
     let mut new_stmts = Vec::new();
@@ -121,7 +138,14 @@ fn licm_block(
             NirStmtKind::Loop { body } => {
                 // Apply LICM to the loop body
                 let empty_set = IndexSet::default();
-                let hoist_stmts = licm_loop(body, local_count, locals, type_table, &empty_set);
+                let hoist_stmts = licm_loop(
+                    body,
+                    local_count,
+                    locals,
+                    type_table,
+                    &empty_set,
+                    outer_aliases,
+                );
 
                 if !hoist_stmts.is_empty() {
                     changed = true;
@@ -136,15 +160,32 @@ fn licm_block(
                 else_block,
                 ..
             } => {
-                // Recurse into if branches
-                changed |= licm_block(then_block, local_count, locals, type_table);
+                // Recurse into if branches. The conservative thing is to
+                // clone the alias accumulator so sibling branches don't
+                // see each other's aliases, but since aliasing is
+                // monotone-correct (extra aliases never cause wrong
+                // hoists, only conservative misses), sharing the same
+                // accumulator is safe.
+                changed |= licm_block(then_block, local_count, locals, type_table, outer_aliases);
                 if let Some(eb) = else_block {
-                    changed |= licm_block(eb, local_count, locals, type_table);
+                    changed |= licm_block(eb, local_count, locals, type_table, outer_aliases);
                 }
                 new_stmts.push(stmt);
             }
             NirStmtKind::LabeledBlock { block: inner, .. } => {
-                changed |= licm_block(inner, local_count, locals, type_table);
+                changed |= licm_block(inner, local_count, locals, type_table, outer_aliases);
+                new_stmts.push(stmt);
+            }
+            NirStmtKind::Let {
+                local_index, value, ..
+            } => {
+                // Track outer-scope aliases so a subsequent loop's LICM
+                // can see them. See `outer_aliases` doc above.
+                if let Some(src_idx) = extract_alias_source(value)
+                    && is_gc_heap_type(value.type_id, type_table)
+                {
+                    outer_aliases.push((*local_index, src_idx));
+                }
                 new_stmts.push(stmt);
             }
             // Other statements don't contain loops at the statement level
@@ -167,6 +208,7 @@ fn licm_loop(
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
     extra_modified: &IndexSet<u32>,
+    outer_aliases: &[(u32, u32)],
 ) -> Vec<NirStmt> {
     let mut all_hoist_stmts = Vec::new();
 
@@ -178,6 +220,12 @@ fn licm_loop(
         // Step 1: Collect all variables modified in the loop
         let mut modified_vars = ModifiedVars::default();
         modified_vars.extend_full(extra_modified);
+        // Seed with pre-loop aliases (e.g. `let p = &mut outer_p`) so a
+        // write through one alias inside the loop body invalidates hoist
+        // candidates targeting the other.
+        for &(a, b) in outer_aliases {
+            modified_vars.add_alias(a, b);
+        }
         collect_modified_vars_in_block(loop_body, &mut modified_vars, type_table);
 
         // Step 2: Collect immutable reference bindings for look-through optimization
@@ -263,8 +311,19 @@ fn licm_loop(
         replace_hoisted_in_block(loop_body, &candidates, &ref_bindings);
     }
 
-    // Also need to handle nested loops - apply LICM recursively
-    licm_block(loop_body, local_count, locals, type_table);
+    // Also need to handle nested loops - apply LICM recursively.
+    // The nested loop sees the outer-loop's body as its own outer scope,
+    // so threading `outer_aliases` is unnecessary here — the nested
+    // `licm_block` will accumulate aliases from the outer loop's `let`
+    // statements on its own walk.
+    let mut nested_aliases: Vec<(u32, u32)> = outer_aliases.to_vec();
+    licm_block(
+        loop_body,
+        local_count,
+        locals,
+        type_table,
+        &mut nested_aliases,
+    );
 
     all_hoist_stmts
 }
@@ -308,6 +367,57 @@ fn mark_gc_local_as_fully_modified(
             return;
         }
         modified.insert_full(*index);
+    }
+}
+
+/// Walk through reference-introducing wrappers and tail-return blocks to
+/// find the source local that a let-binding actually aliases.
+///
+/// Handles:
+/// - `Local(y)` — direct
+/// - `&y` / `&mut y` — reference (the address backs the same heap object)
+/// - `LabeledBlock { label, block: { stmts; break label: V } }` — value-yielding
+///   labeled block, recurse into `V`
+/// - `Block { stmts; Expr(V) }` — plain block whose tail expression is `V`,
+///   produced by `branch_prune`'s C3 flatten of the above. Recurse into `V`.
+///
+/// The walk is alias-precision-only: missing an alias is a soundness bug
+/// (LICM may hoist a mutated field), but adding too many aliases is at
+/// worst a missed optimisation. The recursion stops on the first
+/// non-aliasing shape; it never traverses through `FieldAccess`, `Index`,
+/// `Call`, etc.
+fn extract_alias_source(expr: &NirExpr) -> Option<u32> {
+    match &expr.kind {
+        NirExprKind::Local { index, .. } => Some(*index),
+        NirExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } => extract_alias_source(inner),
+        NirExprKind::Block(block) => {
+            let tail = block.stmts.last()?;
+            let NirStmtKind::Expr(tail_expr) = &tail.kind else {
+                return None;
+            };
+            extract_alias_source(tail_expr)
+        }
+        NirExprKind::LabeledBlock { label, block, .. } => {
+            // Find the matching tail break and recurse on its value.
+            // Conservatively only accept the LAST stmt being the break;
+            // multi-break shapes don't have a single alias source.
+            let last = block.stmts.last()?;
+            let NirStmtKind::Break {
+                label: Some(brk_label),
+                value: Some(brk_value),
+            } = &last.kind
+            else {
+                return None;
+            };
+            if brk_label != label {
+                return None;
+            }
+            extract_alias_source(brk_value)
+        }
+        _ => None,
     }
 }
 
@@ -359,7 +469,12 @@ fn mark_assignment_target_as_modified(expr: &NirExpr, modified: &mut ModifiedVar
                 // Single-level field assignment: `buf.field = x` — only that field is modified
                 modified.insert_field(*index, *field_index);
             } else {
-                // Deeper nesting: `a.b.c = x` — conservatively mark root as fully modified
+                // Deeper nesting: `a.b.c = x` — conservatively mark root as fully modified.
+                //
+                // TODO(optimizer): track field paths (e.g. `(b, c)`)
+                // rather than collapsing to "fully modified" so that a
+                // hoist of `self.repr.len` survives a sibling write
+                // like `self.other.flag = true`.
                 mark_local_as_fully_modified(inner, modified);
             }
         }
@@ -383,12 +498,15 @@ fn collect_modified_vars_in_stmt(
             // Let statements define new variables, mark them as modified
             // (they're not invariant within the loop where they're defined)
             modified.insert_full(*local_index);
-            // Track GC aliases: `let a = b` where b is a local with GC type
-            // means a and b point to the same heap object.
-            if let NirExprKind::Local { index: src_idx, .. } = &value.kind
+            // Track GC aliases: `let a = b` (or `&b` / `&mut b` /
+            // labeled-block or plain-block tailing in `b`) where `b` is a
+            // local with GC type means `a` and `b` point to the same
+            // heap object — so a write through one is observable through
+            // the other.
+            if let Some(src_idx) = extract_alias_source(value)
                 && is_gc_heap_type(value.type_id, type_table)
             {
-                modified.add_alias(*local_index, *src_idx);
+                modified.add_alias(*local_index, src_idx);
             }
             // Also check the value expression for mutable references
             collect_modified_vars_in_expr(value, modified, type_table);

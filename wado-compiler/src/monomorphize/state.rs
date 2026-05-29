@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
+use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
-use crate::resolver::trait_env::TraitEnv;
 use crate::tir::{InstantiationKey, ResolvedType, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
@@ -344,7 +344,7 @@ impl Monomorphizer {
                 Some(mangle_generic_name("Array", &[arg]))
             }
             // Newtypes are transparent for method lookup — unwrap to base type,
-            // same as Ref/MutRef. The resolver already resolves methods through
+            // same as Ref/MutRef. The elaborator already resolves methods through
             // newtypes, so the monomorphizer needs to see the base type to find
             // the correct generic function template.
             ResolvedType::Newtype { base_type, .. } => {

@@ -1,7 +1,7 @@
 //! Integration tests for `Engine::diagnostics`.
 //!
-//! `Engine::diagnostics` runs only the `annotate` pipeline (parse → bind →
-//! desugar → load → analyze → resolve), deliberately stopping before
+//! `Engine::diagnostics` runs only the semantics pipeline (parse → bind →
+//! load → analyze → resolve), deliberately stopping before
 //! codegen. These tests pin two contracts:
 //!
 //! - Bundled stdlib files carry `#![no_prelude]`, so opening them in an
@@ -10,40 +10,15 @@
 //! - User code that redefines a prelude name without opting out via
 //!   `#![no_prelude]` still surfaces the collision diagnostic.
 //! - Inputs that historically panicked during codegen validation now
-//!   complete cleanly because `Engine::diagnostics` stops at `annotate`.
+//!   complete cleanly because `Engine::diagnostics` stops at
+//!   `semantics_of`.
 
-use indexmap::IndexMap;
-use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, SourceError};
+use wado_lsp::test_support::MapHost;
 use wado_lsp::{Diagnostic, Engine, Severity};
-
-struct TestHost {
-    sources: IndexMap<String, Vec<u8>>,
-}
-
-impl TestHost {
-    fn empty() -> Self {
-        Self {
-            sources: IndexMap::new(),
-        }
-    }
-}
-
-impl CompilerHost for TestHost {
-    async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-        if let Some(b) = self.sources.get(path) {
-            return Ok(b.clone());
-        }
-        Err(SourceError::NotFound {
-            path: path.to_string(),
-        })
-    }
-
-    fn emit_diagnostic(&self, _diagnostic: CompilerDiagnostic) {}
-}
 
 async fn diagnostics_for(path: &str, source: &str) -> Vec<Diagnostic> {
     let uri = format!("file://{path}");
-    let host = TestHost::empty();
+    let host = MapHost::empty();
     let mut engine = Engine::new();
     engine.open_document(&uri, source.to_string());
     engine.diagnostics(&uri, &host).await

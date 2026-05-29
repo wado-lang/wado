@@ -434,7 +434,6 @@ fn "wado-compiler/tests/fixtures/http_routing_created.wado/handle"(request) {
                 break __inline_String_Eq__eq_2: 0;
             }
             break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(p.repr, other.repr, len_a);
-            unreachable;
         } {
             drop("wado-compiler/tests/fixtures/http_routing_created.wado/__cm_binding__Response_set_status_code"(response, 201));
         }
@@ -785,13 +784,7 @@ fn "wado-compiler/tests/fixtures/http_routing_created.wado/__cm_binding__Request
     __disc = builtin::load_u8(__outptr);
     __option_result = ref.null none;
     if __disc != 0 {
-        __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref "core:prelude/string.wado//String" {
-            ptr = builtin::load_i32(__outptr + 4);
-            len_5 = builtin::load_i32((__outptr + 4) + 4);
-            arr = "core:internal/memory_to_gc_array"(ptr, len_5);
-            break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_5 };
-            unreachable;
-        });
+        __option_result = ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_5 = builtin::load_i32((__outptr + 4) + 4); arr = "core:internal/memory_to_gc_array"(ptr, len_5); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_5 });
         drop("mem/realloc"(builtin::load_i32(__outptr + 4), builtin::load_i32((__outptr + 4) + 4), 1, 0));
     }
     drop("mem/realloc"(__outptr, 12, 4, 0));
@@ -845,17 +838,15 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     let arr: ref builtin::array<u8>;
     let i: i32;
     arr = builtin::array_new<u8>(len);
-    __for_0: block {
-        i = 0;
-        block {
-            l69: loop {
-                if i >= len {
-                    break __for_0;
-                }
-                builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
-                i = i + 1;
-                continue l69;
-            };
+    i = 0;
+    b68: block {
+        l69: loop {
+            if i >= len {
+                break b68;
+            }
+            builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
+            i = i + 1;
+            continue l69;
         };
     };
     return arr;
@@ -863,17 +854,15 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l72: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l72;
-            };
+    i = 0;
+    b71: block {
+        l72: loop {
+            if i >= len {
+                break b71;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l72;
         };
     };
 }
@@ -891,19 +880,17 @@ fn "core:internal/cm_lower_string"(s) {
 
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l75: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
-                    return 0;
-                }
-                i = i + 1;
-                continue l75;
-            };
+    i = 0;
+    b74: block {
+        l75: loop {
+            if i >= len {
+                break b74;
+            }
+            if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
+                return 0;
+            }
+            i = i + 1;
+            continue l75;
         };
     };
     return 1;

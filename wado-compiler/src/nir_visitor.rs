@@ -91,9 +91,14 @@ pub trait NirMutVisitor {
                     self.visit_pattern(binding);
                 }
             }
-            NirPattern::Enum { .. }
-            | NirPattern::ConstantValue { .. }
-            | NirPattern::Range { .. } => {}
+            NirPattern::Enum { .. } | NirPattern::Range { .. } => {}
+            // `ConstantValue { expr }` carries a sub-expression; recurse so
+            // expression-level visitors see it. Matches
+            // `NirOptVisitor::opt_walk_pattern` (which already does this);
+            // `NirRefVisitor::walk_pattern` mirrors the fix.
+            NirPattern::ConstantValue { expr } => {
+                self.visit_expr(expr);
+            }
             NirPattern::Struct { fields, .. } => {
                 for field in fields {
                     self.visit_pattern(&mut field.pattern);
@@ -262,9 +267,14 @@ pub trait NirRefVisitor {
                     self.visit_pattern(binding);
                 }
             }
-            NirPattern::Enum { .. }
-            | NirPattern::ConstantValue { .. }
-            | NirPattern::Range { .. } => {}
+            NirPattern::Enum { .. } | NirPattern::Range { .. } => {}
+            // `ConstantValue { expr }` carries a sub-expression; recurse so
+            // expression-level visitors see it. Matches
+            // `NirOptVisitor::opt_walk_pattern` (which already does this);
+            // `NirMutVisitor::walk_pattern` mirrors the fix.
+            NirPattern::ConstantValue { expr } => {
+                self.visit_expr(expr);
+            }
             NirPattern::Struct { fields, .. } => {
                 for field in fields {
                     self.visit_pattern(&field.pattern);

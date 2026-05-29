@@ -2,47 +2,13 @@
 //! across parameters, locals, items, types, method calls, imports, effects,
 //! and file-path jumps.
 
-use indexmap::IndexMap;
-use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, SourceError};
+use wado_lsp::test_support::MapHost;
 use wado_lsp::{DefinitionResult, Engine, Position};
-
-struct TestHost {
-    sources: IndexMap<String, Vec<u8>>,
-}
-
-impl TestHost {
-    fn new(path: &str, source: &str) -> Self {
-        let mut sources = IndexMap::new();
-        sources.insert(path.to_string(), source.as_bytes().to_vec());
-        Self { sources }
-    }
-
-    fn with_files(files: &[(&str, &str)]) -> Self {
-        let mut sources = IndexMap::new();
-        for (path, source) in files {
-            sources.insert((*path).to_string(), source.as_bytes().to_vec());
-        }
-        Self { sources }
-    }
-}
-
-impl CompilerHost for TestHost {
-    async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-        if let Some(b) = self.sources.get(path) {
-            return Ok(b.clone());
-        }
-        Err(SourceError::NotFound {
-            path: path.to_string(),
-        })
-    }
-
-    fn emit_diagnostic(&self, _diagnostic: CompilerDiagnostic) {}
-}
 
 async fn def_at(source: &str, line: u32, character: u32) -> Option<DefinitionResult> {
     let path = "/test.wado";
     let uri = format!("file://{path}");
-    let host = TestHost::new(path, source);
+    let host = MapHost::single(path, source);
     let mut engine = Engine::new();
     engine.open_document(&uri, source.to_string());
     engine
@@ -57,7 +23,7 @@ async fn def_at_in(
     character: u32,
 ) -> Option<DefinitionResult> {
     let uri = format!("file://{entry}");
-    let host = TestHost::with_files(files);
+    let host = MapHost::with_files(files);
     let entry_source = files
         .iter()
         .find(|(p, _)| *p == entry)
@@ -262,6 +228,38 @@ fn for_of_binding_definition() {
         );
         let result = def_at(source, 3, 25).await.expect("use of item in body");
         assert_range(&result, 2, 12, 16);
+    });
+}
+
+#[test]
+fn for_of_keyword_does_not_resolve_to_synthetic_iter() {
+    // Cursor on the `for` keyword of `for let item of items { ... }` must
+    // never resolve to the elaborator's synthetic `__iter_N` local. The user
+    // never typed that name; surfacing it in jump-to-def / hover leaks
+    // compiler internals into the editor.
+    futures::executor::block_on(async {
+        let source = concat!(
+            "fn f(items: Array<i32>) -> i32 {\n",
+            "    let mut total = 0;\n",
+            "    for let item of items {\n",
+            "        total = total + item;\n",
+            "    }\n",
+            "    return total;\n",
+            "}\n",
+        );
+        // Cursor on the `f` of `for` (line 2 col 4). The cursor should
+        // either resolve to nothing or to the loop variable binding — never
+        // to a synthetic helper local nor to the `.into_iter()` / `.next()`
+        // method defs in `core:prelude/array.wado`. The bug being fixed
+        // dragged the click into core stdlib (the synthetic `MethodCall`
+        // reused `for_of.id` as its `method_id`, planting a use→def edge
+        // there).
+        if let Some(r) = def_at(source, 2, 4).await {
+            assert!(
+                r.uri == "file:///test.wado",
+                "cursor on `for` should not jump out of the source file: {r:?}"
+            );
+        }
     });
 }
 
@@ -577,6 +575,44 @@ fn generic_type_parameter_use_definition() {
         let source = concat!("fn identity<T>(x: T) -> T {\n", "    return x;\n", "}\n",);
         let result = def_at(source, 0, 18).await.expect("T in param type");
         assert_range(&result, 0, 12, 13);
+    });
+}
+
+#[test]
+fn cross_file_definition_uses_target_modules_codepoint_columns_not_entrys() {
+    // Pre-existing bug class fixed by this commit: `find_definition`
+    // passed `Some(source)` (the entry document's text) to
+    // `span_to_range` for cross-file def spans, re-encoding the target
+    // module's codepoint column against the WRONG source line. Under
+    // UTF-16, a 🦀-laden entry line of the same line number would
+    // inflate the def's `character` by `len_utf16 - 1` per emoji.
+    //
+    // Here `helper` lives at codepoint column 7..13 on line 0 of
+    // lib.wado (the `pub fn `'s name span). The entry document's line 0
+    // is `// 🦀🦀🦀🦀🦀` — 13 codepoints, 18 UTF-16 units. The
+    // correctly-encoded range start under UTF-16 must be 7 (lib's
+    // line) — not 13 (saturated entry length) and not anything in
+    // between.
+    futures::executor::block_on(async {
+        let lib = "pub fn helper() -> i32 { return 1; }\n";
+        let entry = concat!(
+            "// 🦀🦀🦀🦀🦀\n",
+            "use { helper } from \"./lib.wado\";\n",
+            "fn main() -> i32 { return helper(); }\n",
+        );
+        let result = def_at_in(
+            &[("./lib.wado", lib), ("/test.wado", entry)],
+            "/test.wado",
+            2,
+            26, // cursor on `helper` call (ASCII line, byte=codepoint)
+        )
+        .await
+        .expect("cross-file definition");
+        assert_eq!(result.uri, "file:///lib.wado");
+        // Codepoint columns 7..13 in lib.wado — under any encoding
+        // this is the value emitted when we DON'T re-encode against
+        // the entry's source.
+        assert_range(&result, 0, 7, 13);
     });
 }
 

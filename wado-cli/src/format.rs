@@ -1,7 +1,6 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
-use std::process;
 use std::time::Instant;
 
 use lexopt::Arg::Value;
@@ -62,11 +61,6 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Parse command-line arguments for the `format` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<FormatOptions, CliExit> {
     let usage = format_usage();
     let mut inputs: Vec<String> = Vec::new();
@@ -106,14 +100,13 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<FormatOptions, CliExit> 
     })
 }
 
-pub fn run(opts: FormatOptions) {
+pub fn run(opts: FormatOptions) -> Result<(), CliExit> {
     let mut any_would_reformat = false;
     let mut any_error = false;
 
     for input in &opts.inputs {
         let path = Path::new(input);
 
-        // Read original source
         let original = match fs::read_to_string(path) {
             Ok(s) => s,
             Err(e) => {
@@ -123,7 +116,6 @@ pub fn run(opts: FormatOptions) {
             }
         };
 
-        // Format
         let start = Instant::now();
         let formatted = match wado_compiler::format(&original) {
             Ok(f) => f,
@@ -136,13 +128,11 @@ pub fn run(opts: FormatOptions) {
         let elapsed_ms = start.elapsed().as_millis();
 
         if opts.check {
-            // Check mode: track if any file would change
             if original != formatted {
                 eprintln!("{input}: would reformat");
                 any_would_reformat = true;
             }
         } else if opts.write_in_place {
-            // Write back to file only if changed
             if original != formatted {
                 match fs::write(path, &formatted) {
                     Ok(()) => {
@@ -155,15 +145,12 @@ pub fn run(opts: FormatOptions) {
                 }
             }
         } else {
-            // Output to stdout (single file only)
             print!("{formatted}");
         }
     }
 
-    if any_error {
-        process::exit(1);
+    if any_error || (opts.check && any_would_reformat) {
+        return Err(CliExit::silent_failure(1));
     }
-    if opts.check && any_would_reformat {
-        process::exit(1);
-    }
+    Ok(())
 }

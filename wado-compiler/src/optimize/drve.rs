@@ -1,4 +1,4 @@
-//! Dead Return Value Elimination for Wado TIR.
+//! Dead Return Value Elimination for Wado NIR.
 //!
 //! Converts non-void functions whose return value is always immediately
 //! dropped at every call site into void-returning functions. Every
@@ -6,7 +6,7 @@
 //! `expr` is verified pure, and call sites stay structurally identical
 //! (the call expression now produces `Unit`).
 //!
-//! TIR analog of `wir_optimize/drve.rs`. Running at TIR exposes the freshly
+//! NIR analog of `wir_optimize/drve.rs`. Running at NIR exposes the freshly
 //! dead expressions to the rest of the fixed-point loop. Especially useful
 //! after `inline` collapses a `Result<(), Error>`-returning helper whose
 //! callers all `_ = helper(args);`-style discard the result — DCE can then

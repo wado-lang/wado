@@ -816,13 +816,7 @@ fn "wado-compiler/tests/fixtures/http_method_routing.wado/__cm_binding__Request_
     } else if __vdisc == 8 {
         __vresult = struct.new "wasi:http/types.wado//Method" { 8 };
     } else {
-        __vresult = struct.new "wasi:http/types.wado//Method::Other" { discriminant: 9, payload_0: ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref "core:prelude/string.wado//String" {
-            ptr = builtin::load_i32(__outptr + 4);
-            len_5 = builtin::load_i32((__outptr + 4) + 4);
-            arr = "core:internal/memory_to_gc_array"(ptr, len_5);
-            break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_5 };
-            unreachable;
-        }) };
+        __vresult = struct.new "wasi:http/types.wado//Method::Other" { discriminant: 9, payload_0: ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_5 = builtin::load_i32((__outptr + 4) + 4); arr = "core:internal/memory_to_gc_array"(ptr, len_5); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_5 }) };
     }
     drop("mem/realloc"(__outptr, 12, 4, 0));
     return __vresult;
@@ -875,17 +869,15 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     let arr: ref builtin::array<u8>;
     let i: i32;
     arr = builtin::array_new<u8>(len);
-    __for_0: block {
-        i = 0;
-        block {
-            l79: loop {
-                if i >= len {
-                    break __for_0;
-                }
-                builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
-                i = i + 1;
-                continue l79;
-            };
+    i = 0;
+    b78: block {
+        l79: loop {
+            if i >= len {
+                break b78;
+            }
+            builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
+            i = i + 1;
+            continue l79;
         };
     };
     return arr;
@@ -893,17 +885,15 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l82: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l82;
-            };
+    i = 0;
+    b81: block {
+        l82: loop {
+            if i >= len {
+                break b81;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l82;
         };
     };
 }

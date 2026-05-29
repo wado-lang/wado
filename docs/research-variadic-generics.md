@@ -573,7 +573,7 @@ The specific obstacles Rust faces do not directly apply.
 
 6. **Interaction with `for let v of tuple`**: the existing compile-time unrolling already
    handles consuming a tuple whose type is `[..T]` once T is instantiated. Does it work
-   without changes, or does the resolver need to recognize that `[..T]` expands during
+   without changes, or does the elaborator need to recognize that `[..T]` expands during
    monomorphization?
 
 ---

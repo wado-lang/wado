@@ -1,7 +1,6 @@
 use std::fmt::Write as FmtWrite;
 use std::fs;
 use std::path::Path;
-use std::process;
 
 use lexopt::Arg::Value;
 use wado_compiler::doc::{
@@ -113,11 +112,6 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Parse command-line arguments for the `doc` subcommand.
-///
-/// # Errors
-///
-/// Returns an error if the arguments are invalid or required arguments are missing.
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
     let usage = format_usage();
     let mut inputs: Vec<String> = Vec::new();
@@ -187,12 +181,12 @@ fn is_stdlib_module(input: &str) -> bool {
     input.starts_with("core:") || input.starts_with("wasi:")
 }
 
-pub fn run(opts: DocOptions) {
+pub fn run(opts: DocOptions) -> Result<(), CliExit> {
     let docs: Vec<(String, DocModule)> = opts
         .inputs
         .iter()
-        .map(|input| (input.clone(), load_doc(input)))
-        .collect();
+        .map(|input| load_doc(input).map(|doc| (input.clone(), doc)))
+        .collect::<Result<_, _>>()?;
 
     let format_name = match opts.format {
         OutputFormat::Markdown => "markdown",
@@ -210,42 +204,37 @@ pub fn run(opts: DocOptions) {
         for (input, doc) in &docs {
             let path = template.replace(MODULE_PLACEHOLDER, &module_filename_stem(input));
             let content = render_single(doc, format_name, input, opts.format);
-            write_to_file(&path, &content);
+            write_to_file(&path, &content)?;
         }
-        return;
+        return Ok(());
     }
 
     let combined = render_combined(&docs, opts.title.as_deref(), format_name, &opts);
     match opts.output.as_deref() {
-        Some(path) => write_to_file(path, &combined),
+        Some(path) => write_to_file(path, &combined)?,
         None => print!("{combined}"),
     }
+    Ok(())
 }
 
-fn load_doc(input: &str) -> DocModule {
+fn load_doc(input: &str) -> Result<DocModule, CliExit> {
     if is_stdlib_module(input) {
-        return extract_stdlib_doc(input).unwrap_or_else(|| {
-            eprintln!("Unknown stdlib module: {input}");
-            process::exit(1);
-        });
+        return extract_stdlib_doc(input)
+            .ok_or_else(|| CliExit::error(format!("Unknown stdlib module: {input}")));
     }
 
     let path = Path::new(input);
-    let source = fs::read_to_string(path).unwrap_or_else(|e| {
-        eprintln!("Error reading '{}': {e}", path.display());
-        process::exit(1);
-    });
+    let source = fs::read_to_string(path)
+        .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
 
-    let parsed = wado_compiler::parse(&source).unwrap_or_else(|e| {
-        eprintln!("Error parsing '{}': {e:?}", path.display());
-        process::exit(1);
-    });
+    let parsed = wado_compiler::parse(&source)
+        .map_err(|e| CliExit::error(format!("parsing '{}': {e:?}", path.display())))?;
 
     let module_name = path
         .file_stem()
         .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
 
-    extract_doc(&parsed.ast, &parsed.trivia, module_name)
+    Ok(extract_doc(&parsed.ast, &parsed.trivia, module_name))
 }
 
 /// Filesystem-safe stem for a module input: stdlib `core:cli` -> `core-cli`,
@@ -260,18 +249,15 @@ fn module_filename_stem(input: &str) -> String {
         .map_or_else(|| input.to_string(), str::to_string)
 }
 
-fn write_to_file(path: &str, content: &str) {
+fn write_to_file(path: &str, content: &str) -> Result<(), CliExit> {
     if let Some(parent) = Path::new(path).parent()
         && !parent.as_os_str().is_empty()
-        && let Err(e) = fs::create_dir_all(parent)
     {
-        eprintln!("Error creating '{}': {e}", parent.display());
-        process::exit(1);
+        fs::create_dir_all(parent)
+            .map_err(|e| CliExit::error(format!("creating '{}': {e}", parent.display())))?;
     }
-    if let Err(e) = fs::write(path, content) {
-        eprintln!("Error writing '{path}': {e}");
-        process::exit(1);
-    }
+    fs::write(path, content).map_err(|e| CliExit::error(format!("writing '{path}': {e}")))?;
+    Ok(())
 }
 
 fn render_single(doc: &DocModule, format_name: &str, input: &str, format: OutputFormat) -> String {
@@ -285,7 +271,7 @@ fn render_single(doc: &DocModule, format_name: &str, input: &str, format: Output
                 OutputFormat::Simple => out.push_str(&render_simple(doc, 0)),
                 OutputFormat::Json => unreachable!(),
             }
-            out
+            format_markdown(&out)
         }
     }
 }
@@ -325,7 +311,65 @@ fn render_combined(
             OutputFormat::Json => unreachable!(),
         }
     }
-    out
+    format_markdown(&out)
+}
+
+/// Normalize Markdown via dprint. The contract for `wado doc -f markdown`
+/// and `-f simple` is that emitted output is always dprint-stable: re-running
+/// `dprint` over the output is a no-op. This lets downstream tooling avoid a
+/// post-format pass.
+fn format_markdown(content: &str) -> String {
+    let config = dprint_plugin_markdown::configuration::ConfigurationBuilder::new().build();
+    match dprint_plugin_markdown::format_text(content, &config, |_, _, _| Ok(None)) {
+        Ok(Some(formatted)) => formatted,
+        Ok(None) => content.to_string(),
+        Err(e) => panic!("wado doc: dprint failed to format generated markdown: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod format_contract_tests {
+    use super::*;
+    use wado_compiler::doc::extract_stdlib_doc;
+
+    fn assert_dprint_stable(content: &str, label: &str) {
+        let reformatted = format_markdown(content);
+        assert_eq!(
+            content, reformatted,
+            "{label}: wado doc output must be dprint-stable but re-formatting changed it",
+        );
+    }
+
+    #[test]
+    fn markdown_output_is_dprint_stable() {
+        let doc = extract_stdlib_doc("core:cli").expect("core:cli stdlib doc");
+        let out = render_single(&doc, "markdown", "core:cli", OutputFormat::Markdown);
+        assert_dprint_stable(&out, "markdown single");
+    }
+
+    #[test]
+    fn simple_output_is_dprint_stable() {
+        let doc = extract_stdlib_doc("core:cli").expect("core:cli stdlib doc");
+        let out = render_single(&doc, "simple", "core:cli", OutputFormat::Simple);
+        assert_dprint_stable(&out, "simple single");
+    }
+
+    #[test]
+    fn combined_markdown_output_is_dprint_stable() {
+        let inputs = ["core:cli".to_string(), "core:base64".to_string()];
+        let docs: Vec<(String, _)> = inputs
+            .iter()
+            .map(|i| (i.clone(), extract_stdlib_doc(i).expect("stdlib doc")))
+            .collect();
+        let opts = DocOptions {
+            inputs: inputs.to_vec(),
+            format: OutputFormat::Markdown,
+            title: Some("Test".to_string()),
+            output: None,
+        };
+        let out = render_combined(&docs, opts.title.as_deref(), "markdown", &opts);
+        assert_dprint_stable(&out, "markdown combined");
+    }
 }
 
 fn render_auto_generated_header(

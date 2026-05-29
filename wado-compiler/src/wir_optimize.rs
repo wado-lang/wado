@@ -8,7 +8,6 @@
 //! |-------------------|--------------------------------------------|
 //! | `nullable_ref`        | Null-niche variant representation           |
 //! | `sroa_variant_return` | Multi-value return SROA (variants)          |
-//! | `sroa_param`          | Single-field parameter SROA                 |
 //! | `elide_struct`        | Struct local elimination (single + multi)   |
 //! | `array`               | Push collapse / data promotion / splitting  |
 //! | `const_forward`       | Struct field constant forwarding            |
@@ -22,6 +21,15 @@
 //! were moved to TIR (`optimize::dae`, `optimize::drve`) so they can
 //! interact with `inline` / `copy_prop` / `const_fold` / `dce` inside the
 //! same fixed-point loop.
+//!
+//! Single-field parameter SROA and the adjacent-use Box-local elision
+//! used to live here as `sroa_param` and `elide_struct`'s
+//! `elide_adjacent_single_use_struct_locals`. Both moved to NIR
+//! (`optimize::sroa_param` and `optimize::elide_box_local`) so the
+//! rewritten signatures and substituted expressions feed the rest of
+//! the optimizer's fix-point loop. The WIR-side `ModRef` summary that
+//! powered the adjacent-use pass was retired with it; the NIR
+//! equivalent is `optimize::mod_ref`.
 //!
 //! Write-only-local elimination is split across both layers:
 //! `optimize::elide_local` handles TIR locals (user `let`, SROA / variant
@@ -39,7 +47,6 @@ mod elide_struct;
 mod init_guard;
 mod nullable_ref;
 mod peephole;
-mod sroa_param;
 mod sroa_variant_return;
 mod util;
 
@@ -56,13 +63,11 @@ use cleanup::cleanup;
 use const_forward::forward_struct_field_constants;
 use elide_local::elide_write_only_locals;
 use elide_struct::{
-    elide_adjacent_single_use_struct_locals, elide_multi_field_struct_locals,
-    elide_single_field_struct_locals, flatten_seq_assignments,
+    elide_multi_field_struct_locals, elide_single_field_struct_locals, flatten_seq_assignments,
 };
 use init_guard::remove_trivial_init_globals;
 use nullable_ref::optimize_nullable_refs;
 use peephole::run_peephole;
-use sroa_param::sroa_single_field_parameters;
 use sroa_variant_return::sroa_variant_returns;
 
 /// Run a single WIR optimization pass with profiling.
@@ -123,25 +128,17 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     wir_pass("wir/sroa_variant_returns", module, profiler, |m| {
         sroa_variant_returns(m);
     });
-    wir_pass("wir/sroa_single_field_parameters", module, profiler, |m| {
-        sroa_single_field_parameters(m);
-    });
     profiler.span_end("wir/phase1_type_repr");
 
     // Phase 2: Struct local elimination (round 1)
     //
-    // After parameter SROA, call sites may hold `LocalSet(x, StructNew { [inner] })`
+    // After NIR `sroa_param` strips single-field struct parameters down
+    // to scalars, call sites may hold `LocalSet(x, StructNew { [inner] })`
     // where every use of `x` is via StructGet. Substitute `inner` directly.
+    // The adjacent-use Box-local elision that used to follow this pass
+    // now runs at NIR (`optimize::elide_box_local`).
     wir_pass("wir/elide_single_field_struct", module, profiler, |m| {
         elide_single_field_struct_locals(m);
-    });
-    // Adjacent-use elision: handles the common Box<T> pattern produced by
-    // boxing+inlining where the inner field initializer reads heap state and
-    // the only use is the immediately-following sibling instruction's leftmost
-    // descendant. Conservative wrt re-evaluation safety; relies on adjacency
-    // and leftmost-evaluation rather than referential transparency.
-    wir_pass("wir/elide_adjacent_struct", module, profiler, |m| {
-        elide_adjacent_single_use_struct_locals(m);
     });
 
     // Phase 3: Data flow

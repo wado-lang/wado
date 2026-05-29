@@ -80,13 +80,8 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/forof_generic_array.wado/run"() with Stdout {
     let __b_0: ref "core:prelude//Array<i32>";
     let __iter_1: ref "core:prelude/array.wado//ArrayIter<i32>";
-    let __sroa_c_items: ref "core:prelude//Array<i32>";
-    __sroa_c_items = __seq_lit: block -> ref "core:prelude//Array<i32>" {
-        __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-        break __seq_lit: __b_0;
-        unreachable;
-    };
-    __iter_1 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: __sroa_c_items.repr, used: 3, index: 0 };
+    __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    __iter_1 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: __b_0.repr, used: 3, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___match_3_discriminant: i32;
@@ -142,17 +137,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l5: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l5;
-            };
+    i = 0;
+    b4: block {
+        l5: loop {
+            if i >= len {
+                break b4;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l5;
         };
     };
 }

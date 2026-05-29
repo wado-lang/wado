@@ -15,9 +15,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::compiler_item::{CompilerItem, CompilerItems};
+use crate::elaborator::trait_env::TraitEnv;
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
-use crate::resolver::trait_env::TraitEnv;
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,
     TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart,
@@ -919,10 +919,13 @@ fn build_formatter_expr(
                 },
                 TirStructField {
                     name: "precision".to_string(),
+                    // -2 (`Formatter::PRECISION_DEFAULT`) marks "no precision in
+                    // the spec" so sequence Inspect can fall back to its default
+                    // length cap; an explicit `.N` carries the literal N.
                     value: TirExpr::new(
                         TirExprKind::IntLiteral {
-                            value: pf.precision.unwrap_or(-1).cast_unsigned(),
-                            repr: pf.precision.unwrap_or(-1).to_string(),
+                            value: pf.precision.unwrap_or(-2).cast_unsigned(),
+                            repr: pf.precision.unwrap_or(-2).to_string(),
                         },
                         TypeTable::I32,
                         span,
@@ -1175,7 +1178,7 @@ fn trait_impl_module(
         _ => None,
     };
 
-    // Preferred path: consult the resolver's `TraitEnv`, which knows where
+    // Preferred path: consult the elaborator's `TraitEnv`, which knows where
     // every user-written `impl Trait for Type` block lives. This handles
     // cross-module impls like `impl Display for String` (defined in
     // `core:prelude/format`, not the module that declares `String`).

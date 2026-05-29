@@ -1,36 +1,19 @@
 use serde::{Deserialize, Serialize};
 use wado_compiler::{Code, Diagnostic as CompilerDiagnostic, Severity as CompilerSeverity};
 
-/// LSP-compatible diagnostic severity. Serializes as the 1..=4 integer
-/// defined by the LSP wire format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(into = "u32", try_from = "u32")]
-pub enum Severity {
-    Error = 1,
-    Warning = 2,
-    Information = 3,
-    Hint = 4,
-}
+use crate::macros::lsp_repr_u32_enum;
+use crate::text::{PositionEncoding, codepoint_offset_to_character};
 
-impl From<Severity> for u32 {
-    fn from(s: Severity) -> Self {
-        s as Self
+lsp_repr_u32_enum!(
+    /// LSP-compatible diagnostic severity. Serializes as the 1..=4 integer
+    /// defined by the LSP wire format.
+    pub enum Severity {
+        Error = 1,
+        Warning = 2,
+        Information = 3,
+        Hint = 4,
     }
-}
-
-impl TryFrom<u32> for Severity {
-    type Error = String;
-
-    fn try_from(n: u32) -> Result<Self, <Self as TryFrom<u32>>::Error> {
-        match n {
-            1 => Ok(Self::Error),
-            2 => Ok(Self::Warning),
-            3 => Ok(Self::Information),
-            4 => Ok(Self::Hint),
-            _ => Err(format!("invalid Severity: {n}")),
-        }
-    }
-}
+);
 
 /// Zero-based line/column position in a text document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,7 +44,20 @@ pub struct Diagnostic {
 ///
 /// Returns `None` for diagnostics that should not be shown to the user
 /// (span tracking, log messages, diagnostics without source location).
-pub fn from_compiler_diagnostic(diag: &CompilerDiagnostic, _uri: &str) -> Option<Diagnostic> {
+///
+/// `source` and `encoding` are used to re-express the compiler's
+/// codepoint columns in the negotiated position encoding. Pass
+/// `None` for diagnostics whose `span.file` is not the request
+/// document — the result will still be valid for ASCII source but may
+/// drift the column for non-ASCII codepoints (the spec's UTF-16
+/// default). For the request document itself the caller should always
+/// provide `Some(source)`.
+pub fn from_compiler_diagnostic(
+    diag: &CompilerDiagnostic,
+    _uri: &str,
+    source: Option<&str>,
+    encoding: PositionEncoding,
+) -> Option<Diagnostic> {
     // Skip internal span tracking and log messages
     match diag.code {
         Code::SpanStart | Code::SpanEnd | Code::Log => return None,
@@ -77,19 +73,25 @@ pub fn from_compiler_diagnostic(diag: &CompilerDiagnostic, _uri: &str) -> Option
 
     let span = diag.span.as_ref()?;
 
-    // Compiler uses 1-based line/column; LSP uses 0-based.
+    // Compiler uses 1-based line/codepoint column; LSP uses 0-based.
     let start_line = span.line.saturating_sub(1) as u32;
-    let start_char = span.column.saturating_sub(1) as u32;
-
     let end_line = span
         .end_line
         .map_or(start_line, |l| l.saturating_sub(1) as u32);
-    let end_char = span.end_column.map_or(
-        // No end_column available — highlight to end of start token.
-        // Use start_char + 1 as a minimal highlight.
-        start_char + 1,
-        |c| c.saturating_sub(1) as u32,
-    );
+    let start_codepoint = span.column.saturating_sub(1) as u32;
+    let end_codepoint = span
+        .end_column
+        .map_or(start_codepoint.saturating_add(1), |c| {
+            c.saturating_sub(1) as u32
+        });
+
+    let (start_char, end_char) = match source {
+        Some(src) => (
+            codepoint_offset_to_character(src, start_line, start_codepoint, encoding),
+            codepoint_offset_to_character(src, end_line, end_codepoint, encoding),
+        ),
+        None => (start_codepoint, end_codepoint),
+    };
 
     Some(Diagnostic {
         range: Range {
@@ -130,7 +132,13 @@ mod tests {
             }),
         };
 
-        let diag = from_compiler_diagnostic(&compiler_diag, "file:///test.wado").unwrap();
+        let diag = from_compiler_diagnostic(
+            &compiler_diag,
+            "file:///test.wado",
+            None,
+            PositionEncoding::Utf16,
+        )
+        .unwrap();
         assert_eq!(diag.severity, Severity::Error);
         assert_eq!(diag.code, "TYPE_MISMATCH");
         assert_eq!(diag.message, "expected i32, found String");
@@ -146,7 +154,15 @@ mod tests {
             message: "parse".to_string(),
             span: None,
         };
-        assert!(from_compiler_diagnostic(&compiler_diag, "file:///test.wado").is_none());
+        assert!(
+            from_compiler_diagnostic(
+                &compiler_diag,
+                "file:///test.wado",
+                None,
+                PositionEncoding::Utf16
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -157,7 +173,15 @@ mod tests {
             message: "internal error".to_string(),
             span: None,
         };
-        assert!(from_compiler_diagnostic(&compiler_diag, "file:///test.wado").is_none());
+        assert!(
+            from_compiler_diagnostic(
+                &compiler_diag,
+                "file:///test.wado",
+                None,
+                PositionEncoding::Utf16
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -174,8 +198,77 @@ mod tests {
                 end_column: None,
             }),
         };
-        let diag = from_compiler_diagnostic(&compiler_diag, "file:///test.wado").unwrap();
+        let diag = from_compiler_diagnostic(
+            &compiler_diag,
+            "file:///test.wado",
+            None,
+            PositionEncoding::Utf16,
+        )
+        .unwrap();
         assert_eq!(diag.severity, Severity::Warning);
+    }
+
+    #[test]
+    fn source_none_passes_codepoint_columns_through_verbatim() {
+        // When the caller cannot supply the right module's source
+        // (cross-file diagnostic, no on-hand text), `from_compiler_diagnostic`
+        // must NOT re-encode against the wrong text. Codepoint columns
+        // are emitted verbatim — correct under UTF-32 / ASCII, drifts
+        // under UTF-16 but the alternative (re-encoding against a
+        // different file's bytes) is worse.
+        let compiler_diag = CompilerDiagnostic {
+            severity: CompilerSeverity::Error,
+            code: Code::TypeMismatch,
+            message: "x".to_string(),
+            span: Some(DiagnosticSpan {
+                file: "imported.wado".to_string(),
+                line: 1,
+                column: 13, // codepoint col in imported.wado
+                end_line: Some(1),
+                end_column: Some(15),
+            }),
+        };
+        let diag = from_compiler_diagnostic(
+            &compiler_diag,
+            "file:///entry.wado",
+            None, // cross-file: no source on hand
+            PositionEncoding::Utf16,
+        )
+        .unwrap();
+        // Codepoint 13 (1-based) → LSP 0-based 12.
+        assert_eq!(diag.range.start.character, 12);
+        assert_eq!(diag.range.end.character, 14);
+    }
+
+    #[test]
+    fn source_some_reencodes_to_utf16_for_non_ascii() {
+        // When the diagnostic's span IS in the entry document, the
+        // caller passes `Some(source)` and we re-express the codepoint
+        // column in the requested encoding. For "// 🦀🦀" the
+        // codepoint column 4 ("after '// 🦀'") sits at UTF-16 unit 5
+        // because 🦀 is two UTF-16 units.
+        let src = "// 🦀🦀\n";
+        let compiler_diag = CompilerDiagnostic {
+            severity: CompilerSeverity::Error,
+            code: Code::TypeMismatch,
+            message: "x".to_string(),
+            span: Some(DiagnosticSpan {
+                file: "entry.wado".to_string(),
+                line: 1,
+                column: 5,
+                end_line: Some(1),
+                end_column: Some(6),
+            }),
+        };
+        let diag = from_compiler_diagnostic(
+            &compiler_diag,
+            "file:///entry.wado",
+            Some(src),
+            PositionEncoding::Utf16,
+        )
+        .unwrap();
+        // Codepoint 5 → "// 🦀" → 3 ASCII + 1 codepoint (2 utf-16 units) = 5 utf-16 units.
+        assert_eq!(diag.range.start.character, 5);
     }
 
     #[test]
@@ -195,7 +288,13 @@ mod tests {
                 end_column: Some(15),
             }),
         };
-        let diag = from_compiler_diagnostic(&compiler_diag, "file:///test.wado").unwrap();
+        let diag = from_compiler_diagnostic(
+            &compiler_diag,
+            "file:///test.wado",
+            None,
+            PositionEncoding::Utf16,
+        )
+        .unwrap();
         assert_eq!(
             diag.range,
             Range {

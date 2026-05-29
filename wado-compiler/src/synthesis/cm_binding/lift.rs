@@ -23,8 +23,8 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    LiftContext, binary_add, canonical_wasi_package, cm_flags_byte_size, is_unit_type,
-    kebab_to_pascal, module_source_for_cm_interface, wasi_type_to_type_id,
+    LiftContext, binary_add, canonical_wasi_package, cm_flags_byte_size, cm_type_to_type_id,
+    is_unit_type, kebab_to_pascal, module_source_for_cm_interface,
 };
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.
@@ -96,7 +96,7 @@ fn synthesize_lift_inner(
     // before dispatching, so the CM-lift logic sees the underlying shape
     // rather than treating an unknown name as an i32 handle. Other type
     // shapes pass through `resolve_type` unchanged.
-    let resolved = ctx.wasi_registry.resolve_type(ty);
+    let resolved = ctx.cm_interface_registry.resolve_type(ty);
     let ty = &resolved;
     // Resolve stdlib struct names through the compiler-item registry so
     // a rename of `String` / `Array` / `Option` / `Result` flows through
@@ -155,7 +155,7 @@ fn synthesize_lift_inner(
                     // generator-world bindings). Non-CM references fall through
                     // to the i32-handle default.
                     if let Some(source) = ctx
-                        .wasi_registry
+                        .cm_interface_registry
                         .resolve_cm_source_for(named, Some(ctx.cm_package))
                         .map(str::to_string)
                     {
@@ -183,7 +183,7 @@ fn synthesize_lift_inner(
                             return lifted;
                         }
                         if let Some(members) = ctx
-                            .wasi_registry
+                            .cm_interface_registry
                             .get_flags_members_by_source(source, &named.name)
                         {
                             let load_name = match cm_flags_byte_size(members.len()) {
@@ -195,7 +195,7 @@ fn synthesize_lift_inner(
                             return builtin_call(load_name, vec![addr], TypeTable::I32);
                         }
                         if let Some(variants) = ctx
-                            .wasi_registry
+                            .cm_interface_registry
                             .get_enum_variants_by_source(source, &named.name)
                         {
                             let load_name = if variants.len() <= 256 {
@@ -253,14 +253,14 @@ pub(super) fn try_lift_wasi_variant_or_enum(
 ) -> Option<TirExpr> {
     let tt = ctx.type_table.borrow();
     if let Some(cases) = ctx
-        .wasi_registry
+        .cm_interface_registry
         .get_variant_cases_by_source(source, &named.name)
     {
         let cases = cases.to_vec();
         let variant_type = tt
             .find_named_type_by_cm_package(&named.name, ctx.cm_package)
             .or_else(|| {
-                canonical_wasi_package(ctx.wasi_registry, &named.name)
+                canonical_wasi_package(ctx.cm_interface_registry, &named.name)
                     .and_then(|pkg| tt.find_named_type_by_cm_package(&named.name, pkg))
             })?;
         drop(tt);
@@ -276,14 +276,14 @@ pub(super) fn try_lift_wasi_variant_or_enum(
         ));
     }
     if let Some(case_names) = ctx
-        .wasi_registry
+        .cm_interface_registry
         .get_enum_variants_by_source(source, &named.name)
     {
         let case_names = case_names.to_vec();
         let enum_type = tt
             .find_named_type_by_cm_package(&named.name, ctx.cm_package)
             .or_else(|| {
-                canonical_wasi_package(ctx.wasi_registry, &named.name)
+                canonical_wasi_package(ctx.cm_interface_registry, &named.name)
                     .and_then(|pkg| tt.find_named_type_by_cm_package(&named.name, pkg))
             })?;
         drop(tt);
@@ -313,14 +313,14 @@ fn try_lift_wasi_struct(
     ctx: &LiftContext<'_>,
 ) -> Option<TirExpr> {
     let fields = ctx
-        .wasi_registry
+        .cm_interface_registry
         .get_struct_fields_by_source(source, &named.name)?;
     let fields = fields.to_vec();
 
     // Resolve field types through newtypes and compute the record layout
     let resolved_fields: Vec<(String, Type)> = fields
         .iter()
-        .map(|(fname, fty)| (fname.clone(), ctx.wasi_registry.resolve_type(fty)))
+        .map(|(fname, fty)| (fname.clone(), ctx.cm_interface_registry.resolve_type(fty)))
         .collect();
     let field_types: Vec<&Type> = resolved_fields.iter().map(|(_, ty)| ty).collect();
 
@@ -329,8 +329,8 @@ fn try_lift_wasi_struct(
     let mut max_align = 1u32;
     let mut offsets = Vec::with_capacity(field_types.len());
     for ft in &field_types {
-        let fa = crate::component_model::cm_align_with_registry(ft, ctx.wasi_registry);
-        let fs = crate::component_model::cm_size_with_registry(ft, ctx.wasi_registry);
+        let fa = crate::component_model::cm_align_with_registry(ft, ctx.cm_interface_registry);
+        let fs = crate::component_model::cm_size_with_registry(ft, ctx.cm_interface_registry);
         offset = cm_abi::align_to(offset, fa);
         offsets.push(offset);
         offset += fs;
@@ -351,7 +351,7 @@ fn try_lift_wasi_struct(
     // Lift each field — Wado field names come directly from this interface's
     // registration, which must exist since we just proved the struct does.
     let wado_fields: Vec<String> = ctx
-        .wasi_registry
+        .cm_interface_registry
         .get_struct_fields_with_wado_names_by_source(source, &named.name)
         .expect("struct fields_with_wado_names present when fields are")
         .iter()
@@ -441,7 +441,7 @@ fn synthesize_lift_wasi_variant(
         .map(|ty| {
             crate::component_model::cm_align_with_registry_scoped(
                 ty,
-                ctx.wasi_registry,
+                ctx.cm_interface_registry,
                 Some(ctx.cm_package),
             )
         })
@@ -612,12 +612,12 @@ fn synthesize_lift_list(
 ) -> TirExpr {
     let elem_size = crate::component_model::cm_size_with_registry_scoped(
         elem_ty,
-        ctx.wasi_registry,
+        ctx.cm_interface_registry,
         Some(ctx.cm_package),
     );
     let elem_align = crate::component_model::cm_align_with_registry_scoped(
         elem_ty,
-        ctx.wasi_registry,
+        ctx.cm_interface_registry,
         Some(ctx.cm_package),
     );
 
@@ -625,7 +625,8 @@ fn synthesize_lift_list(
     // These are needed by the monomorphizer to instantiate Array::with_capacity and .push().
     let (elem_type_id, array_type_id, array_struct_name) = {
         let mut tt = ctx.type_table.borrow_mut();
-        let elem_tid = wasi_type_to_type_id(elem_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
+        let elem_tid =
+            cm_type_to_type_id(elem_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
         let array_tid = tt.make_array(elem_tid);
         let array_name = tt
             .compiler_items()
@@ -783,7 +784,7 @@ fn synthesize_lift_option_inner(
 ) -> TirExpr {
     let layout = cm_abi::layout_option_with_registry_scoped(
         inner_ty,
-        ctx.wasi_registry,
+        ctx.cm_interface_registry,
         Some(ctx.cm_package),
     );
     let payload_offset = layout.offsets[1];
@@ -793,7 +794,7 @@ fn synthesize_lift_option_inner(
     let option_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
         let inner_type_id =
-            wasi_type_to_type_id(inner_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
+            cm_type_to_type_id(inner_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
         tt.make_option(inner_type_id)
     };
 
@@ -871,7 +872,7 @@ fn synthesize_lift_result_inner(
     let layout = cm_abi::layout_result_with_registry_scoped(
         ok_ty,
         err_ty,
-        ctx.wasi_registry,
+        ctx.cm_interface_registry,
         Some(ctx.cm_package),
     );
     let payload_offset = layout.offsets[1];
@@ -889,8 +890,10 @@ fn synthesize_lift_result_inner(
     // mutable local is typed as a GC reference (not i32).
     let (result_type_id, ok_name, ok_index, err_name, err_index) = {
         let mut tt = ctx.type_table.borrow_mut();
-        let ok_type_id = wasi_type_to_type_id(ok_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
-        let err_type_id = wasi_type_to_type_id(err_ty, &mut tt, ctx.wasi_registry, ctx.cm_package);
+        let ok_type_id =
+            cm_type_to_type_id(ok_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
+        let err_type_id =
+            cm_type_to_type_id(err_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
         let result_type_id = tt.make_result(ok_type_id, err_type_id);
         let items = tt.compiler_items();
         let (_, _, ok_n, ok_i) =
@@ -1013,7 +1016,7 @@ fn synthesize_lift_tuple(
         let mut tt = ctx.type_table.borrow_mut();
         let elem_type_ids: Vec<TypeId> = elems
             .iter()
-            .map(|t| wasi_type_to_type_id(t, &mut tt, ctx.wasi_registry, ctx.cm_package))
+            .map(|t| cm_type_to_type_id(t, &mut tt, ctx.cm_interface_registry, ctx.cm_package))
             .collect();
         tt.make_tuple(elem_type_ids)
     };

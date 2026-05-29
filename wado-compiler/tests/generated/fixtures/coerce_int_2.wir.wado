@@ -9,63 +9,53 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-struct core:prelude/int128.wado//i128 {  // TypeId(2)
-    mut low: u64,
-    mut high: i64,
-}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
-struct core:prelude/int128.wado//u128 {  // TypeId(3)
-    mut low: u64,
-    mut high: u64,
-}
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wado-compiler/tests/fixtures/coerce_int_2.wado/coerce_int_literal_bitwise_i128" = fn();  // TypeId(11)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wado-compiler/tests/fixtures/coerce_int_2.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/coerce_int_2.wado/coerce_int_literal_bitwise_i128" = fn();  // TypeId(13)
+type "functype//wado-compiler/tests/fixtures/coerce_int_2.wado/__cm_export__run" = fn();  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/coerce_int_2.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/coerce_int_2.wado/__cm_export__run" = fn();  // TypeId(15)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(15)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(16)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(16)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(17)
+type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(18)
+type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(18)
 
-type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
+type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(19)
 
-type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(20)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(20)
 
-type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(21)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(22)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(22)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(23)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(24)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(27)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -82,18 +72,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/coerce_int_2.wado/coerce_int_literal_bitwise_i128"() with Stdout {
-    let a1: ref "core:prelude/int128.wado//u128";
-    let a2: ref "core:prelude/int128.wado//u128";
-    let a3: ref "core:prelude/int128.wado//i128";
-    let a4: ref "core:prelude/int128.wado//i128";
-    let b1: ref "core:prelude/int128.wado//u128";
-    let b2: ref "core:prelude/int128.wado//u128";
-    let b3: ref "core:prelude/int128.wado//i128";
-    let b4: ref "core:prelude/int128.wado//i128";
-    let c1: ref "core:prelude/int128.wado//u128";
-    let c2: ref "core:prelude/int128.wado//u128";
-    let c3: ref "core:prelude/int128.wado//i128";
-    let c4: ref "core:prelude/int128.wado//i128";
     let cond_20: bool;
     let label_21: ref "core:prelude/string.wado//String";
     let cond_28: bool;
@@ -118,217 +96,121 @@ fn "wado-compiler/tests/fixtures/coerce_int_2.wado/coerce_int_literal_bitwise_i1
     let label_110: ref "core:prelude/string.wado//String";
     let cond_119: bool;
     let label_120: ref "core:prelude/string.wado//String";
-    a1 = __inline_u128_BitAnd__bitand_2: block -> ref "core:prelude/int128.wado//u128" {
-        break __inline_u128_BitAnd__bitand_2: struct.new "core:prelude/int128.wado//u128" { low: 65280_i64 & 255_i64, high: 0_i64 & 0_i64 };
-        unreachable;
-    };
-    cond_20 = __inline_u128_Eq__eq_5: block -> bool {
-        if a1.low == 0_i64 -> i32 {
-            a1.high == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_u128_Eq__eq_5;
-        unreachable;
-    };
+    cond_20 = (if (65280_i64 & 255_i64) == 0_i64 -> i32 {
+        (0_i64 & 0_i64) == 0_i64;
+    } else {
+        0;
+    });
     label_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("u128 & rhs"), used: 10 };
     if cond_20 == 0 {
         "core:internal/panic"(label_21);
         unreachable;
     }
-    a2 = __inline_u128_BitAnd__bitand_7: block -> ref "core:prelude/int128.wado//u128" {
-        break __inline_u128_BitAnd__bitand_7: struct.new "core:prelude/int128.wado//u128" { low: 255_i64 & 65280_i64, high: 0_i64 & 0_i64 };
-        unreachable;
-    };
-    cond_28 = __inline_u128_Eq__eq_10: block -> bool {
-        if a2.low == 0_i64 -> i32 {
-            a2.high == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_u128_Eq__eq_10;
-        unreachable;
-    };
+    cond_28 = (if (255_i64 & 65280_i64) == 0_i64 -> i32 {
+        (0_i64 & 0_i64) == 0_i64;
+    } else {
+        0;
+    });
     label_29 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs & u128"), used: 10 };
     if cond_28 == 0 {
         "core:internal/panic"(label_29);
         unreachable;
     }
-    a3 = __inline_i128_BitAnd__bitand_12: block -> ref "core:prelude/int128.wado//i128" {
-        break __inline_i128_BitAnd__bitand_12: struct.new "core:prelude/int128.wado//i128" { low: 255_i64 & 15_i64, high: 0_i64 & 0_i64 };
-        unreachable;
-    };
-    cond_37 = __inline_i128_Eq__eq_15: block -> bool {
-        if a3.low == 15_i64 -> i32 {
-            a3.high == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_i128_Eq__eq_15;
-        unreachable;
-    };
+    cond_37 = (if (255_i64 & 15_i64) == 15_i64 -> i32 {
+        (0_i64 & 0_i64) == 0_i64;
+    } else {
+        0;
+    });
     label_38 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("i128 & rhs"), used: 10 };
     if cond_37 == 0 {
         "core:internal/panic"(label_38);
         unreachable;
     }
-    a4 = __inline_i128_BitAnd__bitand_17: block -> ref "core:prelude/int128.wado//i128" {
-        break __inline_i128_BitAnd__bitand_17: struct.new "core:prelude/int128.wado//i128" { low: 15_i64 & 255_i64, high: 0_i64 & 0_i64 };
-        unreachable;
-    };
-    cond_47 = __inline_i128_Eq__eq_20: block -> bool {
-        if a4.low == 15_i64 -> i32 {
-            a4.high == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_i128_Eq__eq_20;
-        unreachable;
-    };
+    cond_47 = (if (15_i64 & 255_i64) == 15_i64 -> i32 {
+        (0_i64 & 0_i64) == 0_i64;
+    } else {
+        0;
+    });
     label_48 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs & i128"), used: 10 };
     if cond_47 == 0 {
         "core:internal/panic"(label_48);
         unreachable;
     }
-    b1 = __inline_u128_BitOr__bitor_22: block -> ref "core:prelude/int128.wado//u128" {
-        break __inline_u128_BitOr__bitor_22: struct.new "core:prelude/int128.wado//u128" { low: 65280_i64 | 255_i64, high: 0_i64 | 0_i64 };
-        unreachable;
-    };
-    cond_56 = __inline_u128_Eq__eq_25: block -> bool {
-        if b1.low == 65535_i64 -> i32 {
-            b1.high == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_u128_Eq__eq_25;
-        unreachable;
-    };
+    cond_56 = (if (65280_i64 | 255_i64) == 65535_i64 -> i32 {
+        (0_i64 | 0_i64) == 0_i64;
+    } else {
+        0;
+    });
     label_57 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("u128 | rhs"), used: 10 };
     if cond_56 == 0 {
         "core:internal/panic"(label_57);
         unreachable;
     }
-    b2 = __inline_u128_BitOr__bitor_27: block -> ref "core:prelude/int128.wado//u128" {
-        break __inline_u128_BitOr__bitor_27: struct.new "core:prelude/int128.wado//u128" { low: 255_i64 | 65280_i64, high: 0_i64 | 0_i64 };
-        unreachable;
-    };
-    cond_64 = __inline_u128_Eq__eq_30: block -> bool {
-        if b2.low == 65535_i64 -> i32 {
-            b2.high == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_u128_Eq__eq_30;
-        unreachable;
-    };
+    cond_64 = (if (255_i64 | 65280_i64) == 65535_i64 -> i32 {
+        (0_i64 | 0_i64) == 0_i64;
+    } else {
+        0;
+    });
     label_65 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs | u128"), used: 10 };
     if cond_64 == 0 {
         "core:internal/panic"(label_65);
         unreachable;
     }
-    b3 = __inline_i128_BitOr__bitor_32: block -> ref "core:prelude/int128.wado//i128" {
-        break __inline_i128_BitOr__bitor_32: struct.new "core:prelude/int128.wado//i128" { low: 255_i64 | 256_i64, high: 0_i64 | 0_i64 };
-        unreachable;
-    };
-    cond_73 = __inline_i128_Eq__eq_35: block -> bool {
-        if b3.low == 511_i64 -> i32 {
-            b3.high == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_i128_Eq__eq_35;
-        unreachable;
-    };
+    cond_73 = (if (255_i64 | 256_i64) == 511_i64 -> i32 {
+        (0_i64 | 0_i64) == 0_i64;
+    } else {
+        0;
+    });
     label_74 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("i128 | rhs"), used: 10 };
     if cond_73 == 0 {
         "core:internal/panic"(label_74);
         unreachable;
     }
-    b4 = __inline_i128_BitOr__bitor_37: block -> ref "core:prelude/int128.wado//i128" {
-        break __inline_i128_BitOr__bitor_37: struct.new "core:prelude/int128.wado//i128" { low: 256_i64 | 255_i64, high: 0_i64 | 0_i64 };
-        unreachable;
-    };
-    cond_83 = __inline_i128_Eq__eq_40: block -> bool {
-        if b4.low == 511_i64 -> i32 {
-            b4.high == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_i128_Eq__eq_40;
-        unreachable;
-    };
+    cond_83 = (if (256_i64 | 255_i64) == 511_i64 -> i32 {
+        (0_i64 | 0_i64) == 0_i64;
+    } else {
+        0;
+    });
     label_84 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs | i128"), used: 10 };
     if cond_83 == 0 {
         "core:internal/panic"(label_84);
         unreachable;
     }
-    c1 = __inline_u128_BitXor__bitxor_42: block -> ref "core:prelude/int128.wado//u128" {
-        break __inline_u128_BitXor__bitxor_42: struct.new "core:prelude/int128.wado//u128" { low: 65280_i64 ^ 65535_i64, high: 0_i64 ^ 0_i64 };
-        unreachable;
-    };
-    cond_92 = __inline_u128_Eq__eq_45: block -> bool {
-        if c1.low == 255_i64 -> i32 {
-            c1.high == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_u128_Eq__eq_45;
-        unreachable;
-    };
+    cond_92 = (if (65280_i64 ^ 65535_i64) == 255_i64 -> i32 {
+        (0_i64 ^ 0_i64) == 0_i64;
+    } else {
+        0;
+    });
     label_93 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("u128 ^ rhs"), used: 10 };
     if cond_92 == 0 {
         "core:internal/panic"(label_93);
         unreachable;
     }
-    c2 = __inline_u128_BitXor__bitxor_47: block -> ref "core:prelude/int128.wado//u128" {
-        break __inline_u128_BitXor__bitxor_47: struct.new "core:prelude/int128.wado//u128" { low: 65535_i64 ^ 65280_i64, high: 0_i64 ^ 0_i64 };
-        unreachable;
-    };
-    cond_100 = __inline_u128_Eq__eq_50: block -> bool {
-        if c2.low == 255_i64 -> i32 {
-            c2.high == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_u128_Eq__eq_50;
-        unreachable;
-    };
+    cond_100 = (if (65535_i64 ^ 65280_i64) == 255_i64 -> i32 {
+        (0_i64 ^ 0_i64) == 0_i64;
+    } else {
+        0;
+    });
     label_101 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs ^ u128"), used: 10 };
     if cond_100 == 0 {
         "core:internal/panic"(label_101);
         unreachable;
     }
-    c3 = __inline_i128_BitXor__bitxor_52: block -> ref "core:prelude/int128.wado//i128" {
-        break __inline_i128_BitXor__bitxor_52: struct.new "core:prelude/int128.wado//i128" { low: 255_i64 ^ 255_i64, high: 0_i64 ^ 0_i64 };
-        unreachable;
-    };
-    cond_109 = __inline_i128_Eq__eq_55: block -> bool {
-        if c3.low == 0_i64 -> i32 {
-            c3.high == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_i128_Eq__eq_55;
-        unreachable;
-    };
+    cond_109 = (if (255_i64 ^ 255_i64) == 0_i64 -> i32 {
+        (0_i64 ^ 0_i64) == 0_i64;
+    } else {
+        0;
+    });
     label_110 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("i128 ^ rhs"), used: 10 };
     if cond_109 == 0 {
         "core:internal/panic"(label_110);
         unreachable;
     }
-    c4 = __inline_i128_BitXor__bitxor_57: block -> ref "core:prelude/int128.wado//i128" {
-        break __inline_i128_BitXor__bitxor_57: struct.new "core:prelude/int128.wado//i128" { low: 255_i64 ^ 255_i64, high: 0_i64 ^ 0_i64 };
-        unreachable;
-    };
-    cond_119 = __inline_i128_Eq__eq_60: block -> bool {
-        if c4.low == 0_i64 -> i32 {
-            c4.high == 0_i64;
-        } else {
-            0;
-        }
-        break __inline_i128_Eq__eq_60;
-        unreachable;
-    };
+    cond_119 = (if (255_i64 ^ 255_i64) == 0_i64 -> i32 {
+        (0_i64 ^ 0_i64) == 0_i64;
+    } else {
+        0;
+    });
     label_120 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs ^ i128"), used: 10 };
     if cond_119 == 0 {
         "core:internal/panic"(label_120);
@@ -379,17 +261,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l26: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l26;
-            };
+    i = 0;
+    b25: block {
+        l26: loop {
+            if i >= len {
+                break b25;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l26;
         };
     };
 }

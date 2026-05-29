@@ -2134,7 +2134,7 @@ impl<'a> PatternLowerer<'a> {
                 ..
             } => {
                 // Closures have their own local-index namespace — the
-                // resolver builds each closure's `FunctionContext` with a
+                // elaborator builds each closure's `FunctionContext` with a
                 // fresh `next_local: 0`, so the body's `Local` / `Let`
                 // indices are independent of the outer function's.
                 // Pattern lowering must honour that: any temp it allocates

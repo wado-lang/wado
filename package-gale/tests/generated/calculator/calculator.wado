@@ -228,6 +228,96 @@ pub fn normalize_tree(s: &String) -> String {
     return out;
 }
 
+/// Find the first direct child Node of `parent` whose rule name equals
+/// `name`. Returns `None` when no such child exists.
+///
+/// Used by Stage B sub-tree drivers: many ANTLR4 descriptors print a
+/// labelled sub-tree (`@after { <ToStringTree("$r.ctx"):writeln()> }`)
+/// rather than the start rule's full tree. Gale's `parse()` always
+/// returns the full tree, so the test must navigate down to the
+/// referenced child before comparing.
+pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode> {
+    for let child of &parent.children {
+        if let Node(n) = *child {
+            if n.name == *name {
+                return Option::<CstNode>::Some(n);
+            }
+        }
+    }
+    return null;
+}
+
+/// Produce an ANTLR4-style `Token.toString()` dump of the token stream:
+///
+///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]\n  (per token)
+///
+/// Used by Stage L (token-stream equivalence) tests against the upstream
+/// `LexerExec` / etc. `[output]` blocks.
+///
+/// - `tokens` is the public-channel stream returned by the generated
+///   `tokenize(input)`. Skip-channel tokens never reach this array, so no
+///   filtering is needed here.
+/// - `input` is the original source; passed in so line/col can be
+///   computed from byte offsets (Gale's `Token` does not carry these).
+/// - `eof_kind` is the value of the generated `TK_EOF` constant; EOF
+///   tokens print as `<EOF>` text with type id `-1`.
+///
+/// Type IDs are remapped from Gale's 0-based numbering to ANTLR4's
+/// 1-based: `kind + 1` for explicit lexer rules, `-1` for EOF. Lexer-only
+/// grammars never introduce implicit literals, so the contiguous
+/// `0..num_lexer_rules` range maps directly onto ANTLR4's
+/// `1..num_lexer_rules+1`.
+///
+/// Text escaping follows `CommonToken.toString` (`vendor/antlr4/runtime/
+/// Java/src/org/antlr/v4/runtime/CommonToken.java`): only `\n`, `\r`,
+/// `\t` are escaped; backslashes and quotes pass through unchanged.
+pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
+    let chars: Array<char> = input.chars().collect();
+    let mut out = String::with_capacity(tokens.len() * 32);
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        let tok = &tokens[i];
+        let is_eof = tok.kind == eof_kind;
+        let mut text_buf = String::with_capacity(16);
+        if is_eof {
+            text_buf.push_str(&"<EOF>");
+        } else {
+            for let mut j = tok.text.start; j < tok.text.end; j += 1 {
+                let c = tok.text.chars[j];
+                match c {
+                    '\n' => text_buf.push_str(&"\\n"),
+                    '\r' => text_buf.push_str(&"\\r"),
+                    '\t' => text_buf.push_str(&"\\t"),
+                    _ => text_buf.push(c),
+                }
+            }
+        }
+        let type_id = if is_eof { -1 } else { tok.kind + 1 };
+        let line_col = line_col_at(&chars, tok.span.start);
+        let line = line_col.0;
+        let col = line_col.1;
+        let end_inclusive = tok.span.end - 1;
+        out.push_str(&`[@{i},{tok.span.start}:{end_inclusive}='{text_buf}',<{type_id}>,{line}:{col}]\n`);
+    }
+    return out;
+}
+
+/// Compute (line, column) at a 0-based char index in `chars`, with
+/// 1-based line and 0-based column to match ANTLR4's `Token` getters.
+fn line_col_at(chars: &Array<char>, pos: i32) -> [i32, i32] {
+    let mut line = 1;
+    let mut col = 0;
+    let cap = if pos < chars.len() { pos } else { chars.len() };
+    for let mut i = 0; i < cap; i += 1 {
+        if chars[i] == '\n' {
+            line += 1;
+            col = 0;
+        } else {
+            col += 1;
+        }
+    }
+    return [line, col];
+}
+
 /// Highlight override: when inside a specific rule, override the capture for a token kind.
 pub struct HighlightOverride {
     pub rule_name: String,
@@ -1493,6 +1583,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_equation(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -1761,11 +1869,11 @@ fn scan_relop(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return -1;
 }
 
-fn parse_equation(p: &mut Parser) -> Result<EquationNode, ParseError> {
+fn _parse_equation(p: &mut Parser) -> Result<EquationNode, ParseError> {
     let start = p.peek().span.start;
-    let expression = parse_expression(p)?;
-    let relop = parse_relop(p)?;
-    let expression_2 = parse_expression(p)?;
+    let expression = _parse_expression(p)?;
+    let relop = _parse_relop(p)?;
+    let expression_2 = _parse_expression(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<EquationNode, ParseError>::Ok(EquationNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1776,9 +1884,9 @@ fn parse_equation(p: &mut Parser) -> Result<EquationNode, ParseError> {
     });
 }
 
-fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
+fn _parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
-    let multiplying_expression = parse_multiplying_expression(p)?;
+    let multiplying_expression = _parse_multiplying_expression(p)?;
     let mut item_multiplying_expression_list: Array<ItemMultiplyingExpressionItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -1813,8 +1921,8 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let plus_or_minus = p.advance();
-        let multiplying_expression = parse_multiplying_expression(p)?;
+        let plus_or_minus = p.match_set([TK_PLUS, TK_MINUS])?;
+        let multiplying_expression = _parse_multiplying_expression(p)?;
         let item_multiplying_expression = ItemMultiplyingExpressionItem {
             plus_or_minus,
             multiplying_expression,
@@ -1828,9 +1936,9 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     });
 }
 
-fn parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionNode, ParseError> {
+fn _parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionNode, ParseError> {
     let start = p.peek().span.start;
-    let pow_expression = parse_pow_expression(p)?;
+    let pow_expression = _parse_pow_expression(p)?;
     let mut item_pow_expression_list: Array<ItemPowExpressionItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -1865,8 +1973,8 @@ fn parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionN
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let times_or_div = p.advance();
-        let pow_expression = parse_pow_expression(p)?;
+        let times_or_div = p.match_set([TK_TIMES, TK_DIV])?;
+        let pow_expression = _parse_pow_expression(p)?;
         let item_pow_expression = ItemPowExpressionItem {
             times_or_div,
             pow_expression,
@@ -1880,9 +1988,9 @@ fn parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionN
     });
 }
 
-fn parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError> {
+fn _parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError> {
     let start = p.peek().span.start;
-    let signed_atom = parse_signed_atom(p)?;
+    let signed_atom = _parse_signed_atom(p)?;
     let mut pow_signed_atom_list: Array<PowSignedAtomItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -1904,7 +2012,7 @@ fn parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError>
         }
         if rep_scan_pos < 0 { break; }
         let pow = p.expect(TK_POW)?;
-        let signed_atom = parse_signed_atom(p)?;
+        let signed_atom = _parse_signed_atom(p)?;
         let pow_signed_atom = PowSignedAtomItem {
             pow,
             signed_atom,
@@ -1918,12 +2026,12 @@ fn parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError>
     });
 }
 
-fn parse_signed_atom(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
+fn _parse_signed_atom(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_PLUS {
         let plus = p.expect(TK_PLUS)?;
-        let signed_atom = parse_signed_atom(p)?;
+        let signed_atom = _parse_signed_atom(p)?;
         return Result::<SignedAtomNode, ParseError>::Ok(SignedAtomNode::Alt0(SignedAtomAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             plus,
@@ -1932,7 +2040,7 @@ fn parse_signed_atom(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
     }
     if kind == TK_MINUS {
         let minus = p.expect(TK_MINUS)?;
-        let signed_atom = parse_signed_atom(p)?;
+        let signed_atom = _parse_signed_atom(p)?;
         return Result::<SignedAtomNode, ParseError>::Ok(SignedAtomNode::Alt1(SignedAtomAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             minus,
@@ -1940,14 +2048,14 @@ fn parse_signed_atom(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
         }));
     }
     if _gale_kind_set_2(kind) {
-        let func_ = parse_func_(p)?;
+        let func_ = _parse_func_(p)?;
         return Result::<SignedAtomNode, ParseError>::Ok(SignedAtomNode::Alt2(SignedAtomAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             func_,
         }));
     }
     if _gale_kind_set_3(kind) {
-        let atom = parse_atom(p)?;
+        let atom = _parse_atom(p)?;
         return Result::<SignedAtomNode, ParseError>::Ok(SignedAtomNode::Alt3(SignedAtomAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             atom,
@@ -1960,25 +2068,25 @@ fn parse_signed_atom(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
     ));
 }
 
-fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
+fn _parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_SCIENTIFIC_NUMBER {
-        let scientific = parse_scientific(p)?;
+        let scientific = _parse_scientific(p)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt0(AtomAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             scientific,
         }));
     }
     if kind == TK_VARIABLE {
-        let variable = parse_variable(p)?;
+        let variable = _parse_variable(p)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt1(AtomAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             variable,
         }));
     }
     if _gale_kind_set_4(kind) {
-        let constant = parse_constant(p)?;
+        let constant = _parse_constant(p)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt2(AtomAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             constant,
@@ -1986,7 +2094,7 @@ fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
     }
     if kind == TK_LPAREN {
         let lparen = p.expect(TK_LPAREN)?;
-        let expression = parse_expression(p)?;
+        let expression = _parse_expression(p)?;
         let rparen = p.expect(TK_RPAREN)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt3(AtomAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -2002,7 +2110,7 @@ fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
     ));
 }
 
-fn parse_scientific(p: &mut Parser) -> Result<ScientificNode, ParseError> {
+fn _parse_scientific(p: &mut Parser) -> Result<ScientificNode, ParseError> {
     let start = p.peek().span.start;
     let scientific_number = p.expect(TK_SCIENTIFIC_NUMBER)?;
     return Result::<ScientificNode, ParseError>::Ok(ScientificNode {
@@ -2011,7 +2119,7 @@ fn parse_scientific(p: &mut Parser) -> Result<ScientificNode, ParseError> {
     });
 }
 
-fn parse_constant(p: &mut Parser) -> Result<ConstantNode, ParseError> {
+fn _parse_constant(p: &mut Parser) -> Result<ConstantNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_PI {
@@ -2042,7 +2150,7 @@ fn parse_constant(p: &mut Parser) -> Result<ConstantNode, ParseError> {
     ));
 }
 
-fn parse_variable(p: &mut Parser) -> Result<VariableNode, ParseError> {
+fn _parse_variable(p: &mut Parser) -> Result<VariableNode, ParseError> {
     let start = p.peek().span.start;
     let variable = p.expect(TK_VARIABLE)?;
     return Result::<VariableNode, ParseError>::Ok(VariableNode {
@@ -2051,11 +2159,11 @@ fn parse_variable(p: &mut Parser) -> Result<VariableNode, ParseError> {
     });
 }
 
-fn parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
+fn _parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
     let start = p.peek().span.start;
-    let funcname = parse_funcname(p)?;
+    let funcname = _parse_funcname(p)?;
     let lparen = p.expect(TK_LPAREN)?;
-    let expression = parse_expression(p)?;
+    let expression = _parse_expression(p)?;
     let mut comma_expression_list: Array<CommaExpressionItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -2077,7 +2185,7 @@ fn parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
-        let expression = parse_expression(p)?;
+        let expression = _parse_expression(p)?;
         let comma_expression = CommaExpressionItem {
             comma,
             expression,
@@ -2095,7 +2203,7 @@ fn parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
     });
 }
 
-fn parse_funcname(p: &mut Parser) -> Result<FuncnameNode, ParseError> {
+fn _parse_funcname(p: &mut Parser) -> Result<FuncnameNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_COS {
@@ -2168,7 +2276,7 @@ fn parse_funcname(p: &mut Parser) -> Result<FuncnameNode, ParseError> {
     ));
 }
 
-fn parse_relop(p: &mut Parser) -> Result<RelopNode, ParseError> {
+fn _parse_relop(p: &mut Parser) -> Result<RelopNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_EQ {
@@ -2199,10 +2307,80 @@ fn parse_relop(p: &mut Parser) -> Result<RelopNode, ParseError> {
     ));
 }
 
-pub fn parse(input: &String) -> Result<EquationNode, ParseError> {
+pub fn parse_equation(input: &String) -> Result<EquationNode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_equation(&mut parser);
+    return _parse_equation(&mut parser);
+}
+
+pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_expression(&mut parser);
+}
+
+pub fn parse_multiplying_expression(input: &String) -> Result<MultiplyingExpressionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_multiplying_expression(&mut parser);
+}
+
+pub fn parse_pow_expression(input: &String) -> Result<PowExpressionNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_pow_expression(&mut parser);
+}
+
+pub fn parse_signed_atom(input: &String) -> Result<SignedAtomNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_signed_atom(&mut parser);
+}
+
+pub fn parse_atom(input: &String) -> Result<AtomNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_atom(&mut parser);
+}
+
+pub fn parse_scientific(input: &String) -> Result<ScientificNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_scientific(&mut parser);
+}
+
+pub fn parse_constant(input: &String) -> Result<ConstantNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_constant(&mut parser);
+}
+
+pub fn parse_variable(input: &String) -> Result<VariableNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_variable(&mut parser);
+}
+
+pub fn parse_func_(input: &String) -> Result<FuncNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_func_(&mut parser);
+}
+
+pub fn parse_funcname(input: &String) -> Result<FuncnameNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_funcname(&mut parser);
+}
+
+pub fn parse_relop(input: &String) -> Result<RelopNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_relop(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<EquationNode, ParseError> {
+    return parse_equation(input);
 }
 
 pub fn walk_equation<V: Visitor>(v: &mut V, node: &EquationNode) {

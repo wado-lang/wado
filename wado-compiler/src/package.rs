@@ -5,10 +5,10 @@
 //! produces a [`crate::flat_package::FlatPackage`] for WIR building and codegen.
 
 use crate::builtin_registry::BuiltinRegistry;
-use crate::component_model::WasiRegistry;
+use crate::component_model::CmInterfaceRegistry;
+use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::resolver::trait_env::TraitEnv;
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
 use crate::world_registry::{self, WorldRegistry};
@@ -29,7 +29,7 @@ pub struct Package {
     pub symbols: SymbolTable,
     /// Project-wide trait knowledge built once during the resolve phase.
     /// Synthesis, monomorphize, and friends consult this instead of
-    /// re-scanning all modules. Held by `Arc` because the resolver also
+    /// re-scanning all modules. Held by `Arc` because the elaborator also
     /// keeps a reference (LSP queries reuse the same indices).
     pub(crate) trait_env: Arc<TraitEnv>,
     /// Implicitly imported modules (e.g., core:prelude)
@@ -38,7 +38,7 @@ pub struct Package {
     pub module_name: String,
 
     /// Registry of WASI imports from lib/wasi/*.wado
-    pub wasi_registry: &'static WasiRegistry,
+    pub cm_interface_registry: &'static CmInterfaceRegistry,
     /// Registry of world definitions from lib/wasi/*.wado
     pub world_registry: &'static WorldRegistry,
     /// Registry of builtin function signatures from lib/core/builtin.wado
@@ -53,6 +53,11 @@ pub struct Package {
     pub skip_validation: bool,
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")
     pub target_world: String,
+    /// `--test-name` substring filters (test world only). When non-empty, only
+    /// `test "name"` blocks whose name contains one of these strings are kept
+    /// as component exports; the rest are dropped before adapter synthesis so
+    /// early DCE removes their bodies. Empty means "every test".
+    pub test_name_filters: Vec<String>,
 
     /// Maps world export name → adapter function name.
     /// Populated by `synthesis::cm_binding` when export adapters are synthesized.
@@ -69,7 +74,7 @@ pub struct Package {
     /// Keyed by canonical namespace string (matches `namespace` in
     /// `#[canonical("wasm:<path>", "<export>")]` attributes). Consumed by
     /// the codegen `embed_imported_wasm_modules` pass and (in a follow-up)
-    /// by the resolver, which synthesises Wado declarations from each
+    /// by the elaborator, which synthesises Wado declarations from each
     /// asset's exports.
     pub wasm_assets: IndexMap<String, crate::loader::WasmAsset>,
 
@@ -85,13 +90,30 @@ pub struct Package {
         crate::synthesis::effect_dispatch::DispatchPlan,
     >,
 
-    /// `ModuleSource` interner shared with the resolver. Synthesis
+    /// `ModuleSource` interner shared with the elaborator. Synthesis
     /// passes (`cm_binding`, `effect_dispatch`) borrow this when they
     /// need to construct fresh `ModuleSource` values for synthesised
     /// items. Dropped at the `Package → FlatPackage` boundary —
     /// downstream phases (link, monomorphize, lower, optimize, codegen)
     /// only consume existing `ModuleSource` values.
     pub interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
+}
+
+/// Decide whether a `test "name"` block is selected by the active
+/// `--test-name` filters.
+///
+/// Matching follows `cargo test`: case-sensitive substring against the
+/// original (lossless) test name. Empty `filters` selects every test.
+/// Multiple filters combine with OR. Unnamed tests (`test { … }`) carry no
+/// name to match, so they are dropped whenever any filter is active.
+pub fn test_selected(original_name: Option<&str>, filters: &[String]) -> bool {
+    if filters.is_empty() {
+        return true;
+    }
+    match original_name {
+        Some(name) => filters.iter().any(|f| name.contains(f.as_str())),
+        None => false,
+    }
 }
 
 impl Package {
@@ -104,7 +126,7 @@ impl Package {
         trait_env: Arc<TraitEnv>,
         implicit_modules: IndexSet<ModuleSource>,
         module_name: String,
-        wasi_registry: &'static WasiRegistry,
+        cm_interface_registry: &'static CmInterfaceRegistry,
         world_registry: &'static WorldRegistry,
         builtin_registry: BuiltinRegistry,
         interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
@@ -116,7 +138,7 @@ impl Package {
             trait_env,
             implicit_modules,
             module_name,
-            wasi_registry,
+            cm_interface_registry,
             world_registry,
             builtin_registry,
             interner,
@@ -126,6 +148,7 @@ impl Package {
             strip_names: false,
             skip_validation: false,
             target_world: "wasi:cli/command".to_string(),
+            test_name_filters: Vec::new(),
             // CM export adapter mapping
             export_binding_names: IndexMap::default(),
             task_return_flat_params: None,
@@ -158,5 +181,46 @@ impl Package {
         self.used_wasi_functions
             .iter()
             .any(|f| f.starts_with(&prefix))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_selected;
+
+    #[test]
+    fn empty_filters_select_everything() {
+        assert!(test_selected(Some("anything"), &[]));
+        assert!(test_selected(None, &[]));
+    }
+
+    #[test]
+    fn substring_match_is_case_sensitive() {
+        let filters = vec!["alpha".to_string()];
+        assert!(test_selected(Some("alpha addition"), &filters));
+        assert!(test_selected(Some("the alpha test"), &filters));
+        assert!(!test_selected(Some("beta"), &filters));
+        // Case-sensitive, like `cargo test`.
+        assert!(!test_selected(Some("ALPHA"), &filters));
+    }
+
+    #[test]
+    fn multiple_filters_are_or() {
+        let filters = vec!["beta".to_string(), "gamma".to_string()];
+        assert!(test_selected(Some("beta one"), &filters));
+        assert!(test_selected(Some("gamma two"), &filters));
+        assert!(!test_selected(Some("alpha"), &filters));
+    }
+
+    #[test]
+    fn unnamed_tests_are_dropped_when_a_filter_is_active() {
+        assert!(!test_selected(None, &["x".to_string()]));
+    }
+
+    #[test]
+    fn matches_multibyte_names() {
+        let filters = vec!["日本語".to_string()];
+        assert!(test_selected(Some("日本語 ok"), &filters));
+        assert!(!test_selected(Some("english only"), &filters));
     }
 }

@@ -1,0 +1,75 @@
+// Regression: `tir/copy_prop` at -O3 drops the side effect of a `&mut self`
+// method call whose argument is an `Array<T>` literal built via
+// `SequenceLiteralBuilder` and whose `Result<T, E>` return value is consumed
+// via the `?` operator.
+//
+// Surface symptom in package-gale: `p.match_set([TK_A, TK_B])?` does not
+// advance `Parser::pos`, so the next `p.expect(...)` sees the token the set
+// element should have consumed (`ParserErrors/SingleTokenDeletionExpectingSet`,
+// `ParserErrors/SingleTokenDeletionBeforeAlt`).
+//
+// Minimal trigger (verified at each -Ox level):
+//   * -O0 / -O1 / -O2 / -Os: pass — `pos` is advanced as expected.
+//   * -O3: fails — `pos` stays 0 after the call.
+//
+// The trigger requires the matched arm of the `for let x of included` loop
+// to carry a **nested** early-return (`if cond { return Ok(snapshot); }`)
+// in addition to the outer `return Ok(self.advance())`. Collapsing the
+// nested return path makes the bug disappear at -O3.
+
+struct Token {
+    kind: i32,
+}
+
+struct Err {
+    msg: String,
+}
+
+struct State {
+    tokens: Array<Token>,
+    pos: i32,
+}
+
+impl State {
+    fn advance(&mut self) -> Token {
+        let tok = self.tokens[self.pos];
+        self.pos += 1;
+        return tok;
+    }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, Err> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == 0 {
+                    // Nested early-return path. Without it, -O3 does not
+                    // mis-eliminate the outer `advance()` call below.
+                    return Result::<Token, Err>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, Err>::Ok(self.advance());
+            }
+        }
+        return Result::<Token, Err>::Err(Err { msg: "no match" });
+    }
+}
+
+fn drive(s: &mut State) -> Result<Token, Err> {
+    let bound = s.match_set([1, 2])?;
+    return Result::<Token, Err>::Ok(bound);
+}
+
+export fn run() {
+    let tokens: Array<Token> = [Token { kind: 2 }, Token { kind: 9 }];
+    let mut s = State { tokens, pos: 0 };
+    let r = drive(&mut s);
+    if let Err(e) = &r {
+        panic(`expected Ok, got Err({e.msg})`);
+    }
+    assert s.pos == 1, `expected pos==1 after match_set, got pos={s.pos}`;
+    assert r.unwrap().kind == 2;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

@@ -1,20 +1,19 @@
-//! Find-references, powered by `wado_compiler::annotate`.
+//! Find-references, powered by `wado_compiler::semantics`.
 //!
 //! Resolution flow mirrors `definition.rs`:
-//! 1. Run `annotate` to produce a fully-resolved snapshot.
+//! 1. Run `semantics` to produce a fully-resolved snapshot.
 //! 2. Resolve the cursor to a defining [`SymbolKey`].
-//! 3. Walk `Annotated::iter_references` and collect every use-site whose
+//! 3. Walk `Semantics::iter_references` and collect every use-site whose
 //!    target equals the def key.
 //! 4. Translate each use-site into a [`ReferenceLocation`].
 //! 5. Optionally prepend the defining occurrence itself.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::CompilerHost;
-use wado_compiler::annotate::{Annotated, annotate_with_invocations};
 use wado_compiler::symbol::SymbolKey;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, span_to_range, symbol_uri, uri_to_filename};
+use crate::location::{module_uri, span_to_range, symbol_uri};
+use crate::query::QueryContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReferenceLocation {
@@ -22,30 +21,18 @@ pub struct ReferenceLocation {
     pub range: Range,
 }
 
-/// Find every reference to the symbol named at `position` in `source`.
+/// Find every reference to the symbol named at `position` in `ctx.source`.
 ///
 /// When `include_declaration` is true, the defining occurrence (the
 /// identifier at the symbol's declaration site) is included in the result.
 /// The result is deduplicated and sorted by `(uri, range.start)`.
-pub async fn find_references<H: CompilerHost>(
-    source: &str,
+#[must_use]
+pub(crate) fn find_references(
+    ctx: &QueryContext,
     position: Position,
-    uri: &str,
     include_declaration: bool,
-    host: &H,
 ) -> Vec<ReferenceLocation> {
-    let filename = uri_to_filename(uri);
-    let invocations = crate::kiln::prepare_invocations(&filename, source, host);
-    let Ok(annotated) = annotate_with_invocations(source, host, Some(&filename), invocations).await
-    else {
-        return Vec::new();
-    };
-
-    let module = annotated.entry_module_source.clone();
-    let line = position.line as usize + 1;
-    let col = position.character as usize + 1;
-
-    let Some(cursor) = annotated.cursor_at(&module, line, col) else {
+    let Some(cursor) = ctx.cursor_at(position) else {
         return Vec::new();
     };
     let Some(def_key) = cursor.def_key() else {
@@ -53,11 +40,11 @@ pub async fn find_references<H: CompilerHost>(
     };
 
     let mut out = Vec::new();
-    if include_declaration && let Some(loc) = declaration_location(&annotated, &def_key, uri) {
+    if include_declaration && let Some(loc) = declaration_location(ctx, &def_key) {
         out.push(loc);
     }
     for use_key in cursor.references_to_def() {
-        if let Some(loc) = use_site_location(&annotated, &use_key, uri) {
+        if let Some(loc) = use_site_location(ctx, &use_key) {
             out.push(loc);
         }
     }
@@ -73,62 +60,35 @@ pub async fn find_references<H: CompilerHost>(
 }
 
 pub(crate) fn declaration_location(
-    annotated: &Annotated,
+    ctx: &QueryContext,
     def_key: &SymbolKey,
-    request_uri: &str,
 ) -> Option<ReferenceLocation> {
-    let symbol = annotated.symbol_at(def_key)?;
-    let span = annotated.name_span_of(def_key).or(symbol.span)?;
-    let uri = symbol_uri(annotated, symbol, request_uri)?;
+    let symbol = ctx.sem.symbol_at(def_key)?;
+    let span = ctx.sem.name_span_of(def_key).or(symbol.span)?;
+    let uri = symbol_uri(ctx.entry(), symbol, ctx.uri)?;
     Some(ReferenceLocation {
         uri,
-        range: span_to_range(&span),
+        range: span_to_range(&span, ctx.source_for_key(def_key), ctx.encoding),
     })
 }
 
 pub(crate) fn use_site_location(
-    annotated: &Annotated,
+    ctx: &QueryContext,
     use_key: &SymbolKey,
-    request_uri: &str,
 ) -> Option<ReferenceLocation> {
-    let span = annotated.span_of_key(use_key)?;
-    let uri = module_uri(annotated, &use_key.module, request_uri)?;
+    let span = ctx.sem.span_of_key(use_key)?;
+    let uri = module_uri(ctx.entry(), &use_key.module, ctx.uri)?;
     Some(ReferenceLocation {
         uri,
-        range: span_to_range(&span),
+        range: span_to_range(&span, ctx.source_for_key(use_key), ctx.encoding),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use indexmap::IndexMap;
-    use wado_compiler::{Diagnostic as CompilerDiagnostic, SourceError};
-
-    struct TestHost {
-        sources: IndexMap<String, Vec<u8>>,
-    }
-
-    impl TestHost {
-        fn single(path: &str, source: &str) -> Self {
-            let mut sources = IndexMap::new();
-            sources.insert(path.to_string(), source.as_bytes().to_vec());
-            Self { sources }
-        }
-    }
-
-    impl CompilerHost for TestHost {
-        async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-            self.sources
-                .get(path)
-                .cloned()
-                .ok_or_else(|| SourceError::NotFound {
-                    path: path.to_string(),
-                })
-        }
-
-        fn emit_diagnostic(&self, _diagnostic: CompilerDiagnostic) {}
-    }
+    use crate::test_support::MapHost;
+    use crate::text::PositionEncoding;
 
     async fn refs_at(
         source: &str,
@@ -138,15 +98,15 @@ mod tests {
     ) -> Vec<ReferenceLocation> {
         let path = "/test.wado";
         let uri = format!("file://{path}");
-        let host = TestHost::single(path, source);
-        find_references(
+        let host = MapHost::single(path, source);
+        let sem = wado_compiler::semantics(source, &host, Some(path)).await;
+        let ctx = QueryContext {
+            sem: &sem,
             source,
-            Position { line, character },
-            &uri,
-            include_declaration,
-            &host,
-        )
-        .await
+            uri: &uri,
+            encoding: PositionEncoding::Utf16,
+        };
+        find_references(&ctx, Position { line, character }, include_declaration)
     }
 
     fn ranges(refs: &[ReferenceLocation]) -> Vec<(u32, u32, u32, u32)> {

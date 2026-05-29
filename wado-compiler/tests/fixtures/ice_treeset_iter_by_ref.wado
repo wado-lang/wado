@@ -5,20 +5,20 @@
 //
 // The same shape on `&TreeMap<K, V>` panicked too — even though
 // `TreeMap` does not implement `IntoIterator` at all — because the
-// resolver fell through to the wrong impl match described below.
+// elaborator fell through to the wrong impl match described below.
 // `&TreeMap<K, V>` now correctly reports
 // `no method 'into_iter' found on type 'TreeMap<...>'`. Adding an
 // actual `IntoIterator` impl for `TreeMap` is a separate, additive
 // feature and out of scope for this regression.
 //
 // Root cause was in trait-method lookup for reference-typed receivers
-// (`resolver/method_lookup.rs::find_trait_method_for_type`). When the
+// (`elaborator/method_lookup.rs::find_trait_method_for_type`). When the
 // receiver was `&Foo<T>`, the impl-name match treated all
 // `impl ... for &X<...>` impls as "name = `&`" because
 // `get_type_name(Type::Reference)` collapses to the literal `"&"`.
 // Without an additional inner-type check, `impl<T> IntoIterator for
 // &Array<T>` matched any `&AnyContainer<T>` receiver, and the
-// resolver committed to whichever ref impl appeared first in the
+// elaborator committed to whichever ref impl appeared first in the
 // scan. The mis-matched impl then walked the receiver as
 // `&Array<String>` (`arr.repr` / `arr.used`), which lowered to a
 // non-null Wasm GC reference where the destination expected a
@@ -41,7 +41,7 @@ use { TreeSet } from "core:collections";
 
 export fn run() {
     // String element type — the original repro that surfaced the
-    // ICE. Iterates by reference so the resolver hits the ref-impl
+    // ICE. Iterates by reference so the elaborator hits the ref-impl
     // branch.
     let mut set_str = TreeSet::<String>::new();
     set_str.insert("a");

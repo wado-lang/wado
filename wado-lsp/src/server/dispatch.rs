@@ -8,13 +8,14 @@ use serde_json::Value;
 use crate::Engine;
 use crate::server::rpc::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-    InitializeResult, JsonRpcRequest, PublishDiagnosticsParams, ReferenceParams, SemanticTokens,
-    SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams, ServerCapabilities,
-    ServerInfo, TextDocumentContentOptions, TextDocumentContentParams, TextDocumentContentResult,
-    TextDocumentPositionParams, TextDocumentSyncOptions, WorkspaceServerCapabilities, error_codes,
-    text_document_sync_kind,
+    InitializeParams, InitializeResult, InlayHintParams, JsonRpcRequest, PublishDiagnosticsParams,
+    ReferenceParams, SemanticTokens, SemanticTokensLegend, SemanticTokensOptions,
+    SemanticTokensParams, ServerCapabilities, ServerInfo, TextDocumentContentOptions,
+    TextDocumentContentParams, TextDocumentContentResult, TextDocumentPositionParams,
+    TextDocumentSyncOptions, WorkspaceServerCapabilities, error_codes, text_document_sync_kind,
 };
 use crate::server::transport;
+use crate::text::PositionEncoding;
 
 const STDLIB_SCHEMES: &[&str] = &["core", "wasi"];
 
@@ -82,8 +83,18 @@ pub async fn dispatch<W: Write>(
                     )?;
                     return Ok(());
                 }
+                let parsed: InitializeParams = serde_json::from_value(params).unwrap_or_default();
+                let client_encodings = parsed
+                    .capabilities
+                    .general
+                    .as_ref()
+                    .and_then(|g| g.position_encodings.clone())
+                    .unwrap_or_default();
+                let encoding = PositionEncoding::negotiate(&client_encodings);
+                engine.set_position_encoding(encoding);
                 let result = InitializeResult {
                     capabilities: ServerCapabilities {
+                        position_encoding: Some(encoding.as_wire()),
                         text_document_sync: Some(TextDocumentSyncOptions {
                             open_close: true,
                             change: text_document_sync_kind::FULL,
@@ -99,6 +110,7 @@ pub async fn dispatch<W: Write>(
                             },
                             full: true,
                         }),
+                        inlay_hint_provider: Some(true),
                         workspace: Some(WorkspaceServerCapabilities {
                             text_document_content: Some(TextDocumentContentOptions {
                                 schemes: STDLIB_SCHEMES,
@@ -140,77 +152,66 @@ pub async fn dispatch<W: Write>(
             }
         }
         "textDocument/definition" => {
-            if let Some(id) = id {
-                let Some(p) = transport::decode_or_error::<TextDocumentPositionParams, _>(
-                    writer, id, params,
-                )?
-                else {
-                    return Ok(());
-                };
+            let engine = &*engine;
+            transport::typed_request(writer, id, params, async |p: TextDocumentPositionParams| {
                 let host = transport::host_for_uri(&p.text_document.uri);
-                let result = engine
+                engine
                     .definition(&p.text_document.uri, p.position, &host)
-                    .await;
-                transport::send_response(writer, id, result)?;
-            }
+                    .await
+            })
+            .await?;
         }
         "textDocument/hover" => {
-            if let Some(id) = id {
-                let Some(p) = transport::decode_or_error::<TextDocumentPositionParams, _>(
-                    writer, id, params,
-                )?
-                else {
-                    return Ok(());
-                };
+            let engine = &*engine;
+            transport::typed_request(writer, id, params, async |p: TextDocumentPositionParams| {
                 let host = transport::host_for_uri(&p.text_document.uri);
-                let result = engine.hover(&p.text_document.uri, p.position, &host).await;
-                transport::send_response(writer, id, result)?;
-            }
+                engine.hover(&p.text_document.uri, p.position, &host).await
+            })
+            .await?;
         }
         "textDocument/references" => {
-            if let Some(id) = id {
-                let Some(p) = transport::decode_or_error::<ReferenceParams, _>(writer, id, params)?
-                else {
-                    return Ok(());
-                };
+            let engine = &*engine;
+            transport::typed_request(writer, id, params, async |p: ReferenceParams| {
                 let host = transport::host_for_uri(&p.text_document.uri);
-                let refs = engine
+                engine
                     .references(
                         &p.text_document.uri,
                         p.position,
                         p.context.include_declaration,
                         &host,
                     )
-                    .await;
-                transport::send_response(writer, id, refs)?;
-            }
+                    .await
+            })
+            .await?;
         }
         "textDocument/documentHighlight" => {
-            if let Some(id) = id {
-                let Some(p) = transport::decode_or_error::<TextDocumentPositionParams, _>(
-                    writer, id, params,
-                )?
-                else {
-                    return Ok(());
-                };
+            let engine = &*engine;
+            transport::typed_request(writer, id, params, async |p: TextDocumentPositionParams| {
                 let host = transport::host_for_uri(&p.text_document.uri);
-                let highlights = engine
+                engine
                     .document_highlight(&p.text_document.uri, p.position, &host)
-                    .await;
-                transport::send_response(writer, id, highlights)?;
-            }
+                    .await
+            })
+            .await?;
         }
         "textDocument/semanticTokens/full" => {
-            if let Some(id) = id {
-                let Some(p) =
-                    transport::decode_or_error::<SemanticTokensParams, _>(writer, id, params)?
-                else {
-                    return Ok(());
-                };
-                let data = engine.semantic_tokens(&p.text_document.uri);
-                let result = SemanticTokens { data };
-                transport::send_response(writer, id, result)?;
-            }
+            let engine = &*engine;
+            transport::typed_request(writer, id, params, async |p: SemanticTokensParams| {
+                SemanticTokens {
+                    data: engine.semantic_tokens(&p.text_document.uri),
+                }
+            })
+            .await?;
+        }
+        "textDocument/inlayHint" => {
+            let engine = &*engine;
+            transport::typed_request(writer, id, params, async |p: InlayHintParams| {
+                let host = transport::host_for_uri(&p.text_document.uri);
+                engine
+                    .inlay_hints(&p.text_document.uri, p.range, &host)
+                    .await
+            })
+            .await?;
         }
         "workspace/textDocumentContent" => {
             if let Some(id) = id {

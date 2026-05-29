@@ -1,0 +1,25 @@
+#![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado")]
+// Do not edit by hand — re-run the generator to regenerate.
+//
+// Source descriptor: Sets/UnicodeUnescapedBMPSet (ANTLR4 runtime-testsuite).
+// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).
+//
+// Stage A claim (b): the generated parser must accept the descriptor's
+// [input] without returning an error. No parse-tree shape comparison.
+
+use t from "../../grammars/Sets/UnicodeUnescapedBMPSet.g4"
+    with {
+        generator: {
+            module: "../../../../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/antlr4_compat_a/Sets/UnicodeUnescapedBMPSet",
+        },
+    };
+
+test "stage_a_parse: Sets/UnicodeUnescapedBMPSet" {
+    let input = "aäあ亜c";
+    let result = t::parse(&input);
+    if let Err(err) = &result {
+        panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);
+    }
+}

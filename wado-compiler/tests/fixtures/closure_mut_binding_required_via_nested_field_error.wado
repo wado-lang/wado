@@ -1,0 +1,27 @@
+// Nested field access: the *root* binding must be `mut`, even when the
+// `fn mut` field lives several levels deep. See issue #1098.
+
+struct Inner {
+    f: fn mut() -> (),
+}
+
+struct Mid {
+    inner: Inner,
+}
+
+struct Outer {
+    mid: Mid,
+}
+
+test "fn mut via nested field access requires mut root binding" {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    let o = Outer { mid: Mid { inner: Inner { f: inc } } };
+    // Root binding `o` is immutable; the call must be rejected.
+    (o.mid.inner.f)();
+}
+
+__DATA__
+{"test": {}, "compile_error": "mut"}

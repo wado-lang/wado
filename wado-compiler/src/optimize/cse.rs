@@ -1,4 +1,4 @@
-//! Common Subexpression Elimination (CSE) for Wado TIR
+//! Common Subexpression Elimination (CSE) for Wado NIR
 //!
 //! Eliminates duplicate pure expressions within loop bodies. When the same
 //! pure binary expression appears multiple times within a single loop iteration
@@ -106,7 +106,7 @@ enum CseKey {
     },
 }
 
-/// Try to build a `CseKey` from a TIR expression (only for pure expressions).
+/// Try to build a `CseKey` from a NIR expression (only for pure expressions).
 fn expr_to_key(expr: &NirExpr) -> Option<CseKey> {
     match &expr.kind {
         NirExprKind::Binary { left, op, right } => {
@@ -423,7 +423,7 @@ fn expr_contains(expr: &NirExpr, key: &CseKey) -> bool {
     }
 }
 
-/// Extract (clone) the first matching expression from a TIR expression tree.
+/// Extract (clone) the first matching expression from a NIR expression tree.
 fn extract_matching_expr(expr: &NirExpr, key: &CseKey) -> Option<NirExpr> {
     if expr_to_key(expr).as_ref() == Some(key) {
         return Some(expr.clone());

@@ -454,10 +454,10 @@ impl TirMutVisitor for TypeRewriter<'_> {
 
         // Rewrite explicit `type_args` on `Call`/`MethodCall` so post-monomorphisation
         // `InstantiationKey`s built from them use the canonical (substituted)
-        // `Struct` form rather than the resolver-assigned `GenericInstance`
+        // `Struct` form rather than the elaborator-assigned `GenericInstance`
         // form. Without this, two queue paths for the same logical
         // instantiation — one driven by call-site `type_args` (left as
-        // `GenericInstance` by the resolver) and another driven by
+        // `GenericInstance` by the elaborator) and another driven by
         // receiver/struct_key paths (already rewritten to `Struct`) —
         // would hash distinct yet mangle identically, producing two
         // `TirFunction`s sharing one `function_id_for`.

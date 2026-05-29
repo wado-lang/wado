@@ -11,7 +11,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::cm_abi;
-use crate::component_model::WasiRegistry;
+use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::tir::{
@@ -40,7 +40,7 @@ pub(super) fn expand_task_returns_in_func(
     flat_return_types: &[cm_abi::CmValType],
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     cm_package: &str,
     interner: &RefCell<ModuleSourceInterner>,
 ) {
@@ -55,7 +55,7 @@ pub(super) fn expand_task_returns_in_func(
         extra_locals: Vec::new(),
         tir_modules,
         type_table,
-        wasi_registry,
+        cm_interface_registry,
         cm_package,
         interner,
     };
@@ -90,7 +90,7 @@ struct TaskReturnExpander<'a> {
     extra_locals: Vec<TirLocal>,
     tir_modules: &'a IndexMap<ModuleSource, TirModule>,
     type_table: &'a Rc<RefCell<TypeTable>>,
-    wasi_registry: &'a WasiRegistry,
+    cm_interface_registry: &'a CmInterfaceRegistry,
     cm_package: &'a str,
     interner: &'a RefCell<ModuleSourceInterner>,
 }
@@ -111,7 +111,7 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
                         &mut self.extra_locals,
                         self.tir_modules,
                         self.type_table,
-                        self.wasi_registry,
+                        self.cm_interface_registry,
                         self.cm_package,
                         self.interner,
                     ));
@@ -158,12 +158,12 @@ fn generate_inline_task_return(
     locals: &mut Vec<TirLocal>,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     cm_package: &str,
     interner: &RefCell<ModuleSourceInterner>,
 ) -> Vec<TirStmt> {
     let lift_ctx = LiftContext {
-        wasi_registry,
+        cm_interface_registry,
         type_table,
         cm_package,
         interner,

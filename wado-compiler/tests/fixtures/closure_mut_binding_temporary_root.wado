@@ -1,0 +1,23 @@
+// Calling a `fn mut` closure whose place expression has a *temporary*
+// root (e.g. a call result) is accepted: there is no binding to require
+// `mut` on. Mirrors Rust's FnMut rule. See issue #1098.
+
+struct Counter {
+    f: fn mut() -> (),
+}
+
+fn make_counter() -> Counter {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    return Counter { f: inc };
+}
+
+test "fn mut through a call-result root is allowed" {
+    // `make_counter()` is a temporary — no `mut` binding to require.
+    (make_counter().f)();
+}
+
+__DATA__
+{"test": {}}

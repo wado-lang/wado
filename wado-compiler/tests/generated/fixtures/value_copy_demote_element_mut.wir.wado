@@ -90,54 +90,27 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first"(words) {
     let x: ref "core:prelude//Array<core:prelude/string.wado/String>";
-    x = __inline__value_copy_T95_0: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
-        break __inline__value_copy_T95_0: struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T25*/ words.repr)), used: words.used };
+    x = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T25*/ words.repr)), used: words.used };
+    "core:prelude/string.wado/String::push"(if 0 >= x.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    };
-    "core:prelude/string.wado/String::push"(__inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_1: block -> ref "core:prelude/string.wado//String" {
-        if 0 >= x.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_1: builtin::array_get<ref "core:prelude/string.wado//String">(x.repr, 0);
+    }; builtin::array_get<ref "core:prelude/string.wado//String">(x.repr, 0), 33);
+    return if 0 >= x.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }, 33);
-    return __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_2: block -> ref "core:prelude/string.wado//String" {
-        if 0 >= x.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_2: builtin::array_get<ref "core:prelude/string.wado//String">(x.repr, 0);
-        unreachable;
-    };
+    }, builtin::array_get<ref "core:prelude/string.wado//String">(x.repr, 0);
 }
 
 fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/run"() with Stdout {
     let __b_0: ref "core:prelude//Array<core:prelude/string.wado/String>";
-    let words: ref "core:prelude//Array<core:prelude/string.wado/String>";
     let s: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/string.wado//String";
-    words = __seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
-        __b_0 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi"), used: 2 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("yo"), used: 2 }), used: 2 };
-        break __seq_lit: __b_0;
+    __b_0 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi"), used: 2 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("yo"), used: 2 }), used: 2 };
+    s = "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first"(__b_0);
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, s); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, if 0 >= __b_0.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    };
-    s = "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first"(words);
-    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-        "core:prelude/string.wado/String::push_str"(__local_3, s);
-        "core:prelude/string.wado/String::push"(__local_3, 32);
-        "core:prelude/string.wado/String::push_str"(__local_3, __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_8: block -> ref "core:prelude/string.wado//String" {
-            if 0 >= words.used {
-                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                unreachable;
-            }
-            break __inline_Array_core_prelude_string_wado_String__IndexValue_i32___index_value_8: builtin::array_get<ref "core:prelude/string.wado//String">(words.repr, 0);
-            unreachable;
-        });
-        break __tmpl: __local_3;
-        unreachable;
-    });
+    }; builtin::array_get<ref "core:prelude/string.wado//String">(__b_0.repr, 0)); __local_3);
 }
 
 fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -184,17 +157,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l5: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l5;
-            };
+    i = 0;
+    b4: block {
+        l5: loop {
+            if i >= len {
+                break b4;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l5;
         };
     };
 }
@@ -279,15 +250,9 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a_5 = __inline_i32_max_1: block -> i32 {
-            a_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
-            unreachable;
-        };
-        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
-        unreachable;
-    };
+    a_7 = capacity * 2;
+    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
+    new_capacity = select i32(a_5 > 8, a_5, 8);
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;

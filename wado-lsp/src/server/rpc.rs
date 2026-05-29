@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::Position;
+use crate::{Position, Range};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextDocumentIdentifier {
@@ -84,6 +84,13 @@ pub struct SemanticTokensParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct InlayHintParams {
+    pub text_document: TextDocumentIdentifier,
+    pub range: Range,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TextDocumentContentParams {
     pub uri: String,
 }
@@ -121,9 +128,41 @@ pub struct ServerInfo {
     pub version: Option<&'static str>,
 }
 
+/// Subset of LSP `InitializeParams` the engine consults during
+/// negotiation. Everything we do not read is ignored via `#[serde(default)]`.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitializeParams {
+    #[serde(default)]
+    pub capabilities: ClientCapabilities,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientCapabilities {
+    #[serde(default)]
+    pub general: Option<GeneralClientCapabilities>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeneralClientCapabilities {
+    /// Position encodings the client supports (LSP 3.18
+    /// §general.positionEncodings). The server picks one and echoes
+    /// it back in `InitializeResult::capabilities.positionEncoding`.
+    /// Absent / empty means "utf-16 only" per spec.
+    #[serde(default)]
+    pub position_encodings: Option<Vec<String>>,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServerCapabilities {
+    /// Echo of the negotiated position encoding. `None` falls back to the
+    /// LSP default `utf-16`; the dispatcher always populates this for
+    /// clarity.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position_encoding: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text_document_sync: Option<TextDocumentSyncOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -136,6 +175,8 @@ pub struct ServerCapabilities {
     pub document_highlight_provider: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_tokens_provider: Option<SemanticTokensOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inlay_hint_provider: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workspace: Option<WorkspaceServerCapabilities>,
 }

@@ -1,0 +1,24 @@
+// Test names containing non-ASCII (multibyte) characters must still produce
+// valid Component Model kebab-case exports. Non-ASCII letters collapse to `-`
+// in the export name; the original name is preserved out of band for display
+// and `--test-name` filtering. Regression for the codegen ICE where Unicode
+// letters leaked into the export name and failed Wasm validation.
+
+test "日本語のテスト ok" {
+    assert 1 + 1 == 2;
+}
+
+test "café résumé" {
+    assert true;
+}
+
+test "完全に日本語" {
+    assert true;
+}
+
+test "mixed 日本語 and ascii tail" {
+    assert true;
+}
+
+__DATA__
+{"test": {}}

@@ -22,7 +22,7 @@ use std::rc::Rc;
 
 use crate::ast::Type;
 use crate::cm_abi;
-use crate::component_model::WasiRegistry;
+use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::LocalMethodName;
@@ -186,12 +186,16 @@ fn lower_to_flat_inner(
             let elem_type_id = type_args[0];
             let elem_ast_type = {
                 let tt = ctx.type_table.borrow();
-                type_id_to_ast_type(elem_type_id, &tt, ctx.wasi_registry)
+                type_id_to_ast_type(elem_type_id, &tt, ctx.cm_interface_registry)
             };
-            let elem_size =
-                crate::component_model::cm_size_with_registry(&elem_ast_type, ctx.wasi_registry);
-            let elem_align =
-                crate::component_model::cm_align_with_registry(&elem_ast_type, ctx.wasi_registry);
+            let elem_size = crate::component_model::cm_size_with_registry(
+                &elem_ast_type,
+                ctx.cm_interface_registry,
+            );
+            let elem_align = crate::component_model::cm_align_with_registry(
+                &elem_ast_type,
+                ctx.cm_interface_registry,
+            );
 
             // __arr = value
             let arr_local = alloc_local(next_local, locals, type_id);
@@ -329,7 +333,7 @@ fn lower_to_flat_inner(
                 local_ref(elem_addr_local, "__arr_elem_addr", TypeTable::I32),
                 next_local,
                 locals,
-                ctx.wasi_registry,
+                ctx.cm_interface_registry,
                 ctx.cm_package,
                 ctx.type_table,
             ));
@@ -585,12 +589,14 @@ pub(super) fn synthesize_lift_from_flat_params(
                         let field_tys: Vec<Type> = struct_decl
                             .fields
                             .iter()
-                            .map(|f| type_id_to_ast_type(f.type_id, &tt, lift_ctx.wasi_registry))
+                            .map(|f| {
+                                type_id_to_ast_type(f.type_id, &tt, lift_ctx.cm_interface_registry)
+                            })
                             .collect();
                         // Prefer the already-registered TypeId so the WIR
                         // `struct_type_map` lookup hits — the
                         // `find_struct_by_name` index is populated when
-                        // the resolver first processed the struct decl,
+                        // the elaborator first processed the struct decl,
                         // and `target_type_id` may arrive as a reference
                         // wrapper or an unregistered intern.
                         let stid = tt
@@ -861,7 +867,7 @@ pub(super) fn synthesize_result_export_binding(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     cm_package: &str,
     interner: &RefCell<ModuleSourceInterner>,
 ) -> Rc<RefCell<TirFunction>> {
@@ -873,7 +879,7 @@ pub(super) fn synthesize_result_export_binding(
     let user_return_type = user_func_ref.return_type;
     let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
     let lift_ctx = LiftContext {
-        wasi_registry,
+        cm_interface_registry,
         type_table,
         cm_package,
         interner,
@@ -1441,7 +1447,7 @@ pub(super) fn synthesize_general_export_binding(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     cm_package: &str,
     interner: &RefCell<ModuleSourceInterner>,
 ) -> Rc<RefCell<TirFunction>> {
@@ -1453,7 +1459,7 @@ pub(super) fn synthesize_general_export_binding(
     let user_return_type = user_func_ref.return_type;
     let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
     let lift_ctx = LiftContext {
-        wasi_registry,
+        cm_interface_registry,
         type_table,
         cm_package,
         interner,
@@ -1672,7 +1678,7 @@ pub(super) fn synthesize_async_export_binding(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
-    wasi_registry: &WasiRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     cm_package: &str,
     interner: &RefCell<ModuleSourceInterner>,
 ) -> Rc<RefCell<TirFunction>> {
@@ -1712,7 +1718,7 @@ pub(super) fn synthesize_async_export_binding(
         let mut lifted_args = Vec::new();
         let mut flat_offset = 0;
         let lift_ctx = LiftContext {
-            wasi_registry,
+            cm_interface_registry,
             type_table,
             cm_package,
             interner,

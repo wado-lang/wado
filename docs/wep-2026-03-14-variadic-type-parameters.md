@@ -133,7 +133,7 @@ operations (zip, interleave) are out of scope for this WEP.
 
 The existing compile-time tuple enumeration (WEP-2026-02-10) works unchanged when the
 tuple type is `[..T]` — once the pack is instantiated to a concrete tuple type, the
-resolver unrolls the `for let v of tuple` loop as usual:
+elaborator unrolls the `for let v of tuple` loop as usual:
 
 ```wado
 fn inspect_all<..T: Inspect>(values: [..T]) -> Array<String> {
@@ -391,7 +391,7 @@ where T: Reflect<Fields = [..F]>
 - [x] Parser: recognize `..T` in generic parameter lists and `[..T]` in type position
 - [x] AST/TIR: add `TypePackSpread`, `TupleSpread` nodes; track pack bounds
 - [x] Prelude: add `pub type [...T]` declaration; register tuples' owning module
-- [x] Resolver: at monomorphization, substitute concrete types for packs; extend existing
+- [x] Elaborator: at monomorphization, substitute concrete types for packs; extend existing
       tuple-enumeration unrolling to handle `[for let v of tuple { }]` construction form
 - [x] Variadic `for let v of`: deferred expansion via `VariadicForOf` TIR node, expanded
       by the monomorphizer after type substitution resolves packs to concrete tuples

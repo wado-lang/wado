@@ -82,6 +82,14 @@ pub struct GenContext {
     kind_set_registry: TreeMap<String, KindSetEntry>,
     /// Cache of `tail_greedy_first(rule)` keyed by rule name.
     tail_greedy_cache: TreeMap<String, Array<String>>,
+    /// Cache of `tail_greedy_k_prefix(rule, max_k)`. Outer array is
+    /// indexed by `max_k` (so `cache[k][name]` is the K=k prefix for
+    /// `name`); inner TreeMap is keyed by rule name. An array of maps —
+    /// rather than a single TreeMap with a composite string key — keeps
+    /// the hot lookup path free of per-call `String` allocation.
+    /// `max_k` is bounded by `FOLLOW_VARIANT_MAX_K`, so the outer array
+    /// stays small (slot `0` is unused; slots are grown on first use).
+    tail_greedy_k_prefix_cache: Array<TreeMap<String, Array<Array<String>>>>,
     /// Registry of follow-aware rule variants keyed by `rule_name + ':'
     /// + canonical_mask`. IDs are assigned in insertion order. See
     /// `FollowVariantEntry`.
@@ -111,6 +119,7 @@ impl GenContext {
             single_alt_owner,
             kind_set_registry: TreeMap::<String, KindSetEntry>::new(),
             tail_greedy_cache: TreeMap::<String, Array<String>>::new(),
+            tail_greedy_k_prefix_cache: [],
             follow_variant_registry: TreeMap::<String, FollowVariantEntry>::new(),
             follow_variant_order: [],
         };
@@ -990,10 +999,18 @@ impl GenContext {
     /// halt at depth 0 (per-depth alignment unknown across alts) —
     /// conservative but sound.
     pub fn tail_greedy_k_prefix_of_rule(&mut self, name: &String, max_k: i32, visiting: &mut Array<String>) -> Array<Array<String>> {
+        if max_k >= 0 && max_k < self.tail_greedy_k_prefix_cache.len() {
+            let cached = self.tail_greedy_k_prefix_cache[max_k].get(*name);
+            if let Some(result) = cached {
+                return result;
+            }
+        }
+
         if visiting.contains(name) {
             return [];
         }
 
+        let is_top_level = visiting.is_empty();
         visiting.push(*name);
 
         let mut result: Array<Array<String>> = [];
@@ -1006,6 +1023,13 @@ impl GenContext {
         }
 
         remove_from_visiting(visiting, name);
+
+        if is_top_level && max_k >= 0 {
+            while self.tail_greedy_k_prefix_cache.len() <= max_k {
+                self.tail_greedy_k_prefix_cache.push(TreeMap::<String, Array<Array<String>>>::new());
+            }
+            self.tail_greedy_k_prefix_cache[max_k][*name] = result;
+        }
 
         return result;
     }

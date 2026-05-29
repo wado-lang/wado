@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::Path;
-use std::process;
 
 use serde_json::json;
 use wado_lsp::{DefinitionResult, DocumentHighlight, HighlightKind, Position, ReferenceLocation};
 
+use crate::args::CliExit;
 use crate::compiler_host::FilesystemCompilerHost;
 
 struct PreparedQuery {
@@ -13,15 +13,10 @@ struct PreparedQuery {
     host: FilesystemCompilerHost,
 }
 
-fn prepare_query(filename: &str) -> PreparedQuery {
+fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
     let path = Path::new(filename);
-    let source = match fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Error reading '{}': {e}", path.display());
-            process::exit(1);
-        }
-    };
+    let source = fs::read_to_string(path)
+        .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
 
     let base_path = path
         .parent()
@@ -38,7 +33,7 @@ fn prepare_query(filename: &str) -> PreparedQuery {
     let mut engine = wado_lsp::Engine::new();
     engine.open_document(&uri, source);
 
-    PreparedQuery { uri, engine, host }
+    Ok(PreparedQuery { uri, engine, host })
 }
 
 fn position_from_one_based(line: u32, column: u32) -> Position {
@@ -48,9 +43,8 @@ fn position_from_one_based(line: u32, column: u32) -> Position {
     }
 }
 
-/// Run diagnostics query and print results.
-pub async fn run_diagnostics(filename: &str, json_output: bool) {
-    let prepared = prepare_query(filename);
+pub async fn run_diagnostics(filename: &str, json_output: bool) -> Result<(), CliExit> {
+    let prepared = prepare_query(filename)?;
     let diagnostics = prepared
         .engine
         .diagnostics(&prepared.uri, &prepared.host)
@@ -66,19 +60,19 @@ pub async fn run_diagnostics(filename: &str, json_output: bool) {
         .iter()
         .any(|d| matches!(d.severity, wado_lsp::Severity::Error))
     {
-        process::exit(1);
+        return Err(CliExit::silent_failure(1));
     }
+    Ok(())
 }
 
-/// Run references query and print results.
 pub async fn run_references(
     filename: &str,
     line: u32,
     column: u32,
     include_declaration: bool,
     json_output: bool,
-) {
-    let prepared = prepare_query(filename);
+) -> Result<(), CliExit> {
+    let prepared = prepare_query(filename)?;
     let position = position_from_one_based(line, column);
     let refs = prepared
         .engine
@@ -92,11 +86,16 @@ pub async fn run_references(
     }
 
     warn_on_compile_errors(&prepared.host, refs.is_empty());
+    Ok(())
 }
 
-/// Run definition query and print results.
-pub async fn run_definition(filename: &str, line: u32, column: u32, json_output: bool) {
-    let prepared = prepare_query(filename);
+pub async fn run_definition(
+    filename: &str,
+    line: u32,
+    column: u32,
+    json_output: bool,
+) -> Result<(), CliExit> {
+    let prepared = prepare_query(filename)?;
     let position = position_from_one_based(line, column);
     let result = prepared
         .engine
@@ -110,11 +109,16 @@ pub async fn run_definition(filename: &str, line: u32, column: u32, json_output:
     }
 
     warn_on_compile_errors(&prepared.host, result.is_none());
+    Ok(())
 }
 
-/// Run document-highlight query and print results.
-pub async fn run_document_highlight(filename: &str, line: u32, column: u32, json_output: bool) {
-    let prepared = prepare_query(filename);
+pub async fn run_document_highlight(
+    filename: &str,
+    line: u32,
+    column: u32,
+    json_output: bool,
+) -> Result<(), CliExit> {
+    let prepared = prepare_query(filename)?;
     let position = position_from_one_based(line, column);
     let highlights = prepared
         .engine
@@ -128,13 +132,12 @@ pub async fn run_document_highlight(filename: &str, line: u32, column: u32, json
     }
 
     warn_on_compile_errors(&prepared.host, highlights.is_empty());
+    Ok(())
 }
 
-/// When a position-based query returns no results, the cause is ambiguous —
-/// the cursor might genuinely be on nothing, or the file might have failed to
-/// compile far enough to populate the symbol table. Surface the compiler
-/// errors on stderr so users can distinguish the two without re-running
-/// `wado query diagnostics`.
+/// An empty position-based result is ambiguous (cursor on nothing vs.
+/// symbol table never populated). Surface the underlying errors so the
+/// user doesn't need to re-run `wado query diagnostics` to find out.
 fn warn_on_compile_errors(host: &FilesystemCompilerHost, result_was_empty: bool) {
     if !result_was_empty || !host.has_errors() {
         return;

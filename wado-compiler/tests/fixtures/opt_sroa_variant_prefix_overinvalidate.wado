@@ -1,0 +1,69 @@
+// Regression for the prefix over-invalidation in
+// `find_candidate_calls_in_block_prefix` (review finding P1 #3).
+//
+// `helper` is `#[inline(always)]`'d into `caller`. The inlined body
+// `let r = { let y = g(c, x); match y { ... }; h(c, x + 1) }` lowers to
+// `LocalSet(r, Block { body: [LocalSet(y, Call(g)), If(...), Call(h)] })`.
+// `unwrap_to_candidate_call` recognises the outer `LS + Call(h)` and the
+// LS-arm validates `h` correctly. The block's prefix scan then must also
+// recognise the inner `LocalSet(y, Call(g))` as a SROA-compatible call
+// site (since `y`'s only use is `ref.test(Ok, y)`) — otherwise the
+// unconditional `find_nested_candidate_calls` walk over-invalidates `g`.
+//
+// Both `g` and `h` should become multi-value after the fix.
+
+struct Counter { n: i32 }
+
+#[inline("never")]
+fn g(c: &mut Counter, x: i32) -> Result<i32, String> {
+    c.n = c.n + 1;
+    return Result::<i32, String>::Ok(x);
+}
+
+#[inline("never")]
+fn h(c: &mut Counter, x: i32) -> Result<i32, String> {
+    c.n = c.n + 10;
+    return Result::<i32, String>::Ok(x * 2);
+}
+
+#[inline(always)]
+fn helper(c: &mut Counter, x: i32) -> Result<i32, String> {
+    let y = g(c, x);
+    if let Ok(_) = y {
+        c.n = c.n + 100;  // observable side effect — keeps the ref.test alive
+    } else {
+        c.n = c.n + 1000;
+    }
+    return h(c, x + 1);
+}
+
+#[inline("never")]
+fn caller(c: &mut Counter, x: i32) -> Result<i32, String> {
+    let r = helper(c, x);
+    if let Ok(v) = r {
+        return Result::<i32, String>::Ok(v);
+    }
+    return Result::<i32, String>::Err("err");
+}
+
+export fn run() {
+    let mut c = Counter { n: 0 };
+    let r = caller(&mut c, 5);
+    let v = match r { Ok(v) => v, Err(_) => -1 };
+    assert v == 12;
+    assert c.n == 111;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "/g\" = fn(ref \"",
+        "/h\" = fn(ref \"",
+        "//Counter\", i32) -> [i32, i32, ref null \"core:prelude/string.wado//String\"]",
+        "multivalue_bind [__sroa_y_discriminant, __sroa_y_case0_payload_0, __sroa_y_case1_payload_0]"
+    ],
+    "wir_not_expect:O2": [
+        "-> ref \"core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>\""
+    ]
+}

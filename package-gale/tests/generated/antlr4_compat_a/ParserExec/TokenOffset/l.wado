@@ -228,6 +228,96 @@ pub fn normalize_tree(s: &String) -> String {
     return out;
 }
 
+/// Find the first direct child Node of `parent` whose rule name equals
+/// `name`. Returns `None` when no such child exists.
+///
+/// Used by Stage B sub-tree drivers: many ANTLR4 descriptors print a
+/// labelled sub-tree (`@after { <ToStringTree("$r.ctx"):writeln()> }`)
+/// rather than the start rule's full tree. Gale's `parse()` always
+/// returns the full tree, so the test must navigate down to the
+/// referenced child before comparing.
+pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode> {
+    for let child of &parent.children {
+        if let Node(n) = *child {
+            if n.name == *name {
+                return Option::<CstNode>::Some(n);
+            }
+        }
+    }
+    return null;
+}
+
+/// Produce an ANTLR4-style `Token.toString()` dump of the token stream:
+///
+///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]\n  (per token)
+///
+/// Used by Stage L (token-stream equivalence) tests against the upstream
+/// `LexerExec` / etc. `[output]` blocks.
+///
+/// - `tokens` is the public-channel stream returned by the generated
+///   `tokenize(input)`. Skip-channel tokens never reach this array, so no
+///   filtering is needed here.
+/// - `input` is the original source; passed in so line/col can be
+///   computed from byte offsets (Gale's `Token` does not carry these).
+/// - `eof_kind` is the value of the generated `TK_EOF` constant; EOF
+///   tokens print as `<EOF>` text with type id `-1`.
+///
+/// Type IDs are remapped from Gale's 0-based numbering to ANTLR4's
+/// 1-based: `kind + 1` for explicit lexer rules, `-1` for EOF. Lexer-only
+/// grammars never introduce implicit literals, so the contiguous
+/// `0..num_lexer_rules` range maps directly onto ANTLR4's
+/// `1..num_lexer_rules+1`.
+///
+/// Text escaping follows `CommonToken.toString` (`vendor/antlr4/runtime/
+/// Java/src/org/antlr/v4/runtime/CommonToken.java`): only `\n`, `\r`,
+/// `\t` are escaped; backslashes and quotes pass through unchanged.
+pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
+    let chars: Array<char> = input.chars().collect();
+    let mut out = String::with_capacity(tokens.len() * 32);
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        let tok = &tokens[i];
+        let is_eof = tok.kind == eof_kind;
+        let mut text_buf = String::with_capacity(16);
+        if is_eof {
+            text_buf.push_str(&"<EOF>");
+        } else {
+            for let mut j = tok.text.start; j < tok.text.end; j += 1 {
+                let c = tok.text.chars[j];
+                match c {
+                    '\n' => text_buf.push_str(&"\\n"),
+                    '\r' => text_buf.push_str(&"\\r"),
+                    '\t' => text_buf.push_str(&"\\t"),
+                    _ => text_buf.push(c),
+                }
+            }
+        }
+        let type_id = if is_eof { -1 } else { tok.kind + 1 };
+        let line_col = line_col_at(&chars, tok.span.start);
+        let line = line_col.0;
+        let col = line_col.1;
+        let end_inclusive = tok.span.end - 1;
+        out.push_str(&`[@{i},{tok.span.start}:{end_inclusive}='{text_buf}',<{type_id}>,{line}:{col}]\n`);
+    }
+    return out;
+}
+
+/// Compute (line, column) at a 0-based char index in `chars`, with
+/// 1-based line and 0-based column to match ANTLR4's `Token` getters.
+fn line_col_at(chars: &Array<char>, pos: i32) -> [i32, i32] {
+    let mut line = 1;
+    let mut col = 0;
+    let cap = if pos < chars.len() { pos } else { chars.len() };
+    for let mut i = 0; i < cap; i += 1 {
+        if chars[i] == '\n' {
+            line += 1;
+            col = 0;
+        } else {
+            col += 1;
+        }
+    }
+    return [line, col];
+}
+
 /// Highlight override: when inside a specific rule, override the capture for a token kind.
 pub struct HighlightOverride {
     pub rule_name: String,
@@ -1420,6 +1510,24 @@ impl Parser {
             ["set complement"],
         ));
     }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
 }
 
 fn scan_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -2232,7 +2340,7 @@ fn scan_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let mut lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66_list: Array<Token> = [];
     let mut _plus_first = true;
@@ -2648,7 +2756,7 @@ fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66 = p.advance();
+        let lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66 = p.match_set([TK_LIT_1, TK_LIT_2, TK_LIT_3, TK_LIT_4, TK_LIT_5, TK_LIT_6, TK_LIT_7, TK_LIT_8, TK_LIT_9, TK_LIT_10, TK_LIT_11, TK_LIT_12, TK_LIT_13, TK_LIT_14, TK_LIT_15, TK_LIT_16, TK_LIT_17, TK_LIT_18, TK_LIT_19, TK_LIT_20, TK_LIT_21, TK_LIT_22, TK_LIT_23, TK_LIT_24, TK_LIT_25, TK_LIT_26, TK_LIT_27, TK_LIT_28, TK_LIT_29, TK_LIT_30, TK_LIT_31, TK_LIT_32, TK_LIT_33, TK_LIT_34, TK_LIT_35, TK_LIT_36, TK_LIT_37, TK_LIT_38, TK_LIT_39, TK_LIT_40, TK_LIT_41, TK_LIT_42, TK_LIT_43, TK_LIT_44, TK_LIT_45, TK_LIT_46, TK_LIT_47, TK_LIT_48, TK_LIT_49, TK_LIT_50, TK_LIT_51, TK_LIT_52, TK_LIT_53, TK_LIT_54, TK_LIT_55, TK_LIT_56, TK_LIT_57, TK_LIT_58, TK_LIT_59, TK_LIT_60, TK_LIT_61, TK_LIT_62, TK_LIT_63, TK_LIT_64, TK_LIT_65, TK_LIT_66])?;
         lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66_list.push(lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66);
     }
     return Result::<ANode, ParseError>::Ok(ANode {
@@ -2657,10 +2765,14 @@ fn parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     });
 }
 
-pub fn parse(input: &String) -> Result<ANode, ParseError> {
+pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let tokens = tokenize(input);
     let mut parser = Parser::new(tokens);
-    return parse_a(&mut parser);
+    return _parse_a(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<ANode, ParseError> {
+    return parse_a(input);
 }
 
 pub fn walk_a<V: Visitor>(v: &mut V, node: &ANode) {

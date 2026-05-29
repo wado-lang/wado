@@ -37,7 +37,7 @@ pub enum TypeParamScope {
 ///
 /// Identity is `(module_source, name)` for `Concrete` and `name` alone for
 /// `Param` — same as every other resolved symbol in the compiler. The
-/// resolver canonicalises the module source, so `with Stdout` imported from
+/// elaborator canonicalises the module source, so `with Stdout` imported from
 /// `wasi:cli` and `core:cli` both end up with `module_source = wasi:cli`
 /// (the defining module) and compare equal.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -501,7 +501,7 @@ pub struct TypeTable {
     struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
     /// Canonical map: declared-type symbol → `TypeId`.
     ///
-    /// Populated by the resolver whenever it creates a decl-backed type
+    /// Populated by the elaborator whenever it creates a decl-backed type
     /// (`make_struct`, `make_enum`, `make_variant`, `make_flags`,
     /// `make_newtype`, `make_resource`) via [`TypeTable::register_decl_type`].
     /// Lets LSP-style queries translate a [`SymbolKey`] — the canonical
@@ -699,7 +699,7 @@ impl TypeTable {
 
     /// Register the `(SymbolKey -> TypeId)` mapping for a declared type.
     ///
-    /// Called by the resolver right after constructing the `TypeId` that
+    /// Called by the elaborator right after constructing the `TypeId` that
     /// represents a user-declared type (struct, enum, variant, flags,
     /// newtype, resource). Both directions of the map are populated:
     /// forward `type_by_symbol[key] = type_id` and inverse
@@ -723,7 +723,7 @@ impl TypeTable {
     /// Canonical `TypeId` for a declared-type [`SymbolKey`].
     ///
     /// Returns `None` if the symbol is not a decl-backed type, or if the
-    /// resolver has not yet created a `TypeId` for it.
+    /// elaborator has not yet created a `TypeId` for it.
     pub fn type_of_symbol(&self, key: &crate::symbol::SymbolKey) -> Option<TypeId> {
         self.type_by_symbol.get(key).copied()
     }
@@ -860,7 +860,7 @@ impl TypeTable {
         &self.compiler_items
     }
 
-    /// Mutable handle on the registry. Used by the resolver during the
+    /// Mutable handle on the registry. Used by the elaborator during the
     /// annotate pass to register each `#[compiler_item("...")]`
     /// declaration.
     pub fn compiler_items_mut(&mut self) -> &mut crate::compiler_item::CompilerItems {
@@ -2027,7 +2027,7 @@ impl TypeTable {
     ///
     /// Standalone uses (e.g. `mangle_type_name(ErrorCode)` outside a
     /// generic instance, or method-dispatch `base_struct_name`) keep the
-    /// short name so that `wasi_registry`, `LocalMethodName`, and
+    /// short name so that `cm_interface_registry`, `LocalMethodName`, and
     /// `ModuleSource::interface_name` keys remain unchanged.
     ///
     /// User-facing display (`TypeTable::type_name`) is independent and
@@ -2385,8 +2385,8 @@ impl CallArg {
 /// through [`TirExprKind::method_call`], the sole constructor.  The inner
 /// `()` is private to this module so no code outside `tir` can build one —
 /// this makes direct struct-literal construction of `TirExprKind::MethodCall`
-/// impossible and channels every resolver-side emission through the
-/// single checkpoint maintained in `Resolver::build_tir_method_call`,
+/// impossible and channels every elaborator-side emission through the
+/// single checkpoint maintained in `Elaborator::build_tir_method_call`,
 /// which in turn guarantees arguments were typechecked against the
 /// callee's declared parameter types.
 ///
@@ -2401,8 +2401,8 @@ impl TirExprKind {
     /// Sole constructor of [`TirExprKind::MethodCall`].
     ///
     /// Callers are expected to have typechecked `args` against the callee's
-    /// declared parameter types before reaching here.  Resolver-side
-    /// constructions flow through `Resolver::build_tir_method_call`;
+    /// declared parameter types before reaching here.  Elaborator-side
+    /// constructions flow through `Elaborator::build_tir_method_call`;
     /// post-resolve rewriters thread already-checked TIR through this
     /// function too so the variant's `invariant` field stays coherent.
     pub(crate) fn method_call(
@@ -2553,14 +2553,14 @@ pub enum TirExprKind {
     },
 
     /// Spread a tuple expression into an enclosing `TupleLiteral`.
-    /// Created by the resolver for `[..expr]` syntax. Expanded by monomorphization
+    /// Created by the elaborator for `[..expr]` syntax. Expanded by monomorphization
     /// into individual `FieldAccess` elements once the concrete tuple arity is known.
     TupleSpread {
         expr: Box<TirExpr>,
     },
 
     /// Transpose a tuple-of-tuples: `[a, b].zip()` → `[[a.0, b.0], [a.1, b.1], ...]`.
-    /// Created by the resolver for the `.zip()` pseudo-method on tuples.
+    /// Created by the elaborator for the `.zip()` pseudo-method on tuples.
     /// Expanded during monomorphization once concrete tuple arities are known.
     TupleZip {
         expr: Box<TirExpr>,
@@ -2695,7 +2695,7 @@ pub enum TirExprKind {
 
     /// Unresolved template string expression.
     ///
-    /// Created by the resolver with resolved sub-expressions but without
+    /// Created by the elaborator with resolved sub-expressions but without
     /// expanding to formatting code. The synthesis phase (pre-monomorphize)
     /// expands this into the `__tmpl` labeled block with `String::with_capacity`,
     /// `push_str`, `Formatter`, and `Display`/inspect calls.
@@ -2729,7 +2729,7 @@ pub enum TirExprKind {
 /// One `Effect => handler` binding inside a `with ... do` block.
 #[derive(Debug, Clone)]
 pub struct TirHandlerBinding {
-    /// The effect being handled. The resolver always fills this in with a
+    /// The effect being handled. The elaborator always fills this in with a
     /// concrete effect reference — the bundled `with &mut h do` form is
     /// expanded to one binding per implemented effect, each carrying a
     /// concrete `EffectRef`. `None` only appears transiently when an
@@ -2938,15 +2938,15 @@ impl TirBlock {
 ///
 /// - `If` / `IfLet` with both branches: both branches must agree
 ///   (or one must be `Never`); otherwise the block has no
-///   meaningful value and is `Unit`. The resolver enforces the
+///   meaningful value and is `Unit`. The elaborator enforces the
 ///   "both agree" rule when typing the surrounding expression, so
 ///   the `None` fallback at a stale mismatch is benign — the
 ///   surrounding diagnostic already reports the error.
 /// - `Return` / `Break` / `Continue`: diverging statements yield
 ///   `Never`.
 ///
-/// Used by the resolver, to type `let x = { /* block */ }` (the call
-/// lives on `Resolver` for historical reasons but delegates here) and
+/// Used by the elaborator, to type `let x = { /* block */ }` (the call
+/// lives on `Elaborator` for historical reasons but delegates here) and
 /// to type the `if let` → `Let` + `Match` lowering's arms.
 pub fn block_result_type(block: &TirBlock) -> TypeId {
     block
@@ -2967,7 +2967,7 @@ pub fn block_result_type(block: &TirBlock) -> TypeId {
         .unwrap_or(TypeTable::UNIT)
 }
 
-/// Combine two branch result types under the resolver's rule:
+/// Combine two branch result types under the elaborator's rule:
 /// equal types agree; a `Never` branch defers to the other; an
 /// outright mismatch yields `None` so the caller falls back to
 /// `Unit`.
@@ -3179,7 +3179,7 @@ pub struct TirFunction {
     /// Per-local metadata — `name`, `type_id`, `is_mut` — indexed by Wasm
     /// local index. Entries `0..params.len()` shadow the corresponding
     /// `params[i]` (for uniform absolute indexing); body let-bindings and
-    /// resolver/optimizer-allocated temporaries occupy `params.len()..`.
+    /// elaborator/optimizer-allocated temporaries occupy `params.len()..`.
     /// `local_count == locals.len()` post-resolve; passes that grow the
     /// local set must keep the two in sync.
     pub locals: Vec<TirLocal>,
@@ -3398,7 +3398,7 @@ impl TirFunction {
 /// local environment.
 ///
 /// `FunctionContext::add_local` records every local — source-level
-/// parameters, `let` bindings, destructure bindings, and resolver-generated
+/// parameters, `let` bindings, destructure bindings, and elaborator-generated
 /// temporaries — as a `TirLocal`. The single source of truth for the local
 /// namespace is `FunctionContext::locals: Vec<TirLocal>`; from there it is
 /// projected onto:
@@ -3412,7 +3412,7 @@ impl TirFunction {
 #[derive(Debug, Clone)]
 pub struct TirLocal {
     /// Source-level name of the binding (or a synthesised `__name` for
-    /// resolver-generated temporaries that have no surface syntax).
+    /// elaborator-generated temporaries that have no surface syntax).
     pub name: String,
     pub type_id: TypeId,
     pub is_mut: bool,
@@ -3438,7 +3438,7 @@ pub struct TirParam {
     pub local_index: u32,
     pub is_mut: bool,
     /// Resolved default expression for trailing parameters with `= expr`.
-    /// Used by the resolver to synthesize arguments at call sites.
+    /// Used by the elaborator to synthesize arguments at call sites.
     pub default_expr: Option<Box<TirExpr>>,
     pub span: Span,
 }
@@ -3472,7 +3472,7 @@ pub struct TirField {
     /// `#[serde(default)]` — use default value when field is missing during deserialization.
     pub serde_default: bool,
     /// Resolved default expression for `struct S { x: T = expr }`.
-    /// Inserted by the resolver when the field is omitted in a struct literal.
+    /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<TirExpr>>,
 }
 
@@ -3774,7 +3774,7 @@ pub struct TirModule {
     pub resources: Vec<TirResource>,
     pub traits: Vec<TirTrait>,
     pub impls: Vec<TirImpl>,
-    /// `impl Trait for Type;` — synthesis requests (populated by resolver, consumed by synthesis)
+    /// `impl Trait for Type;` — synthesis requests (populated by elaborator, consumed by synthesis)
     pub synthesis_requests: Vec<SynthesisRequest>,
     /// Test declarations with their metadata
     pub tests: Vec<TirTest>,

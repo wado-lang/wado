@@ -276,18 +276,17 @@ fn attach_variant_header(rule: &mut Rule, v: FollowVariant) {
     }
 }
 
-/// Walk a freshly-lowered LR variant rule and re-stamp `variant_id`
-/// on every top-level self-recursive `ScanRuleCall` inside the LR
-/// suffixes. Used by `lower_variant_rules` after `attach_variant_header`
-/// to preserve the pre-Phase-2-F emitter contract: an LR variant's
-/// suffix recurses into the SAME variant function (not the base
-/// `scan_X`, and not whichever per-call-site variant
-/// `intern_follow_variant` happened to register for the local follow).
-///
-/// No-op for non-LR rules — they have no LR suffix to walk.
+/// Re-stamp `variant_id` on every self-recursive `ScanRuleCall`
+/// (top-level or nested in `Repeat` / `Group` / `OptionalLookahead`)
+/// inside the LR suffixes of a freshly-lowered variant rule. Used by
+/// `lower_variant_rules` so the variant's LR suffix recurses into
+/// itself, not the base `scan_X` or whichever per-call-site variant
+/// `intern_follow_variant` registered for the local follow. No-op
+/// for non-LR rules.
 fn attach_variant_id_to_lr_self_refs(rule: &mut Rule, rule_snake: &String, variant_id: i32) {
     if let LeftRecursive(l) = *rule {
-        // Walk every suffix once to count self-refs. If zero, the
+        // Walk every suffix once to detect any self-ref (top-level OR
+        // nested in Repeat / Group / OptionalLookahead). If zero, the
         // rebuild is a no-op — skip it so a variant rule with only
         // non-self-ref-targeting LR alts (e.g. unary prefix alts
         // whose suffix is just a token) doesn't pay the
@@ -295,11 +294,9 @@ fn attach_variant_id_to_lr_self_refs(rule: &mut Rule, rule_snake: &String, varia
         let mut has_self_ref = false;
         for let lr_alt of &l.lr_alts {
             for let se of &lr_alt.scan_suffix.elements {
-                if let RuleCall(rc) = se {
-                    if rc.target_snake == *rule_snake {
-                        has_self_ref = true;
-                        break;
-                    }
+                if scan_element_contains_self_ref(se, rule_snake) {
+                    has_self_ref = true;
+                    break;
                 }
             }
             if has_self_ref {
@@ -313,7 +310,7 @@ fn attach_variant_id_to_lr_self_refs(rule: &mut Rule, rule_snake: &String, varia
         for let lr_alt of &l.lr_alts {
             let mut new_elements: Array<ScanElement> = [];
             for let se of &lr_alt.scan_suffix.elements {
-                new_elements.push(rebind_scan_self_ref_variant_id(*se, rule_snake, variant_id));
+                new_elements.push(rebind_scan_self_ref_variant_id_deep(*se, rule_snake, variant_id));
             }
             new_lr_alts.push(LrAlt {
                 alt_index: lr_alt.alt_index,
@@ -338,17 +335,106 @@ fn attach_variant_id_to_lr_self_refs(rule: &mut Rule, rule_snake: &String, varia
     }
 }
 
-fn rebind_scan_self_ref_variant_id(se: ScanElement, rule_snake: &String, variant_id: i32) -> ScanElement {
-    if let RuleCall(rc) = se {
-        if rc.target_snake == *rule_snake {
-            return ScanElement::RuleCall(ScanRuleCallElem {
-                target_snake: rc.target_snake,
-                variant_id: Option::<i32>::Some(variant_id),
-                min_prec_arg: rc.min_prec_arg,
+/// Returns true iff `se` carries a `ScanRuleCall` to `rule_snake`
+/// anywhere reachable through `Repeat` / `Group` / `OptionalLookahead`.
+/// Pre-check for the deep walkers so they skip subtrees with no
+/// self-ref (Wado value semantics make the rebuild a deep clone).
+fn scan_element_contains_self_ref(se: &ScanElement, rule_snake: &String) -> bool {
+    return match se {
+        RuleCall(rc) => rc.target_snake == *rule_snake,
+        Repeat(r) => scan_element_contains_self_ref(&r.body, rule_snake),
+        Group(g) => {
+            let mut found = false;
+            for let scan_alt of &g.alts {
+                for let inner of &scan_alt.elements {
+                    if scan_element_contains_self_ref(inner, rule_snake) {
+                        found = true;
+                        break;
+                    }
+                }
+                if found { break; }
+            }
+            found;
+        },
+        OptionalLookahead(ole) => {
+            let mut found = false;
+            for let body of &ole.bodies {
+                for let inner of &body.elements {
+                    if scan_element_contains_self_ref(inner, rule_snake) {
+                        found = true;
+                        break;
+                    }
+                }
+                if found { break; }
+            }
+            found;
+        },
+        Token(_) => false,
+        Wildcard => false,
+        Excluded(_) => false,
+    };
+}
+
+/// Walks `ScanElement` containers and stamps
+/// `variant_id = Some(variant_id)` on every reachable self-recursive
+/// `ScanRuleCall`. Pairs with `deep_stamp_inner_self_refs_scan`, which
+/// handles `min_prec_arg` with the same container coverage.
+fn rebind_scan_self_ref_variant_id_deep(se: ScanElement, rule_snake: &String, variant_id: i32) -> ScanElement {
+    return match se {
+        RuleCall(rc) => {
+            if rc.target_snake == *rule_snake {
+                ScanElement::RuleCall(ScanRuleCallElem {
+                    target_snake: rc.target_snake,
+                    variant_id: Option::<i32>::Some(variant_id),
+                    min_prec_arg: rc.min_prec_arg,
+                });
+            } else {
+                ScanElement::RuleCall(rc);
+            }
+        },
+        Repeat(r) => ScanElement::Repeat(ScanRepeatElem {
+            kind: r.kind,
+            body: rebind_scan_self_ref_variant_id_deep(r.body, rule_snake, variant_id),
+            strategy: r.strategy,
+            inner_first: r.inner_first,
+            caller_follow_first: r.caller_follow_first,
+            k_prefix_mask: r.k_prefix_mask,
+        }),
+        Group(g) => {
+            let mut new_alts: Array<ScanBody> = [];
+            for let scan_alt of &g.alts {
+                let mut new_elements: Array<ScanElement> = [];
+                for let inner of &scan_alt.elements {
+                    new_elements.push(rebind_scan_self_ref_variant_id_deep(*inner, rule_snake, variant_id));
+                }
+                new_alts.push(ScanBody { elements: new_elements });
+            }
+            ScanElement::Group(ScanGroupElem {
+                alts: new_alts,
+                dispatch: g.dispatch,
+                lenient: g.lenient,
+                alt_first_sets: g.alt_first_sets,
+                wildcard_alt_indices: g.wildcard_alt_indices,
             });
-        }
-    }
-    return se;
+        },
+        OptionalLookahead(ole) => {
+            let mut new_bodies: Array<ScanBody> = [];
+            for let body of &ole.bodies {
+                let mut new_elements: Array<ScanElement> = [];
+                for let inner of &body.elements {
+                    new_elements.push(rebind_scan_self_ref_variant_id_deep(*inner, rule_snake, variant_id));
+                }
+                new_bodies.push(ScanBody { elements: new_elements });
+            }
+            ScanElement::OptionalLookahead(ScanOptionalLookaheadElem {
+                sigs: ole.sigs,
+                bodies: new_bodies,
+            });
+        },
+        Token(t) => ScanElement::Token(t),
+        Wildcard => ScanElement::Wildcard,
+        Excluded(e) => ScanElement::Excluded(e),
+    };
 }
 
 /// Walk every lowered `Rule` and intern every multi-element
@@ -757,8 +843,27 @@ fn stamp_lr_self_ref_min_prec(lr_alts: &mut Array<LrAlt>, rule_name: &String, ru
                 new_ops.push(rebind_self_ref_min_prec(*op_ref, prec));
                 new_scan.push(rebind_scan_self_ref_min_prec(*se_ref, rule_snake, prec));
             } else {
-                new_ops.push(*op_ref);
-                new_scan.push(*se_ref);
+                // Self-ref nested inside a container (`Repeat`, `Group`,
+                // scan-side `OptionalLookahead`). Use `conflict_min`
+                // unconditionally: an inner self-ref must terminate
+                // before consuming an outer LR suffix token, so the
+                // BETWEEN…AND downgrade in `compute_self_ref_prec_from_ops`
+                // (top-level only) doesn't apply. Short-circuit when
+                // the subtree has no self-ref — the deep walker would
+                // otherwise rebuild every nested struct (value-semantics
+                // deep clone).
+                let needs_op = op_subtree_contains_self_ref(op_ref, rule_name);
+                let needs_scan = scan_element_contains_self_ref(se_ref, rule_snake);
+                if needs_op {
+                    new_ops.push(deep_stamp_inner_self_refs_op(*op_ref, rule_name, rule_snake, conflict_min));
+                } else {
+                    new_ops.push(*op_ref);
+                }
+                if needs_scan {
+                    new_scan.push(deep_stamp_inner_self_refs_scan(*se_ref, rule_snake, conflict_min));
+                } else {
+                    new_scan.push(*se_ref);
+                }
             }
         }
         lr_alts[i].suffix.ops = new_ops;
@@ -799,6 +904,37 @@ fn find_self_ref_rule_call(op: &Op, rule_name: &String) -> Option<&RuleCallOp> w
     return null;
 }
 
+/// Returns true iff `op` contains an `Op::RuleCall` targeting
+/// `rule_name`, anywhere reachable through container variants
+/// (`Repeat`, `Group`, `ListLabel`). Used by
+/// `stamp_lr_self_ref_min_prec` to skip the deep-walker rebuild for
+/// subtrees that don't carry a self-ref — Wado's value semantics
+/// turn the rebuild into a deep copy.
+fn op_subtree_contains_self_ref(op: &Op, rule_name: &String) -> bool {
+    return match *op {
+        RuleCall(rc) => rc.target_name == *rule_name,
+        ListLabel(ll) => op_subtree_contains_self_ref(&ll.inner, rule_name),
+        Repeat(r) => op_subtree_contains_self_ref(&r.body, rule_name),
+        Group(g) => {
+            let mut found = false;
+            for let alt of &g.alts {
+                for let inner of &alt.ops {
+                    if op_subtree_contains_self_ref(inner, rule_name) {
+                        found = true;
+                        break;
+                    }
+                }
+                if found { break; }
+            }
+            found;
+        },
+        Token(_) => false,
+        Literal(_) => false,
+        Wildcard(_) => false,
+        Excluded(_) => false,
+    };
+}
+
 fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
     return match op {
         RuleCall(rc) => Op::RuleCall(RuleCallOp {
@@ -814,7 +950,164 @@ fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
             inner: rebind_self_ref_min_prec(ll.inner, prec),
             dedup_base: ll.dedup_base,
         }),
-        other => other,
+        Token(t) => Op::Token(t),
+        Literal(l) => Op::Literal(l),
+        Wildcard(wop) => Op::Wildcard(wop),
+        Excluded(e) => Op::Excluded(e),
+        Repeat(r) => Op::Repeat(r),
+        Group(g) => Op::Group(g),
+    };
+}
+
+/// Stamp `min_prec_arg = prec` on every self-recursive `RuleCall`
+/// reachable through `Repeat` / `Group` / `ListLabel`. Used by
+/// `stamp_lr_self_ref_min_prec` for top-level positions where the
+/// op is a container (`rebind_self_ref_min_prec` covers direct
+/// `RuleCall` / `ListLabel`). Both name forms are threaded so the
+/// scan-side recursion (`rule_snake`-keyed) stays in sync.
+fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String, prec: i32) -> Op {
+    return match op {
+        RuleCall(rc) => {
+            if rc.target_name == *rule_name {
+                Op::RuleCall(RuleCallOp {
+                    target_name: rc.target_name,
+                    target_snake: rc.target_snake,
+                    variant_id: rc.variant_id,
+                    min_prec_arg: Option::<i32>::Some(prec),
+                    field: rc.field,
+                    dedup_base: rc.dedup_base,
+                });
+            } else {
+                Op::RuleCall(rc);
+            }
+        },
+        ListLabel(ll) => Op::ListLabel(ListLabelOp {
+            field: ll.field,
+            inner: deep_stamp_inner_self_refs_op(ll.inner, rule_name, rule_snake, prec),
+            dedup_base: ll.dedup_base,
+        }),
+        Repeat(r) => Op::Repeat(RepeatOp {
+            kind: r.kind,
+            body: deep_stamp_inner_self_refs_op(r.body, rule_name, rule_snake, prec),
+            scan_body: deep_stamp_inner_self_refs_scan(r.scan_body, rule_snake, prec),
+            strategy: r.strategy,
+            field: r.field,
+            caller_follow_first: r.caller_follow_first,
+            position_mask: r.position_mask,
+            k_prefix_mask: r.k_prefix_mask,
+            caller_follow_second: r.caller_follow_second,
+            body_scannable: r.body_scannable,
+            body_has_field: r.body_has_field,
+            body_first_set: r.body_first_set,
+            body_is_single_alt_group: r.body_is_single_alt_group,
+            body_second_position_first: r.body_second_position_first,
+            body_shape: r.body_shape,
+        }),
+        Group(g) => {
+            let mut new_alts: Array<AltBody> = [];
+            for let alt of &g.alts {
+                let mut new_ops: Array<Op> = [];
+                for let inner_op of &alt.ops {
+                    new_ops.push(deep_stamp_inner_self_refs_op(*inner_op, rule_name, rule_snake, prec));
+                }
+                new_alts.push(AltBody {
+                    alt_index: alt.alt_index,
+                    case_name: alt.case_name,
+                    struct_name: alt.struct_name,
+                    ops: new_ops,
+                    fields: alt.fields,
+                    prefix_self_ref_min_prec: alt.prefix_self_ref_min_prec,
+                });
+            }
+            let mut new_scan_alts: Array<ScanBody> = [];
+            for let scan_alt of &g.scan_alts {
+                let mut new_elements: Array<ScanElement> = [];
+                for let se of &scan_alt.elements {
+                    new_elements.push(deep_stamp_inner_self_refs_scan(*se, rule_snake, prec));
+                }
+                new_scan_alts.push(ScanBody { elements: new_elements });
+            }
+            Op::Group(GroupOp {
+                shape: g.shape,
+                alts: new_alts,
+                scan_alts: new_scan_alts,
+                dispatch: g.dispatch,
+                scan_dispatch: g.scan_dispatch,
+            });
+        },
+        // Leaves with no nested Op: pass through unchanged. Listed
+        // explicitly so a new Op variant fails to compile here rather
+        // than silently dropping a nested self-ref it might carry.
+        Token(t) => Op::Token(t),
+        Literal(l) => Op::Literal(l),
+        Wildcard(wop) => Op::Wildcard(wop),
+        Excluded(e) => Op::Excluded(e),
+    };
+}
+
+/// Scan-side mirror of `deep_stamp_inner_self_refs_op`. Preserves
+/// `variant_id` (unlike the top-level `rebind_scan_self_ref_min_prec`
+/// which clears it): a nested self-ref isn't an LR climb, so the
+/// per-call-site id `intern_follow_variant` set for the local follow
+/// must survive.
+fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
+    return match se {
+        RuleCall(rc) => {
+            if rc.target_snake == *rule_snake {
+                ScanElement::RuleCall(ScanRuleCallElem {
+                    target_snake: rc.target_snake,
+                    variant_id: rc.variant_id,
+                    min_prec_arg: Option::<i32>::Some(prec),
+                });
+            } else {
+                ScanElement::RuleCall(rc);
+            }
+        },
+        Repeat(r) => ScanElement::Repeat(ScanRepeatElem {
+            kind: r.kind,
+            body: deep_stamp_inner_self_refs_scan(r.body, rule_snake, prec),
+            strategy: r.strategy,
+            inner_first: r.inner_first,
+            caller_follow_first: r.caller_follow_first,
+            k_prefix_mask: r.k_prefix_mask,
+        }),
+        Group(g) => {
+            let mut new_alts: Array<ScanBody> = [];
+            for let scan_alt of &g.alts {
+                let mut new_elements: Array<ScanElement> = [];
+                for let inner of &scan_alt.elements {
+                    new_elements.push(deep_stamp_inner_self_refs_scan(*inner, rule_snake, prec));
+                }
+                new_alts.push(ScanBody { elements: new_elements });
+            }
+            ScanElement::Group(ScanGroupElem {
+                alts: new_alts,
+                dispatch: g.dispatch,
+                lenient: g.lenient,
+                alt_first_sets: g.alt_first_sets,
+                wildcard_alt_indices: g.wildcard_alt_indices,
+            });
+        },
+        OptionalLookahead(ole) => {
+            let mut new_bodies: Array<ScanBody> = [];
+            for let body of &ole.bodies {
+                let mut new_elements: Array<ScanElement> = [];
+                for let inner of &body.elements {
+                    new_elements.push(deep_stamp_inner_self_refs_scan(*inner, rule_snake, prec));
+                }
+                new_bodies.push(ScanBody { elements: new_elements });
+            }
+            ScanElement::OptionalLookahead(ScanOptionalLookaheadElem {
+                sigs: ole.sigs,
+                bodies: new_bodies,
+            });
+        },
+        // Leaves with no nested ScanElement: pass through unchanged.
+        // Listed explicitly so that adding a new ScanElement variant
+        // is a compile error here rather than a silent miss.
+        Token(t) => ScanElement::Token(t),
+        Wildcard => ScanElement::Wildcard,
+        Excluded(e) => ScanElement::Excluded(e),
     };
 }
 
@@ -833,6 +1126,12 @@ fn collect_lr_suffix_first_tokens_from_lowered(lr_alts: &Array<LrAlt>) -> Array<
     return result;
 }
 
+/// Pick the `min_prec` for a TOP-LEVEL self-recursive call at suffix
+/// position `k`. Defaults to `conflict_min`; drops to `0` for
+/// non-trailing self-refs whose next op is not an LR-suffix token
+/// (BETWEEN…AND pattern). Nested self-refs bypass this helper and
+/// use `conflict_min` unconditionally — see
+/// `stamp_lr_self_ref_min_prec`'s container branch.
 fn compute_self_ref_prec_from_ops(ops: &Array<Op>, k: i32, elem_idx: i32, last_self_ref_idx: i32, conflict_min: i32, lr_suffix_first_tokens: &Array<String>) -> i32 {
     let mut prec = conflict_min;
     if elem_idx != last_self_ref_idx && k + 1 < ops.len() {
@@ -1380,7 +1679,12 @@ fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
     return match *elem {
         RuleRef(r) => r.name == *rule_name,
         Label(lab) => element_is_self_ref(&lab.element, rule_name),
-        _ => false,
+        TokenRef(_) => false,
+        Literal(_) => false,
+        Group(_) => false,
+        Repeat(_) => false,
+        Wildcard(_) => false,
+        Not(_) => false,
     };
 }
 
@@ -1975,11 +2279,12 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
         ops.push(op);
     }
 
-    // For prefix LR alts (e.g. `'-' e` in `e : e '+' e | '-' e | …`),
-    // stamp the trailing self-ref RuleCall's `min_prec_arg` so emit
-    // doesn't need to thread the prec value through `ctx`. The
-    // surrounding alt walker (`gen_op_leaf`) reads
-    // `RuleCallOp.min_prec_arg` directly.
+    // For prefix LR alts (`'-' e` in `e : e '+' e | '-' e | …`), stamp
+    // the trailing self-ref's `min_prec_arg` so emit reads it directly.
+    // The shallow `find_self_ref_rule_call` is sufficient because
+    // `is_prefix_alt` only accepts a direct (possibly labeled) self-ref
+    // as the trailing element; if it ever broadens to containers,
+    // mirror the depth-walking fallback in `stamp_lr_self_ref_min_prec`.
     let prefix_prec = compute_prefix_self_ref_min_prec(rule, idx);
     if prefix_prec > 0 && !ops.is_empty() {
         let last_idx = ops.len() - 1;
@@ -2767,7 +3072,18 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     }
 
     let strategy = if rep.non_greedy {
-        compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
+        // `??` shares the Option<T> emit shape of greedy `?` — only the
+        // prediction layer differs (prefer-skip vs first-set match).
+        // Reuse the greedy strategy pipeline so emit's Optional
+        // dispatcher accepts it; the prefer-skip semantics remain
+        // tracked in package-gale/TODO.md. `*?` / `+?` keep the
+        // dedicated non-greedy strategy.
+        if let Optional = rep.kind {
+            let mask_decision = choose_greedy_repeat_strategy(&inner_first, variant_mask);
+            pick_greedy_strategy(mask_decision, opt_specialised);
+        } else {
+            compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
+        }
     } else {
         // Mask-driven `Suppressed` always wins — if every iteration's
         // first token is in the variant mask, the loop never enters
@@ -2787,22 +3103,26 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
     let iter_follow = union_kind_arrays(&inner_first, outer_follow);
 
     let mut inner_counts: Array<[String, i32]> = [];
-    // `(name+=elem)*` / `name+=elem+` / `name+=elem?` — the Repeat
-    // itself supplies the `Array<>` typing via its `field`; the inner
-    // Label only contributes its name, not an extra `Array<>` wrap.
-    // Bypass `lower_label_op`'s `Op::ListLabel` wrapper here and
-    // lower the labelled inner directly, rebinding to the Repeat's
-    // outer field name so emit's runtime construction (which
-    // references the binding as `<outer_field>.push(...)`) matches.
-    // The iter body sits at a different input depth than the
-    // surrounding alt position — the surrounding K-prefix (e.g. caller
-    // `c : X Y Z` at the outer site) does not apply here. The iter's
-    // own K-prefix would be `first(iter again | exit-to-caller)`, a
-    // fixed-point computation we defer; passing `[]` is sound and
-    // preserves the existing 1-token mask path for inner RuleRefs.
+    // `(name+=elem)*` / `name+=elem+` / `name+=elem?`: the Repeat
+    // supplies the `Array<>` typing via its `field`; bypass
+    // `lower_label_op`'s `Op::ListLabel` wrapper and lower the inner
+    // directly. Seed `inner_counts` with `outer_field` so the inner's
+    // `dedup_name` forks the name when it would collide with the
+    // container — keeps `let <natural>` for the common case while
+    // guaranteeing `<inner>.push(<natural>)` never self-shadows. The
+    // non-Repeat counterpart is handled emit-side in
+    // `gen_op_list_label` (lower's `name_counts` can't track it there
+    // without desyncing the visitor's parallel naming pipeline).
+    //
+    // K-prefix masks reset to `[]` because the iter body sits at a
+    // different input depth than the surrounding alt position; the
+    // iter's own K-prefix (`first(iter again | exit-to-caller)`) is
+    // a fixed-point computation we defer. The 1-token mask path for
+    // inner RuleRefs is unaffected.
     let body = if repeat_inner_is_list_label(&rep.element) {
         if let Label(lab) = &rep.element {
-            let inner_op = lower_op(
+            let _ = dedup_name(&outer_field, &mut inner_counts);
+            lower_op(
                 &lab.element,
                 &mut inner_counts,
                 rule_name,
@@ -2815,11 +3135,6 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut Array<[String, i32]>, 
                 outer_position_mask,
                 &empty_k_prefix(),
             );
-            // The Repeat's outer field carries `lab.field_name` as
-            // its base (deduped earlier in `outer_field`); the rebind
-            // adopts that base on the inner op so emit's leaf sync
-            // bumps the actually-emitted name, not the elided inner.
-            rebind_op_field(inner_op, &outer_field, &lab.field_name);
         } else {
             panic("repeat_inner_is_list_label returned true for non-Label");
         }
@@ -3124,7 +3439,12 @@ fn try_optional_scan_guard(inner: &Element, ctx: &mut GenContext) -> Option<Repe
     let needs_guard = match *inner {
         Group(_) => true,
         RuleRef(_) => true,
-        _ => false,
+        TokenRef(_) => false,
+        Literal(_) => false,
+        Wildcard(_) => false,
+        Not(_) => false,
+        Label(_) => false,
+        Repeat(_) => false,
     };
     if !needs_guard {
         return null;
@@ -3631,7 +3951,7 @@ fn transparent_group_inner_decl(_g: &GroupOp) -> Option<FieldDecl> {
 /// * `ListLabel` carries `dedup_base` itself; rebinding the outer
 ///   field here updates `dedup_base` to `new_dedup_base` for the same
 ///   reason as the leaf arms.
-fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> Op {
+pub fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> Op {
     return match op {
         Token(t) => Op::Token(TokenOp { kind: t.kind, field: *new_field, dedup_base: *new_dedup_base }),
         Literal(l) => Op::Literal(LiteralOp { kind: l.kind, field: *new_field, dedup_base: *new_dedup_base }),

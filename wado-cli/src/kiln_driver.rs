@@ -38,6 +38,7 @@ use wado_compiler::kiln::{
     Plan, PlanError, content_hash, encode_options_canonical, file_hash, generator_identity,
     has_generated_marker, hex_digest, validate_options,
 };
+use wado_compiler::{Code, Diagnostic, Severity};
 use wado_manifest::Manifest;
 
 use crate::kiln_metadata::{
@@ -201,8 +202,8 @@ pub async fn execute<H: CompilerHost>(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecuteMode {
     /// Default `wado compile` behavior: write generator outputs to disk,
-    /// surface a [`Code::KilnGeneratedRegenerated`] warning when the new
-    /// bytes differ from the pre-existing on-disk file.
+    /// surface a [`Code::KilnGeneratedRegenerated`] debug notice when the
+    /// new bytes differ from the pre-existing on-disk file.
     WriteAndWarnOnOverwrite,
     /// `wado check` behavior: do not write to disk. The caller is
     /// responsible for byte-comparing the returned [`InvocationRun`]
@@ -282,7 +283,7 @@ pub async fn execute_with_mode<H: CompilerHost>(
                 if let Ok(existing) = std::fs::read(&full_path)
                     && existing != bytes
                 {
-                    emit_generated_regenerated_warning(
+                    emit_generated_regenerated_notice(
                         host,
                         &invocation.decl_site.synthetic_id,
                         normalized.as_str(),
@@ -533,10 +534,13 @@ fn emit_generated_modified_warning<H: CompilerHost>(host: &H, invocation: &str, 
     });
 }
 
-fn emit_generated_regenerated_warning<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
+fn emit_generated_regenerated_notice<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
     use wado_compiler::{Diagnostic, Severity};
+    // `Debug`, not `Warning`: regenerating cached outputs is the expected
+    // state after a generator edit, and one run can touch hundreds of
+    // files (issue #1218), so per-file warnings are just noise.
     host.emit_diagnostic(Diagnostic {
-        severity: Severity::Warning,
+        severity: Severity::Debug,
         code: wado_compiler::Code::KilnGeneratedRegenerated,
         message: format!(
             "kiln[{invocation}]: regenerating {path} (previous content differed from \
@@ -701,72 +705,45 @@ fn validate_rel_output_path(p: &str) -> Result<PathBuf, ExecuteError> {
     Ok(candidate.to_path_buf())
 }
 
-/// Component bytes returned by [`GeneratorProvider::get_component`],
-/// paired with a content-addressed hash of the generator's source
-/// closure. The hash flows into [`Metadata::generator_source_hash`] so
-/// the kiln-output cache invalidates when the generator changes — even
-/// when the consumer's primary `.g4` (or other inputs) is unchanged.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GeneratorComponent {
-    /// Component model `.wasm` bytes ready for `run_generator`.
-    pub bytes: Vec<u8>,
-    /// Hex-encoded SHA-256 of the generator's source closure (entry
-    /// `.wado` plus every transitively imported `.wado`). Empty when
-    /// the provider could not compute one (e.g. the spec-form path on
-    /// providers that have not implemented source-distribution
-    /// hashing). An empty string is recorded verbatim in the metadata
-    /// and matches another empty string only — the driver therefore
-    /// keeps caching consistent for generators that can never produce
-    /// a hash, while still invalidating once one is produced.
+/// Generator artifacts produced once per unique [`GeneratorModule`]
+/// per pipeline run, by [`GeneratorProvider::resolve`]. Every
+/// downstream phase reads from the resolved bundle rather than
+/// re-asking the provider, so on-disk cache reads happen at most once
+/// per module per run.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedGenerator {
+    pub wasm: Vec<u8>,
+    /// `None` when the generator has no `pub struct Options` (or the
+    /// provider can't introspect it); [`typed_encode_options`] then
+    /// falls back to the provisional TOML encoding.
+    pub descriptor: Option<OptionsDescriptor>,
+    /// Hex SHA-256 of the generator's transitive `.wado` closure. The
+    /// empty string is a valid value (providers that can't compute
+    /// one) and is recorded verbatim — so two such generators never
+    /// share a kiln-output cache entry by accident.
     pub source_hash: String,
 }
 
-/// Resolves a generator's component bytes for execution.
+/// Resolves a generator module to its artifacts (component wasm,
+/// typed options descriptor, source-closure hash).
 ///
-/// The runner is deliberately decoupled from how a given module becomes a
-/// component `.wasm`. Two concrete providers land in later commits:
-///
-/// - A production `CliGeneratorProvider` that compiles and caches generator
-///   components under `build/kiln/generators/…` (ships with M6.6,
-///   when there is a real generator to compile).
-/// - A test provider that returns pre-built bytes.
+/// The trait is deliberately a single method: [`run_pipeline`] calls
+/// it once per unique module up-front (see [`resolve_modules`]) and
+/// hands the same `ResolvedGenerator` to every downstream phase, so
+/// implementations don't need their own in-memory cache layer.
 pub trait GeneratorProvider {
-    /// Resolve `module` to component bytes plus a content-addressed
-    /// identity for the generator's source closure. The driver caches
-    /// the result by `GeneratorModule` for the duration of one
-    /// `run_pipeline`, so a module shared across N invocations triggers
-    /// at most one call here. Implementations should still honor their
-    /// own internal cache so the steady-state hit on a *cold* pipeline
-    /// is a small filesystem read rather than a recompile.
-    fn get_component(
+    /// Resolve `module` to its [`ResolvedGenerator`]. Implementations
+    /// own whatever on-disk cache they read; nothing above this layer
+    /// dedups, so a second call for the same module will redo all the
+    /// work this method does.
+    fn resolve(
         &self,
         module: &GeneratorModule,
-    ) -> impl std::future::Future<Output = Result<GeneratorComponent, ProviderError>> + Send;
-
-    /// Resolve `module` to its typed [`OptionsDescriptor`]. Used by the
-    /// driver to validate a user-supplied options table before calling the
-    /// generator — see
-    /// [`wado_compiler::kiln::validate_options`]. When a provider cannot
-    /// introspect the generator (e.g. consume-only mode on the LSP), it
-    /// returns [`ProviderError::Unsupported`] and the driver falls back to
-    /// the provisional TOML encoder on the raw options table.
-    fn descriptor(
-        &self,
-        module: &GeneratorModule,
-    ) -> impl std::future::Future<Output = Result<OptionsDescriptor, ProviderError>> + Send {
-        let _ = module;
-        async {
-            Err(ProviderError::Unsupported {
-                message:
-                    "kiln: provider does not expose OptionsDescriptor (typed options unavailable)"
-                        .to_string(),
-            })
-        }
-    }
+    ) -> impl std::future::Future<Output = Result<ResolvedGenerator, ProviderError>> + Send;
 }
 
 /// Error returned by a [`GeneratorProvider`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ProviderError {
     /// The provider cannot resolve the module (e.g. build-dependency
     /// resolution not yet wired). The message should guide the user.
@@ -804,7 +781,7 @@ pub struct PipelineOutcome {
     /// and skips lockfile / output-directory writes so committed artifacts
     /// are preserved.
     pub stale: Vec<String>,
-    /// Redirect index for the resolver: `(decl_file, from)` → entry path.
+    /// Redirect index for the elaborator: `(decl_file, from)` → entry path.
     /// Populated from every invocation (cached, executed, or stale) so the
     /// compiler can redirect `use { X } from "<schema>"` to the generated
     /// entry module. Empty when no invocations ran.
@@ -866,20 +843,65 @@ impl From<DriverError> for PipelineError {
     }
 }
 
-/// Run the full Kiln pipeline for the given inline invocations: plan →
-/// per-invocation cache check → execute on miss → reconcile stale outputs →
-/// persist lockfile.
-///
-/// `provider` resolves generator module bytes on demand. `host` is the
-/// compiler host used to load input files and (inside `execute`) to invoke
-/// the runner.
-///
-/// On success, the manifest's `wado.lock` is updated in place to persist
-/// the current `[[generator-cache]]` entries. The lockfile is re-serialized
-/// via [`wado_manifest::LockFile::to_toml`], so non-Kiln sections round-trip
-/// through the manifest-crate writer — byte-identity is not guaranteed.
+/// Emit a debug-severity `SpanStart` diagnostic. The CLI host renders
+/// these as `[hh:mm:ss.tttt] >> <name>` when `--log-level debug` is set,
+/// so timing breakdowns of the Kiln pipeline are visible alongside the
+/// existing `parse` / `bind` / `wir_optimize` spans the compiler emits.
+fn span_start<H: CompilerHost>(host: &H, name: &str) {
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Debug,
+        code: Code::SpanStart,
+        message: name.to_string(),
+        span: None,
+    });
+}
+
+fn span_end<H: CompilerHost>(host: &H, name: &str) {
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Debug,
+        code: Code::SpanEnd,
+        message: name.to_string(),
+        span: None,
+    });
+}
+
+/// RAII guard: emits `SpanStart` on construction, `SpanEnd` on drop.
+/// Lets the surrounding function early-return on any error branch
+/// without manually pairing every `return` with a `span_end` call —
+/// which kept the Kiln driver's `?` flow free and avoided an extra
+/// `async fn` wrapper that would otherwise inflate the layout depth
+/// of `compile::run` past rustc's default recursion limit.
+struct KilnSpan<'a, H: CompilerHost> {
+    host: &'a H,
+    name: String,
+}
+
+impl<'a, H: CompilerHost> KilnSpan<'a, H> {
+    fn new(host: &'a H, name: impl Into<String>) -> Self {
+        let name = name.into();
+        span_start(host, &name);
+        Self { host, name }
+    }
+}
+
+impl<H: CompilerHost> Drop for KilnSpan<'_, H> {
+    fn drop(&mut self) {
+        span_end(self.host, &self.name);
+    }
+}
+
+/// Run the full Kiln pipeline for the given inline invocations: resolve
+/// every unique generator once, plan → per-invocation cache check →
+/// execute on miss → reconcile stale outputs.
 ///
 /// Returns an empty outcome when `inline_invocations` is empty.
+///
+/// `no_cache` only bypasses on-disk caches — the per-invocation
+/// `<primary>.kiln.json` and the per-generator `build/kiln/` artifacts.
+/// In-process artifact sharing (the upfront resolve map, the host-side
+/// compiled `Component` cache) is unaffected: it would be wrong to
+/// recompile or re-instantiate the same wasm twice within a single
+/// pipeline run regardless of how on-disk caching is configured.
 ///
 /// # Errors
 /// See [`PipelineError`].
@@ -889,11 +911,13 @@ pub async fn run_pipeline<H, P>(
     host: &H,
     provider: &P,
     inline_invocations: Vec<wado_compiler::kiln::Invocation>,
+    no_cache: bool,
 ) -> Result<PipelineOutcome, PipelineError>
 where
     H: CompilerHost,
     P: GeneratorProvider,
 {
+    let _pipeline_span = KilnSpan::new(host, "kiln");
     let plan_order =
         wado_compiler::kiln::build_plan(inline_invocations).map_err(DriverError::Plan)?;
     let mut planned = PlanOutcome {
@@ -904,91 +928,94 @@ where
         return Ok(PipelineOutcome::default());
     }
 
-    typed_encode_options(manifest, &mut planned.plan.order, provider, host).await;
+    let resolved = resolve_modules(&planned.plan.order, provider, host).await;
+
+    {
+        let _s = KilnSpan::new(host, "kiln/typed_encode_options");
+        typed_encode_options(manifest, &mut planned.plan.order, &resolved, host);
+    }
 
     let mut outcome = PipelineOutcome::default();
     let mut kept_by_dir: indexmap::IndexMap<String, Vec<String>> = indexmap::IndexMap::new();
-    // Per-pipeline cache of provider results, keyed by `GeneratorModule`.
-    // Many invocations typically share a single generator module (one
-    // generator package emits parsers for every grammar in a project), so
-    // looking it up once per pipeline keeps the per-invocation hot path to
-    // an in-memory `Arc::clone` instead of a fresh sidecar walk + WASM read.
-    // Linear scan is fine: the unique-module count is O(1) in practice.
-    let mut module_cache: Vec<(GeneratorModule, Arc<GeneratorComponent>)> = Vec::new();
 
     for invocation in &planned.plan.order {
         let invocation_name = invocation_id(invocation);
+        let _inv_span = KilnSpan::new(host, format!("kiln/{invocation_name}"));
 
-        let existing = match kiln_metadata::load(
-            manifest_root,
-            invocation.output_dir.as_str(),
-            invocation.from.as_str(),
-        ) {
-            Ok(m) => m,
-            Err(source) => {
-                emit_metadata_load_warning(host, &invocation_name, &source);
-                None
+        // --no-cache: drop the previously-recorded metadata so the
+        // invocation always falls through to the run branch below.
+        // We still let `run_and_build_metadata` write a fresh sidecar
+        // so a subsequent cache-enabled run can hit it.
+        let existing = if no_cache {
+            None
+        } else {
+            match kiln_metadata::load(
+                manifest_root,
+                invocation.output_dir.as_str(),
+                invocation.from.as_str(),
+            ) {
+                Ok(m) => m,
+                Err(source) => {
+                    emit_metadata_load_warning(host, &invocation_name, &source);
+                    None
+                }
             }
         };
 
         let options_hash =
             wado_compiler::kiln::hash_options_canonical(&invocation.options_canonical);
 
-        // Resolve the component once per unique module. The provider's
-        // own internal cache makes a first call's hit path cheap; the
-        // pipeline-level cache here ensures we don't repeat that walk
-        // for every invocation that shares the same module.
-        let component_result: Result<Arc<GeneratorComponent>, ProviderError> =
-            match module_cache.iter().find(|(m, _)| m == &invocation.module) {
-                Some((_, cached)) => Ok(Arc::clone(cached)),
-                None => match provider.get_component(&invocation.module).await {
-                    Ok(c) => {
-                        let arc = Arc::new(c);
-                        module_cache.push((invocation.module.clone(), Arc::clone(&arc)));
-                        Ok(arc)
-                    }
-                    Err(e) => Err(e),
-                },
-            };
+        let component_result: Result<Arc<ResolvedGenerator>, ProviderError> =
+            lookup_resolved(&resolved, &invocation.module);
 
         let (entry, executed) =
             if let Some(prior) = existing.clone().filter(|m| m.options_hash == options_hash) {
                 match component_result {
-                    Ok(component) => match cache_matches(
-                        &prior,
-                        invocation,
-                        manifest_root,
-                        host,
-                        &component.source_hash,
-                    )
-                    .await
-                    {
-                        CacheCheck::Hit | CacheCheck::HitButModified => {
-                            outcome.cached.push(invocation_name.clone());
-                            (Some(prior), false)
-                        }
-                        CacheCheck::Miss => match run_and_build_metadata(
-                            &invocation_name,
-                            invocation,
-                            manifest_root,
-                            host,
-                            component.as_ref(),
-                            options_hash.clone(),
-                        )
-                        .await
-                        {
-                            Ok(metadata) => {
-                                outcome.executed.push(invocation_name.clone());
-                                (Some(metadata), true)
-                            }
-                            Err(e) if is_unsupported(&e) => {
-                                emit_stale_warning(host, &invocation_name);
-                                outcome.stale.push(invocation_name.clone());
+                    Ok(component) => {
+                        let check = {
+                            let _s = KilnSpan::new(host, "kiln/cache_check");
+                            cache_matches(
+                                &prior,
+                                invocation,
+                                manifest_root,
+                                host,
+                                &component.source_hash,
+                            )
+                            .await
+                        };
+                        match check {
+                            CacheCheck::Hit | CacheCheck::HitButModified => {
+                                outcome.cached.push(invocation_name.clone());
                                 (Some(prior), false)
                             }
-                            Err(e) => return Err(e),
-                        },
-                    },
+                            CacheCheck::Miss => {
+                                let r = {
+                                    let _s = KilnSpan::new(host, "kiln/run");
+                                    run_and_build_metadata(
+                                        &invocation_name,
+                                        invocation,
+                                        manifest_root,
+                                        host,
+                                        component.as_ref(),
+                                        options_hash.clone(),
+                                    )
+                                    .await
+                                };
+                                match r {
+                                    Ok(metadata) => {
+                                        outcome.executed.push(invocation_name.clone());
+                                        (Some(metadata), true)
+                                    }
+                                    Err(e) if is_unsupported(&e) => {
+                                        emit_stale_warning(host, &invocation_name);
+                                        outcome.stale.push(invocation_name.clone());
+                                        (Some(prior), false)
+                                    }
+                                    Err(e) => return Err(e),
+                                }
+                            }
+                        }
+                    }
                     Err(ProviderError::Unsupported { .. }) => {
                         emit_stale_warning(host, &invocation_name);
                         outcome.stale.push(invocation_name.clone());
@@ -1003,27 +1030,32 @@ where
                 }
             } else {
                 match component_result {
-                    Ok(component) => match run_and_build_metadata(
-                        &invocation_name,
-                        invocation,
-                        manifest_root,
-                        host,
-                        component.as_ref(),
-                        options_hash,
-                    )
-                    .await
-                    {
-                        Ok(metadata) => {
-                            outcome.executed.push(invocation_name.clone());
-                            (Some(metadata), true)
+                    Ok(component) => {
+                        let r = {
+                            let _s = KilnSpan::new(host, "kiln/run");
+                            run_and_build_metadata(
+                                &invocation_name,
+                                invocation,
+                                manifest_root,
+                                host,
+                                component.as_ref(),
+                                options_hash,
+                            )
+                            .await
+                        };
+                        match r {
+                            Ok(metadata) => {
+                                outcome.executed.push(invocation_name.clone());
+                                (Some(metadata), true)
+                            }
+                            Err(e) if is_unsupported(&e) => {
+                                emit_stale_warning(host, &invocation_name);
+                                outcome.stale.push(invocation_name.clone());
+                                (existing, false)
+                            }
+                            Err(e) => return Err(e),
                         }
-                        Err(e) if is_unsupported(&e) => {
-                            emit_stale_warning(host, &invocation_name);
-                            outcome.stale.push(invocation_name.clone());
-                            (existing, false)
-                        }
-                        Err(e) => return Err(e),
-                    },
+                    }
                     Err(ProviderError::Unsupported { .. }) => {
                         emit_stale_warning(host, &invocation_name);
                         outcome.stale.push(invocation_name.clone());
@@ -1106,7 +1138,7 @@ pub struct CheckOutcome {
     pub checked: Vec<String>,
     pub stale: Vec<String>,
     pub missing: Vec<String>,
-    /// Redirect index for the resolver, populated identically to
+    /// Redirect index for the elaborator, populated identically to
     /// [`PipelineOutcome::invocations`] so the downstream compile can
     /// resolve `use { ... } from "<schema>"` even though `check_pipeline`
     /// did not write outputs to disk.
@@ -1142,22 +1174,22 @@ where
         return Ok(CheckOutcome::default());
     }
 
-    typed_encode_options(manifest, &mut planned.plan.order, provider, host).await;
+    let resolved = resolve_modules(&planned.plan.order, provider, host).await;
+    typed_encode_options(manifest, &mut planned.plan.order, &resolved, host);
 
     let mut outcome = CheckOutcome::default();
     for invocation in &planned.plan.order {
         let invocation_name = invocation_id(invocation);
 
-        let component = provider
-            .get_component(&invocation.module)
-            .await
-            .map_err(|source| PipelineError::Provider {
+        let generator = lookup_resolved(&resolved, &invocation.module).map_err(|source| {
+            PipelineError::Provider {
                 invocation: invocation_name.clone(),
                 source,
-            })?;
+            }
+        })?;
         let run = execute_with_mode(
             invocation,
-            &component.bytes,
+            &generator.wasm,
             manifest_root,
             host,
             ExecuteMode::DryRun,
@@ -1253,55 +1285,93 @@ fn emit_stale_warning<H: CompilerHost>(host: &H, invocation: &str) {
     });
 }
 
-/// Re-encode each invocation's `options_canonical` bytes using the typed
-/// pipeline from [`wado_compiler::kiln::encode_options_canonical`] when the
-/// provider exposes a descriptor. Falls back silently to the provisional
-/// bytes already produced by [`lower`] when:
+/// Resolve every unique [`GeneratorModule`] in `order` exactly once.
 ///
-/// - the invocation is anonymous (inline `use ... with`) — M5 clauses already
-///   encode via the typed path when they are built, so this code path skips
-///   them;
-/// - the provider returns [`ProviderError::Unsupported`] (e.g. consume-only
-///   LSP mode);
-/// - the provider returns [`ProviderError::Internal`] — a warning diagnostic
-///   is surfaced through `host.emit_diagnostic`, but the pipeline continues.
+/// Resolution errors are folded into the returned map rather than
+/// bubbled up: whether a per-module failure aborts the pipeline,
+/// degrades to a stale-cache warning, or just skips option validation
+/// is a per-invocation policy decision that lives in the run loop.
 ///
-/// Validation failures (unknown / missing / type-mismatched fields) surface
-/// as error diagnostics on `host`; the provisional bytes remain in place so
-/// downstream layers still see a consistent invocation. The caller's next
-/// step — `run_and_build_entry` — will fail fast when the generator rejects
-/// the options blob, so the user sees both the compiler-side validation
-/// error and the generator-side trap in the same run.
-async fn typed_encode_options<H, P>(
-    manifest: &Manifest,
-    invocations: &mut [Invocation],
+/// `Vec` not `HashMap`: the unique-module count is O(1) in practice
+/// (typically a single generator per project) and `GeneratorModule`
+/// isn't `Hash`.
+async fn resolve_modules<H, P>(
+    order: &[Invocation],
     provider: &P,
     host: &H,
-) where
+) -> Vec<(
+    GeneratorModule,
+    Result<Arc<ResolvedGenerator>, ProviderError>,
+)>
+where
     H: CompilerHost,
     P: GeneratorProvider,
 {
-    use wado_compiler::{Code, Diagnostic, Severity};
+    let _s = KilnSpan::new(host, "kiln/resolve");
+    let mut out: Vec<(
+        GeneratorModule,
+        Result<Arc<ResolvedGenerator>, ProviderError>,
+    )> = Vec::new();
+    for inv in order {
+        if out.iter().any(|(m, _)| m == &inv.module) {
+            continue;
+        }
+        let result = provider.resolve(&inv.module).await.map(Arc::new);
+        out.push((inv.module.clone(), result));
+    }
+    out
+}
 
+/// Project the resolved-modules map into a per-invocation result. The
+/// `Err` arm is cloned (rather than referenced) so each invocation
+/// sharing a broken module can fold an owned error into its own
+/// outcome independently.
+fn lookup_resolved(
+    resolved: &[(
+        GeneratorModule,
+        Result<Arc<ResolvedGenerator>, ProviderError>,
+    )],
+    module: &GeneratorModule,
+) -> Result<Arc<ResolvedGenerator>, ProviderError> {
+    resolved
+        .iter()
+        .find(|(m, _)| m == module)
+        .map(|(_, r)| match r {
+            Ok(arc) => Ok(Arc::clone(arc)),
+            Err(e) => Err(e.clone()),
+        })
+        .expect("resolve_modules populates every module referenced by the plan")
+}
+
+/// Re-encode each invocation's `options_canonical` against the typed
+/// descriptor when one is available, falling back silently to the
+/// provisional bytes [`lower`] produced when no descriptor exists
+/// (`descriptor: None`) or the module failed to resolve at all
+/// (`Err` — the run loop will handle the failure as a per-invocation
+/// stale-cache warning or pipeline error).
+///
+/// Validation failures (unknown / missing / type-mismatched fields)
+/// surface as error diagnostics on `host`; the provisional bytes stay
+/// in place so downstream phases still see a consistent invocation
+/// and the generator-side trap surfaces in the same run as the
+/// compiler-side complaint.
+fn typed_encode_options<H: CompilerHost>(
+    manifest: &Manifest,
+    invocations: &mut [Invocation],
+    resolved: &[(
+        GeneratorModule,
+        Result<Arc<ResolvedGenerator>, ProviderError>,
+    )],
+    host: &H,
+) {
     let _ = manifest;
     for inv in invocations.iter_mut() {
-        let display_name = inv.decl_site.synthetic_id.clone();
-
-        let descriptor = match provider.descriptor(&inv.module).await {
-            Ok(d) => d,
-            Err(ProviderError::Unsupported { .. }) => continue,
-            Err(ProviderError::Internal { message }) => {
-                host.emit_diagnostic(Diagnostic {
-                    severity: Severity::Warning,
-                    code: Code::Log,
-                    message: format!(
-                        "kiln[{display_name}]: failed to introspect generator options schema \
-                         ({message}); falling back to raw TOML encoding",
-                    ),
-                    span: None,
-                });
-                continue;
-            }
+        let descriptor = match lookup_resolved(resolved, &inv.module) {
+            Ok(arc) => match &arc.descriptor {
+                Some(d) => d.clone(),
+                None => continue,
+            },
+            Err(_) => continue,
         };
 
         let supplied: Option<&AttrValue> = match inv.raw_options.as_ref() {
@@ -1326,13 +1396,13 @@ async fn run_and_build_metadata<H>(
     invocation: &Invocation,
     manifest_root: &Path,
     host: &H,
-    component: &GeneratorComponent,
+    generator: &ResolvedGenerator,
     options_hash: String,
 ) -> Result<Metadata, PipelineError>
 where
     H: CompilerHost,
 {
-    let run = execute(invocation, &component.bytes, manifest_root, host)
+    let run = execute(invocation, &generator.wasm, manifest_root, host)
         .await
         .map_err(|source| PipelineError::Execute {
             invocation: invocation_name.to_string(),
@@ -1343,7 +1413,7 @@ where
         invocation,
         &run,
         options_hash,
-        component.source_hash.clone(),
+        generator.source_hash.clone(),
     ))
 }
 

@@ -223,10 +223,10 @@ trailers_tx.write(Result::Ok(null));
 - [x] `AsyncCall<T>` added to `prelude/types.wado`; non-generic `Subtask`
       retained as an internal resource.
 - [x] Compiler representation: `AsyncCall<T>` is a struct-like type with the
-      hidden `i32` fields plus the lift `fn` pointer; type resolver,
+      hidden `i32` fields plus the lift `fn` pointer; type elaborator,
       monomorphization, and WIR lowering construct and read it. Hardcoded
       under the name `"AsyncCall"` in `cm_binding/import_adapter.rs`,
-      `cm_binding/types.rs`, `resolver/call.rs`, and `component_model.rs`.
+      `cm_binding/types.rs`, `elaborator/call.rs`, and `component_model.rs`.
 - [x] `AsyncCall<T>::wait` / `cancel` / `join` written in Wado in
       `prelude/types.wado`, reusing `wait_for_subtask`-style logic.
 - [x] `needs_async_lower` branch in `cm_binding.rs` returns `AsyncCall<T>`

@@ -41,7 +41,10 @@ use {
     deflate_raw,
     inflate_raw,
     gzip_compress,
+    gzip_compress_with_header,
     inflate_gzip,
+    inflate_get_gzip_header,
+    GzipHeader,
     uncompress,
     DeflateStream,
     InflateStream,
@@ -624,4 +627,20 @@ test "inflate_zlib error on invalid data" {
 test "inflate_gzip error on invalid data" {
     let bad: Array<u8> = [0, 0];
     assert inflate_gzip(&bad) matches { Err(_) };
+}
+
+test "gzip header preserves UTF-8 name and comment" {
+    let mut header = GzipHeader::new();
+    header.set_name("café_日本語.txt");
+    header.set_comment("コメント 😀");
+
+    let data = string_to_bytes("payload");
+    let compressed = gzip_compress_with_header(&data, Z_DEFAULT_COMPRESSION, &header);
+
+    let parsed = inflate_get_gzip_header(&compressed).unwrap();
+    assert parsed.name() == "café_日本語.txt", "FNAME must round-trip as UTF-8";
+    assert parsed.comment() == "コメント 😀", "FCOMMENT must round-trip as UTF-8";
+
+    // The body still inflates correctly with non-ASCII header fields present.
+    assert bytes_equal(&data, &inflate_gzip(&compressed).unwrap());
 }

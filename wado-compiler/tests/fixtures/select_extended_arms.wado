@@ -1,0 +1,72 @@
+// Verify that `select_lowering` accepts `Unary`, `Binary`, and `Cast`
+// expressions as arms — not just `Local` / `Literal`. Both arms of a
+// `select` are evaluated unconditionally, so the eligibility check
+// must reject anything that could trap (Div, Mod, Deref) or have side
+// effects (Call, Assign) but accept the cheap leaf-pure shapes.
+//
+// The motivating sites are in `fpfmt`:
+//   `abs_f = if is_neg { -value } else { value };`       (Unary Neg)
+//   `decimal_pos = if c { 2 - p1 } else { 1 - p1 };`     (Binary Sub)
+// which used to survive as `if` expressions because the arms weren't
+// `Local | Literal`.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn opaque_f(x: f64) -> f64 {
+    return x + 1.0;
+}
+
+#[inline(never)]
+fn opaque_i(x: i32) -> i32 {
+    return x;
+}
+
+#[inline(never)]
+fn opaque_bool(x: i32) -> bool {
+    return x > 0;
+}
+
+export fn run() with Stdout {
+    // Unary::Neg arm (the fpfmt::fmt_fixed shape).
+    let v = opaque_f(2.5);
+    let neg = opaque_bool(1);
+    let abs_f = if neg {
+        -v;
+    } else {
+        v;
+    };
+
+    // Binary::Sub arms (the fpfmt::fixed_width_for_prec shape).
+    let p = opaque_i(7);
+    let c = opaque_bool(1);
+    let decimal_pos = if c {
+        2 - p;
+    } else {
+        1 - p;
+    };
+
+    // Cast arm.
+    let x = opaque_i(3);
+    let c2 = opaque_bool(0);
+    let widened = if c2 {
+        x as i64;
+    } else {
+        (x + 1) as i64;
+    };
+
+    assert abs_f == -3.5;
+    assert decimal_pos == -5;
+    assert widened == 4;
+    println(`{abs_f} {decimal_pos} {widened}`);
+}
+
+__DATA__
+{
+    "stdout": "-3.5 -5 4\n",
+    "wir_expect:O2": [
+        "select f64(",
+        "select i32(",
+        "select i64("
+    ]
+}

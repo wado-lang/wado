@@ -13,7 +13,6 @@ use rustc_hash::FxBuildHasher;
 use crate::ast::{Item, Module};
 use crate::bind;
 use crate::compiler_host::{CompilerHost, SourceError};
-use crate::desugar::desugar_module;
 use crate::lexer::Lexer;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner, WasmAssetKind};
@@ -249,11 +248,13 @@ pub struct WasmAsset {
 
 /// Result of loading all modules
 pub struct LoadResult {
-    /// All loaded modules (module source -> desugared AST)
+    /// All loaded modules (module source -> parsed + bound AST)
     pub modules: IndexMap<ModuleSource, Module>,
     /// The entry module source
     pub entry_module_source: ModuleSource,
-    /// Original (non-desugared) entry module AST, for tooling
+    /// Entry module AST. Always identical to the `modules` entry for
+    /// [`Self::entry_module_source`]; kept as a separate field for
+    /// tooling that takes the entry AST by value.
     pub entry_ast: Module,
     /// Modules that were implicitly loaded (not from user imports)
     pub implicit_modules: IndexSet<ModuleSource>,
@@ -269,11 +270,11 @@ pub struct LoadResult {
     /// synthesis.
     pub wasm_assets: IndexMap<String, WasmAsset>,
     /// Kiln invocation redirects propagated from the loader so later phases
-    /// (analyze, resolver) can also rewrite `use ... from "<schema>"`
+    /// (analyze, elaborator) can also rewrite `use ... from "<schema>"`
     /// clauses consistently.
     pub invocations: crate::kiln::InvocationIndex,
     /// `ModuleSource` interner created during loading. Downstream phases
-    /// (analyze / resolver / synthesis / monomorphize) borrow this to
+    /// (analyze / elaborator / synthesis / monomorphize) borrow this to
     /// canonicalize any `ModuleSource` they construct so that ptr-eq
     /// remains a valid identity check across phases.
     pub interner: ModuleSourceInterner,
@@ -426,7 +427,7 @@ fn wasm_core_val_type_name(ty: WasmCoreValType) -> &'static str {
 /// builtin/import lowering machinery picks the call up.
 ///
 /// The synthesized module is fed back through the regular
-/// parse/bind/desugar pipeline. Doing it as text (rather than building
+/// parse/bind pipeline. Doing it as text (rather than building
 /// an `ast::Module` programmatically) keeps `AstId` allocation,
 /// span/source-map invariants, and the LSP "AST is the source of
 /// truth" rule honoured without special cases — see
@@ -476,7 +477,7 @@ fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -
 
 /// Walk a core wasm module: validate Phase 1 constraints (no `start`,
 /// ≤1 memory, only `env.memory` may be imported) and extract the
-/// signatures of every function export so the resolver can synthesise
+/// signatures of every function export so the elaborator can synthesise
 /// Wado declarations from them.
 ///
 /// Returns the list of function-export signatures in declaration order.
@@ -704,7 +705,7 @@ fn format_stdlib_error(
     out
 }
 
-fn parse_bind_desugar_stdlib(label: &str, source: &str) -> Module {
+fn parse_bind_stdlib(label: &str, source: &str) -> Module {
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize().unwrap_or_else(|e| {
         panic!(
@@ -760,7 +761,7 @@ fn parse_bind_desugar_stdlib(label: &str, source: &str) -> Module {
             panic!("{msg}");
         });
     }
-    desugar_module(&ast)
+    ast
 }
 
 /// Resolve a `#![stdlib("…")]` declaration on `module` to a canonical
@@ -821,9 +822,13 @@ mod tests {
     }
 }
 
-/// Cached desugared AST modules for all stdlib modules (core + WASI).
+/// Per-module lazy cache for stdlib AST.
 ///
-/// Each module is parsed, bound, and desugared exactly once per process.
+/// Each module is parsed and bound at most once per process. The slot
+/// table (path → slot) is built eagerly on first access — that walk is
+/// just `HashMap` inserts of empty [`OnceLock`]s, no parsing — and then
+/// each module's actual parse runs only when [`cached_stdlib_module`]
+/// is called for that import path.
 ///
 /// Keyed by the canonical display form (`"core:foo"`, `"wasi:bar/baz.wado"`)
 /// rather than by `ModuleSource` value. The cache is process-global, but
@@ -832,29 +837,47 @@ mod tests {
 /// content-addressed and avoids forcing the cache to share an interner
 /// with every loader. See [`stdlib_cache_key`] for how callers compute
 /// the lookup string from a `ModuleSource`.
-fn cached_stdlib() -> &'static IndexMap<String, Module> {
+struct StdlibSlot {
+    source: &'static str,
+    module: std::sync::OnceLock<Module>,
+}
+
+type StdlibSlotMap = std::collections::HashMap<&'static str, StdlibSlot, FxBuildHasher>;
+
+fn stdlib_slots() -> &'static StdlibSlotMap {
     use std::sync::OnceLock;
 
-    static CACHE: OnceLock<IndexMap<String, Module>> = OnceLock::new();
-    CACHE.get_or_init(|| {
-        let total_count = stdlib::ALL_CORE_MODULES.len() + stdlib::ALL_WASI_MODULES.len();
-        let mut cache = IndexMap::with_capacity_and_hasher(total_count, FxBuildHasher);
-
-        for &(import_path, source) in stdlib::ALL_CORE_MODULES
+    static SLOTS: OnceLock<StdlibSlotMap> = OnceLock::new();
+    SLOTS.get_or_init(|| {
+        let total = stdlib::ALL_CORE_MODULES.len() + stdlib::ALL_WASI_MODULES.len();
+        let mut slots: StdlibSlotMap =
+            std::collections::HashMap::with_capacity_and_hasher(total, FxBuildHasher);
+        for &(path, source) in stdlib::ALL_CORE_MODULES
             .iter()
             .chain(stdlib::ALL_WASI_MODULES.iter())
         {
-            cache.insert(
-                import_path.to_string(),
-                parse_bind_desugar_stdlib(import_path, source),
+            slots.insert(
+                path,
+                StdlibSlot {
+                    source,
+                    module: OnceLock::new(),
+                },
             );
         }
-
-        cache
+        slots
     })
 }
 
-/// Compute the cache key string used by [`cached_stdlib`] for a
+/// Return the cached AST for a stdlib module, parsing it on first access.
+fn cached_stdlib_module(import_path: &str) -> Option<&'static Module> {
+    let (key, slot) = stdlib_slots().get_key_value(import_path)?;
+    Some(
+        slot.module
+            .get_or_init(|| parse_bind_stdlib(key, slot.source)),
+    )
+}
+
+/// Compute the cache key string used by [`cached_stdlib_module`] for a
 /// `ModuleSource`. Returns `None` for variants that the stdlib cache
 /// never holds (Local / Remote / `EntryPoint` / Redirected / Wasm).
 fn stdlib_cache_key(ms: &ModuleSource) -> Option<String> {
@@ -951,20 +974,45 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         entry_source: &str,
         entry_filename: Option<&str>,
     ) -> Result<LoadResult, LoadError> {
-        // Parse, bind, and desugar entry module
-        // Use "<stdin>" as synthetic filename when no filename is provided (e.g., REPL, embedded code)
         let resolved_filename = entry_filename.unwrap_or("<stdin>");
         let tentative_entry_source = self.interner.entry_point(resolved_filename);
-
-        // Parse first; the parser only needs `module_source` for error
-        // reporting, so a tentative `EntryPoint` is fine. After parsing we
-        // consult `#![stdlib("…")]` to decide the entry's canonical
-        // identity — see `Module::stdlib_identity` for why bundled
-        // stdlib sources self-declare.
         let entry_ast = {
             let _span = self.logger.span(&format!("parse {tentative_entry_source}"));
             self.parse_source(entry_source, &tentative_entry_source)?
         };
+        self.load_all_inner(entry_ast, entry_filename, tentative_entry_source)
+            .await
+    }
+
+    /// Variant of [`Self::load_all`] that takes a pre-parsed entry module
+    /// instead of source bytes, so callers that already have an AST (LSP,
+    /// kiln-aware drivers that inspect the entry before loading) don't pay
+    /// for a second lex+parse of the entry.
+    ///
+    /// Equivalent to `load_all(source, filename)` after the entry parse;
+    /// the public free function [`crate::load`] wraps this for the common
+    /// "parse once, then load" flow.
+    pub async fn load_all_from_parsed_entry(
+        mut self,
+        entry_ast: Module,
+        entry_filename: Option<&str>,
+    ) -> Result<LoadResult, LoadError> {
+        let resolved_filename = entry_filename.unwrap_or("<stdin>");
+        let tentative_entry_source = self.interner.entry_point(resolved_filename);
+        self.load_all_inner(entry_ast, entry_filename, tentative_entry_source)
+            .await
+    }
+
+    /// Shared post-parse loading: `tentative_entry_source` is the
+    /// interned `EntryPoint` [`ModuleSource`] pre-resolved by the caller,
+    /// so neither public entry point hits the interner twice.
+    async fn load_all_inner(
+        mut self,
+        entry_ast: Module,
+        entry_filename: Option<&str>,
+        tentative_entry_source: ModuleSource,
+    ) -> Result<LoadResult, LoadError> {
+        let resolved_filename = entry_filename.unwrap_or("<stdin>");
 
         let entry_module_source = parse_stdlib_identity_attribute(&mut self.interner, &entry_ast)
             .unwrap_or(tentative_entry_source);
@@ -974,7 +1022,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let entry_name = entry_module_source.to_string();
         self.logger.span_start(&format!("load {entry_name}"));
 
-        // Collect imports from entry module (before bind/desugar)
+        // Collect imports from entry module (before bind)
         let mut pending: VecDeque<(ModuleSource, ModuleSource)> = VecDeque::new();
         let mut wasm_imports: Vec<(ModuleSource, WasmAssetKind, crate::ast::UseDecl)> = Vec::new();
         self.collect_imports(
@@ -984,23 +1032,17 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             &mut wasm_imports,
         )?;
 
-        // Bind and desugar, then store (keep original AST for tooling)
         {
             let _span = self.logger.span(&format!("bind {entry_name}"));
             self.bind_module(&entry_ast, &entry_module_source)?;
         }
-        let desugared_entry = {
-            let _span = self.logger.span(&format!("desugar {entry_name}"));
-            desugar_module(&entry_ast)
-        };
         self.loaded
-            .insert(entry_module_source.clone(), desugared_entry);
+            .insert(entry_module_source.clone(), entry_ast.clone());
         let entry_ast_original = entry_ast;
 
         self.logger.span_end(&format!("load {entry_name}"));
 
         // Load all dependencies iteratively
-        let core_cache = cached_stdlib();
         while let Some((from_module_source, module_source)) = pending.pop_front() {
             // Skip if already loaded
             if self.loaded.contains_key(&module_source) {
@@ -1016,8 +1058,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
             let mod_name = module_source.to_string();
 
-            // Use cached desugared module for core stdlib
-            if let Some(cached) = stdlib_cache_key(&module_source).and_then(|k| core_cache.get(&k))
+            // Use cached parsed module for core stdlib
+            if let Some(cached) =
+                stdlib_cache_key(&module_source).and_then(|k| cached_stdlib_module(&k))
             {
                 let span_name = format!("load {mod_name} (cached)");
                 self.logger.span_start(&span_name);
@@ -1039,19 +1082,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 self.parse_source(&source, &module_source)?
             };
 
-            // Collect its imports (before bind/desugar)
+            // Collect its imports (before bind)
             self.collect_imports(&ast, &module_source, &mut pending, &mut wasm_imports)?;
 
-            // Bind, desugar, and store
             {
                 let _span = self.logger.span(&format!("bind {mod_name}"));
                 self.bind_module(&ast, &module_source)?;
             }
-            let desugared = {
-                let _span = self.logger.span(&format!("desugar {mod_name}"));
-                desugar_module(&ast)
-            };
-            self.loaded.insert(module_source.clone(), desugared);
+            self.loaded.insert(module_source.clone(), ast);
             self.loading.swap_remove(&module_source);
 
             self.logger.span_end(&format!("load {mod_name}"));
@@ -1065,7 +1103,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
 
         // Load implicit modules (for compiler-generated code)
-        self.load_implicit_modules()?;
+        self.logger.span_start("load/implicit_modules");
+        let implicit_result = self.load_implicit_modules();
+        self.logger.span_end("load/implicit_modules");
+        implicit_result?;
 
         // Drain any wasm asset imports surfaced by implicit modules (e.g.
         // `core:builtin` declaring `use _ from "./libm.wat" with { type: "wat" };`).
@@ -1075,7 +1116,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
 
         // Collect and load files referenced by #include_str / #include_bytes
-        let included_files = self.load_included_files().await?;
+        let included_files = {
+            let _span = self.logger.span("load/included_files");
+            self.load_included_files().await?
+        };
 
         Ok(LoadResult {
             modules: self.loaded,
@@ -1130,7 +1174,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ///
     /// Phase 1 only supports the wildcard form (`use _ from "..."`); named
     /// imports are rejected with a pointed diagnostic so users get a clear
-    /// message instead of a downstream resolver failure.
+    /// message instead of a downstream elaborator failure.
     async fn handle_wasm_import(
         &mut self,
         from_module_source: &ModuleSource,
@@ -1155,20 +1199,24 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             ModuleSource::Wasm { path, .. } => path.clone(),
             _ => unreachable!(),
         };
-        let raw_bytes = self.fetch_wasm_asset_bytes(&source, &path).await?;
-        let core_wasm_bytes = match kind {
-            WasmAssetKind::Wat => wat::parse_bytes(&raw_bytes)
-                .map_err(|e| LoadError::WasmImport {
-                    module_source: source.clone(),
-                    message: format!("failed to parse .wat: {e}"),
-                })?
-                .into_owned(),
-            WasmAssetKind::Wasm => raw_bytes,
+        let (core_wasm_bytes, function_exports) = {
+            let _span = self.logger.span(&format!("load_wasm_asset {namespace}"));
+            let raw_bytes = self.fetch_wasm_asset_bytes(&source, &path).await?;
+            let core_wasm_bytes = match kind {
+                WasmAssetKind::Wat => wat::parse_bytes(&raw_bytes)
+                    .map_err(|e| LoadError::WasmImport {
+                        module_source: source.clone(),
+                        message: format!("failed to parse .wat: {e}"),
+                    })?
+                    .into_owned(),
+                WasmAssetKind::Wasm => raw_bytes,
+            };
+            let function_exports = parse_wasm_module_exports(&source, &core_wasm_bytes)?;
+            (core_wasm_bytes, function_exports)
         };
-        let function_exports = parse_wasm_module_exports(&source, &core_wasm_bytes)?;
 
         // Synthesize a Wado AST module from the asset's exports and run
-        // it through the regular parse/bind/desugar pipeline so that
+        // it through the regular parse/bind pipeline so that
         // named imports (`use { libm_sin } from "./libm.wat" ...`)
         // resolve through the same path as imports of any other Wado
         // module. The synthesized declarations carry
@@ -1185,9 +1233,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.bind_module(&ast, &source).inspect_err(|_e| {
             self.logger.span_end(&span);
         })?;
-        let desugared = desugar_module(&ast);
         self.logger.span_end(&span);
-        self.loaded.insert(source.clone(), desugared);
+        self.loaded.insert(source.clone(), ast);
 
         self.loaded_wasm_namespaces.insert(namespace.clone());
         self.wasm_assets.insert(
@@ -1220,8 +1267,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
     /// Load implicit modules required by the compiler
     fn load_implicit_modules(&mut self) -> Result<(), LoadError> {
-        let cache = cached_stdlib();
-
         let implicit_module_sources = [
             ModuleSource::builtin(),
             ModuleSource::string(),
@@ -1235,7 +1280,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 continue;
             }
 
-            if let Some(cached) = stdlib_cache_key(&module_source).and_then(|k| cache.get(&k)) {
+            if let Some(cached) =
+                stdlib_cache_key(&module_source).and_then(|k| cached_stdlib_module(&k))
+            {
                 // Load transitive dependencies from cache
                 let mut pending = VecDeque::new();
                 let mut wasm_imports = Vec::new();
@@ -1250,7 +1297,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     if self.loaded.contains_key(&dep_ms) {
                         continue;
                     }
-                    if let Some(dep_cached) = stdlib_cache_key(&dep_ms).and_then(|k| cache.get(&k))
+                    if let Some(dep_cached) =
+                        stdlib_cache_key(&dep_ms).and_then(|k| cached_stdlib_module(&k))
                     {
                         let _ = self.collect_imports(
                             dep_cached,
@@ -1517,7 +1565,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 pairs.insert([ms_str.clone(), raw_path.clone()]);
             }
         }
-        // Format the entry module source once so the per-include resolver
+        // Format the entry module source once so the per-include elaborator
         // can compare against it without allocating per call.
         let entry_module_source = self.entry_module_source.as_ref().map(ToString::to_string);
         let mut included = IndexMap::default();
@@ -1694,7 +1742,7 @@ mod resolve_include_path_tests {
     fn non_relative_arg_passes_through() {
         let entry = "./main.wado";
         // `core:foo` etc. (no leading `./` / `../`) are not relative and the
-        // resolver must not touch them.
+        // elaborator must not touch them.
         let resolved = resolve(Some(entry), entry, "/abs/data.txt");
         assert_eq!(resolved, "/abs/data.txt");
     }

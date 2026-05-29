@@ -28,6 +28,7 @@ use crate::nir::{
     CallArg, FunctionRef, NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind, NirUnaryOp,
 };
 use crate::nir_package::NirPackage;
+use crate::nir_visitor::{NirOptVisitor, opt_walk_block};
 use crate::tir::TypeTable;
 
 /// Maximum byte length of the literal that triggers the rewrite.
@@ -40,11 +41,12 @@ pub fn simplify_short_push_str(project: &mut NirPackage) -> bool {
     let Some(ctx) = Ctx::resolve(project) else {
         return false;
     };
+    let mut visitor = ShortPushStrVisitor { ctx };
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = &mut func.body {
-            changed |= rewrite_block(body, &ctx);
+            changed |= visitor.visit_block(body);
         }
     }
     changed
@@ -68,7 +70,7 @@ impl Ctx {
                 Some(CompilerItem::StringPushChar) => {
                     push_char = Some(FunctionRef::from_resolved(&f, f.module_source.clone()));
                 }
-                _ => {}
+                Some(_) | None => {}
             }
         }
         Some(Self {
@@ -82,22 +84,35 @@ fn func_matches(func: &FunctionRef, target: &FunctionRef) -> bool {
     func.module_source == target.module_source && func.name == target.name
 }
 
-fn rewrite_block(block: &mut NirBlock, ctx: &Ctx) -> bool {
-    let mut changed = false;
-    let mut new_stmts: Vec<NirStmt> = Vec::with_capacity(block.stmts.len());
-    for mut stmt in std::mem::take(&mut block.stmts) {
-        if let NirStmtKind::Expr(expr) = &stmt.kind
-            && let Some(replacements) = try_split_stmt(expr, ctx)
-        {
-            new_stmts.extend(replacements);
-            changed = true;
-            continue;
+struct ShortPushStrVisitor {
+    ctx: Ctx,
+}
+
+impl NirOptVisitor for ShortPushStrVisitor {
+    /// A statement-level visitor is the natural fit: `push_str` is a
+    /// `&mut self` method whose result is dropped, so source-level call
+    /// sites always appear as `NirStmtKind::Expr(MethodCall(...))`.
+    /// `opt_walk_block` lets us return a fresh statement list when we
+    /// expand one `push_str` into N `push` statements.
+    fn visit_block(&mut self, block: &mut NirBlock) -> bool {
+        // First recurse into nested blocks so inner candidates are
+        // handled before we restructure the outer statement vector.
+        let mut changed = opt_walk_block(self, block);
+
+        let mut new_stmts: Vec<NirStmt> = Vec::with_capacity(block.stmts.len());
+        for stmt in std::mem::take(&mut block.stmts) {
+            if let NirStmtKind::Expr(expr) = &stmt.kind
+                && let Some(replacements) = try_split_stmt(expr, &self.ctx)
+            {
+                new_stmts.extend(replacements);
+                changed = true;
+            } else {
+                new_stmts.push(stmt);
+            }
         }
-        rewrite_stmt(&mut stmt, ctx, &mut changed);
-        new_stmts.push(stmt);
+        block.stmts = new_stmts;
+        changed
     }
-    block.stmts = new_stmts;
-    changed
 }
 
 fn try_split_stmt(expr: &NirExpr, ctx: &Ctx) -> Option<Vec<NirStmt>> {
@@ -155,7 +170,7 @@ fn try_split_stmt(expr: &NirExpr, ctx: &Ctx) -> Option<Vec<NirStmt>> {
 /// narrow: anything that may allocate, trap, or be observably stateful is
 /// excluded so duplicating it cannot change semantics.
 ///
-/// `String::push_str`'s `&mut self` parameter constrains what a TIR
+/// `String::push_str`'s `&mut self` parameter constrains what a NIR
 /// `MethodCall` receiver can syntactically be: it must be a place, so
 /// in practice we only ever see `Local`, an `&mut`-wrapped `Local`, or
 /// a `FieldAccess` chain rooted at a `Local`. The broader leaves
@@ -170,152 +185,29 @@ fn is_duplicable_receiver(e: &NirExpr) -> bool {
             op: NirUnaryOp::Deref | NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
         } => is_duplicable_receiver(inner),
-        _ => false,
-    }
-}
-
-fn rewrite_stmt(stmt: &mut NirStmt, ctx: &Ctx, changed: &mut bool) {
-    match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
-            *changed |= rewrite_expr(value, ctx);
-        }
-        NirStmtKind::Expr(expr) => {
-            *changed |= rewrite_expr(expr, ctx);
-        }
-        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                *changed |= rewrite_expr(v, ctx);
-            }
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            *changed |= rewrite_expr(condition, ctx);
-            *changed |= rewrite_block(then_block, ctx);
-            if let Some(eb) = else_block {
-                *changed |= rewrite_block(eb, ctx);
-            }
-        }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            *changed |= rewrite_block(body, ctx);
-        }
-        NirStmtKind::Continue => {}
-    }
-}
-
-/// Walk an expression looking for nested `NirBlock`s whose statements may
-/// hold rewritable `push_str` calls. The structural traversal mirrors
-/// `value_copy_elide::strip_in_expr` so every block-bearing variant is
-/// reached.
-fn rewrite_expr(expr: &mut NirExpr, ctx: &Ctx) -> bool {
-    match &mut expr.kind {
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
-            rewrite_block(block, ctx)
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            let mut c = rewrite_expr(condition, ctx);
-            c |= rewrite_block(then_branch, ctx);
-            if let Some(eb) = else_branch {
-                c |= rewrite_block(eb, ctx);
-            }
-            c
-        }
-        NirExprKind::Match { expr: scrut, arms } => {
-            let mut c = rewrite_expr(scrut, ctx);
-            for arm in arms {
-                if let Some(g) = &mut arm.guard {
-                    c |= rewrite_expr(g, ctx);
-                }
-                c |= rewrite_expr(&mut arm.body, ctx);
-            }
-            c
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            let mut c = rewrite_expr(scrutinee, ctx);
-            for arm in arms {
-                c |= rewrite_block(arm, ctx);
-            }
-            c |= rewrite_block(default, ctx);
-            c
-        }
-        NirExprKind::Call { args, .. } => {
-            let mut c = false;
-            for arg in args {
-                c |= rewrite_expr(&mut arg.expr, ctx);
-            }
-            c
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            let mut c = rewrite_expr(receiver, ctx);
-            for arg in args {
-                c |= rewrite_expr(&mut arg.expr, ctx);
-            }
-            c
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            let mut c = false;
-            for arg in args {
-                c |= rewrite_expr(arg, ctx);
-            }
-            c
-        }
-        NirExprKind::IndirectCall { callee, args, .. } => {
-            let mut c = rewrite_expr(callee, ctx);
-            for arg in args {
-                c |= rewrite_expr(arg, ctx);
-            }
-            c
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            rewrite_expr(left, ctx) | rewrite_expr(right, ctx)
-        }
-        NirExprKind::Assign { target, value } => {
-            rewrite_expr(target, ctx) | rewrite_expr(value, ctx)
-        }
-        NirExprKind::Index { expr: inner, index } => {
-            rewrite_expr(inner, ctx) | rewrite_expr(index, ctx)
-        }
-        NirExprKind::Unary { expr: inner, .. }
-        | NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::VariantTag { expr: inner }
-        | NirExprKind::VariantTest { expr: inner, .. }
-        | NirExprKind::VariantPayload { expr: inner, .. }
-        | NirExprKind::GlobalVarSet { value: inner, .. }
-        | NirExprKind::ClosureToCanonical { functor: inner, .. } => rewrite_expr(inner, ctx),
-        NirExprKind::StructLiteral { fields, .. } => {
-            let mut c = false;
-            for field in fields {
-                c |= rewrite_expr(&mut field.value, ctx);
-            }
-            c
-        }
-        NirExprKind::TupleLiteral { elements } => {
-            let mut c = false;
-            for elem in elements {
-                c |= rewrite_expr(elem, ctx);
-            }
-            c
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                rewrite_expr(p, ctx)
-            } else {
-                false
-            }
-        }
-        NirExprKind::IntLiteral { .. }
+        NirExprKind::Unary { .. }
+        | NirExprKind::Binary { .. }
+        | NirExprKind::Cast { .. }
+        | NirExprKind::Assign { .. }
+        | NirExprKind::Index { .. }
+        | NirExprKind::Call { .. }
+        | NirExprKind::MethodCall { .. }
+        | NirExprKind::CmRawCall { .. }
+        | NirExprKind::IndirectCall { .. }
+        | NirExprKind::ClosureToCanonical { .. }
+        | NirExprKind::Block(_)
+        | NirExprKind::LabeledBlock { .. }
+        | NirExprKind::If { .. }
+        | NirExprKind::Match { .. }
+        | NirExprKind::Switch { .. }
+        | NirExprKind::StructLiteral { .. }
+        | NirExprKind::TupleLiteral { .. }
+        | NirExprKind::VariantConstruct { .. }
+        | NirExprKind::VariantTag { .. }
+        | NirExprKind::VariantTest { .. }
+        | NirExprKind::VariantPayload { .. }
+        | NirExprKind::GlobalVarSet { .. }
+        | NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
         | NirExprKind::BoolLiteral(_)
         | NirExprKind::CharLiteral(_)
@@ -323,8 +215,6 @@ fn rewrite_expr(expr: &mut NirExpr, ctx: &Ctx) -> bool {
         | NirExprKind::BytesLiteral(_)
         | NirExprKind::Null
         | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
         | NirExprKind::EnumConstruct { .. } => false,
     }
 }

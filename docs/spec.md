@@ -1843,7 +1843,7 @@ let capture = |x: i32| x + outer;  // captures &outer
 capture(5);  // Returns 15
 ```
 
-Closures auto-capture each free variable by reference; the reference kind is inferred from body usage (`&T` for read-only, `&mut T` for mutating). Pure read-only captures keep the closure type at `fn`; any `&mut` capture promotes it to `fn mut`. Calling a `fn mut` closure requires its binding to be `mut` (mirrors Rust's `FnMut` rule).
+Closures auto-capture each free variable by reference; the reference kind is inferred from body usage (`&T` for read-only, `&mut T` for mutating). Pure read-only captures keep the closure type at `fn`; any `&mut` capture promotes it to `fn mut`. Calling a `fn mut` closure requires the _root_ of the callee place to be a mutable binding (mirrors Rust's `FnMut` rule); this applies whether the closure is called directly (`f()`) or reached through field access or indexing (`(h.f)()`, `arr[i]()`). A temporary root — a call result, a literal — has no binding and is always accepted.
 
 Shared mutable state across closures is automatic — multiple closures referring to the same outer binding share the underlying location, with no explicit reference dance needed:
 
@@ -1917,7 +1917,7 @@ make_rect(10.0);  // → make_rect(10.0, 10.0)
 
 - `self` cannot have a default.
 - Function types do not carry default information; assigning a function with defaults to a `fn(...)` type erases them, and every call site of that variable must supply every argument.
-- Closures cannot declare defaults: a closure value's arity must match its `fn(...)` type. The parser accepts `= expr` on closure parameters for recovery only and the resolver rejects it.
+- Closures cannot declare defaults: a closure value's arity must match its `fn(...)` type. The parser accepts `= expr` on closure parameters for recovery only and the elaborator rejects it.
 - `export fn` cannot declare defaults — exported functions appear in the component's WIT signature where every parameter is required by the CM ABI. Split into a private helper plus a thin `export fn` wrapper if defaults are needed.
 - Trait methods may declare defaults only in the trait definition; implementations receive every parameter and cannot add, remove, or change defaults. Direct `impl Type { ... }` methods (not part of any trait) may declare defaults freely.
 
@@ -3455,6 +3455,15 @@ assert x > 0;
 assert x > 0, "x must be checked elsewhere";
 ```
 
+To keep a failure readable, each captured operand is rendered with `Inspect`
+(`:?`), which caps sequence types at a default length (`DEFAULT_SEQ_LIMIT` = 256):
+a `String` operand is truncated to 256 characters with a `...` marker and an
+`Array` operand to 256 elements (see [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md)).
+Non-sequence operands such as floats keep their natural rendering. The optional
+user message is formatted with the user's own template specifiers (typically
+`Display`, which is never capped) — opt into a longer dump by formatting the
+value yourself.
+
 ## Testing
 
 Wado has built-in support for writing and running tests. Test declarations are first-class syntax, and the `wado test` command provides a test runner similar to `cargo test` or `moon test`.
@@ -4478,7 +4487,7 @@ Marks a stdlib declaration as the resolution for a compiler-recognized item. The
 
 Examples: `#[compiler_item("option")]` on `variant Option`, `#[compiler_item("option_some")]` on the `Some` case, `#[compiler_item("display")]` on the `Display` trait, `#[compiler_item("string_push_str")]` on the `String::push_str` method.
 
-The attribute is only valid inside `core::*` modules; the resolver rejects it on user code.
+The attribute is only valid inside `core::*` modules; the elaborator rejects it on user code.
 
 #### `#[cm("namespace:pkg/interface@version")]` / `#[cm_params(...)]`
 

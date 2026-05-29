@@ -113,19 +113,30 @@ fn lift_error(e: kiln_types::Error) -> GeneratorError {
     }
 }
 
-/// Instantiate `component_wasm` against the `core:kiln/generator` world, call
-/// its exported `generate`, and return the response plus the list of every
-/// file the generator read via `host::read-file`.
+/// Build a wasmtime [`Component`] from raw bytes. Cranelift-AOT
+/// dominates here (~7s on a 432KB generator), so the host caches the
+/// result across invocations that share the same bytes — see
+/// [`crate::compiler_host::FilesystemCompilerHost`].
+pub fn compile_component(
+    engine: &Engine,
+    component_wasm: &[u8],
+) -> Result<Component, GeneratorRunnerError> {
+    Component::from_binary(engine, component_wasm)
+        .map_err(|e| GeneratorRunnerError::Host(format!("component compile: {e}")))
+}
+
+/// Instantiate a pre-built [`Component`] against the
+/// `core:kiln/generator` world, invoke `generate`, and return the
+/// response plus the files the generator read via `host::read-file`.
+/// Always pass a [`Component`] obtained from the host's cache rather
+/// than building one inline — see [`compile_component`].
 pub async fn run_generator<H: CompilerHost + 'static>(
     engine: &Engine,
     host: Arc<H>,
-    component_wasm: &[u8],
+    component: &Component,
     request: GeneratorRequest,
     policy: KilnRunPolicy,
 ) -> Result<GeneratorResponse, GeneratorRunnerError> {
-    let component = Component::from_binary(engine, component_wasm)
-        .map_err(|e| GeneratorRunnerError::Host(format!("component compile: {e}")))?;
-
     let reads = Arc::new(Mutex::new(Vec::<GeneratorReadRecord>::new()));
     let diagnostics = Arc::new(Mutex::new(Vec::<GeneratorDiagnostic>::new()));
 
@@ -154,7 +165,7 @@ pub async fn run_generator<H: CompilerHost + 'static>(
         .set_fuel(fuel)
         .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e}")))?;
 
-    let generator = Generator::instantiate_async(&mut store, &component, &linker)
+    let generator = Generator::instantiate_async(&mut store, component, &linker)
         .await
         .map_err(|e| GeneratorRunnerError::Host(format!("instantiate: {e}")))?;
 
@@ -214,51 +225,21 @@ fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: GeneratorDiagnosti
 mod tests {
     use super::*;
     use crate::runtime::create_kiln_engine;
-    use wado_compiler::{Diagnostic, SourceError};
-
-    struct DummyHost;
-
-    impl CompilerHost for DummyHost {
-        async fn load_source(&self, _path: &str) -> Result<Vec<u8>, SourceError> {
-            Err(SourceError::NotFound {
-                path: "unused".to_string(),
-            })
-        }
-        fn emit_diagnostic(&self, _diagnostic: Diagnostic) {}
-    }
 
     #[test]
     fn malformed_component_is_host_error() {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(async {
-                let engine = create_kiln_engine(wasmtime::OptLevel::Speed).expect("engine");
-                let host = Arc::new(DummyHost);
-                let request = GeneratorRequest {
-                    primary: GeneratorInputFile {
-                        path: "schema.proto".to_string(),
-                        content: "syntax = \"proto3\";".to_string(),
-                    },
-                    inputs: vec![],
-                    options: String::new(),
-                };
-                let result = run_generator(
-                    &engine,
-                    host,
-                    &[0, 1, 2, 3],
-                    request,
-                    KilnRunPolicy::default(),
-                )
-                .await;
-                match result {
-                    Err(GeneratorRunnerError::Host(msg)) => {
-                        assert!(msg.contains("component compile"), "msg = {msg}");
-                    }
-                    other => panic!("expected Host error, got {other:?}"),
-                }
-            });
+        // Cranelift AOT now happens up-front in `compile_component`
+        // (so the host can cache the result across invocations); this
+        // is where a malformed module surfaces, not from
+        // `run_generator`.
+        let engine = create_kiln_engine(wasmtime::OptLevel::Speed).expect("engine");
+        match compile_component(&engine, &[0, 1, 2, 3]) {
+            Err(GeneratorRunnerError::Host(msg)) => {
+                assert!(msg.contains("component compile"), "msg = {msg}");
+            }
+            Err(other) => panic!("expected Host error, got {other:?}"),
+            Ok(_) => panic!("expected error on malformed bytes, got Ok"),
+        }
     }
 
     #[test]

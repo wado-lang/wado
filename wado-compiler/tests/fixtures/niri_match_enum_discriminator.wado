@@ -1,0 +1,49 @@
+// Verify niri's match → discriminator collapse for `Enum` patterns:
+//   `match X { Enum::Case => true, _ => false }`
+//     →  `X == Enum::Case`
+//
+// This is the shape `x matches { Enum::Case }` desugars to. The
+// collapse runs at NIR before `match_to_switch` so the synthesised
+// equality reaches every downstream pass.
+//
+// The unit tests in tests/niri.rs cover the in-place NIR rewrite
+// directly; this fixture verifies end-to-end correctness and locks
+// the WIR shape: after the rewrite, the match-arm `if X == disc { ... }
+// else { ... }` chain that pattern_match.rs would otherwise emit is
+// gone, replaced by a single discriminator comparison.
+
+use { println, Stdout } from "core:cli";
+
+enum Color { Red, Green, Blue }
+
+#[inline(never)]
+fn pick(n: i32) -> Color {
+    if n == 0 {
+        return Color::Red;
+    }
+    if n == 1 {
+        return Color::Green;
+    }
+    return Color::Blue;
+}
+
+export fn run() with Stdout {
+    let a = pick(0) matches { Red };
+    let b = pick(1) matches { Red };
+    let c = pick(2) matches { Blue };
+    let d = pick(0) matches { Blue };
+    assert a;
+    assert !b;
+    assert c;
+    assert !d;
+    println(`{a} {b} {c} {d}`);
+}
+
+__DATA__
+{
+    "stdout": "true false true false\n",
+    "wir_not_expect:O2": [
+        "if /pick\"(0) == 0 -> bool",
+        "if /pick\"(1) == 0 -> bool"
+    ]
+}

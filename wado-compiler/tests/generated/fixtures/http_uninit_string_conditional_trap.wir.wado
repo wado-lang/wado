@@ -496,11 +496,7 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
     let __mv_hi_2: i32;
     multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
     resp_headers = "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_new"();
-    drop("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append"(resp_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(__inline_String__bytes_3: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
-        self_166 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 };
-        break __inline_String__bytes_3: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_166.repr, used: self_166.used, index: 0 };
-        unreachable;
-    })));
+    drop("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append"(resp_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self_166 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_166.repr, used: self_166.used, index: 0 })));
     __pattern_temp_2 = "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Response_new"(resp_headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: __mv_lo_2 }, __mv_lo_1);
     response = __pattern_temp_2.0;
     drop("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Response_set_status_code"(response, 200));
@@ -851,13 +847,7 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_b
     __disc = builtin::load_u8(__outptr);
     __option_result = ref.null none;
     if __disc != 0 {
-        __option_result = ref.as_non_null(__inline_memory_to_gc_string_0: block -> ref "core:prelude/string.wado//String" {
-            ptr = builtin::load_i32(__outptr + 4);
-            len_5 = builtin::load_i32((__outptr + 4) + 4);
-            arr = "core:internal/memory_to_gc_array"(ptr, len_5);
-            break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: arr, used: len_5 };
-            unreachable;
-        });
+        __option_result = ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_5 = builtin::load_i32((__outptr + 4) + 4); arr = "core:internal/memory_to_gc_array"(ptr, len_5); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_5 });
         drop("mem/realloc"(builtin::load_i32(__outptr + 4), builtin::load_i32((__outptr + 4) + 4), 1, 0));
     }
     drop("mem/realloc"(__outptr, 12, 4, 0));
@@ -884,12 +874,9 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_b
     let len_18: i32;
     let arr_19: ref builtin::array<u8>;
     __name_packed = "core:internal/cm_lower_string"(name);
-    __value_packed = __inline_cm_lower_array_u8_0: block -> i64 {
-        data = value.repr;
-        len_14 = value.used;
-        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(data, len_14);
-        unreachable;
-    };
+    data = value.repr;
+    len_14 = value.used;
+    __value_packed = "core:internal/cm_lower_list_u8"(data, len_14);
     __outptr = "mem/realloc"(0, 0, 4, 20);
     "wasi/wasi:http/Fields::append"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64), builtin::i32_wrap_i64(__value_packed), builtin::i32_wrap_i64(__value_packed >> 32_i64), __outptr);
     __disc_6 = builtin::load_u8(__outptr);
@@ -911,13 +898,7 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_b
             __disc_10 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_10 != 0 {
-                __option_result = ref.as_non_null(__inline_memory_to_gc_string_3: block -> ref "core:prelude/string.wado//String" {
-                    ptr = builtin::load_i32(((__outptr + 4) + 4) + 4);
-                    len_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
-                    arr_19 = "core:internal/memory_to_gc_array"(ptr, len_18);
-                    break __inline_memory_to_gc_string_3: struct.new "core:prelude/string.wado//String" { repr: arr_19, used: len_18 };
-                    unreachable;
-                });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_19 = "core:internal/memory_to_gc_array"(ptr, len_18); struct.new "core:prelude/string.wado//String" { repr: arr_19, used: len_18 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: __option_result };
@@ -971,17 +952,15 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     let arr: ref builtin::array<u8>;
     let i: i32;
     arr = builtin::array_new<u8>(len);
-    __for_0: block {
-        i = 0;
-        block {
-            l74: loop {
-                if i >= len {
-                    break __for_0;
-                }
-                builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
-                i = i + 1;
-                continue l74;
-            };
+    i = 0;
+    b73: block {
+        l74: loop {
+            if i >= len {
+                break b73;
+            }
+            builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
+            i = i + 1;
+            continue l74;
         };
     };
     return arr;
@@ -989,17 +968,15 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l77: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l77;
-            };
+    i = 0;
+    b76: block {
+        l77: loop {
+            if i >= len {
+                break b76;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l77;
         };
     };
 }
@@ -1043,12 +1020,9 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {
     let result: i32;
     let data_9: ref builtin::array<u8>;
     let len_10: i32;
-    packed = __inline_cm_lower_array_u8_0: block -> i64 {
-        data_9 = data.repr;
-        len_10 = data.used;
-        break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(data_9, len_10);
-        unreachable;
-    };
+    data_9 = data.repr;
+    len_10 = data.used;
+    packed = "core:internal/cm_lower_list_u8"(data_9, len_10);
     ptr = builtin::i32_wrap_i64(packed);
     len_4 = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, len_4);
@@ -1068,15 +1042,9 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a_5 = __inline_i32_max_1: block -> i32 {
-            a_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
-            unreachable;
-        };
-        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
-        unreachable;
-    };
+    a_7 = capacity * 2;
+    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
+    new_capacity = select i32(a_5 > 8, a_5, 8);
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
@@ -1100,11 +1068,8 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 fn "core:prelude/string.wado/String^Add::add"(self, other) {
     let result: ref "core:prelude/string.wado//String";
     let capacity: i32;
-    result = __inline_String__with_capacity_0: block -> ref "core:prelude/string.wado//String" {
-        capacity = self.used + other.used;
-        break __inline_String__with_capacity_0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity), used: 0 };
-        unreachable;
-    };
+    capacity = self.used + other.used;
+    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity), used: 0 };
     "core:prelude/string.wado/String::push_str"(result, self);
     "core:prelude/string.wado/String::push_str"(result, other);
     return result;
@@ -1112,35 +1077,27 @@ fn "core:prelude/string.wado/String^Add::add"(self, other) {
 
 fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     let __b: ref "core:prelude//Array<u8>";
-    let result: ref "core:prelude//Array<u8>";
     let byte: u8;
     let _licm_used_10: i32;
     let _licm_repr_11: ref builtin::array<u8>;
     let __hfs_index_12: i32;
-    result = __seq_lit: block -> ref "core:prelude//Array<u8>" {
-        __b = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-        break __seq_lit: __b;
-        unreachable;
-    };
+    __b = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     _licm_used_10 = self.used;
     _licm_repr_11 = self.repr;
     __hfs_index_12 = self.index;
     b83: block {
         l84: loop {
-            __fused___inline_StrUtf8ByteIter_Iterator__next_3: block {
-                if __hfs_index_12 >= _licm_used_10 {
-                    break b83;
-                }
-                byte = builtin::array_get_u8(_licm_repr_11, __hfs_index_12);
-                __hfs_index_12 = __hfs_index_12 + 1;
-                "core:prelude/array.wado/Array<u8>::push"(result, byte);
-                break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
-            };
+            if __hfs_index_12 >= _licm_used_10 {
+                break b83;
+            }
+            byte = builtin::array_get_u8(_licm_repr_11, __hfs_index_12);
+            __hfs_index_12 = __hfs_index_12 + 1;
+            "core:prelude/array.wado/Array<u8>::push"(__b, byte);
             self.index = __hfs_index_12;
             continue l84;
         };
     };
-    return result;
+    return __b;
 }
 
 fn "core:prelude/array.wado/Array<u8>::push"(self, value) {
@@ -1159,11 +1116,8 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     let new_repr: ref builtin::array<u8>;
     let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a = capacity * 2;
-        break __inline_i32_max_0: select i32(a > 4, a, 4);
-        unreachable;
-    };
+    a = capacity * 2;
+    new_capacity = select i32(a > 4, a, 4);
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;

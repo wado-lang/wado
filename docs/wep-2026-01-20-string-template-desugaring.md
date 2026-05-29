@@ -2,7 +2,7 @@
 
 ## Context
 
-String templates (`` `Hello, {name}!` ``) are currently lowered in the resolver to chained `+` (Add::add) calls. This approach has limitations:
+String templates (`` `Hello, {name}!` ``) are currently lowered in the elaborator to chained `+` (Add::add) calls. This approach has limitations:
 
 1. No support for tagged templates (`sql`...``, `String::raw`...``)
 2. Format specifiers are not fully implemented

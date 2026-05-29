@@ -2397,7 +2397,8 @@ This avoids intermediate allocations.
 Format specification fields match Rust's format syntax:
 `[[fill]align][sign][#][0][width][.precision]type`
 
-Width and precision use -1 as sentinel for "not specified".
+Width uses -1 for "not specified"; precision uses the sentinels on
+`impl Formatter`.
 
 #### `fill: char`
 
@@ -2421,7 +2422,8 @@ Minimum field width (-1 = no minimum)
 
 #### `precision: i32`
 
-Precision for floats (decimal places) or strings (max width) (-1 = default)
+Decimal places for floats; max rendered length for sequences (chars /
+elements). Negative values are the sentinels on `impl Formatter`.
 
 #### `indent: i32`
 
@@ -2433,7 +2435,7 @@ Reference to the output buffer
 
 #### `pub fn new(buf: &mut String) -> Formatter`
 
-Create a new Formatter with default format spec that writes into the given buffer.
+Create a Formatter with the default spec, writing into the given buffer.
 
 #### `pub fn write_str(&mut self, s: &String)`
 

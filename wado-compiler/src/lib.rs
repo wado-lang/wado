@@ -1,5 +1,4 @@
 pub mod analyze;
-pub mod annotate;
 pub mod ast;
 pub mod ast_index;
 pub mod bind;
@@ -10,9 +9,9 @@ pub mod comment;
 pub mod compiler_host;
 pub mod compiler_item;
 pub mod component_model;
-pub mod desugar;
 pub mod doc;
 pub mod effect_check;
+pub mod elaborator;
 pub mod flat_package;
 pub mod hashmap;
 pub mod intern;
@@ -32,16 +31,17 @@ pub mod nir_visitor;
 pub mod optimize;
 pub mod package;
 pub mod parser;
-pub mod resolver;
+pub mod semantics;
 pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
+pub mod test_names;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
+pub mod niri;
 pub mod symbol;
 pub mod syntax;
 pub mod synthesis;
 pub mod tir;
 pub mod tir_visitor;
-pub mod tiri;
 pub mod token;
 pub mod trace;
 pub mod unparse;
@@ -53,7 +53,6 @@ pub mod wir_visitor;
 pub mod world_registry;
 
 pub use analyze::Analyzer;
-pub use annotate::{Annotated, Cursor, Definition, annotate, annotate_with_invocations};
 pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
 pub use compiler_host::{
@@ -63,10 +62,14 @@ pub use compiler_host::{
     Severity, SourceError,
 };
 pub use logger::{Bail, Logger};
+pub use semantics::{
+    Cursor, Definition, Semantics, parse_failure_diagnostic, semantics, semantics_of,
+};
 
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{EffectError, check_default_purity, check_effects, check_stores};
+pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
 pub use lexer::{LexError, Lexer};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
@@ -76,7 +79,6 @@ pub use monomorphize::monomorphize;
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
 pub use parser::{ParseError, Parser};
-pub use resolver::{Resolver, TypeError};
 pub use token::Span;
 
 use std::cell::RefCell;
@@ -129,10 +131,8 @@ pub struct DumpResult {
     pub source: String,
     /// Tokens from lexer
     pub tokens: Vec<token::Token>,
-    /// The main module's AST (after parser)
+    /// The main module's AST (after parser).
     pub ast: ast::Module,
-    /// Desugared AST (after desugar pass)
-    pub desugared_ast: ast::Module,
     /// Symbol table after analysis
     pub symbols: symbol::SymbolTable,
     /// Loaded module sources
@@ -187,12 +187,18 @@ pub struct CompilerOptions {
     /// that have run the Kiln pipeline (wado-cli, wado-lsp) populate this;
     /// everyone else leaves it empty.
     pub invocations: kiln::InvocationIndex,
+    /// `--test-name` substring filters for the test world. When non-empty,
+    /// only `test "name"` blocks whose name contains one of these strings are
+    /// exported; the rest become dead code and are removed by early DCE, so
+    /// filtered-out tests are never compiled into the output. Empty means
+    /// "run every test". Ignored outside the test world.
+    pub test_name_filters: Vec<String>,
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
 ///
 /// This is the main compilation entry point. It runs the full compilation pipeline:
-/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> `tir_to_wir`
+/// lexer -> parser -> binder -> loader -> analyzer -> elaborator -> lower -> optimize -> `tir_to_wir`
 ///
 /// # Arguments
 /// * `source` - The entry module source code
@@ -222,7 +228,7 @@ pub async fn compile_with_host<H: CompilerHost>(
 /// Compile Wado source code with full options.
 ///
 /// This is the main compilation entry point with all options. It runs the full compilation pipeline:
-/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> `tir_to_wir`
+/// lexer -> parser -> binder -> loader -> analyzer -> elaborator -> lower -> optimize -> `tir_to_wir`
 ///
 /// # Arguments
 /// * `source` - The entry module source code
@@ -243,8 +249,8 @@ pub async fn compile_with_options<H: CompilerHost>(
     }
 
     // === Phase 1: Load all modules ===
-    // Loader performs: lex → parse → bind → desugar for each module
-    // Also preserves the original (non-desugared) entry AST for tooling
+    // Loader performs: lex → parse → bind for each module, and preserves
+    // the entry AST for tooling that takes it by value.
     let load_result = {
         let module_loader = loader::ModuleLoader::new(host, log_level)
             .with_invocations(options.invocations.clone());
@@ -312,7 +318,7 @@ fn compile_after_load<H: CompilerHost>(
     }
 
     // === Phase 1b: Kiln `impl Deserialize for Options;` auto-injection ===
-    // Ensures the resolver sees an impl record for `Options: Deserialize`
+    // Ensures the elaborator sees an impl record for `Options: Deserialize`
     // so `bind_request::<Options>(raw)` typechecks without the user having
     // to write `impl Deserialize for Options;` by hand. Idempotent.
     kiln::import_check::inject_deserialize_impl(
@@ -333,15 +339,25 @@ fn compile_after_load<H: CompilerHost>(
         &mut load_result.modules,
     );
 
-    // Save wasm asset bytes before `annotate_loaded` consumes the
+    // Save wasm asset bytes before `semantics_with_logger` consumes the
     // `LoadResult`. They flow through the package to codegen below.
     let wasm_assets = load_result.wasm_assets.clone();
 
     // === Phases 2 + 6a + 6b: Analyze + Annotate + Lower TIR ===
-    // `annotate` performs analyze, type resolution, and body-level TIR
-    // lowering. The resulting `Annotated` carries the `TirModule`s the batch
-    // compiler needs plus the use→def reference map LSP queries need.
-    let annotated = annotate::annotate_loaded(load_result, logger)?;
+    // `semantics_with_logger` performs analyze, type resolution, and
+    // body-level TIR lowering. The resulting `Semantics` carries the
+    // `TirModule`s the batch compiler needs plus the use→def reference
+    // map LSP queries need.
+    //
+    // `semantics_with_logger` always returns a `Semantics`. For batch
+    // compilation we refuse to continue when the pipeline did not fully
+    // resolve — the downstream phases assume populated `state` /
+    // `tir_modules`. Diagnostics explaining the failure have already
+    // been emitted to the host.
+    let sem = semantics::semantics_with_logger(load_result, logger);
+    if !sem.is_complete() {
+        return Err(Bail);
+    }
 
     // === Phase 6c: Kiln `Options` descriptor extraction ===
     // For the `core:kiln/generator` target world, walk the entry module's
@@ -352,7 +368,7 @@ fn compile_after_load<H: CompilerHost>(
     // produces a valid cache key.
     let kiln_options_descriptor = if options.target_world.as_deref() == Some("core:kiln/generator")
     {
-        match kiln::extract_options_descriptor(&annotated, &annotated.entry_module_source) {
+        match kiln::extract_options_descriptor(&sem, &sem.entry_module_source) {
             Ok(d) => Some(d),
             Err(diags) => {
                 for d in diags {
@@ -365,29 +381,58 @@ fn compile_after_load<H: CompilerHost>(
         None
     };
 
-    let annotate::Annotated {
+    let semantics::Semantics {
         entry_module_source,
         symbols,
         state,
         tir_modules,
         interner,
         ..
-    } = annotated;
+    } = sem;
 
+    // `is_complete()` was checked above, so the full pipeline ran and `state`
+    // is populated.
+    let state = state.expect("elaborator state present when is_complete");
+
+    // Move trait_env out of `state.tysys` rather than cloning the `Arc`,
+    // so that `Package` is the unique owner. `synthesize` later calls
+    // `TraitEnv::extend_with_synthesised`, which `Arc::try_unwrap`s the
+    // `trait_env` and **panics** if the `Arc` has more than one strong
+    // reference (see `trait_env.rs::extend_with_synthesised`). `TraitEnv`
+    // does not implement `Clone`, so a stray clone at this point cannot
+    // degrade gracefully — it would surface as a panic deep inside
+    // synthesis. The `debug_assert!` below makes that contract loud at
+    // the leak site instead of one stage later.
+    let world_registry = state.world_registry;
+    let tysys = state.tysys;
+    debug_assert_eq!(
+        std::sync::Arc::strong_count(&tysys.trait_env),
+        1,
+        "Package::new must be the unique `Arc<TraitEnv>` owner; a leftover \
+         per-module clone would panic in extend_with_synthesised"
+    );
+    // `Rc::try_unwrap` for `builtin_registry` is the same uniqueness
+    // contract; `BuiltinRegistry` *does* implement `Clone`, so the
+    // fallback path is sound but quietly deep-copies — the debug-assert
+    // catches the leak before that happens.
+    debug_assert_eq!(
+        std::rc::Rc::strong_count(&tysys.builtin_registry),
+        1,
+        "Package::new must be the unique `Rc<BuiltinRegistry>` owner; a \
+         leftover per-module clone would silently fall back to a deep clone"
+    );
+    let builtin_registry =
+        std::rc::Rc::try_unwrap(tysys.builtin_registry).unwrap_or_else(|rc| (*rc).clone());
     let package = Package::new(
         entry_module_source,
         tir_modules,
         symbols,
-        // Move trait_env out of `state` rather than cloning the `Arc`,
-        // so that `Package` is the unique owner. `synthesize` later relies
-        // on `Arc::try_unwrap` succeeding to swap layers in place; a stray
-        // clone here would force a deep `TraitEnv` clone instead.
-        state.trait_env,
+        tysys.trait_env,
         implicit_modules,
         module_name,
-        state.wasi_registry,
-        state.world_registry,
-        state.builtin_registry,
+        tysys.cm_interface_registry,
+        world_registry,
+        builtin_registry,
         interner,
     );
 
@@ -397,6 +442,7 @@ fn compile_after_load<H: CompilerHost>(
         package.target_world = world;
     }
     package.skip_validation = options.skip_validation;
+    package.test_name_filters = options.test_name_filters;
     package.wasm_assets = wasm_assets;
 
     // Select allocator: find the function tagged with #[allocator("...")] matching the
@@ -454,7 +500,7 @@ fn compile_after_load<H: CompilerHost>(
     }
 
     // Validate that every required `CompilerItem` was registered by the
-    // resolver. A missing required item is a stdlib bug — every Wado-side
+    // elaborator. A missing required item is a stdlib bug — every Wado-side
     // declaration that anchors a compiler item must carry the matching
     // `#[compiler_item("...")]` attribute. Surfacing it here means the
     // failure happens at compile time with a clear message, not at the
@@ -464,7 +510,7 @@ fn compile_after_load<H: CompilerHost>(
             .tir_modules
             .values()
             .next()
-            .expect("Package always has at least one TIR module after annotate");
+            .expect("Package always has at least one TIR module after semantics");
         let missing = module
             .type_table
             .borrow()
@@ -605,7 +651,7 @@ fn compile_after_load<H: CompilerHost>(
         codegen::emit_wasm(&nir, &wir_package)
     };
 
-    // Return the original (non-desugared) entry AST for tooling
+    // Return the entry AST for tooling
     Ok((
         wasm,
         entry_ast,
@@ -650,7 +696,7 @@ fn snapshot_tir_modules(
 /// This runs the compilation pipeline up through optimization (without code generation)
 /// and returns diagnostic information about the internal state.
 ///
-/// Pipeline: lexer -> parser -> bind -> desugar -> load -> analyze -> resolve -> lower -> link -> optimize
+/// Pipeline: lexer -> parser -> bind -> load -> analyze -> resolve -> lower -> link -> optimize
 pub async fn dump_with_host<H: CompilerHost>(
     source: &str,
     host: &H,
@@ -713,13 +759,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         binder.bind_module(&ast)?;
     }
 
-    // === Phase 4: Desugar ===
-    let desugared_ast = {
-        let _span = logger.span("desugar");
-        desugar::desugar_module(&ast)
-    };
-
-    // === Phase 5: Load all modules ===
+    // === Phase 4: Load all modules ===
     let load_result = {
         let module_loader = loader::ModuleLoader::new(host, compiler_host::LogLevel::default());
         module_loader
@@ -747,14 +787,20 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     };
 
     // === Phase 7: Resolve all modules to TIR ===
+    // Hand `load_result.included_files` to the elaborator via partial
+    // move + `Rc::new`, matching the `semantics_with_logger` pattern.
+    // The map can be megabytes for projects that bundle binary assets
+    // via `#include_bytes`, and nothing below this line reads
+    // `load_result.included_files` again.
+    let included_files = std::rc::Rc::new(load_result.included_files);
     let resolve_output = {
-        let _span = logger.span("resolve");
-        Resolver::resolve_all_modules(
+        let _span = logger.span("elaborate");
+        Elaborator::elaborate_all_modules(
             &symbols,
             &load_result.modules,
             load_result.entry_module_source.clone(),
             &logger,
-            &load_result.included_files,
+            included_files,
             load_result.invocations.clone(),
             interner.clone(),
         )
@@ -766,7 +812,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // no need to keep `resolve_output` past this point.
     let (tir_modules_by_source, trait_env): (
         Option<IndexMap<ModuleSource, tir::TirModule>>,
-        Option<std::sync::Arc<crate::resolver::trait_env::TraitEnv>>,
+        Option<std::sync::Arc<crate::elaborator::trait_env::TraitEnv>>,
     ) = match resolve_output {
         Some((modules, env)) => (Some(snapshot_tir_modules(&modules)), Some(env)),
         None => (None, None),
@@ -779,8 +825,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         if let Some(resolved_modules) = tir_modules_by_source.clone() {
             let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
-            let (wasi_registry, world_registry) =
-                component_model::WasiRegistry::build_from_stdlib();
+            let (cm_interface_registry, world_registry) =
+                component_model::CmInterfaceRegistry::build_from_stdlib();
 
             let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
             let mut builtin_registry =
@@ -802,7 +848,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 trait_env.expect("trait_env is set when resolve succeeded"),
                 load_result.implicit_modules.clone(),
                 module_name,
-                wasi_registry,
+                cm_interface_registry,
                 world_registry,
                 builtin_registry,
                 interner,
@@ -902,7 +948,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         source: source.to_string(),
         tokens: tokens_for_dump,
         ast,
-        desugared_ast,
         symbols,
         loaded_modules: load_result.modules.keys().cloned().collect(),
         implicit_modules: load_result.implicit_modules.into_iter().collect(),
@@ -963,6 +1008,30 @@ pub fn format(source: &str) -> Result<String, CompileError> {
 pub struct ParseResult {
     pub ast: ast::Module,
     pub trivia: comment::TriviaMap,
+}
+
+/// Resolve every transitive import of `parsed` and return the loaded
+/// module set.
+///
+/// Stage 2 of the compiler frontend: pair this with [`parse`] for stage 1
+/// and [`semantics::semantics_of`] for stage 3 (analyze + resolve). The
+/// convenience [`semantics::semantics`] wraps all three for callers that
+/// don't need to inspect the parsed entry between stages.
+///
+/// `invocations` redirects bare `use { … } from "<schema>"` clauses to
+/// kiln-generated entry modules. Pass [`kiln::InvocationIndex::new`] when
+/// the caller has no kiln pipeline to advertise.
+pub async fn load<H: CompilerHost>(
+    parsed: ParseResult,
+    filename: Option<&str>,
+    host: &H,
+    invocations: kiln::InvocationIndex,
+    log_level: LogLevel,
+) -> Result<LoadResult, LoadError> {
+    let loader = loader::ModuleLoader::new(host, log_level).with_invocations(invocations);
+    loader
+        .load_all_from_parsed_entry(parsed.ast, filename)
+        .await
 }
 
 /// Parse a Wado source file into AST and trivia map.

@@ -71,7 +71,7 @@ fn kiln_options() -> CompilerOptions {
     // async lift materializes the record in linear memory — a type
     // mismatch the validator catches. The generator still type-checks,
     // synthesis still runs, and the bind_request call site exercises the
-    // full resolver / auto-derive path. Remove this flag once the
+    // full elaborator / auto-derive path. Remove this flag once the
     // adapter lands.
     CompilerOptions {
         log_level: Some(LogLevel::Warn),

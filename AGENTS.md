@@ -49,6 +49,7 @@ mise run report-wasm-size  # hello_world, pi_approx, zlib, and so on
 - A compiler bug is always P0 — no exceptions. Stop, write a minimal reproducible e2e fixture, and fix it before continuing if it blocks the current task.
 - A pre-existing issue — whether you find it or a reviewer points it out — must be fixed, with TDD when practical.
 - Don't pipe long-running commands (`mise run …`, `cargo test`, etc.) into `tail` or `head`. Redirect to a file and inspect it afterwards if you need to trim output.
+- Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and `cranelift-codegen` so dev-build runtime is close to release for the parts that matter, while compile time stays much lower. `--release` is for distributing binaries, not for the inner dev loop.
 - Use the `rust` skill when writing Rust.
 - Use the `wado` skill when writing Wado code or designing Wado language features.
 
@@ -153,7 +154,6 @@ wado dump file.wado                  # show final WIR (default)
 wado dump --nir file.wado            # show final NIR (after optimization)
 wado dump --nir -O0 file.wado        # show NIR without optimization
 wado dump --ast file.wado            # show parsed AST
-wado dump --desugared file.wado      # show desugared AST
 wado dump --modules file.wado        # show loaded modules
 wado dump --symbols file.wado        # show symbol table
 wado dump --types file.wado          # show type table

@@ -321,31 +321,31 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(68)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(69)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(69)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(70)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(70)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(71)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(71)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(72)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(72)
 
-type "functype//wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end" = fn(ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Parser") -> i32;  // TypeId(73)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(73)
 
-type "functype//wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::advance" = fn(ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Parser") -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token";  // TypeId(74)
+type "functype//wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end" = fn(ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Parser") -> i32;  // TypeId(74)
 
-type "functype//wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect" = fn(ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Parser", i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";  // TypeId(75)
+type "functype//wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::advance" = fn(ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Parser") -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token";  // TypeId(75)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(76)
+type "functype//wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect" = fn(ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Parser", i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";  // TypeId(76)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(77)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(77)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(78)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(78)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(79)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(79)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(80)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(80)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(81)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(81)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -552,21 +552,13 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
     let index_267: i32;
     let index_269: i32;
     let __hfs_pos_270: i32;
-    start_1 = __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_0: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-        index_257 = p.pos;
-        if index_257 >= p.tokens.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_0: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_257);
+    start_1 = index_257 = p.pos; if index_257 >= p.tokens.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }.span.start;
+    }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_257).span.start;
     let __match_scrut_0: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
-    __match_scrut_0 = __inline_parse_atom_1: block -> ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>" {
-        tok_192 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::advance"(p);
-        break __inline_parse_atom_1: struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Lit" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P0" { span: tok_192.span, tok: tok_192 } } };
-        unreachable;
-    };
+    tok_192 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::advance"(p);
+    __match_scrut_0 = struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Lit" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P0" { span: tok_192.span, tok: tok_192 } } };
     result = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_0) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E" {
         __qm_v_2 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_0).payload_0;
         __qm_v_2;
@@ -577,15 +569,10 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
     __hfs_pos_270 = p.pos;
     b2: block {
         l3: loop {
-            suffix_kind = __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_3: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                index_195 = __hfs_pos_270;
-                if index_195 >= p.tokens.used {
-                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                    unreachable;
-                }
-                break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_3: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_195);
+            suffix_kind = index_195 = __hfs_pos_270; if index_195 >= p.tokens.used {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            }.kind;
+            }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_195).kind;
             if suffix_kind == 4 {
                 let __match_scrut_1: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_1 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("'||'"), used: 4 });
@@ -605,11 +592,7 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     __qm_e_10 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_2).payload_0;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_10 };
                 });
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt4" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P4" { span: ref.as_non_null(__inline_Span__new_4: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    end_197 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_4: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_197 };
-                    unreachable;
-                }), expr: result, tok: tok_8, expr2: expr2_11 } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt4" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P4" { span: ref.as_non_null(end_197 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_197 }), expr: result, tok: tok_8, expr2: expr2_11 } };
             } else if (if (if suffix_kind == 51 -> i32 {
                 1;
             } else {
@@ -619,15 +602,10 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
             } else {
                 suffix_kind == 53;
             }) {
-                grp_kind_12 = __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_6: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                    index_200 = __hfs_pos_270;
-                    if index_200 >= p.tokens.used {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_6: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_200);
+                grp_kind_12 = index_200 = __hfs_pos_270; if index_200 >= p.tokens.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }.kind;
+                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_200).kind;
                 if grp_kind_12 == 51 {
                     let __match_scrut_3: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_3 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 51, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("'*'"), used: 3 });
@@ -669,25 +647,16 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     __qm_e_23 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_6).payload_0;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_23 };
                 });
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt5" { discriminant: 2, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P5" { span: ref.as_non_null(__inline_Span__new_7: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    end_202 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_7: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_202 };
-                    unreachable;
-                }), expr: result, expr2: expr2_24 } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt5" { discriminant: 2, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P5" { span: ref.as_non_null(end_202 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_202 }), expr: result, expr2: expr2_24 } };
             } else if (if suffix_kind == 61 -> i32 {
                 1;
             } else {
                 suffix_kind == 62;
             }) {
-                grp_kind_25 = __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_9: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                    index_205 = __hfs_pos_270;
-                    if index_205 >= p.tokens.used {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_9: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_205);
+                grp_kind_25 = index_205 = __hfs_pos_270; if index_205 >= p.tokens.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }.kind;
+                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_205).kind;
                 if grp_kind_25 == 61 {
                     let __match_scrut_7: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_7 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 61, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("'+'"), used: 3 });
@@ -719,11 +688,7 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     __qm_e_33 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_9).payload_0;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_33 };
                 });
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt6" { discriminant: 3, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P6" { span: ref.as_non_null(__inline_Span__new_10: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    end_207 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_10: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_207 };
-                    unreachable;
-                }), expr: result, expr2: expr2_34 } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt6" { discriminant: 3, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P6" { span: ref.as_non_null(end_207 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_207 }), expr: result, expr2: expr2_34 } };
             } else if (if (if (if suffix_kind == 71 -> i32 {
                 1;
             } else {
@@ -737,15 +702,10 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
             } else {
                 suffix_kind == 74;
             }) {
-                grp_kind_35 = __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_12: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                    index_210 = __hfs_pos_270;
-                    if index_210 >= p.tokens.used {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_12: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_210);
+                grp_kind_35 = index_210 = __hfs_pos_270; if index_210 >= p.tokens.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }.kind;
+                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_210).kind;
                 if grp_kind_35 == 71 {
                     let __match_scrut_10: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_10 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 71, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("'<<'"), used: 4 });
@@ -797,11 +757,7 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     __qm_e_49 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_14).payload_0;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_49 };
                 });
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt7" { discriminant: 4, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P7" { span: ref.as_non_null(__inline_Span__new_13: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    end_212 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_13: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_212 };
-                    unreachable;
-                }), expr: result, expr2: expr2_50 } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt7" { discriminant: 4, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P7" { span: ref.as_non_null(end_212 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_212 }), expr: result, expr2: expr2_50 } };
             } else if (if (if (if suffix_kind == 81 -> i32 {
                 1;
             } else {
@@ -815,15 +771,10 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
             } else {
                 suffix_kind == 84;
             }) {
-                grp_kind_51 = __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_15: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                    index_215 = __hfs_pos_270;
-                    if index_215 >= p.tokens.used {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_15: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_215);
+                grp_kind_51 = index_215 = __hfs_pos_270; if index_215 >= p.tokens.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }.kind;
+                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_215).kind;
                 if grp_kind_51 == 81 {
                     let __match_scrut_15: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_15 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 81, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("'<'"), used: 3 });
@@ -875,11 +826,7 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     __qm_e_65 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_19).payload_0;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_65 };
                 });
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt8" { discriminant: 5, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P8" { span: ref.as_non_null(__inline_Span__new_16: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    end_217 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_16: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_217 };
-                    unreachable;
-                }), expr: result, expr2: expr2_66 } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt8" { discriminant: 5, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P8" { span: ref.as_non_null(end_217 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_217 }), expr: result, expr2: expr2_66 } };
             } else if (if (if (if suffix_kind == 91 -> i32 {
                 1;
             } else {
@@ -893,15 +840,10 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
             } else {
                 suffix_kind == 94;
             }) {
-                grp_kind_67 = __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_18: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                    index_220 = __hfs_pos_270;
-                    if index_220 >= p.tokens.used {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_18: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_220);
+                grp_kind_67 = index_220 = __hfs_pos_270; if index_220 >= p.tokens.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }.kind;
+                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_220).kind;
                 if grp_kind_67 == 91 {
                     let __match_scrut_20: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_20 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 91, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("'='"), used: 3 });
@@ -953,21 +895,12 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     __qm_e_81 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_24).payload_0;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_81 };
                 });
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt9" { discriminant: 6, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P9" { span: ref.as_non_null(__inline_Span__new_19: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    end_222 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_19: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_222 };
-                    unreachable;
-                }), expr: result, expr2: expr2_82 } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt9" { discriminant: 6, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P9" { span: ref.as_non_null(end_222 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_222 }), expr: result, expr2: expr2_82 } };
             } else if suffix_kind == 10 {
-                k_not_86 = (if __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_1: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                    index_259 = __hfs_pos_270;
-                    if index_259 >= p.tokens.used {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_1: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_259);
+                k_not_86 = (if index_259 = __hfs_pos_270; if index_259 >= p.tokens.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }.kind == 10 -> ref null "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_259).kind == 10 -> ref null "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     let __match_scrut_25: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_25 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NOT"), used: 3 });
                     k_not_85 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_25) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
@@ -990,16 +923,10 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     __qm_e_88 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_26).payload_0;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_88 };
                 });
-                inner_kind = __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_22: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                    __hfs_pos_270 = p.pos;
-                    index_226 = __hfs_pos_270;
-                    if index_226 >= p.tokens.used {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_22: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_226);
+                inner_kind = __hfs_pos_270 = p.pos; index_226 = __hfs_pos_270; if index_226 >= p.tokens.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }.kind;
+                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_226).kind;
                 if inner_kind == 120 {
                     saved_pos_91 = __hfs_pos_270;
                     bt_done = 0;
@@ -1023,16 +950,10 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                         }));
                         b79: block {
                             l80: loop {
-                                if __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_2: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                                    __hfs_pos_270 = p.pos;
-                                    index_261 = __hfs_pos_270;
-                                    if index_261 >= p.tokens.used {
-                                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                                        unreachable;
-                                    }
-                                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_2: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_261);
+                                if __hfs_pos_270 = p.pos; index_261 = __hfs_pos_270; if index_261 >= p.tokens.used {
+                                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                                     unreachable;
-                                }.kind != 130 {
+                                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_261).kind != 130 {
                                     break b79;
                                 }
                                 let __match_scrut_29: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
@@ -1096,11 +1017,7 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_110 };
                     }));
                 }
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt10" { discriminant: 7, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P10" { span: ref.as_non_null(__inline_Span__new_26: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    end_231 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_26: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_231 };
-                    unreachable;
-                }), expr: result, opt: k_not_86, tok: tok_89 } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt10" { discriminant: 7, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P10" { span: ref.as_non_null(end_231 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_231 }), expr: result, opt: k_not_86, tok: tok_89 } };
             } else if suffix_kind == 111 {
                 let __match_scrut_35: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_35 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 111, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("AND"), used: 3 });
@@ -1120,11 +1037,7 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     __qm_e_116 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_36).payload_0;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_116 };
                 });
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt11" { discriminant: 8, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P11" { span: ref.as_non_null(__inline_Span__new_27: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    end_233 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_27: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_233 };
-                    unreachable;
-                }), expr: result, tok: tok_114, expr2: expr2_117 } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt11" { discriminant: 8, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P11" { span: ref.as_non_null(end_233 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_233 }), expr: result, tok: tok_114, expr2: expr2_117 } };
             } else if suffix_kind == 112 {
                 let __match_scrut_37: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_37 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 112, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("OR"), used: 2 });
@@ -1144,11 +1057,7 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     __qm_e_122 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_38).payload_0;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_122 };
                 });
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt12" { discriminant: 9, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P12" { span: ref.as_non_null(__inline_Span__new_28: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    end_235 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_28: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_235 };
-                    unreachable;
-                }), expr: result, tok: tok_120, expr2: expr2_123 } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt12" { discriminant: 9, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P12" { span: ref.as_non_null(end_235 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_235 }), expr: result, tok: tok_120, expr2: expr2_123 } };
             } else if suffix_kind == 116 {
                 let __match_scrut_39: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_39 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 116, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("COLLATE"), used: 7 });
@@ -1160,21 +1069,12 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_125 };
                 });
                 name_127 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::advance"(p);
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt16" { discriminant: 10, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P16" { span: ref.as_non_null(__inline_Span__new_29: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    end_237 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_29: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_237 };
-                    unreachable;
-                }), expr: result, tok: tok_126, name: name_127 } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt16" { discriminant: 10, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P16" { span: ref.as_non_null(end_237 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_237 }), expr: result, tok: tok_126, name: name_127 } };
             } else if suffix_kind == 17 {
-                k_not_131 = (if __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_3: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                    index_263 = __hfs_pos_270;
-                    if index_263 >= p.tokens.used {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_3: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_263);
+                k_not_131 = (if index_263 = __hfs_pos_270; if index_263 >= p.tokens.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }.kind == 17 -> ref null "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_263).kind == 17 -> ref null "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     let __match_scrut_40: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_40 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NOT"), used: 3 });
                     k_not_130 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_40) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
@@ -1188,16 +1088,10 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                 } else {
                     ref.null none;
                 });
-                grp_kind_132 = __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_32: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                    __hfs_pos_270 = p.pos;
-                    index_241 = __hfs_pos_270;
-                    if index_241 >= p.tokens.used {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_32: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_241);
+                grp_kind_132 = __hfs_pos_270 = p.pos; index_241 = __hfs_pos_270; if index_241 >= p.tokens.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }.kind;
+                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_241).kind;
                 if grp_kind_132 == 171 {
                     let __match_scrut_41: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_41 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 171, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("LIKE"), used: 4 });
@@ -1249,16 +1143,10 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     __qm_e_146 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_45).payload_0;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_146 };
                 });
-                if __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_4: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                    __hfs_pos_270 = p.pos;
-                    index_265 = __hfs_pos_270;
-                    if index_265 >= p.tokens.used {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_4: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_265);
+                if __hfs_pos_270 = p.pos; index_265 = __hfs_pos_270; if index_265 >= p.tokens.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }.kind == 175 {
+                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_265).kind == 175 {
                     saved_pos_148 = __hfs_pos_270;
                     opt_bt: block {
                         r1_149 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 175, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ESCAPE"), used: 6 });
@@ -1277,12 +1165,7 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     };
                 } else {
                 }
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt17" { discriminant: 11, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P17" { span: ref.as_non_null(__inline_Span__new_34: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    p.pos = __hfs_pos_270;
-                    end_244 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_34: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_244 };
-                    unreachable;
-                }), expr: result, opt: k_not_131, expr2: expr2_147 } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt17" { discriminant: 11, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P17" { span: ref.as_non_null(p.pos = __hfs_pos_270; end_244 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_244 }), expr: result, opt: k_not_131, expr2: expr2_147 } };
             } else if (if (if suffix_kind == 181 -> i32 {
                 1;
             } else {
@@ -1292,15 +1175,10 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
             } else {
                 suffix_kind == 183;
             }) {
-                grp_kind_151 = __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_36: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                    index_247 = __hfs_pos_270;
-                    if index_247 >= p.tokens.used {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_36: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_247);
+                grp_kind_151 = index_247 = __hfs_pos_270; if index_247 >= p.tokens.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }.kind;
+                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_247).kind;
                 if grp_kind_151 == 181 {
                     let __match_scrut_48: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_48 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 181, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ISNULL"), used: 6 });
@@ -1342,11 +1220,7 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     }));
                 } else {
                 }
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt18" { discriminant: 12, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P18" { span: ref.as_non_null(__inline_Span__new_37: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    end_249 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_37: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_249 };
-                    unreachable;
-                }), expr: result } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt18" { discriminant: 12, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P18" { span: ref.as_non_null(end_249 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_249 }), expr: result } };
             } else if suffix_kind == 19 {
                 let __match_scrut_52: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                 __match_scrut_52 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("IS"), used: 2 });
@@ -1357,16 +1231,10 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     __qm_e_165 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_52).payload_0;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_165 };
                 });
-                k_not_170 = (if __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_5: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                    __hfs_pos_270 = p.pos;
-                    index_267 = __hfs_pos_270;
-                    if index_267 >= p.tokens.used {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_5: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_267);
+                k_not_170 = (if __hfs_pos_270 = p.pos; index_267 = __hfs_pos_270; if index_267 >= p.tokens.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }.kind == 191 -> ref null "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_267).kind == 191 -> ref null "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     let __match_scrut_53: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_53 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 191, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NOT"), used: 3 });
                     k_not_169 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_53) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
@@ -1389,21 +1257,12 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     __qm_e_172 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_54).payload_0;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_172 };
                 });
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt19" { discriminant: 13, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P19" { span: ref.as_non_null(__inline_Span__new_39: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    end_252 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_39: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_252 };
-                    unreachable;
-                }), expr: result, tok: tok_166, opt: k_not_170, expr2: expr2_173 } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt19" { discriminant: 13, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P19" { span: ref.as_non_null(end_252 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_252 }), expr: result, tok: tok_166, opt: k_not_170, expr2: expr2_173 } };
             } else if suffix_kind == 20 {
-                k_not_177 = (if __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_6: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-                    index_269 = __hfs_pos_270;
-                    if index_269 >= p.tokens.used {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_6: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_269);
+                k_not_177 = (if index_269 = __hfs_pos_270; if index_269 >= p.tokens.used {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }.kind == 20 -> ref null "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
+                }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(p.tokens.repr, index_269).kind == 20 -> ref null "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
                     let __match_scrut_55: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
                     __match_scrut_55 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"(p, 20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NOT"), used: 3 });
                     k_not_176 = (if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok"(__match_scrut_55) -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
@@ -1453,11 +1312,7 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
                     __qm_e_188 = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__match_scrut_59).payload_0;
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: __qm_e_188 };
                 });
-                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt20" { discriminant: 14, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P20" { span: ref.as_non_null(__inline_Span__new_41: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" {
-                    end_255 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p);
-                    break __inline_Span__new_41: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_255 };
-                    unreachable;
-                }), expr: result, opt: k_not_177, tok: tok_180, expr2: expr2_183, tok2: tok2_186, expr3: expr3 } };
+                result = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//E::Alt20" { discriminant: 14, payload_0: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//P20" { span: ref.as_non_null(end_255 = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: start_1, end: end_255 }), expr: result, opt: k_not_177, tok: tok_180, expr2: expr2_183, tok2: tok2_186, expr3: expr3 } };
             } else {
                 break b2;
             }
@@ -1470,7 +1325,6 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p) 
 
 fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/run"() {
     let __b_0: ref "core:prelude//Array<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token>";
-    let tokens: ref "core:prelude//Array<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token>";
     let p: ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Parser";
     let e: ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//ParseError";
     let __v0: i32;
@@ -1485,88 +1339,24 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/run"() {
     let text_31: ref "core:prelude/string.wado//String";
     let text_37: ref "core:prelude/string.wado//String";
     let f_45: ref "core:prelude/format.wado//Formatter";
+    let self_52: i32;
     let f_56: ref "core:prelude/format.wado//Formatter";
     let __sroa_r_value: ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>";
-    tokens = __seq_lit: block -> ref "core:prelude//Array<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token>" {
-        __b_0 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(__inline_make_tok_5: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-            text_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("1"), used: 1 };
-            break __inline_make_tok_5: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" { kind: 1, text: text_19, span: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: 0, end: 0 + text_19.used } };
-            unreachable;
-        }, __inline_make_tok_8: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-            text_25 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
-            break __inline_make_tok_8: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" { kind: 61, text: text_25, span: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: 2, end: 2 + text_25.used } };
-            unreachable;
-        }, __inline_make_tok_11: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-            text_31 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("2"), used: 1 };
-            break __inline_make_tok_11: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" { kind: 1, text: text_31, span: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: 4, end: 4 + text_31.used } };
-            unreachable;
-        }, __inline_make_tok_14: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-            text_37 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-            break __inline_make_tok_14: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" { kind: -1, text: text_37, span: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: 5, end: 5 + text_37.used } };
-            unreachable;
-        }), used: 4 };
-        break __seq_lit: __b_0;
-        unreachable;
-    };
-    p = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Parser" { tokens: tokens, pos: 0 };
+    __b_0 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(text_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("1"), used: 1 }; struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" { kind: 1, text: text_19, span: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: 0, end: 0 + text_19.used } }, text_25 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 }; struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" { kind: 61, text: text_25, span: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: 2, end: 2 + text_25.used } }, text_31 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("2"), used: 1 }; struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" { kind: 1, text: text_31, span: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: 4, end: 4 + text_31.used } }, text_37 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }; struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" { kind: -1, text: text_37, span: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span" { start: 5, end: 5 + text_37.used } }), used: 4 };
+    p = struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Parser" { tokens: __b_0, pos: 0 };
     __sroa_r_value = "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/parse_expr"(p);
     if ref.test "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__sroa_r_value) {
         e = ref.cast "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/E,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err"(__sroa_r_value).payload_0;
-        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-            __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 };
-            "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("parse failed: "), used: 14 });
-            "core:prelude/string.wado/String::push_str"(__local_7, e.message);
-            break __tmpl: __local_7;
-            unreachable;
-        });
+        "core:internal/panic"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("parse failed: "), used: 14 }); "core:prelude/string.wado/String::push_str"(__local_7, e.message); __local_7);
         unreachable;
     } else {
     }
     __v0 = p.pos;
     __cond = __v0 == 3;
     if __cond == 0 {
-        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-            __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(138), used: 0 };
-            "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            "core:prelude/string.wado/String::push"(__local_10, 114);
-            "core:prelude/string.wado/String::push"(__local_10, 117);
-            "core:prelude/string.wado/String::push"(__local_10, 110);
-            "core:prelude/string.wado/String::push"(__local_10, 32);
-            "core:prelude/string.wado/String::push"(__local_10, 97);
-            "core:prelude/string.wado/String::push"(__local_10, 116);
-            "core:prelude/string.wado/String::push"(__local_10, 32);
-            "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado"), used: 60 });
-            "core:prelude/string.wado/String::push"(__local_10, 58);
-            __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
-            f_45 = __local_11;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(267, f_45);
-            "core:prelude/string.wado/String::push"(__local_10, 58);
-            "core:prelude/string.wado/String::push"(__local_10, 32);
-            "core:prelude/string.wado/String::push_str"(__local_10, __tmpl: block -> ref "core:prelude/string.wado//String" {
-                __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 };
-                "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected pos=3, got pos="), used: 24 });
-                __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
-                "core:prelude/primitive.wado/i32::fmt_decimal"(p.pos, __local_9);
-                break __tmpl: __local_8;
-                unreachable;
-            });
-            "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:internal/panic"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(138), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_10, 114); "core:prelude/string.wado/String::push"(__local_10, 117); "core:prelude/string.wado/String::push"(__local_10, 110); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado"), used: 60 }); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; f_45 = __local_11; "core:prelude/primitive.wado/i32::fmt_decimal"(267, f_45); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected pos=3, got pos="), used: 24 }); __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; self_52 = p.pos; "core:prelude/primitive.wado/i32::fmt_decimal"(self_52, __local_9); __local_8); "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: p.pos == 3
-"), used: 23 });
-            "core:prelude/string.wado/String::push"(__local_10, 112);
-            "core:prelude/string.wado/String::push"(__local_10, 46);
-            "core:prelude/string.wado/String::push"(__local_10, 112);
-            "core:prelude/string.wado/String::push"(__local_10, 111);
-            "core:prelude/string.wado/String::push"(__local_10, 115);
-            "core:prelude/string.wado/String::push"(__local_10, 58);
-            "core:prelude/string.wado/String::push"(__local_10, 32);
-            __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
-            f_56 = __local_11;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_56);
-            "core:prelude/string.wado/String::push"(__local_10, 10);
-            break __tmpl: __local_10;
-            unreachable;
-        });
+"), used: 23 }); "core:prelude/string.wado/String::push"(__local_10, 112); "core:prelude/string.wado/String::push"(__local_10, 46); "core:prelude/string.wado/String::push"(__local_10, 112); "core:prelude/string.wado/String::push"(__local_10, 111); "core:prelude/string.wado/String::push"(__local_10, 115); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; f_56 = __local_11; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_56); "core:prelude/string.wado/String::push"(__local_10, 10); __local_10);
         unreachable;
     }
 }
@@ -1578,17 +1368,15 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/__cm_export__ru
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l143: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l143;
-            };
+    i = 0;
+    b142: block {
+        l143: loop {
+            if i >= len {
+                break b142;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l143;
         };
     };
 }
@@ -1670,17 +1458,15 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         return 1;
     }
     n = 0;
-    __for_1: block {
-        t = val;
-        block {
-            l149: loop {
-                if t <= 0_i64 {
-                    break __for_1;
-                }
-                n = n + 1;
-                t = t / 10_i64;
-                continue l149;
-            };
+    t = val;
+    b148: block {
+        l149: loop {
+            if t <= 0_i64 {
+                break b148;
+            }
+            n = n + 1;
+            t = t / 10_i64;
+            continue l149;
         };
     };
     return n;
@@ -1693,18 +1479,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
     } else {
-        __for_2: block {
-            temp = abs_val;
-            block {
-                l153: loop {
-                    if temp <= 0_i64 {
-                        break __for_2;
-                    }
-                    pos = pos - 1;
-                    builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
-                    temp = temp / 10_i64;
-                    continue l153;
-                };
+        temp = abs_val;
+        b152: block {
+            l153: loop {
+                if temp <= 0_i64 {
+                    break b152;
+                }
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                temp = temp / 10_i64;
+                continue l153;
             };
         };
     }
@@ -1717,18 +1501,10 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let offset: i32;
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
-    abs_val = (if is_negative -> i64 {
-        0_i64 - builtin::i64_extend_i32_s(self);
-    } else {
-        builtin::i64_extend_i32_s(self);
-    });
+    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
     digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
-        self_6 = f.buf;
-        break __inline_String__internal_raw_bytes_0: self_6.repr;
-        unreachable;
-    }, offset, abs_val, digit_count);
+    "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
 
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
@@ -1741,15 +1517,9 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a_5 = __inline_i32_max_1: block -> i32 {
-            a_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
-            unreachable;
-        };
-        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
-        unreachable;
-    };
+    a_7 = capacity * 2;
+    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
+    new_capacity = select i32(a_5 > 8, a_5, 8);
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
@@ -1812,29 +1582,21 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::last_en
     if self.pos == 0 {
         return 0;
     }
-    return __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_0: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-        index = self.pos - 1;
-        if index >= self.tokens.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_0: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(self.tokens.repr, index);
+    return index = self.pos - 1; if index >= self.tokens.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }.span.end;
+    }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(self.tokens.repr, index).span.end;
 }
 
 fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::advance"(self) {
     let tok: ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token";
     let index: i32;
-    tok = __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_0: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-        index = self.pos;
-        if index >= self.tokens.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_0: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(self.tokens.repr, index);
+    index = self.pos;
+    if index >= self.tokens.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    };
+    }
+    tok = builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(self.tokens.repr, index);
     self.pos = self.pos + 1;
     return tok;
 }
@@ -1845,72 +1607,35 @@ fn "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::expect"
     let __local_5: ref "core:prelude/string.wado//String";
     let index_7: i32;
     let index_9: i32;
-    let message: ref "core:prelude/string.wado//String";
     let span: ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Span";
-    let expected: ref "core:prelude//Array<core:prelude/string.wado/String>";
-    if __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_0: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-        index_7 = self.pos;
-        if index_7 >= self.tokens.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_0: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(self.tokens.repr, index_7);
+    if index_7 = self.pos; if index_7 >= self.tokens.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }.kind == kind {
+    }; builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(self.tokens.repr, index_7).kind == kind {
         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Ok" { discriminant: 0, payload_0: ref.as_non_null("wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Parser::advance"(self)) };
     }
-    tok = __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_1: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token" {
-        index_9 = self.pos;
-        if index_9 >= self.tokens.used {
-            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
-        break __inline_Array_wado_compiler_tests_fixtures_result_mut_ref_side_effect_wado_Token__IndexValue_i32___index_value_1: builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(self.tokens.repr, index_9);
+    index_9 = self.pos;
+    if index_9 >= self.tokens.used {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    };
-    return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_ParseError__new_7: block -> ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//ParseError" {
-        message = __tmpl: block -> ref "core:prelude/string.wado//String" {
-            __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 };
-            "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected "), used: 9 });
-            "core:prelude/string.wado/String::push_str"(__local_5, name);
-            "core:prelude/string.wado/String::push"(__local_5, 44);
-            "core:prelude/string.wado/String::push"(__local_5, 32);
-            "core:prelude/string.wado/String::push"(__local_5, 103);
-            "core:prelude/string.wado/String::push"(__local_5, 111);
-            "core:prelude/string.wado/String::push"(__local_5, 116);
-            "core:prelude/string.wado/String::push"(__local_5, 32);
-            "core:prelude/string.wado/String::push"(__local_5, 34);
-            "core:prelude/string.wado/String::push_str"(__local_5, tok.text);
-            "core:prelude/string.wado/String::push"(__local_5, 34);
-            break __tmpl: __local_5;
-            unreachable;
-        };
-        span = tok.span;
-        expected = __seq_lit: block -> ref "core:prelude//Array<core:prelude/string.wado/String>" {
-            __b = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(name), used: 1 };
-            break __seq_lit: __b;
-            unreachable;
-        };
-        break __inline_ParseError__new_7: struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//ParseError" { message: message, span: span, expected: expected };
-        unreachable;
-    }) };
+    }
+    tok = builtin::array_get<ref "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//Token">(self.tokens.repr, index_9);
+    return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/Token,wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado/ParseError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected "), used: 9 }); "core:prelude/string.wado/String::push_str"(__local_5, name); "core:prelude/string.wado/String::push"(__local_5, 44); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 103); "core:prelude/string.wado/String::push"(__local_5, 111); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 34); "core:prelude/string.wado/String::push_str"(__local_5, tok.text); "core:prelude/string.wado/String::push"(__local_5, 34); span = tok.span; __b = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(name), used: 1 }; struct.new "wado-compiler/tests/fixtures/result_mut_ref_side_effect.wado//ParseError" { message: __local_5, span: span, expected: __b }) };
 }
 
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
-    __for_0: block {
-        i = 0;
-        _licm_buf_4 = self.buf;
-        block {
-            l171: loop {
-                if i >= n {
-                    break __for_0;
-                }
-                "core:prelude/string.wado/String::push"(_licm_buf_4, c);
-                i = i + 1;
-                continue l171;
-            };
+    i = 0;
+    _licm_buf_4 = self.buf;
+    b169: block {
+        l170: loop {
+            if i >= n {
+                break b169;
+            }
+            "core:prelude/string.wado/String::push"(_licm_buf_4, c);
+            i = i + 1;
+            continue l170;
         };
     };
 }

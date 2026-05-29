@@ -18,12 +18,12 @@
 // In Wado the `;` is just a statement separator (not a "discard value"
 // marker as in Rust); `{ helper(); }` and `{ helper() }` both
 // evaluate to `helper()`'s return type. So the arms genuinely
-// disagreed on result type, but the resolver previously picked the
+// disagreed on result type, but the elaborator previously picked the
 // first non-`never` arm type without checking that the others agreed
 // — and the WIR builder then emitted a `(if (result i32) ...)` whose
 // `_ => {}` branch left nothing on the stack.
 //
-// Fix: `resolver::resolve_stmt` now pins `expected_type = Some(Unit)`
+// Fix: `elaborator::resolve_stmt` now pins `expected_type = Some(Unit)`
 // when it calls `resolve_match_expr` for a match in statement
 // position. With that hint, the match's overall `type_id` is forced
 // to `Unit`, and `wir_build::translate_match` already wraps each
@@ -34,7 +34,7 @@
 // and `wasmparser` accepts the module.
 //
 // Same root-cause family as `match_arm_struct_field_invalid_wasm.wado`
-// (resolver / WIR-builder coordination on value-drop semantics for
+// (elaborator / WIR-builder coordination on value-drop semantics for
 // `match` arms used in statement position).
 
 enum Foo {

@@ -1793,6 +1793,8 @@ impl WirInstr {
                     | Self::ArrayNewFixed { .. }
                     | Self::RefAsNonNull(_)
                     | Self::RefI31(_)
+                    // `ref.func` always produces a non-null funcref.
+                    | Self::RefFunc { .. }
             ),
         }
     }

@@ -1142,7 +1142,7 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
 /// nodes so the rest of the closure pipeline handles them uniformly.
 ///
 /// `FuncRefs` in callee position of `Call` / `MethodCall` are not
-/// `TirExprKind::FuncRef` (the call resolver emits a `Call`/`MethodCall`
+/// `TirExprKind::FuncRef` (the call elaborator emits a `Call`/`MethodCall`
 /// directly), so they're left alone by the default walk. `&FuncRef` is
 /// just `&` applied to a `fn(...)` value: the inner `FuncRef` becomes a
 /// zero-capture closure and the outer `Unary::Ref` stays put, producing a

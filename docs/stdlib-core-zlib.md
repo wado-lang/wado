@@ -261,6 +261,34 @@ _Fields are private._
 
 Creates a header with all fields cleared (`os` set to `0xFF` = unknown).
 
+#### `pub fn text(&self) -> bool`
+
+Returns true if the FTEXT flag is set (payload is probably ASCII text).
+
+#### `pub fn time(&self) -> u32`
+
+Returns MTIME (modification time as a Unix timestamp; 0 = unset).
+
+#### `pub fn os(&self) -> i32`
+
+Returns the OS byte (`0xFF` = unknown).
+
+#### `pub fn extra(&self) -> Array<u8>`
+
+Returns the FEXTRA payload (empty = none).
+
+#### `pub fn name(&self) -> String`
+
+Returns the FNAME (original file name; empty = none).
+
+#### `pub fn comment(&self) -> String`
+
+Returns the FCOMMENT (empty = none).
+
+#### `pub fn hcrc(&self) -> bool`
+
+Returns true if the FHCRC flag is set (header CRC16 is present).
+
 #### `pub fn set_text(&mut self, text: bool)`
 
 Sets the FTEXT flag, indicating the payload is probably ASCII text.

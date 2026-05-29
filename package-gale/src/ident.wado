@@ -1,24 +1,44 @@
 /// Pure identifier-name transforms used by both the IR (to populate
 /// per-element name caches at construction time) and the codegen layer.
 /// This module deliberately has no IR dependencies — `ir.wado` imports it.
+///
+/// Length-first dispatch: most non-reserved identifiers are either too
+/// short or too long to match any reserved word, so the outer length
+/// switch short-circuits without any string comparison. The inner
+/// `match *name` for each length only walks the (much smaller) set of
+/// reserved words sharing that length.
 fn is_wado_reserved(name: &String) -> bool {
-    return match *name {
-        // Control flow
-        "if" | "else" | "while" | "for" | "loop" | "break" | "continue" | "return" | "match" | "matches" => true,
-        // Declarations
-        "fn" | "let" | "global" | "const" | "struct" | "enum" | "variant" | "impl" | "trait" => true,
-        "type" | "use" | "from" | "pub" | "import" | "export" | "test" => true,
-        // Modifiers
-        "as" | "with" | "mut" | "async" | "move" | "unique" | "in" | "of" | "stores" => true,
-        // Other keywords
-        "assert" | "effect" | "interface" | "handler" | "reactive" | "resource" | "world" => true,
-        // Constants
-        "true" | "false" | "null" | "self" => true,
-        // Built-in types
-        "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" => true,
-        "bool" | "char" | "String" | "Array" | "Option" | "Result" | "Fn" => true,
-        // Other
-        "scope" | "task" | "flags" | "panic" | "unreachable" => true,
+    return match name.len() {
+        2 => match *name {
+            "Fn" | "as" | "fn" | "i8" | "if" | "in" | "of" | "u8" => true,
+            _ => false,
+        },
+        3 => match *name {
+            "f32" | "f64" | "for" | "i16" | "i32" | "i64" | "let" | "mut" | "pub" | "u16" | "u32" | "u64" | "use" => true,
+            _ => false,
+        },
+        4 => match *name {
+            "bool" | "char" | "else" | "enum" | "from" | "impl" | "loop" | "move" | "null" | "self" | "task" | "test" | "true" | "type" | "with" => true,
+            _ => false,
+        },
+        5 => match *name {
+            "Array" | "async" | "break" | "const" | "false" | "flags" | "match" | "panic" | "scope" | "trait" | "while" | "world" => true,
+            _ => false,
+        },
+        6 => match *name {
+            "Option" | "Result" | "String" | "assert" | "effect" | "export" | "global" | "import" | "return" | "stores" | "struct" | "unique" => true,
+            _ => false,
+        },
+        7 => match *name {
+            "handler" | "matches" | "variant" => true,
+            _ => false,
+        },
+        8 => match *name {
+            "continue" | "reactive" | "resource" => true,
+            _ => false,
+        },
+        9 => *name == "interface",
+        11 => *name == "unreachable",
         _ => false,
     };
 }

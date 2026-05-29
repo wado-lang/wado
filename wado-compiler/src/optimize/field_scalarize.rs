@@ -1,4 +1,4 @@
-//! Hot Field Scalarization for Wado TIR
+//! Hot Field Scalarization for Wado NIR
 //!
 //! Promotes a hot struct field `obj.field` (read+written inside a loop)
 //! to a mutable local `__hfs_field_N`, hoisted out of the loop. Reads
@@ -61,6 +61,14 @@
 //! actually touches. An immutable-ref parameter elides the post-call
 //! `re_read` since the callee cannot mutate through it. Unresolved
 //! callees fall back to "all fields" conservatively.
+//!
+//! TODO(optimizer): the "unresolved callee → all fields" fallback (used
+//! by indirect / cm-raw / closure-functor invocations and by callees
+//! outside the local function set) writes back every scalarized field
+//! on every such call. Propagating an "opaque-callee transparent on
+//! fields this function never writes" summary up the call graph would
+//! eliminate the sync cliff for thin wrapper functions that only forward
+//! the receiver.
 //!
 //! ## Generated locals
 //!
@@ -1473,7 +1481,7 @@ fn count_field_accesses_in_expr(
             field_name,
         } => {
             // Match both `local.field` and `(&mut local).field` patterns.
-            // The latter occurs for `&mut local.field` which TIR represents as
+            // The latter occurs for `&mut local.field` which NIR represents as
             // FieldAccess { expr: Unary { MutRef, Local { ... } }, field }.
             let local_info = match &inner.kind {
                 NirExprKind::Local { index, name } => Some((*index, name.clone(), inner.type_id)),
@@ -1770,6 +1778,16 @@ struct WalkCtx<'a> {
     /// constructed. Each temp's def/use are confined to one Block, so
     /// reuse across separate Blocks is sound.
     temp_pool: IndexMap<TypeId, Vec<u32>>,
+    /// Per-active-label break-state observations. `walk_labeled_block`
+    /// pushes an empty entry on enter and pops it on exit; every
+    /// `walk_stmt` `Break { label: Some(l), .. }` arm appends the
+    /// walker's current `ScalarStates` to the entry for `l`. The
+    /// labeled-block exit then JOINs the fall-through state with every
+    /// observed break-state to derive the post-block walker state —
+    /// over-approximating by entry alone (the prior fix) wrongly
+    /// dropped `FieldOnly` walker states when entry was `ScalarOnly`,
+    /// causing missed re-reads in post-block code (#1190 regression).
+    label_break_states: IndexMap<String, Vec<ScalarStates>>,
 }
 
 impl WalkCtx<'_> {
@@ -1819,6 +1837,7 @@ fn process_loop_body(
         locals,
         local_count,
         temp_pool: IndexMap::default(),
+        label_break_states: IndexMap::default(),
     };
     walk_block(body, &mut states, &mut ctx);
     let span = crate::token::Span::new(0, 0, 0, 0);
@@ -2062,10 +2081,10 @@ fn walk_stmt(
             out.push(stmt);
         }
         NirStmtKind::LabeledBlock {
-            label: _,
+            label,
             block: inner,
         } => {
-            walk_block(inner, states, ctx);
+            walk_labeled_block(label, inner, states, ctx);
             out.push(stmt);
         }
         NirStmtKind::Return { value } => {
@@ -2075,8 +2094,55 @@ fn walk_stmt(
             // Escape: commit every ScalarOnly candidate to the field
             // before the return. After commit, only the field is
             // observable outside the loop.
-            commit_scalar_for_escape(states, out, ctx, span);
-            out.push(stmt);
+            //
+            // If the return expression itself transitioned a candidate to
+            // `ScalarOnly` (e.g. an inlined `self.pos = self.pos + 1`
+            // nested under `__inline_advance: { ... break tok; }` inside
+            // the return value), a writeback emitted before the Return
+            // stmt would run with the **pre-expression** scalar value at
+            // runtime — the expression mutates `__hfs_pos` after the
+            // writeback has already syncd the old value, and the post-
+            // mutation value is then discarded by the return. Hoist the
+            // value into a temp local so the writeback can run between
+            // the expression's evaluation and the return jump.
+            let needs_post_eval_writeback =
+                value.is_some() && states.contains(&CanonState::ScalarOnly);
+            if needs_post_eval_writeback {
+                let return_value = value.take().expect("checked Some above");
+                let return_type = return_value.type_id;
+                let tmp_idx = ctx.alloc_temp(return_type);
+                let tmp_name = ctx.temp_name(tmp_idx);
+                out.push(NirStmt::new(
+                    NirStmtKind::Let {
+                        name: tmp_name.clone(),
+                        local_index: tmp_idx,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: return_type,
+                        value: return_value,
+                        skip_value_copy: true,
+                    },
+                    span,
+                ));
+                commit_scalar_for_escape(states, out, ctx, span);
+                out.push(NirStmt::new(
+                    NirStmtKind::Return {
+                        value: Some(NirExpr::new(
+                            NirExprKind::Local {
+                                index: tmp_idx,
+                                name: tmp_name,
+                            },
+                            return_type,
+                            span,
+                        )),
+                    },
+                    span,
+                ));
+                ctx.free_temp(tmp_idx, return_type);
+            } else {
+                commit_scalar_for_escape(states, out, ctx, span);
+                out.push(stmt);
+            }
         }
         NirStmtKind::Break { value, label } => {
             if let Some(v) = value {
@@ -2087,17 +2153,17 @@ fn walk_stmt(
             // any `ScalarOnly` candidate must be committed inline before
             // the break — the body-end force-Both is not reached.
             //
-            // Labeled `break <name>` exits a labeled block. Without
-            // tracking break-target states the walker can't precisely
-            // model the post-block JOIN; leave it uncommitted. The
-            // alternative — committing on every labeled break — was
-            // tried during this PR and proved a runtime-perf disaster
-            // on gale's parser, where labeled-break-heavy hot loops
-            // produced many redundant write-backs per iteration. If a
-            // future fixture surfaces a labeled-break correctness gap,
-            // fix it by tracking break-target states, not by
-            // over-syncing.
-            if label.is_none() {
+            // Labeled `break <name>` exits a labeled block. Emitting an
+            // unconditional commit here ("commit-on-every-labeled-break")
+            // proved a runtime-perf disaster on gale's hot loops. Record
+            // the walker's current state instead so `walk_labeled_block`
+            // can JOIN every per-path exit into its post-block walker
+            // state — the precise alternative to over-syncing.
+            if let Some(l) = label {
+                if let Some(bucket) = ctx.label_break_states.get_mut(l) {
+                    bucket.push(states.clone());
+                }
+            } else {
                 commit_scalar_for_escape(states, out, ctx, span);
             }
             out.push(stmt);
@@ -2197,7 +2263,7 @@ fn walk_branching_block_if(
 ///    re-read at the read (state=Both), but iter 2's runtime state
 ///    after iter 1's call is `FieldOnly` — scalar is stale.
 ///
-/// 2. **Post-loop conservatism.** The TIR `Loop` only exits via
+/// 2. **Post-loop conservatism.** The NIR `Loop` only exits via
 ///    `break`/`return`, so the post-loop state at runtime is the
 ///    state at the break-point. The walker doesn't track break-paths
 ///    precisely; the OLD `pick_join_target_for_candidate(entry,
@@ -2596,8 +2662,8 @@ fn walk_other_expr_kinds(
                 walk_expr(p, states, true, out, ctx);
             }
         }
-        NirExprKind::LabeledBlock { block, .. } => {
-            walk_inline_block(block, states, result_used, ctx);
+        NirExprKind::LabeledBlock { label, block, .. } => {
+            walk_labeled_block(label, block, states, ctx);
         }
         NirExprKind::GlobalVarSet { value, .. } => {
             walk_expr(value, states, true, out, ctx);
@@ -2662,6 +2728,52 @@ fn walk_inline_block(
     ctx: &mut WalkCtx,
 ) {
     walk_block(block, states, ctx);
+}
+
+/// Walk a labeled block (stmt- or expr-position), accounting for
+/// labeled-break early-exits that bypass any sync the walker emits
+/// inside the block.
+///
+/// `walk_stmt`'s `Break { label: Some(l), .. }` arm does not emit any
+/// sync (an experiment with "commit-on-every-labeled-break" caused
+/// unacceptable over-syncing in gale's hot loops). So a sync the
+/// walker emits inside the block — e.g. `walk_nested_loop`'s
+/// pre-recurse `write_back`, or a pre-call `write_back` / re-read — may
+/// be skipped at runtime when a labeled break exits before reaching
+/// it.
+///
+/// `walk_stmt`'s `Break` arm instead pushes the walker's current
+/// `ScalarStates` into `ctx.label_break_states[label]`. Here we JOIN
+/// the fall-through state with every observed break-state to derive
+/// the post-block walker state, so subsequent code's sync decisions
+/// see every per-candidate state that any runtime path can leave the
+/// block with. Issue #1187 (the early-return + nested-loop bug) and
+/// the #1190 regression (`FieldOnly` walker exit silently weakened to
+/// `ScalarOnly` by a JOIN with `ScalarOnly` entry) both fall out of
+/// this precise per-path join.
+fn walk_labeled_block(
+    label: &str,
+    block: &mut NirBlock,
+    states: &mut ScalarStates,
+    ctx: &mut WalkCtx,
+) {
+    let prior = ctx.label_break_states.insert(label.to_string(), Vec::new());
+    walk_block(block, states, ctx);
+    let break_states = ctx
+        .label_break_states
+        .swap_remove(label)
+        .unwrap_or_default();
+    if let Some(p) = prior {
+        ctx.label_break_states.insert(label.to_string(), p);
+    }
+    for i in 0..states.len() {
+        let mut exits = Vec::with_capacity(1 + break_states.len());
+        exits.push(states[i]);
+        for bs in &break_states {
+            exits.push(bs[i]);
+        }
+        states[i] = pick_join_target_for_candidate(&exits);
+    }
 }
 
 /// Walk an If used in expression position (then/else are `NirBlocks`).

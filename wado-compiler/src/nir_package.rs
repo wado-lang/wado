@@ -11,7 +11,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::builtin_registry::BuiltinRegistry;
-use crate::component_model::WasiRegistry;
+use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
@@ -70,7 +70,7 @@ pub struct NirPackage {
     /// Module name for the output (derived from filename)
     pub module_name: String,
     /// Registry of WASI imports from lib/wasi/*.wado
-    pub wasi_registry: &'static WasiRegistry,
+    pub cm_interface_registry: &'static CmInterfaceRegistry,
     /// Registry of world definitions from lib/wasi/*.wado
     pub world_registry: &'static WorldRegistry,
 
@@ -106,7 +106,7 @@ pub struct NirPackage {
     /// here by [`crate::monomorphize::monomorphize`], which adds the
     /// instantiation layer once it has materialised the concrete
     /// trait-method instances.
-    pub trait_env: std::sync::Arc<crate::resolver::trait_env::TraitEnv>,
+    pub trait_env: std::sync::Arc<crate::elaborator::trait_env::TraitEnv>,
 }
 
 impl NirPackage {

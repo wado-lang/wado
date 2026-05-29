@@ -101,14 +101,7 @@ fn "wado-compiler/tests/fixtures/variant_struct_concat_module.wado/run"() with S
     let __local_2: ref "core:prelude/string.wado//String";
     opts = struct.new "wado-compiler/tests/fixtures/variant_struct_concat_module.wado//Opts" { align: struct.new "wado-compiler/tests/fixtures/variant_struct_concat_module.wado//Align" { 1 }, width: 0 };
     s = "wado-compiler/tests/fixtures/variant_struct_concat_module.wado/format_str"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi"), used: 2 }, opts);
-    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
-        "core:prelude/string.wado/String::push"(__local_2, 91);
-        "core:prelude/string.wado/String::push_str"(__local_2, s);
-        "core:prelude/string.wado/String::push"(__local_2, 93);
-        break __tmpl: __local_2;
-        unreachable;
-    });
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_2, 91); "core:prelude/string.wado/String::push_str"(__local_2, s); "core:prelude/string.wado/String::push"(__local_2, 93); __local_2);
 }
 
 fn "wado-compiler/tests/fixtures/variant_struct_concat_module.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -151,17 +144,15 @@ fn "core:cli/println"(message) with Stdout {
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l4: loop {
-                if i >= len {
-                    break __for_1;
-                }
-                builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
-                i = i + 1;
-                continue l4;
-            };
+    i = 0;
+    b3: block {
+        l4: loop {
+            if i >= len {
+                break b3;
+            }
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            i = i + 1;
+            continue l4;
         };
     };
 }
@@ -212,15 +203,9 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        a_5 = __inline_i32_max_1: block -> i32 {
-            a_7 = capacity * 2;
-            break __inline_i32_max_1: select i32(a_7 > min_capacity, a_7, min_capacity);
-            unreachable;
-        };
-        break __inline_i32_max_0: select i32(a_5 > 8, a_5, 8);
-        unreachable;
-    };
+    a_7 = capacity * 2;
+    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
+    new_capacity = select i32(a_5 > 8, a_5, 8);
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
@@ -244,11 +229,8 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 fn "core:prelude/string.wado/String^Add::add"(self, other) {
     let result: ref "core:prelude/string.wado//String";
     let capacity: i32;
-    result = __inline_String__with_capacity_0: block -> ref "core:prelude/string.wado//String" {
-        capacity = self.used + other.used;
-        break __inline_String__with_capacity_0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity), used: 0 };
-        unreachable;
-    };
+    capacity = self.used + other.used;
+    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity), used: 0 };
     "core:prelude/string.wado/String::push_str"(result, self);
     "core:prelude/string.wado/String::push_str"(result, other);
     return result;

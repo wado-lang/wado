@@ -329,8 +329,8 @@ pub struct LocalMethodName {
     /// dispatch.
     pub base_trait_name: Option<String>,
     /// Canonical declaring module of the trait this method implements.
-    /// Populated by the resolver via
-    /// [`crate::resolver::Resolver::canonical_decl_key`] when constructing
+    /// Populated by the elaborator via
+    /// [`crate::elaborator::Elaborator::canonical_decl_key`] when constructing
     /// the method from an `impl <Trait> for <Type>` block. Left `None` for
     /// synthesis-derived auto-impls (Inspect / Display / Eq / Ord / From
     /// / `serde` adapters, …) because those impls target prelude / core
@@ -339,8 +339,8 @@ pub struct LocalMethodName {
     /// disambiguating module.
     ///
     /// When `Some`, paired with `base_trait_name` it forms the canonical
-    /// `(module, name)` key into [`crate::resolver::trait_env::EffectDeclIndex`]
-    /// and [`crate::resolver::trait_env::ResourceDeclIndex`]. Two modules
+    /// `(module, name)` key into [`crate::elaborator::trait_env::EffectDeclIndex`]
+    /// and [`crate::elaborator::trait_env::ResourceDeclIndex`]. Two modules
     /// can each declare `pub interface Logger`; without this field the
     /// dispatch builder would collapse both impls onto whichever Logger
     /// landed first in the bare-name lookup table.
@@ -398,7 +398,7 @@ impl LocalMethodName {
     /// `trait_name` may be either the bare base form (`"Display"`) or a
     /// pre-mangled form (`"Stream<u8>"`); `base_trait_name` is derived by
     /// truncating at the first `<`. `base_trait_module` is left `None` and
-    /// callers that have the canonical declaring module (resolver path)
+    /// callers that have the canonical declaring module (elaborator path)
     /// should populate it via [`Self::with_base_trait_module`]; synthesis-
     /// derived auto-impls leave it `None` because dispatch synthesis
     /// identifies them by name alone.
@@ -461,9 +461,9 @@ impl LocalMethodName {
     }
 
     /// Attach the canonical declaring module of `base_trait_name`. Used by
-    /// the resolver path that lifts an `impl <Trait> for <Type>` block into
+    /// the elaborator path that lifts an `impl <Trait> for <Type>` block into
     /// TIR: the trait reference is canonicalised through
-    /// [`crate::resolver::Resolver::canonical_decl_key`] and then threaded
+    /// [`crate::elaborator::Elaborator::canonical_decl_key`] and then threaded
     /// into the per-method `LocalMethodName` so dispatch synthesis can
     /// distinguish two modules' same-named effects / resources.
     #[must_use]
@@ -1191,9 +1191,50 @@ pub fn dispatch_field_name(op_name: &str) -> String {
     format!("op_{op_name}")
 }
 
+/// Convert a user-facing `test "name"` string into the snake-case segment used
+/// in the internal test function name (`__test_{index}_{snake}`).
+///
+/// Only **ASCII** alphanumerics survive verbatim (lowercased); every other
+/// character — including non-ASCII letters such as `é` or `日` — collapses to
+/// `_`. This is deliberate: the segment must downgrade losslessly into a
+/// Component Model kebab-case export name (`[a-z0-9-]+`) via
+/// `sanitize_kebab_export_name`. Using Unicode-aware `char::is_alphanumeric`
+/// here would let multibyte letters through and produce an invalid extern name,
+/// crashing Wasm validation. The original (lossless) name is preserved
+/// separately for display and filtering — see the test-name custom section.
+///
+/// Examples:
+/// - `test_name_to_snake("Hello, World!")` → `"hello__world_"`
+/// - `test_name_to_snake("café résumé")` → `"caf__r_sum_"`
+/// - `test_name_to_snake("日本語のテスト ok")` → `"________ok"`
+pub fn test_name_to_snake(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect::<String>()
+        .to_lowercase()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_test_name_to_snake_is_ascii_only() {
+        // ASCII alphanumerics survive (lowercased); punctuation/space → `_`.
+        assert_eq!(test_name_to_snake("Hello, World!"), "hello__world_");
+        // Non-ASCII letters collapse to `_` so the kebab export stays valid.
+        assert_eq!(test_name_to_snake("café résumé"), "caf__r_sum_");
+        assert_eq!(test_name_to_snake("日本語のテスト ok"), "________ok");
+        // A fully non-ASCII name leaves no ASCII segment at all.
+        assert_eq!(test_name_to_snake("完全に日本語"), "______");
+        // The output must never contain a non-ASCII byte.
+        for input in ["café résumé", "日本語のテスト ok", "Ω±∞ μ"] {
+            assert!(
+                test_name_to_snake(input).is_ascii(),
+                "snake form of {input:?} must be ASCII"
+            );
+        }
+    }
 
     #[test]
     fn test_method_name_to_string_simple() {

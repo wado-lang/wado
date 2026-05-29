@@ -1,12 +1,14 @@
-//! Dead Code Elimination (DCE) for Wado TIR
+//! Dead-code elimination for the NIR package.
 //!
-//! This module provides dead code elimination at two levels:
+//! [`analyze_dce`] computes every reachability set the package needs
+//! up front (functions / globals / types, plus name-keyed views over
+//! the reachable type set for the type-retain predicate). The
+//! downstream [`remove_unreachable_functions`] / `_globals` / `_types`
+//! and the literal/closure-functor filters then become pure mutators
+//! that consume the precomputed sets; no per-pass re-analysis.
 //!
-//! 1. **Function-level DCE**: Reachability analysis starting from the entry point,
-//!    removing functions that are never called.
-//!
-//! 2. **Constant branch pruning**: When an `if` condition is a compile-time boolean
-//!    literal, the dead branch is eliminated and the taken branch is inlined in place.
+//! See [`crate::optimize::run_dce`] for the orchestration: analyze
+//! once, mutate in dependency order.
 
 use crate::hashmap::IndexSet;
 
@@ -18,6 +20,7 @@ use crate::name::{
 };
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirImport, NirStmt, NirStmtKind};
 use crate::nir_package::NirPackage;
+use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Call graph: function ID -> set of called function IDs
@@ -50,33 +53,85 @@ struct FunctionAnalysis {
     /// graph by `apply_inspect_edges` after the inspectable-signature set is
     /// known.
     pending_inspects: Vec<PendingInspectEdge>,
+    /// `(module-path-joined-by-::, name)` pairs that this function reads via
+    /// `GlobalVarGet`. Globals only written to (via `GlobalVarSet`) are not
+    /// recorded here — those are dead per `remove_unreachable_globals`.
+    used_globals: IndexSet<(String, String)>,
+    /// Types directly referenced by this function (signature, locals,
+    /// expression `type_id`s, and explicit type-bearing fields like
+    /// `Cast.target_type`, `StructLiteral.struct_type`, etc.).
+    /// Transitive closure happens later in
+    /// [`populate_type_reachability`]'s Phase 2.
+    used_types: IndexSet<TypeId>,
 }
 
-/// Analyze the project and populate its usage fields with DCE analysis results.
-///
-/// This performs dead code elimination analysis starting from the entry point
-/// and populates the project's `used_wasi_functions` field and the `imports`
-/// list. Returns the set of indices into `project.functions` that survive DCE,
-/// for use by `remove_unreachable_functions`.
-///
-/// The call graph is built in a single AST walk: edges that depend on the
-/// inspectable-signature set (the per-functor `__Closure_N^Inspect[Alt]`
-/// impls emitted from `ClosureToCanonical`) are collected as pending
-/// edges and added by `apply_inspect_edges` once the signature set is
-/// known. This avoids a second full walk of every function body.
-pub fn analyze_project(project: &mut NirPackage) -> IndexSet<usize> {
-    // Phase 1: build the raw call graph in a single pass.
-    let AnalysisGraph {
-        mut call_graph,
-        effect_usage,
-        pending_inspects,
-        func_positions,
-    } = build_analysis_graph(project);
+/// Combined DCE analysis: which functions / globals / types are
+/// reachable from the project's entry points, plus name-keyed views
+/// over the reachable type set that the downstream
+/// `remove_unreachable_*` retain predicates need. Computed once up
+/// front by [`analyze_dce`], then consumed by pure mutators.
+pub struct DceAnalysis {
+    /// Indices into `project.functions` that are reachable.
+    pub functions: IndexSet<usize>,
+    /// `(module-path-joined-by-::, global-name)` pairs that are read
+    /// (via `GlobalVarGet`) by some reachable function. Globals only
+    /// written to are dead.
+    pub globals: IndexSet<(String, String)>,
+    /// Reachable type IDs (transitively closed over struct fields,
+    /// variant payloads, and per-type dependencies).
+    pub types: IndexSet<TypeId>,
+    /// Non-monomorphized `Struct` types in `types`, keyed by (name, module).
+    pub struct_exact: IndexSet<(String, ModuleSource)>,
+    /// Monomorphized struct names in `types` (e.g. `"Box<i32>"`).
+    pub struct_monomorph_names: IndexSet<String>,
+    /// Base names of monomorphized structs in `types` (e.g. `"Box"`).
+    pub struct_monomorph_bases: IndexSet<String>,
+    /// `GenericInstance` names in `types`.
+    pub generic_instance_names: IndexSet<String>,
+    /// `Variant` types in `types`, keyed by (name, module).
+    pub variant_exact: IndexSet<(String, ModuleSource)>,
+    /// `Enum` types in `types`, keyed by (name, module).
+    pub enum_exact: IndexSet<(String, ModuleSource)>,
+}
 
+/// Compute every DCE input from the unpruned `project` in dependency
+/// order: function reachability → global reachability → type
+/// reachability. Each downstream step (`remove_unreachable_functions`,
+/// `remove_unreachable_globals`, `remove_unreachable_types`) then
+/// becomes a pure mutator that consumes the corresponding field.
+///
+/// Splitting analysis from mutation also means the type-reachability
+/// pass can run before `remove_unreachable_globals` mutates function
+/// bodies (dropping `GlobalVarSet`s) — those mutations don't expose
+/// any new types, but the explicit ordering makes the invariant
+/// observable.
+pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
+    // Single AST walk per function body: build the call graph and
+    // collect per-function used-globals / used-types in one go.
+    let mut graph = build_analysis_graph(project);
+
+    let mut analysis = DceAnalysis::empty();
+    analysis.functions = compute_function_reachability(project, &mut graph);
+    analysis.globals = compute_global_reachability(&graph, &analysis.functions);
+    populate_type_reachability(project, &graph, &mut analysis);
+    analysis
+}
+
+/// Function reachability via call-graph BFS. Implementation detail of
+/// [`analyze_dce`]; not called directly anywhere else.
+///
+/// Consumes the call graph (and its pending inspect edges) built in
+/// the single AST walk of [`build_analysis_graph`]; mutates the graph
+/// by adding the gated per-functor `__Closure_N^Inspect[Alt]` edges
+/// once the inspectable-signature set is known.
+fn compute_function_reachability(
+    project: &mut NirPackage,
+    graph: &mut AnalysisGraph,
+) -> IndexSet<usize> {
     // Phase 2a: compute the provisional reachable set from the raw graph
     // (without per-functor `__Closure_N^Inspect[Alt]` edges). This is
     // what determines whether a `:?`/`:#?` call site is actually live.
-    let reachable_v1 = compute_reachable_from_entries(project, &call_graph);
+    let reachable_v1 = compute_reachable_from_entries(project, &graph.call_graph);
 
     // Phase 2b: derive the inspectable `(arity, ret)` set from the
     // reachable functions only, then add the gated inspect edges to the
@@ -85,28 +140,28 @@ pub fn analyze_project(project: &mut NirPackage) -> IndexSet<usize> {
     // the inspectable set is stable under this expansion — no fixpoint
     // iteration is needed.
     let inspectable = collect_inspectable_signatures_from_reachable(project, &reachable_v1);
-    apply_inspect_edges(&mut call_graph, &pending_inspects, &inspectable);
+    apply_inspect_edges(&mut graph.call_graph, &graph.pending_inspects, &inspectable);
 
     // Phase 2c: re-compute the reachable set from the augmented graph.
-    let mut reachable = compute_reachable_from_entries(project, &call_graph);
+    let mut reachable = compute_reachable_from_entries(project, &graph.call_graph);
 
     // Phase 3: extend reachable set with optimizer-induced virtual edges.
-    // Optimizer passes (e.g. `tir/string_push`) may *synthesize* new calls
+    // Optimizer passes (e.g. `nir/string_push`) may *synthesize* new calls
     // during the optimization loop. Functions those passes call must
     // survive the early DCE that runs before the loop, otherwise the
     // synthesis target is gone and the rewrite cannot fire. The virtual
     // edges are gated by compiler-item markers so each rule names its
     // canonical pair (`string_push_str` → `string_push_char`, etc.).
-    extend_reachable_for_optimizer_passes(project, &call_graph, &mut reachable);
+    extend_reachable_for_optimizer_passes(project, &graph.call_graph, &mut reachable);
 
     // Phase 4: resolve imports and WASI features using reachable set.
-    resolve_imports(project, &reachable, &effect_usage);
+    resolve_imports(project, &reachable, &graph.effect_usage);
 
     // Phase 5: project the reachable `FunctionId`s back to positions in
     // `project.functions`. This avoids reallocating `FunctionId`s per
     // function inside `remove_unreachable_functions` (the previous
     // implementation cloned 3-4 strings per function during retain).
-    compute_reachable_positions(&reachable, &func_positions)
+    compute_reachable_positions(&reachable, &graph.func_positions)
 }
 
 /// Map the reachable-`FunctionId` set back to positions in `project.functions`.
@@ -123,8 +178,8 @@ fn compute_reachable_positions(
         .collect()
 }
 
-/// Add functions that the TIR optimizer's rewrites may *synthesize* calls
-/// to. For now this is a single pair: `tir/string_push` rewrites
+/// Add functions that the NIR optimizer's rewrites may *synthesize* calls
+/// to. For now this is a single pair: `nir/string_push` rewrites
 /// `String::push_str("short")` calls into `String::push(c)` calls, so
 /// `String::push` (the function flagged with `string_push_char`) must
 /// survive early DCE whenever the function flagged with `string_push_str`
@@ -157,22 +212,21 @@ fn extend_reachable_for_optimizer_passes(
         reachable.extend(compute_reachable(call_graph, &char_id));
     }
 
-    // `$value_copy$T<id>` helpers synthesized by `lower::plan::value_copy` are
-    // reached through two paths: (a) direct TIR-level
-    // `copy_value::<T>(...)` callers, which the regular call graph
-    // already covers; and (b) the per-element clone hidden inside
-    // `array_clone::<T>(arr)` for value-typed `T`, which lowers to a
-    // `WirInstr::ArrayClone { element_copy_func: Some("$value_copy$T<id>") }`
-    // — the helper name appears as a *string* in the WIR instr at
-    // codegen time, not as a TIR call edge, so DCE wouldn't otherwise
-    // see it.
+    // `$value_copy$T<id>` helpers synthesized by `lower::plan::value_copy`
+    // can be reached via `array_clone::<T>(arr)` for value-typed `T`: that
+    // lowers to `WirInstr::ArrayClone { element_copy_func: Some(...) }`
+    // where the helper appears as a *string* at WIR codegen time, not as a
+    // NIR call edge — so the regular call graph misses it. Walk every
+    // reachable function body and seed the corresponding helper as a
+    // virtual root for each value-typed `array_clone::<T>` site.
     //
-    // Walk every reachable function body and, for each
-    // `array_clone::<T>(...)` call where `T` is value-typed, mark the
-    // corresponding `$value_copy$T<id>` helper as a virtual root.
-    // Marking *every* `FunctionKind::ValueCopy` helper (the previous
-    // shape) is correct but wastes code size on programs that have
-    // many monomorphisations the array-clone path never visits.
+    // (Marking every `FunctionKind::ValueCopy` helper unconditionally — the
+    // previous shape — is correct but bloats unused monomorphisations.)
+    //
+    // TODO(optimizer): have `lower::plan::value_copy` register the
+    // synthesized helper as a real call-graph edge on the caller of
+    // `array_clone::<T>`. That folds this fixpoint into the regular
+    // reachability walk and removes the only multi-pass step in DCE.
     let helpers_by_type_id: IndexMap<crate::tir::TypeId, FunctionId> = project
         .functions
         .iter()
@@ -185,19 +239,12 @@ fn extend_reachable_for_optimizer_passes(
             }
         })
         .collect();
-    // Iterate to a fixpoint. The single-pass iteration this loop used
-    // to do was order-sensitive: when a `$value_copy$T<id>` helper's
-    // own body contained an `array_clone::<T'>(...)` (which itself
-    // pointed at another helper), marking the outer helper reachable
-    // mid-loop did not retroactively rescan it. With chains like
-    // `Array<Array<Array<T>>>` (json-canada's
-    // `Geometry::coordinates`), the inner helper was dropped by the
-    // post-`compute_reachable` `remove_unreachable_functions`, and
-    // codegen panicked with `WirInstr::ArrayClone references unknown
-    // helper $value_copy$T<inner-id>` later in the pipeline.
-    // `compute_reachable(call_graph, helper_id)` only follows direct
-    // call edges, so the inner virtual edge would never be added by
-    // that single step.
+    // Iterate to a fixpoint: a helper newly marked reachable may itself
+    // call `array_clone::<T'>` for some `T'` whose helper isn't reachable
+    // yet, and `compute_reachable` only follows direct call-graph edges
+    // (it doesn't replay the array_clone scan). Single-pass would drop
+    // inner helpers for chains like `Array<Array<Array<T>>>`, panicking
+    // codegen with `WirInstr::ArrayClone references unknown helper ...`.
     loop {
         let mut added_this_round = false;
         for func_rc in &project.functions {
@@ -226,7 +273,7 @@ fn extend_reachable_for_optimizer_passes(
 }
 
 /// Walk `block`'s expression tree and collect every `T` such that
-/// `builtin::array_clone::<T>(...)` appears as a TIR call. The
+/// `builtin::array_clone::<T>(...)` appears as a NIR call. The
 /// corresponding `$value_copy$T<id>` helper has to survive DCE because
 /// codegen will reach it by *name* at WIR time.
 fn collect_array_clone_element_types(
@@ -646,7 +693,7 @@ type FuncPositions = IndexMap<FunctionId, usize>;
 /// edges are gated by the inspectable-signature set and added after the
 /// fact by `apply_inspect_edges`.
 ///
-/// `func_pos` maps each TIR-function `FunctionId` back to its position in
+/// `func_pos` maps each NIR-function `FunctionId` back to its position in
 /// `project.functions` so that `remove_unreachable_functions` can keep
 /// surviving functions by index instead of rebuilding `FunctionId`s and
 /// hashing them again.
@@ -655,14 +702,30 @@ struct AnalysisGraph {
     effect_usage: EffectUsageMap,
     pending_inspects: PendingInspectsByCaller,
     func_positions: FuncPositions,
+    /// Per-function globals read, indexed by position in
+    /// `project.functions`. Aggregated for reachable positions by
+    /// [`compute_global_reachability`].
+    per_func_globals: Vec<IndexSet<(String, String)>>,
+    /// Per-function types directly used, indexed by position in
+    /// `project.functions`. Seeded into [`DceAnalysis::types`] by
+    /// [`populate_type_reachability`]'s Phase 1.
+    per_func_types: Vec<IndexSet<TypeId>>,
 }
 
-/// Build the call graph in a single pass over all TIR function bodies.
+/// Build the call graph **and** per-function used-globals / used-types
+/// sets in a single AST walk per function body. The downstream
+/// reachability passes (`analyze_global_reachability`,
+/// `populate_type_reachability`) then union per-function facts for the
+/// reachable subset instead of re-walking bodies — three independent
+/// walks collapsed into one.
 fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
+    let n = project.functions.len();
     let mut call_graph: CallGraph = IndexMap::default();
     let mut effect_usage: EffectUsageMap = IndexMap::default();
     let mut pending_inspects: PendingInspectsByCaller = IndexMap::default();
     let mut func_positions: FuncPositions = IndexMap::default();
+    let mut per_func_globals: Vec<IndexSet<(String, String)>> = Vec::with_capacity(n);
+    let mut per_func_types: Vec<IndexSet<TypeId>> = Vec::with_capacity(n);
 
     let type_table = &*project.type_table.borrow();
 
@@ -670,7 +733,11 @@ fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
         let func = func_rc.borrow();
         let module_source = &func.module_source;
         let func_id = function_id_for(&func);
-        let analysis = analyze_function(&func, module_source, type_table);
+
+        let mut walker = DceWalker::new(type_table, module_source);
+        walker.analyze(&func);
+        let analysis = walker.analysis;
+
         let prior = func_positions.insert(func_id.clone(), pos);
         assert!(
             prior.is_none(),
@@ -686,6 +753,8 @@ fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
         if !analysis.pending_inspects.is_empty() {
             pending_inspects.insert(func_id, analysis.pending_inspects);
         }
+        per_func_globals.push(analysis.used_globals);
+        per_func_types.push(analysis.used_types);
     }
 
     AnalysisGraph {
@@ -693,6 +762,8 @@ fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
         effect_usage,
         pending_inspects,
         func_positions,
+        per_func_globals,
+        per_func_types,
     }
 }
 
@@ -729,7 +800,7 @@ fn apply_inspect_edges(
     }
 }
 
-/// Walk all TIR function bodies and collect every `(arity, return_type)`
+/// Walk all NIR function bodies and collect every `(arity, return_type)`
 /// signature that is the receiver type of a `Fn<arity, ret>^Inspect` or
 /// `Fn<arity, ret>^InspectAlt` method call. Used by the DCE call-graph
 /// builder to gate the per-functor `inspect` / `inspect_alt` root
@@ -770,7 +841,7 @@ fn collect_inspectable_signatures_from_reachable(
     sigs
 }
 
-/// Compute the `FunctionId` used by the call graph for a TIR function.
+/// Compute the `FunctionId` used by the call graph for a NIR function.
 /// Mirrors the keying logic in `build_analysis_graph`; centralising
 /// it here so other passes (notably the inspectable-signatures scan)
 /// can compare against the call graph's reachable set.
@@ -810,17 +881,6 @@ fn scan_inspect_signatures_block(
     type_table: &TypeTable,
     sigs: &mut InspectableSignatures,
 ) {
-    for stmt in &block.stmts {
-        scan_inspect_signatures_stmt(stmt, type_table, sigs);
-    }
-}
-
-fn scan_inspect_signatures_stmt(
-    stmt: &NirStmt,
-    type_table: &TypeTable,
-    sigs: &mut InspectableSignatures,
-) {
-    use crate::nir_visitor::NirRefVisitor;
     struct Scanner<'a> {
         type_table: &'a TypeTable,
         sigs: &'a mut InspectableSignatures,
@@ -832,10 +892,9 @@ fn scan_inspect_signatures_stmt(
                 && info.base_struct_name == "Fn"
                 && let Some(trait_name) = info.base_trait_name.as_deref()
             {
-                // Receiver type is `&Fn(...)` — peel the reference and any
-                // `Box<fn(...)>` wrapper introduced by the boxing pass, then
-                // read the function's arity + return type out of the type
-                // table.
+                // Receiver is `&Fn(...)` (possibly wrapped in `Box<fn(...)>`
+                // by the boxing pass); peel both to read the function's
+                // arity + return type from the type table.
                 let recv_type = self.type_table.peel_refs_and_box(receiver.type_id);
                 if let ResolvedType::Function {
                     params,
@@ -858,651 +917,581 @@ fn scan_inspect_signatures_stmt(
             self.walk_expr(expr);
         }
     }
-    let mut s = Scanner { type_table, sigs };
-    s.visit_stmt(stmt);
+    Scanner { type_table, sigs }.visit_block(block);
 }
 
-/// Analyze a TIR function for callees and effect usage
-fn analyze_function(
-    func: &NirFunction,
-    current_module: &ModuleSource,
-    type_table: &TypeTable,
-) -> FunctionAnalysis {
-    let mut analysis = FunctionAnalysis::default();
-
-    if let Some(body) = &func.body {
-        analyze_block(body, current_module, type_table, &mut analysis);
-    }
-    analysis
+/// Single-walk DCE fact collector: a [`NirRefVisitor`] that collects
+/// **all** per-function facts the DCE driver needs (callees, effect calls,
+/// pending inspect edges, used globals, used types) in one traversal of a
+/// function body. Replaces three hand-rolled walkers (`analyze_block`,
+/// `collect_global_reads_block`, `collect_types_from_block`) that all
+/// rediscovered the same NIR shape independently — new `NirStmtKind` /
+/// `NirExprKind` variants now only need to be considered in the visitor
+/// trait, not in three places.
+struct DceWalker<'a> {
+    type_table: &'a TypeTable,
+    current_module: &'a ModuleSource,
+    analysis: FunctionAnalysis,
 }
 
-fn analyze_block(
-    block: &NirBlock,
-    current_module: &ModuleSource,
-    type_table: &TypeTable,
-    analysis: &mut FunctionAnalysis,
-) {
-    for stmt in &block.stmts {
-        match &stmt.kind {
-            NirStmtKind::Let { value, .. } => {
-                analyze_expr(value, current_module, type_table, analysis);
-            }
-            NirStmtKind::Expr(expr) => {
-                analyze_expr(expr, current_module, type_table, analysis);
-            }
-            NirStmtKind::Return { value } => {
-                if let Some(expr) = value {
-                    analyze_expr(expr, current_module, type_table, analysis);
-                }
-            }
-            NirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                analyze_expr(condition, current_module, type_table, analysis);
-                analyze_block(then_block, current_module, type_table, analysis);
-                if let Some(else_blk) = else_block {
-                    analyze_block(else_blk, current_module, type_table, analysis);
-                }
-            }
-            NirStmtKind::Loop { body } => {
-                analyze_block(body, current_module, type_table, analysis);
-            }
-            NirStmtKind::LabeledBlock { block, .. } => {
-                analyze_block(block, current_module, type_table, analysis);
-            }
-            NirStmtKind::Break { value, .. } => {
-                if let Some(v) = value {
-                    analyze_expr(v, current_module, type_table, analysis);
-                }
-            }
-            NirStmtKind::Continue => {}
-            NirStmtKind::LetDestructure { value, .. } => {
-                analyze_expr(value, current_module, type_table, analysis);
-            }
+impl<'a> DceWalker<'a> {
+    fn new(type_table: &'a TypeTable, current_module: &'a ModuleSource) -> Self {
+        Self {
+            type_table,
+            current_module,
+            analysis: FunctionAnalysis::default(),
         }
     }
-}
 
-fn analyze_expr(
-    expr: &NirExpr,
-    current_module: &ModuleSource,
-    type_table: &TypeTable,
-    analysis: &mut FunctionAnalysis,
-) {
-    match &expr.kind {
-        NirExprKind::Call { func, args, .. } => {
-            let original_callee_module = func.module_source.clone();
-            let func_name = func.name.clone();
-
-            if func.method_info.is_some() {
-                // Formerly StaticCall: static method call (e.g., Box::get, Uint128::from_u64).
-                // func_name contains "::" (e.g., "StructName::method" or "StructName^Trait::method").
-                let callee_id = if func.is_monomorphized() {
-                    let base_name = func
-                        .base_struct_name()
-                        .map(|base| {
-                            func_name
-                                .find("::")
-                                .map(|pos| format!("{}::{}", base, &func_name[pos + 2..]))
-                                .unwrap_or_else(|| base)
-                        })
-                        .unwrap_or_else(|| func_name.clone());
-                    FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                        func.module_source.clone(),
-                        func_name.clone(),
-                        base_name,
-                    ))
-                } else {
-                    let callee_module = original_callee_module;
-                    if let Some(sep_pos) = func_name.find("::") {
-                        let prefix = &func_name[..sep_pos];
-                        let method_name = &func_name[sep_pos + 2..];
-                        let (struct_name, trait_name): (&str, Option<&str>) =
-                            if let Some(caret_pos) = prefix.find('^') {
-                                (&prefix[..caret_pos], Some(&prefix[caret_pos + 1..]))
-                            } else {
-                                (prefix, None)
-                            };
-                        FunctionId::Method(MethodName::new(
-                            callee_module,
-                            struct_name.to_string(),
-                            trait_name.map(String::from),
-                            method_name.to_string(),
-                        ))
-                    } else {
-                        FunctionId::Free(FreeFunctionName::from_module_source(
-                            &callee_module,
-                            &func_name,
-                        ))
-                    }
-                };
-                analysis.callees.insert(callee_id);
-
-                // Detect resource method calls from WASI modules
-                let module_path = func.module_path();
-                if module_path.len() >= 2
-                    && module_path[0] == "wasi"
-                    && let Some(pos) = func_name.find("::")
-                {
-                    let resource_name = &func_name[..pos];
-                    let method_name = &func_name[pos + 2..];
-                    analysis
-                        .effect_calls
-                        .insert((resource_name.to_string(), method_name.to_string()));
-                }
-            } else {
-                // Free function call
-                debug_assert!(
-                    !func_name.contains("::") || func_name.starts_with("builtin::"),
-                    "NirExprKind::Call should not have method-style names: {func_name}"
-                );
-
-                let callee_module = original_callee_module.clone();
-                let callee_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                    &callee_module,
-                    &func_name,
-                ));
-                analysis.callees.insert(callee_id);
-
-                if let Some(interface_name) = original_callee_module.interface_name() {
-                    analysis.effect_calls.insert((interface_name, func_name));
-                }
+    /// Walk a function's signature, locals, monomorphisation type
+    /// arguments, and body. The signature/local/monomorph pre-walk
+    /// covers types not visible from the body (e.g. an unused
+    /// generic parameter type that still needs to survive WIR name
+    /// mangling).
+    fn analyze(&mut self, func: &NirFunction) {
+        for param in &func.params {
+            self.analysis.used_types.insert(param.type_id);
+        }
+        self.analysis.used_types.insert(func.return_type);
+        for local in &func.locals {
+            self.analysis.used_types.insert(local.type_id);
+        }
+        if let Some(info) = &func.monomorph_info {
+            for &ta in &info.impl_type_args {
+                self.analysis.used_types.insert(ta);
             }
-
-            for arg in args {
-                analyze_expr(&arg.expr, current_module, type_table, analysis);
+            for &ta in &info.method_type_args {
+                self.analysis.used_types.insert(ta);
             }
         }
-        NirExprKind::MethodCall {
-            receiver,
-            func,
-            args,
-            ..
-        } => {
-            // Use the func reference directly - it already has the correct mangled name
-            // and monomorph_info from lowering phase
-            let func_name = func.name.clone();
+        if let Some(body) = &func.body {
+            self.visit_block(body);
+        }
+    }
 
-            // Check if this is a monomorphized method using FunctionRef metadata
-            if func.is_monomorphized() {
-                // Monomorphized method (e.g., Array<i32>::len, Box<i32>::get)
-                // Use the func reference's information directly
+    /// Record a directly-referenced type. Transitive closure (struct
+    /// fields, variant payloads, generic dependencies) happens once,
+    /// later, in [`populate_type_reachability`]'s Phase 2 fixed-point
+    /// loop — so the per-expression walker only needs to mark the
+    /// node's own `TypeId` here.
+    fn add_type(&mut self, type_id: TypeId) {
+        self.analysis.used_types.insert(type_id);
+    }
+
+    fn record_call(&mut self, func: &crate::nir::FunctionRef) {
+        let original_callee_module = func.module_source.clone();
+        let func_name = func.name.clone();
+
+        if func.method_info.is_some() {
+            // Static method call (e.g. `Box::get`, `String^Display::fmt`):
+            // `func_name` is `"Struct::method"` or `"Struct^Trait::method"`.
+            let callee_id = if func.is_monomorphized() {
                 let base_name = func
                     .base_struct_name()
                     .map(|base| {
-                        // Extract method name from "Array<i32>::len" -> "len"
                         func_name
                             .find("::")
                             .map(|pos| format!("{}::{}", base, &func_name[pos + 2..]))
                             .unwrap_or_else(|| base)
                     })
                     .unwrap_or_else(|| func_name.clone());
-
-                // Use the func's actual module_source — monomorphized functions
-                // are placed in the module that uses them.
-                let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                FunctionId::Free(FreeFunctionName::with_monomorph_info(
                     func.module_source.clone(),
-                    func_name,
+                    func_name.clone(),
+                    base_name,
+                ))
+            } else {
+                let callee_module = original_callee_module;
+                if let Some(sep_pos) = func_name.find("::") {
+                    let prefix = &func_name[..sep_pos];
+                    let method_name = &func_name[sep_pos + 2..];
+                    let (struct_name, trait_name): (&str, Option<&str>) =
+                        if let Some(caret_pos) = prefix.find('^') {
+                            (&prefix[..caret_pos], Some(&prefix[caret_pos + 1..]))
+                        } else {
+                            (prefix, None)
+                        };
+                    FunctionId::Method(MethodName::new(
+                        callee_module,
+                        struct_name.to_string(),
+                        trait_name.map(String::from),
+                        method_name.to_string(),
+                    ))
+                } else {
+                    FunctionId::Free(FreeFunctionName::from_module_source(
+                        &callee_module,
+                        &func_name,
+                    ))
+                }
+            };
+            self.analysis.callees.insert(callee_id);
+
+            // Resource method call on a WASI module — record as an effect.
+            let module_path = func.module_path();
+            if module_path.len() >= 2
+                && module_path[0] == "wasi"
+                && let Some(pos) = func_name.find("::")
+            {
+                let resource_name = &func_name[..pos];
+                let method_name = &func_name[pos + 2..];
+                self.analysis
+                    .effect_calls
+                    .insert((resource_name.to_string(), method_name.to_string()));
+            }
+        } else {
+            // Free function call.
+            debug_assert!(
+                !func_name.contains("::") || func_name.starts_with("builtin::"),
+                "NirExprKind::Call should not have method-style names: {func_name}"
+            );
+
+            let callee_module = original_callee_module.clone();
+            let callee_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                &callee_module,
+                &func_name,
+            ));
+            self.analysis.callees.insert(callee_id);
+
+            if let Some(interface_name) = original_callee_module.interface_name() {
+                self.analysis
+                    .effect_calls
+                    .insert((interface_name, func_name));
+            }
+        }
+    }
+
+    fn record_method_call(&mut self, receiver: &NirExpr, func: &crate::nir::FunctionRef) {
+        let func_name = func.name.clone();
+
+        // Monomorphized methods (e.g. `Array<i32>::len`) already have
+        // their concrete name on `func`; non-monomorphized methods are
+        // dispatched by `receiver`'s type below.
+        if func.is_monomorphized() {
+            let base_name = func
+                .base_struct_name()
+                .map(|base| {
+                    func_name
+                        .find("::")
+                        .map(|pos| format!("{}::{}", base, &func_name[pos + 2..]))
+                        .unwrap_or_else(|| base)
+                })
+                .unwrap_or_else(|| func_name.clone());
+
+            // Use the func's actual module_source — monomorphized functions
+            // are placed in the module that uses them.
+            let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                func.module_source.clone(),
+                func_name,
+                base_name,
+            ));
+            self.analysis.callees.insert(callee_id);
+            return;
+        }
+
+        // Non-monomorphized method - determine target from receiver type.
+        // Strip any reference wrappers and newtypes to get the base type.
+        let mut current_type = self.type_table.get(receiver.type_id);
+        let mut newtype_info: Option<(String, ModuleSource)> = None;
+        loop {
+            match current_type {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    current_type = self.type_table.get(*inner);
+                }
+                ResolvedType::Newtype {
+                    name,
+                    module_source,
+                    base_type,
+                } => {
+                    // Remember the outermost newtype for its own trait impls
+                    if newtype_info.is_none() {
+                        newtype_info = Some((name.clone(), module_source.clone()));
+                    }
+                    current_type = self.type_table.get(*base_type);
+                }
+                _ => break,
+            }
+        }
+        let base_receiver_type = current_type.clone();
+
+        // Extract method name and trait name from method_info
+        let (method_name, trait_name) = if let Some(info) = func.method_info.clone() {
+            (info.method_name.clone(), info.trait_name)
+        } else {
+            (func_name, None)
+        };
+
+        // If the receiver was a newtype (e.g., flags type), also mark
+        // the newtype's own methods as reachable (e.g., Perms^Inspect::inspect).
+        if let Some((newtype_name, newtype_module)) = newtype_info {
+            let method_id = FunctionId::Method(MethodName::new(
+                newtype_module,
+                newtype_name,
+                trait_name.clone(),
+                method_name.clone(),
+            ));
+            self.analysis.callees.insert(method_id);
+        }
+
+        match base_receiver_type {
+            ResolvedType::Struct {
+                ref name,
+                is_monomorphized: true,
+                base_name: Some(ref base_struct),
+                ..
+            } => {
+                // Monomorphized struct method (e.g. `Box<i32>::get`):
+                // monomorphized functions live in the *using* module, so
+                // route the callee id through `current_module`. The base
+                // method name uses the original generic struct name so
+                // the inlining-induced graph stays mergeable.
+                let mangled_func_name =
+                    MethodName::format_local(name, trait_name.as_deref(), &method_name);
+                let base_method_name =
+                    MethodName::format_local(base_struct, trait_name.as_deref(), &method_name);
+                let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                    self.current_module.clone(),
+                    mangled_func_name,
+                    base_method_name,
+                ));
+                self.analysis.callees.insert(callee_id);
+
+                // For internal Box<T> types (primitive boxing), the method is
+                // actually defined on the inner type (e.g., i32^Ord::cmp, not
+                // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
+                // method target as reachable.
+                if base_struct == "Box"
+                    && let Some(info) = func.method_info.clone()
+                {
+                    let original_method_id = FunctionId::Method(MethodName::new(
+                        func.module_source.clone(),
+                        info.struct_name.clone(),
+                        info.trait_name.clone(),
+                        info.method_name,
+                    ));
+                    self.analysis.callees.insert(original_method_id);
+                }
+            }
+            ResolvedType::Struct {
+                name,
+                module_source,
+                is_monomorphized: false,
+                ..
+            } => {
+                // Non-monomorphized struct method.
+                let method_id = FunctionId::Method(MethodName::new(
+                    module_source.clone(),
+                    name,
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+
+                // Also mark reachable using the FunctionRef's module source,
+                // since trait impls may live in a different module than the type
+                // (e.g., `impl Display for String` is in format.wado, not string.wado)
+                let func_module = func.module_source.clone();
+                if func_module != module_source
+                    && let Some(info) = func.method_info.clone()
+                {
+                    let alt_method_id = FunctionId::Method(MethodName::new(
+                        func_module,
+                        info.struct_name.clone(),
+                        info.trait_name.clone(),
+                        info.method_name,
+                    ));
+                    self.analysis.callees.insert(alt_method_id);
+                }
+            }
+            ResolvedType::Primitive(prim) => {
+                // Trait/inherent methods on primitives (`i32^Ord::cmp`,
+                // `char::is_ascii_space`, `42.to_string()`, …).
+                if method_name == "to_string" {
+                    add_to_string_callee(receiver.type_id, self.type_table, &mut self.analysis);
+                }
+                let method_id = FunctionId::Method(MethodName::new(
+                    ModuleSource::primitive(),
+                    prim.as_str().to_string(),
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            ResolvedType::Unit => {
+                // `()` methods: `().to_string()`, `().fmt(&f)`, etc.
+                let method_id = FunctionId::Method(MethodName::new(
+                    ModuleSource::primitive(),
+                    TypeTable::UNIT_TYPE_NAME.to_string(),
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            ResolvedType::GenericInstance {
+                name,
+                type_args,
+                module_source,
+            } if TypeTable::is_tuple_type(&name, &module_source) => {
+                // Tuple method call: synthesized as non-monomorphized
+                // with struct_name `"Tuple<f64,f64>"`.
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .collect();
+                let mangled_struct =
+                    mangle_generic_name(TypeTable::TUPLE_TYPE_NAME, &type_arg_names);
+                let method_id = FunctionId::Method(MethodName::new(
+                    self.current_module.clone(),
+                    mangled_struct,
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            ResolvedType::GenericInstance {
+                name,
+                type_args,
+                module_source: _,
+            } => {
+                // Generic instance method (e.g. `Box<i32>::get`,
+                // `TreeMap<String,i32>^Index::index`). Trait methods
+                // need the trait name baked into the mangle so trait-
+                // and inherent-name collisions stay separate.
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .collect();
+                let (mangled_func_name, base_name) = if let Some(ref trait_n) = trait_name {
+                    let generic_name = mangle_generic_name(&name, &type_arg_names);
+                    let mangled = mangle_local_trait_method(&generic_name, trait_n, &method_name);
+                    let base = mangle_local_trait_method(&name, trait_n, &method_name);
+                    (mangled, base)
+                } else {
+                    let mangled = mangle_method_generic(&name, &type_arg_names, &method_name);
+                    let base = mangle_local_method(&name, &method_name);
+                    (mangled, base)
+                };
+                let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                    self.current_module.clone(),
+                    mangled_func_name,
                     base_name,
                 ));
-                analysis.callees.insert(callee_id);
-            } else {
-                // Non-monomorphized method - determine target from receiver type
-                // First strip any reference wrappers and newtypes to get the base type
-                let mut current_type = type_table.get(receiver.type_id);
-                let mut newtype_info: Option<(String, ModuleSource)> = None;
-                loop {
-                    match current_type {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                            current_type = type_table.get(*inner);
-                        }
-                        ResolvedType::Newtype {
-                            name,
-                            module_source,
-                            base_type,
-                        } => {
-                            // Remember the outermost newtype for its own trait impls
-                            if newtype_info.is_none() {
-                                newtype_info = Some((name.clone(), module_source.clone()));
-                            }
-                            current_type = type_table.get(*base_type);
-                        }
-                        _ => break,
-                    }
-                }
-                let base_receiver_type = current_type.clone();
+                self.analysis.callees.insert(callee_id);
+            }
+            ResolvedType::Enum {
+                name,
+                module_source,
+            } => {
+                // Enum method (user-defined or auto-derived trait impl).
+                let method_id = FunctionId::Method(MethodName::new(
+                    module_source,
+                    name,
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            ResolvedType::Resource { name, .. } => {
+                // Resource instance method (e.g. `fields.has()`):
+                // recorded as an effect so it lands in
+                // `used_wasi_functions`.
+                self.analysis.effect_calls.insert((name, method_name));
+            }
+            ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            } => {
+                // Variant method, e.g. `Shape^Inspect::inspect`.
+                let method_id = FunctionId::Method(MethodName::new(
+                    module_source,
+                    name,
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                // `Fn<arity, ret>` method, e.g. `Fn<2,i32>^Inspect::inspect`.
+                let type_arg_names = vec![
+                    params.len().to_string(),
+                    self.type_table.mangle_type_name(return_type),
+                ];
+                let mangled_struct = mangle_generic_name("Fn", &type_arg_names);
+                let method_id = FunctionId::Method(MethodName::new(
+                    self.current_module.clone(),
+                    mangled_struct,
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            ResolvedType::GenericResource {
+                name, type_args, ..
+            } => {
+                // Generic resource method, e.g. `Future<T>^Inspect::inspect`.
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.type_table.mangle_type_name(*t))
+                    .collect();
+                let mangled_struct = mangle_generic_name(name.as_str(), &type_arg_names);
+                let method_id = FunctionId::Method(MethodName::new(
+                    self.current_module.clone(),
+                    mangled_struct,
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
+            _ => {}
+        }
+    }
 
-                // Extract method name and trait name from method_info
-                let (method_name, trait_name) = if let Some(info) = func.method_info.clone() {
-                    (info.method_name.clone(), info.trait_name)
-                } else {
-                    (func_name, None)
-                };
+    fn record_cm_raw_call(&mut self, local_name: &str) {
+        // CmRawCall references a lowered WASI import function.
+        // Parse the local_name (e.g., "wasi:cli/Stdout::write_via_stream")
+        // to extract the interface_name and op_name for WASI import tracking.
+        if let Some((interface_name, op_name)) = local_name.split_once("::").map(|(prefix, op)| {
+            // prefix is like "wasi:cli/Stdout" → extract "Stdout"
+            let effect = prefix.rsplit('/').next().unwrap_or(prefix);
+            (effect.to_string(), op.to_string())
+        }) {
+            self.analysis.effect_calls.insert((interface_name, op_name));
+        }
+    }
 
-                // If the receiver was a newtype (e.g., flags type), also mark
-                // the newtype's own methods as reachable (e.g., Perms^Inspect::inspect).
-                if let Some((newtype_name, newtype_module)) = newtype_info {
-                    let method_id = FunctionId::Method(MethodName::new(
-                        newtype_module,
-                        newtype_name,
-                        trait_name.clone(),
-                        method_name.clone(),
-                    ));
-                    analysis.callees.insert(method_id);
-                }
-
-                match base_receiver_type {
-                    ResolvedType::Struct {
-                        ref name,
-                        is_monomorphized: true,
-                        base_name: Some(ref base_struct),
-                        ..
-                    } => {
-                        // Monomorphized struct method call - use FunctionId::Free
-                        let mangled_func_name =
-                            MethodName::format_local(name, trait_name.as_deref(), &method_name);
-                        // Build base method name using the original generic struct name
-                        let base_method_name = MethodName::format_local(
-                            base_struct,
-                            trait_name.as_deref(),
-                            &method_name,
-                        );
-                        // Use current module — monomorphized functions live in the
-                        // module that uses them.
-                        let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                            current_module.clone(),
-                            mangled_func_name,
-                            base_method_name,
-                        ));
-                        analysis.callees.insert(callee_id);
-
-                        // For internal Box<T> types (primitive boxing), the method is
-                        // actually defined on the inner type (e.g., i32^Ord::cmp, not
-                        // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
-                        // method target as reachable.
-                        if base_struct == "Box"
-                            && let Some(info) = func.method_info.clone()
-                        {
-                            let original_method_id = FunctionId::Method(MethodName::new(
-                                func.module_source.clone(),
-                                info.struct_name.clone(),
-                                info.trait_name.clone(),
-                                info.method_name,
-                            ));
-                            analysis.callees.insert(original_method_id);
-                        }
-                    }
-                    ResolvedType::Struct {
-                        name,
-                        module_source,
-                        is_monomorphized: false,
-                        ..
-                    } => {
-                        // Regular struct method call - use FunctionId::Method
-                        let method_id = FunctionId::Method(MethodName::new(
-                            module_source.clone(),
-                            name,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-
-                        // Also mark reachable using the FunctionRef's module source,
-                        // since trait impls may live in a different module than the type
-                        // (e.g., `impl Display for String` is in format.wado, not string.wado)
-                        let func_module = func.module_source.clone();
-                        if func_module != module_source
-                            && let Some(info) = func.method_info.clone()
-                        {
-                            let alt_method_id = FunctionId::Method(MethodName::new(
-                                func_module,
-                                info.struct_name.clone(),
-                                info.trait_name.clone(),
-                                info.method_name,
-                            ));
-                            analysis.callees.insert(alt_method_id);
-                        }
-                    }
-                    ResolvedType::Primitive(prim) => {
-                        // Primitive method call (e.g., i32.to_string())
-                        if method_name == "to_string" {
-                            add_to_string_callee(receiver.type_id, type_table, analysis);
-                        }
-                        // Trait and inherent methods on primitives
-                        // (e.g., i32^Ord::cmp, char::is_ascii_space)
-                        let prim_name = prim.as_str().to_string();
-                        let method_id = FunctionId::Method(MethodName::new(
-                            ModuleSource::primitive(),
-                            prim_name,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    ResolvedType::Unit => {
-                        // Unit type () method call (e.g., ().to_string(), ().fmt(&f))
-                        let method_id = FunctionId::Method(MethodName::new(
-                            ModuleSource::primitive(),
-                            TypeTable::UNIT_TYPE_NAME.to_string(),
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    ResolvedType::GenericInstance {
-                        name,
-                        type_args,
-                        module_source,
-                    } if TypeTable::is_tuple_type(&name, &module_source) => {
-                        // Tuple method call (e.g., Tuple<f64,f64>^Inspect::inspect)
-                        // Synthesized as non-monomorphized methods with struct_name "Tuple<f64,f64>"
-                        let type_arg_names: Vec<String> = type_args
-                            .iter()
-                            .map(|t| type_table.mangle_type_name(*t))
-                            .collect();
-                        let mangled_struct =
-                            mangle_generic_name(TypeTable::TUPLE_TYPE_NAME, &type_arg_names);
-                        let method_id = FunctionId::Method(MethodName::new(
-                            current_module.clone(),
-                            mangled_struct,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    ResolvedType::GenericInstance {
-                        name,
-                        type_args,
-                        module_source: _,
-                    } => {
-                        // Generic instance method call (e.g., Box<i32>.get())
-                        let type_arg_names: Vec<String> = type_args
-                            .iter()
-                            .map(|t| type_table.mangle_type_name(*t))
-                            .collect();
-                        // Include trait name for trait methods (e.g., TreeMap<String,i32>^Index::index)
-                        let (mangled_func_name, base_name) = if let Some(ref trait_n) = trait_name {
-                            let generic_name = mangle_generic_name(&name, &type_arg_names);
-                            let mangled =
-                                mangle_local_trait_method(&generic_name, trait_n, &method_name);
-                            let base = mangle_local_trait_method(&name, trait_n, &method_name);
-                            (mangled, base)
-                        } else {
-                            let mangled =
-                                mangle_method_generic(&name, &type_arg_names, &method_name);
-                            let base = mangle_local_method(&name, &method_name);
-                            (mangled, base)
-                        };
-                        let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                            current_module.clone(),
-                            mangled_func_name,
-                            base_name,
-                        ));
-                        analysis.callees.insert(callee_id);
-                    }
-                    ResolvedType::Enum {
-                        name,
-                        module_source,
-                    } => {
-                        // Enum method call (user-defined or auto-derived trait impls)
-                        let method_id = FunctionId::Method(MethodName::new(
-                            module_source,
-                            name,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    ResolvedType::Resource { name, .. } => {
-                        // Resource instance method call (e.g., fields.has(), fields.append())
-                        // Record as effect call so it's tracked in used_wasi_functions
-                        analysis.effect_calls.insert((name, method_name));
-                    }
-                    ResolvedType::Variant {
-                        name,
-                        module_source,
-                        ..
-                    } => {
-                        // Variant method call (e.g., Shape^Inspect::inspect)
-                        let method_id = FunctionId::Method(MethodName::new(
-                            module_source,
-                            name,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    ResolvedType::Function {
-                        params,
-                        return_type,
-                        ..
-                    } => {
-                        // Function type method call (e.g., Fn<2,i32>^Inspect::inspect)
-                        let type_arg_names = vec![
-                            params.len().to_string(),
-                            type_table.mangle_type_name(return_type),
-                        ];
-                        let mangled_struct = mangle_generic_name("Fn", &type_arg_names);
-                        let method_id = FunctionId::Method(MethodName::new(
-                            current_module.clone(),
-                            mangled_struct,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    ResolvedType::GenericResource {
-                        name, type_args, ..
-                    } => {
-                        // Generic resource method call (e.g., Future<T>^Inspect::inspect)
-                        let type_arg_names: Vec<String> = type_args
-                            .iter()
-                            .map(|t| type_table.mangle_type_name(*t))
-                            .collect();
-                        let mangled_struct = mangle_generic_name(name.as_str(), &type_arg_names);
-                        let method_id = FunctionId::Method(MethodName::new(
-                            current_module.clone(),
-                            mangled_struct,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    _ => {}
-                }
-            }
-
-            analyze_expr(receiver, current_module, type_table, analysis);
-            for arg in args {
-                analyze_expr(&arg.expr, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            analyze_expr(left, current_module, type_table, analysis);
-            analyze_expr(right, current_module, type_table, analysis);
-        }
-        NirExprKind::Unary { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-        }
-        NirExprKind::Assign { target, value } => {
-            analyze_expr(target, current_module, type_table, analysis);
-            analyze_expr(value, current_module, type_table, analysis);
-        }
-        NirExprKind::Cast { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-        }
-        NirExprKind::CmRawCall { local_name, args } => {
-            // CmRawCall references a lowered WASI import function.
-            // Parse the local_name (e.g., "wasi:cli/Stdout::write_via_stream")
-            // to extract the interface_name and op_name for WASI import tracking.
-            if let Some((interface_name, op_name)) =
-                local_name.split_once("::").map(|(prefix, op)| {
-                    // prefix is like "wasi:cli/Stdout" → extract "Stdout"
-                    let effect = prefix.rsplit('/').next().unwrap_or(prefix);
-                    (effect.to_string(), op.to_string())
-                })
-            {
-                analysis.effect_calls.insert((interface_name, op_name));
-            }
-            for arg in args {
-                analyze_expr(arg, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::FieldAccess { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-        }
-        NirExprKind::Index { expr, index } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-            analyze_expr(index, current_module, type_table, analysis);
-        }
-        NirExprKind::Block(block) => {
-            analyze_block(block, current_module, type_table, analysis);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            analyze_expr(condition, current_module, type_table, analysis);
-            analyze_block(then_branch, current_module, type_table, analysis);
-            if let Some(else_blk) = else_branch {
-                analyze_block(else_blk, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::Match { expr, arms } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    analyze_expr(guard, current_module, type_table, analysis);
-                }
-                analyze_expr(&arm.body, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                analyze_expr(&field.value, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                analyze_expr(elem, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::IndirectCall { callee, args } => {
-            analyze_expr(callee, current_module, type_table, analysis);
-            for arg in args {
-                analyze_expr(arg, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::ClosureToCanonical {
-            functor,
-            functor_id,
-            target_fn_type,
-            closure_module,
-        } => {
-            analyze_expr(functor, current_module, type_table, analysis);
-            // The `__call` method is always reached via `ref.func` baked
-            // into the canonical closure struct's `func` slot.
-            let struct_name = format!(
-                "{prefix}{functor_id}",
-                prefix = crate::name::CLOSURE_STRUCT_PREFIX,
-            );
-            analysis.callees.insert(FunctionId::Method(MethodName::new(
+    fn record_closure_to_canonical(
+        &mut self,
+        functor_id: u32,
+        target_fn_type: TypeId,
+        closure_module: &ModuleSource,
+    ) {
+        // `__call` is always live: the canonical closure struct holds
+        // a `ref.func` to it directly.
+        let struct_name = format!(
+            "{prefix}{functor_id}",
+            prefix = crate::name::CLOSURE_STRUCT_PREFIX,
+        );
+        self.analysis
+            .callees
+            .insert(FunctionId::Method(MethodName::new(
                 closure_module.clone(),
                 struct_name.clone(),
                 None,
                 crate::name::CLOSURE_CALL_METHOD.to_string(),
             )));
 
-            // The per-functor `__Closure_N^Inspect` and `^InspectAlt`
-            // impls (and their per-literal source-string constants) only
-            // need to stay alive when their corresponding `Fn<arity,
-            // ret>^Inspect[Alt]` dispatch stub is reachable — gated
-            // independently per trait method. A program that only ever
-            // uses `:?` keeps `__Closure_N^Inspect` but drops
-            // `__Closure_N^InspectAlt` and its source-string literal.
-            //
-            // The gating set is unknown during this walk (it is derived
-            // from the first reachable-set computation), so record a
-            // pending edge here and let `apply_inspect_edges` insert the
-            // real call-graph edges once the set is known.
-            if let ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } = type_table.get(*target_fn_type)
-            {
-                analysis.pending_inspects.push(PendingInspectEdge {
-                    closure_module: closure_module.clone(),
-                    struct_name,
-                    key: (params.len(), *return_type),
-                });
-            }
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                analyze_expr(payload_expr, current_module, type_table, analysis);
-            }
-        }
-        NirExprKind::LabeledBlock { block, .. } => {
-            analyze_block(block, current_module, type_table, analysis);
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            analyze_expr(value, current_module, type_table, analysis);
-        }
-        NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-        }
-        NirExprKind::VariantPayload { expr, .. } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
+        // Per-functor `__Closure_N^Inspect` / `^InspectAlt` impls only
+        // need to stay alive when their matching `Fn<arity, ret>^Inspect[Alt]`
+        // dispatch stub is reachable — tracked independently per trait so a
+        // program using only `:?` doesn't keep `^InspectAlt` (and its
+        // per-literal source-string constant) alive. The gating set isn't
+        // known yet (it's derived from the first reachable-set computation),
+        // so record a pending edge here for `apply_inspect_edges` to
+        // resolve later.
+        if let ResolvedType::Function {
+            params,
+            return_type,
             ..
-        } => {
-            analyze_expr(scrutinee, current_module, type_table, analysis);
-            for arm in arms {
-                analyze_block(arm, current_module, type_table, analysis);
-            }
-            analyze_block(default, current_module, type_table, analysis);
+        } = self.type_table.get(target_fn_type)
+        {
+            self.analysis.pending_inspects.push(PendingInspectEdge {
+                closure_module: closure_module.clone(),
+                struct_name,
+                key: (params.len(), *return_type),
+            });
         }
-        // Leaf nodes - no calls
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
     }
 }
 
-/// Add the appropriate `to_string` function call for a type
+impl NirRefVisitor for DceWalker<'_> {
+    fn visit_stmt(&mut self, stmt: &NirStmt) {
+        // The `Let` binding's declared type is not visible from its `value`
+        // (the value's `type_id` is the RHS type before any coercion).
+        if let NirStmtKind::Let { type_id, .. } = &stmt.kind {
+            self.add_type(*type_id);
+        }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &NirExpr) {
+        // Every expression has a result type that needs to stay alive.
+        self.add_type(expr.type_id);
+
+        match &expr.kind {
+            NirExprKind::Call { func, .. } => self.record_call(func),
+            NirExprKind::MethodCall { receiver, func, .. } => {
+                self.record_method_call(receiver, func);
+            }
+            NirExprKind::CmRawCall { local_name, .. } => self.record_cm_raw_call(local_name),
+            NirExprKind::ClosureToCanonical {
+                functor_id,
+                target_fn_type,
+                closure_module,
+                ..
+            } => {
+                self.add_type(*target_fn_type);
+                self.record_closure_to_canonical(*functor_id, *target_fn_type, closure_module);
+            }
+            NirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => {
+                self.analysis
+                    .used_globals
+                    .insert((module_source.to_path().join("::"), name.clone()));
+            }
+            NirExprKind::Cast { target_type, .. } => self.add_type(*target_type),
+            NirExprKind::StructLiteral { struct_type, .. } => self.add_type(*struct_type),
+            NirExprKind::VariantConstruct { variant_type, .. } => self.add_type(*variant_type),
+            NirExprKind::VariantPayload { payload_type, .. } => self.add_type(*payload_type),
+            _ => {}
+        }
+        // Default recursion into children — handled uniformly by the
+        // visitor trait, so a new `NirExprKind` variant only needs its
+        // sub-expression layout described once in `nir_visitor.rs`.
+        self.walk_expr(expr);
+    }
+
+    fn visit_pattern(&mut self, pattern: &crate::nir::NirPattern) {
+        use crate::nir::NirPattern;
+        match pattern {
+            NirPattern::Binding { type_id, .. } => self.add_type(*type_id),
+            NirPattern::Variant {
+                enum_type,
+                payload_type,
+                ..
+            } => {
+                self.add_type(*enum_type);
+                self.add_type(*payload_type);
+            }
+            NirPattern::Enum { enum_type, .. } => self.add_type(*enum_type),
+            NirPattern::Struct { struct_type, .. } => self.add_type(*struct_type),
+            _ => {}
+        }
+        self.walk_pattern(pattern);
+    }
+}
+
+/// Mark the `to_string` impl that lowering will dispatch
+/// `receiver.to_string()` to. `impl i32`, `impl ()`, etc. live in
+/// `core:prelude/primitive`; `String::to_string` is a no-op and needs
+/// no call.
 fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut FunctionAnalysis) {
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => {
-            // Primitive to_string methods are defined in core:prelude/primitive as impl blocks
-            // e.g., impl i32 { fn to_string(&self) -> String { ... } }
-            let prim_name = prim.as_str();
-            // Method format: module_source/StructName::method_name
             let method_id = FunctionId::Method(MethodName::new(
                 ModuleSource::primitive(),
-                prim_name.to_string(),
+                prim.as_str().to_string(),
                 None,
                 "to_string".to_string(),
             ));
             analysis.callees.insert(method_id);
         }
         ResolvedType::Unit => {
-            // Unit type () to_string is defined in core:prelude/primitive
             let method_id = FunctionId::Method(MethodName::new(
                 ModuleSource::primitive(),
                 TypeTable::UNIT_TYPE_NAME.to_string(),
@@ -1511,15 +1500,12 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
             ));
             analysis.callees.insert(method_id);
         }
-        ResolvedType::Struct { name, .. } if name == "String" => {
-            // String.to_string() is a no-op, no function call needed
-        }
+        ResolvedType::Struct { name, .. } if name == "String" => {}
         _ => {}
     }
 }
 
-/// Mangle a type ID into a string suitable for struct/function names.
-/// Compute the set of reachable functions from an entry point
+/// Worklist BFS over `call_graph` starting at `entry`.
 fn compute_reachable(
     call_graph: &IndexMap<FunctionId, IndexSet<FunctionId>>,
     entry: &FunctionId,
@@ -1546,21 +1532,16 @@ fn compute_reachable(
     reachable
 }
 
-/// Remove unreachable functions from the project's function list.
-///
-/// `reachable_positions` is the set of indices into `project.functions` that
-/// `analyze_project` determined are reachable — pre-computed there so this
-/// pass can avoid rebuilding a `FunctionId` (3-4 string clones) per function
-/// just to look it up in a hash set.
-///
-/// After this, all remaining functions are reachable — downstream phases
-/// (`wir_build`, codegen) register every function without additional filtering.
+/// Retain only the functions whose original position is in
+/// `reachable_positions` (computed by [`analyze_dce`]). Downstream
+/// phases (`wir_build`, codegen) see every surviving function and
+/// don't repeat reachability work.
 pub fn remove_unreachable_functions(
     project: &mut NirPackage,
     reachable_positions: &IndexSet<usize>,
 ) {
-    // Dense `Vec<bool>` indexed by original position is faster than hashing
-    // each index against `reachable_positions` during retain.
+    // Dense `Vec<bool>` indexed by original position avoids hashing each
+    // index against `reachable_positions` once per retain step.
     let mut keep = vec![false; project.functions.len()];
     for &pos in reachable_positions {
         if pos < keep.len() {
@@ -1575,15 +1556,91 @@ pub fn remove_unreachable_functions(
     });
 }
 
-/// Compute the set of reachable types from reachable functions.
-/// A type is reachable if it's used in any reachable function's signature,
-/// locals, or expressions.
-fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
-    let mut reachable_types: IndexSet<TypeId> = IndexSet::default();
+impl DceAnalysis {
+    fn empty() -> Self {
+        Self {
+            functions: IndexSet::default(),
+            globals: IndexSet::default(),
+            types: IndexSet::default(),
+            struct_exact: IndexSet::default(),
+            struct_monomorph_names: IndexSet::default(),
+            struct_monomorph_bases: IndexSet::default(),
+            generic_instance_names: IndexSet::default(),
+            variant_exact: IndexSet::default(),
+            enum_exact: IndexSet::default(),
+        }
+    }
 
+    /// Rebuild the name-keyed type-index views from the current
+    /// `self.types`. Cheap relative to the alternative of `iter().any()`
+    /// lookups — see [`populate_type_reachability`]'s Phase 2 comment.
+    fn refresh_indexes(&mut self, type_table: &TypeTable) {
+        self.struct_exact.clear();
+        self.struct_monomorph_names.clear();
+        self.struct_monomorph_bases.clear();
+        self.generic_instance_names.clear();
+        self.variant_exact.clear();
+        self.enum_exact.clear();
+        for &id in &self.types {
+            match type_table.get(id) {
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    is_monomorphized,
+                    base_name,
+                } => {
+                    if *is_monomorphized {
+                        self.struct_monomorph_names.insert(name.clone());
+                        if let Some(base) = base_name {
+                            self.struct_monomorph_bases.insert(base.clone());
+                        }
+                    } else {
+                        self.struct_exact
+                            .insert((name.clone(), module_source.clone()));
+                    }
+                }
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                } => {
+                    self.variant_exact
+                        .insert((name.clone(), module_source.clone()));
+                }
+                ResolvedType::Enum {
+                    name,
+                    module_source,
+                } => {
+                    self.enum_exact
+                        .insert((name.clone(), module_source.clone()));
+                }
+                ResolvedType::GenericInstance { name, .. } => {
+                    self.generic_instance_names.insert(name.clone());
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Populate `analysis.types` and the name-keyed type-index views.
+/// A type is reachable if it's used in any reachable function's
+/// signature, locals, or expressions, or in any reachable global's
+/// initializer (with transitive closure over struct fields, variant
+/// payloads, and per-type dependencies).
+///
+/// Reads `analysis.functions` and `analysis.globals` to filter the
+/// per-function / per-global walks — both must be populated first
+/// (see [`analyze_dce`]). Running pre-pruning, so all DCE analysis
+/// sits in `analyze_dce` and the downstream `remove_*` functions only
+/// mutate.
+fn populate_type_reachability(
+    project: &NirPackage,
+    graph: &AnalysisGraph,
+    analysis: &mut DceAnalysis,
+) {
     // Always include primitive types (TypeId 0-17)
     for i in 0..18 {
-        reachable_types.insert(TypeId(i));
+        analysis.types.insert(TypeId(i));
     }
 
     // Always include BuiltinArray(U8) as it's fundamental for String operations
@@ -1595,56 +1652,72 @@ fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
             if let ResolvedType::BuiltinArray(elem) = type_table.get(type_id)
                 && *elem == TypeTable::U8
             {
-                reachable_types.insert(type_id);
+                analysis.types.insert(type_id);
                 break;
             }
         }
     }
 
-    // Phase 1: Collect types from all remaining functions
-    // Note: We collect from ALL functions that exist after function DCE,
-    // because function DCE has already removed unreachable functions.
-    // This is more conservative but ensures we don't miss any types.
+    // Phase 1: Seed `analysis.types` from per-function facts (collected
+    // by `DceWalker` during `build_analysis_graph`) and from reachable
+    // globals' initializers + closure functor types. No function-body
+    // re-walk — the per-function used-types set is already populated.
     {
         let type_table = project.type_table.borrow();
 
-        for func_rc in &project.functions {
-            let func = func_rc.borrow();
-            collect_types_from_function(&func, &type_table, &mut reachable_types);
+        // Sum per-function used-types for reachable functions only.
+        for &pos in &analysis.functions {
+            if let Some(per_func) = graph.per_func_types.get(pos) {
+                for &id in per_func {
+                    analysis.types.insert(id);
+                }
+            }
         }
 
-        // Collect types from global variables
+        // Reachable globals' declared type + initializer types. At NIR
+        // level non-constant initializers have already been extracted
+        // into `__initialize_module` (see `lower::plan::globals`), so
+        // each surviving `global.initializer` here is a constant
+        // expression — DceWalker on it only walks the literal tree.
         for global in &project.globals {
-            collect_types_from_expr(&global.initializer, &type_table, &mut reachable_types);
+            let global_key = (
+                global.module_source.to_path().join("::"),
+                global.name.clone(),
+            );
+            if !analysis.globals.contains(&global_key) {
+                continue;
+            }
+            collect_type_transitive(global.ty, &type_table, &mut analysis.types);
+            let mut walker = DceWalker::new(&type_table, &global.module_source);
+            walker.visit_expr(&global.initializer);
+            for id in walker.analysis.used_types {
+                analysis.types.insert(id);
+            }
         }
 
-        // Closure functor types are collected transitively from
-        // ClosureToCanonical expressions in reachable functions. No need
-        // to unconditionally mark all functor types as reachable — unused
-        // closures should have their types DCE'd.
-        //
-        // BUT: if the functor's `__call` method is still reachable (kept
-        // by function DCE), the functor's struct / ref types must stay
-        // live too. `wir_build::register_closure_wrappers` reads
-        // `ClosureFunctor::ref_type_id` to emit the wrapper's `ref.cast`,
-        // and TIR DAE may have removed the struct ref from
-        // `call_method.params[0]` (dropping the env `self`) — at which
-        // point the only remaining TIR-side reference is the
-        // `ClosureFunctor` record itself. Without this insertion, that
+        // When a closure functor's `__call` method is reachable, its
+        // struct / ref types must stay live: `wir_build::register_closure_wrappers`
+        // reads `ClosureFunctor::ref_type_id` to emit the wrapper's `ref.cast`,
+        // and NIR DAE can drop every other NIR-side reference (it removes the
+        // env `self` from `call_method.params[0]`), leaving the `ClosureFunctor`
+        // record itself as the only live mention. Without this insertion the
         // type-table lookup panics with `TypeId not found`.
-        // The functor's `call_method` and `project.functions[i]` are the
-        // same `Rc` when DCE has kept the function alive — comparing by
-        // pointer identity avoids cloning `(ModuleSource, String)` per
-        // function just to build a lookup set. Pre-compute a hash set of
-        // raw pointers so the per-functor check is O(1) instead of an
-        // O(|functions|) linear scan per functor.
-        let surviving_ptrs: IndexSet<*const _> =
-            project.functions.iter().map(std::rc::Rc::as_ptr).collect();
+        //
+        // `functor.call_method` and the matching `project.functions[i]` are the
+        // same `Rc` — compare by pointer identity to avoid cloning a
+        // `(ModuleSource, String)` key per functor.
+        let surviving_ptrs: IndexSet<*const _> = project
+            .functions
+            .iter()
+            .enumerate()
+            .filter(|(pos, _)| analysis.functions.contains(pos))
+            .map(|(_, rc)| std::rc::Rc::as_ptr(rc))
+            .collect();
         for functor in &project.closure_functors {
             let cm_ptr = std::rc::Rc::as_ptr(&functor.call_method);
             if surviving_ptrs.contains(&cm_ptr) {
-                reachable_types.insert(functor.struct_type_id);
-                reachable_types.insert(functor.ref_type_id);
+                analysis.types.insert(functor.struct_type_id);
+                analysis.types.insert(functor.ref_type_id);
             }
         }
     }
@@ -1653,397 +1726,90 @@ fn compute_reachable_types(project: &NirPackage) -> IndexSet<TypeId> {
     let mut changed = true;
     while changed {
         changed = false;
-        let before_len = reachable_types.len();
+        let before_len = analysis.types.len();
 
         let type_table = project.type_table.borrow();
 
-        // Collect struct field types for reachable structs
-        // A struct's fields should be collected if:
-        // 1. The Struct type itself is reachable, OR
-        // 2. Any GenericInstance with this struct name is reachable, OR
-        // 3. Any monomorphized version with this base name is reachable
+        // Rebuild the name-keyed indexes so the struct/variant checks
+        // below are O(1) hash probes instead of O(N) `iter().any()`
+        // scans. Without this the loop is O(S × N) per iteration —
+        // ~2M `type_table.get`s/iter on a 900-struct / 2200-type
+        // Gale-generated parser, dominating the whole DCE pass.
+        analysis.refresh_indexes(&type_table);
+
+        // A struct's fields are kept iff its Struct type, any
+        // `GenericInstance` of its name, or any monomorphized variant
+        // sharing its base name is reachable.
         for tir_struct in &project.structs {
-            let module_source = &tir_struct.module_source;
             let struct_reachable = if tir_struct.monomorph_info.is_none() {
-                // Non-monomorphized struct
-                let direct_reachable = type_table
-                    .find_struct_type(&tir_struct.name, module_source)
-                    .map(|id| reachable_types.contains(&id))
-                    .unwrap_or(false);
-
-                let instance_reachable = reachable_types.iter().any(|&id| {
-                    matches!(
-                        type_table.get(id),
-                        ResolvedType::GenericInstance { name, .. } if name == &tir_struct.name
-                    )
-                });
-
-                let monomorph_reachable = reachable_types.iter().any(|&id| {
-                    matches!(
-                        type_table.get(id),
-                        ResolvedType::Struct { base_name: Some(base), is_monomorphized: true, .. } if base == &tir_struct.name
-                    )
-                });
-
-                direct_reachable || instance_reachable || monomorph_reachable
+                analysis
+                    .struct_exact
+                    .contains(&(tir_struct.name.clone(), tir_struct.module_source.clone()))
+                    || analysis
+                        .generic_instance_names
+                        .contains(tir_struct.name.as_str())
+                    || analysis
+                        .struct_monomorph_bases
+                        .contains(tir_struct.name.as_str())
             } else {
-                // Monomorphized struct - check by exact name match
-                reachable_types.iter().any(|&id| {
-                    matches!(
-                        type_table.get(id),
-                        ResolvedType::Struct { name, is_monomorphized: true, .. } if name == &tir_struct.name
-                    )
-                })
+                analysis
+                    .struct_monomorph_names
+                    .contains(tir_struct.name.as_str())
             };
 
             if struct_reachable {
                 for field in &tir_struct.fields {
-                    collect_type_transitive(field.type_id, &type_table, &mut reachable_types);
+                    collect_type_transitive(field.type_id, &type_table, &mut analysis.types);
                 }
                 // Monomorphization type args are used by WIR for name mangling
                 if let Some(info) = &tir_struct.monomorph_info {
                     for &ta in &info.impl_type_args {
-                        collect_type_transitive(ta, &type_table, &mut reachable_types);
+                        collect_type_transitive(ta, &type_table, &mut analysis.types);
                     }
                     for &ta in &info.method_type_args {
-                        collect_type_transitive(ta, &type_table, &mut reachable_types);
+                        collect_type_transitive(ta, &type_table, &mut analysis.types);
                     }
                 }
             }
         }
 
-        // Collect variant payload types for reachable variants
-        // A variant's payloads should be collected if:
-        // 1. The base Variant type is reachable, OR
-        // 2. Any GenericInstance with this variant name is reachable
+        // Same predicate as above but for variants: the base type or
+        // any `GenericInstance` of the variant's name keeps payloads
+        // alive.
         for variant in &project.variants {
-            let base_reachable = type_table
-                .iter_type_ids()
-                .find(|&id| matches!(type_table.get(id), ResolvedType::Variant { name, .. } if name == &variant.name))
-                .map(|id| reachable_types.contains(&id))
-                .unwrap_or(false);
-
-            let instance_reachable = reachable_types.iter().any(|&id| {
-                matches!(
-                    type_table.get(id),
-                    ResolvedType::GenericInstance { name, .. } if name == &variant.name
-                )
-            });
+            let base_reachable = analysis
+                .variant_exact
+                .contains(&(variant.name.clone(), variant.module_source.clone()));
+            let instance_reachable = analysis
+                .generic_instance_names
+                .contains(variant.name.as_str());
 
             if base_reachable || instance_reachable {
                 for case in &variant.cases {
-                    collect_type_transitive(case.payload, &type_table, &mut reachable_types);
+                    collect_type_transitive(case.payload, &type_table, &mut analysis.types);
                 }
             }
         }
 
         // Collect type dependencies (array elements, option inner, etc.)
-        let current_types: Vec<TypeId> = reachable_types.iter().copied().collect();
+        let current_types: Vec<TypeId> = analysis.types.iter().copied().collect();
         for type_id in current_types {
-            collect_type_dependencies(type_id, &type_table, &mut reachable_types);
+            collect_type_dependencies(type_id, &type_table, &mut analysis.types);
         }
 
         drop(type_table);
 
-        if reachable_types.len() > before_len {
+        if analysis.types.len() > before_len {
             changed = true;
         }
     }
 
-    reachable_types
-}
-
-/// Collect all types used in a function
-fn collect_types_from_function(
-    func: &NirFunction,
-    type_table: &TypeTable,
-    reachable: &mut IndexSet<TypeId>,
-) {
-    // Collect parameter types
-    for param in &func.params {
-        collect_type_transitive(param.type_id, type_table, reachable);
-    }
-
-    // Collect return type
-    collect_type_transitive(func.return_type, type_table, reachable);
-
-    // Collect local variable types (includes types from inlined functions)
-    for local in &func.locals {
-        collect_type_transitive(local.type_id, type_table, reachable);
-    }
-
-    // Collect monomorphization type args (used by WIR for name mangling)
-    if let Some(info) = &func.monomorph_info {
-        for &ta in &info.impl_type_args {
-            collect_type_transitive(ta, type_table, reachable);
-        }
-        for &ta in &info.method_type_args {
-            collect_type_transitive(ta, type_table, reachable);
-        }
-    }
-
-    // Collect types from body
-    if let Some(body) = &func.body {
-        collect_types_from_block(body, type_table, reachable);
-    }
-}
-
-/// Collect types from a block
-fn collect_types_from_block(
-    block: &NirBlock,
-    type_table: &TypeTable,
-    reachable: &mut IndexSet<TypeId>,
-) {
-    for stmt in &block.stmts {
-        match &stmt.kind {
-            NirStmtKind::Let { value, type_id, .. } => {
-                collect_type_transitive(*type_id, type_table, reachable);
-                collect_types_from_expr(value, type_table, reachable);
-            }
-            NirStmtKind::Expr(expr) => {
-                collect_types_from_expr(expr, type_table, reachable);
-            }
-            NirStmtKind::Return { value } => {
-                if let Some(expr) = value {
-                    collect_types_from_expr(expr, type_table, reachable);
-                }
-            }
-            NirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                collect_types_from_expr(condition, type_table, reachable);
-                collect_types_from_block(then_block, type_table, reachable);
-                if let Some(else_blk) = else_block {
-                    collect_types_from_block(else_blk, type_table, reachable);
-                }
-            }
-            NirStmtKind::Loop { body } => {
-                collect_types_from_block(body, type_table, reachable);
-            }
-            NirStmtKind::LabeledBlock { block, .. } => {
-                collect_types_from_block(block, type_table, reachable);
-            }
-            NirStmtKind::Break { value, .. } => {
-                if let Some(v) = value {
-                    collect_types_from_expr(v, type_table, reachable);
-                }
-            }
-            NirStmtKind::Continue => {}
-            NirStmtKind::LetDestructure { pattern, value, .. } => {
-                collect_types_from_pattern(pattern, type_table, reachable);
-                collect_types_from_expr(value, type_table, reachable);
-            }
-        }
-    }
-}
-
-/// Collect types from an expression
-fn collect_types_from_expr(
-    expr: &NirExpr,
-    type_table: &TypeTable,
-    reachable: &mut IndexSet<TypeId>,
-) {
-    // Always collect the expression's type
-    collect_type_transitive(expr.type_id, type_table, reachable);
-
-    match &expr.kind {
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                collect_types_from_expr(&arg.expr, type_table, reachable);
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            collect_types_from_expr(receiver, type_table, reachable);
-            for arg in args {
-                collect_types_from_expr(&arg.expr, type_table, reachable);
-            }
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            collect_types_from_expr(left, type_table, reachable);
-            collect_types_from_expr(right, type_table, reachable);
-        }
-        NirExprKind::Unary { expr, .. } => {
-            collect_types_from_expr(expr, type_table, reachable);
-        }
-        NirExprKind::Assign { target, value } => {
-            collect_types_from_expr(target, type_table, reachable);
-            collect_types_from_expr(value, type_table, reachable);
-        }
-        NirExprKind::Cast { expr, target_type } => {
-            collect_types_from_expr(expr, type_table, reachable);
-            collect_type_transitive(*target_type, type_table, reachable);
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_types_from_expr(arg, type_table, reachable);
-            }
-        }
-        NirExprKind::FieldAccess { expr, .. } => {
-            collect_types_from_expr(expr, type_table, reachable);
-        }
-        NirExprKind::Index { expr, index } => {
-            collect_types_from_expr(expr, type_table, reachable);
-            collect_types_from_expr(index, type_table, reachable);
-        }
-        NirExprKind::Block(block) => {
-            collect_types_from_block(block, type_table, reachable);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_types_from_expr(condition, type_table, reachable);
-            collect_types_from_block(then_branch, type_table, reachable);
-            if let Some(else_blk) = else_branch {
-                collect_types_from_block(else_blk, type_table, reachable);
-            }
-        }
-        NirExprKind::Match { expr, arms } => {
-            collect_types_from_expr(expr, type_table, reachable);
-            for arm in arms {
-                collect_types_from_pattern(&arm.pattern, type_table, reachable);
-                if let Some(guard) = &arm.guard {
-                    collect_types_from_expr(guard, type_table, reachable);
-                }
-                collect_types_from_expr(&arm.body, type_table, reachable);
-            }
-        }
-        NirExprKind::StructLiteral {
-            struct_type,
-            fields,
-            ..
-        } => {
-            collect_type_transitive(*struct_type, type_table, reachable);
-            for field in fields {
-                collect_types_from_expr(&field.value, type_table, reachable);
-            }
-        }
-        NirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                collect_types_from_expr(elem, type_table, reachable);
-            }
-        }
-        NirExprKind::IndirectCall { callee, args } => {
-            collect_types_from_expr(callee, type_table, reachable);
-            for arg in args {
-                collect_types_from_expr(arg, type_table, reachable);
-            }
-        }
-        NirExprKind::ClosureToCanonical {
-            functor,
-            target_fn_type,
-            ..
-        } => {
-            collect_types_from_expr(functor, type_table, reachable);
-            collect_type_transitive(*target_fn_type, type_table, reachable);
-        }
-        NirExprKind::VariantConstruct {
-            variant_type,
-            payload,
-            ..
-        } => {
-            collect_type_transitive(*variant_type, type_table, reachable);
-            if let Some(payload_expr) = payload {
-                collect_types_from_expr(payload_expr, type_table, reachable);
-            }
-        }
-        NirExprKind::LabeledBlock { block, .. } => {
-            collect_types_from_block(block, type_table, reachable);
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            collect_types_from_expr(value, type_table, reachable);
-        }
-        NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
-            collect_types_from_expr(expr, type_table, reachable);
-        }
-        NirExprKind::VariantPayload {
-            expr, payload_type, ..
-        } => {
-            collect_types_from_expr(expr, type_table, reachable);
-            collect_type_transitive(*payload_type, type_table, reachable);
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_types_from_expr(scrutinee, type_table, reachable);
-            for arm in arms {
-                collect_types_from_block(arm, type_table, reachable);
-            }
-            collect_types_from_block(default, type_table, reachable);
-        }
-        // Leaf nodes
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
-    }
-}
-
-/// Collect types from a pattern
-fn collect_types_from_pattern(
-    pattern: &crate::nir::NirPattern,
-    type_table: &TypeTable,
-    reachable: &mut IndexSet<TypeId>,
-) {
-    use crate::nir::NirPattern;
-
-    match pattern {
-        NirPattern::Wildcard => {}
-        NirPattern::Binding { type_id, .. } => {
-            collect_type_transitive(*type_id, type_table, reachable);
-        }
-        NirPattern::Literal(_) | NirPattern::Range { .. } => {}
-        NirPattern::Tuple(patterns, _) => {
-            for p in patterns {
-                collect_types_from_pattern(p, type_table, reachable);
-            }
-        }
-        NirPattern::Variant {
-            enum_type,
-            bindings,
-            payload_type,
-            ..
-        } => {
-            collect_type_transitive(*enum_type, type_table, reachable);
-            collect_type_transitive(*payload_type, type_table, reachable);
-            for binding in bindings {
-                collect_types_from_pattern(binding, type_table, reachable);
-            }
-        }
-        NirPattern::Enum { enum_type, .. } => {
-            collect_type_transitive(*enum_type, type_table, reachable);
-        }
-        NirPattern::Struct {
-            struct_type,
-            fields,
-            ..
-        } => {
-            collect_type_transitive(*struct_type, type_table, reachable);
-            for field in fields {
-                collect_types_from_pattern(&field.pattern, type_table, reachable);
-            }
-        }
-        NirPattern::Or(alternatives) => {
-            for p in alternatives {
-                collect_types_from_pattern(p, type_table, reachable);
-            }
-        }
-        NirPattern::ConstantValue { expr } => {
-            collect_type_transitive(expr.type_id, type_table, reachable);
-        }
+    // Final index refresh so downstream consumers (e.g. the retain
+    // calls in `remove_unreachable_types`) see indexes matching the
+    // converged `analysis.types` rather than the second-to-last snapshot.
+    {
+        let type_table = project.type_table.borrow();
+        analysis.refresh_indexes(&type_table);
     }
 }
 
@@ -2117,317 +1883,86 @@ fn collect_type_dependencies(
 }
 
 /// Remove unreachable types from the project's `TypeTable` and module definitions.
-/// This should be called after function DCE.
-pub fn remove_unreachable_types(project: &mut NirPackage) {
-    let reachable_types = compute_reachable_types(project);
-
-    // Collect names of structs to keep
+///
+/// `analysis` is precomputed by [`analyze_dce`] — this function only
+/// retains entries matching its precomputed indexes.
+pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis) {
     // A struct is kept if:
     // 1. Its Struct type is reachable, OR
     // 2. Any GenericInstance with its base name is reachable (e.g., Box<i32> for Box)
     // 3. Any monomorphized Struct with its base name is reachable
-    {
-        let type_table = project.type_table.borrow();
-
-        // Single pass over reachable_types to build lookup indices keyed by the
-        // metadata already carried on each ResolvedType. This replaces the
-        // earlier O(|structs| × |reachable_types|) repeated linear scans.
-        let mut reachable_struct_exact: IndexSet<(String, ModuleSource)> = IndexSet::default();
-        let mut reachable_struct_monomorph_names: IndexSet<String> = IndexSet::default();
-        let mut reachable_struct_monomorph_bases: IndexSet<String> = IndexSet::default();
-        let mut reachable_generic_instance_names: IndexSet<String> = IndexSet::default();
-        let mut reachable_variant_exact: IndexSet<(String, ModuleSource)> = IndexSet::default();
-        let mut reachable_enum_exact: IndexSet<(String, ModuleSource)> = IndexSet::default();
-
-        for &id in &reachable_types {
-            match type_table.get(id) {
-                ResolvedType::Struct {
-                    name,
-                    module_source,
-                    is_monomorphized,
-                    base_name,
-                } => {
-                    if *is_monomorphized {
-                        reachable_struct_monomorph_names.insert(name.clone());
-                        if let Some(base) = base_name {
-                            reachable_struct_monomorph_bases.insert(base.clone());
-                        }
-                    } else {
-                        reachable_struct_exact.insert((name.clone(), module_source.clone()));
-                    }
-                }
-                ResolvedType::GenericInstance { name, .. } => {
-                    reachable_generic_instance_names.insert(name.clone());
-                }
-                ResolvedType::Variant {
-                    name,
-                    module_source,
-                } => {
-                    reachable_variant_exact.insert((name.clone(), module_source.clone()));
-                }
-                ResolvedType::Enum {
-                    name,
-                    module_source,
-                } => {
-                    reachable_enum_exact.insert((name.clone(), module_source.clone()));
-                }
-                _ => {}
-            }
+    project.structs.retain(|s| {
+        if s.monomorph_info.is_none() {
+            analysis
+                .struct_exact
+                .contains(&(s.name.clone(), s.module_source.clone()))
+                || analysis.generic_instance_names.contains(s.name.as_str())
+                || analysis.struct_monomorph_bases.contains(s.name.as_str())
+        } else {
+            analysis.struct_monomorph_names.contains(s.name.as_str())
         }
-
-        let keep_structs: IndexSet<(String, ModuleSource)> = project
-            .structs
-            .iter()
-            .filter(|s| {
-                if s.monomorph_info.is_none() {
-                    reachable_struct_exact.contains(&(s.name.clone(), s.module_source.clone()))
-                        || reachable_generic_instance_names.contains(&s.name)
-                        || reachable_struct_monomorph_bases.contains(&s.name)
-                } else {
-                    reachable_struct_monomorph_names.contains(&s.name)
-                }
-            })
-            .map(|s| (s.name.clone(), s.module_source.clone()))
-            .collect();
-
-        let keep_variants: IndexSet<(String, ModuleSource)> = project
-            .variants
-            .iter()
-            .filter(|v| {
-                reachable_variant_exact.contains(&(v.name.clone(), v.module_source.clone()))
-                    || reachable_generic_instance_names.contains(&v.name)
-            })
-            .map(|v| (v.name.clone(), v.module_source.clone()))
-            .collect();
-
-        let keep_enums: IndexSet<(String, ModuleSource)> = project
-            .enums
-            .iter()
-            .filter(|e| reachable_enum_exact.contains(&(e.name.clone(), e.module_source.clone())))
-            .map(|e| (e.name.clone(), e.module_source.clone()))
-            .collect();
-
-        drop(type_table);
-
-        // Remove unreachable definitions
-        project
-            .structs
-            .retain(|s| keep_structs.contains(&(s.name.clone(), s.module_source.clone())));
-        project
-            .variants
-            .retain(|v| keep_variants.contains(&(v.name.clone(), v.module_source.clone())));
-        project
-            .enums
-            .retain(|e| keep_enums.contains(&(e.name.clone(), e.module_source.clone())));
-    }
+    });
+    project.variants.retain(|v| {
+        analysis
+            .variant_exact
+            .contains(&(v.name.clone(), v.module_source.clone()))
+            || analysis.generic_instance_names.contains(v.name.as_str())
+    });
+    project.enums.retain(|e| {
+        analysis
+            .enum_exact
+            .contains(&(e.name.clone(), e.module_source.clone()))
+    });
 
     // Remove unreachable entries from the shared TypeTable.
     // This ensures that subsequent phases (WIR type registration, codegen) do not
     // emit types that are no longer referenced by any surviving function.
-    project.type_table.borrow_mut().retain(&reachable_types);
+    project.type_table.borrow_mut().retain(&analysis.types);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Global variable DCE
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Remove unreachable global variables from the project's TIR modules.
-///
-/// A global is considered "used" if any surviving function references it via
-/// `GlobalVarGet`. Globals only referenced by `GlobalVarSet` (e.g., their
-/// lazy initializer in `__initialize_module`) are dead.
-///
-/// When a global is removed:
-/// 1. Its declaration is removed from `module.globals`
-/// 2. Any `GlobalVarSet` statements for it are removed from function bodies
-///    (this covers both the original `__initialize_module` and inlined copies)
-pub fn remove_unreachable_globals(project: &mut NirPackage) {
-    // Phase 1: Collect all GlobalVarGet references from surviving functions.
-    // Key: (module_source path as string, global name)
+/// Union every `(module_key, global_name)` pair read by some reachable
+/// function. Reads come from the per-function index built once by
+/// [`build_analysis_graph`]'s [`DceWalker`] walk; functions not in
+/// `reachable_functions` are skipped since they'll be removed by
+/// `remove_unreachable_functions`.
+fn compute_global_reachability(
+    graph: &AnalysisGraph,
+    reachable_functions: &IndexSet<usize>,
+) -> IndexSet<(String, String)> {
     let mut used_globals: IndexSet<(String, String)> = IndexSet::default();
-
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        if let Some(body) = &func.body {
-            collect_global_reads_block(body, &mut used_globals);
+    for &pos in reachable_functions {
+        if let Some(per_func) = graph.per_func_globals.get(pos) {
+            for entry in per_func {
+                used_globals.insert(entry.clone());
+            }
         }
     }
+    used_globals
+}
 
-    // Phase 2: Remove unused globals
+/// Retain only globals whose `(module_key, name)` is in
+/// `used_globals` (computed by [`analyze_dce`]), then strip every
+/// `GlobalVarSet` for a dead global from surviving function bodies
+/// (covers both the original `__initialize_module` and any inlined
+/// copies).
+pub fn remove_unreachable_globals(
+    project: &mut NirPackage,
+    used_globals: &IndexSet<(String, String)>,
+) {
     project.globals.retain(|global| {
         let global_module_key = global.module_source.to_path().join("::");
         used_globals.contains(&(global_module_key, global.name.clone()))
     });
 
-    // Phase 3: Remove GlobalVarSet statements for dead globals from function bodies
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = &mut func.body {
-            remove_dead_global_sets_block(body, &used_globals);
+            remove_dead_global_sets_block(body, used_globals);
         }
-    }
-}
-
-/// Collect all `GlobalVarGet` references from a block.
-fn collect_global_reads_block(block: &NirBlock, used: &mut IndexSet<(String, String)>) {
-    for stmt in &block.stmts {
-        collect_global_reads_stmt(stmt, used);
-    }
-}
-
-fn collect_global_reads_stmt(stmt: &NirStmt, used: &mut IndexSet<(String, String)>) {
-    match &stmt.kind {
-        NirStmtKind::Let { value, .. }
-        | NirStmtKind::LetDestructure { value, .. }
-        | NirStmtKind::Expr(value) => {
-            collect_global_reads_expr(value, used);
-        }
-        NirStmtKind::Return { value } => {
-            if let Some(expr) = value {
-                collect_global_reads_expr(expr, used);
-            }
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            collect_global_reads_expr(condition, used);
-            collect_global_reads_block(then_block, used);
-            if let Some(else_blk) = else_block {
-                collect_global_reads_block(else_blk, used);
-            }
-        }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            collect_global_reads_block(body, used);
-        }
-        NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                collect_global_reads_expr(v, used);
-            }
-        }
-        NirStmtKind::Continue => {}
-    }
-}
-
-fn collect_global_reads_expr(expr: &NirExpr, used: &mut IndexSet<(String, String)>) {
-    match &expr.kind {
-        NirExprKind::GlobalVarGet {
-            module_source,
-            name,
-        } => {
-            used.insert((module_source.to_path().join("::"), name.clone()));
-        }
-        // Recurse into sub-expressions — mirrors analyze_expr structure
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                collect_global_reads_expr(&arg.expr, used);
-            }
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_global_reads_expr(arg, used);
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            collect_global_reads_expr(receiver, used);
-            for arg in args {
-                collect_global_reads_expr(&arg.expr, used);
-            }
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            collect_global_reads_expr(left, used);
-            collect_global_reads_expr(right, used);
-        }
-        NirExprKind::Unary { expr: inner, .. }
-        | NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::VariantTag { expr: inner }
-        | NirExprKind::VariantTest { expr: inner, .. }
-        | NirExprKind::VariantPayload { expr: inner, .. } => {
-            collect_global_reads_expr(inner, used);
-        }
-        NirExprKind::Assign { target, value } => {
-            collect_global_reads_expr(target, used);
-            collect_global_reads_expr(value, used);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_global_reads_expr(condition, used);
-            collect_global_reads_block(then_branch, used);
-            if let Some(else_blk) = else_branch {
-                collect_global_reads_block(else_blk, used);
-            }
-        }
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
-            collect_global_reads_block(block, used);
-        }
-        NirExprKind::Index { expr, index } => {
-            collect_global_reads_expr(expr, used);
-            collect_global_reads_expr(index, used);
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_global_reads_expr(&field.value, used);
-            }
-        }
-        NirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                collect_global_reads_expr(elem, used);
-            }
-        }
-        NirExprKind::IndirectCall { callee, args } => {
-            collect_global_reads_expr(callee, used);
-            for arg in args {
-                collect_global_reads_expr(arg, used);
-            }
-        }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            collect_global_reads_expr(functor, used);
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                collect_global_reads_expr(payload_expr, used);
-            }
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            collect_global_reads_expr(value, used);
-        }
-        NirExprKind::Match { expr, arms } => {
-            collect_global_reads_expr(expr, used);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    collect_global_reads_expr(guard, used);
-                }
-                collect_global_reads_expr(&arm.body, used);
-            }
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_global_reads_expr(scrutinee, used);
-            for arm in arms {
-                collect_global_reads_block(arm, used);
-            }
-            collect_global_reads_block(default, used);
-        }
-        // Leaf nodes — no GlobalVarGet possible
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
     }
 }
 

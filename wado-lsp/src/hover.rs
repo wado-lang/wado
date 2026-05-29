@@ -1,6 +1,6 @@
-//! Hover information, powered by `wado_compiler::annotate`.
+//! Hover information, powered by `wado_compiler::semantics`.
 //!
-//! Rendering strategy: `Annotated::cursor_at` places a `Cursor` on the
+//! Rendering strategy: `Semantics::cursor_at` places a `Cursor` on the
 //! innermost AST node at the request position; `Cursor::def_symbol` chases
 //! the use→def edge and returns the binding's `Symbol` (or `None` if the
 //! cursor isn't on a recognised name). Locals render as `let` / param
@@ -8,14 +8,14 @@
 //! `wado_compiler::unparse`.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::CompilerHost;
-use wado_compiler::annotate::{Annotated, annotate_with_invocations};
 use wado_compiler::ast::{self, AstId, Expr, Item, Module, Stmt};
+use wado_compiler::semantics::Semantics;
 use wado_compiler::symbol::{Symbol, SymbolKey, SymbolKind};
 use wado_compiler::unparse;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{span_to_range, uri_to_filename};
+use crate::location::span_to_range;
+use crate::query::QueryContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HoverResult {
@@ -37,29 +37,13 @@ pub enum MarkupKind {
     Markdown,
 }
 
-pub async fn find_hover<H: CompilerHost>(
-    source: &str,
-    position: Position,
-    uri: &str,
-    host: &H,
-) -> Option<HoverResult> {
-    let filename = uri_to_filename(uri);
-    let invocations = crate::kiln::prepare_invocations(&filename, source, host);
-    let annotated = annotate_with_invocations(source, host, Some(&filename), invocations)
-        .await
-        .ok()?;
-
-    let module = annotated.entry_module_source.clone();
-    let line = position.line as usize + 1;
-    let col = position.character as usize + 1;
-
-    let cursor = annotated.cursor_at(&module, line, col)?;
+#[must_use]
+pub(crate) fn find_hover(ctx: &QueryContext, position: Position) -> Option<HoverResult> {
+    let cursor = ctx.cursor_at(position)?;
     let symbol = cursor.def_symbol()?;
     let signature = match &symbol.kind {
-        SymbolKind::Variable(_) => {
-            render_local_binding(&annotated, &symbol.defined_at, &symbol.name)?
-        }
-        _ => render_item_signature(&annotated, symbol)?,
+        SymbolKind::Variable(_) => render_local_binding(ctx.sem, &symbol.defined_at, &symbol.name)?,
+        _ => render_item_signature(ctx.sem, symbol)?,
     };
 
     let cursor_span = cursor.span()?;
@@ -68,13 +52,13 @@ pub async fn find_hover<H: CompilerHost>(
             kind: MarkupKind::Markdown,
             value: format!("```wado\n{signature}\n```"),
         },
-        range: Some(span_to_range(&cursor_span)),
+        range: Some(span_to_range(&cursor_span, Some(ctx.source), ctx.encoding)),
     })
 }
 
 /// Render a signature for the given item-level symbol.
-fn render_item_signature(annotated: &Annotated, symbol: &Symbol) -> Option<String> {
-    let module = annotated.modules.get(&symbol.defined_at.module)?;
+fn render_item_signature(sem: &Semantics, symbol: &Symbol) -> Option<String> {
+    let module = sem.modules.get(&symbol.defined_at.module)?;
     for item in &module.items {
         if let Some(rendered) = item_info(item, &symbol.name) {
             return Some(rendered);
@@ -84,8 +68,8 @@ fn render_item_signature(annotated: &Annotated, symbol: &Symbol) -> Option<Strin
 }
 
 /// Render a hover line for a local binding (`let x: T` / `fn f(x: T)`).
-fn render_local_binding(annotated: &Annotated, def_key: &SymbolKey, name: &str) -> Option<String> {
-    let module = annotated.modules.get(&def_key.module)?;
+fn render_local_binding(sem: &Semantics, def_key: &SymbolKey, name: &str) -> Option<String> {
+    let module = sem.modules.get(&def_key.module)?;
     render_local_in_module(module, def_key.ast_id, name)
 }
 
@@ -376,39 +360,11 @@ fn item_info(item: &Item, name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use indexmap::IndexMap;
-    use wado_compiler::{Diagnostic as CompilerDiagnostic, SourceError};
-
-    struct TestHost {
-        sources: IndexMap<String, Vec<u8>>,
-    }
-
-    impl TestHost {
-        fn new(path: &str, source: &str) -> Self {
-            let mut sources = IndexMap::new();
-            sources.insert(path.to_string(), source.as_bytes().to_vec());
-            Self { sources }
-        }
-    }
-
-    impl CompilerHost for TestHost {
-        async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-            self.sources
-                .get(path)
-                .cloned()
-                .ok_or_else(|| SourceError::NotFound {
-                    path: path.to_string(),
-                })
-        }
-
-        fn emit_diagnostic(&self, _diagnostic: CompilerDiagnostic) {}
-    }
+    use crate::test_support::MapHost;
+    use crate::text::PositionEncoding;
 
     async fn hover_at(source: &str, line: u32, character: u32) -> Option<HoverResult> {
-        let path = "/test.wado";
-        let uri = format!("file://{path}");
-        let host = TestHost::new(path, source);
-        find_hover(source, Position { line, character }, &uri, &host).await
+        hover_at_with_encoding(source, line, character, PositionEncoding::Utf16).await
     }
 
     #[test]
@@ -500,6 +456,43 @@ mod tests {
     }
 
     #[test]
+    fn for_of_keyword_no_synthetic_iter_hover() {
+        // The cursor on the `for` keyword of `for x of items { ... }` must
+        // never surface the elaborator's synthetic `__iter_N` local. A hover
+        // here should return None (the cursor lands between recognised
+        // names) or, at most, surface the user's loop variable — never
+        // a `let __iter_N` line that exposes compiler internals.
+        futures::executor::block_on(async {
+            let source = concat!(
+                "fn f(items: Array<i32>) -> i32 {\n",
+                "    let mut total = 0;\n",
+                "    for let item of items {\n",
+                "        total = total + item;\n",
+                "    }\n",
+                "    return total;\n",
+                "}\n",
+            );
+            let result = hover_at(source, 2, 4).await;
+            if let Some(r) = &result {
+                assert!(
+                    !r.contents.value.contains("__iter"),
+                    "hover on `for` exposed synthetic iter local: {}",
+                    r.contents.value
+                );
+                // The cursor isn't on a name the user wrote, so we should
+                // also not surface unrelated symbols (e.g. dragging the
+                // user into `Iterator::next` in core:prelude/array.wado).
+                assert!(
+                    !r.contents.value.contains("fn next")
+                        && !r.contents.value.contains("fn into_iter"),
+                    "hover on `for` jumped into the iterator impl: {}",
+                    r.contents.value
+                );
+            }
+        });
+    }
+
+    #[test]
     fn match_arm_binding_hover() {
         futures::executor::block_on(async {
             let source = concat!(
@@ -512,6 +505,93 @@ mod tests {
             );
             let result = hover_at(source, 2, 19).await.expect("hover on v");
             assert_eq!(result.contents.value, "```wado\nlet v\n```");
+        });
+    }
+
+    async fn hover_at_with_encoding(
+        source: &str,
+        line: u32,
+        character: u32,
+        encoding: PositionEncoding,
+    ) -> Option<HoverResult> {
+        let path = "/test.wado";
+        let uri = format!("file://{path}");
+        let host = MapHost::single(path, source);
+        let sem = wado_compiler::semantics(source, &host, Some(path)).await;
+        let ctx = QueryContext {
+            sem: &sem,
+            source,
+            uri: &uri,
+            encoding,
+        };
+        find_hover(&ctx, Position { line, character })
+    }
+
+    #[test]
+    fn hover_after_non_ascii_identifier_under_utf16() {
+        // Pre-existing bug: every query took `position.character + 1` as a
+        // compiler byte column, which treated UTF-16 code units as UTF-8
+        // bytes. Cursor positions past a multi-byte character on the same
+        // line drifted by `byte_len - 1` per character — silently breaking
+        // hover on every identifier that followed a non-ASCII string,
+        // template, or comment.
+        //
+        // The fixture puts a use of the parameter `x` on the same line as
+        // a comment containing a 3-byte UTF-8 character ('あ'). Under
+        // UTF-16 the LSP `character` index of `x` differs from its byte
+        // column; the conversion in `text::lsp_position_to_line_col` now
+        // bridges them.
+        futures::executor::block_on(async {
+            // Same-line non-ASCII variant: `あ` lives on the cursor line
+            // so the bug fires whether the conversion is wrong or right.
+            let source = concat!(
+                "fn f(x: i32) -> i32 {\n",
+                "    let _s: String = \"あ\"; return x;\n",
+                "}\n",
+            );
+            let line1 = "    let _s: String = \"あ\"; return x;";
+            let byte_in_line = line1.rfind('x').unwrap();
+            let utf16_in_line: u32 = line1[..byte_in_line]
+                .chars()
+                .map(|c| c.len_utf16() as u32)
+                .sum();
+            // Sanity: UTF-16 index differs from byte offset because of `あ`.
+            assert_ne!(
+                utf16_in_line as usize, byte_in_line,
+                "fixture must contain a multi-byte char before the cursor",
+            );
+
+            let result = hover_at_with_encoding(source, 1, utf16_in_line, PositionEncoding::Utf16)
+                .await
+                .expect("hover on return-position x under utf-16 encoding");
+            assert_eq!(result.contents.value, "```wado\nx: i32\n```");
+        });
+    }
+
+    #[test]
+    fn hover_on_well_formed_part_survives_unrelated_error() {
+        // Partial-result behaviour: a type-error elsewhere in the file must
+        // not blank out hover on the unrelated, well-formed function. The
+        // elaborator bails on the bad body, but the LSP should still surface
+        // signatures for whatever was successfully resolved before/around it.
+        futures::executor::block_on(async {
+            let source = concat!(
+                "fn add(a: i32, b: i32) -> i32 {\n",
+                "    return a + b;\n",
+                "}\n",
+                "fn broken() -> i32 {\n",
+                "    return \"not an i32\";\n", // type mismatch
+                "}\n",
+            );
+            let result = hover_at(source, 0, 4).await.expect("hover on `add`");
+            assert!(
+                result
+                    .contents
+                    .value
+                    .contains("fn add(a: i32, b: i32) -> i32"),
+                "got: {}",
+                result.contents.value,
+            );
         });
     }
 }
