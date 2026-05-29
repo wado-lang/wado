@@ -1199,6 +1199,20 @@ pub(super) struct FunctionContext {
     /// so the hook is a single `Option` discriminant check on the hot
     /// path.
     pub(super) assert_capture_ctx: Option<super::assert::AssertCaptureContext>,
+    /// Reify-side power-assert capture context. Populated by
+    /// [`super::reify::Reify::reify_assert`] while reifying the
+    /// condition; the [`super::reify::Reify::reify_expr`] entry
+    /// consults it to intercept scanner-flagged sub-expressions
+    /// (read from the recorded
+    /// [`super::sem::types::AssertCaptureInfo`]) and re-materialise
+    /// them as `let __vK = …;` bindings the panic template
+    /// references by `Local`. Independent from
+    /// [`Self::assert_capture_ctx`] so the production walk's
+    /// capture context can coexist if both phases ever ran on the
+    /// same context (they do not in the current orchestration —
+    /// reify owns the `FunctionContext` it builds — but the field
+    /// is small and the isolation is cheap).
+    pub(super) reify_assert_capture_ctx: Option<super::reify::ReifyAssertCaptureContext>,
 }
 
 impl FunctionContext {
@@ -1224,6 +1238,7 @@ impl FunctionContext {
             next_loop_id: 0,
             for_continue_labels: Vec::new(),
             assert_capture_ctx: None,
+            reify_assert_capture_ctx: None,
         }
     }
 
@@ -1282,6 +1297,7 @@ impl FunctionContext {
             next_loop_id: 0,
             for_continue_labels: Vec::new(),
             assert_capture_ctx: None,
+            reify_assert_capture_ctx: None,
         }
     }
 

@@ -62,9 +62,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::{self, Item, Module};
+use crate::ast::{self, AstId, Item, Module};
 use crate::compiler_host::CompilerHost;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
@@ -92,6 +92,43 @@ use super::tysys::TypeSystem;
 /// Stage 5). The skeleton lands first so the membership contract is
 /// reviewable; the call site flips later in the same WEP migration.
 #[allow(dead_code)]
+/// One reify-side power-assert capture slot. Mirrors
+/// [`super::assert::Capture`] but lives independently on
+/// [`super::types::FunctionContext::reify_assert_capture_ctx`] so the
+/// reify walk can run without sharing fields with the production
+/// `assert.rs` plumbing. Annotated source labels come from the recorded
+/// [`super::sem::types::AssertSlot::capture_label`]; AstIds come from
+/// [`super::sem::types::AssertSlot::ast_id`].
+pub(super) struct ReifyAssertSlot {
+    pub(super) ast_id: AstId,
+    /// `__v0`, `__v1`, … — the local name the panic template
+    /// references.
+    pub(super) name: String,
+    /// User-facing source-text label for the failure message.
+    pub(super) label: String,
+    /// `true` once the reify hook fired for this slot. Slots that
+    /// stay `false` had their AST node evaporate during reify (the
+    /// same evaporation paths annotate sees) and are skipped by the
+    /// template.
+    pub(super) emitted: bool,
+    /// Reified local index allocated by the hook. `None` until the
+    /// hook fires.
+    pub(super) local_index: Option<u32>,
+    /// Reified type id. `None` until the hook fires.
+    pub(super) type_id: Option<crate::tir::TypeId>,
+}
+
+/// Per-assert reify-side capture state. Pushed onto
+/// [`super::types::FunctionContext::reify_assert_capture_ctx`] before
+/// the condition reify walk; consumed afterwards to build the panic
+/// template.
+pub(super) struct ReifyAssertCaptureContext {
+    pub(super) slots: Vec<ReifyAssertSlot>,
+    pub(super) ast_id_to_slot: IndexMap<AstId, usize>,
+    pub(super) in_progress: IndexSet<AstId>,
+    pub(super) emitted_lets: Vec<TirStmt>,
+}
+
 pub(crate) struct Reify<'a, H: CompilerHost> {
     /// Pipeline-wide type knowledge. `&mut` only because reify may
     /// intern new monomorphic instances; the trait/impl tables are
@@ -1493,6 +1530,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::{TirExprKind, TypeTable};
 
+        // Power-assert capture hook (Gap 5 of WEP 2026-05-26). When
+        // the reify walk is inside an assert condition and the current
+        // sub-expression's AstId was flagged for capture by the
+        // recorded `AssertCaptureInfo`, divert into
+        // `reify_with_assert_capture`: reify the sub-expression
+        // normally, emit `let __vK = <reified>;` onto the context's
+        // pending-let buffer, and return `Local(__vK)` so the
+        // surrounding reify sees the binding in place of the original
+        // sub-expression. `in_progress` stops the hook from
+        // re-firing during the recursive reify call.
+        if let Some(actx) = ctx.reify_assert_capture_ctx.as_ref() {
+            let ast_id = expr.id();
+            if !actx.in_progress.contains(&ast_id) {
+                if let Some(&slot_idx) = actx.ast_id_to_slot.get(&ast_id) {
+                    return self.reify_with_assert_capture(slot_idx, expr, ctx, expected_type);
+                }
+            }
+        }
+
         // The expression's recorded type is the source of truth for
         // `TirExpr::type_id`. Falls back to `expected_type` (or
         // `UNKNOWN` when neither is available) for AST shapes that
@@ -1828,51 +1884,308 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )]
     }
 
-    /// Reify an `assert cond[, msg];` statement. The full power-
-    /// assert template (slot extraction into `__vK = …;` + the
-    /// captured-source message) requires re-running the
-    /// [`super::assert::CaptureScanner`] against the condition AST
-    /// in parallel with reify's walk; Gap 5's `assert_captures`
-    /// recording carries the slot↔AstId map for that replay.
+    /// Reify a sub-expression that was flagged for power-assert
+    /// capture. Reifies it normally (with the hook suppressed via
+    /// `in_progress`), allocates a fresh `__vK` local, pushes a
+    /// `let __vK = <reified>;` onto the context's
+    /// `emitted_lets`, and returns `Local(__vK)`. Mirrors
+    /// [`super::Elaborator::resolve_with_assert_capture`]
+    /// (assert.rs:373+).
+    fn reify_with_assert_capture(
+        &mut self,
+        slot_idx: usize,
+        expr: &ast::Expr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<crate::tir::TypeId>,
+    ) -> TirExpr {
+        use crate::tir::{TirExprKind, TirStmtKind};
+
+        let ast_id = expr.id();
+        ctx.reify_assert_capture_ctx
+            .as_mut()
+            .expect("reify_assert_capture_ctx present (guarded by caller)")
+            .in_progress
+            .insert(ast_id);
+
+        let resolved = self.reify_expr(expr, ctx, expected_type);
+
+        ctx.reify_assert_capture_ctx
+            .as_mut()
+            .expect("reify_assert_capture_ctx survives recursive reify")
+            .in_progress
+            .shift_remove(&ast_id);
+
+        let type_id = resolved.type_id;
+        let cap_span = resolved.span;
+        let cap_name = ctx
+            .reify_assert_capture_ctx
+            .as_ref()
+            .expect("reify_assert_capture_ctx survives recursive reify")
+            .slots[slot_idx]
+            .name
+            .clone();
+
+        // `defining_ast_id = None` so the synthetic `__vK` locals
+        // don't enter `local_symbols` (mirrors production).
+        let local_index = ctx.add_local(cap_name.clone(), type_id, false, None);
+
+        let cap_ctx = ctx
+            .reify_assert_capture_ctx
+            .as_mut()
+            .expect("reify_assert_capture_ctx survives recursive reify");
+        cap_ctx.slots[slot_idx].emitted = true;
+        cap_ctx.slots[slot_idx].local_index = Some(local_index);
+        cap_ctx.slots[slot_idx].type_id = Some(type_id);
+        cap_ctx.emitted_lets.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: cap_name.clone(),
+                local_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id,
+                value: resolved,
+                skip_value_copy: false,
+            },
+            cap_span,
+        ));
+
+        TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name: cap_name,
+            },
+            type_id,
+            cap_span,
+        )
+    }
+
+    /// Reify an `assert cond[, msg];` statement with full power-
+    /// assert expansion. Mirrors [`super::Elaborator::desugar_assert`]
+    /// (assert.rs:65+):
     ///
-    /// Stage 5 lands the simplified shape that matches Wado's
-    /// runtime semantics: `if !cond { panic("assertion failed at
-    /// <file>:<line>") }`. The power-assert message reconstruction
-    /// is staged as a follow-up — the recording is in place; the
-    /// playback is the remaining work.
+    /// ```text
+    /// __assert_N: {
+    ///     let __v0 = <subexpr0>;
+    ///     ...
+    ///     let __cond = <rewritten condition>;
+    ///     if !__cond {
+    ///         panic(`Assertion failed in {#function} at {#file}:{#line}[: msg]
+    /// condition: <source>
+    /// <label0>: {__v0:?}
+    /// ...`);
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// The captures themselves come from the recorded
+    /// [`super::sem::types::AssertCaptureInfo`] — annotate's
+    /// [`super::assert::CaptureScanner`] already decided which
+    /// sub-expressions to capture; reify reuses the decision so the
+    /// two phases stay in lockstep. The hook lives in `reify_expr`'s
+    /// entry: when it sees a flagged AstId, it routes through
+    /// [`Self::reify_with_assert_capture`] to materialise the
+    /// `let __vK = …;` binding and substitute `Local(__vK)`.
     fn reify_assert(
         &mut self,
         assert_stmt: &ast::AssertStmt,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
         use crate::tir::{
-            CallArg, FunctionRef, TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable,
+            CallArg, FunctionRef, TirBlock, TirExprKind, TirStmtKind, TirTemplatePart, TirUnaryOp,
+            TypeTable,
         };
 
         let span = assert_stmt.span;
-        let cond_tir = self.reify_expr(&assert_stmt.condition, ctx, Some(TypeTable::BOOL));
+
+        // Capture-slot table from the recorded `AssertCaptureInfo`.
+        // Each slot in the recorded order gets a dense `__v{idx}` name
+        // so the failure-message lines reference predictable locals.
+        // We always install the context — even if `assert_captures`
+        // has no record (e.g. an empty / pure-literal condition), the
+        // hook check is a single `Option` discriminant and the empty
+        // `ast_id_to_slot` map intercepts nothing.
+        let info = self.sem.types.assert_captures.get(&assert_stmt.id);
+        let (slot_meta, ast_id_to_slot): (
+            Vec<(AstId, String)>,
+            IndexMap<AstId, usize>,
+        ) = if let Some(info) = info {
+            let mut meta: Vec<(AstId, String)> = Vec::with_capacity(info.slots.len());
+            let mut map: IndexMap<AstId, usize> = IndexMap::default();
+            for (i, s) in info.slots.iter().enumerate() {
+                meta.push((s.ast_id, s.capture_label.clone()));
+                map.insert(s.ast_id, i);
+            }
+            (meta, map)
+        } else {
+            (Vec::new(), IndexMap::default())
+        };
+
+        // Scope the synthetic `__vK` / `__cond` locals so they cannot
+        // leak past this assert's expansion.
+        ctx.enter_scope();
+
+        ctx.reify_assert_capture_ctx = Some(ReifyAssertCaptureContext {
+            slots: slot_meta
+                .iter()
+                .enumerate()
+                .map(|(i, (ast_id, label))| ReifyAssertSlot {
+                    ast_id: *ast_id,
+                    name: format!("__v{i}"),
+                    label: label.clone(),
+                    emitted: false,
+                    local_index: None,
+                    type_id: None,
+                })
+                .collect(),
+            ast_id_to_slot,
+            in_progress: IndexSet::default(),
+            emitted_lets: Vec::new(),
+        });
+
+        // Walk the unmodified AST condition. The hook intercepts
+        // flagged sub-expressions and registers `let __vK = …;`
+        // bindings onto the context as it goes.
+        //
+        // `expected_type = None` — a `Bool` expectation would
+        // propagate into branch types of an `Expr::If`/`Expr::Match`
+        // inside the condition and reject valid asserts whose
+        // branches produce a non-bool value compared against
+        // something else. Mirrors assert.rs:108.
+        let cond_tir = self.reify_expr(&assert_stmt.condition, ctx, None);
+
+        let actx = ctx
+            .reify_assert_capture_ctx
+            .take()
+            .expect("reify_assert_capture_ctx survives condition reify");
+
+        let mut inner_stmts: Vec<TirStmt> = Vec::with_capacity(actx.emitted_lets.len() + 2);
+        inner_stmts.extend(actx.emitted_lets);
+
+        // `let __cond = <cond_tir>;`
+        let cond_type = cond_tir.type_id;
+        let cond_name = "__cond".to_string();
+        let cond_local_index = ctx.add_local(cond_name.clone(), cond_type, false, None);
+        inner_stmts.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: cond_name.clone(),
+                local_index: cond_local_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id: cond_type,
+                value: cond_tir,
+                skip_value_copy: false,
+            },
+            span,
+        ));
+
+        // `!Local(__cond)` for the if-condition.
+        let cond_ref = TirExpr::new(
+            TirExprKind::Local {
+                index: cond_local_index,
+                name: cond_name,
+            },
+            cond_type,
+            span,
+        );
         let neg_cond = TirExpr::new(
             TirExprKind::Unary {
                 op: TirUnaryOp::Not,
-                expr: Box::new(cond_tir),
+                expr: Box::new(cond_ref),
             },
             TypeTable::BOOL,
             span,
         );
 
+        // Build the panic template. Mirrors
+        // `build_assert_panic_template` (assert.rs:239+) — header
+        // (`Assertion failed in <fn> at <file>:<line>[: <msg>]`),
+        // then the `condition: <source>` line, then one
+        // `<label>: {__vK:?}` line per emitted slot.
         let string_type = self
             .tysys
             .type_table
             .borrow_mut()
             .make_compiler_struct(crate::compiler_item::CompilerItem::String);
-        let panic_msg = TirExpr::new(
-            TirExprKind::StringLiteral(format!(
-                "Assertion failed in {} at {}:{}",
-                ctx.function_name, self.current_module_source, span.line,
-            )),
-            string_type,
-            span,
-        );
+        let line = span.line as u64;
+        let mut parts: Vec<TirTemplatePart> = vec![
+            TirTemplatePart::Literal("Assertion failed in ".to_string()),
+            TirTemplatePart::Interpolation {
+                expr: Box::new(TirExpr::new(
+                    TirExprKind::StringLiteral(ctx.function_name.clone()),
+                    string_type,
+                    span,
+                )),
+                format_spec: None,
+            },
+            TirTemplatePart::Literal(" at ".to_string()),
+            TirTemplatePart::Interpolation {
+                expr: Box::new(TirExpr::new(
+                    TirExprKind::StringLiteral(self.current_module_source.to_string()),
+                    string_type,
+                    span,
+                )),
+                format_spec: None,
+            },
+            TirTemplatePart::Literal(":".to_string()),
+            TirTemplatePart::Interpolation {
+                expr: Box::new(TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: line,
+                        repr: line.to_string(),
+                    },
+                    TypeTable::I32,
+                    span,
+                )),
+                format_spec: None,
+            },
+        ];
+        if let Some(msg) = &assert_stmt.message {
+            parts.push(TirTemplatePart::Literal(": ".to_string()));
+            let msg_tir = self.reify_expr(msg, ctx, None);
+            parts.push(TirTemplatePart::Interpolation {
+                expr: Box::new(msg_tir),
+                format_spec: None,
+            });
+        }
+
+        let condition_source = crate::unparse::unparse_expr_simple(&assert_stmt.condition);
+        parts.push(TirTemplatePart::Literal(format!(
+            "\ncondition: {condition_source}\n"
+        )));
+
+        for slot in &actx.slots {
+            if !slot.emitted {
+                continue;
+            }
+            let (Some(local_index), Some(type_id)) = (slot.local_index, slot.type_id) else {
+                continue;
+            };
+            parts.push(TirTemplatePart::Literal(format!("{}: ", slot.label)));
+            let local_ref = TirExpr::new(
+                TirExprKind::Local {
+                    index: local_index,
+                    name: slot.name.clone(),
+                },
+                type_id,
+                span,
+            );
+            parts.push(TirTemplatePart::Interpolation {
+                expr: Box::new(local_ref),
+                format_spec: Some(crate::tir::TemplateFormatSpec {
+                    fill: None,
+                    align: None,
+                    sign_plus: false,
+                    alternate: false,
+                    zero_pad: false,
+                    width: None,
+                    precision: None,
+                    type_char: Some('?'),
+                }),
+            });
+            parts.push(TirTemplatePart::Literal("\n".to_string()));
+        }
+
+        let template_tir = TirExpr::new(TirExprKind::TemplateString { parts }, string_type, span);
 
         let panic_module_source = self.interner.borrow_mut().core("internal");
         let panic_call = TirExpr::new(
@@ -1884,7 +2197,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     method_info: None,
                 },
                 type_args: Vec::new(),
-                args: vec![CallArg::new(panic_msg, false)],
+                args: vec![CallArg::new(template_tir, false)],
             },
             TypeTable::NEVER,
             span,
@@ -1894,14 +2207,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             vec![TirStmt::new(TirStmtKind::Expr(panic_call), span)],
             span,
         );
-        let if_stmt = TirStmt::new(
+        inner_stmts.push(TirStmt::new(
             TirStmtKind::If {
                 condition: neg_cond,
                 then_block,
                 else_block: None,
             },
             span,
-        );
+        ));
+
+        ctx.exit_scope();
 
         // Wrap in `__assert_N:` LabeledBlock so the synthetic
         // counter on `FunctionContext` advances in lockstep with
@@ -1911,7 +2226,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         vec![TirStmt::new(
             TirStmtKind::LabeledBlock {
                 label: format!("__assert_{assert_serial}"),
-                block: TirBlock::new(vec![if_stmt], span),
+                block: TirBlock::new(inner_stmts, span),
             },
             span,
         )]
