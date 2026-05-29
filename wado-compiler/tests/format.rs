@@ -284,6 +284,87 @@ fn bar() {
 }
 
 #[test]
+fn test_format_preserves_assoc_const_leading_comment() {
+    let source = r"struct Foo {
+    x: i32,
+}
+
+impl Foo {
+    /// Doc on a const.
+    pub const A: i32 = 1;
+    // Line comment on another const.
+    pub const B: i32 = 2;
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("/// Doc on a const."),
+        "assoc const doc comment should be preserved: {formatted}"
+    );
+    assert!(
+        formatted.contains("// Line comment on another const."),
+        "assoc const line comment should be preserved: {formatted}"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+#[test]
+fn test_format_preserves_method_comment_after_const() {
+    // Regression: an associated const must not swallow the leading comment of
+    // the item that follows it.
+    let source = r"struct Foo {
+    x: i32,
+}
+
+impl Foo {
+    pub const A: i32 = 1;
+
+    /// Doc on the method after a const.
+    pub fn m(&self) -> i32 {
+        return self.x;
+    }
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("/// Doc on the method after a const."),
+        "method doc after a const should be preserved: {formatted}"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+#[test]
+fn test_format_preserves_assoc_type_leading_comment() {
+    let source = r"trait Container {
+    type Item;
+}
+
+impl Container for Foo {
+    /// Doc on an associated type.
+    type Item = i32;
+
+    /// Doc on the method after a type.
+    pub fn first(&self) -> i32 {
+        return 0;
+    }
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("/// Doc on an associated type."),
+        "assoc type doc comment should be preserved: {formatted}"
+    );
+    assert!(
+        formatted.contains("/// Doc on the method after a type."),
+        "method doc after an assoc type should be preserved: {formatted}"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+#[test]
 fn test_format_comment_inside_nested_block() {
     let source = r"fn run() {
     if true {
