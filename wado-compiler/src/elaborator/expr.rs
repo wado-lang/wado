@@ -1156,6 +1156,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let type_id = self
                 .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &resolved_args)
                 .unwrap_or(TypeTable::UNKNOWN);
+            self.record_func_ref_instantiation(ident.id, &resolved_args, type_id);
             return TirExpr::new(
                 TirExprKind::FuncRef {
                     module_source,
@@ -1190,6 +1191,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let type_id = self
                         .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &inferred)
                         .unwrap_or(TypeTable::UNKNOWN);
+                    self.record_func_ref_instantiation(ident.id, &inferred, type_id);
                     return TirExpr::new(
                         TirExprKind::FuncRef {
                             module_source,
@@ -1224,6 +1226,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: ident.span,
         });
         TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
+    }
+
+    /// Record the resolved type arguments and instance type of a generic
+    /// function-reference identifier so reify can rebuild the same
+    /// `FuncRef { type_args }`. Without the recorded args reify would emit
+    /// `FuncRef { type_args: [] }`, leaving the name unmangled after
+    /// monomorphization and tripping the `lower::closure` invariant
+    /// ("FuncRef should be wrapped in a Closure"). Non-generic references
+    /// pass an empty `type_args` and are skipped — they need no record.
+    fn record_func_ref_instantiation(
+        &mut self,
+        ident_id: AstId,
+        type_args: &[TypeId],
+        instance_type: TypeId,
+    ) {
+        if type_args.is_empty() {
+            return;
+        }
+        self.sem.types.generic_instantiations.insert(
+            ident_id,
+            super::sem::types::GenericInstantiation {
+                type_args: type_args.to_vec(),
+                instance_type,
+            },
+        );
     }
 
     /// Look up the AST [`ast::Function`], defining module, and the name the

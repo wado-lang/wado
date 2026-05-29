@@ -1759,6 +1759,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::Unary(unary) => {
                 let op = ast_unary_op_to_tir(unary.op);
                 let inner = self.reify_expr(&unary.expr, ctx, None);
+                // Track address-taken locals for `&x` / `&mut x`, mirroring
+                // `Elaborator::resolve_unary` (operators.rs:834). The
+                // boxing pass (`lower::plan::boxing`) reads
+                // `TirFunction::address_taken_locals` to retag a borrowed
+                // local's declaration to its box type, so that mutation
+                // through the reference (e.g. `*slot = other_fn`) writes
+                // back to the original slot. Without this the local stays
+                // unboxed and `&mut local` boxes a throwaway copy.
+                if matches!(
+                    op,
+                    crate::tir::TirUnaryOp::Ref | crate::tir::TirUnaryOp::MutRef
+                ) && let TirExprKind::Local { index, .. } = &inner.kind
+                {
+                    ctx.address_taken_locals.insert(*index);
+                }
                 TirExpr::new(
                     TirExprKind::Unary {
                         op,
@@ -5849,10 +5864,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if let ast::Expr::Ident(ident) = &call.callee
             && !ident.name.contains("::")
             && let Some(local) = ctx.lookup(&ident.name)
-            && matches!(
-                self.tysys.type_table.borrow().get(local.type_id),
-                crate::tir::ResolvedType::Function { .. },
-            )
+            && {
+                // The callee may be a bare `fn(...)` value or a reference
+                // to one (`&fn(...)`, `&mut fn(...)`), possibly behind a
+                // fn-type newtype. Mirror `Elaborator::as_fn_signature`:
+                // peel references and the ultimate base type before
+                // checking for `Function`.
+                let table = self.tysys.type_table.borrow();
+                let base = table.get_ultimate_base_type(table.peel_refs(local.type_id));
+                matches!(table.get(base), crate::tir::ResolvedType::Function { .. })
+            }
         {
             let local_index = local.index;
             let local_type_id = local.type_id;
@@ -5863,6 +5884,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 },
                 local_type_id,
                 ident.span,
+            );
+            // Auto-deref a `&fn` / `&mut fn` callee down to the function
+            // value, exactly as `build_indirect_call`'s final
+            // `deref_to_value` does in the production path.
+            let callee_expr = super::Elaborator::<H>::deref_to_value_static(
+                callee_expr,
+                ident.span,
+                &self.tysys.type_table,
             );
             let arg_exprs: Vec<TirExpr> = call
                 .args
@@ -5886,11 +5915,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (call.rs:248+).
         if !matches!(&call.callee, ast::Expr::Ident(_)) {
             let callee_expr = self.reify_expr(&call.callee, ctx, None);
-            let is_fn = matches!(
-                self.tysys.type_table.borrow().get(callee_expr.type_id),
-                crate::tir::ResolvedType::Function { .. },
-            );
+            let is_fn = {
+                let table = self.tysys.type_table.borrow();
+                let base = table.get_ultimate_base_type(table.peel_refs(callee_expr.type_id));
+                matches!(table.get(base), crate::tir::ResolvedType::Function { .. })
+            };
             if is_fn {
+                // Auto-deref a `&fn` / `&mut fn` callee, matching
+                // `build_indirect_call`'s `deref_to_value` in production.
+                let callee_expr = super::Elaborator::<H>::deref_to_value_static(
+                    callee_expr,
+                    call.callee.span(),
+                    &self.tysys.type_table,
+                );
                 let arg_exprs: Vec<TirExpr> = call
                     .args
                     .iter()
