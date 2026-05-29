@@ -146,32 +146,44 @@ impl SubstitutionContext {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
-                ..
+                bounds,
+                assoc_type_bindings,
             } => {
                 // Substitute the underlying type param to get the concrete type
                 let concrete_id = self.substitute(param_id, type_table);
-                if concrete_id != param_id {
-                    // Direct lookup first
-                    if let Some(resolved) = type_table.resolve_assoc_type(concrete_id, &assoc_name)
-                    {
-                        return resolved;
-                    }
-                    // Newtype fallback: newtypes inherit associated types from their base type.
-                    let base_id = type_table.get_ultimate_base_type(concrete_id);
-                    if base_id != concrete_id
-                        && let Some(resolved) = type_table.resolve_assoc_type(base_id, &assoc_name)
-                    {
-                        return resolved;
-                    }
-                    // GenericInstance fallback: e.g. ArrayIter<i32>::Item -> i32
-                    if let Some(resolved) =
-                        type_table.resolve_generic_assoc_type(concrete_id, &assoc_name)
-                    {
-                        return resolved;
-                    }
+                // Direct lookup first
+                if let Some(resolved) = type_table.resolve_assoc_type(concrete_id, &assoc_name) {
+                    return resolved;
                 }
-                // Fallback: return the concrete type (param substitution)
-                concrete_id
+                // Newtype fallback: newtypes inherit associated types from their base type.
+                let base_id = type_table.get_ultimate_base_type(concrete_id);
+                if base_id != concrete_id
+                    && let Some(resolved) = type_table.resolve_assoc_type(base_id, &assoc_name)
+                {
+                    return resolved;
+                }
+                // GenericInstance fallback: e.g. ArrayIter<i32>::Item -> i32
+                if let Some(resolved) =
+                    type_table.resolve_generic_assoc_type(concrete_id, &assoc_name)
+                {
+                    return resolved;
+                }
+                // The associated type cannot be resolved yet because the
+                // projected parameter is still abstract (e.g. substituting
+                // `I::Item` with `I -> I`, or `I -> some other type param`).
+                // Preserve the projection over the substituted parameter
+                // rather than collapsing to the bare parameter, so later
+                // monomorphization can resolve `concrete::assoc_name`.
+                if concrete_id == param_id {
+                    type_id
+                } else {
+                    type_table.intern(ResolvedType::AssocTypeProjection {
+                        param_id: concrete_id,
+                        assoc_name,
+                        bounds,
+                        assoc_type_bindings,
+                    })
+                }
             }
             ResolvedType::BuiltinArray(elem) => {
                 let new_elem = self.substitute(elem, type_table);
@@ -1411,6 +1423,37 @@ impl TypeTable {
     ) {
         self.generic_assoc_type_defs
             .insert((base_struct_name, assoc_name), type_param_id);
+    }
+
+    /// Register associated-type resolutions for a freshly monomorphized struct.
+    ///
+    /// When a generic struct `Foo<T>` that implements a trait with `type Item = …`
+    /// is instantiated as the monomorphized struct `concrete_id` (a
+    /// [`ResolvedType::Struct`], which carries no type args), the projection
+    /// `Foo<…>::Item` can no longer be resolved through
+    /// [`Self::resolve_generic_assoc_type`] (that path only handles
+    /// `GenericInstance`). We therefore eagerly resolve each associated-type
+    /// definition registered for `base_name` against the instantiation
+    /// `substitution` and record the result keyed by `concrete_id`, so later
+    /// [`Self::resolve_assoc_type`] lookups succeed.
+    pub fn register_monomorphized_assoc_types(
+        &mut self,
+        concrete_id: TypeId,
+        base_name: &str,
+        substitution: &IndexMap<u32, TypeId>,
+    ) {
+        let defs: Vec<(String, TypeId)> = self
+            .generic_assoc_type_defs
+            .iter()
+            .filter(|((name, _), _)| name == base_name)
+            .map(|((_, assoc_name), &def_id)| (assoc_name.clone(), def_id))
+            .collect();
+        for (assoc_name, def_id) in defs {
+            let resolved = self.substitute_type_params(def_id, substitution);
+            if !self.contains_type_param(resolved) {
+                self.register_assoc_type_resolution(concrete_id, assoc_name, resolved);
+            }
+        }
     }
 
     /// Resolve an associated type for a `GenericInstance` type using generic definitions.

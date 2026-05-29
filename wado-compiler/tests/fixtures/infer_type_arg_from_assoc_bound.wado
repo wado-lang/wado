@@ -1,0 +1,44 @@
+// Regression: a type parameter that appears only inside another parameter's
+// associated-type-equality bound must be inferred from the call site instead
+// of being left unbound (which trapped codegen with "unsubstituted TypeParam").
+//
+// `T` here is determined by `I: Iterator<Item = T>`: once `I = Gen<i32>` is
+// inferred from the argument, `T` is `Gen<i32>::Item == i32`.
+
+struct Gen<T> {
+    items: Array<T>,
+    idx: i32,
+}
+
+impl<T> Iterator for Gen<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        if self.idx >= self.items.len() {
+            return null;
+        }
+        let v = self.items[self.idx];
+        self.idx += 1;
+        return Option::Some(v);
+    }
+}
+
+struct Pair<T, I: Iterator<Item = T>> {
+    a: T,
+    inner: I,
+}
+
+// `T` is never named in the parameter list — only in `I`'s bound.
+fn pair<T, I: Iterator<Item = T>>(seed: T, it: I) -> Pair<T, I> {
+    return Pair { a: seed, inner: it };
+}
+
+test "type param inferred via associated-type bound (no turbofish)" {
+    let g: Gen<i32> = Gen { items: [1, 2, 3], idx: 0 };
+    let mut p = pair(99, g);
+    assert p.a == 99;
+    assert p.inner.next() matches { Some(1) };
+    assert p.inner.next() matches { Some(2) };
+}
+
+__DATA__
+{"test": {}}

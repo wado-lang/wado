@@ -998,6 +998,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check trait bounds on function type arguments
         if !type_args.is_empty() {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
+            // Resolve any type parameter that appears only inside another
+            // parameter's associated-type-equality bound (e.g.
+            // `fn f<T, I: Iterator<Item = T>>`). The bounds check above
+            // registered the owner's associated types, so this can now
+            // project them.
+            self.infer_type_args_from_assoc_bounds(&callee, &mut type_args);
         }
 
         // Look up function return type
@@ -2045,6 +2051,67 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return vec![];
         }
         inferred
+    }
+
+    /// Resolve type parameters that appear only inside another parameter's
+    /// associated-type-equality bound, e.g. `fn f<T, I: Iterator<Item = T>>`.
+    ///
+    /// [`Self::infer_fn_type_args`] binds `I` from the argument but leaves `T`
+    /// unbound, because `T` never appears in a parameter type. For each bound
+    /// `Owner: Trait<Assoc = Target>` whose `Owner` is already inferred to a
+    /// concrete type, project that type's `Assoc` to bind `Target`. Without
+    /// this, `T` would survive monomorphization and trap codegen with an
+    /// "unsubstituted TypeParam" panic. Iterates to a fixpoint so chained
+    /// bounds resolve regardless of declaration order.
+    fn infer_type_args_from_assoc_bounds(&mut self, callee: &CalleeRef, type_args: &mut [TypeId]) {
+        let params = self.lookup_function_type_params(callee);
+        if params.len() != type_args.len() {
+            return;
+        }
+        loop {
+            let mut progressed = false;
+            for (owner_idx, param) in params.iter().enumerate() {
+                let owner_ty = type_args[owner_idx];
+                if self.is_unbound_type_param(owner_ty) {
+                    continue;
+                }
+                for bound in &param.bounds {
+                    for assoc in &bound.assoc_types {
+                        let Type::Named(named) = &assoc.ty else {
+                            continue;
+                        };
+                        let Some(target_idx) = params.iter().position(|p| p.name == named.name)
+                        else {
+                            continue;
+                        };
+                        if !self.is_unbound_type_param(type_args[target_idx]) {
+                            continue;
+                        }
+                        let resolved = {
+                            let tt = self.tysys.type_table.borrow();
+                            tt.resolve_assoc_type(owner_ty, &assoc.name)
+                                .or_else(|| tt.resolve_generic_assoc_type(owner_ty, &assoc.name))
+                        };
+                        if let Some(resolved) = resolved {
+                            type_args[target_idx] = resolved;
+                            progressed = true;
+                        }
+                    }
+                }
+            }
+            if !progressed {
+                break;
+            }
+        }
+    }
+
+    /// Whether `ty` is still an unbound generic parameter / pack (as opposed to
+    /// a concrete type inferred from the call site).
+    fn is_unbound_type_param(&self, ty: TypeId) -> bool {
+        matches!(
+            self.tysys.type_table.borrow().get(ty),
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+        )
     }
 
     /// Look up a generic function (current or imported) and produce a temporary

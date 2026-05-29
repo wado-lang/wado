@@ -1,0 +1,34 @@
+// Regression: a bare `null` literal as an operand of `==` / `!=` must infer
+// its `Option<T>` inner type from the other operand. Before the fix the `null`
+// stayed `Option<UNKNOWN>` and ICE'd in WIR build with
+// "Null with unresolved Option inner type".
+
+struct Holder {
+    v: Option<i32>,
+}
+
+test "null on rhs of == infers Option inner type" {
+    let some: Option<i32> = Option::Some(5);
+    let none: Option<i32> = null;
+
+    assert none == null;
+    assert some != null;
+    assert !(some == null);
+    assert !(none != null);
+}
+
+test "null on lhs of == infers Option inner type" {
+    let none: Option<i32> = null;
+    assert null == none;
+    assert null != Option::Some(1);
+}
+
+test "null compared against a struct field of Option type" {
+    let h = Holder { v: null };
+    assert h.v == null;
+    let h2 = Holder { v: Option::Some(7) };
+    assert h2.v != null;
+}
+
+__DATA__
+{"test": {}}
