@@ -6390,32 +6390,35 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         type_args: &[TypeId],
     ) -> TypeId {
         let lookup = self.type_lookup();
-        let Some(variant_info) = lookup.variant_case(variant_name) else {
-            return crate::tir::TypeTable::UNKNOWN;
+        let (payload, type_param_indices): (TypeId, Vec<u32>) = {
+            let Some(variant_info) = lookup.variant_case(variant_name) else {
+                return crate::tir::TypeTable::UNKNOWN;
+            };
+            let Some(case_data) = variant_info.cases.iter().find(|c| c.name == case_name) else {
+                return crate::tir::TypeTable::UNKNOWN;
+            };
+            // Extract the variant decl's type-param indices so the
+            // substitution map below is keyed by `index` — matching
+            // `TypeTable::substitute_type_params` (tir.rs:1480).
+            let indices: Vec<u32> = (0..variant_info.type_param_type_ids.len() as u32).collect();
+            (case_data.payload, indices)
         };
-        let Some(case_data) = variant_info.cases.iter().find(|c| c.name == case_name) else {
-            return crate::tir::TypeTable::UNKNOWN;
-        };
+        drop(lookup);
         if type_args.is_empty() {
-            return case_data.payload;
+            return payload;
         }
-        // Substitute decl type params with concrete `type_args` in the
-        // payload type.
-        let param_map: crate::hashmap::IndexMap<TypeId, TypeId> = variant_info
-            .type_param_type_ids
+        // Map TypeParam{index} → concrete `type_args[index]`. Recurse
+        // through containers (`Ref`, `BuiltinArray`, `GenericInstance`,
+        // `Function`, …) via `TypeTable::substitute_type_params`.
+        let substitution: crate::hashmap::IndexMap<u32, TypeId> = type_param_indices
             .iter()
             .zip(type_args.iter())
-            .map(|(&p, &t)| (p, t))
+            .map(|(&idx, &t)| (idx, t))
             .collect();
-        let _ = param_map;
-        // Stage 5 follow-up: full substitution needs the elaborator's
-        // `substitute_type_params_by_map`; until that helper is
-        // factored to a free function, fall back to the raw payload
-        // for non-generic cases (most variants in current fixtures)
-        // and accept the same `UNKNOWN` slot as
-        // `Elaborator::get_variant_case_payload_type` would for the
-        // un-substitutable path.
-        case_data.payload
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .substitute_type_params(payload, &substitution)
     }
 }
 
