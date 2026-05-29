@@ -405,197 +405,227 @@ migration; see Trade-offs.
       hover path. The stdlib snapshot seeds every map back into
       per-module storage so cached stdlib modules stay consistent.
 - [ ] **Stage 5 — `annotate_bodies` / `reify` split.** _In progress._
-      Recording half complete: every Gap (1–6, 9, 11, 12) is
-      wired end-to-end. Orchestration scaffold landed —
+      Recording half complete: every Gap (1–6, 9, 11, 12, 13)
+      is wired end-to-end. Orchestration scaffold landed —
       `WADO_REIFY=1` env-var opt-in routes
       `build_tir_from_state` through `Reify::reify_module` after
       the existing `resolve_module` walk populates
-      `ModuleSemantics`. Default-path tests (558) unchanged;
-      `WADO_REIFY=1` tests pass 556/558 (the two
-      `stdlib_snapshot` cases hit the residual tuple-for-of
-      `todo!`, the only common variant still pending).
-      `Reify<'a, H>` lands in `elaborator/reify.rs`
-      with a complete per-Item dispatch surface and the
-      `Reify::new` constructor the orchestration driver needs.
-      Decl items (`Enum`, `Flags`, `Newtype`, `Struct` modulo
-      field defaults, `Variant`, `Interface`, `Resource`,
-      `Global`, `Test`) are concrete. `reify_pattern` is
-      feature-complete (all nine variants). `reify_literal`
-      is feature-complete (every variant including the
-      host-driven `LocationFile` / `LocationLine` /
-      `LocationFunction` / `DataSection` / `IncludeStr` /
-      `IncludeBytes`). Body-walk TIR emission covers:
-      `Stmt::{Let (all patterns), Expr, Return, TaskReturn,
-      Break, Continue, If (Condition::Expr), Loop, Match,
-      While (Condition::Expr), For (Condition::Expr),
-      ForOf (IntoIterator path via Gap 6), Assert
-      (simplified), LabeledBlock}`; `Expr::{Literal, Block,
-      Ident (local + globals + imported globals + assoc
-      constants + free function refs + qualified
-      Variant::Case / Enum::Case / Flags::Member +
-      namespace-path), TupleLiteral, Cast, Unary, FieldAccess,
-      MethodCall, Call (free function + variant ctor), Match,
-      Matches, StructLiteral (named + anonymous), Range,
-      TemplateString, If (Condition::Expr), Assign,
-      CompoundAssign (simple lvalues), Binary (native +
-      operator-trait dispatch), Index (tuple + Index trait +
-      IndexValue trait via Gap 11 Index-side wiring), Closure
-      (Gap 4 capture replay), ComparisonChain (primitive
-      chains), Resume, LabeledBlock, Spread, TryOp (Option +
-      same-error-type Result)}`. Receiver adjustment shares
-      `adjust_receiver_for_self_kind_static`.
-      Body-walk reify is **558/558 unit-test green on both the
-      default path and the `WADO_REIFY=1` opt-in**, including
-      the stdlib snapshot. Stdlib bypass landed —
-      `Core` / `Wasi` / `Wasm` modules and snapshot-build
-      itself stay on the production path, isolating reify to
-      user-module compilation while it grows coverage.
-      `function_effects` records the canonicalised `with`
-      clause at the annotate phase so reify can reproduce the
-      `Vec<EffectRef>` shape without needing the transient
-      `current_effect_param_decls` scope. `static_method_dispatch`
-      records every resolved free / namespaced / static-method
-      `FunctionRef` so reify replays the same TIR `Call` shape
-      (module_source, mangled name, monomorph_info, method_info)
-      without re-running impl lookup. The sequence /
-      key-value coercion gaps land too — `sequence_coercions`
-      and `key_value_coercions` annotations record the
-      resolved `SequenceLiteralBuilder` / `KeyValueLiteralBuilder`
-      impl data (builder/element/value types, self-kind,
-      trait/builder names with type args, impl module source,
-      newtype-cast target, new-vs-legacy API flag), and reify's
-      `reify_sequence_coercion` / `reify_key_value_coercion`
-      rebuild the same `__seq_lit:` / `__kv_lit:` desugar
-      blocks deterministically. Struct field defaults reify via
-      the per-struct `FunctionContext` (`struct:<name>`),
-      matching `Elaborator::resolve_struct` (item.rs:461)
-      byte-for-byte. `ForOfIteratorInfo::iter_type` records the
-      resolved `into_iter()` return type so the synthesised
-      `let mut __iter_N = …;` is typed concretely and the
-      subsequent `__iter.next()` MethodCall resolves under
-      monomorph. `MethodDispatch::param_is_mut` carries
-      `lookup_method_param_is_mut`'s result so reify zips it
-      with reified args to produce CallArg `is_mut` flags that
-      match production. `index_assign_dispatch` records the
-      resolved `IndexAssign` trait dispatch so reify emits
-      `arr.index_assign(i, v)` for `arr[i] = v` /
-      `arr[i] OP= v` (previously a no-op Assign through an
-      Index target). Call type-args read both
-      `call.type_args` (explicit turbofish) and
-      `generic_instantiations[call.id]` (inferred) so generic
-      free / static / builtin calls round-trip. Global writes
-      (`g = v` / `g OP= v`) lower to `GlobalVarSet` matching
-      production's `assign_to_target` (operators.rs:1192+).
-      Closure captures resolve through `lookup_or_capture` so a
-      closure body referencing an outer-scope binding lands as
-      `TirExprKind::Capture` (or `Deref(Capture)` for `__ref_v`
-      mut-capture proxies), matching production's `resolve_ident`
-      (expr.rs:534+). Generic-variant case payloads substitute
-      `TypeParam{index}` → concrete `type_args[index]` via
-      `TypeTable::substitute_type_params` so a pattern like
-      `Option::Some(v)` for `x: Option<i32>` binds `v` as
-      `i32` (previously a raw `TypeParam{T,0}` leaked all the
-      way to WIR build's `translate_function_bodies` and
-      panicked at the codegen-time validator). Default-argument
-      padding for free-function and method calls mirrors
-      production's `pad_args_with_defaults` (call.rs:1853+) and
-      `method_call.rs:481+` — reify clones each missing trailing
-      default expression, `substitute_idents` the explicit args,
-      and `reify_expr`s the result. `MethodDispatch` annotations
-      carry `param_names` and `param_defaults` so the replay
-      runs without re-running method lookup. Anonymous struct
-      literals (`{ x: 1, y: 2 }`) read their registered
-      `TypeId` directly from `expression_types` (rather than
-      re-deriving the deterministic name from reified field
-      types, which can diverge by an evaporated coercion
-      wrapper); production no longer drains
-      `pending_anonymous_structs` so reify sees the registered
-      struct decls. Power-assert template reconstruction reads
-      the recorded `AssertCaptureInfo` and replays production's
-      capture-hook expansion: a `ReifyAssertCaptureContext` on
-      `FunctionContext` intercepts each flagged sub-expression
-      at `reify_expr`'s entry, materialises `let __vK = …;` for
-      it, and the panic template emits `condition: <source>`
-      plus one `<label>: {__vK:?}` line per emitted slot.
-      Variant-ctor detection runs before the
-      `static_method_dispatch` arm of `reify_call` so
-      `Option::Some(42)` lowers to `VariantConstruct` instead of
-      a `Call` against a non-existent function.
-      Closure-block return type is inferred via
-      `find_return_type_in_block` (same helper production uses
-      in closure.rs:276+) so `|| { return "hello"; }` returns
-      `String`, not `()`. `ComparisonChain` single-comparison
-      operator-trait dispatch records on `chain.id` (matching
-      production at operators.rs:1346) and reify emits the
-      `Eq::eq` / `Ord::cmp` MethodCall + Ord wrap shape
-      (`cmp == Less`, `cmp != Greater`, …) via the new
-      `wrap_ord_bool_from_cmp` helper. `Self` substitution in
-      impl-method signatures: `fn eq(&self, other: &Self)` now
-      resolves `&Self` to `&Pair<i32>` (etc.) via the new
-      `resolve_type_with_self` helper, mirroring production's
-      `trait_ctx.self_type` plumbing. `LetStmt.is_mut` is now
-      honoured on `Ident`-pattern bindings (the arm previously
-      hardcoded `is_mut: false` so `let mut x = …` lost
-      mutability and downstream `&mut x` borrows failed wasm
-      validation). `reify_ident` for `Local` / `Capture`
-      reads the variable's stored type rather than
-      `expression_types[ident.id]`: template-string
-      interpolation parses each `{expr}` through a fresh
-      `Parser` (parser.rs:5175) whose `next_ast_id` restarts
-      at 0, so two interpolations like `{g} and n1={n1}`
-      collide on `AstId(0)` and the second resolution
-      overwrites the first in `expression_types` — the Local
-      already carries its declared type and is the only
-      authoritative source. Under these annotations the E2E
-      suite at `-O0` + `-O2` reaches **1757 / 2654 fixtures
-      passing under `WADO_REIFY=1`** (878.5 per level, +106.5
-      from the 772 single-level baseline; the
-      `expression_types` fix alone unlocked +102 fixtures by
-      itself).
-      Concrete arms cover every
-      `reify_pattern` variant, every `reify_literal` variant
-      (host-driven included), every `reify_ident` shape
-      (local / current+imported globals / assoc constants /
-      free function refs / qualified Variant::Case /
-      Enum::Case / Flags::Member / namespace path), every
-      `reify_stmt` variant (every Let pattern, full
-      Condition::LetChain for If/While/For, all three
-      `ForOf` paths via the tuple-unroll + variadic-defer +
-      iterator dispatch), and every `reify_expr` variant
-      (full Call dispatch — free function / variant ctor /
-      closure-call / indirect-call / namespace-path /
-      qualified static method; full Index — tuple constant /
-      Index trait / IndexValue trait; full Closure with
-      Gap 4 capture replay; full TryOp — Option +
-      same-err Result + mismatched-err Result through
-      `reify_from_call`; ComparisonChain; CompoundAssign;
-      Range; TemplateString; StructLiteral named + anonymous;
-      Matches; Resume; LabeledBlock; Spread; full impl-block
-      walk via Gap 12's `ImplFacts` record).
-      Remaining gaps (largest failure categories in the
-      residual ~530 per-level fixtures): power-assert
-      slot-extraction template reconstruction (assert.rs
-      desugar — the recorded `AssertCaptureInfo` is in
-      `sem.types` but reify still emits the basic header
-      message without the per-slot `{__vK:?}` interpolation;
-      affects every `assert <cond>` fixture with non-trivial
-      cond); generic-method monomorphization name resolution
-      (mangled `Pair<i32>^Ord::cmp` reaches WIR-build
-      unresolved); struct/array type-identity divergence at
-      `-O0` (WIR-build sees two distinct `(ref $type)` for
-      what production resolves to a single registered type);
-      Format trait dispatch in template strings (`{x:?}` on
-      user types reaches WIR-build with the trait method
-      unresolved); effect handler `with` expression;
-      `MethodCall::IndexMutMethodCall` synthesis;
-      `CompoundAssign` IndexMut-target rewrite;
-      ComparisonChain non-primitive operator-trait dispatch.
-      Dead-code removal (drop the existing combined walk's
-      TIR-emission half + flip `WADO_REIFY` default-on) is
-      the final cleanup once the residual `todo!`s land and
-      the E2E suite confirms equivalence.
+      `ModuleSemantics`. Reify body walk covers every decl, every
+      `Stmt`/`Pattern`/`Literal`/`Ident` variant, every `Expr`
+      variant (full Call dispatch, Index, Closure with Gap 4
+      capture replay, TryOp, ComparisonChain, CompoundAssign,
+      Range, TemplateString, StructLiteral named + anonymous,
+      Matches, Resume, LabeledBlock, Spread, impl-block via
+      Gap 12, WithHandler via Gap 13, power-assert template
+      reconstruction via `ReifyAssertCaptureContext`,
+      default-argument padding for free + method calls,
+      variant-ctor before `static_method_dispatch`,
+      closure-block return inference, `ComparisonChain`
+      operator-trait dispatch with Ord wrap, `Self`
+      substitution in impl methods). Stdlib bypass keeps
+      `Core` / `Wasi` / `Wasm` modules and snapshot construction
+      on the production path. Under these annotations the E2E
+      suite reaches **1757 / 2654 fixtures passing under
+      `WADO_REIFY=1`** at `-O0` + `-O2` (878.5 per level,
+      +106.5 from the 772 single-level baseline).
+      See `### Stage 5 handover` below for the remaining work
+      and the gotchas encountered to date.
 - [ ] **Stage 6 — Liveness and DCE.**
 - [ ] **Stage 7 — Cleanup.**
+
+### Stage 5 handover
+
+The recording half is essentially complete: every gap has an
+annotation channel on `sem.types` and reify consumes it.
+What's left is per-shape parity in the reify walk plus the
+final orchestration cut.
+
+#### Remaining failure categories
+
+Per-level breakdown of the ~445 fixtures still failing under
+`WADO_REIFY=1`, largest first. Categories overlap (a fixture
+can fail at any phase from analyze to wasm validation).
+
+- **CM binding synthesis (http 54 + stream 17 = ~71 fixtures).**
+  HTTP-service fixtures fail at analyze with
+  `analysis error: missing resource 'Response' required by
+  '__cm_binding__Response_new'`. Production's CM binding
+  synthesis runs against the orchestration-produced
+  `TirModule`s; reify's emitted `TirModule` is missing the
+  binding scaffolding the synthesis expects. Likely needs a
+  reify pass over CM-related impl blocks plus the
+  resource-method binding generators (see
+  `wep-2026-02-15-cm-binding-synthesis.md`).
+- **Optimizer / WIR validation (~40 fixtures).**
+  Reify's TIR survives elaborate but trips wasm validation
+  after monomorph+lower+optimize. Typical symptom:
+  `type mismatch: expected (ref $type), found (ref $type)` or
+  `expected i32, found (ref $type)`. Two distinct WIR types
+  print the same name. Root causes seen: array-of-ref Box
+  wrapping divergence, exact vs non-exact ref types,
+  per-monomorph struct registrations missing under `-O0`.
+- **Match pattern edge cases (~23 fixtures).** Associated
+  constant patterns (`TokenKind::FOO => …`), `let`-destructure
+  ergonomics, and a few or-pattern + guard combinations.
+  Likely needs additional annotation channels for the
+  pattern-resolution side.
+- **Serde derive (~22 fixtures).** `#[derive(Deserialize)]`
+  emits synthesized impl methods that go through a different
+  code path; the recording for those synthesized AstIds
+  doesn't survive into reify.
+- **Effect handler residuals (~19 fixtures).** Single-effect
+  and simple bundled handlers pass; complex bundled forms
+  with closure capture + multi-interpolation templates still
+  fail at wasm validation (effect_handler_bundled.wado being
+  the canonical reproducer — error
+  `expected i32, found (ref $type) at offset 0x10e9`,
+  reached after the recent template-type fix).
+- **Trait dispatch (~17 fixtures).** Two subgroups:
+  - Generic-impl `trait_type_args` propagation: reify-built
+    `MethodCall` for `IndexMut<i32>::index_mut` arrives at
+    WIR-build with `trait_type_args: []`, even though
+    `LocalMethodName.trait_name == "IndexMut<i32>"`. Likely
+    needs `MethodDispatch.trait_type_args`.
+  - Wrong-method selection: `describe::<Player>(&p)` calls
+    `score()` where production calls `name()`. Suggests the
+    method index/name mapping divergence when the receiver
+    is a `&T` going through a `T: Trait1 + Trait2` bound.
+- **`IndexMut` desugar (~16 fixtures).** Both
+  `MethodCall::IndexMutMethodCall` (recording exists, replay
+  needs the inner IndexMut dispatch annotation) and
+  `CompoundAssign` IndexMut-target rewrite still emit raw
+  Index TIR that fails to lower.
+- **Literal coercion to call args (~few fixtures).**
+  `take_i64(42)` resolves `42` as i32 in reify (the literal's
+  recorded type at the call site stays the default).
+  `MethodDispatch` / `StaticMethodDispatch` should carry
+  `param_types` so reify can re-resolve numeric literals
+  with the expected type, mirroring production's call-site
+  re-coercion (call.rs:1110+).
+
+#### Gotchas seen in this session — read before continuing
+
+These are non-obvious traps that cost the previous worker
+multiple build cycles each. Every one of them was
+production-correct by accident (single-pass walk hid the
+underlying issue); reify's two-phase split exposes them.
+
+1. **`expression_types[ast_id]` is unreliable for repeated
+   parsed sub-expressions.** Template-string interpolation
+   parses each `{expr}` through a fresh sub-`Parser`
+   (parser.rs:5175) whose `next_ast_id` restarts at 0, so two
+   interpolations like `{g} and n1={n1}` collide on
+   `AstId(0)` and the second resolution overwrites the
+   first. Always prefer the authoritative storage (local /
+   capture / decl) over `expression_types` when one exists.
+   Any future sub-parser will hit the same trap. Fixed for
+   `reify_ident`'s Local / Capture arms in `cacf2901` —
+   audit other `expression_types.get` sites if you see
+   "wrong type after second occurrence" symptoms.
+2. **Production sometimes `drain`s `sem.decls` collections
+   during its body walk.** Reify reads `sem` after that walk,
+   so anything drained is gone.
+   `pending_anonymous_structs` was the example
+   (dcea64f7) — production's
+   `Elaborator::resolve_module` now clones instead. Audit
+   `pending_*` fields on `ModuleDecls` whenever you find
+   reify silently dropping decl-like state.
+3. **`LetStmt.is_mut` lives on the stmt, not just the
+   pattern.** `let mut x = …;` parses to `LetStmt { is_mut:
+   true, pattern: Pattern::Ident(...) }`, not
+   `Pattern::MutIdent`. The reify arm previously hardcoded
+   `is_mut: false` for the `Ident` pattern. Production never
+   hit it because its single walk re-uses the per-pattern
+   resolver. The bug was silent at `-O2` (optimizer
+   propagated through) and only fired at `-O0` when `&mut x`
+   borrows hit wasm validation.
+4. **Block-body closures need
+   `Elaborator::find_return_type_in_block`.** `|| { return
+   "hello"; }` has a body whose tail `type_id` is `NEVER` /
+   `UNIT`; the closure's logical return is the returned
+   value's type. Use the production helper (closure.rs:276+)
+   verbatim — it knows about every divergent shape (`if cond
+   { return … }` with no `else`, `match` arms, panic, …).
+5. **`Self` doesn't resolve in reify type lookups.**
+   Production's `resolve_named_type` consults
+   `trait_ctx.self_type` (type_resolution.rs:240); reify
+   has no such context. For impl-method param/return types,
+   substitute `Self` against the recorded
+   `ImplFacts.self_type` before delegating to
+   `resolve_type_in_scope`. The current
+   `resolve_type_with_self` covers bare `Self` and `&Self` /
+   `&mut Self` — extend it (Self inside `Vec<Self>` etc.) if
+   future fixtures require.
+6. **Variant-constructor detection must run before
+   `static_method_dispatch`.** Annotate records every
+   call's `FunctionRef` on `static_method_dispatch`
+   (call.rs:1146+), including variant ctors like
+   `Option::Some(42)`. If reify's
+   `static_method_dispatch` arm fires first, the variant ctor
+   becomes a `Call` against a function that doesn't exist.
+   Variant detection runs first as of `73a177bf`.
+7. **`pending_operator_ast_id` side-channel is the only
+   way to record operator-trait dispatch on a
+   `ComparisonChain`.** Production sets it in
+   `resolve_binary` for plain `BinaryExpr`, but
+   `desugar_comparison_chain` originally didn't set it for
+   the single-comparison path. Reify needs the
+   dispatch entry keyed on `chain.id`, not `binary.id`.
+   Wired in `c4ec298c`.
+8. **Default-argument padding for methods needs
+   `param_names` + `param_defaults` on
+   `MethodDispatch`.** Free-function padding can lookup
+   defaults from the function decl, but method defaults
+   come from `MethodInfo` (types.rs:1083+) which reify
+   doesn't compute. Carry them through `record_method_dispatch`.
+9. **Power-assert needs a reify-specific capture context.**
+   Production's `AssertCaptureContext` has private fields
+   you can't reach from reify; the channels of the two
+   walks shouldn't share state anyway. `ReifyAssertCaptureContext`
+   (a separate field on `FunctionContext`) plus a hook at
+   `reify_expr`'s top is the clean shape.
+10. **Anon struct names re-derive at reify time can
+    diverge from the registered name.** Annotate's name
+    derivation uses the elaborator-resolved field types;
+    reify's may use slightly different reified types (an
+    evaporated coercion wrapper, a different cache hit).
+    Read the registered `TypeId` from
+    `expression_types[struct_lit.id]` and skip the
+    re-derivation entirely.
+
+#### Recipe for adding a new reify gap
+
+The shape that has worked consistently:
+
+1. Pick the smallest failing fixture in the category.
+2. `WADO_REIFY=1 ./target/release/wado dump
+   --tir-monomorphized fixture.wado` and the same without
+   `WADO_REIFY=1`. Diff the two. The first divergent line is
+   the cut point.
+3. Find production's emitting site (the `elaborator/`
+   helper that produced the production line). Read what
+   state it consults — `trait_ctx`, `pending_*`, scoped
+   `Option<…>` channels. Decide whether the state can be
+   recorded as a per-`AstId` fact on `sem.types`.
+4. Add the annotation struct in
+   `elaborator/sem/types.rs`, the record call in the
+   production site, and the consume in reify. Mirror an
+   existing annotation pair (e.g. `MethodDispatch` or
+   `OperatorDispatch`) for the field shape.
+5. Run the fixture. If it still fails, dump again — the
+   diff is the next gap.
+6. Don't pre-derive in reify what annotate has already
+   computed. Always prefer reading the recorded fact over
+   re-running production logic.
+
+#### Endgame
+
+The dead-code removal (drop the production walk's TIR
+emission half + flip `WADO_REIFY` default-on) is the final
+cleanup once the residual gaps land and E2E confirms
+equivalence. The orchestration scaffold is already in
+place — `build_tir_from_state`'s reify branch (orchestration.rs:1136+)
+is the single flip site.
 
 ### Design notes (Stages 1–3)
 
