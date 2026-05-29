@@ -490,20 +490,21 @@ migration; see Trade-offs.
       closure body referencing an outer-scope binding lands as
       `TirExprKind::Capture` (or `Deref(Capture)` for `__ref_v`
       mut-capture proxies), matching production's `resolve_ident`
-      (expr.rs:534+). Under these annotations the E2E suite at
-      `-O0` reaches **729 / 1326 fixtures passing under
-      `WADO_REIFY=1`** (+106 from the 623 baseline). Open
-      gaps: generic-variant constructors (`Result::Ok(42)`,
-      `Option::Some(42)`, `MyOpt<T>::None`) reach codegen with
-      an unsubstituted `TypeParam`; the reify TIR is
-      byte-identical to production (`variant_type=Result<i32,
-      String>` confirmed via `wado dump --tir-resolved`), so
-      the divergence lives in a downstream pass that walks
-      `tir_module.variants`. The default-arguments pad path
-      (`pad_args_with_defaults`) also remains a follow-up —
-      reify doesn't insert the callee's default expressions
-      for missing positional args. Default-path E2E behaviour
-      is unchanged. Concrete arms cover every
+      (expr.rs:534+). Generic-variant case payloads substitute
+      `TypeParam{index}` → concrete `type_args[index]` via
+      `TypeTable::substitute_type_params` so a pattern like
+      `Option::Some(v)` for `x: Option<i32>` binds `v` as
+      `i32` (previously a raw `TypeParam{T,0}` leaked all the
+      way to WIR build's `translate_function_bodies` and
+      panicked at the codegen-time validator). Under these
+      annotations the E2E suite at `-O0` reaches **772 / 1326
+      fixtures passing under `WADO_REIFY=1`** (+149 from the
+      623 baseline). Open gap: default-arguments pad
+      (`pad_args_with_defaults`) — reify doesn't insert the
+      callee's default expressions for missing positional
+      args, so `add(5)` for `fn add(a: i32, b: i32 = 10)`
+      reaches codegen with a 1-arg call against a 2-param
+      function. Default-path E2E behaviour is unchanged. Concrete arms cover every
       `reify_pattern` variant, every `reify_literal` variant
       (host-driven included), every `reify_ident` shape
       (local / current+imported globals / assoc constants /
