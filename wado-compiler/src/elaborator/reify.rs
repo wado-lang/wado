@@ -297,6 +297,32 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// Resolve an AST type with a binding for `Self`. Mirrors production's
+    /// behaviour inside an impl block where `scope.trait_ctx.self_type` is
+    /// set: a bare `Self` (anywhere in the type tree) resolves to the
+    /// impl's target type. Other shapes delegate to
+    /// [`Self::resolve_type_in_scope`] after textually substituting
+    /// `Self` for the impl's display name.
+    fn resolve_type_with_self(
+        &mut self,
+        ty: &ast::Type,
+        type_params: &[String],
+        self_type: TypeId,
+    ) -> TypeId {
+        match ty {
+            ast::Type::Named(named) if named.name == "Self" => self_type,
+            ast::Type::Reference(inner) => {
+                let inner_id = self.resolve_type_with_self(inner, type_params, self_type);
+                self.tysys.type_table.borrow_mut().make_ref(inner_id)
+            }
+            ast::Type::MutReference(inner) => {
+                let inner_id = self.resolve_type_with_self(inner, type_params, self_type);
+                self.tysys.type_table.borrow_mut().make_mut_ref(inner_id)
+            }
+            _ => self.resolve_type_in_scope(ty, type_params),
+        }
+    }
+
     /// Reify one module: emit a [`TirModule`] from the AST + the
     /// `ModuleSemantics` `annotate_bodies` populated.
     ///
@@ -1011,7 +1037,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let return_type = func
             .return_type
             .as_ref()
-            .map(|t| self.resolve_type_in_scope(t, &type_param_names))
+            .map(|t| self.resolve_type_with_self(t, &type_param_names, facts.self_type))
             .unwrap_or(TypeTable::UNIT);
 
         let mut ctx = FunctionContext::new(return_type, func.name.clone());
@@ -1024,7 +1050,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut params = Vec::with_capacity(func.params.len());
         for p in &func.params {
             let type_id = match p.self_kind {
-                SelfKind::None => self.resolve_type_in_scope(&p.ty, &type_param_names),
+                SelfKind::None => {
+                    self.resolve_type_with_self(&p.ty, &type_param_names, facts.self_type)
+                }
                 SelfKind::Ref => self.tysys.type_table.borrow_mut().make_ref(facts.self_type),
                 SelfKind::MutRef => self
                     .tysys
