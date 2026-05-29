@@ -1,9 +1,15 @@
-// Regression: a type parameter that appears only inside another parameter's
+// Regression: a type parameter that appears ONLY inside another parameter's
 // associated-type-equality bound must be inferred from the call site instead
 // of being left unbound (which trapped codegen with "unsubstituted TypeParam").
 //
-// `T` here is determined by `I: Iterator<Item = T>`: once `I = Gen<i32>` is
-// inferred from the argument, `T` is `Gen<i32>::Item == i32`.
+// `T` here is determined solely by `I: Iterator<Item = T>`: it never appears
+// in a value parameter, so it cannot be inferred from the arguments directly.
+// Once `I = Gen<i32>` is inferred from `it`, `T` must be resolved as
+// `Gen<i32>::Item == i32` via the bound.
+//
+// NOTE: `T` must not appear in any value parameter — otherwise it would be
+// inferable from the argument and this would not exercise bound-driven
+// inference at all.
 
 struct Gen<T> {
     items: Array<T>,
@@ -22,22 +28,33 @@ impl<T> Iterator for Gen<T> {
     }
 }
 
-struct Pair<T, I: Iterator<Item = T>> {
-    a: T,
+// `T` is named only in the bound `Iterator<Item = T>` and the return type.
+fn first<T, I: Iterator<Item = T>>(mut it: I) -> Option<T> {
+    return it.next();
+}
+
+// `T` also only in the bound; used in the returned generic struct.
+struct Holder<T, I: Iterator<Item = T>> {
     inner: I,
+    seen: Option<T>,
 }
 
-// `T` is never named in the parameter list — only in `I`'s bound.
-fn pair<T, I: Iterator<Item = T>>(seed: T, it: I) -> Pair<T, I> {
-    return Pair { a: seed, inner: it };
+fn hold<T, I: Iterator<Item = T>>(it: I) -> Holder<T, I> {
+    return Holder { inner: it, seen: null };
 }
 
-test "type param inferred via associated-type bound (no turbofish)" {
-    let g: Gen<i32> = Gen { items: [1, 2, 3], idx: 0 };
-    let mut p = pair(99, g);
-    assert p.a == 99;
-    assert p.inner.next() matches { Some(1) };
-    assert p.inner.next() matches { Some(2) };
+test "type param inferred solely from associated-type bound" {
+    let g: Gen<i32> = Gen { items: [42, 43], idx: 0 };
+    assert first(g) matches { Some(42) };
+}
+
+test "bound-only type param used in returned generic struct" {
+    let g: Gen<i32> = Gen { items: [7, 8], idx: 0 };
+    let mut h = hold(g);
+    assert h.seen matches { None };
+    h.seen = h.inner.next();
+    assert h.seen matches { Some(7) };
+    assert h.inner.next() matches { Some(8) };
 }
 
 __DATA__
