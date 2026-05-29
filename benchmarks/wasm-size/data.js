@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780007323264,
+  "lastUpdate": 1780012989729,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27073,6 +27073,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3fe162b17e51d21684c8ff3a6a93b05201fd0328"
         },
         "date": 1780007322792,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6bac7a00935b39da1a6d028f6f0645fec8068e3e",
+          "message": "Merge pull request #1223 from wado-lang/claude/zlib-wado-unicode-fixme-W2MCU\n\nfix(zlib): decode gzip FNAME/FCOMMENT as UTF-8",
+          "timestamp": "2026-05-29T08:56:48+09:00",
+          "tree_id": "04b8099b69b19d319856f2090c2054e6f2ea2f89",
+          "url": "https://github.com/wado-lang/wado/commit/6bac7a00935b39da1a6d028f6f0645fec8068e3e"
+        },
+        "date": 1780012989354,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
