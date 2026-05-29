@@ -41,7 +41,7 @@ fn test_branch_hints_emitted() {
     );
 }
 
-/// Decode an unsigned LEB128 at `bytes[i]`, returning (value, next_index).
+/// Decode an unsigned LEB128 at `bytes[i]`, returning (value, `next_index`).
 fn read_uleb(bytes: &[u8], mut i: usize) -> (u64, usize) {
     let mut result: u64 = 0;
     let mut shift = 0;
