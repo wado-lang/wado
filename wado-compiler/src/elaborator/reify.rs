@@ -90,41 +90,26 @@ use super::tysys::TypeSystem;
 /// until [`crate::elaborator::orchestration`] wires the
 /// `annotate_bodies → reify_modules` pipeline split (the second half of
 /// Stage 5). The skeleton lands first so the membership contract is
-/// reviewable; the call site flips later in the same WEP migration.
+/// One reify-side power-assert capture slot. Independent from
+/// [`super::assert::Capture`] so the two walks don't share state.
 #[allow(dead_code)]
-/// One reify-side power-assert capture slot. Mirrors
-/// [`super::assert::Capture`] but lives independently on
-/// [`super::types::FunctionContext::reify_assert_capture_ctx`] so the
-/// reify walk can run without sharing fields with the production
-/// `assert.rs` plumbing. Annotated source labels come from the recorded
-/// [`super::sem::types::AssertSlot::capture_label`]; `AstIds` come from
-/// [`super::sem::types::AssertSlot::ast_id`].
 pub(super) struct ReifyAssertSlot {
     pub(super) ast_id: AstId,
-    /// `__v0`, `__v1`, … — the local name the panic template
-    /// references.
+    /// `__v0`, `__v1`, … — the local the panic template references.
     pub(super) name: String,
-    /// User-facing source-text label for the failure message.
     pub(super) label: String,
-    /// `true` once the reify hook fired for this slot. Slots that
-    /// stay `false` had their AST node evaporate during reify (the
-    /// same evaporation paths annotate sees) and are skipped by the
-    /// template.
+    /// `false` when the sub-expression evaporated during reify and no
+    /// `let __vK = …;` was emitted; the template skips the slot.
     pub(super) emitted: bool,
-    /// Reified local index allocated by the hook. `None` until the
-    /// hook fires.
     pub(super) local_index: Option<u32>,
-    /// Reified type id. `None` until the hook fires.
     pub(super) type_id: Option<crate::tir::TypeId>,
 }
 
-/// Per-assert reify-side capture state. Pushed onto
-/// [`super::types::FunctionContext::reify_assert_capture_ctx`] before
-/// the condition reify walk; consumed afterwards to build the panic
-/// template.
 pub(super) struct ReifyAssertCaptureContext {
     pub(super) slots: Vec<ReifyAssertSlot>,
     pub(super) ast_id_to_slot: IndexMap<AstId, usize>,
+    /// Guard so the `reify_expr` hook doesn't re-fire on the same
+    /// `AstId` during its own recursive reify call.
     pub(super) in_progress: IndexSet<AstId>,
     pub(super) emitted_lets: Vec<TirStmt>,
 }
@@ -297,12 +282,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Resolve an AST type with a binding for `Self`. Mirrors production's
-    /// behaviour inside an impl block where `scope.trait_ctx.self_type` is
-    /// set: a bare `Self` (anywhere in the type tree) resolves to the
-    /// impl's target type. Other shapes delegate to
-    /// [`Self::resolve_type_in_scope`] after textually substituting
-    /// `Self` for the impl's display name.
+    /// Like [`Self::resolve_type_in_scope`] but resolves bare `Self`
+    /// (anywhere in the type tree) to `self_type`. Reify has no
+    /// `trait_ctx.self_type` equivalent (production: type_resolution.rs:240),
+    /// so impl-method param/return types substitute it explicitly.
     fn resolve_type_with_self(
         &mut self,
         ty: &ast::Type,
@@ -1477,10 +1460,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         match &let_stmt.pattern {
             ast::Pattern::Ident { id, name, span: _ } => {
-                // `is_mut` lives on `LetStmt` for the `let mut x = …`
-                // surface form; the `Ident` pattern itself is the
-                // non-mut variant. Mirror production's
-                // `resolve_let_stmt` which combines the two sources.
+                // `let mut x = …` carries the mutability on `LetStmt`,
+                // not on the `Ident` pattern.
                 let is_mut = let_stmt.is_mut;
                 let local_index = ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
                 TirStmt::new(
@@ -1564,16 +1545,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::{TirExprKind, TypeTable};
 
-        // Power-assert capture hook (Gap 5 of WEP 2026-05-26). When
-        // the reify walk is inside an assert condition and the current
-        // sub-expression's AstId was flagged for capture by the
-        // recorded `AssertCaptureInfo`, divert into
-        // `reify_with_assert_capture`: reify the sub-expression
-        // normally, emit `let __vK = <reified>;` onto the context's
-        // pending-let buffer, and return `Local(__vK)` so the
-        // surrounding reify sees the binding in place of the original
-        // sub-expression. `in_progress` stops the hook from
-        // re-firing during the recursive reify call.
+        // Power-assert capture hook (Gap 5). See `reify_assert` /
+        // `reify_with_assert_capture`.
         if let Some(actx) = ctx.reify_assert_capture_ctx.as_ref() {
             let ast_id = expr.id();
             if !actx.in_progress.contains(&ast_id)
@@ -1918,12 +1891,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )]
     }
 
-    /// Reify a sub-expression that was flagged for power-assert
-    /// capture. Reifies it normally (with the hook suppressed via
-    /// `in_progress`), allocates a fresh `__vK` local, pushes a
-    /// `let __vK = <reified>;` onto the context's
-    /// `emitted_lets`, and returns `Local(__vK)`. Mirrors
-    /// [`super::Elaborator::resolve_with_assert_capture`]
+    /// Reify hook for a power-assert-flagged sub-expression: reifies
+    /// the sub-tree under an `in_progress` guard, allocates `__vK`,
+    /// pushes the `let __vK = …;` onto the capture context, and
+    /// returns `Local(__vK)` for the surrounding reify to splice in.
+    /// Mirrors [`super::Elaborator::resolve_with_assert_capture`]
     /// (assert.rs:373+).
     fn reify_with_assert_capture(
         &mut self,
@@ -1959,8 +1931,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .name
             .clone();
 
-        // `defining_ast_id = None` so the synthetic `__vK` locals
-        // don't enter `local_symbols` (mirrors production).
+        // `defining_ast_id = None` keeps synthetic locals out of
+        // `local_symbols` (LSP hover / go-to-def).
         let local_index = ctx.add_local(cap_name.clone(), type_id, false, None);
 
         let cap_ctx = ctx
@@ -1993,32 +1965,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify an `assert cond[, msg];` statement with full power-
-    /// assert expansion. Mirrors [`super::Elaborator::desugar_assert`]
-    /// (assert.rs:65+):
-    ///
-    /// ```text
-    /// __assert_N: {
-    ///     let __v0 = <subexpr0>;
-    ///     ...
-    ///     let __cond = <rewritten condition>;
-    ///     if !__cond {
-    ///         panic(`Assertion failed in {#function} at {#file}:{#line}[: msg]
-    /// condition: <source>
-    /// <label0>: {__v0:?}
-    /// ...`);
-    ///     }
-    /// }
-    /// ```
-    ///
-    /// The captures themselves come from the recorded
-    /// [`super::sem::types::AssertCaptureInfo`] — annotate's
-    /// [`super::assert::CaptureScanner`] already decided which
-    /// sub-expressions to capture; reify reuses the decision so the
-    /// two phases stay in lockstep. The hook lives in `reify_expr`'s
-    /// entry: when it sees a flagged `AstId`, it routes through
-    /// [`Self::reify_with_assert_capture`] to materialise the
-    /// `let __vK = …;` binding and substitute `Local(__vK)`.
+    /// Reify `assert cond[, msg];` into the power-assert expansion.
+    /// Mirrors [`super::Elaborator::desugar_assert`] (assert.rs:65+).
+    /// Capture slots come from the recorded
+    /// [`super::sem::types::AssertCaptureInfo`] (annotate's
+    /// `CaptureScanner` already chose them); the hook in `reify_expr`
+    /// emits the `let __vK = …;` bindings during the condition walk.
     fn reify_assert(
         &mut self,
         assert_stmt: &ast::AssertStmt,
@@ -2031,13 +1983,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let span = assert_stmt.span;
 
-        // Capture-slot table from the recorded `AssertCaptureInfo`.
-        // Each slot in the recorded order gets a dense `__v{idx}` name
-        // so the failure-message lines reference predictable locals.
-        // We always install the context — even if `assert_captures`
-        // has no record (e.g. an empty / pure-literal condition), the
-        // hook check is a single `Option` discriminant and the empty
-        // `ast_id_to_slot` map intercepts nothing.
+        // Always install the context: an empty `ast_id_to_slot` map
+        // intercepts nothing, and the hook is a single Option check.
         let info = self.sem.types.assert_captures.get(&assert_stmt.id);
         let (slot_meta, ast_id_to_slot): (Vec<(AstId, String)>, IndexMap<AstId, usize>) =
             if let Some(info) = info {
@@ -2052,8 +1999,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 (Vec::new(), IndexMap::default())
             };
 
-        // Scope the synthetic `__vK` / `__cond` locals so they cannot
-        // leak past this assert's expansion.
         ctx.enter_scope();
 
         ctx.reify_assert_capture_ctx = Some(ReifyAssertCaptureContext {
@@ -2074,15 +2019,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             emitted_lets: Vec::new(),
         });
 
-        // Walk the unmodified AST condition. The hook intercepts
-        // flagged sub-expressions and registers `let __vK = …;`
-        // bindings onto the context as it goes.
-        //
-        // `expected_type = None` — a `Bool` expectation would
-        // propagate into branch types of an `Expr::If`/`Expr::Match`
-        // inside the condition and reject valid asserts whose
-        // branches produce a non-bool value compared against
-        // something else. Mirrors assert.rs:108.
+        // `expected_type = None`: a `Bool` expectation propagates into
+        // `If`/`Match` branches inside the condition and rejects
+        // non-bool arm bodies. Mirrors assert.rs:108.
         let cond_tir = self.reify_expr(&assert_stmt.condition, ctx, None);
 
         let actx = ctx
@@ -2093,7 +2032,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut inner_stmts: Vec<TirStmt> = Vec::with_capacity(actx.emitted_lets.len() + 2);
         inner_stmts.extend(actx.emitted_lets);
 
-        // `let __cond = <cond_tir>;`
         let cond_type = cond_tir.type_id;
         let cond_name = "__cond".to_string();
         let cond_local_index = ctx.add_local(cond_name.clone(), cond_type, false, None);
@@ -2110,7 +2048,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         ));
 
-        // `!Local(__cond)` for the if-condition.
         let cond_ref = TirExpr::new(
             TirExprKind::Local {
                 index: cond_local_index,
@@ -2128,10 +2065,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
 
-        // Build the panic template. Mirrors
-        // `build_assert_panic_template` (assert.rs:239+) — header
-        // (`Assertion failed in <fn> at <file>:<line>[: <msg>]`),
-        // then the `condition: <source>` line, then one
+        // Panic template, mirroring `build_assert_panic_template`
+        // (assert.rs:239+): header + `condition: <source>` + one
         // `<label>: {__vK:?}` line per emitted slot.
         let string_type = self
             .tysys
@@ -3936,11 +3871,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let left = self.reify_expr(&chain.first, ctx, None);
             let right = self.reify_expr(&cmp.right, ctx, Some(left.type_id));
 
-            // Operator-trait dispatch path (Gap 11): non-primitive
-            // comparison routes through `Eq::eq` / `Ord::cmp`. The
-            // recording fires on `chain.id` (operators.rs:1346 branch)
-            // when production's `build_binary_op_tir` takes the trait
-            // path. Reify reproduces the MethodCall + Ord wrap shape.
+            // Non-primitive comparison dispatches through `Eq::eq` /
+            // `Ord::cmp`; the recording fires on `chain.id` at
+            // operators.rs:1346.
             if let Some(dispatch) = self.sem.types.operator_dispatch.get(&chain.id).cloned() {
                 let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
                     left,
@@ -3983,11 +3916,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     chain.span,
                 );
 
-                // For Ord ops (`<`, `>`, `<=`, `>=`) the dispatch
-                // returns `Ordering`; wrap with `cmp == Less` etc.
-                // (mirrors `Elaborator::ord_bool_from_cmp`,
-                // operators.rs:1605+). For `!=` via `Eq::eq`, wrap
-                // with `!`.
+                // Ord ops wrap `cmp(...) ==/!= Less/Greater`;
+                // `!=` via `Eq::eq` wraps with `!`.
                 use ast::BinaryOp;
                 if matches!(
                     cmp.op,
@@ -4365,13 +4295,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
-        // Step 6: determine the return type. For block-bodied
-        // closures with an explicit `return X`, the block's tail
-        // type is NEVER / UNIT but the closure's logical return type
-        // is the returned value's type — scan the block for a
-        // return-stmt type (same logic production's
-        // `resolve_closure` uses, closure.rs:276+). Expression-body
-        // closures fall through to the body's own type.
+        // Block bodies with explicit `return X` have a NEVER/UNIT
+        // tail; the closure's logical return is the returned type.
+        // Production: closure.rs:276+.
         let return_type = if let TirExprKind::Block(ref block) = body.kind {
             super::Elaborator::<H>::find_return_type_in_block(block).unwrap_or(body.type_id)
         } else {
@@ -5138,13 +5064,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
-        // Anonymous structs are registered during annotate — see
-        // `Elaborator::resolve_anonymous_struct_literal` (expr.rs:3603+) —
-        // and the registered `TypeId` is recorded on
-        // `sem.types.expression_types[struct_lit.id]`. Reify reads it back
-        // from `recorded_type` rather than re-deriving the name (which can
-        // diverge if any field's reified type differs from annotate's
-        // resolved type by an evaporated coercion wrapper).
+        // Read the registered type back from `expression_types` — the
+        // deterministic name derived from reified field types can
+        // diverge from annotate's (evaporated coercion wrappers).
+        // Production registers it in expr.rs:3603+.
         let struct_type = recorded_type;
         let struct_name = self.tysys.type_table.borrow().type_name(struct_type);
 
@@ -5319,11 +5242,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Look up the parameter list (`name`, `default`) of a free function
-    /// declared in `module_source`. Returns the parameters in declaration
-    /// order. Only bare-ident free-function callees are handled — static
-    /// methods and namespaced calls have no defaults per the production
-    /// semantics in `lookup_function_param_defaults` (call.rs:1912+).
+    /// Parameter `(name, default)` list of a free function in
+    /// declaration order. Empty for unknown callees.
     fn lookup_free_func_params(
         &self,
         module_source: &ModuleSource,
@@ -5352,13 +5272,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Reify-side mirror of `Elaborator::pad_args_with_defaults`
-    /// (call.rs:1853+). For each missing trailing positional argument,
-    /// substitute the explicit args into the function's recorded default
-    /// expression and reify it. Only bare-ident free-function callees
-    /// participate — static methods and namespaced calls have no
-    /// defaults per the production `lookup_function_param_defaults`
-    /// contract.
+    /// Pad missing trailing positional args with the callee's
+    /// declared defaults. Mirrors `Elaborator::pad_args_with_defaults`
+    /// (call.rs:1853+); only bare-ident free functions have defaults.
     fn reify_pad_args_with_defaults(
         &mut self,
         callee: &ast::Expr,
@@ -5397,12 +5313,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Wrap an `Ord::cmp` method call result into a `bool` by
-    /// comparing the returned `Ordering` variant against the one
-    /// that makes the operator true. Mirrors
-    /// [`super::Elaborator::ord_bool_from_cmp`] (operators.rs:1605+).
-    /// `<`   → `cmp == Less`, `>` → `cmp == Greater`,
-    /// `<=`  → `cmp != Greater`, `>=` → `cmp != Less`.
+    /// Wrap `Ord::cmp` into a `bool`: `<` → `cmp == Less`, `>` →
+    /// `cmp == Greater`, `<=` → `cmp != Greater`, `>=` → `cmp != Less`.
+    /// Mirrors [`super::Elaborator::ord_bool_from_cmp`] (operators.rs:1605+).
     fn wrap_ord_bool_from_cmp(
         &mut self,
         cmp_call: TirExpr,
@@ -5476,14 +5389,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let span = call.span;
 
-        // Variant-ctor call shape (checked first): `Variant::Case(payload)`.
-        // Detected via the callee being a qualified ident whose prefix
-        // names a variant decl with a matching case. Annotate's
-        // common-path also records this call's `static_method_dispatch`
-        // entry (call.rs:1146+), but for a variant constructor the
-        // recorded shape is wrong — it would emit a `Call` against the
-        // synthesized `Option::Some` function rather than a
-        // `VariantConstruct`. Variant detection has to win.
+        // Variant-ctor (`Variant::Case(payload)`) must beat the
+        // `static_method_dispatch` arm: annotate also records the
+        // ctor at call.rs:1146+, but that shape would lower to a
+        // `Call` against a function that doesn't exist.
         if let ast::Expr::Ident(ident) = &call.callee
             && let Some(pos) = ident.name.find("::")
         {
@@ -5545,10 +5454,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg, is_mut)
                 })
                 .collect();
-            // Default-argument padding (production parity with
-            // `Elaborator::pad_args_with_defaults`, call.rs:1853+).
-            // Restricted to bare-ident free-function callees per the
-            // production `lookup_function_param_defaults` contract.
             self.reify_pad_args_with_defaults(
                 &call.callee,
                 &call.args,
@@ -6146,11 +6051,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
-        // Default-argument padding for method calls (production parity
-        // with method_call.rs:481+ where `pad_args_with_defaults`-style
-        // logic substitutes explicit arg ASTs into each missing default
-        // before resolving). The recorded `param_names` / `param_defaults`
-        // arrive on `MethodDispatch` from annotate.
+        // Pad missing trailing args with the method's defaults.
+        // Mirrors method_call.rs:481+; the recorded `param_names` /
+        // `param_defaults` arrive on `MethodDispatch` from annotate.
         if args.len() < dispatch.param_defaults.len() {
             let mut subs: IndexMap<String, ast::Expr> = IndexMap::default();
             for (i, arg_ast) in method_call.args.iter().enumerate() {
@@ -6232,25 +6135,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::TirExprKind;
 
-        // 1. Local binding (parameter, let, closure param) and closure
-        //    captures. `lookup_or_capture` mirrors production's
-        //    `resolve_ident` (expr.rs:534+): inside a closure, an outer
-        //    binding lands as `TirExprKind::Capture` (or a `Deref` of a
-        //    capture for `&mut` proxies via the `__ref_v` mut-capture
-        //    pre-pass). Outside a closure the lookup behaves like
-        //    `ctx.lookup` and returns `VarRef::Local`.
+        // 1. Local / capture lookup, mirroring `resolve_ident`
+        //    (expr.rs:534+). Use the local's stored type instead of
+        //    `recorded_type`: template-string sub-parsers restart
+        //    `next_ast_id` at 0 (parser.rs:5175), so multiple
+        //    interpolations collide on `AstId(0)` and the last write
+        //    to `expression_types` wins.
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
             match var_ref {
                 super::types::VarRef::Local { index, type_id, .. } => {
-                    // Use the local's stored type rather than
-                    // `recorded_type`. Template-string interpolation
-                    // parsers (parser.rs:5175) build a fresh `Parser`
-                    // per `{expr}` whose `next_ast_id` restarts at 0,
-                    // so two interpolations like `{g}` and `{n1}`
-                    // collide on `AstId(0)` and the second resolution
-                    // overwrites the first in `expression_types`.
-                    // The Local was added with its declared type, so
-                    // it's the only authoritative source here.
                     return TirExpr::new(
                         TirExprKind::Local {
                             index,
