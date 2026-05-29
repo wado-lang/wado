@@ -48,6 +48,11 @@ pub struct TestOptions {
     /// `<primary>.kiln.json` as a side-effect) but skip wasmtime execution.
     pub no_run: bool,
     pub no_cache: bool,
+    /// `--test-name <pattern>` substring filters (repeatable). When non-empty,
+    /// only `test "name"` blocks whose name contains one of these strings are
+    /// compiled and run; the rest are dropped before codegen so early DCE
+    /// removes them. Empty means "run every test".
+    pub test_name_filters: Vec<String>,
 }
 
 impl TestOptions {
@@ -63,6 +68,7 @@ impl TestOptions {
             opt_iterations: self.opt_iterations,
             allocator: self.allocator.clone(),
             no_cache: self.no_cache,
+            test_name_filters: self.test_name_filters.clone(),
         }
     }
 }
@@ -76,6 +82,7 @@ pub struct PackageRun {
 #[derive(Clone, Copy)]
 enum Opt {
     Filter,
+    TestName,
     Exclude,
     Parallel,
     OptLevel,
@@ -93,6 +100,7 @@ enum Opt {
 impl Opt {
     const ALL: &[Self] = &[
         Self::Filter,
+        Self::TestName,
         Self::Exclude,
         Self::Parallel,
         Self::OptLevel,
@@ -114,6 +122,12 @@ impl Opt {
                 short: Some('f'),
                 value: Some("<pattern>"),
                 desc: "Keep only files whose path matches the wildcard pattern (`*`, `?`, `[...]`)",
+            },
+            Self::TestName => args::OptSpec {
+                long: Some("test-name"),
+                short: None,
+                value: Some("<pattern>"),
+                desc: "Run only `test \"name\"` blocks whose name contains this substring (repeatable; case-sensitive)",
             },
             Self::Exclude => args::OptSpec {
                 long: Some("exclude"),
@@ -331,6 +345,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let usage = format_usage();
     let mut paths: Vec<String> = Vec::new();
     let mut filters: Vec<String> = Vec::new();
+    let mut test_name_filters: Vec<String> = Vec::new();
     let mut cli_excludes: Vec<String> = Vec::new();
     let mut jobs: Option<usize> = None;
     let mut opt_level = OptLevel::default();
@@ -348,6 +363,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
             match opt {
                 Opt::Filter => {
                     filters.push(args::require_string(&mut parser)?);
+                }
+                Opt::TestName => {
+                    test_name_filters.push(args::require_string(&mut parser)?);
                 }
                 Opt::Exclude => {
                     cli_excludes.push(args::require_string(&mut parser)?);
@@ -462,6 +480,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         preopened_dirs,
         no_run,
         no_cache,
+        test_name_filters,
     })
 }
 
@@ -708,6 +727,20 @@ enum LoadOutcome {
 struct ParsedTest {
     export_name: String,
     parsed: TestExportName,
+    /// Original `test "name"` string recovered from the `wado:test-names`
+    /// custom section (`None` for unnamed tests). Preferred over
+    /// `parsed.display` for output because it is lossless.
+    original_name: Option<String>,
+}
+
+impl ParsedTest {
+    /// Label shown in test output: the lossless source name when available,
+    /// otherwise the kebab-derived fallback (`simple`, `<test 3>`, …).
+    fn display_name(&self) -> String {
+        self.original_name
+            .clone()
+            .unwrap_or_else(|| self.parsed.display.clone())
+    }
 }
 
 /// **Stage 1 worker** — run the wado compiler over one source file and
@@ -815,13 +848,32 @@ fn load_module(
         Ok((engine, component, linker)) => {
             println!("[{elapsed}] Loaded {} ({load_dur})", artifact.path);
 
+            // Recover original (lossless) test names from the custom section
+            // the compiler embeds. Keyed by kebab export name. The compiler
+            // emits an entry for every test export, so a discovered test
+            // export missing here is an internal inconsistency → panic.
+            let original_names: std::collections::HashMap<String, Option<String>> =
+                wado_compiler::test_names::read_from_component(&artifact.wasm)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .collect();
+
             let component_ty = component.component_type();
             let mut tests: Vec<ParsedTest> = Vec::new();
             for (name, _) in component_ty.exports(&engine) {
                 if let Some(parsed) = parse_test_export(name) {
+                    let original_name = original_names.get(name).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "test export {name:?} has no entry in the {:?} custom section \
+                             of {} — compiler/runner test-name encoding is out of sync",
+                            wado_compiler::test_names::SECTION_NAME,
+                            artifact.path,
+                        )
+                    });
                     tests.push(ParsedTest {
                         export_name: name.to_string(),
                         parsed,
+                        original_name,
                     });
                 }
             }
@@ -1105,7 +1157,7 @@ async fn run_execute_stage(
             .map(|t| TestJob {
                 module: module.clone(),
                 test_name: t.export_name.clone(),
-                display_name: t.parsed.display.clone(),
+                display_name: t.display_name(),
                 expect_trap: t.parsed.kind == TestKind::ExpectTrap,
                 is_todo: t.parsed.kind == TestKind::Todo,
                 timeout_ms: t.parsed.timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MS),

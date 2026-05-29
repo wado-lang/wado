@@ -53,6 +53,11 @@ pub struct Package {
     pub skip_validation: bool,
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")
     pub target_world: String,
+    /// `--test-name` substring filters (test world only). When non-empty, only
+    /// `test "name"` blocks whose name contains one of these strings are kept
+    /// as component exports; the rest are dropped before adapter synthesis so
+    /// early DCE removes their bodies. Empty means "every test".
+    pub test_name_filters: Vec<String>,
 
     /// Maps world export name → adapter function name.
     /// Populated by `synthesis::cm_binding` when export adapters are synthesized.
@@ -94,6 +99,23 @@ pub struct Package {
     pub interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
 }
 
+/// Decide whether a `test "name"` block is selected by the active
+/// `--test-name` filters.
+///
+/// Matching follows `cargo test`: case-sensitive substring against the
+/// original (lossless) test name. Empty `filters` selects every test.
+/// Multiple filters combine with OR. Unnamed tests (`test { … }`) carry no
+/// name to match, so they are dropped whenever any filter is active.
+pub fn test_selected(original_name: Option<&str>, filters: &[String]) -> bool {
+    if filters.is_empty() {
+        return true;
+    }
+    match original_name {
+        Some(name) => filters.iter().any(|f| name.contains(f.as_str())),
+        None => false,
+    }
+}
+
 impl Package {
     /// Create a new Package from compilation artifacts (before optimization).
     #[allow(clippy::too_many_arguments)]
@@ -126,6 +148,7 @@ impl Package {
             strip_names: false,
             skip_validation: false,
             target_world: "wasi:cli/command".to_string(),
+            test_name_filters: Vec::new(),
             // CM export adapter mapping
             export_binding_names: IndexMap::default(),
             task_return_flat_params: None,
@@ -158,5 +181,46 @@ impl Package {
         self.used_wasi_functions
             .iter()
             .any(|f| f.starts_with(&prefix))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_selected;
+
+    #[test]
+    fn empty_filters_select_everything() {
+        assert!(test_selected(Some("anything"), &[]));
+        assert!(test_selected(None, &[]));
+    }
+
+    #[test]
+    fn substring_match_is_case_sensitive() {
+        let filters = vec!["alpha".to_string()];
+        assert!(test_selected(Some("alpha addition"), &filters));
+        assert!(test_selected(Some("the alpha test"), &filters));
+        assert!(!test_selected(Some("beta"), &filters));
+        // Case-sensitive, like `cargo test`.
+        assert!(!test_selected(Some("ALPHA"), &filters));
+    }
+
+    #[test]
+    fn multiple_filters_are_or() {
+        let filters = vec!["beta".to_string(), "gamma".to_string()];
+        assert!(test_selected(Some("beta one"), &filters));
+        assert!(test_selected(Some("gamma two"), &filters));
+        assert!(!test_selected(Some("alpha"), &filters));
+    }
+
+    #[test]
+    fn unnamed_tests_are_dropped_when_a_filter_is_active() {
+        assert!(!test_selected(None, &["x".to_string()]));
+    }
+
+    #[test]
+    fn matches_multibyte_names() {
+        let filters = vec!["日本語".to_string()];
+        assert!(test_selected(Some("日本語 ok"), &filters));
+        assert!(!test_selected(Some("english only"), &filters));
     }
 }

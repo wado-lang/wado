@@ -102,6 +102,9 @@ pub struct CompileFlags {
     /// *writes* still happen, so a follow-up run without `--no-cache`
     /// benefits from a warm cache again.
     pub no_cache: bool,
+    /// `--test-name` substring filters for the test world (empty elsewhere).
+    /// Forwarded to `CompilerOptions::test_name_filters`.
+    pub test_name_filters: Vec<String>,
 }
 
 impl CompileOptions {
@@ -116,6 +119,7 @@ impl CompileOptions {
             opt_iterations: self.opt_iterations,
             allocator: self.allocator.clone(),
             no_cache: self.no_cache,
+            test_name_filters: Vec::new(),
         }
     }
 }
@@ -362,6 +366,7 @@ pub async fn try_compile(
         log_level: Some(flags.log_level),
         allocator: flags.allocator.clone(),
         invocations: pipeline_outcome.invocations,
+        test_name_filters: flags.test_name_filters.clone(),
         ..Default::default()
     };
 
