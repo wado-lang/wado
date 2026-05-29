@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2334 / 2664 fixtures passing under
+      suite reaches **2371 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 330 remaining failures are all reify-specific). The
+      so the 293 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -532,20 +532,40 @@ Landed:
     (**2038 → 2334**): it cleared the entire CM / HTTP / stream cluster
     and every `Result` / `Option` / `Future` turbofish ctor and static
     call across the suite. Zero net regressions on a full run.
+13. **fn_ref: `&fn` callees, generic FuncRef args, address-taken locals.**
+    Three reify gaps in the fn-reference cluster (**2334 → 2371**, fn_ref
+    e2e 26/34 → 34/34, zero net regressions):
+    - A bare-ident or non-ident callee whose type is `&fn` / `&mut fn`
+      now auto-derefs to the function value before `IndirectCall`,
+      mirroring `build_indirect_call`'s final `deref_to_value`. Detection
+      peels refs and the ultimate base type as `as_fn_signature` does.
+    - Generic function references (`id::<i32>`,
+      `let f: fn(bool)->bool = id`) reified as `FuncRef { type_args: [] }`,
+      leaving the name unmangled after monomorphization and tripping the
+      `lower::closure` "FuncRef should be wrapped in a Closure" invariant.
+      `resolve_func_ref_ident` now records the inferred / turbofish args
+      into `generic_instantiations` (which reify already reads).
+    - `&x` / `&mut x` now mark the borrowed local address-taken in reify
+      (`ctx.address_taken_locals`), so the boxing pass retags the local
+      to its box type and mutation through a `&mut fn` out-param
+      (`*slot = other_fn`) writes back to the slot instead of a throwaway
+      box.
 
 #### Re-triaged remaining clusters
 
 Largest first, by fixture-name prefix (after the landings above; the
-CM / HTTP / stream cluster is now resolved):
+CM / HTTP / stream and fn_ref clusters are now resolved). 293 reify-
+specific failures across 158 unique fixtures remain:
 
-- **fn_ref (~10).** Power-assert capture of fn-typed sub-expressions
-  reaches `unknown^Inspect::inspect`.
-- **serde (~14).** `serde_json` / `serde_serialize`: method-level
-  generic monomorphization (`serialize<S: Serializer>`) + derive-
-  synthesized impls.
+- **serde (~19).** `serde_json` (8) + `serde_serialize` (6) + tails:
+  method-level generic monomorphization (`serialize<S: Serializer>`) +
+  derive-synthesized impls.
 - **cross_module (~6), effect_propagation / effect_handler (~9),
-  match_literal / match_ergonomics (~7), variadic / type_param /
-  trait_default / iterator_generic / inspect** and smaller tails.
+  match_literal / match_ergonomics / match_or (~9), type_param /
+  trait_default / trait_generic / trait_bound (~10), result_if /
+  result_match (~5), iterator_generic (~3)** and smaller tails
+  (variant, tuple, namespace_import, default_field, closure_fn,
+  wasi_clocks, …).
 
 <!-- superseded: the CM binding cluster below is resolved by landings
 11-12; kept for the original diagnosis trail. -->
