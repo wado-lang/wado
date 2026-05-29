@@ -1613,51 +1613,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `<`   → `cmp == Less`, `>` → `cmp == Greater`,
     /// `<=`  → `cmp != Greater`, `>=` → `cmp != Less`.
     fn ord_bool_from_cmp(&mut self, cmp_call: TirExpr, op: BinaryOp, span: Span) -> TirExpr {
-        let ordering_type_id = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_compiler_enum(CompilerItem::Ordering);
-        // Look up Ordering's `Less` / `Greater` cases through the
-        // `CompilerItem` registry so a stdlib rename of either case
-        // flows here without touching the operator-lowering path.
-        let (less_name, less_index, greater_name, greater_index) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            let (_, _, less_name, less_index) = items.require_enum_case(CompilerItem::OrderingLess);
-            let (_, _, greater_name, greater_index) =
-                items.require_enum_case(CompilerItem::OrderingGreater);
-            (
-                less_name.to_string(),
-                less_index,
-                greater_name.to_string(),
-                greater_index,
-            )
-        };
-        let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {
-            BinaryOp::Lt => (TirBinaryOp::Eq, less_name, less_index),
-            BinaryOp::Gt => (TirBinaryOp::Eq, greater_name, greater_index),
-            BinaryOp::LtEq => (TirBinaryOp::NotEq, greater_name, greater_index),
-            BinaryOp::GtEq => (TirBinaryOp::NotEq, less_name, less_index),
-            _ => unreachable!(),
-        };
-        let ordering_variant = TirExpr::new(
-            TirExprKind::EnumConstruct {
-                enum_type: ordering_type_id,
-                case_name,
-                case_index,
-            },
-            ordering_type_id,
-            span,
-        );
-        TirExpr::new(
-            TirExprKind::Binary {
-                op: compare_op,
-                left: Box::new(cmp_call),
-                right: Box::new(ordering_variant),
-            },
-            TypeTable::BOOL,
-            span,
-        )
+        ord_bool_from_cmp(cmp_call, op, span, &self.tysys.type_table)
     }
+}
+
+/// Free-function form of [`Elaborator::ord_bool_from_cmp`] so the reify
+/// pass produces an identical `Ordering`-comparison wrapper without an
+/// `Elaborator`. `<` → `cmp == Less`, `>` → `cmp == Greater`,
+/// `<=` → `cmp != Greater`, `>=` → `cmp != Less`.
+pub(super) fn ord_bool_from_cmp(
+    cmp_call: TirExpr,
+    op: BinaryOp,
+    span: Span,
+    type_table: &std::cell::RefCell<TypeTable>,
+) -> TirExpr {
+    let ordering_type_id = type_table
+        .borrow_mut()
+        .make_compiler_enum(CompilerItem::Ordering);
+    // Look up Ordering's `Less` / `Greater` cases through the
+    // `CompilerItem` registry so a stdlib rename of either case
+    // flows here without touching the operator-lowering path.
+    let (less_name, less_index, greater_name, greater_index) = {
+        let tt = type_table.borrow();
+        let items = tt.compiler_items();
+        let (_, _, less_name, less_index) = items.require_enum_case(CompilerItem::OrderingLess);
+        let (_, _, greater_name, greater_index) =
+            items.require_enum_case(CompilerItem::OrderingGreater);
+        (
+            less_name.to_string(),
+            less_index,
+            greater_name.to_string(),
+            greater_index,
+        )
+    };
+    let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {
+        BinaryOp::Lt => (TirBinaryOp::Eq, less_name, less_index),
+        BinaryOp::Gt => (TirBinaryOp::Eq, greater_name, greater_index),
+        BinaryOp::LtEq => (TirBinaryOp::NotEq, greater_name, greater_index),
+        BinaryOp::GtEq => (TirBinaryOp::NotEq, less_name, less_index),
+        _ => unreachable!(),
+    };
+    let ordering_variant = TirExpr::new(
+        TirExprKind::EnumConstruct {
+            enum_type: ordering_type_id,
+            case_name,
+            case_index,
+        },
+        ordering_type_id,
+        span,
+    );
+    TirExpr::new(
+        TirExprKind::Binary {
+            op: compare_op,
+            left: Box::new(cmp_call),
+            right: Box::new(ordering_variant),
+        },
+        TypeTable::BOOL,
+        span,
+    )
 }

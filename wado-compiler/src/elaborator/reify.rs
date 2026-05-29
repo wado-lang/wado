@@ -3109,7 +3109,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{CallArg, ResolvedType, TirExprKind, TirUnaryOp};
+        use crate::tir::{CallArg, ResolvedType, TirExprKind, TirUnaryOp, TypeTable};
 
         let left = self.reify_expr(&binary.left, ctx, None);
         let right = self.reify_expr(&binary.right, ctx, None);
@@ -3151,7 +3151,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg_expr, false)
                 })
                 .collect();
-            return super::Elaborator::<H>::build_tir_method_call(
+            let call = super::Elaborator::<H>::build_tir_method_call(
                 receiver,
                 dispatch.function_ref,
                 vec![],
@@ -3159,6 +3159,35 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 dispatch.return_type,
                 binary.span,
             );
+            // Comparison operators dispatch to `Eq::eq` / `Ord::cmp` but
+            // the source operator decides the wrapping the elaborator
+            // applies after the call: `!=` negates the `eq` result, and
+            // `<` / `>` / `<=` / `>=` compare the `cmp` `Ordering` against
+            // the variant that makes the operator true.
+            return match binary.op {
+                ast::BinaryOp::NotEq if call.type_id == TypeTable::BOOL => TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Not,
+                        expr: Box::new(call),
+                    },
+                    TypeTable::BOOL,
+                    binary.span,
+                ),
+                ast::BinaryOp::Lt
+                | ast::BinaryOp::Gt
+                | ast::BinaryOp::LtEq
+                | ast::BinaryOp::GtEq
+                    if call.type_id != TypeTable::ERROR =>
+                {
+                    super::operators::ord_bool_from_cmp(
+                        call,
+                        binary.op,
+                        binary.span,
+                        &self.tysys.type_table,
+                    )
+                }
+                _ => call,
+            };
         }
 
         // Native binary op — primitive path. The op mapping is 1:1
