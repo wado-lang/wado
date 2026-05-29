@@ -4260,12 +4260,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
-        // Step 6: determine the return type. Prefer the body's
-        // resolved type (which annotate already unified) over the
-        // recorded `recorded_type` for the inner — `recorded_type`
-        // is the closure expression's function type, not the return
-        // type.
-        let return_type = body.type_id;
+        // Step 6: determine the return type. For block-bodied
+        // closures with an explicit `return X`, the block's tail
+        // type is NEVER / UNIT but the closure's logical return type
+        // is the returned value's type — scan the block for a
+        // return-stmt type (same logic production's
+        // `resolve_closure` uses, closure.rs:276+). Expression-body
+        // closures fall through to the body's own type.
+        let return_type = if let TirExprKind::Block(ref block) = body.kind {
+            super::Elaborator::<H>::find_return_type_in_block(block).unwrap_or(body.type_id)
+        } else {
+            body.type_id
+        };
 
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
