@@ -4,6 +4,14 @@ Performance comparison of Wado (Wasm/wasmtime) against native compilers.
 
 Environment: Wado 2026-05-29, wasmtime 44.0.0, gcc 13.3.0, rustc 1.95.0, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
 
+All figures are the **best of three runs** per implementation (cloud VMs
+are noisy; the fastest run is the cleanest estimate of true capacity).
+To keep every result in whole milliseconds, the lightest workloads are
+scaled up: the sieve runs to 100M, float-to-string does 5M conversions,
+the JSON parsers iterate ×10, and zlib iterates ×100. JSON and zlib
+figures are totals over those iterations, so they reflect warm
+steady-state throughput rather than a single cold parse.
+
 ## Prime Counting
 
 Count primes up to 10M (integer arithmetic).
@@ -11,8 +19,8 @@ Count primes up to 10M (integer arithmetic).
 | Implementation    |     Time | vs best |
 | ----------------- | -------: | ------: |
 | C (gcc -O3)       | 3,208 ms |   1.00x |
-| **Wado**          | 3,252 ms |   1.01x |
-| JavaScript (Node) | 3,311 ms |   1.03x |
+| **Wado**          | 3,245 ms |   1.01x |
+| JavaScript (Node) | 3,288 ms |   1.02x |
 
 ## Mandelbrot
 
@@ -20,70 +28,70 @@ Count primes up to 10M (integer arithmetic).
 
 | Implementation    |   Time | vs best |
 | ----------------- | -----: | ------: |
-| **Wado**          | 195 ms |   1.00x |
-| JavaScript (Node) | 196 ms |   1.01x |
-| C (gcc -O3)       | 197 ms |   1.01x |
+| **Wado**          | 194 ms |   1.00x |
+| JavaScript (Node) | 194 ms |   1.00x |
+| C (gcc -O3)       | 197 ms |   1.02x |
 
 ## Sieve
 
-Sieve of Eratosthenes up to 10M (array operations).
+Sieve of Eratosthenes up to 100M (array operations).
 
-| Implementation    |  Time | vs best |
-| ----------------- | ----: | ------: |
-| C (gcc -O3)       | 37 ms |   1.00x |
-| JavaScript (Node) | 61 ms |   1.65x |
-| **Wado**          | 71 ms |   1.92x |
+| Implementation    |     Time | vs best |
+| ----------------- | -------: | ------: |
+| C (gcc -O3)       | 1,423 ms |   1.00x |
+| JavaScript (Node) | 1,541 ms |   1.08x |
+| **Wado**          | 1,864 ms |   1.31x |
 
 ## Float-to-String
 
-500K f64 conversions to fixed-point string.
+5M f64 conversions to fixed-point string.
 
-| Implementation |  Time | vs best |
-| -------------- | ----: | ------: |
-| Zig (RelFast)  | 31 ms |   1.00x |
-| Rust (native)  | 38 ms |   1.23x |
-| **Wado**       | 57 ms |   1.84x |
-| C (gcc -O3)    | 67 ms |   2.16x |
+| Implementation |   Time | vs best |
+| -------------- | -----: | ------: |
+| Zig (RelFast)  | 334 ms |   1.00x |
+| Rust (native)  | 497 ms |   1.49x |
+| **Wado**       | 702 ms |   2.10x |
+| C (gcc -O3)    | 877 ms |   2.63x |
 
 ## Compression
 
-zlib compress/decompress of twitter.json (631 KB) x 10 iterations.
+zlib compress/decompress of twitter.json (631 KB) x 100 iterations.
 
-| Implementation        | Compress | Decompress |  Total | vs best |
-| --------------------- | -------: | ---------: | -----: | ------: |
-| zlib-rs (Rust native) |    29 ms |       4 ms |  32 ms |   1.00x |
-| **Wado** core:zlib    |   201 ms |     116 ms | 317 ms |   9.86x |
+| Implementation        | Compress | Decompress |    Total | vs best |
+| --------------------- | -------: | ---------: | -------: | ------: |
+| zlib-rs (Rust native) |   402 ms |      44 ms |   446 ms |   1.00x |
+| **Wado** core:zlib    | 2,568 ms |   1,560 ms | 4,128 ms |   9.26x |
 
 ## JSON: twitter
 
-Deserialize twitter.json (631 KB).
+Deserialize twitter.json (631 KB), ×10.
 
-| Implementation           |    Time | vs best |
-| ------------------------ | ------: | ------: |
-| serde_json (Rust native) | 0.90 ms |   1.00x |
-| JSON.parse (Node)        | 1.77 ms |   1.97x |
-| **Wado** core:json       | 4.46 ms |   4.97x |
+| Implementation           |  Time | vs best |
+| ------------------------ | ----: | ------: |
+| serde_json (Rust native) |  9 ms |   1.00x |
+| JSON.parse (Node)        | 24 ms |   2.66x |
+| **Wado** core:json       | 57 ms |   6.20x |
 
 ## JSON: canada
 
-Deserialize canada.json (2.3 MB, geographic coordinates).
+Deserialize canada.json (2.3 MB, geographic coordinates), ×10.
 
-| Implementation           |      Time | vs best |
-| ------------------------ | --------: | ------: |
-| serde_json (Rust native) |   8.39 ms |   1.00x |
-| JSON.parse (Node)        |  12.25 ms |   1.46x |
-| **Wado** core:json       | 117.73 ms |  14.03x |
+| Implementation           |   Time | vs best |
+| ------------------------ | -----: | ------: |
+| serde_json (Rust native) | 111 ms |   1.00x |
+| JSON.parse (Node)        | 138 ms |   1.24x |
+| **Wado** core:json       | 426 ms |   3.84x |
 
 ## JSON: catalog
 
-Deserialize citm_catalog.json (1.7 MB, event catalog).
+Deserialize citm_catalog.json (1.7 MB, event catalog), ×10.
 
-| Implementation             |     Time | vs best |
-| -------------------------- | -------: | ------: |
-| serde_json (Rust native)   |  2.39 ms |   1.00x |
-| JSON.parse (Node)          |  4.50 ms |   1.88x |
-| **Wado** v2 (hand-rolled¹) |  6.42 ms |   2.69x |
-| **Wado** core:json         | 17.09 ms |   7.15x |
+| Implementation             |   Time | vs best |
+| -------------------------- | -----: | ------: |
+| serde_json (Rust native)   |  27 ms |   1.00x |
+| JSON.parse (Node)          |  49 ms |   1.80x |
+| **Wado** v2 (hand-rolled¹) | 107 ms |   3.98x |
+| **Wado** core:json         | 224 ms |   8.30x |
 
 ¹ `json_catalog/json_catalog_v2.wado` is a hand-rolled CitmCatalog parser
 PoC (no `core:json` / `core:serde`). Kept as a marker of the upper bound
@@ -93,8 +101,6 @@ sub-access-struct architecture. See its source for design notes.
 ## SQL Parse
 
 Parse 81 SQL statements (13 KB) x 100 iterations. Gale-generated parser vs sqlparser-rs.
-
-Best of three runs per implementation:
 
 | Implementation             |   Time | vs best |
 | -------------------------- | -----: | ------: |
@@ -114,8 +120,6 @@ highlighter vs four reference SQL highlighters:
 - **tree-sitter (web-tree-sitter)** — official JS WASM binding, same
   `@derekstride/tree-sitter-sql` grammar as the Rust row
 - **Shiki (JS engine)** — TextMate grammars, VSCode-quality output
-
-Best of three runs per implementation:
 
 | Implementation            |     Time | vs best |
 | ------------------------- | -------: | ------: |
