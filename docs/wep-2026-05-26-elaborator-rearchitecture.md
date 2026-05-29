@@ -533,10 +533,26 @@ migration; see Trade-offs.
       impl-method signatures: `fn eq(&self, other: &Self)` now
       resolves `&Self` to `&Pair<i32>` (etc.) via the new
       `resolve_type_with_self` helper, mirroring production's
-      `trait_ctx.self_type` plumbing. Under these annotations
-      the E2E suite at `-O0` + `-O2` reaches **1643 / 2654
-      fixtures passing under `WADO_REIFY=1`** (821.5 per level,
-      +49.5 from the 772 single-level baseline). Concrete arms cover every
+      `trait_ctx.self_type` plumbing. `LetStmt.is_mut` is now
+      honoured on `Ident`-pattern bindings (the arm previously
+      hardcoded `is_mut: false` so `let mut x = …` lost
+      mutability and downstream `&mut x` borrows failed wasm
+      validation). `reify_ident` for `Local` / `Capture`
+      reads the variable's stored type rather than
+      `expression_types[ident.id]`: template-string
+      interpolation parses each `{expr}` through a fresh
+      `Parser` (parser.rs:5175) whose `next_ast_id` restarts
+      at 0, so two interpolations like `{g} and n1={n1}`
+      collide on `AstId(0)` and the second resolution
+      overwrites the first in `expression_types` — the Local
+      already carries its declared type and is the only
+      authoritative source. Under these annotations the E2E
+      suite at `-O0` + `-O2` reaches **1757 / 2654 fixtures
+      passing under `WADO_REIFY=1`** (878.5 per level, +106.5
+      from the 772 single-level baseline; the
+      `expression_types` fix alone unlocked +102 fixtures by
+      itself).
+      Concrete arms cover every
       `reify_pattern` variant, every `reify_literal` variant
       (host-driven included), every `reify_ident` shape
       (local / current+imported globals / assoc constants /
