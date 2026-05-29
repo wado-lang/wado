@@ -496,15 +496,24 @@ migration; see Trade-offs.
       `Option::Some(v)` for `x: Option<i32>` binds `v` as
       `i32` (previously a raw `TypeParam{T,0}` leaked all the
       way to WIR build's `translate_function_bodies` and
-      panicked at the codegen-time validator). Under these
-      annotations the E2E suite at `-O0` reaches **772 / 1326
-      fixtures passing under `WADO_REIFY=1`** (+149 from the
-      623 baseline). Open gap: default-arguments pad
-      (`pad_args_with_defaults`) — reify doesn't insert the
-      callee's default expressions for missing positional
-      args, so `add(5)` for `fn add(a: i32, b: i32 = 10)`
-      reaches codegen with a 1-arg call against a 2-param
-      function. Default-path E2E behaviour is unchanged. Concrete arms cover every
+      panicked at the codegen-time validator). Default-argument
+      padding for free-function and method calls mirrors
+      production's `pad_args_with_defaults` (call.rs:1853+) and
+      `method_call.rs:481+` — reify clones each missing trailing
+      default expression, `substitute_idents` the explicit args,
+      and `reify_expr`s the result. `MethodDispatch` annotations
+      carry `param_names` and `param_defaults` so the replay
+      runs without re-running method lookup. Anonymous struct
+      literals (`{ x: 1, y: 2 }`) read their registered
+      `TypeId` directly from `expression_types` (rather than
+      re-deriving the deterministic name from reified field
+      types, which can diverge by an evaporated coercion
+      wrapper); production no longer drains
+      `pending_anonymous_structs` so reify sees the registered
+      struct decls. Under these annotations the E2E suite at
+      `-O0` + `-O2` reaches **1587 / 2654 fixtures passing
+      under `WADO_REIFY=1`** (793.5 per level, +21.5 from the
+      772 single-level baseline). Concrete arms cover every
       `reify_pattern` variant, every `reify_literal` variant
       (host-driven included), every `reify_ident` shape
       (local / current+imported globals / assoc constants /
@@ -524,17 +533,24 @@ migration; see Trade-offs.
       Range; TemplateString; StructLiteral named + anonymous;
       Matches; Resume; LabeledBlock; Spread; full impl-block
       walk via Gap 12's `ImplFacts` record).
-      Remaining (each carries a labelled `todo!`):
-      `MethodCall::IndexMutMethodCall` synthesis (Gap 3
-      desugar; the recording fires, the reify replay needs
-      the inner IndexMut dispatch annotation);
-      `CompoundAssign` IndexMut-target rewrite (same
-      annotation gap); `Expr::WithHandler` (effect handler
-      `with`); field-default expressions on `reify_struct`;
-      per-arg `is_mut` / literal-coercion records for `Call`
-      / `MethodCall`; power-assert slot-extraction template
-      reconstruction; ComparisonChain non-primitive
-      operator-trait dispatch.
+      Remaining gaps (largest failure categories in the
+      residual ~530 per-level fixtures): power-assert
+      slot-extraction template reconstruction (assert.rs
+      desugar — the recorded `AssertCaptureInfo` is in
+      `sem.types` but reify still emits the basic header
+      message without the per-slot `{__vK:?}` interpolation;
+      affects every `assert <cond>` fixture with non-trivial
+      cond); generic-method monomorphization name resolution
+      (mangled `Pair<i32>^Ord::cmp` reaches WIR-build
+      unresolved); struct/array type-identity divergence at
+      `-O0` (WIR-build sees two distinct `(ref $type)` for
+      what production resolves to a single registered type);
+      Format trait dispatch in template strings (`{x:?}` on
+      user types reaches WIR-build with the trait method
+      unresolved); effect handler `with` expression;
+      `MethodCall::IndexMutMethodCall` synthesis;
+      `CompoundAssign` IndexMut-target rewrite;
+      ComparisonChain non-primitive operator-trait dispatch.
       Dead-code removal (drop the existing combined walk's
       TIR-emission half + flip `WADO_REIFY` default-on) is
       the final cleanup once the residual `todo!`s land and

@@ -613,7 +613,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // construction, or monomorph-info shaping. Reify cannot
                 // reconstruct these from the AST alone — they depend on
                 // trait-impl resolution that lives only in the elaborator.
-                if let crate::tir::TirExprKind::Call { func, args: tir_args, .. } = &tir_call.kind {
+                if let crate::tir::TirExprKind::Call {
+                    func,
+                    args: tir_args,
+                    ..
+                } = &tir_call.kind
+                {
                     let func_ref = func.clone();
                     let param_is_mut: Vec<bool> = tir_args.iter().map(|a| a.is_mut).collect();
                     self.sem.types.static_method_dispatch.insert(

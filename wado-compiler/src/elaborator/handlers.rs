@@ -332,11 +332,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::HandlerBindingFacts {
                 effects: effects
                     .iter()
-                    .map(|(name, module, type_args)| super::sem::types::HandlerEffectEntry {
-                        name: name.clone(),
-                        module_source: module.clone(),
-                        trait_type_args: type_args.clone(),
-                    })
+                    .map(
+                        |(name, module, type_args)| super::sem::types::HandlerEffectEntry {
+                            name: name.clone(),
+                            module_source: module.clone(),
+                            trait_type_args: type_args.clone(),
+                        },
+                    )
                     .collect(),
                 bundle_group: Some(bundle_group),
                 handler_type,

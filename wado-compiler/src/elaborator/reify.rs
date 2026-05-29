@@ -500,10 +500,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             });
 
-            let default_expr: Option<Box<TirExpr>> = field
-                .default
-                .as_ref()
-                .map(|default_ast| Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(type_id))));
+            let default_expr: Option<Box<TirExpr>> = field.default.as_ref().map(|default_ast| {
+                Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(type_id)))
+            });
 
             let serde_default = field.default.is_some()
                 || field
@@ -4844,9 +4843,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source,
                     ..
                 } => (name, module_source),
-                ResolvedType::Primitive(prim) => {
-                    (prim.as_str().to_string(), crate::module_source::ModuleSource::primitive())
-                }
+                ResolvedType::Primitive(prim) => (
+                    prim.as_str().to_string(),
+                    crate::module_source::ModuleSource::primitive(),
+                ),
                 _ => (String::new(), self.current_module_source.clone()),
             }
         };
@@ -4997,13 +4997,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // can reproduce the same TIR `Call` shape without re-running
         // impl lookup, mangled-name construction, or monomorph-info
         // shaping (none of which are tractable from the AST alone).
-        if let Some(dispatch) = self
-            .sem
-            .types
-            .static_method_dispatch
-            .get(&call.id)
-            .cloned()
-        {
+        if let Some(dispatch) = self.sem.types.static_method_dispatch.get(&call.id).cloned() {
             let mut arg_exprs: Vec<CallArg> = call
                 .args
                 .iter()
@@ -5462,14 +5456,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Step 1: build the `container.index_mut(idx)` call.
         let container = self.reify_expr(&index_expr.expr, ctx, None);
-        let receiver_for_index_mut =
-            super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
-                container,
-                inner_dispatch.self_kind,
-                false,
-                index_expr.span,
-                &self.tysys.type_table,
-            );
+        let receiver_for_index_mut = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+            container,
+            inner_dispatch.self_kind,
+            false,
+            index_expr.span,
+            &self.tysys.type_table,
+        );
         let index_resolved = self.reify_expr(&index_expr.index, ctx, None);
         let index_mut_call = super::Elaborator::<H>::build_tir_method_call(
             receiver_for_index_mut,
@@ -5482,14 +5475,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Step 2: adjust the index_mut result for the outer method's
         // self_kind and build the outer MethodCall TIR.
-        let receiver_for_method =
-            super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
-                index_mut_call,
-                outer_dispatch.self_kind,
-                outer_dispatch.is_ref_impl,
-                method_call.span,
-                &self.tysys.type_table,
-            );
+        let receiver_for_method = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+            index_mut_call,
+            outer_dispatch.self_kind,
+            outer_dispatch.is_ref_impl,
+            method_call.span,
+            &self.tysys.type_table,
+        );
 
         let type_args: Vec<TypeId> = method_call
             .type_args
@@ -5761,9 +5753,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    `ctx.lookup` and returns `VarRef::Local`.
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
             match var_ref {
-                super::types::VarRef::Local {
-                    index, type_id, ..
-                } => {
+                super::types::VarRef::Local { index, type_id, .. } => {
                     let _ = type_id;
                     return TirExpr::new(
                         TirExprKind::Local {
@@ -5774,9 +5764,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         ident.span,
                     );
                 }
-                super::types::VarRef::Capture {
-                    index, type_id, ..
-                } => {
+                super::types::VarRef::Capture { index, type_id, .. } => {
                     let _ = type_id;
                     return TirExpr::new(
                         TirExprKind::Capture {
