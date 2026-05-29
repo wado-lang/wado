@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780045540288,
+  "lastUpdate": 1780045618411,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27205,6 +27205,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/205c6286a08644516c973977ba3467374a2946c4"
         },
         "date": 1780045539815,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "00dccfd8f623828bc779920901ed3f39d7120335",
+          "message": "Merge pull request #1226 from wado-lang/claude/assert-string-truncation-8ZNhG\n\nfeat: cap long String/Array operands in power-assert output",
+          "timestamp": "2026-05-29T18:00:10+09:00",
+          "tree_id": "5d54d693a514b7d1f70fe9fd68418db7cd96ea2d",
+          "url": "https://github.com/wado-lang/wado/commit/00dccfd8f623828bc779920901ed3f39d7120335"
+        },
+        "date": 1780045617930,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
