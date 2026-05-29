@@ -130,7 +130,10 @@ pub fn parse_format_spec(spec: &str) -> TemplateFormatSpec {
         width = w.parse().ok();
     }
 
-    // Parse [.precision]: '.' followed by digits
+    // Parse [.precision]: '.' followed by digits. A `None` precision lowers to
+    // PRECISION_DEFAULT (sequence Inspect applies its default cap).
+    // TODO: add a spec form (e.g. `.!`) for PRECISION_INFINITE so `{x:?}` can
+    // opt out of the default cap — there is no surface syntax for it yet.
     if i < len && chars[i] == '.' {
         i += 1;
         let prec_start = i;

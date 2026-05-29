@@ -919,10 +919,13 @@ fn build_formatter_expr(
                 },
                 TirStructField {
                     name: "precision".to_string(),
+                    // -2 (`Formatter::PRECISION_DEFAULT`) marks "no precision in
+                    // the spec" so sequence Inspect can fall back to its default
+                    // length cap; an explicit `.N` carries the literal N.
                     value: TirExpr::new(
                         TirExprKind::IntLiteral {
-                            value: pf.precision.unwrap_or(-1).cast_unsigned(),
-                            repr: pf.precision.unwrap_or(-1).to_string(),
+                            value: pf.precision.unwrap_or(-2).cast_unsigned(),
+                            repr: pf.precision.unwrap_or(-2).to_string(),
                         },
                         TypeTable::I32,
                         span,

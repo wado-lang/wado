@@ -1,0 +1,18 @@
+// Power-assert truncates long String operands to the default sequence limit.
+//
+// The captured operand dump (`s: "..."`) is rendered with Inspect and no
+// explicit precision, so String Inspect falls back to DEFAULT_SEQ_LIMIT (256)
+// and truncates with a `...` marker. The user-supplied message stays uncapped.
+export fn run() with Stdout {
+    let mut s = "";
+    for let mut i = 0; i < 300; i += 1 {
+        s.push('x');
+    }
+    assert s == "z";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["s: \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"..."]
+}
