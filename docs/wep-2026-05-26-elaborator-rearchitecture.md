@@ -425,11 +425,11 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **1895 / 2664 fixtures passing under
+      suite reaches **2011 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 769 remaining failures are all reify-specific). The
-      second-half session lifted the count from 1765 via four
-      landings — see `### Stage 5 second-half progress` below for
+      so the 653 remaining failures are all reify-specific). The
+      second-half session lifted the count from 1765 via the
+      landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
       See `### Stage 5 handover` below for the original remaining
       work and the gotchas encountered to date.
@@ -472,43 +472,67 @@ Landed:
    function and the op-driven wrap applied in `reify_binary`.
    `RefEq` / `RefNotEq` for reference-operand equality is also
    reproduced from operand types.
+5. **`Self::AssocType` in impl-method signatures.** reify resolved
+   bare `Self` but not the associated-type projection `Self::Output`,
+   so `&Self::Output` reified as `&unknown`, breaking the
+   call→definition link at WIR build (`[WIR] unresolved`
+   `ReadOnlyBox^Index<i32>::index`). reify now resolves
+   `Self::AssocType` against the impl's recorded
+   `ImplFacts.assoc_type_bindings`. Fixes all `index_trait` fixtures.
+6. **Associated-constant patterns and const range bounds.** A nullary
+   qualified pattern (`TokenKind::FOO`, `i32::MIN`) was lowered as a
+   variant case; it now resolves to the constant's value — user consts
+   via `sem.decls.associated_constants`, builtin primitive consts
+   (`i32::MIN`/`u8::MAX`/…) via the shared `primitive_assoc_const_to_i128`
+   (extracted from `stmt.rs`). Range endpoints resolve const bounds too.
+7. **Bare-ident / enum-case pattern disambiguation.** reify_pattern's
+   `Ident` arm always produced a binding, so a bare nullary case
+   (`None`, `Red`) became a catch-all and an immutable-global pattern
+   bound instead of comparing; the `Variant` arm never produced
+   `TirPattern::Enum`. Now mirrors `resolve_if_pattern_inner`: known
+   enum case → `Enum`, known variant case → nullary `Variant`,
+   immutable global → `ConstantValue`, else binding. Largest pattern
+   lift (match cluster 166 → 218 passing).
+8. **Variant constructor in turbofish form.** `Option::<String>::Some(x)`
+   parses as a `StaticMethodCall` whose target is a variant; reify
+   emitted an unresolved static call. `reify_static_method_call` now
+   detects the variant-case target and emits `VariantConstruct`.
+9. **Omitted struct-literal field defaults.** `Config { host }` with
+   `port: i32 = 8080` left defaulted fields unset (invalid wasm). reify
+   now synthesizes each omitted field's default (generic-substituted
+   type) and sorts fields by declaration index, mirroring
+   `resolve_struct_literal`.
 
-#### Re-triaged remaining clusters (769 failing)
+#### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix:
+Largest first, by fixture-name prefix (after the landings above):
 
 - **CM / HTTP / stream binding synthesis (~45).** `http_request`,
   `http_fields`, `http_client`, `http_response`, `stream_*` —
   unchanged from the handover analysis; needs a reify pass over
   CM-related impl blocks plus the resource-method binding
   generators.
-- **Trait-impl-method DCE/lower resolution (index_trait 10,
-  from_literal 8, serde ~16, and contributors elsewhere).** The
-  highest-leverage _single_ root cause uncovered this session. A
-  concrete trait-impl method (e.g.
-  `ReadOnlyBox^Index<i32>::index`, `TagMap<Tag,i32>^KeyValueLiteralBuilder::new_literal`)
-  is emitted by reify and **survives monomorphization**, but is
-  dropped between monomorphize and WIR build — the lower → DCE
-  reachability edge from the reify-emitted call to the definition
-  is not recognized, so the method is pruned and the call is
-  `[WIR] unresolved`. The call name and the definition name match
-  (`{module}^{Trait<Args>}::method`), and DCE's def-side
-  `function_id_for` and call-side `FunctionId::Method` keying agree on
-  `(module, struct_name, trait_name, method_name)`. Ruled out this
-  session: the def-side `LocalMethodName.trait_type_args` differs
-  (prod `[i32]`, reify `[]`), but it is **not** the cause — the call
-  side has `[]` in _both_ prod and reify (both build it via
-  `build_trait_op_method_call_on_resolved`, which never sets
-  `trait_type_args`), and populating the def's `trait_type_args` from a
-  new `ImplFacts` field did not resolve the call. The drop is therefore
-  in lower → DCE reachability itself, not the method-name keying. Next
-  step: instrument `optimize/dce.rs`'s reachable-set membership
-  (compare the def node's `FunctionId` against the inserted callee id
-  at the moment of pruning) for prod vs reify on the one-method
-  `impl Index<i32> for ReadOnlyBox` fixture; the post-mono TIR is
-  identical-shaped, so the divergence is in how the lowered NIR call
-  edge is keyed or in a pre-DCE lower pass. Cracking this should unlock
-  index_trait + from_literal + serde at once.
+- **Generic-impl builder monomorphization (from_literal ~8, serde
+  ~16).** A generic impl whose type parameter is implicit in the self
+  type — `impl KeyValueLiteralBuilder for TagMap<Tag, V>` (no explicit
+  `impl<V>`) — reifies its methods with `V` resolved to `unknown`
+  (return type `TagMap<String, unknown>`), so the
+  `TagMap<Tag,i32>^…::new_literal` call is `[WIR] unresolved`. The
+  elaborator collects implicit type params from the self type's generic
+  args (`elaborator.rs:1292+`) and registers them with self-arg-position
+  indices, but `ImplFacts.impl_type_params` records only the explicit
+  `impl<…>` clause, and reify resolves impl-method types positionally.
+  The correct fix is a unified type-param scope: record the impl's full
+  `(name → index)` scope (explicit + implicit-from-self-type, matching
+  the elaborator's indices) on `ImplFacts` and have reify resolve
+  impl-method types via that map rather than positionally. Care needed:
+  the existing recording already has an index-convention skew for
+  `impl<i32, T>` (the projection's `enumerate` index vs the elaborator's
+  `actual_idx`), so this must unify both — a bolt-on hack risks
+  regressing the explicit-param impls that currently pass. (The earlier
+  "DCE drops the method" hypothesis was wrong: the drop was the
+  `&unknown`-typed signature from the unresolved type param / assoc
+  type; landing #5 fixed the assoc-type half and cleared index_trait.)
 - **fn_ref (10).** Power-assert capture of fn-typed sub-expressions
   reaches `unknown^Inspect::inspect`; needs the assert-capture path
   to skip / specially handle fn-typed operands.
