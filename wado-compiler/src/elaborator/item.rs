@@ -1262,12 +1262,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let function_name = match &test_decl.name {
             Some(name) => {
-                // Convert test name to snake_case for function name
-                let snake_name: String = name
-                    .chars()
-                    .map(|c| if c.is_alphanumeric() { c } else { '_' })
-                    .collect::<String>()
-                    .to_lowercase();
+                // Convert the test name to an ASCII snake_case segment. Non-ASCII
+                // characters collapse to `_` so the derived CM kebab export name
+                // stays valid; the lossless original name is preserved on
+                // `TirTest::name` for display and `--test-name` filtering.
+                let snake_name = crate::name::test_name_to_snake(name);
                 format!("{prefix}_{test_index}_{snake_name}")
             }
             None => format!("{prefix}_{test_index}"),
