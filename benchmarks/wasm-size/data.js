@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780058649598,
+  "lastUpdate": 1780081044020,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27337,6 +27337,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2ad5a7ee06fbf070195c6b204a648fc2a708c9a4"
         },
         "date": 1780058649127,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8769cf0891ebfe83832d20a69e3d0a2435c2e27e",
+          "message": "Merge pull request #1228 from wado-lang/claude/wado-template-syntax-fmfJc\n\ntest: cover nested expr and turbofish in template interpolation",
+          "timestamp": "2026-05-30T03:49:15+09:00",
+          "tree_id": "62c15da6fbc5498730912a06b460d39bba5e7774",
+          "url": "https://github.com/wado-lang/wado/commit/8769cf0891ebfe83832d20a69e3d0a2435c2e27e"
+        },
+        "date": 1780081043608,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
