@@ -203,6 +203,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => Vec::new(),
         };
 
+        // Stage 5 / Gap 13 — record this explicit binding so
+        // reify_with_handler reads the single-effect entry
+        // without re-resolving the effect reference.
+        if let Some(EffectRef::Concrete {
+            name: ref eff_name,
+            module_source: ref eff_module,
+        }) = effect
+        {
+            self.record_handler_binding_facts(
+                binding.id,
+                super::sem::types::HandlerBindingFacts {
+                    effects: vec![super::sem::types::HandlerEffectEntry {
+                        name: eff_name.clone(),
+                        module_source: eff_module.clone(),
+                        trait_type_args: trait_type_args.clone(),
+                    }],
+                    bundle_group: None,
+                    handler_type,
+                },
+            );
+        }
+
         TirHandlerBinding {
             effect,
             trait_type_args,
@@ -301,6 +323,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // independent copies per effect.
         let bundle_group = *next_bundle_group;
         *next_bundle_group += 1;
+
+        // Stage 5 / Gap 13 — record the bundled binding's effect
+        // enumeration so reify_with_handler reproduces the same
+        // list without re-running collect_effect_impls_for_type.
+        self.record_handler_binding_facts(
+            binding.id,
+            super::sem::types::HandlerBindingFacts {
+                effects: effects
+                    .iter()
+                    .map(
+                        |(name, module, type_args)| super::sem::types::HandlerEffectEntry {
+                            name: name.clone(),
+                            module_source: module.clone(),
+                            trait_type_args: type_args.clone(),
+                        },
+                    )
+                    .collect(),
+                bundle_group: Some(bundle_group),
+                handler_type,
+            },
+        );
 
         effects
             .into_iter()

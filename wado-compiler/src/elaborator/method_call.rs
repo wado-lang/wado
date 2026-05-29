@@ -91,6 +91,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         input: MethodCallInput<'_>,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
+        // Clear the side-channel so a synthetic caller that reads
+        // `self.pending_method_dispatch` after this call never sees a
+        // stale value from a previous dispatch. The successful-dispatch
+        // path below repopulates it just before the final method-call
+        // TIR is built.
+        self.pending_method_dispatch = None;
+
         let MethodCallInput {
             mut receiver,
             method_name,
@@ -784,7 +791,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //  - Method lookup failed and we are in the error-recovery
         //    placeholder path (`method_found == false`).
         if method_found {
-            self.record_method_dispatch(call_id, &func, self_kind);
+            self.record_method_dispatch(
+                call_id,
+                &func,
+                self_kind,
+                is_ref_impl,
+                param_is_mut.clone(),
+                param_names,
+                param_defaults,
+            );
+            // Side-channel for synthetic callers (Gap 6 of Stage 5):
+            // for-of's `.into_iter()` / `.next()` dispatches pass
+            // `call_id == None` so `record_method_dispatch` skips them,
+            // but the synthetic caller still needs the
+            // receiver-adjustment inputs for its own recording. We
+            // populate the channel regardless of `call_id`; the
+            // `method_found` gate keeps the error-recovery placeholder
+            // from leaking out.
+            self.pending_method_dispatch = Some((self_kind, is_ref_impl));
         }
 
         Self::build_tir_method_call(

@@ -23,6 +23,7 @@ mod method_lookup;
 mod module;
 mod operators;
 pub(crate) mod orchestration;
+pub(crate) mod reify;
 pub(crate) mod sem;
 mod stmt;
 mod template;
@@ -182,6 +183,36 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// instances can `borrow_mut()` it from `&self` contexts (e.g.
     /// `record_use_specifier_references`).
     pub(super) interner: Rc<RefCell<ModuleSourceInterner>>,
+    /// Side-channel populated by [`Self::resolve_method_call_with`]
+    /// immediately before it builds the final `TirExprKind::MethodCall`,
+    /// carrying the `(self_kind, is_ref_impl)` the dispatch resolved.
+    /// Synthetic callers (e.g. for-of's `.into_iter()` / `.next()`) read
+    /// it back to record the dispatch info their own way — they pass
+    /// `call_id == None` so the in-function `record_method_dispatch`
+    /// call is skipped, and reify needs the recorded receiver-adjustment
+    /// inputs all the same (Gap 6 of WEP 2026-05-26 §`Design notes
+    /// (Stage 5)`).
+    ///
+    /// Cleared at the top of `resolve_method_call_with` so a synthetic
+    /// caller never accidentally reads a stale value from a previous
+    /// dispatch. `None` means either no dispatch ran (the short-circuit
+    /// paths returned early) or the method-not-found recovery branch
+    /// took over.
+    pub(super) pending_method_dispatch: Option<(ast::SelfKind, bool)>,
+    /// Side-channel populated by [`Self::resolve_binary`] and the
+    /// `Expr::Index` arm of [`Self::resolve_expr`] before they call
+    /// the trait-operator dispatcher, carrying the source-level
+    /// [`crate::ast::BinaryExpr`] / [`crate::ast::IndexExpr`] id that
+    /// reify needs to key the `OperatorDispatch` record on (Gap 11
+    /// of WEP 2026-05-26 §`Design notes (Stage 5)`).
+    ///
+    /// [`Self::build_trait_op_method_call_on_resolved`] reads this
+    /// channel, records the dispatch decision via
+    /// [`Self::record_operator_dispatch`], and clears it. Synthesised
+    /// binary calls (e.g. inside `desugar_comparison_chain`) leave the
+    /// channel `None`, and the recording is skipped — those calls have
+    /// no source AST id reify could key on.
+    pub(super) pending_operator_ast_id: Option<crate::ast::AstId>,
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -492,11 +523,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Synthetic calls (for-of's `.into_iter()` / `.next()`) pass
     /// `ast_id == None` and skip recording per the
     /// [`sem::types::MethodDispatch`] contract.
+    ///
+    /// `is_ref_impl` is the flag `lookup_method_info` produces alongside
+    /// the dispatch target; reify uses it together with `self_kind` to
+    /// drive `adjust_receiver_for_self_kind` without re-running impl
+    /// lookup (Gap 2 of Stage 5).
     pub(super) fn record_method_dispatch(
         &mut self,
         ast_id: Option<crate::ast::AstId>,
         function_ref: &tir::FunctionRef,
         self_kind: ast::SelfKind,
+        is_ref_impl: bool,
+        param_is_mut: Vec<bool>,
+        param_names: Vec<String>,
+        param_defaults: Vec<Option<ast::Expr>>,
     ) {
         let Some(ast_id) = ast_id else { return };
         self.sem.types.method_dispatch.insert(
@@ -504,8 +544,174 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             sem::types::MethodDispatch {
                 function_ref: function_ref.clone(),
                 self_kind,
+                is_ref_impl,
+                param_is_mut,
+                param_names,
+                param_defaults,
             },
         );
+    }
+
+    /// Record a generic-instantiation decision for the call / struct
+    /// literal / variant-ctor at `ast_id` (Gap 1 of Stage 5). `type_args`
+    /// is the inferred (or explicitly written) concrete type for each
+    /// generic parameter in declaration order; `instance_type` is the
+    /// `TypeId` of the resulting `GenericInstance` / monomorphic target.
+    ///
+    /// Skipped when `type_args` is empty (the site is non-generic) so the
+    /// map only carries decisions reify needs.
+    ///
+    /// `#[allow(dead_code)]` while the recording call sites in
+    /// `call.rs` / `expr.rs` are still being wired up — once every
+    /// generic call / struct literal / variant ctor records, drop the
+    /// allow.
+    #[allow(dead_code)]
+    pub(super) fn record_generic_instantiation(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        type_args: Vec<TypeId>,
+        instance_type: TypeId,
+    ) {
+        if type_args.is_empty() {
+            return;
+        }
+        self.sem.types.generic_instantiations.insert(
+            ast_id,
+            sem::types::GenericInstantiation {
+                type_args,
+                instance_type,
+            },
+        );
+    }
+
+    /// Record the capture-analysis result for the closure expression at
+    /// `ast_id` (Gap 4 of Stage 5). See [`sem::types::ClosureCaptureInfo`].
+    pub(super) fn record_closure_captures(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::ClosureCaptureInfo,
+    ) {
+        self.sem.types.closure_captures.insert(ast_id, info);
+    }
+
+    /// Record the power-assert capture-slot table for the assert
+    /// statement at `ast_id` (Gap 5 of Stage 5). See
+    /// [`sem::types::AssertCaptureInfo`].
+    pub(super) fn record_assert_captures(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::AssertCaptureInfo,
+    ) {
+        self.sem.types.assert_captures.insert(ast_id, info);
+    }
+
+    /// Record the iterator-path dispatch decision for the for-of
+    /// statement at `ast_id` (Gap 6 of Stage 5). Tuple / variadic paths
+    /// are tagged via [`sem::types::DesugarKind`] alone and leave no
+    /// entry here. See [`sem::types::ForOfIteratorInfo`].
+    pub(super) fn record_for_of_iterator(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::ForOfIteratorInfo,
+    ) {
+        self.sem.types.for_of_iterator.insert(ast_id, info);
+    }
+
+    /// Record the operator-dispatch decision for a binary / index
+    /// expression that the elaborator lowered to a trait method call
+    /// (Gap 11 of Stage 5). Absence of a recorded entry signals to
+    /// reify that the native
+    /// [`tir::TirExprKind::Binary`] / [`tir::TirExprKind::Index`] path
+    /// was taken instead. See [`sem::types::OperatorDispatch`].
+    pub(super) fn record_operator_dispatch(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::OperatorDispatch,
+    ) {
+        self.sem.types.operator_dispatch.insert(ast_id, info);
+    }
+
+    /// Record the resolved `IndexAssign` trait dispatch keyed by the
+    /// inner `IndexExpr`'s `AstId`. See
+    /// [`sem::types::TypeAnnotations::index_assign_dispatch`]. Reify
+    /// reads this to emit `receiver.index_assign(idx, value)` for
+    /// `arr[i] = v` and `arr[i] OP= v` shapes — separate from the
+    /// read-side `operator_dispatch` that carries the `IndexValue` /
+    /// `Index` dispatch keyed by the same `AstId`.
+    pub(super) fn record_index_assign_dispatch(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::OperatorDispatch,
+    ) {
+        self.sem.types.index_assign_dispatch.insert(ast_id, info);
+    }
+
+    /// Record the handler-binding resolution facts (Gap 13 of
+    /// Stage 5) keyed by the
+    /// [`crate::ast::EffectHandlerBinding`]'s [`AstId`]. Reify
+    /// reads this entry to enumerate the same `TirHandlerBinding`
+    /// list annotate's combined walk produces, without re-running
+    /// `collect_effect_impls_for_type` or the explicit-form
+    /// `trait_env` validation. See [`sem::types::HandlerBindingFacts`].
+    ///
+    /// `#[allow(dead_code)]` until the recording sites in
+    /// `resolve_explicit_handler_binding` /
+    /// `resolve_bundled_handler_binding` are wired through.
+    #[allow(dead_code)]
+    pub(super) fn record_handler_binding_facts(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::HandlerBindingFacts,
+    ) {
+        self.sem.types.handler_bindings.insert(ast_id, info);
+    }
+
+    /// Record the impl-block resolution facts (Gap 12 of Stage 5)
+    /// keyed by the [`crate::ast::ImplBlock`]'s [`AstId`]. Reify
+    /// reads the entry verbatim — no re-resolution of the impl
+    /// target, the trait reference, the type params, or the
+    /// associated types happens inside `reify_impl`.
+    /// See [`sem::types::ImplFacts`].
+    ///
+    /// `#[allow(dead_code)]` until the recording site in the
+    /// `Item::Impl` arm of `resolve_module` is wired up and
+    /// `reify_impl` reads the record.
+    #[allow(dead_code)]
+    pub(super) fn record_impl_facts(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        info: sem::types::ImplFacts,
+    ) {
+        self.sem.types.impl_facts.insert(ast_id, info);
+    }
+
+    /// Record an `impl Trait for Type;` synthesis request (Gap 12 /
+    /// Stage 5). `reify_module` reads
+    /// [`sem::decls::ModuleDecls::pending_synthesis_requests`] and
+    /// pushes each onto the emitted [`tir::TirModule::synthesis_requests`].
+    ///
+    /// `#[allow(dead_code)]` until the recording site at the
+    /// elaborator's existing
+    /// `tir_module.synthesis_requests.push(...)` is rerouted
+    /// through here.
+    #[allow(dead_code)]
+    pub(super) fn record_pending_synthesis_request(&mut self, req: tir::SynthesisRequest) {
+        self.sem.decls.pending_synthesis_requests.push(req);
+    }
+
+    /// Record a synthesised default-method `TirFunction` (Gap 12 /
+    /// Stage 5). `reify_module` reads
+    /// [`sem::decls::ModuleDecls::pending_default_methods`] and
+    /// pushes each onto the emitted [`tir::TirModule`]'s function
+    /// list. Decouples the synthesis output from the reify walk so
+    /// reify doesn't re-run the default-method synthesis.
+    ///
+    /// `#[allow(dead_code)]` until the recording site in the
+    /// existing default-method synthesis loop is rerouted
+    /// through here.
+    #[allow(dead_code)]
+    pub(super) fn record_pending_default_method(&mut self, func: tir::TirFunction) {
+        self.sem.decls.pending_default_methods.push(func);
     }
 
     /// Record a coercion decision for the expression at `ast_id`. Called
@@ -1103,7 +1309,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                     }
 
-                    // `impl Trait for Type;` — record synthesis request and skip
+                    // `impl Trait for Type;` — record synthesis request and skip.
+                    // Stage 5 / Gap 12: the synthesis-request push lands both
+                    // on the existing `tir_module.synthesis_requests` (so the
+                    // current combined walk's behaviour is preserved) and on
+                    // `sem.decls.pending_synthesis_requests` (so reify_module
+                    // reads it once the orchestration switch flips). The
+                    // duplication is intentional and goes away when the
+                    // existing push is retired alongside the combined walk.
                     if impl_block.is_synthesize_request {
                         if let Some(ref trait_type) = impl_block.trait_type {
                             let synth_trait_name = self.get_type_name_full(trait_type);
@@ -1114,15 +1327,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .iter()
                                 .map(|(name, &(index, type_id))| (name.clone(), index, type_id))
                                 .collect();
-                            tir_module
-                                .synthesis_requests
-                                .push(crate::tir::SynthesisRequest {
-                                    trait_name: synth_trait_name,
-                                    target_type_name: struct_name.clone(),
-                                    target_type_id,
-                                    type_params,
-                                    span: impl_block.span,
-                                });
+                            let req = crate::tir::SynthesisRequest {
+                                trait_name: synth_trait_name,
+                                target_type_name: struct_name.clone(),
+                                target_type_id,
+                                type_params,
+                                span: impl_block.span,
+                            };
+                            tir_module.synthesis_requests.push(req.clone());
+                            self.record_pending_synthesis_request(req);
                         }
                         self.trait_ctx = saved_trait_ctx;
                         continue;
@@ -1170,6 +1383,63 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     );
                             }
                         }
+                    }
+
+                    // Stage 5 / Gap 12: record the impl-block
+                    // resolution facts so `reify_impl` can read them
+                    // verbatim. All inputs are already computed by
+                    // the setup above; the recording is one call
+                    // that snapshots the resolved Self type, the
+                    // trait canonical / mangled forms, the impl's
+                    // TIR type-param projection, the assoc-type
+                    // bindings, and the handler / ref-impl flags.
+                    {
+                        let self_type = self.resolve_type(&impl_block.ty);
+                        let trait_canonical = impl_block.trait_type.as_ref().map(|t| {
+                            let base = self.get_type_name(t);
+                            self.canonical_decl_key(&base)
+                        });
+                        let is_handler_method = trait_canonical
+                            .as_ref()
+                            .map(|key| {
+                                self.tysys.trait_env.effect_decl_index.contains_key(key)
+                                    || self.tysys.trait_env.resource_decl_index.contains_key(key)
+                            })
+                            .unwrap_or(false);
+                        let is_ref_impl = matches!(
+                            &impl_block.ty,
+                            ast::Type::Reference(_) | ast::Type::MutReference(_),
+                        );
+                        let impl_type_params_tir: Vec<crate::tir::TirTypeParam> = impl_block
+                            .type_params
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(i, p)| {
+                                if self.tysys.is_known_type_name(&p.name) {
+                                    return None;
+                                }
+                                Some(crate::tir::TirTypeParam {
+                                    name: p.name.clone(),
+                                    is_effect: p.is_effect,
+                                    is_pack: p.is_pack,
+                                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                                    default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                                    index: i as u32,
+                                })
+                            })
+                            .collect();
+                        self.record_impl_facts(
+                            impl_block.id,
+                            sem::types::ImplFacts {
+                                self_type,
+                                trait_name_mangled: trait_name.clone(),
+                                trait_canonical,
+                                impl_type_params: impl_type_params_tir,
+                                assoc_type_bindings: self.trait_ctx.assoc_type_bindings.clone(),
+                                is_handler_method,
+                                is_ref_impl,
+                            },
+                        );
                     }
 
                     // Collect explicitly provided method names
@@ -1228,6 +1498,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 // in the AST, but they should be treated as pub since they are
                                 // part of a trait implementation
                                 tir_func.is_pub = true;
+                                // Stage 5 / Gap 12: record the
+                                // synthesised default-method
+                                // function so reify_module reads
+                                // it from `sem.decls.pending_default_methods`
+                                // when the orchestration switch
+                                // flips. Until then, the existing
+                                // `tir_module.add_function` keeps
+                                // the combined walk's behaviour.
+                                self.record_pending_default_method(tir_func.clone());
                                 tir_module.add_function(tir_func);
                             }
                         }
@@ -1335,9 +1614,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             tir_module = tir_module.with_data_section(Some(data.to_string()));
         }
 
-        // Add anonymous structs created during expression resolution
-        for anon_struct in self.sem.decls.pending_anonymous_structs.drain(..) {
-            tir_module.add_struct(anon_struct);
+        // Anonymous structs created during expression resolution.
+        // Clone (not drain) so reify still sees them under WADO_REIFY=1.
+        for anon_struct in &self.sem.decls.pending_anonymous_structs {
+            tir_module.add_struct(anon_struct.clone());
         }
 
         // Preserve wasm_module attribute

@@ -468,6 +468,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_type_args_inferred = impl_args;
                     method_type_args = method_args;
                 }
+                // Stage 5 (Gap 1 of WEP 2026-05-26): record the combined
+                // `(impl_args, method_args)` for the static-method call
+                // site. Reify needs both halves to reconstruct the
+                // mangled `__<Type>__<method>` name with the same type
+                // arg shape annotate computed. The combined order is
+                // `[impl_args, method_args]` — same as
+                // `lookup_static_method_param_types`'s substitution
+                // input below. Instance type is UNKNOWN: a static-method
+                // call has no decl-anchored `GenericInstance`; reify
+                // reads `expression_types[call.id]` for the result type.
+                {
+                    let mut combined = impl_type_args_inferred.clone();
+                    combined.extend_from_slice(&method_type_args);
+                    self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
+                }
                 // Check trait bounds and register assoc type resolutions for inferred type args
                 if !method_type_args.is_empty() {
                     let mtype_params = self.lookup_static_method_type_params(prefix, suffix);
@@ -502,8 +517,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let arg_type = args[0].type_id;
                     let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
 
-                    // Reflexive: T::from(T_val) — identity conversion
+                    // Reflexive: T::from(T_val) — identity conversion. Stage 5
+                    // (Gap 9): the outer Call AstId evaporates, so tag it with
+                    // `NewtypeFromCollapse` for reify to recognise — otherwise
+                    // reify would emit a `TirExprKind::Call` the elaborator
+                    // never built. The inner argument's `expression_types`
+                    // entry survives because it was recorded by the
+                    // `resolve_expr` wrapper for the argument itself.
                     if arg_type_name == prefix {
+                        self.record_desugar(
+                            call.id,
+                            super::sem::types::DesugarKind::NewtypeFromCollapse,
+                        );
                         return args[0].clone();
                     }
 
@@ -572,7 +597,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                return self.resolve_static_method_call_from_qualified(
+                let tir_call = self.resolve_static_method_call_from_qualified(
                     prefix,
                     suffix,
                     &mangled_name,
@@ -582,6 +607,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     call.span,
                     ctx,
                 );
+                // Stage 5 (WEP 2026-05-26): record the resolved
+                // `FunctionRef` so reify can reproduce the same TIR
+                // shape without re-running impl lookup, mangled-name
+                // construction, or monomorph-info shaping. Reify cannot
+                // reconstruct these from the AST alone — they depend on
+                // trait-impl resolution that lives only in the elaborator.
+                if let crate::tir::TirExprKind::Call {
+                    func,
+                    args: tir_args,
+                    ..
+                } = &tir_call.kind
+                {
+                    let func_ref = func.clone();
+                    let param_is_mut: Vec<bool> = tir_args.iter().map(|a| a.is_mut).collect();
+                    self.sem.types.static_method_dispatch.insert(
+                        call.id,
+                        super::sem::types::StaticMethodDispatch {
+                            function_ref: func_ref,
+                            param_is_mut,
+                        },
+                    );
+                }
+                return tir_call;
             }
             // Check if this is a flags type method call: Perms::none(), Perms::all()
             else if let Some(flags_info) = self.lookup_flags_case(prefix).cloned()
@@ -659,6 +707,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             expected_type,
                         )
                     };
+
+                    // Stage 5 (Gap 1 of WEP 2026-05-26): record generic
+                    // type args for variant constructors. Non-generic
+                    // variants emit a `Variant` (no type_args) and the
+                    // recording is skipped via the empty-`type_args`
+                    // guard inside `record_generic_instantiation`.
+                    let type_args = match self.tysys.type_table.borrow().get(variant_type) {
+                        ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                        _ => Vec::new(),
+                    };
+                    self.record_generic_instantiation(call.id, type_args, variant_type);
 
                     return TirExpr::new(
                         TirExprKind::VariantConstruct {
@@ -796,6 +855,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     expected_type,
                                 )
                             };
+
+                            // Stage 5 (Gap 1): record generic type args
+                            // for namespace-qualified variant ctors.
+                            let type_args = match self.tysys.type_table.borrow().get(variant_type) {
+                                ResolvedType::GenericInstance { type_args, .. } => {
+                                    type_args.clone()
+                                }
+                                _ => Vec::new(),
+                            };
+                            self.record_generic_instantiation(call.id, type_args, variant_type);
+
                             return TirExpr::new(
                                 TirExprKind::VariantConstruct {
                                     variant_type,
@@ -1008,6 +1078,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = self.substitute_type_params(return_type, &type_args);
         }
 
+        // Stage 5 (Gap 1 of WEP 2026-05-26): record the inferred /
+        // explicit `type_args` so reify can emit
+        // `TirExprKind::Call { type_args, … }` without re-running
+        // inference. Free-function calls have no `GenericInstance`-style
+        // anchor type — the substituted return type plays the same role
+        // (it pins the per-call monomorphic shape reify needs to seed
+        // mangled-name construction).
+        self.record_generic_instantiation(call.id, type_args.clone(), return_type);
+
         // Check each argument: reject &T/&mut T passed where non-ref is expected.
         // For generic functions with explicit type args, rebuild param types with
         // type params substituted so UNKNOWN params become concrete types.
@@ -1052,17 +1131,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let param_is_mut = self.lookup_function_param_is_mut(&call.callee);
         let call_args: Vec<CallArg> = args
             .into_iter()
-            .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
+            .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
             .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
             .collect();
+        let func_ref = FunctionRef {
+            module_source: callee.module,
+            name: callee.name,
+            monomorph_info: None,
+            method_info: None, // Free function call,
+        };
+        // Stage 5 (WEP 2026-05-26): record the resolved callee for the
+        // free / builtin / namespaced call paths so reify reproduces
+        // the same FunctionRef shape (module_source, mangled name,
+        // method_info) without re-running the dispatch logic. The
+        // static-method path already records via the early-return at
+        // the `is_static_method` arm; this covers the remaining
+        // shapes (`println(x)`, `builtin::array_new(n)`,
+        // `ns::foo(x)` for use-namespaced imports).
+        self.sem.types.static_method_dispatch.insert(
+            call.id,
+            super::sem::types::StaticMethodDispatch {
+                function_ref: func_ref.clone(),
+                param_is_mut,
+            },
+        );
         TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
-                    module_source: callee.module,
-                    name: callee.name,
-                    monomorph_info: None,
-                    method_info: None, // Free function call,
-                },
+                func: func_ref,
                 type_args,
                 args: call_args,
             },

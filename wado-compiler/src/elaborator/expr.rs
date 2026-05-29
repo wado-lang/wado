@@ -654,6 +654,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )
                     };
 
+                    // Stage 5 (Gap 1): record generic type args for
+                    // payload-less variant references that compile to a
+                    // `VariantConstruct` (e.g. `Option::<i32>::None`).
+                    let type_args = match self.tysys.type_table.borrow().get(variant_type) {
+                        ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                        _ => Vec::new(),
+                    };
+                    self.record_generic_instantiation(ident.id, type_args, variant_type);
+
                     return TirExpr::new(
                         TirExprKind::VariantConstruct {
                             variant_type,
@@ -770,6 +779,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             expected_type,
                         )
                     };
+                    // Stage 5 (Gap 1): record generic type args for
+                    // namespace-qualified payload-less variant references.
+                    let type_args = match self.tysys.type_table.borrow().get(variant_type) {
+                        ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                        _ => Vec::new(),
+                    };
+                    self.record_generic_instantiation(ident.id, type_args, variant_type);
                     return TirExpr::new(
                         TirExprKind::VariantConstruct {
                             variant_type,
@@ -1752,18 +1768,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow_mut()
                     .make_ref(trait_info.output_type);
 
+                let func = FunctionRef {
+                    module_source: trait_info.impl_module_source.clone(),
+                    name: mangled_method_name,
+                    monomorph_info: None,
+                    method_info: Some(LocalMethodName::new(
+                        lookup_name,
+                        Some(trait_info.trait_name.clone()),
+                        "index".to_string(),
+                    )),
+                };
+
+                // Stage 5 (Gap 11 Index-side wiring): record the
+                // operator dispatch keyed off the `IndexExpr`'s
+                // `AstId`. Reify reads `operator_dispatch[index.id]`
+                // to reproduce the `*<method-call>` shape — the
+                // `Ref(Output)` `return_type` is the signal that the
+                // outer `Deref` wrap is needed.
+                self.record_operator_dispatch(
+                    index.id,
+                    super::sem::types::OperatorDispatch {
+                        function_ref: func.clone(),
+                        self_kind: trait_info.self_kind,
+                        arg_ref_wraps: vec![false],
+                        return_type: ref_output_type,
+                    },
+                );
+
                 let method_call = Self::build_tir_method_call(
                     receiver,
-                    FunctionRef {
-                        module_source: trait_info.impl_module_source.clone(),
-                        name: mangled_method_name,
-                        monomorph_info: None,
-                        method_info: Some(LocalMethodName::new(
-                            lookup_name,
-                            Some(trait_info.trait_name.clone()),
-                            "index".to_string(),
-                        )),
-                    },
+                    func,
                     vec![],
                     vec![CallArg::new(index_expr, false)],
                     ref_output_type,
@@ -1803,18 +1837,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
 
                 // IndexValue returns Output directly (not a reference)
+                let func = FunctionRef {
+                    module_source: trait_info.impl_module_source.clone(),
+                    name: mangled_method_name,
+                    monomorph_info: None,
+                    method_info: Some(LocalMethodName::new(
+                        lookup_name,
+                        Some(trait_info.trait_name.clone()),
+                        "index_value".to_string(),
+                    )),
+                };
+
+                // Stage 5 (Gap 11 Index-side wiring): record the
+                // operator dispatch keyed off the `IndexExpr`'s
+                // `AstId`. The `return_type` (the `Output` directly,
+                // not wrapped in `Ref`) is reify's signal that no
+                // outer `Deref` wrap is needed — the IndexValue
+                // shape returns the value by copy.
+                self.record_operator_dispatch(
+                    index.id,
+                    super::sem::types::OperatorDispatch {
+                        function_ref: func.clone(),
+                        self_kind: trait_info.self_kind,
+                        arg_ref_wraps: vec![false],
+                        return_type: trait_info.output_type,
+                    },
+                );
+
                 return Self::build_tir_method_call(
                     receiver,
-                    FunctionRef {
-                        module_source: trait_info.impl_module_source.clone(),
-                        name: mangled_method_name,
-                        monomorph_info: None,
-                        method_info: Some(LocalMethodName::new(
-                            lookup_name,
-                            Some(trait_info.trait_name.clone()),
-                            "index_value".to_string(),
-                        )),
-                    },
+                    func,
                     vec![],
                     vec![CallArg::new(index_expr, false)],
                     trait_info.output_type,
@@ -3514,6 +3566,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 struct_module_source,
                 type_args.clone(),
             );
+            // Stage 5 (Gap 1 of WEP 2026-05-26): record the inferred
+            // type_args + the resulting `GenericInstance` so reify can
+            // emit `TirExprKind::StructLiteral { struct_type, … }`
+            // without re-running `infer_struct_type_args`.
+            self.record_generic_instantiation(struct_lit.id, type_args.clone(), struct_type);
             // Build mangled name with type arguments
             let arg_names: Vec<String> = type_args
                 .iter()
