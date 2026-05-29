@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2011 / 2664 fixtures passing under
+      suite reaches **2036 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 653 remaining failures are all reify-specific). The
+      so the 628 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -502,6 +502,16 @@ Landed:
    now synthesizes each omitted field's default (generic-substituted
    type) and sorts fields by declaration index, mirroring
    `resolve_struct_literal`.
+10. **Impl type params rebuilt from the AST self type.** Generic impls
+    whose type params are implicit in the self type
+    (`impl … for TagMap<Tag, V>`) reified methods with the param
+    resolved to `unknown`. `reify_method` now rebuilds `impl_type_params`
+    from the self type, mirroring the elaborator's method emission
+    (`item.rs:1370-1462`): each `Named` self-type arg is a positional
+    impl type param so monomorph's positional substitution against the
+    recorded `type_arg_ids` lines up. Cleared the `from_literal`,
+    `index_value`, `sequence_literal`, and `template_string_generic`
+    builder fixtures (zero net regressions on a full run).
 
 #### Re-triaged remaining clusters
 
@@ -512,33 +522,22 @@ Largest first, by fixture-name prefix (after the landings above):
   unchanged from the handover analysis; needs a reify pass over
   CM-related impl blocks plus the resource-method binding
   generators.
-- **Generic-impl builder monomorphization (from_literal ~8, serde
-  ~16).** `impl KeyValueLiteralBuilder for TagMap<Tag, V>` (no explicit
-  `impl<V>`) reifies its methods with `V` resolved to `unknown` (return
-  `TagMap<String, unknown>`), so `TagMap<Tag,i32>^…::new_literal` is
-  `[WIR] unresolved`. Full diagnosis: the elaborator's _method-emission_
-  path (`item.rs:1378–1402`) treats **every** `Named` arg of a generic
-  self type as a positional impl type param — `TagMap<Tag, V>` registers
-  `Tag → TypeParam{0}` and `V → TypeParam{1}` (it does _not_ skip the
-  newtype-aliased `Tag`), and the recorded
-  `KeyValueCoercionFacts.type_arg_ids = [String, i32]` (the builder
-  instance's full type args, by self-arg position) is what monomorph
-  substitutes positionally (`TypeParam{i} → type_arg_ids[i]`). reify
-  instead resolves `Tag` as a newtype (→`String`) and `V` as `unknown`,
-  with `impl_type_params` from the explicit `impl<…>` clause (empty
-  here). The fix is to mirror `item.rs:1370–1462` in reify: rebuild
-  `impl_type_params` + the type-param scope from the AST self type
-  (`impl_block.ty`), registering each `Named` self-type arg as
-  `TypeParam{position}`, and resolve impl-method types with that scope
-  taking precedence over newtype resolution (the resolver checks
-  newtypes before type params, so `Tag` would otherwise resolve to its
-  alias). This is a core-resolver change touching every generic-self-type
-  impl, so it needs a full e2e regression run; `impl<T> Foo for Bar<T>`
-  and the concrete `impl … for ReadOnlyBox` (Named self type) are
-  unaffected. (The earlier "DCE drops the method" and "`trait_type_args`"
-  hypotheses were both wrong: the drop was the `&unknown`-typed
-  signature; landing #5 fixed the assoc-type half and cleared
-  index_trait.)
+- **Serde derive + non-`Named` self-type args (serde ~16,
+  from_literal_nested_generic).** Landing #10 cleared the common
+  generic-impl builders (`from_literal`, `index_value`,
+  `sequence_literal`, `template_string_generic`) by rebuilding
+  `impl_type_params` from the self type. Two sub-cases remain:
+  - **Non-`Named` self-type args.** `impl … for NestedMap<Array<String>, V>`
+    has a `Generic` arg (`Array<String>`) at position 0; landing #10 only
+    registers `Named` args, so the positional alignment with
+    `type_arg_ids` is off and `NestedMap<…>::new` is `[WIR] unresolved`.
+    The fix is to register a positional impl type param for _every_ self-type
+    arg (synthesizing a fresh param name for non-`Named` shapes) so the
+    indices stay dense, mirroring how monomorph keys `type_arg_ids`.
+  - **Serde-derived synthesized impls.** `#[derive(Serialize/Deserialize)]`
+    emits impl methods through a synthesis path whose per-`AstId`
+    annotations do not survive into reify; needs the synthesized AstIds
+    recorded (or the synthesized impls re-walked by reify).
 - **fn_ref (10).** Power-assert capture of fn-typed sub-expressions
   reaches `unknown^Inspect::inspect`; needs the assert-capture path
   to skip / specially handle fn-typed operands.
