@@ -113,6 +113,9 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
+
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
