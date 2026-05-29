@@ -1275,7 +1275,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // names (excluding effect params). We use these names together with
         // `impl_offset` to materialise the `TypeParam` ids the solver needs
         // to track, without re-resolving the method signature.
-        let method_type_param_names = match &base_type {
+        let method_type_params = match &base_type {
             ResolvedType::Struct {
                 name,
                 module_source,
@@ -1292,26 +1292,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .get(name)
                 .cloned()
                 .and_then(|bounds| {
-                    self.find_method_type_param_names_in_trait_bounds(
+                    self.find_method_type_params_in_trait_bounds(
                         &bounds.iter().map(|b| b.name.clone()).collect::<Vec<_>>(),
                         method_name,
                     )
                 }),
             ResolvedType::AssocTypeProjection { bounds, .. } => {
-                self.find_method_type_param_names_in_trait_bounds(bounds, method_name)
+                self.find_method_type_params_in_trait_bounds(bounds, method_name)
             }
             _ => None,
         };
-        let Some(method_type_param_names) = method_type_param_names else {
+        let Some(method_type_params) = method_type_params else {
             return vec![];
         };
 
         let method_type_param_ids: Vec<TypeId> = {
             let mut tt = self.tysys.type_table.borrow_mut();
-            method_type_param_names
+            method_type_params
                 .iter()
                 .enumerate()
-                .map(|(i, (name, _))| tt.make_type_param(name.clone(), impl_offset + i as u32))
+                .map(|(i, p)| tt.make_type_param(p.name.clone(), impl_offset + i as u32))
                 .collect()
         };
 
@@ -1341,7 +1341,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .values()
             .map(|&(_, tid)| tid)
             .collect();
-        let (inferred, all_concrete) = infer.solve_with_phantoms();
+        let (mut inferred, _) = infer.solve_with_phantoms();
+        // Resolve method type params that appear only inside another method
+        // param's associated-type-equality bound (e.g.
+        // `fn m<T, I: Iterator<Item = T>>`), mirroring the free-function path.
+        self.resolve_assoc_bound_args(&method_type_params, &mut inferred);
+        let all_concrete = inferred.iter().all(|&tid| !self.is_unbound_type_param(tid));
         if !all_concrete {
             let all_outer = inferred.iter().all(|tid| scope_params.contains(tid));
             if !all_outer {
@@ -1356,10 +1361,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // they are constrained structurally from the bound's function
                 // type, not by call-site inference, so an empty result for
                 // them is expected and handled downstream.
-                let unresolved: Vec<&str> = method_type_param_names
+                let unresolved: Vec<&str> = method_type_params
                     .iter()
                     .zip(inferred.iter())
-                    .filter(|&((_, has_fn_bound), &tid)| {
+                    .filter(|&(param, &tid)| {
+                        let has_fn_bound =
+                            param.bounds.iter().any(|b| b.fn_signature.is_some());
                         !has_fn_bound
                             && matches!(
                                 self.tysys.type_table.borrow().get(tid),
@@ -1367,7 +1374,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             )
                             && !scope_params.contains(&tid)
                     })
-                    .map(|((name, _), _)| name.as_str())
+                    .map(|(param, _)| param.name.as_str())
                     .collect();
                 if !unresolved.is_empty() {
                     let params = unresolved
@@ -1393,23 +1400,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// declarations of the given trait bounds. Used when the receiver is a
     /// type parameter or an associated-type projection whose concrete type is
     /// unknown at inference time.
-    fn find_method_type_param_names_in_trait_bounds(
+    fn find_method_type_params_in_trait_bounds(
         &self,
         trait_names: &[String],
         method_name: &str,
-    ) -> Option<Vec<(String, bool)>> {
-        let extract_names = |method: &ast::Function| -> Option<Vec<(String, bool)>> {
-            let names: Vec<(String, bool)> = method
-                .type_params
-                .iter()
-                .filter(|p| !p.is_effect)
-                .map(|tp| {
-                    let has_fn_bound = tp.bounds.iter().any(|b| b.fn_signature.is_some());
-                    (tp.name.clone(), has_fn_bound)
-                })
-                .collect();
-            if names.is_empty() { None } else { Some(names) }
-        };
+    ) -> Option<Vec<ast::GenericParam>> {
         for module in self.loaded_modules.values() {
             for item in &module.items {
                 if let Item::Trait(trait_decl) = item
@@ -1417,9 +1412,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     for trait_method in &trait_decl.methods {
                         if trait_method.name == method_name
-                            && let Some(names) = extract_names(trait_method)
+                            && let Some(params) = Self::non_effect_type_params(trait_method)
                         {
-                            return Some(names);
+                            return Some(params);
                         }
                     }
                 }
@@ -1431,14 +1426,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 for trait_method in &trait_decl.methods {
                     if trait_method.name == method_name
-                        && let Some(names) = extract_names(trait_method)
+                        && let Some(params) = Self::non_effect_type_params(trait_method)
                     {
-                        return Some(names);
+                        return Some(params);
                     }
                 }
             }
         }
         None
+    }
+
+    /// The method's non-effect type parameters (cloned, in declaration
+    /// order), or `None` when there are none. Shared by the method
+    /// type-parameter lookups used by `infer_method_type_args`.
+    fn non_effect_type_params(method: &ast::Function) -> Option<Vec<ast::GenericParam>> {
+        let params: Vec<ast::GenericParam> = method
+            .type_params
+            .iter()
+            .filter(|p| !p.is_effect)
+            .cloned()
+            .collect();
+        if params.is_empty() { None } else { Some(params) }
     }
 
     /// Find the non-effect type parameter names of an instance method, in
@@ -1462,19 +1470,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         struct_module_source: Option<&ModuleSource>,
         method_name: &str,
-    ) -> Option<Vec<(String, bool)>> {
-        let extract_names = |method: &ast::Function| -> Option<Vec<(String, bool)>> {
-            let names: Vec<(String, bool)> = method
-                .type_params
-                .iter()
-                .filter(|p| !p.is_effect)
-                .map(|tp| {
-                    let has_fn_bound = tp.bounds.iter().any(|b| b.fn_signature.is_some());
-                    (tp.name.clone(), has_fn_bound)
-                })
-                .collect();
-            if names.is_empty() { None } else { Some(names) }
-        };
+    ) -> Option<Vec<ast::GenericParam>> {
+        let extract_names = Self::non_effect_type_params;
 
         let impl_matches_struct = |impl_block: &ast::ImplBlock, include_trait: bool| -> bool {
             if !include_trait && impl_block.trait_type.is_some() {
@@ -1485,7 +1482,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_type_name == struct_name || impl_base_name == struct_name
         };
 
-        let search_items = |items: &[Item], include_trait: bool| -> Option<Vec<(String, bool)>> {
+        let search_items = |items: &[Item], include_trait: bool| -> Option<Vec<ast::GenericParam>> {
             for item in items {
                 if let Item::Impl(impl_block) = item
                     && impl_matches_struct(impl_block, include_trait)
