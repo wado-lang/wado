@@ -791,7 +791,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //  - Method lookup failed and we are in the error-recovery
         //    placeholder path (`method_found == false`).
         if method_found {
-            self.record_method_dispatch(call_id, &func, self_kind, is_ref_impl, param_is_mut.clone());
+            self.record_method_dispatch(
+                call_id,
+                &func,
+                self_kind,
+                is_ref_impl,
+                param_is_mut.clone(),
+                param_names.clone(),
+                param_defaults.clone(),
+            );
             // Side-channel for synthetic callers (Gap 6 of Stage 5):
             // for-of's `.into_iter()` / `.next()` dispatches pass
             // `call_id == None` so `record_method_dispatch` skips them,

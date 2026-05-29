@@ -535,6 +535,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self_kind: ast::SelfKind,
         is_ref_impl: bool,
         param_is_mut: Vec<bool>,
+        param_names: Vec<String>,
+        param_defaults: Vec<Option<ast::Expr>>,
     ) {
         let Some(ast_id) = ast_id else { return };
         self.sem.types.method_dispatch.insert(
@@ -544,6 +546,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self_kind,
                 is_ref_impl,
                 param_is_mut,
+                param_names,
+                param_defaults,
             },
         );
     }

@@ -91,6 +91,18 @@ pub(crate) struct MethodDispatch {
     /// with the same `is_mut` shape annotate produced.
     #[allow(dead_code)]
     pub(crate) param_is_mut: Vec<bool>,
+    /// Parameter names in declaration order. Reify uses these as keys
+    /// when substituting explicit-arg ASTs into a default expression
+    /// that references an earlier parameter (e.g. `fn f(w, h = w)`),
+    /// mirroring `Elaborator::pad_args_with_defaults` (call.rs:1853+).
+    #[allow(dead_code)]
+    pub(crate) param_names: Vec<String>,
+    /// Parameter default expression ASTs in declaration order
+    /// (`None` for required parameters). Reify pads missing trailing
+    /// args by substituting explicit args into the default AST and
+    /// reifying the result.
+    #[allow(dead_code)]
+    pub(crate) param_defaults: Vec<Option<crate::ast::Expr>>,
 }
 
 /// Which sub-coercion [`super::super::Elaborator::try_coerce`] applied at

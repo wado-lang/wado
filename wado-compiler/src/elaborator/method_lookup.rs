@@ -3400,8 +3400,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             cm_name: _,
             is_ref_impl: method_is_ref_impl,
             method_type_param_ids: _,
-            param_defaults: _,
-            param_names: _,
+            param_defaults: method_param_defaults,
+            param_names: method_param_names,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self
@@ -3527,6 +3527,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_kind,
             method_is_ref_impl,
             method_param_is_mut.clone(),
+            method_param_names,
+            method_param_defaults,
         );
         self.record_desugar(
             method_call.id,

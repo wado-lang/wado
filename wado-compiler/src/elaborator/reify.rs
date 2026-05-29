@@ -5668,7 +5668,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Zip with the AST args so call sites with fewer args than
         // declared (a Stage-5 recovery shape) still produce the
         // right is_mut for the args we have.
-        let args: Vec<crate::tir::CallArg> = method_call
+        let mut args: Vec<crate::tir::CallArg> = method_call
             .args
             .iter()
             .zip(
@@ -5683,6 +5683,33 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 crate::tir::CallArg::new(arg_tir, is_mut)
             })
             .collect();
+
+        // Default-argument padding for method calls (production parity
+        // with method_call.rs:481+ where `pad_args_with_defaults`-style
+        // logic substitutes explicit arg ASTs into each missing default
+        // before resolving). The recorded `param_names` / `param_defaults`
+        // arrive on `MethodDispatch` from annotate.
+        if args.len() < dispatch.param_defaults.len() {
+            let mut subs: IndexMap<String, ast::Expr> = IndexMap::default();
+            for (i, arg_ast) in method_call.args.iter().enumerate() {
+                if let Some(name) = dispatch.param_names.get(i) {
+                    subs.insert(name.clone(), arg_ast.clone());
+                }
+            }
+            for i in args.len()..dispatch.param_defaults.len() {
+                let Some(Some(default_ast)) = dispatch.param_defaults.get(i) else {
+                    break;
+                };
+                let mut default_expr = default_ast.clone();
+                default_expr.substitute_idents(&subs);
+                let resolved = self.reify_expr(&default_expr, ctx, None);
+                let is_mut = dispatch.param_is_mut.get(i).copied().unwrap_or(false);
+                args.push(crate::tir::CallArg::new(resolved, is_mut));
+                if let Some(name) = dispatch.param_names.get(i) {
+                    subs.insert(name.clone(), default_expr);
+                }
+            }
+        }
 
         super::Elaborator::<H>::build_tir_method_call(
             adjusted_receiver,
