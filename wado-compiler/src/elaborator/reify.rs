@@ -3477,16 +3477,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Field positional info from the decl-interned struct.
         let lookup = self.type_lookup();
-        let info = lookup.struct_fields(&struct_name);
-        let field_names_to_index: crate::hashmap::IndexMap<String, (u32, TypeId)> = info
-            .map(|info| {
+        // Decl field shape: (name, index, raw_type, default_expr).
+        // Cloned out of the lookup so the borrow ends before reifying.
+        let decl_fields: Vec<(String, u32, TypeId, Option<ast::Expr>)> = {
+            let info = lookup.struct_fields(&struct_name);
+            info.map(|info| {
                 info.fields
                     .iter()
                     .enumerate()
-                    .map(|(i, (n, t, _is_pub))| (n.clone(), (i as u32, *t)))
+                    .map(|(i, (n, t, _is_pub))| {
+                        let default = info.field_defaults.get(i).and_then(Option::clone);
+                        (n.clone(), i as u32, *t, default)
+                    })
                     .collect()
             })
-            .unwrap_or_default();
+            .unwrap_or_default()
+        };
+        let field_names_to_index: crate::hashmap::IndexMap<String, (u32, TypeId)> = decl_fields
+            .iter()
+            .map(|(n, i, t, _)| (n.clone(), (*i, *t)))
+            .collect();
 
         // Instance type for generic structs is recorded by Gap 1; for
         // non-generic structs Gap 1's recording is skipped and we use
@@ -3509,18 +3519,36 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             crate::name::mangle_generic_name(&struct_name, &arg_names)
         };
 
-        // Reify each AST field. Field order in the TIR follows the AST
-        // (source order); the elaborator-side `field_index` lookup
-        // pins the positional slot used by codegen / WIR field
-        // accesses.
-        let fields: Vec<TirStructField> = struct_lit
+        // Substitute the decl's `TypeParam`s with the instance's generic
+        // args so a field's expected type is concrete (a no-op for
+        // non-generic structs, where `generic_args` is empty).
+        let substitute = |this: &Self, raw: TypeId| -> TypeId {
+            if generic_args.is_empty() {
+                return raw;
+            }
+            let subst: crate::hashmap::IndexMap<u32, TypeId> = (0..generic_args.len() as u32)
+                .zip(generic_args.iter().copied())
+                .collect();
+            this.tysys
+                .type_table
+                .borrow_mut()
+                .substitute_type_params(raw, &subst)
+        };
+
+        // Reify each AST-provided field, then synthesize omitted fields
+        // that declared a default (`port: i32 = 8080`). Field order in
+        // the TIR is by declaration index — matching
+        // `Elaborator::resolve_struct_literal`, which sorts after
+        // filling defaults so codegen's positional slots line up.
+        let mut fields: Vec<TirStructField> = struct_lit
             .fields
             .iter()
             .map(|f| {
-                let (field_index, expected_field_ty) = field_names_to_index
+                let (field_index, raw_ty) = field_names_to_index
                     .get(&f.name)
                     .copied()
                     .unwrap_or((0, crate::tir::TypeTable::UNKNOWN));
+                let expected_field_ty = substitute(self, raw_ty);
                 let value = self.reify_expr(&f.value, ctx, Some(expected_field_ty));
                 TirStructField {
                     name: f.name.clone(),
@@ -3529,6 +3557,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             })
             .collect();
+
+        let provided: crate::hashmap::IndexSet<String> =
+            struct_lit.fields.iter().map(|f| f.name.clone()).collect();
+        for (name, field_index, raw_ty, default) in &decl_fields {
+            if provided.contains(name) {
+                continue;
+            }
+            if let Some(default_expr) = default {
+                let expected_field_ty = substitute(self, *raw_ty);
+                let value = self.reify_expr(default_expr, ctx, Some(expected_field_ty));
+                fields.push(TirStructField {
+                    name: name.clone(),
+                    value,
+                    field_index: *field_index,
+                });
+            }
+        }
+        fields.sort_by_key(|f| f.field_index);
 
         TirExpr::new(
             TirExprKind::StructLiteral {
