@@ -1614,9 +1614,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             tir_module = tir_module.with_data_section(Some(data.to_string()));
         }
 
-        // Add anonymous structs created during expression resolution
-        for anon_struct in self.sem.decls.pending_anonymous_structs.drain(..) {
-            tir_module.add_struct(anon_struct);
+        // Add anonymous structs created during expression resolution.
+        // Stage 5 / WEP 2026-05-26: clone rather than drain so reify
+        // (which reads `&self.sem` after this walk) still sees them on
+        // `pending_anonymous_structs` when WADO_REIFY=1. Production's
+        // `tir_module` is discarded in that mode, so the extra clones
+        // cost nothing observable.
+        for anon_struct in &self.sem.decls.pending_anonymous_structs {
+            tir_module.add_struct(anon_struct.clone());
         }
 
         // Preserve wasm_module attribute
