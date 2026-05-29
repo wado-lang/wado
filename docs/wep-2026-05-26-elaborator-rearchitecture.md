@@ -510,10 +510,33 @@ migration; see Trade-offs.
       types, which can diverge by an evaporated coercion
       wrapper); production no longer drains
       `pending_anonymous_structs` so reify sees the registered
-      struct decls. Under these annotations the E2E suite at
-      `-O0` + `-O2` reaches **1587 / 2654 fixtures passing
-      under `WADO_REIFY=1`** (793.5 per level, +21.5 from the
-      772 single-level baseline). Concrete arms cover every
+      struct decls. Power-assert template reconstruction reads
+      the recorded `AssertCaptureInfo` and replays production's
+      capture-hook expansion: a `ReifyAssertCaptureContext` on
+      `FunctionContext` intercepts each flagged sub-expression
+      at `reify_expr`'s entry, materialises `let __vK = …;` for
+      it, and the panic template emits `condition: <source>`
+      plus one `<label>: {__vK:?}` line per emitted slot.
+      Variant-ctor detection runs before the
+      `static_method_dispatch` arm of `reify_call` so
+      `Option::Some(42)` lowers to `VariantConstruct` instead of
+      a `Call` against a non-existent function.
+      Closure-block return type is inferred via
+      `find_return_type_in_block` (same helper production uses
+      in closure.rs:276+) so `|| { return "hello"; }` returns
+      `String`, not `()`. `ComparisonChain` single-comparison
+      operator-trait dispatch records on `chain.id` (matching
+      production at operators.rs:1346) and reify emits the
+      `Eq::eq` / `Ord::cmp` MethodCall + Ord wrap shape
+      (`cmp == Less`, `cmp != Greater`, …) via the new
+      `wrap_ord_bool_from_cmp` helper. `Self` substitution in
+      impl-method signatures: `fn eq(&self, other: &Self)` now
+      resolves `&Self` to `&Pair<i32>` (etc.) via the new
+      `resolve_type_with_self` helper, mirroring production's
+      `trait_ctx.self_type` plumbing. Under these annotations
+      the E2E suite at `-O0` + `-O2` reaches **1643 / 2654
+      fixtures passing under `WADO_REIFY=1`** (821.5 per level,
+      +49.5 from the 772 single-level baseline). Concrete arms cover every
       `reify_pattern` variant, every `reify_literal` variant
       (host-driven included), every `reify_ident` shape
       (local / current+imported globals / assoc constants /

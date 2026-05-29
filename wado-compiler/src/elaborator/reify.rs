@@ -2033,20 +2033,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // hook check is a single `Option` discriminant and the empty
         // `ast_id_to_slot` map intercepts nothing.
         let info = self.sem.types.assert_captures.get(&assert_stmt.id);
-        let (slot_meta, ast_id_to_slot): (
-            Vec<(AstId, String)>,
-            IndexMap<AstId, usize>,
-        ) = if let Some(info) = info {
-            let mut meta: Vec<(AstId, String)> = Vec::with_capacity(info.slots.len());
-            let mut map: IndexMap<AstId, usize> = IndexMap::default();
-            for (i, s) in info.slots.iter().enumerate() {
-                meta.push((s.ast_id, s.capture_label.clone()));
-                map.insert(s.ast_id, i);
-            }
-            (meta, map)
-        } else {
-            (Vec::new(), IndexMap::default())
-        };
+        let (slot_meta, ast_id_to_slot): (Vec<(AstId, String)>, IndexMap<AstId, usize>) =
+            if let Some(info) = info {
+                let mut meta: Vec<(AstId, String)> = Vec::with_capacity(info.slots.len());
+                let mut map: IndexMap<AstId, usize> = IndexMap::default();
+                for (i, s) in info.slots.iter().enumerate() {
+                    meta.push((s.ast_id, s.capture_label.clone()));
+                    map.insert(s.ast_id, i);
+                }
+                (meta, map)
+            } else {
+                (Vec::new(), IndexMap::default())
+            };
 
         // Scope the synthetic `__vK` / `__cond` locals so they cannot
         // leak past this assert's expansion.
