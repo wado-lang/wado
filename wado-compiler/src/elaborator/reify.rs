@@ -962,7 +962,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         impl_block
             .methods
             .iter()
-            .filter_map(|method| self.reify_method(method, &facts))
+            .filter_map(|method| self.reify_method(method, &facts, &impl_block.ty))
             .collect()
     }
 
@@ -977,23 +977,89 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         func: &ast::Function,
         facts: &super::sem::types::ImplFacts,
+        impl_self_ty: &ast::Type,
     ) -> Option<TirFunction> {
         use crate::ast::SelfKind;
         use crate::name::{LocalMethodName, MethodName};
         use crate::tir::TypeTable;
 
-        // Method type-param scope unions the impl's projected
-        // type params with the method's own (skipping effect
-        // params, mirroring `reify_function`'s filter).
-        let mut type_param_names: Vec<String> = facts
-            .impl_type_params
-            .iter()
-            .map(|p| p.name.clone())
-            .collect();
-        for p in &func.type_params {
-            if !p.is_effect && !type_param_names.contains(&p.name) {
-                type_param_names.push(p.name.clone());
+        // Impl type params, rebuilt from the AST self type to mirror the
+        // elaborator's method emission (`item.rs:1370-1462`): every
+        // `Named` arg of a generic self type is a positional impl type
+        // param (`TagMap<Tag, V>` → `Tag@0`, `V@1`), so monomorph's
+        // positional substitution against the recorded `type_arg_ids`
+        // lines up — including the newtype-aliased / concrete args.
+        // Bounds come from the explicit `impl<…>` clause (recorded in
+        // `facts.impl_type_params`) by name. Self-type shapes this does
+        // not model (variadic tuple `[..T]`, …) fall back to the
+        // recorded projection so their behaviour is preserved.
+        let impl_self_inner = match impl_self_ty {
+            ast::Type::Reference(i) | ast::Type::MutReference(i) => i.as_ref(),
+            other => other,
+        };
+        let bounds_for = |name: &str| -> Vec<String> {
+            facts
+                .impl_type_params
+                .iter()
+                .find(|p| p.name == name)
+                .map(|p| p.bounds.clone())
+                .unwrap_or_default()
+        };
+        let impl_type_params: Vec<crate::tir::TirTypeParam> = match impl_self_inner {
+            ast::Type::Generic(generic) => generic
+                .args
+                .iter()
+                .enumerate()
+                .filter_map(|(i, arg)| match arg {
+                    ast::Type::Named(named) => Some(crate::tir::TirTypeParam {
+                        name: named.name.clone(),
+                        is_effect: false,
+                        is_pack: false,
+                        bounds: bounds_for(&named.name),
+                        default: None,
+                        index: i as u32,
+                    }),
+                    _ => None,
+                })
+                .collect(),
+            ast::Type::Named(named)
+                if facts.impl_type_params.iter().any(|p| p.name == named.name) =>
+            {
+                // Blanket impl `impl<I: Bound> Trait for I`.
+                facts.impl_type_params.clone()
             }
+            _ => facts.impl_type_params.clone(),
+        };
+
+        // Type-param scope for resolving the method's own param/return
+        // types. Impl params are placed at their declaration index (so
+        // `resolve_type_static_with_params`, which keys by position,
+        // reproduces those indices); concrete / known names (e.g. a
+        // newtype-aliased `Tag`) are left out so they resolve to their
+        // alias, which monomorph then maps to the same concrete type.
+        // Method-level params continue after the impl param count,
+        // matching the elaborator's `next_idx = type_params.len()`.
+        let mut type_param_names: Vec<String> = Vec::new();
+        for p in &impl_type_params {
+            if self.tysys.is_known_type_name(&p.name) {
+                continue;
+            }
+            let idx = p.index as usize;
+            if type_param_names.len() <= idx {
+                type_param_names.resize(idx + 1, String::new());
+            }
+            type_param_names[idx] = p.name.clone();
+        }
+        let mut next_idx = impl_type_params.len();
+        for p in &func.type_params {
+            if p.is_effect || type_param_names.iter().any(|n| n == &p.name) {
+                continue;
+            }
+            if type_param_names.len() <= next_idx {
+                type_param_names.resize(next_idx + 1, String::new());
+            }
+            type_param_names[next_idx] = p.name.clone();
+            next_idx += 1;
         }
 
         // Derive the mangler's base-struct-name input from the
@@ -1122,7 +1188,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_export: false,
             is_async: func.is_async,
             type_params,
-            impl_type_params: facts.impl_type_params.clone(),
+            impl_type_params,
             monomorph_info: None,
             method_info: Some(method_info),
             params,
