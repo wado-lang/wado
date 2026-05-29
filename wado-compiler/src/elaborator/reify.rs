@@ -27,7 +27,7 @@
 //!   around the raw expression
 //! - `ModuleSemantics.types.desugars[id]` → which expansion path to take
 //!   (assert / matches / for-of / while / compound-assign / comparison
-//!   chain / IndexMut method call / newtype-from collapse)
+//!   chain / `IndexMut` method call / newtype-from collapse)
 //! - `ModuleSemantics.types.generic_instantiations[id]` → `type_args`
 //!   for call / struct / variant constructions
 //! - `ModuleSemantics.types.closure_captures[id]` → closure capture list
@@ -97,7 +97,7 @@ use super::tysys::TypeSystem;
 /// [`super::types::FunctionContext::reify_assert_capture_ctx`] so the
 /// reify walk can run without sharing fields with the production
 /// `assert.rs` plumbing. Annotated source labels come from the recorded
-/// [`super::sem::types::AssertSlot::capture_label`]; AstIds come from
+/// [`super::sem::types::AssertSlot::capture_label`]; `AstIds` come from
 /// [`super::sem::types::AssertSlot::ast_id`].
 pub(super) struct ReifyAssertSlot {
     pub(super) ast_id: AstId,
@@ -1163,7 +1163,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a `test "…" { … }` block. Returns the synthesised
     /// `TirFunction` plus the `TirTest` metadata. Mirrors
     /// `Elaborator::resolve_test_decl` (item.rs:1233+): the function
-    /// name encodes test_index + attributes (`expect_trap`, `TODO`,
+    /// name encodes `test_index` + attributes (`expect_trap`, `TODO`,
     /// `timeout_ms`); the body reifies into a unit-returning
     /// no-parameter function.
     fn reify_test_decl(
@@ -1257,7 +1257,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a `global g: T = expr;` declaration. The declared type
-    /// was already resolved by annotate_decls and lives on
+    /// was already resolved by `annotate_decls` and lives on
     /// `sem.decls.current_module_globals`; reify reads it back and
     /// walks the initializer through a minimal `FunctionContext`.
     /// `is_nullable` / `lazy_init` are populated by the lower phase
@@ -1308,15 +1308,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Propagate expected type to the last expression-form
             // statement for coercion, mirroring
             // `Elaborator::resolve_block` (stmt.rs:31–69).
-            if expected_type.is_some() && i == len - 1 {
-                if let ast::Stmt::Expr(expr_stmt) = s {
-                    let expr = self.reify_expr(&expr_stmt.expr, ctx, expected_type);
-                    stmts.push(TirStmt::new(
-                        crate::tir::TirStmtKind::Expr(expr),
-                        expr_stmt.span,
-                    ));
-                    continue;
-                }
+            if expected_type.is_some()
+                && i == len - 1
+                && let ast::Stmt::Expr(expr_stmt) = s
+            {
+                let expr = self.reify_expr(&expr_stmt.expr, ctx, expected_type);
+                stmts.push(TirStmt::new(
+                    crate::tir::TirStmtKind::Expr(expr),
+                    expr_stmt.span,
+                ));
+                continue;
             }
             stmts.extend(self.reify_stmt(s, ctx));
         }
@@ -1575,10 +1576,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // re-firing during the recursive reify call.
         if let Some(actx) = ctx.reify_assert_capture_ctx.as_ref() {
             let ast_id = expr.id();
-            if !actx.in_progress.contains(&ast_id) {
-                if let Some(&slot_idx) = actx.ast_id_to_slot.get(&ast_id) {
-                    return self.reify_with_assert_capture(slot_idx, expr, ctx, expected_type);
-                }
+            if !actx.in_progress.contains(&ast_id)
+                && let Some(&slot_idx) = actx.ast_id_to_slot.get(&ast_id)
+            {
+                return self.reify_with_assert_capture(slot_idx, expr, ctx, expected_type);
             }
         }
 
@@ -2015,7 +2016,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// [`super::assert::CaptureScanner`] already decided which
     /// sub-expressions to capture; reify reuses the decision so the
     /// two phases stay in lockstep. The hook lives in `reify_expr`'s
-    /// entry: when it sees a flagged AstId, it routes through
+    /// entry: when it sees a flagged `AstId`, it routes through
     /// [`Self::reify_with_assert_capture`] to materialise the
     /// `let __vK = …;` binding and substitute `Local(__vK)`.
     fn reify_assert(
@@ -2280,7 +2281,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_for_of(&mut self, for_of: &ast::ForOfStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
 
-        match self.sem.types.desugars.get(&for_of.id).cloned() {
+        match self.sem.types.desugars.get(&for_of.id).copied() {
             Some(super::sem::types::DesugarKind::ForOfTuple) => {
                 self.reify_tuple_for_of(for_of, ctx)
             }
@@ -2304,7 +2305,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// IntoIterator path of for-of (extracted from
+    /// `IntoIterator` path of for-of (extracted from
     /// `reify_for_of` for readability). The Gap 6 record carries
     /// the resolved `into_iter` / `next` `FunctionRef`s.
     fn reify_iterator_for_of(
@@ -2908,7 +2909,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a let-chain (`if let PAT = e [&& BOOL]* { … }`) into
     /// nested Match / If stmts. Mirrors
     /// `Elaborator::resolve_let_chain_stmts` (stmt.rs:1099+).
-    /// Shared by the LetChain branches of `reify_if_expr`,
+    /// Shared by the `LetChain` branches of `reify_if_expr`,
     /// `reify_if_stmt`, and `reify_while`.
     ///
     /// Each `Let` element becomes a two-arm Match: the recorded
@@ -2916,7 +2917,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// wildcard arm falls back to the chain's `else_block`. Each
     /// `Expr` element becomes a single-branch `If` whose body is
     /// the recursive continuation. The recursion terminates at
-    /// an empty element list, where the then_block is reified
+    /// an empty element list, where the `then_block` is reified
     /// directly.
     fn reify_let_chain_stmts(
         &mut self,
@@ -3403,7 +3404,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a named `StructLiteralExpr`. Field types come from
-    /// `tysys.all_struct_fields`; the instance type + type_args for
+    /// `tysys.all_struct_fields`; the instance type + `type_args` for
     /// generic structs come from Gap 1's
     /// `sem.types.generic_instantiations[id]` record. Anonymous
     /// struct literals (`{ x: 1, y: 2 }` with no leading type name)
@@ -3912,7 +3913,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// dispatch in the elaborator. The trait-dispatch path inside
     /// the chain is staged for a Stage 5 follow-up: the synthesised
     /// inner comparisons have no source AST id, so Gap 11's
-    /// `operator_dispatch` record (keyed by AstId) doesn't catch
+    /// `operator_dispatch` record (keyed by `AstId`) doesn't catch
     /// them. The primitive-only path covers the common fixture
     /// shape (`x < y && y < z`); non-primitive chains fall to the
     /// recovery shape (native Binary on whatever types the operands
@@ -5283,15 +5284,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
-        let type_args: Vec<TypeId> = if !explicit_method_type_args.is_empty() {
-            explicit_method_type_args
-        } else {
+        let type_args: Vec<TypeId> = if explicit_method_type_args.is_empty() {
             self.sem
                 .types
                 .generic_instantiations
                 .get(&static_call.id)
                 .map(|gi| gi.type_args.clone())
                 .unwrap_or_default()
+        } else {
+            explicit_method_type_args
         };
 
         let args: Vec<CallArg> = static_call
@@ -5300,8 +5301,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
             .collect();
 
-        let method_info =
-            LocalMethodName::new(struct_name.clone(), None, static_call.method.clone());
+        let method_info = LocalMethodName::new(struct_name, None, static_call.method.clone());
 
         TirExpr::new(
             TirExprKind::Call {
@@ -5513,7 +5513,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         TirExprKind::VariantConstruct {
                             variant_type,
                             case_index: case_index as u32,
-                            case_name: case_data.name.clone(),
+                            case_name: case_data.name,
                             payload,
                         },
                         variant_type,
@@ -5560,18 +5560,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Type args: explicit turbofish on the call expression,
             // else the inference recorded by Gap 1. Monomorph reads
             // these to specialize generic free / static methods.
-            let type_args: Vec<TypeId> = if !call.type_args.is_empty() {
-                call.type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect()
-            } else {
+            let type_args: Vec<TypeId> = if call.type_args.is_empty() {
                 self.sem
                     .types
                     .generic_instantiations
                     .get(&call.id)
                     .map(|gi| gi.type_args.clone())
                     .unwrap_or_default()
+            } else {
+                call.type_args
+                    .iter()
+                    .map(|ty| self.resolve_type(ty))
+                    .collect()
             };
             return TirExpr::new(
                 TirExprKind::Call {
@@ -5697,18 +5697,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         self.sem.imports.namespace_imports.get(ns_prefix).cloned()
                         && !rest.contains("::")
                     {
-                        let type_args: Vec<TypeId> = if !call.type_args.is_empty() {
-                            call.type_args
-                                .iter()
-                                .map(|ty| self.resolve_type(ty))
-                                .collect()
-                        } else {
+                        let type_args: Vec<TypeId> = if call.type_args.is_empty() {
                             self.sem
                                 .types
                                 .generic_instantiations
                                 .get(&call.id)
                                 .map(|gi| gi.type_args.clone())
                                 .unwrap_or_default()
+                        } else {
+                            call.type_args
+                                .iter()
+                                .map(|ty| self.resolve_type(ty))
+                                .collect()
                         };
                         let arg_calls: Vec<CallArg> = call
                             .args
@@ -5738,18 +5738,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
             // Type args: explicit turbofish on the call expression,
             // else the inference recorded by Gap 1.
-            let type_args: Vec<TypeId> = if !call.type_args.is_empty() {
-                call.type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect()
-            } else {
+            let type_args: Vec<TypeId> = if call.type_args.is_empty() {
                 self.sem
                     .types
                     .generic_instantiations
                     .get(&call.id)
                     .map(|gi| gi.type_args.clone())
                     .unwrap_or_default()
+            } else {
+                call.type_args
+                    .iter()
+                    .map(|ty| self.resolve_type(ty))
+                    .collect()
             };
 
             // TODO(stage-5-bodies): callee param types drive literal
@@ -5844,18 +5844,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
             let mangled_method_name = crate::name::MethodName::format_local(prefix, None, suffix);
 
-            let type_args: Vec<TypeId> = if !call.type_args.is_empty() {
-                call.type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect()
-            } else {
+            let type_args: Vec<TypeId> = if call.type_args.is_empty() {
                 self.sem
                     .types
                     .generic_instantiations
                     .get(&call.id)
                     .map(|gi| gi.type_args.clone())
                     .unwrap_or_default()
+            } else {
+                call.type_args
+                    .iter()
+                    .map(|ty| self.resolve_type(ty))
+                    .collect()
             };
 
             let arg_calls: Vec<CallArg> = call
@@ -5887,10 +5887,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, span)
     }
 
-    /// Reify the `container[i].method(args)` IndexMut rewrite
+    /// Reify the `container[i].method(args)` `IndexMut` rewrite
     /// (Gap 3 desugar tag). Mirrors
     /// `Elaborator::try_resolve_index_mut_method_call`
-    /// (method_lookup.rs:3390+).
+    /// (`method_lookup.rs:3390`+).
     ///
     /// Two dispatch records drive the shape:
     /// - The inner `IndexMut::index_mut(idx)` call lives on
@@ -6454,7 +6454,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         TirExprKind::VariantConstruct {
                             variant_type,
                             case_index: case_index as u32,
-                            case_name: case_data.name.clone(),
+                            case_name: case_data.name,
                             payload: None,
                         },
                         variant_type,

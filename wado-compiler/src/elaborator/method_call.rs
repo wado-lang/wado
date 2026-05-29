@@ -797,8 +797,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self_kind,
                 is_ref_impl,
                 param_is_mut.clone(),
-                param_names.clone(),
-                param_defaults.clone(),
+                param_names,
+                param_defaults,
             );
             // Side-channel for synthetic callers (Gap 6 of Stage 5):
             // for-of's `.into_iter()` / `.next()` dispatches pass

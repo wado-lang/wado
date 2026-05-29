@@ -215,7 +215,7 @@ pub(crate) struct TypeAnnotations {
     /// expanded `TirHandlerBinding`s without re-running
     /// `collect_effect_impls_for_type`.
     ///
-    /// `#[allow(dead_code)]` until reify_with_handler reads it
+    /// `#[allow(dead_code)]` until `reify_with_handler` reads it
     /// and the recording sites in `resolve_with_handler` /
     /// `resolve_handler_binding` are wired through.
     #[allow(dead_code)]
@@ -303,7 +303,7 @@ pub(crate) struct TypeAnnotations {
 #[allow(dead_code)]
 pub(crate) struct SequenceCoercionFacts {
     /// The builder struct's [`crate::tir::TypeId`] (e.g.
-    /// `Array<i32>`'s SequenceLiteralBuilder is `Array<i32>` itself).
+    /// `Array<i32>`'s `SequenceLiteralBuilder` is `Array<i32>` itself).
     pub(crate) builder_type: crate::tir::TypeId,
     /// The element type each `push_literal` call takes.
     pub(crate) element_type: crate::tir::TypeId,
@@ -344,7 +344,7 @@ pub(crate) struct KeyValueCoercionFacts {
     pub(crate) insert_self_kind: crate::ast::SelfKind,
     /// Fully resolved trait name.
     pub(crate) trait_name: String,
-    /// The block's resulting type (= target_type).
+    /// The block's resulting type (= `target_type`).
     pub(crate) target_type: crate::tir::TypeId,
     /// Module that hosts the impl block.
     pub(crate) impl_module_source: crate::module_source::ModuleSource,
@@ -482,7 +482,7 @@ pub(crate) struct AssertCaptureInfo {
 /// of Stage 5). Reify reads this entry to enumerate the same
 /// `TirHandlerBinding` list annotate's combined walk produces,
 /// without re-running `collect_effect_impls_for_type` or the
-/// explicit-form trait_env validation.
+/// explicit-form `trait_env` validation.
 #[derive(Clone)]
 #[allow(dead_code)]
 pub(crate) struct HandlerBindingFacts {

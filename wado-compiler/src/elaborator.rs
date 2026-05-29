@@ -652,7 +652,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// reads this entry to enumerate the same `TirHandlerBinding`
     /// list annotate's combined walk produces, without re-running
     /// `collect_effect_impls_for_type` or the explicit-form
-    /// trait_env validation. See [`sem::types::HandlerBindingFacts`].
+    /// `trait_env` validation. See [`sem::types::HandlerBindingFacts`].
     ///
     /// `#[allow(dead_code)]` until the recording sites in
     /// `resolve_explicit_handler_binding` /
@@ -675,7 +675,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// `#[allow(dead_code)]` until the recording site in the
     /// `Item::Impl` arm of `resolve_module` is wired up and
-    /// reify_impl reads the record.
+    /// `reify_impl` reads the record.
     #[allow(dead_code)]
     pub(super) fn record_impl_facts(
         &mut self,

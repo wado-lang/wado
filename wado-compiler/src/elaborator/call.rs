@@ -1152,7 +1152,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             call.id,
             super::sem::types::StaticMethodDispatch {
                 function_ref: func_ref.clone(),
-                param_is_mut: param_is_mut.iter().copied().collect(),
+                param_is_mut: param_is_mut.clone(),
             },
         );
         TirExpr::new(
