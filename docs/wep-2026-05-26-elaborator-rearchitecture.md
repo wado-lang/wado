@@ -425,13 +425,93 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **1757 / 2654 fixtures passing under
-      `WADO_REIFY=1`** at `-O0` + `-O2` (878.5 per level,
-      +106.5 from the 772 single-level baseline).
-      See `### Stage 5 handover` below for the remaining work
-      and the gotchas encountered to date.
+      suite reaches **1895 / 2664 fixtures passing under
+      `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
+      so the 769 remaining failures are all reify-specific). The
+      second-half session lifted the count from 1765 via four
+      landings — see `### Stage 5 second-half progress` below for
+      what changed and the re-triaged remaining clusters.
+      See `### Stage 5 handover` below for the original remaining
+      work and the gotchas encountered to date.
 - [ ] **Stage 6 — Liveness and DCE.**
 - [ ] **Stage 7 — Cleanup.**
+
+### Stage 5 second-half progress
+
+Second-half session, starting from the 1765/2664 baseline. All
+landings keep production at 2664/2664 (verified by full e2e runs);
+every remaining failure is reify-specific.
+
+Landed:
+
+1. **i128/u128 literal coercion + cast replay.** reify never
+   consumed the per-`AstId` `coercions` map, so 128-bit literals
+   (prelude structs built via `from_u64` / `from_i64` /
+   `from_pair`) reached codegen as bare literals and ICE'd. The
+   construction is extracted into pure helpers in `coercion.rs`
+   (`build_int128_literal_call`, `build_int128_from_pair`,
+   `build_int128_from_intermediate`) shared by the elaborator and
+   reify; reify replays the recorded `NumericLiteral` coercion and
+   the `expr as i128/u128` cast.
+2. **FieldAccess type from the struct decl.** reify now types a
+   field access from the receiver's struct decl (with generic
+   type-arg substitution) rather than `expression_types[field.id]`,
+   which collides across template sub-parsers (gotcha #1).
+3. **Template interpolation `AstId` collision (parser, root fix).**
+   Interpolation sub-expressions were parsed with a fresh `Parser`
+   restarting at `AstId(0)`, so multiple interpolations clobbered
+   each other's entries in every per-`AstId` map. The sub-parser
+   now continues the parent's dense `AstId` space. This single
+   change was the largest lift (~+100 fixtures) — it fixes
+   mis-typed field accesses and mis-dispatched calls in any
+   multi-interpolation template.
+4. **Comparison operator-trait wrapping.** reify reproduced only
+   the inner `Eq::eq` / `Ord::cmp` dispatch; the source operator's
+   wrapping (`!=` → `!eq`, `<` / `>` / `<=` / `>=` → `cmp == Ordering::X`)
+   was missing. `ord_bool_from_cmp` is extracted into a shared free
+   function and the op-driven wrap applied in `reify_binary`.
+   `RefEq` / `RefNotEq` for reference-operand equality is also
+   reproduced from operand types.
+
+#### Re-triaged remaining clusters (769 failing)
+
+Largest first, by fixture-name prefix:
+
+- **CM / HTTP / stream binding synthesis (~45).** `http_request`,
+  `http_fields`, `http_client`, `http_response`, `stream_*` —
+  unchanged from the handover analysis; needs a reify pass over
+  CM-related impl blocks plus the resource-method binding
+  generators.
+- **Trait-impl-method DCE/lower resolution (index_trait 10,
+  from_literal 8, serde ~16, and contributors elsewhere).** The
+  highest-leverage _single_ root cause uncovered this session. A
+  concrete trait-impl method (e.g.
+  `ReadOnlyBox^Index<i32>::index`, `TagMap<Tag,i32>^KeyValueLiteralBuilder::new_literal`)
+  is emitted by reify and **survives monomorphization**, but is
+  dropped between monomorphize and WIR build — the lower → DCE
+  reachability edge from the reify-emitted call to the definition
+  is not recognized, so the method is pruned and the call is
+  `[WIR] unresolved`. The call name and the definition name match
+  (`{module}^{Trait<Args>}::method`), and DCE's def-side
+  `function_id_for` and call-side `FunctionId::Method` keying
+  _appear_ to agree on `(module, struct_name, trait_name,
+  method_name)` — the divergence is subtler and is the next thing
+  to chase (compare the lowered-NIR MethodCall edge for a
+  one-method `impl Index<i32> for ReadOnlyBox` fixture against
+  production). Cracking this should unlock index_trait + from_literal
+  - serde at once.
+- **fn_ref (10).** Power-assert capture of fn-typed sub-expressions
+  reaches `unknown^Inspect::inspect`; needs the assert-capture path
+  to skip / specially handle fn-typed operands.
+- **effect_propagation (10) / effect_handler (5).**
+- **Optimizer / WIR validation (opt_sroa, opt_container,
+  wir_optimize, ref_equality primitive case).** Per-monomorph
+  type-identity: two distinct WIR types print the same name;
+  per-monomorph struct registrations missing under `-O0`.
+- **match_variant / match_or / match_literal (~12).** Pattern-side
+  annotation channels.
+- __cross_module (6), default_field (5), wasi_filesystem (9),
+  variadic / type_param / trait__ (smaller tails)._*
 
 ### Stage 5 handover
 
