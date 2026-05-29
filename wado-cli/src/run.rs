@@ -29,6 +29,7 @@ pub struct RunOptions {
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
     pub allocator: Option<String>,
+    pub collector: wasmtime::Collector,
 }
 
 #[derive(Clone, Copy)]
@@ -40,6 +41,7 @@ enum Opt {
     OptIterations,
     LogLevel,
     Allocator,
+    Collector,
     Profile,
     Help,
 }
@@ -53,6 +55,7 @@ impl Opt {
         Self::OptIterations,
         Self::LogLevel,
         Self::Allocator,
+        Self::Collector,
         Self::Profile,
         Self::Help,
     ];
@@ -73,6 +76,7 @@ impl Opt {
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::LogLevel => args::LOG_LEVEL_SPEC,
             Self::Allocator => args::ALLOCATOR_SPEC,
+            Self::Collector => args::COLLECTOR_SPEC,
             Self::Profile => args::OptSpec {
                 long: Some("profile"),
                 short: None,
@@ -191,6 +195,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
     let mut allocator: Option<String> = None;
+    let mut collector = runtime::DEFAULT_COLLECTOR;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -215,6 +220,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
                 }
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
+                Opt::Collector => {
+                    let spec = args::require_string(&mut parser)?;
+                    collector = runtime::parse_collector(&spec).map_err(CliExit::error)?;
+                }
                 Opt::Profile => {
                     let spec = args::require_string(&mut parser)?;
                     profile = parse_profile(&spec)?;
@@ -251,6 +260,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
         inline_threshold,
         opt_iterations,
         allocator,
+        collector,
     })
 }
 
@@ -260,8 +270,9 @@ async fn run_cli_component(
     profile: &ProfileMode,
     preopened_dirs: &[(String, String)],
     program_args: &[String],
+    collector: wasmtime::Collector,
 ) -> Result<()> {
-    let engine = runtime::create_engine(cranelift_opt, profile)?;
+    let engine = runtime::create_engine(cranelift_opt, profile, collector)?;
     let component = Component::new(&engine, wasm)?;
     let linker = runtime::create_linker(&engine)?;
     let mut store = runtime::create_store(&engine, preopened_dirs, program_args)?;
@@ -349,6 +360,7 @@ pub async fn run(opts: RunOptions) {
         &opts.profile,
         &opts.preopened_dirs,
         &opts.program_args,
+        opts.collector,
     )
     .await
     {

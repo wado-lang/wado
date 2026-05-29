@@ -204,6 +204,14 @@ pub const ALLOCATOR_SPEC: OptSpec = OptSpec {
     desc: "Allocator mode (default depends on target world):\nbump (CLI), freelist (HTTP), debug (test; no-reuse + 0xFF poison)",
 };
 
+/// Shared spec: `--collector <mode>`
+pub const COLLECTOR_SPEC: OptSpec = OptSpec {
+    long: Some("collector"),
+    short: None,
+    value: Some("<mode>"),
+    desc: "GC collector (default: copying):\ncopying, drc (deferred ref-counting), null (never collects)",
+};
+
 /// Shared spec: `--dir <path>` (preopen for WASI filesystem access).
 pub const DIR_SPEC: OptSpec = OptSpec {
     long: Some("dir"),

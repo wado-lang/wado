@@ -70,6 +70,7 @@ pub struct ServeOptions {
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
     pub allocator: Option<String>,
+    pub collector: wasmtime::Collector,
     /// Preopened directories as `(host_path, guest_path)` pairs. Empty by
     /// default — services rarely need filesystem access, so unlike `wado run`
     /// we do NOT preopen the cwd unless the user passes `--dir`.
@@ -95,6 +96,7 @@ enum Opt {
     OptIterations,
     LogLevel,
     Allocator,
+    Collector,
     Timeout,
     Workers,
     RecycleRequests,
@@ -147,6 +149,7 @@ impl Opt {
         Self::OptIterations,
         Self::LogLevel,
         Self::Allocator,
+        Self::Collector,
         Self::Timeout,
         Self::Workers,
         Self::RecycleRequests,
@@ -174,6 +177,7 @@ impl Opt {
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::LogLevel => args::LOG_LEVEL_SPEC,
             Self::Allocator => args::ALLOCATOR_SPEC,
+            Self::Collector => args::COLLECTOR_SPEC,
             Self::Timeout => TIMEOUT_SPEC,
             Self::Workers => WORKERS_SPEC,
             Self::RecycleRequests => RECYCLE_REQUESTS_SPEC,
@@ -243,6 +247,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
     let mut allocator: Option<String> = None;
+    let mut collector = runtime::DEFAULT_COLLECTOR;
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
     let mut timeout_secs: u64 = DEFAULT_TIMEOUT_SECS;
     let mut workers: Option<usize> = None;
@@ -270,6 +275,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                 }
                 Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
+                Opt::Collector => {
+                    let spec = args::require_string(&mut parser)?;
+                    collector = runtime::parse_collector(&spec).map_err(CliExit::error)?;
+                }
                 Opt::Timeout => timeout_secs = parse_timeout_arg(&mut parser)?,
                 Opt::Workers => {
                     let n = parse_count_arg("--workers", &mut parser, false)?;
@@ -329,6 +338,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         inline_threshold,
         opt_iterations,
         allocator,
+        collector,
         preopened_dirs,
         timeout_secs,
         workers,
@@ -889,6 +899,7 @@ async fn run_http_server(
     recycle_requests: u64,
     max_concurrency: usize,
     profile: ProfileMode,
+    collector: wasmtime::Collector,
 ) -> Result<()> {
     // `workers` and `max_concurrency` are bounded to `u32` range in
     // `parse_args`, so these conversions never fail.
@@ -898,7 +909,8 @@ async fn run_http_server(
     // Pool head-room: at most `workers` instances are live at once (a
     // recycle drops the old instance before building the new), plus slack.
     let max_instances = workers_u32.saturating_add(8);
-    let engine = runtime::create_serve_engine(cranelift_opt, max_instances, max_concurrency_u32)?;
+    let engine =
+        runtime::create_serve_engine(cranelift_opt, max_instances, max_concurrency_u32, collector)?;
     let component = Component::new(&engine, &wasm)?;
     let linker = runtime::create_linker(&engine)?;
     // Open preopens once at startup; they are attached to every worker
@@ -1213,6 +1225,7 @@ pub async fn run(opts: ServeOptions) {
         opts.recycle_requests,
         opts.max_concurrency,
         opts.profile,
+        opts.collector,
     )
     .await
     {
