@@ -2671,8 +2671,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     type_table.make_option(inner)
                 }
                 _ => {
-                    if let Some(info) = lookup.struct_fields(&generic.name) {
-                        let module_source = info.module_source.clone();
+                    // A generic application `Name<args...>` may name a
+                    // struct, a variant (`Result<T, E>`), or an enum. The
+                    // `Type::Named` arm above already checks all three; the
+                    // generic arm must too, otherwise generic variants /
+                    // enums resolve to `UNKNOWN`. `make_generic_instance`
+                    // is name-based, so the same call shape works for every
+                    // kind.
+                    let module_source = lookup
+                        .struct_fields(&generic.name)
+                        .map(|info| info.module_source.clone())
+                        .or_else(|| {
+                            lookup
+                                .variant_case(&generic.name)
+                                .map(|info| info.module_source.clone())
+                        })
+                        .or_else(|| {
+                            lookup
+                                .enum_case(&generic.name)
+                                .map(|info| info.module_source.clone())
+                        });
+                    if let Some(module_source) = module_source {
                         let type_args: Vec<TypeId> = generic
                             .args
                             .iter()
