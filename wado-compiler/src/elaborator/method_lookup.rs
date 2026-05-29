@@ -1365,8 +1365,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .zip(inferred.iter())
                     .filter(|&(param, &tid)| {
-                        let has_fn_bound =
-                            param.bounds.iter().any(|b| b.fn_signature.is_some());
+                        let has_fn_bound = param.bounds.iter().any(|b| b.fn_signature.is_some());
                         !has_fn_bound
                             && matches!(
                                 self.tysys.type_table.borrow().get(tid),
@@ -1446,7 +1445,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|p| !p.is_effect)
             .cloned()
             .collect();
-        if params.is_empty() { None } else { Some(params) }
+        if params.is_empty() {
+            None
+        } else {
+            Some(params)
+        }
     }
 
     /// Find the non-effect type parameter names of an instance method, in
@@ -1482,22 +1485,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_type_name == struct_name || impl_base_name == struct_name
         };
 
-        let search_items = |items: &[Item], include_trait: bool| -> Option<Vec<ast::GenericParam>> {
-            for item in items {
-                if let Item::Impl(impl_block) = item
-                    && impl_matches_struct(impl_block, include_trait)
-                {
-                    for method in &impl_block.methods {
-                        if method.name == method_name
-                            && let Some(names) = extract_names(method)
-                        {
-                            return Some(names);
+        let search_items =
+            |items: &[Item], include_trait: bool| -> Option<Vec<ast::GenericParam>> {
+                for item in items {
+                    if let Item::Impl(impl_block) = item
+                        && impl_matches_struct(impl_block, include_trait)
+                    {
+                        for method in &impl_block.methods {
+                            if method.name == method_name
+                                && let Some(names) = extract_names(method)
+                            {
+                                return Some(names);
+                            }
                         }
                     }
                 }
-            }
-            None
-        };
+                None
+            };
 
         if let Some(module_source) = struct_module_source
             && let Some(module) = self.loaded_modules.get(module_source)
