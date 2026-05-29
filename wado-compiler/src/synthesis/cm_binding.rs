@@ -494,18 +494,38 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     // Step 6: Synthesize export bindings for test functions (__test_*)
     // Only when targeting the test world — in other worlds, tests are dead code.
     if project.is_test_world() {
+        let test_name_filters = project.test_name_filters.clone();
         let entry_module = project
             .tir_modules
             .get_mut(&entry_source)
             .expect("entry module should exist");
 
+        // Map each test's mangled function name → its original (lossless) name
+        // so `--test-name` matches against what the user wrote, not the
+        // ASCII-folded export name.
+        let original_names: crate::hashmap::IndexMap<&str, Option<&str>> = entry_module
+            .tests
+            .iter()
+            .map(|t| (t.function_name.as_str(), t.name.as_deref()))
+            .collect();
+
         // Collect test functions first to avoid borrow conflict.
         // Test functions have is_export=false (they're not world exports),
         // but they need adapters for task-return when called via `wado test`.
+        // Only selected tests get an adapter: an unselected test then has no
+        // `is_cm_export` root, so early DCE drops its body — that is what makes
+        // `--test-name` speed up compilation.
         let test_funcs: Vec<(String, Rc<RefCell<TirFunction>>)> = entry_module
             .functions
             .iter()
-            .filter(|f| f.borrow().name.starts_with("__test_"))
+            .filter(|f| {
+                let name = f.borrow().name.clone();
+                name.starts_with("__test_")
+                    && crate::package::test_selected(
+                        original_names.get(name.as_str()).copied().flatten(),
+                        &test_name_filters,
+                    )
+            })
             .map(|f| (f.borrow().name.clone(), f.clone()))
             .collect();
 

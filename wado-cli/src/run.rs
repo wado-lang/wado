@@ -328,6 +328,7 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
         opt_iterations: opts.opt_iterations,
         allocator: opts.allocator,
         no_cache: opts.no_cache,
+        test_name_filters: Vec::new(),
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
     let wasm = compile::compile(&opts.input, &flags).await?;

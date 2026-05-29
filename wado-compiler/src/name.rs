@@ -1191,9 +1191,50 @@ pub fn dispatch_field_name(op_name: &str) -> String {
     format!("op_{op_name}")
 }
 
+/// Convert a user-facing `test "name"` string into the snake-case segment used
+/// in the internal test function name (`__test_{index}_{snake}`).
+///
+/// Only **ASCII** alphanumerics survive verbatim (lowercased); every other
+/// character — including non-ASCII letters such as `é` or `日` — collapses to
+/// `_`. This is deliberate: the segment must downgrade losslessly into a
+/// Component Model kebab-case export name (`[a-z0-9-]+`) via
+/// `sanitize_kebab_export_name`. Using Unicode-aware `char::is_alphanumeric`
+/// here would let multibyte letters through and produce an invalid extern name,
+/// crashing Wasm validation. The original (lossless) name is preserved
+/// separately for display and filtering — see the test-name custom section.
+///
+/// Examples:
+/// - `test_name_to_snake("Hello, World!")` → `"hello__world_"`
+/// - `test_name_to_snake("café résumé")` → `"caf__r_sum_"`
+/// - `test_name_to_snake("日本語のテスト ok")` → `"________ok"`
+pub fn test_name_to_snake(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect::<String>()
+        .to_lowercase()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_test_name_to_snake_is_ascii_only() {
+        // ASCII alphanumerics survive (lowercased); punctuation/space → `_`.
+        assert_eq!(test_name_to_snake("Hello, World!"), "hello__world_");
+        // Non-ASCII letters collapse to `_` so the kebab export stays valid.
+        assert_eq!(test_name_to_snake("café résumé"), "caf__r_sum_");
+        assert_eq!(test_name_to_snake("日本語のテスト ok"), "________ok");
+        // A fully non-ASCII name leaves no ASCII segment at all.
+        assert_eq!(test_name_to_snake("完全に日本語"), "______");
+        // The output must never contain a non-ASCII byte.
+        for input in ["café résumé", "日本語のテスト ok", "Ω±∞ μ"] {
+            assert!(
+                test_name_to_snake(input).is_ascii(),
+                "snake form of {input:?} must be ASCII"
+            );
+        }
+    }
 
     #[test]
     fn test_method_name_to_string_simple() {
