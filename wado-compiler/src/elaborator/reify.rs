@@ -3109,10 +3109,42 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{CallArg, ResolvedType, TirExprKind, TirUnaryOp, TypeTable};
+        use crate::tir::{CallArg, ResolvedType, TirBinaryOp, TirExprKind, TirUnaryOp, TypeTable};
 
         let left = self.reify_expr(&binary.left, ctx, None);
         let right = self.reify_expr(&binary.right, ctx, None);
+
+        // Reference equality: when both operands are references, the
+        // elaborator emits `RefEq` / `RefNotEq` (identity comparison)
+        // rather than dispatching to `Eq` — and records no operator
+        // dispatch. The decision is from operand types alone
+        // (operators.rs:150), so reify reproduces it here.
+        if matches!(binary.op, ast::BinaryOp::Eq | ast::BinaryOp::NotEq) {
+            let both_refs = {
+                let tt = self.tysys.type_table.borrow();
+                matches!(
+                    (tt.get(left.type_id), tt.get(right.type_id)),
+                    (ResolvedType::Ref(_), ResolvedType::Ref(_))
+                        | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
+                )
+            };
+            if both_refs {
+                let op = if binary.op == ast::BinaryOp::Eq {
+                    TirBinaryOp::RefEq
+                } else {
+                    TirBinaryOp::RefNotEq
+                };
+                return TirExpr::new(
+                    TirExprKind::Binary {
+                        op,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    TypeTable::BOOL,
+                    binary.span,
+                );
+            }
+        }
 
         if let Some(dispatch) = self.sem.types.operator_dispatch.get(&binary.id).cloned() {
             // Operator-trait dispatch path. Reuse the shared receiver
