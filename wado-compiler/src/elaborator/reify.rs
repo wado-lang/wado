@@ -1476,12 +1476,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         match &let_stmt.pattern {
             ast::Pattern::Ident { id, name, span: _ } => {
-                let local_index = ctx.add_local(name.clone(), type_id, false, Some(*id));
+                // `is_mut` lives on `LetStmt` for the `let mut x = …`
+                // surface form; the `Ident` pattern itself is the
+                // non-mut variant. Mirror production's
+                // `resolve_let_stmt` which combines the two sources.
+                let is_mut = let_stmt.is_mut;
+                let local_index = ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
                 TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
                         local_index,
-                        is_mut: false,
+                        is_mut,
                         is_reactive: let_stmt.is_reactive,
                         type_id,
                         value,
