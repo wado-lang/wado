@@ -4912,6 +4912,84 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// Look up the parameter list (`name`, `default`) of a free function
+    /// declared in `module_source`. Returns the parameters in declaration
+    /// order. Only bare-ident free-function callees are handled — static
+    /// methods and namespaced calls have no defaults per the production
+    /// semantics in `lookup_function_param_defaults` (call.rs:1912+).
+    fn lookup_free_func_params(
+        &self,
+        module_source: &ModuleSource,
+        func_name: &str,
+    ) -> Vec<(String, Option<ast::Expr>)> {
+        let Some(idx_map) = self.tysys.loaded_module_func_indices.get(module_source) else {
+            return Vec::new();
+        };
+        let Some(&idx) = idx_map.get(func_name) else {
+            return Vec::new();
+        };
+        let items: &[Item] = if module_source == &self.current_module_source {
+            self.current_module_items
+        } else if let Some(m) = self.loaded_modules.get(module_source) {
+            &m.items
+        } else {
+            return Vec::new();
+        };
+        if let Some(Item::Function(func)) = items.get(idx) {
+            func.params
+                .iter()
+                .map(|p| (p.name.clone(), p.default.clone()))
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Reify-side mirror of `Elaborator::pad_args_with_defaults`
+    /// (call.rs:1853+). For each missing trailing positional argument,
+    /// substitute the explicit args into the function's recorded default
+    /// expression and reify it. Only bare-ident free-function callees
+    /// participate — static methods and namespaced calls have no
+    /// defaults per the production `lookup_function_param_defaults`
+    /// contract.
+    fn reify_pad_args_with_defaults(
+        &mut self,
+        callee: &ast::Expr,
+        call_args_ast: &[ast::Expr],
+        args: &mut Vec<crate::tir::CallArg>,
+        callee_module: &ModuleSource,
+        callee_name: &str,
+        ctx: &mut FunctionContext,
+    ) {
+        let ast::Expr::Ident(ident) = callee else {
+            return;
+        };
+        if ident.name.contains("::") {
+            return;
+        }
+        let func_params = self.lookup_free_func_params(callee_module, callee_name);
+        if func_params.is_empty() || args.len() >= func_params.len() {
+            return;
+        }
+        let mut subs: IndexMap<String, ast::Expr> = IndexMap::default();
+        for (i, arg_ast) in call_args_ast.iter().enumerate() {
+            if let Some((name, _)) = func_params.get(i) {
+                subs.insert(name.clone(), arg_ast.clone());
+            }
+        }
+        for i in args.len()..func_params.len() {
+            let (name, default_ast) = match func_params.get(i) {
+                Some((n, Some(d))) => (n.clone(), d.clone()),
+                _ => break,
+            };
+            let mut default_expr = default_ast;
+            default_expr.substitute_idents(&subs);
+            let resolved = self.reify_expr(&default_expr, ctx, None);
+            args.push(crate::tir::CallArg::new(resolved, false));
+            subs.insert(name, default_expr);
+        }
+    }
+
     /// Reify a `CallExpr`. Stage 5 covers the common shapes: bare-ident
     /// callees that resolve to a current-module or imported free
     /// function (`TirExprKind::Call`), and qualified-ident
@@ -4944,7 +5022,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .get(&call.id)
             .cloned()
         {
-            let arg_exprs: Vec<CallArg> = call
+            let mut arg_exprs: Vec<CallArg> = call
                 .args
                 .iter()
                 .zip(
@@ -4959,6 +5037,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg, is_mut)
                 })
                 .collect();
+            // Default-argument padding (production parity with
+            // `Elaborator::pad_args_with_defaults`, call.rs:1853+).
+            // Restricted to bare-ident free-function callees per the
+            // production `lookup_function_param_defaults` contract.
+            self.reify_pad_args_with_defaults(
+                &call.callee,
+                &call.args,
+                &mut arg_exprs,
+                &dispatch.function_ref.module_source,
+                &dispatch.function_ref.name,
+                ctx,
+            );
             // Type args: explicit turbofish on the call expression,
             // else the inference recorded by Gap 1. Monomorph reads
             // these to specialize generic free / static methods.
