@@ -425,9 +425,10 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2607 / 2664 fixtures passing under
-      `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 57 remaining failures are all reify-specific). The
+      suite reaches **2635 / 2678 fixtures passing under
+      `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2678/2678,
+      so the 28 remaining unique failures are all reify-specific;
+      count as of the 2026-05-30 `origin/main` merge). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -854,158 +855,80 @@ Landed:
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2614
-/ 2664** under `WADO_REIFY=1`. A full-suite scan after landing #35 found 34
-unique reify-only failing fixtures; landings #36–#40 then cleared
-infer_static_method_from_lhs, labeled_block_break_null_coercion,
-test_unicode_names, ice_array_iter_into_iterator,
-effect_indirect_call_error, and
-bug_store_load_forward_mut_method_receiver. The prior
-effect_handler_resource_* cluster is resolved (compiles clean — likely a
-side effect of landing #31).
-The remaining set is: variadic_* (6), tuple_* (tuple_zip, tuple_for_of,
-tuple_1, tuple_name_collision×2, tuple_literal_expected_type_in_branch,
-opt_container_sroa_tuple), newtype_* (newtype_chained_method,
-newtype_method_inheritance, newtype_return_type — O2-only),
-cross_module_same_name_fn(_infer), infer_lhs_overrides_literal,
-infer_static_method_from_lhs, {if,for,return}_merged, loop_nested,
-trait_bound_1, opt_sroa_variant_return_if_descent, effect_indirect_call_error,
-effect_handler_with_do, default_arg_private_item, test_unicode_names,
-ice_array_iter_into_iterator, labeled_block_break_null_coercion,
-bug_store_load_forward_mut_method_receiver, wasm_name_conflict_generic_fn.
-Most are **O2-only optimizer interactions**
-(pass at -O0, fail at -O2: newtype method values, tuple field access,
-cross_module same-name generics, `opt_*`), **codegen type-identity** GC
-collisions, **variadic pack machinery**, and specific deep cases
-(newtype generic-base method inheritance, closure functor `__call`,
-effect_handler_with_do):
+Largest first, grouped by cluster. **2635 / 2678** passing under
+`WADO_REIFY=1` (fresh full-suite scan on 2026-05-30, after merging
+`origin/main`; every fixture `main` added passes under reify). **28 unique
+fixtures fail** — 15 at `-O0` (also `-O2`), 13 only at `-O2`. The localized
+"missing annotation channel" gaps are gone; each remaining cluster is
+feature-level work, not a one-line replay fix.
 
-- **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
-  panic in `synthesis/effect_dispatch.rs` with `no DispatchPlan for
-  instantiation Future<…>` (`identify_active_effects` and
-  `synthesize_dispatch_infrastructure` out of sync) — reify is not
-  forwarding some effect-dispatch annotation the synthesis needs. Others
-  (`effect_propagation_*`, `effect_handler_with_do`) are codegen-level.
-- **Codegen type-identity mismatches (`tuple_name_collision`,
-  `struct_name_conflict`, ~4).** A user-defined `struct Tuple` / `struct
-  Tuple<T>` (or other name colliding with a built-in) interns to a
-  different `TypeId` under reify than production, surfacing as
-  `(ref $type)` vs `(ref $type)` at Wasm validation. The match_literal /
-  match_ergonomics members of this cluster turned out to be the
-  literal-pattern + ref-binding bugs (landings #23/#25), not interning.
-- **serde (~2).** `serde_json_primitives` (a char-serialization test
-  traps) and `serde_ndjson_wrapper` — narrow runtime cases.
-- Smaller tails: **wasi_clocks (2), tuple_name (2), namespace_import (2),
-  match_or (2), httpbin_server (2), cross_module (2), closure_fn (2)**,
-  and assorted single fixtures (variant_qualified, variadic_*,
-  wasm_name, wasi_filesystem, …).
+##### O2-only — optimizer / `TypeId`-identity divergence (13)
 
-<!-- superseded: the CM binding cluster below is resolved by landings
-11-12; kept for the original diagnosis trail. -->
+Pass at `-O0`, fail only at `-O2`: the reified TIR is behaviourally correct
+but some sub-node carries a `TypeId` that prints the same yet interns
+distinctly from production, so an `-O2` pass (SROA / DCE / const-fold)
+diverges and trips WIR validation. Diff with
+`WADO_REIFY=1 wado dump --nir -O2 fixture.wado` vs the same without the env
+var; the first node whose type differs is the cut point.
 
-- **CM / HTTP / stream binding synthesis (RESOLVED by #11/#12).**
-  `http_request`, `http_fields`, `http_client`, `http_response`,
-  `stream_*` — originally diagnosed as needing a reify pass over
-  CM-related impl blocks plus the resource-method binding
-  generators.
-- **Serde derive + non-`Named` self-type args (serde ~16,
-  from_literal_nested_generic).** Landing #10 cleared the common
-  generic-impl builders (`from_literal`, `index_value`,
-  `sequence_literal`, `template_string_generic`) by rebuilding
-  `impl_type_params` from the self type. Two sub-cases remain:
-  - **Non-`Named` self-type args.** `impl … for NestedMap<Array<String>, V>`
-    has a `Generic` arg (`Array<String>`) at position 0; landing #10 only
-    registers `Named` args, so the positional alignment with
-    `type_arg_ids` is off and `NestedMap<…>::new` is `[WIR] unresolved`.
-    The fix is to register a positional impl type param for _every_ self-type
-    arg (synthesizing a fresh param name for non-`Named` shapes) so the
-    indices stay dense, mirroring how monomorph keys `type_arg_ids`.
-  - **Serde-derived synthesized impls.** `#[derive(Serialize/Deserialize)]`
-    emits impl methods through a synthesis path whose per-`AstId`
-    annotations do not survive into reify; needs the synthesized AstIds
-    recorded (or the synthesized impls re-walked by reify).
-- **fn_ref (10).** Power-assert capture of fn-typed sub-expressions
-  reaches `unknown^Inspect::inspect`; needs the assert-capture path
-  to skip / specially handle fn-typed operands.
-- **effect_propagation (10) / effect_handler (5).**
-- **Optimizer / WIR validation (opt_sroa, opt_container,
-  wir_optimize, ref_equality primitive case).** Per-monomorph
-  type-identity: two distinct WIR types print the same name;
-  per-monomorph struct registrations missing under `-O0`.
-- **match_variant / match_or / match_literal (~12).** Pattern-side
-  annotation channels.
-- **cross_module (6), default_field (5), wasi_filesystem (9),
-  variadic / type_param / trait** (smaller tails)._*
+- `newtype_chained_method`, `newtype_method_inheritance`,
+  `newtype_return_type` — newtype method values through `-O2`.
+- `tuple_1`, `tuple_literal_expected_type_in_branch`,
+  `opt_container_sroa_tuple` — tuple field / SROA identity.
+- `tuple_name_collision`, `tuple_name_collision_2` — a user-defined
+  `struct Tuple` interns to a different `TypeId` than the builtin tuple.
+- `cross_module_same_name_fn`, `cross_module_same_name_fn_infer` — two
+  modules' same-named generic `wrap<T>` must monomorphize independently;
+  reify's instances appear to collide on name rather than `(module, name)`.
+- `infer_lhs_overrides_literal`, `return_merged`,
+  `wasm_name_conflict_generic_fn`.
+
+##### Variadic type-pack machinery (6, fail O0+O2)
+
+`variadic_1` / `variadic_2` / `variadic_3`,
+`variadic_for_of_generic_method`, `variadic_impl_method_type_param`,
+`variadic_trait_bound`. Need the type-pack expansion pipeline reproduced in
+reify (see `wep-2026-03-14-variadic-type-parameters.md`).
+
+##### Compile-time tuple enumeration (2, fail O0)
+
+- `tuple_zip` — reify emits `TupleZip` but monomorphize never expands it
+  (panic at `lower/translate.rs:1135`, "should be expanded by monomorphize");
+  the receiver tuple-of-tuples type is not in the shape the expansion keys
+  on.
+- `tuple_for_of` — for-of over a heterogeneous tuple emits invalid Wasm in
+  the **test world** only (clean as a CLI program).
+
+##### Remaining `-O0` singles (5)
+
+- `default_arg_private_item` — a default expr that references a
+  callee-module-private global (`paint(c = DEFAULT_VALUE)`) can't resolve:
+  reify inlines and resolves the default in the _caller_ scope, where the
+  global isn't visible (`"nothing on stack"` at validation). Needs
+  callee-scope ident resolution (reify already holds `loaded_modules`) or a
+  recorded-resolved-default channel keyed by the call `AstId`.
+- `effect_handler_with_do` — codegen-level effect-handler residual.
+- `trait_bound_1` — codegen type-identity (`expected (ref null $type),
+  found i32`).
+- `opt_sroa_variant_return_if_descent` — optimizer pass divergence.
+- `if_merged` / `for_merged` / `loop_nested` — large multi-feature files;
+  `if_merged` traps at runtime, the other two fail test-world assertions.
+
+##### Where to start next
+
+Highest leverage: the **O2-only `TypeId`-identity cluster** (13 fixtures,
+likely a small number of shared root causes). Start with the smallest —
+`newtype_return_type` — `dump --nir -O2` reify vs production, find the first
+differing-`TypeId` node, and trace back to where reify interns it. The
+`#### Recipe for adding a new reify gap`, `#### Gotchas`, and `#### Endgame`
+below still apply unchanged.
 
 ### Stage 5 handover
 
-The recording half is essentially complete: every gap has an
-annotation channel on `sem.types` and reify consumes it.
-What's left is per-shape parity in the reify walk plus the
-final orchestration cut.
-
-#### Remaining failure categories
-
-Per-level breakdown of the ~445 fixtures still failing under
-`WADO_REIFY=1`, largest first. Categories overlap (a fixture
-can fail at any phase from analyze to wasm validation).
-
-- **CM binding synthesis (http 54 + stream 17 = ~71 fixtures).**
-  HTTP-service fixtures fail at analyze with
-  `analysis error: missing resource 'Response' required by
-  '__cm_binding__Response_new'`. Production's CM binding
-  synthesis runs against the orchestration-produced
-  `TirModule`s; reify's emitted `TirModule` is missing the
-  binding scaffolding the synthesis expects. Likely needs a
-  reify pass over CM-related impl blocks plus the
-  resource-method binding generators (see
-  `wep-2026-02-15-cm-binding-synthesis.md`).
-- **Optimizer / WIR validation (~40 fixtures).**
-  Reify's TIR survives elaborate but trips wasm validation
-  after monomorph+lower+optimize. Typical symptom:
-  `type mismatch: expected (ref $type), found (ref $type)` or
-  `expected i32, found (ref $type)`. Two distinct WIR types
-  print the same name. Root causes seen: array-of-ref Box
-  wrapping divergence, exact vs non-exact ref types,
-  per-monomorph struct registrations missing under `-O0`.
-- **Match pattern edge cases (~23 fixtures).** Associated
-  constant patterns (`TokenKind::FOO => …`), `let`-destructure
-  ergonomics, and a few or-pattern + guard combinations.
-  Likely needs additional annotation channels for the
-  pattern-resolution side.
-- **Serde derive (~22 fixtures).** `#[derive(Deserialize)]`
-  emits synthesized impl methods that go through a different
-  code path; the recording for those synthesized AstIds
-  doesn't survive into reify.
-- **Effect handler residuals (~19 fixtures).** Single-effect
-  and simple bundled handlers pass; complex bundled forms
-  with closure capture + multi-interpolation templates still
-  fail at wasm validation (effect_handler_bundled.wado being
-  the canonical reproducer — error
-  `expected i32, found (ref $type) at offset 0x10e9`,
-  reached after the recent template-type fix).
-- **Trait dispatch (~17 fixtures).** Two subgroups:
-  - Generic-impl `trait_type_args` propagation: reify-built
-    `MethodCall` for `IndexMut<i32>::index_mut` arrives at
-    WIR-build with `trait_type_args: []`, even though
-    `LocalMethodName.trait_name == "IndexMut<i32>"`. Likely
-    needs `MethodDispatch.trait_type_args`.
-  - Wrong-method selection: `describe::<Player>(&p)` calls
-    `score()` where production calls `name()`. Suggests the
-    method index/name mapping divergence when the receiver
-    is a `&T` going through a `T: Trait1 + Trait2` bound.
-- **`IndexMut` desugar (~16 fixtures).** Both
-  `MethodCall::IndexMutMethodCall` (recording exists, replay
-  needs the inner IndexMut dispatch annotation) and
-  `CompoundAssign` IndexMut-target rewrite still emit raw
-  Index TIR that fails to lower.
-- **Literal coercion to call args (~few fixtures).**
-  `take_i64(42)` resolves `42` as i32 in reify (the literal's
-  recorded type at the call site stays the default).
-  `MethodDispatch` / `StaticMethodDispatch` should carry
-  `param_types` so reify can re-resolve numeric literals
-  with the expected type, mirroring production's call-site
-  re-coercion (call.rs:1110+).
+The recording half is complete: every landed gap has an annotation channel
+on `sem.types` and reify consumes it. What remains is per-shape parity for
+the 28 clusters above (mostly `-O2` `TypeId` identity + variadic/tuple
+expansion), then the final orchestration cut (`#### Endgame`).
 
 #### Gotchas seen in this session — read before continuing
 
