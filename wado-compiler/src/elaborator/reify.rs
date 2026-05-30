@@ -2030,14 +2030,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 {
                     return self.reify_sequence_coercion(tuple_lit, facts, ctx, span);
                 }
-                // Element-by-element walk; the recorded type is the
-                // tuple `TypeId` annotate produced.
+                // Element-by-element walk. Build the tuple's `TypeId`
+                // bottom-up from the reified element types, mirroring
+                // `Elaborator::resolve_tuple_literal`'s
+                // `make_tuple(elem_types)` (expr.rs:3896). Stamping the
+                // literal with the recorded outer type instead would let a
+                // nested tuple's element type intern distinctly from the
+                // inner literal's own (print-equal but a different `TypeId`),
+                // which `nir/sroa` then decomposes inconsistently — the
+                // field local takes one tuple `TypeId` while the nested
+                // index reads the other, tripping WIR validation at `-O2`
+                // (`expected (ref null $type), found i32`).
                 let elements: Vec<TirExpr> = tuple_lit
                     .elements
                     .iter()
                     .map(|e| self.reify_expr(e, ctx, None))
                     .collect();
-                TirExpr::new(TirExprKind::TupleLiteral { elements }, recorded_type, span)
+                let tuple_type = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_tuple(elements.iter().map(|e| e.type_id).collect());
+                TirExpr::new(TirExprKind::TupleLiteral { elements }, tuple_type, span)
             }
             ast::Expr::Cast(cast) => {
                 let target_type = self.resolve_type(&cast.target_type);
@@ -7026,7 +7040,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name,
                     module_source,
                     type_args,
-                } => (name, Some(module_source), type_args),
+                } => {
+                    // Tuple projection (`t.0`): a tuple is a `GenericInstance`
+                    // named "Tuple" with no struct decl, so the struct-fields
+                    // lookup below would miss and fall to the `(0, …)`
+                    // fallback — collapsing every `t.N` onto field 0, which
+                    // SROA then keys on. Resolve the numeric field name into
+                    // the element index directly, mirroring the elaborator's
+                    // `lookup_field_type` tuple branch (expr.rs:1513).
+                    if crate::tir::TypeTable::is_tuple_type(&name, &module_source)
+                        && let Ok(index) = field_name.parse::<usize>()
+                        && index < type_args.len()
+                    {
+                        return (index as u32, field_name.to_string(), Some(type_args[index]));
+                    }
+                    (name, Some(module_source), type_args)
+                }
                 // Peel references and newtypes and recurse, mirroring the
                 // elaborator's `lookup_field_type` (expr.rs:1500): `&Point`,
                 // `&mut Point`, a newtype `Location = Point`, and chained
