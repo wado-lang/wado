@@ -1356,13 +1356,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (`Box`, not `Box<T>`); the type table's
         // `type_name(self_type)` returns the mangled form, so
         // truncate at the first `<`.
-        let struct_name_for_mangle: String =
-            self.tysys.type_table.borrow().type_name(facts.self_type);
-        let base_struct_name = struct_name_for_mangle
-            .split('<')
-            .next()
-            .unwrap_or(&struct_name_for_mangle)
-            .to_string();
+        //
+        // A variadic tuple impl (`impl<..T> Trait for [..T]`) is the
+        // exception: `type_name` renders the tuple self type in bracket
+        // notation (`[..T]`, no `<`), so the truncation would mangle the
+        // method as `[..T]^Trait::method`. Production instead uses the
+        // builtin tuple's `name` field — `Tuple` — for both the method
+        // name and `method_info` (item.rs:660 / method_call.rs:724), so
+        // the call site's `monomorph_info.generic_name` (`Tuple^…`) and
+        // the monomorphizer's tuple-variadic instantiation path
+        // (func_inst.rs:888, gated on `struct_name == TUPLE_TYPE_NAME`)
+        // both find the template. Match that here.
+        let base_struct_name = if self.tysys.type_table.borrow().is_tuple(facts.self_type) {
+            TypeTable::TUPLE_TYPE_NAME.to_string()
+        } else {
+            let struct_name_for_mangle: String =
+                self.tysys.type_table.borrow().type_name(facts.self_type);
+            struct_name_for_mangle
+                .split('<')
+                .next()
+                .unwrap_or(&struct_name_for_mangle)
+                .to_string()
+        };
         let mangled_name = MethodName::format_local(
             &base_struct_name,
             facts.trait_name_mangled.as_deref(),
