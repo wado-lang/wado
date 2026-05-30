@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780144591683,
+  "lastUpdate": 1780149315501,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27953,6 +27953,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/51d1facf2fae1bd7ad3633a6389ba9b8873c16ab"
         },
         "date": 1780144591193,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16997,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 447987,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f29021ec873f6c91ed4451ea9561de5a7d490b5f",
+          "message": "Merge pull request #1249 from wado-lang/claude/benchmark-sieve-stability-EFQKZ\n\nbench(sieve): reuse buffer across iterations for stable timings",
+          "timestamp": "2026-05-30T22:46:55+09:00",
+          "tree_id": "25af893d6fe03c56463668d41d70896e96aa9646",
+          "url": "https://github.com/wado-lang/wado/commit/f29021ec873f6c91ed4451ea9561de5a7d490b5f"
+        },
+        "date": 1780149315018,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
