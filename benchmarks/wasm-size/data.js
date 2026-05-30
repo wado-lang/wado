@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780115819041,
+  "lastUpdate": 1780118620977,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27577,6 +27577,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 491625,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f63694e611edeecf7e8c41480193f347f5c58081",
+          "message": "Merge pull request #1238 from wado-lang/claude/rust-peekable-iterator-VOZh2\n\nfix(compiler): enable Rust-compatible Peekable; restore bounds-check elimination",
+          "timestamp": "2026-05-30T14:15:31+09:00",
+          "tree_id": "64ccd6807024e709cc14e2faabb21bcb49be0bbe",
+          "url": "https://github.com/wado-lang/wado/commit/f63694e611edeecf7e8c41480193f347f5c58081"
+        },
+        "date": 1780118620504,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16963,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 458952,
             "unit": "bytes"
           }
         ]
