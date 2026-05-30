@@ -6745,32 +6745,58 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> (u32, String, Option<TypeId>) {
         use crate::tir::ResolvedType;
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
-        let (struct_name, type_args): (String, Vec<TypeId>) = match resolved {
-            ResolvedType::Struct { name, .. } => (name, vec![]),
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => (name, type_args),
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                match self.tysys.type_table.borrow().get(inner).clone() {
-                    ResolvedType::Struct { name, .. } => (name, vec![]),
-                    ResolvedType::GenericInstance {
-                        name, type_args, ..
-                    } => (name, type_args),
-                    _ => return (0, field_name.to_string(), None),
+        // Keep the receiver's `module_source` so same-named structs in
+        // different modules (a local `Pair` vs an imported `helper::Pair`)
+        // resolve their fields against the right decl. A name-only lookup
+        // finds whichever the current module sees first, mapping
+        // `remote.y` onto the wrong field index.
+        let (struct_name, module_source, type_args): (String, Option<ModuleSource>, Vec<TypeId>) =
+            match resolved {
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    ..
+                } => (name, Some(module_source), vec![]),
+                ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    type_args,
+                } => (name, Some(module_source), type_args),
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    match self.tysys.type_table.borrow().get(inner).clone() {
+                        ResolvedType::Struct {
+                            name,
+                            module_source,
+                            ..
+                        } => (name, Some(module_source), vec![]),
+                        ResolvedType::GenericInstance {
+                            name,
+                            module_source,
+                            type_args,
+                        } => (name, Some(module_source), type_args),
+                        _ => return (0, field_name.to_string(), None),
+                    }
                 }
-            }
-            _ => return (0, field_name.to_string(), None),
-        };
+                _ => return (0, field_name.to_string(), None),
+            };
 
-        let found = {
-            let lookup = self.type_lookup();
-            lookup.struct_fields(&struct_name).and_then(|info| {
-                info.fields
-                    .iter()
-                    .enumerate()
-                    .find(|(_, (n, _, _))| n == field_name)
-                    .map(|(idx, (n, ty, _))| (idx as u32, n.clone(), *ty))
-            })
+        let resolve_in = |info: &super::types::StructFieldInfo| {
+            info.fields
+                .iter()
+                .enumerate()
+                .find(|(_, (n, _, _))| n == field_name)
+                .map(|(idx, (n, ty, _))| (idx as u32, n.clone(), *ty))
+        };
+        let found = if let Some(info) = module_source
+            .as_ref()
+            .and_then(|ms| self.tysys.all_struct_fields.get(ms))
+            .and_then(|m| m.get(&struct_name))
+        {
+            resolve_in(info)
+        } else {
+            self.type_lookup()
+                .struct_fields(&struct_name)
+                .and_then(resolve_in)
         };
         let Some((idx, canonical, raw_field_type)) = found else {
             return (0, field_name.to_string(), None);
