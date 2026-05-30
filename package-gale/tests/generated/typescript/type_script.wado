@@ -8255,6 +8255,7 @@ fn scan_type_parameter(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_20(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_identifier(tokens, pos, 0);
@@ -8263,7 +8264,7 @@ fn scan_type_parameter(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
                 pos += 1;
                 pos = scan_type_argument(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
@@ -8274,8 +8275,9 @@ fn scan_type_parameter(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
                     pos = scan_constraint(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_LT {
             pos = start;
@@ -8378,11 +8380,12 @@ fn scan_type_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_LIT_LPAREN {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_function_type(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
@@ -8408,22 +8411,25 @@ fn scan_type_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 }
                 pos = scan_union_or_intersection_or_primary_type(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_LT {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_function_type(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
                 pos = scan_type_generic(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_NEW {
             pos = start;
@@ -8511,17 +8517,18 @@ fn scan_primary_type_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             }
             return -1;
         } else if _gale_kind_set_40(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_predefined_type(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
                 pos = scan_type_reference(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_7: {
@@ -8531,8 +8538,9 @@ fn scan_primary_type_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 pos = scan_primary_type(tokens, pos, 0);
                 if pos < 0 { break try_7; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_41(alt_kind) {
             pos = start;
@@ -8543,11 +8551,12 @@ fn scan_primary_type_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             }
             return -1;
         } else if _gale_kind_set_42(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_2: {
                 pos = scan_type_reference(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_7: {
@@ -8557,23 +8566,25 @@ fn scan_primary_type_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 pos = scan_primary_type(tokens, pos, 0);
                 if pos < 0 { break try_7; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_KeyOf {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_KeyOf { break try_8; }
                 pos += 1;
                 pos = scan_primary_type(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
                 pos = scan_type_reference(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_7: {
@@ -8583,8 +8594,9 @@ fn scan_primary_type_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 pos = scan_primary_type(tokens, pos, 0);
                 if pos < 0 { break try_7; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_LBRACE {
             pos = start;
@@ -8818,18 +8830,20 @@ fn scan_type_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_20(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_identifier(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
                 pos = scan_namespace_name(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
             return -1;
@@ -8921,11 +8935,12 @@ fn scan_type_member(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_43(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_property_signatur(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_4: {
@@ -8945,21 +8960,23 @@ fn scan_type_member(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                     }
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_LBRACKET {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_property_signatur(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
                 pos = scan_index_signature(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_4: {
@@ -8979,8 +8996,9 @@ fn scan_type_member(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                     }
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_44(alt_kind) {
             pos = start;
@@ -9117,11 +9135,12 @@ fn scan_type_query_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_20(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_identifier(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
@@ -9152,8 +9171,9 @@ fn scan_type_query_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
                 }
                 pos = scan_identifier_name(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_45(alt_kind) {
             pos = start;
@@ -9354,18 +9374,20 @@ fn scan_parameter(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_10(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_required_parameter(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
                 pos = scan_optional_parameter(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
             return -1;
@@ -9984,322 +10006,344 @@ fn scan_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_LBRACE {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_block(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
                 pos = scan_variable_statement(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_46(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Const {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_26: {
                 pos = scan_enum_declaration(tokens, pos, 0);
                 if pos < 0 { break try_26; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_47(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_18: {
                 pos = scan_labelled_statement(tokens, pos, 0);
                 if pos < 0 { break try_18; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Async {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_7: {
                 pos = scan_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_7; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_18: {
                 pos = scan_labelled_statement(tokens, pos, 0);
                 if pos < 0 { break try_18; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_24: {
                 pos = scan_generator_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_24; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Yield {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_16: {
                 pos = scan_yield_statement(tokens, pos, 0);
                 if pos < 0 { break try_16; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_18: {
                 pos = scan_labelled_statement(tokens, pos, 0);
                 if pos < 0 { break try_18; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Namespace {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_10: {
                 pos = scan_namespace_declaration(tokens, pos, 0);
                 if pos < 0 { break try_10; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_18: {
                 pos = scan_labelled_statement(tokens, pos, 0);
                 if pos < 0 { break try_18; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Abstract {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_5: {
                 pos = scan_abstract_declaration(tokens, pos, 0);
                 if pos < 0 { break try_5; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_6: {
                 pos = scan_class_declaration(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_18: {
                 pos = scan_labelled_statement(tokens, pos, 0);
                 if pos < 0 { break try_18; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Declare {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_9: {
                 pos = scan_interface_declaration(tokens, pos, 0);
                 if pos < 0 { break try_9; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_10: {
                 pos = scan_namespace_declaration(tokens, pos, 0);
                 if pos < 0 { break try_10; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Import {
+            let mut best: i32 = -1;
             pos = start;
             try_2: {
                 pos = scan_import_statement(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Export {
+            let mut best: i32 = -1;
             pos = start;
             try_27: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Export { break try_27; }
                 pos += 1;
                 pos = scan_statement(tokens, pos, 0);
                 if pos < 0 { break try_27; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_6: {
                 pos = scan_class_declaration(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_9: {
                 pos = scan_interface_declaration(tokens, pos, 0);
                 if pos < 0 { break try_9; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_25: {
                 pos = scan_type_alias_declaration(tokens, pos, 0);
                 if pos < 0 { break try_25; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
                 pos = scan_export_statement(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_SemiColon {
             pos = start;
@@ -10318,304 +10362,334 @@ fn scan_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_Class {
+            let mut best: i32 = -1;
             pos = start;
             try_6: {
                 pos = scan_class_declaration(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Function_ {
+            let mut best: i32 = -1;
             pos = start;
             try_7: {
                 pos = scan_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_7; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_24: {
                 pos = scan_generator_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_24; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Break {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_14: {
                 pos = scan_break_statement(tokens, pos, 0);
                 if pos < 0 { break try_14; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_48(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_12: {
                 pos = scan_iteration_statement(tokens, pos, 0);
                 if pos < 0 { break try_12; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_49(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Return {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_15: {
                 pos = scan_return_statement(tokens, pos, 0);
                 if pos < 0 { break try_15; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Continue {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_13: {
                 pos = scan_continue_statement(tokens, pos, 0);
                 if pos < 0 { break try_13; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Switch {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
                 pos = scan_switch_statement(tokens, pos, 0);
                 if pos < 0 { break try_19; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Debugger {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_22: {
                 pos = scan_debugger_statement(tokens, pos, 0);
                 if pos < 0 { break try_22; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_With {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_17: {
                 pos = scan_with_statement(tokens, pos, 0);
                 if pos < 0 { break try_17; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_If {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_11: {
                 pos = scan_if_statement(tokens, pos, 0);
                 if pos < 0 { break try_11; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Throw {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_20: {
                 pos = scan_throw_statement(tokens, pos, 0);
                 if pos < 0 { break try_20; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Try {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_21: {
                 pos = scan_try_statement(tokens, pos, 0);
                 if pos < 0 { break try_21; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Enum {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_26: {
                 pos = scan_enum_declaration(tokens, pos, 0);
                 if pos < 0 { break try_26; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Interface {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_9: {
                 pos = scan_interface_declaration(tokens, pos, 0);
                 if pos < 0 { break try_9; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_50(alt_kind) {
             pos = start;
@@ -10626,18 +10700,20 @@ fn scan_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_YieldStar {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_16: {
                 pos = scan_yield_statement(tokens, pos, 0);
                 if pos < 0 { break try_16; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_TYPE {
             pos = start;
@@ -10949,6 +11025,7 @@ fn scan_export_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_Export {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Export { break try_0; }
@@ -10981,7 +11058,7 @@ fn scan_export_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
                 }
                 pos = scan_eos(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
@@ -10993,8 +11070,9 @@ fn scan_export_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
                 if pos < 0 { break try_1; }
                 pos = scan_eos(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
             return -1;
@@ -11114,32 +11192,36 @@ fn scan_declaration(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_Async {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_variable_statement(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
                 pos = scan_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Abstract {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_variable_statement(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
                 pos = scan_class_declaration(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_53(alt_kind) {
             pos = start;
@@ -11170,6 +11252,7 @@ fn scan_variable_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_0(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 if pos < tokens.len() && _gale_kind_set_13(tokens[pos].kind) {
@@ -11194,7 +11277,7 @@ fn scan_variable_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
                     if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
@@ -11212,8 +11295,9 @@ fn scan_variable_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
                     if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_54(alt_kind) {
             pos = start;
@@ -11439,6 +11523,7 @@ fn scan_iteration_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
             }
             return -1;
         } else if alt_kind == TK_For {
+            let mut best: i32 = -1;
             pos = start;
             try_3: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_For { break try_3; }
@@ -11467,7 +11552,7 @@ fn scan_iteration_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 pos += 1;
                 pos = scan_statement(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_7: {
@@ -11506,7 +11591,7 @@ fn scan_iteration_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 pos += 1;
                 pos = scan_statement(tokens, pos, 0);
                 if pos < 0 { break try_7; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_6: {
@@ -11543,7 +11628,7 @@ fn scan_iteration_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 pos += 1;
                 pos = scan_statement(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
@@ -11574,7 +11659,7 @@ fn scan_iteration_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 pos += 1;
                 pos = scan_statement(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_5: {
@@ -11594,7 +11679,7 @@ fn scan_iteration_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 pos += 1;
                 pos = scan_statement(tokens, pos, 0);
                 if pos < 0 { break try_5; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_4: {
@@ -11612,8 +11697,9 @@ fn scan_iteration_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 pos += 1;
                 pos = scan_statement(tokens, pos, 0);
                 if pos < 0 { break try_4; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
             return -1;
@@ -12047,17 +12133,18 @@ fn scan_class_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_13(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_constructor_declaration(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
                 pos = scan_statement(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
@@ -12068,29 +12155,33 @@ fn scan_class_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
                 }
                 pos = scan_property_member_declaration(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Constructor {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_constructor_declaration(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
                 pos = scan_statement(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_55(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_3: {
                 pos = scan_statement(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
@@ -12101,22 +12192,25 @@ fn scan_class_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
                 }
                 pos = scan_property_member_declaration(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_LBRACKET {
+            let mut best: i32 = -1;
             pos = start;
             try_2: {
                 pos = scan_index_member_declaration(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
                 pos = scan_statement(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_56(alt_kind) {
             pos = start;
@@ -12139,6 +12233,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_57(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_property_member_base__follow_4(tokens, pos, 0);
@@ -12162,7 +12257,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
                 }
                 if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { break try_0; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
@@ -12201,7 +12296,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
                         pos = gp_60;
                     }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
@@ -12228,15 +12323,17 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
                         pos = gp_62;
                     }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Abstract {
+            let mut best: i32 = -1;
             pos = start;
             try_3: {
                 pos = scan_abstract_declaration(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
@@ -12261,7 +12358,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
                 }
                 if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { break try_0; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
@@ -12300,7 +12397,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
                         pos = gp_63;
                     }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
@@ -12327,10 +12424,12 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
                         pos = gp_65;
                     }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_58(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_property_member_base__follow_4(tokens, pos, 0);
@@ -12354,7 +12453,7 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
                 }
                 if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { break try_0; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
@@ -12393,8 +12492,9 @@ fn scan_property_member_declaration(tokens: &Array<Token>, pos: i32, min_prec: i
                         pos = gp_66;
                     }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
             return -1;
@@ -12685,11 +12785,12 @@ fn scan_formal_parameter_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
             }
             return -1;
         } else if alt_kind == TK_LIT_LBRACKET {
+            let mut best: i32 = -1;
             pos = start;
             try_2: {
                 pos = scan_array_literal(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
@@ -12729,10 +12830,12 @@ fn scan_formal_parameter_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
                     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_LBRACE {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_formal_parameter_arg(tokens, pos, 0);
@@ -12771,7 +12874,7 @@ fn scan_formal_parameter_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
                     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
@@ -12791,8 +12894,9 @@ fn scan_formal_parameter_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
                     }
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Ellipsis {
             pos = start;
@@ -13025,29 +13129,30 @@ fn scan_property_assignment(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_20(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_2: {
                 pos = scan_get_accessor(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
                 pos = scan_set_accessor(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_4: {
                 pos = scan_generator_method(tokens, pos, 0);
                 if pos < 0 { break try_4; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_5: {
                 pos = scan_identifier_or_key_word(tokens, pos, 0);
                 if pos < 0 { break try_5; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
@@ -13071,7 +13176,7 @@ fn scan_property_assignment(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 }
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_6: {
@@ -13082,15 +13187,17 @@ fn scan_property_assignment(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 }
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_60(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_4: {
                 pos = scan_generator_method(tokens, pos, 0);
                 if pos < 0 { break try_4; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
@@ -13114,7 +13221,7 @@ fn scan_property_assignment(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 }
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_6: {
@@ -13125,21 +13232,23 @@ fn scan_property_assignment(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 }
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Require {
+            let mut best: i32 = -1;
             pos = start;
             try_4: {
                 pos = scan_generator_method(tokens, pos, 0);
                 if pos < 0 { break try_4; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_5: {
                 pos = scan_identifier_or_key_word(tokens, pos, 0);
                 if pos < 0 { break try_5; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
@@ -13163,7 +13272,7 @@ fn scan_property_assignment(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 }
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_6: {
@@ -13174,10 +13283,12 @@ fn scan_property_assignment(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 }
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_LBRACKET {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break try_1; }
@@ -13190,13 +13301,13 @@ fn scan_property_assignment(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 pos += 1;
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_4: {
                 pos = scan_generator_method(tokens, pos, 0);
                 if pos < 0 { break try_4; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
@@ -13220,7 +13331,7 @@ fn scan_property_assignment(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 }
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_6: {
@@ -13231,8 +13342,9 @@ fn scan_property_assignment(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 }
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_STAR {
             pos = start;
@@ -13465,17 +13577,18 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_62(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_16: {
                 pos = scan_generator_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_16; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -13486,15 +13599,17 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_63(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -13505,21 +13620,23 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Yield {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_17: {
                 pos = scan_yield_statement(tokens, pos, 0);
                 if pos < 0 { break try_17; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -13530,23 +13647,25 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Typeof {
+            let mut best: i32 = -1;
             pos = start;
             try_6: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Typeof { break try_6; }
                 pos += 1;
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -13557,10 +13676,12 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_New {
+            let mut best: i32 = -1;
             pos = start;
             try_2: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_New { break try_2; }
@@ -13574,7 +13695,7 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 }
                 pos = scan_arguments(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
@@ -13587,13 +13708,13 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     pos = scan_type_arguments(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -13604,23 +13725,25 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Void {
+            let mut best: i32 = -1;
             pos = start;
             try_5: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Void { break try_5; }
                 pos += 1;
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_5; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -13631,15 +13754,17 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_This {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -13650,29 +13775,31 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_18: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_This { break try_18; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Delete {
+            let mut best: i32 = -1;
             pos = start;
             try_4: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Delete { break try_4; }
                 pos += 1;
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_4; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -13683,10 +13810,12 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Class {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Class { break try_1; }
@@ -13705,13 +13834,13 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 if pos < 0 { break try_1; }
                 pos = scan_class_tail(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -13722,15 +13851,17 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Super {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -13741,29 +13872,31 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_20: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Super { break try_20; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Await {
+            let mut best: i32 = -1;
             pos = start;
             try_13: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Await { break try_13; }
                 pos += 1;
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_13; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -13774,21 +13907,23 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_64(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_21: {
                 pos = scan_literal(tokens, pos, 0);
                 if pos < 0 { break try_21; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -13799,38 +13934,44 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_65(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_21: {
                 pos = scan_literal(tokens, pos, 0);
                 if pos < 0 { break try_21; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_LBRACKET {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_22: {
                 pos = scan_array_literal(tokens, pos, 0);
                 if pos < 0 { break try_22; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_LPAREN {
+            let mut best: i32 = -1;
             pos = start;
             try_24: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_24; }
@@ -13839,14 +13980,15 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
                 if pos < 0 { break try_24; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_24; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_PLUSPLUS {
             pos = start;
@@ -13909,24 +14051,26 @@ fn scan_single_expression_atom(tokens: &Array<Token>, pos: i32) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_LIT_LBRACE {
+            let mut best: i32 = -1;
             pos = start;
             try_14: {
                 pos = scan_iterator_block(tokens, pos, 0);
                 if pos < 0 { break try_14; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_15: {
                 pos = scan_generator_block(tokens, pos, 0);
                 if pos < 0 { break try_15; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_object_literal(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_YieldStar {
             pos = start;
@@ -14666,11 +14810,12 @@ fn scan_as_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_75(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
@@ -14690,8 +14835,9 @@ fn scan_as_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
                     }
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_76(alt_kind) {
             pos = start;
@@ -14722,18 +14868,20 @@ fn scan_assignable(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             }
             return -1;
         } else if _gale_kind_set_78(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_identifier(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
                 pos = scan_keyword(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_79(alt_kind) {
             pos = start;
@@ -14772,6 +14920,7 @@ fn scan_anonymous_function(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_62(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 if pos < tokens.len() && tokens[pos].kind == TK_Async {
@@ -14806,20 +14955,21 @@ fn scan_anonymous_function(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { break try_1; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_80(alt_kind) {
             pos = start;
@@ -14906,6 +15056,7 @@ fn scan_arrow_function_body(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
             }
             return -1;
         } else if alt_kind == TK_LIT_LBRACE {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { break try_1; }
@@ -14914,14 +15065,15 @@ fn scan_arrow_function_body(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { break try_1; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_single_expression(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
             return -1;
@@ -15106,18 +15258,20 @@ fn scan_identifier_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
             }
             return -1;
         } else if _gale_kind_set_78(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_identifier(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
                 pos = scan_reserved_word(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_45(alt_kind) {
             pos = start;
@@ -15155,18 +15309,20 @@ fn scan_identifier_or_key_word(tokens: &Array<Token>, pos: i32, min_prec: i32 = 
             }
             return -1;
         } else if alt_kind == TK_TypeAlias {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_identifier(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_TypeAlias { break try_1; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Require {
             pos = start;
@@ -15232,46 +15388,52 @@ fn scan_eos(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_SemiColon {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { break try_0; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_EOF {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_EOF { break try_1; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
+            let mut best: i32 = -1;
             pos = start;
             try_2: {
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         }
     }
@@ -26556,322 +26718,344 @@ fn scan_statement__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_LBRACE {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_block(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
                 pos = scan_variable_statement__follow_7(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_46(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement__follow_7(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Const {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement__follow_7(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_26: {
                 pos = scan_enum_declaration(tokens, pos, 0);
                 if pos < 0 { break try_26; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_47(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement__follow_7(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_18: {
                 pos = scan_labelled_statement__follow_15(tokens, pos, 0);
                 if pos < 0 { break try_18; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Async {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement__follow_7(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_7: {
                 pos = scan_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_7; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_18: {
                 pos = scan_labelled_statement__follow_15(tokens, pos, 0);
                 if pos < 0 { break try_18; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_24: {
                 pos = scan_generator_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_24; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Yield {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement__follow_7(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_16: {
                 pos = scan_yield_statement(tokens, pos, 0);
                 if pos < 0 { break try_16; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_18: {
                 pos = scan_labelled_statement__follow_15(tokens, pos, 0);
                 if pos < 0 { break try_18; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Namespace {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement__follow_7(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_10: {
                 pos = scan_namespace_declaration(tokens, pos, 0);
                 if pos < 0 { break try_10; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_18: {
                 pos = scan_labelled_statement__follow_15(tokens, pos, 0);
                 if pos < 0 { break try_18; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Abstract {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement__follow_7(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_5: {
                 pos = scan_abstract_declaration__follow_9(tokens, pos, 0);
                 if pos < 0 { break try_5; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_6: {
                 pos = scan_class_declaration(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_18: {
                 pos = scan_labelled_statement__follow_15(tokens, pos, 0);
                 if pos < 0 { break try_18; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Declare {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 pos = scan_variable_statement__follow_7(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_9: {
                 pos = scan_interface_declaration__follow_11(tokens, pos, 0);
                 if pos < 0 { break try_9; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_10: {
                 pos = scan_namespace_declaration(tokens, pos, 0);
                 if pos < 0 { break try_10; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Import {
+            let mut best: i32 = -1;
             pos = start;
             try_2: {
                 pos = scan_import_statement(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Export {
+            let mut best: i32 = -1;
             pos = start;
             try_27: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Export { break try_27; }
                 pos += 1;
                 pos = scan_statement__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_27; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_6: {
                 pos = scan_class_declaration(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_9: {
                 pos = scan_interface_declaration__follow_11(tokens, pos, 0);
                 if pos < 0 { break try_9; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_25: {
                 pos = scan_type_alias_declaration(tokens, pos, 0);
                 if pos < 0 { break try_25; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
                 pos = scan_export_statement__follow_8(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_SemiColon {
             pos = start;
@@ -26890,304 +27074,334 @@ fn scan_statement__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
             }
             return -1;
         } else if alt_kind == TK_Class {
+            let mut best: i32 = -1;
             pos = start;
             try_6: {
                 pos = scan_class_declaration(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Function_ {
+            let mut best: i32 = -1;
             pos = start;
             try_7: {
                 pos = scan_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_7; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_24: {
                 pos = scan_generator_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_24; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Break {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_14: {
                 pos = scan_break_statement(tokens, pos, 0);
                 if pos < 0 { break try_14; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_48(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_12: {
                 pos = scan_iteration_statement__follow_13(tokens, pos, 0);
                 if pos < 0 { break try_12; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_49(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Return {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_15: {
                 pos = scan_return_statement(tokens, pos, 0);
                 if pos < 0 { break try_15; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Continue {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_13: {
                 pos = scan_continue_statement(tokens, pos, 0);
                 if pos < 0 { break try_13; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Switch {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
                 pos = scan_switch_statement(tokens, pos, 0);
                 if pos < 0 { break try_19; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Debugger {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_22: {
                 pos = scan_debugger_statement(tokens, pos, 0);
                 if pos < 0 { break try_22; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_With {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_17: {
                 pos = scan_with_statement__follow_14(tokens, pos, 0);
                 if pos < 0 { break try_17; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_If {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_11: {
                 pos = scan_if_statement__follow_12(tokens, pos, 0);
                 if pos < 0 { break try_11; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Throw {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_20: {
                 pos = scan_throw_statement(tokens, pos, 0);
                 if pos < 0 { break try_20; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Try {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_21: {
                 pos = scan_try_statement(tokens, pos, 0);
                 if pos < 0 { break try_21; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Enum {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_26: {
                 pos = scan_enum_declaration(tokens, pos, 0);
                 if pos < 0 { break try_26; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Interface {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_9: {
                 pos = scan_interface_declaration__follow_11(tokens, pos, 0);
                 if pos < 0 { break try_9; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_arrow_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_50(alt_kind) {
             pos = start;
@@ -27198,18 +27412,20 @@ fn scan_statement__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
             }
             return -1;
         } else if alt_kind == TK_YieldStar {
+            let mut best: i32 = -1;
             pos = start;
             try_8: {
                 pos = scan_expression_statement__follow_10(tokens, pos, 0);
                 if pos < 0 { break try_8; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_16: {
                 pos = scan_yield_statement(tokens, pos, 0);
                 if pos < 0 { break try_16; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_TYPE {
             pos = start;
@@ -28624,17 +28840,18 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_62(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_16: {
                 pos = scan_generator_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_16; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -28645,15 +28862,17 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_63(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -28664,21 +28883,23 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Yield {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_17: {
                 pos = scan_yield_statement__follow_16(tokens, pos, 0);
                 if pos < 0 { break try_17; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -28689,23 +28910,25 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Typeof {
+            let mut best: i32 = -1;
             pos = start;
             try_6: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Typeof { break try_6; }
                 pos += 1;
                 pos = scan_single_expression__follow_1(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -28716,10 +28939,12 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_New {
+            let mut best: i32 = -1;
             pos = start;
             try_2: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_New { break try_2; }
@@ -28733,7 +28958,7 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                 }
                 pos = scan_arguments(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
@@ -28746,13 +28971,13 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                     pos = scan_type_arguments(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -28763,23 +28988,25 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Void {
+            let mut best: i32 = -1;
             pos = start;
             try_5: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Void { break try_5; }
                 pos += 1;
                 pos = scan_single_expression__follow_1(tokens, pos, 0);
                 if pos < 0 { break try_5; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -28790,15 +29017,17 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_This {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -28809,29 +29038,31 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_18: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_This { break try_18; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Delete {
+            let mut best: i32 = -1;
             pos = start;
             try_4: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Delete { break try_4; }
                 pos += 1;
                 pos = scan_single_expression__follow_1(tokens, pos, 0);
                 if pos < 0 { break try_4; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -28842,10 +29073,12 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Class {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Class { break try_1; }
@@ -28864,13 +29097,13 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                 if pos < 0 { break try_1; }
                 pos = scan_class_tail(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -28881,15 +29114,17 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Super {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -28900,29 +29135,31 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_20: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Super { break try_20; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Await {
+            let mut best: i32 = -1;
             pos = start;
             try_13: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Await { break try_13; }
                 pos += 1;
                 pos = scan_single_expression__follow_1(tokens, pos, 0);
                 if pos < 0 { break try_13; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -28933,21 +29170,23 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_64(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_21: {
                 pos = scan_literal(tokens, pos, 0);
                 if pos < 0 { break try_21; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_19: {
@@ -28958,38 +29197,44 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                     pos = scan_single_expression(tokens, pos, 0);
                     if pos < 0 { pos = sp; }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_65(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_21: {
                 pos = scan_literal(tokens, pos, 0);
                 if pos < 0 { break try_21; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_LBRACKET {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_22: {
                 pos = scan_array_literal(tokens, pos, 0);
                 if pos < 0 { break try_22; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_LPAREN {
+            let mut best: i32 = -1;
             pos = start;
             try_24: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_24; }
@@ -28998,14 +29243,15 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
                 if pos < 0 { break try_24; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_24; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 pos = scan_anonymous_function(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_PLUSPLUS {
             pos = start;
@@ -29068,24 +29314,26 @@ fn scan_single_expression__follow_1_atom(tokens: &Array<Token>, pos: i32) -> i32
             }
             return -1;
         } else if alt_kind == TK_LIT_LBRACE {
+            let mut best: i32 = -1;
             pos = start;
             try_14: {
                 pos = scan_iterator_block(tokens, pos, 0);
                 if pos < 0 { break try_14; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_15: {
                 pos = scan_generator_block(tokens, pos, 0);
                 if pos < 0 { break try_15; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_23: {
                 pos = scan_object_literal(tokens, pos, 0);
                 if pos < 0 { break try_23; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_YieldStar {
             pos = start;
@@ -31619,17 +31867,18 @@ fn scan_class_element__follow_3(tokens: &Array<Token>, pos: i32, min_prec: i32 =
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_13(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_constructor_declaration(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
                 pos = scan_statement__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
@@ -31640,29 +31889,33 @@ fn scan_class_element__follow_3(tokens: &Array<Token>, pos: i32, min_prec: i32 =
                 }
                 pos = scan_property_member_declaration__follow_17(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Constructor {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_constructor_declaration(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
                 pos = scan_statement__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_55(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_3: {
                 pos = scan_statement__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
@@ -31673,22 +31926,25 @@ fn scan_class_element__follow_3(tokens: &Array<Token>, pos: i32, min_prec: i32 =
                 }
                 pos = scan_property_member_declaration__follow_17(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_LBRACKET {
+            let mut best: i32 = -1;
             pos = start;
             try_2: {
                 pos = scan_index_member_declaration(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_3: {
                 pos = scan_statement__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_56(alt_kind) {
             pos = start;
@@ -31996,6 +32252,7 @@ fn scan_variable_statement__follow_7(tokens: &Array<Token>, pos: i32, min_prec: 
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_0(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 if pos < tokens.len() && _gale_kind_set_13(tokens[pos].kind) {
@@ -32015,7 +32272,7 @@ fn scan_variable_statement__follow_7(tokens: &Array<Token>, pos: i32, min_prec: 
                 }
                 pos = scan_variable_declaration_list(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
@@ -32028,8 +32285,9 @@ fn scan_variable_statement__follow_7(tokens: &Array<Token>, pos: i32, min_prec: 
                 }
                 pos = scan_initializer(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_54(alt_kind) {
             pos = start;
@@ -32225,6 +32483,7 @@ fn scan_export_statement__follow_8(tokens: &Array<Token>, pos: i32, min_prec: i3
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_Export {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_Export { break try_0; }
@@ -32257,7 +32516,7 @@ fn scan_export_statement__follow_8(tokens: &Array<Token>, pos: i32, min_prec: i3
                 }
                 pos = scan_eos(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
@@ -32269,8 +32528,9 @@ fn scan_export_statement__follow_8(tokens: &Array<Token>, pos: i32, min_prec: i3
                 if pos < 0 { break try_1; }
                 pos = scan_eos(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
             return -1;
@@ -32684,6 +32944,7 @@ fn scan_iteration_statement__follow_13(tokens: &Array<Token>, pos: i32, min_prec
             }
             return -1;
         } else if alt_kind == TK_For {
+            let mut best: i32 = -1;
             pos = start;
             try_3: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_For { break try_3; }
@@ -32712,7 +32973,7 @@ fn scan_iteration_statement__follow_13(tokens: &Array<Token>, pos: i32, min_prec
                 pos += 1;
                 pos = scan_statement__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_7: {
@@ -32751,7 +33012,7 @@ fn scan_iteration_statement__follow_13(tokens: &Array<Token>, pos: i32, min_prec
                 pos += 1;
                 pos = scan_statement__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_7; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_6: {
@@ -32788,7 +33049,7 @@ fn scan_iteration_statement__follow_13(tokens: &Array<Token>, pos: i32, min_prec
                 pos += 1;
                 pos = scan_statement__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_6; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
@@ -32819,7 +33080,7 @@ fn scan_iteration_statement__follow_13(tokens: &Array<Token>, pos: i32, min_prec
                 pos += 1;
                 pos = scan_statement__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_5: {
@@ -32839,7 +33100,7 @@ fn scan_iteration_statement__follow_13(tokens: &Array<Token>, pos: i32, min_prec
                 pos += 1;
                 pos = scan_statement__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_5; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_4: {
@@ -32857,8 +33118,9 @@ fn scan_iteration_statement__follow_13(tokens: &Array<Token>, pos: i32, min_prec
                 pos += 1;
                 pos = scan_statement__follow_0(tokens, pos, 0);
                 if pos < 0 { break try_4; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
             return -1;
@@ -33462,6 +33724,7 @@ fn scan_property_member_declaration__follow_17(tokens: &Array<Token>, pos: i32, 
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_57(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_property_member_base__follow_4(tokens, pos, 0);
@@ -33485,7 +33748,7 @@ fn scan_property_member_declaration__follow_17(tokens: &Array<Token>, pos: i32, 
                 }
                 if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { break try_0; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
@@ -33524,7 +33787,7 @@ fn scan_property_member_declaration__follow_17(tokens: &Array<Token>, pos: i32, 
                         pos = gp_156;
                     }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
@@ -33551,15 +33814,17 @@ fn scan_property_member_declaration__follow_17(tokens: &Array<Token>, pos: i32, 
                         pos = gp_158;
                     }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Abstract {
+            let mut best: i32 = -1;
             pos = start;
             try_3: {
                 pos = scan_abstract_declaration__follow_9(tokens, pos, 0);
                 if pos < 0 { break try_3; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
@@ -33584,7 +33849,7 @@ fn scan_property_member_declaration__follow_17(tokens: &Array<Token>, pos: i32, 
                 }
                 if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { break try_0; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
@@ -33623,7 +33888,7 @@ fn scan_property_member_declaration__follow_17(tokens: &Array<Token>, pos: i32, 
                         pos = gp_159;
                     }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
@@ -33650,10 +33915,12 @@ fn scan_property_member_declaration__follow_17(tokens: &Array<Token>, pos: i32, 
                         pos = gp_161;
                     }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_58(alt_kind) {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_property_member_base__follow_4(tokens, pos, 0);
@@ -33677,7 +33944,7 @@ fn scan_property_member_declaration__follow_17(tokens: &Array<Token>, pos: i32, 
                 }
                 if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { break try_0; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
@@ -33716,8 +33983,9 @@ fn scan_property_member_declaration__follow_17(tokens: &Array<Token>, pos: i32, 
                         pos = gp_162;
                     }
                 }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
             return -1;
@@ -33986,32 +34254,36 @@ fn scan_declaration__follow_18(tokens: &Array<Token>, pos: i32, min_prec: i32 = 
             }
             return -1;
         } else if alt_kind == TK_Async {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_variable_statement__follow_7(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_2: {
                 pos = scan_function_declaration(tokens, pos, 0);
                 if pos < 0 { break try_2; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Abstract {
+            let mut best: i32 = -1;
             pos = start;
             try_0: {
                 pos = scan_variable_statement__follow_7(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
                 pos = scan_class_declaration(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _gale_kind_set_53(alt_kind) {
             pos = start;

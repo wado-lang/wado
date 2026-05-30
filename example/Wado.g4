@@ -51,6 +51,15 @@ itemKind
     | variantDecl
     | traitDecl
     | implBlock
+    | testDecl
+    ;
+
+// `test "name" { ... }` / `test { ... }` blocks. `test` is a contextual
+// keyword in Wado (a valid identifier elsewhere); none of the bundled
+// examples use it as an identifier, so the example grammar models it as
+// a literal keyword for simplicity.
+testDecl
+    : 'test' STRING_LITERAL? block
     ;
 
 // --- Attributes ------------------------------------------------------------
@@ -224,8 +233,12 @@ memberName
 
 // --- Statements ------------------------------------------------------------
 
+// A block is a sequence of statements, optionally followed by a final
+// expression with no trailing `;` — the block's value (`{ 1 }`,
+// `if c { a } else { b }`). The trailing expression is struct-literal-
+// unrestricted because a `}` (not a `{`) closes the block.
 block
-    : '{' statement* '}'
+    : '{' statement* expression? '}'
     ;
 
 statement
@@ -237,12 +250,17 @@ statement
     | loopStatement
     | breakStatement
     | continueStatement
+    | assertStatement
     | matchStatement
     | exprStatement
     ;
 
 letStatement
-    : 'let' 'mut'? IDENTIFIER (':' typeRef)? '=' expression ';'
+    : 'let' pattern (':' typeRef)? '=' expression ';'
+    ;
+
+assertStatement
+    : 'assert' expression (',' expression)? ';'
     ;
 
 returnStatement
@@ -259,7 +277,7 @@ forStatement
 
 forTail
     : 'of' exprNoStruct
-    | (':' typeRef)? '=' expression ';' expression? ';' expression?
+    | (':' typeRef)? '=' expression ';' expression? ';' exprNoStruct?
     ;
 
 whileStatement
@@ -335,8 +353,9 @@ argumentList
 
 primary
     : literal
-    | path ('::' typeArgs)?
+    | 'self'
     | structLiteral
+    | path ('::' typeArgs)?
     | tupleOrArrayLiteral
     | closure
     | ifExpr
@@ -345,9 +364,49 @@ primary
     ;
 
 // `exprNoStruct` is the struct-literal-restricted expression used in the
-// header position of `if` / `while` / `for`, where a `{` starts the body.
+// header position of `if` / `while` / `for`, where a `{` opens the body.
+// It mirrors the full `expression` precedence chain but its leaf
+// `primaryNoStruct` drops the `structLiteral` alternative, so `while a {`
+// parses `a` as a path and leaves `{` to open the loop body instead of
+// being misread as the empty struct literal `a {}`. Sub-expressions
+// reachable through `( )`, `[ ]`, or call arguments reset to the full
+// `expression`, so a struct literal is still allowed when explicitly
+// parenthesised (`while (Foo { x: 1 }).flag {`).
 exprNoStruct
-    : expression
+    : exprNoStruct ('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^=' | '<<=' | '>>=') exprNoStruct
+    | exprNoStruct ('..<' | '..=') exprNoStruct
+    | exprNoStruct '||' exprNoStruct
+    | exprNoStruct '&&' exprNoStruct
+    | exprNoStruct '|' exprNoStruct
+    | exprNoStruct '^' exprNoStruct
+    | exprNoStruct '&' exprNoStruct
+    | exprNoStruct ('==' | '!=') exprNoStruct
+    | exprNoStruct ('<' | '<=' | '>' | '>=') exprNoStruct
+    | exprNoStruct ('<<' | '>>') exprNoStruct
+    | exprNoStruct ('+' | '-') exprNoStruct
+    | exprNoStruct 'as' typeRef
+    | exprNoStruct ('*' | '/' | '%') exprNoStruct
+    | unaryNoStruct
+    ;
+
+unaryNoStruct
+    : ('-' | '!' | '&' '&'? 'mut'? | '*') unaryNoStruct
+    | postfixNoStruct
+    ;
+
+postfixNoStruct
+    : primaryNoStruct postfixOp*
+    ;
+
+primaryNoStruct
+    : literal
+    | 'self'
+    | path ('::' typeArgs)?
+    | tupleOrArrayLiteral
+    | closure
+    | ifExpr
+    | matchExpr
+    | '(' expression ')'
     ;
 
 structLiteral

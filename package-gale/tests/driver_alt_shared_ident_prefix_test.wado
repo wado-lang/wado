@@ -1,0 +1,46 @@
+use g from "./grammars/alt_shared_ident_prefix.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/alt_shared_ident_prefix",
+        },
+    };
+use { normalize_tree } from "./grammars/alt_shared_ident_prefix.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = g::parse(input).unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+test "tree: bare-ident pattern" {
+    assert_tree(&"match c { a => z }", &"(prog (matchExpr match c { (arm (pattern a) => z) }))");
+}
+
+test "tree: variant pattern — the regression case" {
+    assert_tree(&"match c { N ( n ) => z }", &"
+        (prog (matchExpr match c { (arm (pattern (path N) ( (pattern n) )) => z) }))
+    ");
+}
+
+test "tree: variant then bare-ident arm" {
+    assert_tree(&"match c { N ( n ) => z , a => z }", &"
+        (prog
+          (matchExpr match c {
+            (arm (pattern (path N) ( (pattern n) )) => z)
+            ,
+            (arm (pattern a) => z)
+          }))
+    ");
+}
+
+test "tree: nested variant pattern" {
+    assert_tree(&"match c { N ( M ( x ) ) => z }", &"
+        (prog (matchExpr match c {
+          (arm (pattern (path N) ( (pattern (path M) ( (pattern x) )) )) => z)
+        }))
+    ");
+}

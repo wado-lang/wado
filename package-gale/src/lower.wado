@@ -2077,11 +2077,31 @@ fn surface_is_optional_repeat(elem: &Element) -> bool {
 /// present/absent positions (see `try_optional_shape_lookahead`).
 fn surface_contains_variable_repeat(elem: &Element) -> bool {
     if let Repeat(rep) = elem {
-        return match rep.kind {
+        let self_is_variable = match rep.kind {
             Star => true,
             Plus => true,
             Optional => false,
         };
+        if self_is_variable {
+            return true;
+        }
+        // An `Optional` whose inner hides a Star/Plus still defeats shape
+        // enumeration: `( pattern (',' pattern)* )?` nests the Star one
+        // level down, and the enclosing shape's per-position signature
+        // collapses the "list present" and "list absent" cases the same
+        // way the top-level Star does. Recurse through the optional's
+        // inner so the guard sees it.
+        return surface_contains_variable_repeat(&rep.element);
+    }
+    if let Group(g) = elem {
+        for let alt of &g.alternatives {
+            for let inner of &alt.elements {
+                if surface_contains_variable_repeat(inner) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
     if let Label(lab) = elem {
         return surface_contains_variable_repeat(&lab.element);
