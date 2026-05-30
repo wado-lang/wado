@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780118620977,
+  "lastUpdate": 1780122908536,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27601,6 +27601,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f63694e611edeecf7e8c41480193f347f5c58081"
         },
         "date": 1780118620504,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16963,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 458952,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "59c0c68439dfc2c1ffa3def8e6e334801d632ff8",
+          "message": "Merge pull request #1240 from wado-lang/claude/synth-cm-binding-review-8dS5j\n\nfix(synthesis): cm_binding boundary bug fixes + migrate walkers to TirVisitor",
+          "timestamp": "2026-05-30T15:26:24+09:00",
+          "tree_id": "6ae82ece80f44db6fdf184417df9497e73c3c9e2",
+          "url": "https://github.com/wado-lang/wado/commit/59c0c68439dfc2c1ffa3def8e6e334801d632ff8"
+        },
+        "date": 1780122908047,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
