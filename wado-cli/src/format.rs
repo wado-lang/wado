@@ -163,9 +163,10 @@ const BUILTIN_FORMAT_EXCLUDES: &[&str] = &["**/generated/**", "**/build/**"];
 /// different root), mirroring how `wado test` reads `[test]` filters.
 fn format_filters_for(dir: &Path) -> Result<(discover::ExcludeSet, discover::IncludeSet), CliExit> {
     let (exclude, include) = match project_manifest::discover(dir) {
-        Ok(Some(project)) if project.root == dir => {
-            (project.manifest.format.exclude, project.manifest.format.include)
-        }
+        Ok(Some(project)) if project.root == dir => (
+            project.manifest.format.exclude,
+            project.manifest.format.include,
+        ),
         Ok(_) => (Vec::new(), Vec::new()),
         Err(e) => return Err(CliExit::error(e)),
     };

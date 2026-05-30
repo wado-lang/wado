@@ -544,14 +544,22 @@ impl<'a> Unparser<'a> {
     fn unparse_attr_value_wrapped(&mut self, v: &crate::ast::AttrValue) {
         match v {
             crate::ast::AttrValue::Object(obj) if !obj.is_empty() => {
-                self.emit_container_value(attr_value_depth(v), |s| s.unparse_attr_value(v), |s| {
-                    s.unparse_attr_object_multiline(obj);
-                });
+                self.emit_container_value(
+                    attr_value_depth(v),
+                    |s| s.unparse_attr_value(v),
+                    |s| {
+                        s.unparse_attr_object_multiline(obj);
+                    },
+                );
             }
             crate::ast::AttrValue::Array(items) if !items.is_empty() => {
-                self.emit_container_value(attr_value_depth(v), |s| s.unparse_attr_value(v), |s| {
-                    s.unparse_attr_array_multiline(items);
-                });
+                self.emit_container_value(
+                    attr_value_depth(v),
+                    |s| s.unparse_attr_value(v),
+                    |s| {
+                        s.unparse_attr_array_multiline(items);
+                    },
+                );
             }
             _ => self.unparse_attr_value(v),
         }

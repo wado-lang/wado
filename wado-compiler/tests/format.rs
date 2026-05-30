@@ -261,9 +261,15 @@ fn test_format_test_attr_blank_line_idempotent() {
     let source = "// note\n\n#[TODO]\ntest \"x\" {\n    assert true;\n}\n";
     let once = wado_compiler::format(source).expect("format failed");
     let twice = wado_compiler::format(&once).expect("format failed");
-    assert_eq!(once, twice, "format must be idempotent\n--- once ---\n{once}");
+    assert_eq!(
+        once, twice,
+        "format must be idempotent\n--- once ---\n{once}"
+    );
     // Exactly one blank line (the source's) sits between comment and attribute.
-    assert_eq!(once, "// note\n\n#[TODO]\ntest \"x\" {\n    assert true;\n}\n");
+    assert_eq!(
+        once,
+        "// note\n\n#[TODO]\ntest \"x\" {\n    assert true;\n}\n"
+    );
 }
 
 /// A function type with a unit return omits the `-> ()`, matching the rule for
@@ -305,13 +311,13 @@ fn test_format_array_of_tuples_one_per_line() {
 #[test]
 fn test_format_array_of_triples_one_per_line() {
     let source = "fn run() {\n    let m = [[1, 2, 3], [4, 5, 6]];\n}\n";
-    let expected = r#"fn run() {
+    let expected = r"fn run() {
     let m = [
         [1, 2, 3],
         [4, 5, 6],
     ];
 }
-"#;
+";
     let formatted = wado_compiler::format(source).expect("format failed");
     assert_eq!(formatted, expected);
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
@@ -331,8 +337,7 @@ fn test_format_flat_array_stays_inline() {
 /// line, while the (flat) inner struct stays inline.
 #[test]
 fn test_format_nested_struct_breaks_outer() {
-    let source =
-        "fn run() {\n    let c = Config { server: Server { host: \"h\", port: 8080 }, debug: true };\n}\n";
+    let source = "fn run() {\n    let c = Config { server: Server { host: \"h\", port: 8080 }, debug: true };\n}\n";
     let expected = r#"fn run() {
     let c = Config {
         server: Server { host: "h", port: 8080 },
