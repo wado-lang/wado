@@ -385,6 +385,16 @@ pub(crate) struct StaticMethodDispatch {
     /// with the reified argument exprs to build [`crate::tir::CallArg`]s
     /// with the same `is_mut` shape annotate produced.
     pub(crate) param_is_mut: Vec<bool>,
+    /// The exact `type_args` the production builder put on the resulting
+    /// `TirExprKind::Call`. For a static method on a generic struct the
+    /// impl (struct) type args live in `function_ref.monomorph_info`, so
+    /// this list carries only the method-level type args (often empty);
+    /// for a free generic function it carries the function's type args.
+    /// Reify replays this verbatim instead of re-deriving from
+    /// `generic_instantiations`, which would (wrongly) feed the impl args
+    /// in as method-level type args and mangle `Container<i32>::make` as
+    /// `Container::make<i32>`.
+    pub(crate) type_args: Vec<crate::tir::TypeId>,
 }
 
 /// Generic-instantiation decision recorded by the body walk at a call,

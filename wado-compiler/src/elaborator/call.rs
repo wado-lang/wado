@@ -615,7 +615,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let crate::tir::TirExprKind::Call {
                     func,
                     args: tir_args,
-                    ..
+                    type_args: tir_type_args,
                 } = &tir_call.kind
                 {
                     let func_ref = func.clone();
@@ -625,6 +625,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         super::sem::types::StaticMethodDispatch {
                             function_ref: func_ref,
                             param_is_mut,
+                            type_args: tir_type_args.clone(),
                         },
                     );
                 }
@@ -1157,6 +1158,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::StaticMethodDispatch {
                 function_ref: func_ref.clone(),
                 param_is_mut,
+                type_args: type_args.clone(),
             },
         );
         TirExpr::new(
@@ -2630,6 +2632,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 super::sem::types::StaticMethodDispatch {
                     function_ref: func_ref.clone(),
                     param_is_mut: vec![false; args.len()],
+                    type_args: vec![],
                 },
             );
 

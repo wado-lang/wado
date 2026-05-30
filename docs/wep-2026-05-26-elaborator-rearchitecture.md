@@ -794,12 +794,25 @@ Landed:
     pinning `declared_effects` to the generic effect param. reify_closure
     also peels newtypes before reading the expected fn signature. Fixes
     newtype_closure_coercion; production unaffected.
+36. **Replay the production `Call`'s exact type args for static dispatch
+    (2609 → 2610).** Reify rebuilt a static / free call's `type_args` from
+    `generic_instantiations`, the flat impl+method type-arg list. For a
+    static method on a generic struct (`Container::make()` with `let c:
+    Container<i32> = …`) the impl arg `i32` rides in
+    `function_ref.monomorph_info`, so feeding it back as a method-level
+    `type_arg` mangled the call as `Container::make<i32>` while monomorphize
+    emitted `Container<i32>::make` — the instance was never found
+    (`unresolved Call: Container::make<i32>`). `StaticMethodDispatch` now
+    carries the exact `type_args` the production builder put on the `Call`
+    (recorded at all four dispatch sites); reify replays it verbatim. Fixes
+    infer_static_method_from_lhs; production unaffected.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2609
-/ 2664** under `WADO_REIFY=1`. A full-suite scan after landing #34 found 35
-unique reify-only failing fixtures; the prior effect_handler_resource_*
+Largest first, by fixture-name prefix (after the landings above). **2610
+/ 2664** under `WADO_REIFY=1`. A full-suite scan after landing #35 found 34
+unique reify-only failing fixtures (landing #36 then cleared
+infer_static_method_from_lhs); the prior effect_handler_resource_*
 cluster is resolved (compiles clean — likely a side effect of landing #31).
 The remaining set is: variadic_* (6), tuple_* (tuple_zip, tuple_for_of,
 tuple_1, tuple_name_collision×2, tuple_literal_expected_type_in_branch,

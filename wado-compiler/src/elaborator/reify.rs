@@ -5684,20 +5684,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .get(&static_call.id)
             .cloned()
         {
-            let type_args: Vec<TypeId> = if static_call.type_args.is_empty() {
-                self.sem
-                    .types
-                    .generic_instantiations
-                    .get(&static_call.id)
-                    .map(|gi| gi.type_args.clone())
-                    .unwrap_or_default()
-            } else {
-                static_call
-                    .type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect()
-            };
             let args: Vec<CallArg> = static_call
                 .args
                 .iter()
@@ -5710,10 +5696,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
                 .map(|(a, is_mut)| CallArg::new(self.reify_expr(a, ctx, None), is_mut))
                 .collect();
+            // Replay the production `Call`'s exact type args (method-level;
+            // impl args ride along in `function_ref.monomorph_info`).
             return TirExpr::new(
                 TirExprKind::Call {
+                    type_args: dispatch.type_args,
                     func: dispatch.function_ref,
-                    type_args,
                     args,
                 },
                 recorded_type,
@@ -6202,26 +6190,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 &dispatch.function_ref.name,
                 ctx,
             );
-            // Type args: explicit turbofish on the call expression,
-            // else the inference recorded by Gap 1. Monomorph reads
-            // these to specialize generic free / static methods.
-            let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                self.sem
-                    .types
-                    .generic_instantiations
-                    .get(&call.id)
-                    .map(|gi| gi.type_args.clone())
-                    .unwrap_or_default()
-            } else {
-                call.type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect()
-            };
+            // Type args: replay exactly what the production builder put on
+            // the `Call`. This already folds in any explicit turbofish and,
+            // crucially, carries only the method-level type args — a generic
+            // struct's impl type args live in `function_ref.monomorph_info`,
+            // so re-deriving from `generic_instantiations` (which is the flat
+            // impl+method list) would mangle `Container<i32>::make` as
+            // `Container::make<i32>` and miss the monomorphized instance.
             return TirExpr::new(
                 TirExprKind::Call {
+                    type_args: dispatch.type_args,
                     func: dispatch.function_ref,
-                    type_args,
                     args: arg_exprs,
                 },
                 recorded_type,

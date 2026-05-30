@@ -1511,6 +1511,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::StaticMethodDispatch {
                 function_ref: func_ref.clone(),
                 param_is_mut: param_is_mut.clone(),
+                type_args: method_type_args.clone(),
             },
         );
 
