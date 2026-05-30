@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2566 / 2664 fixtures passing under
+      suite reaches **2570 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 98 remaining failures are all reify-specific). The
+      so the 94 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -694,13 +694,25 @@ Landed:
     `lookup.resource_type`. +8 fixtures (effect_propagation_signature_*,
     variant_payload, and other generic-resource signature sites). The
     struct-field / nested members (`effect_propagation_struct_field`,
-    `_signature_nested`) still need `collect_resource_refs` to recurse
-    through an interface op's struct return into its resource fields.
+    `_signature_nested`) needed the resolver unification in #27.
+27. **Unify `resolve_type_static` onto the type-param-aware resolver
+    (2566 → 2570).** `resolve_type_static` and
+    `resolve_type_static_with_params` had drifted: the former's
+    `Type::Generic` arm handled only `Option` / generic structs, so a
+    struct field or effect-op signature typed `Stream<u8>` /
+    `Result<T, E>` resolved to `UNKNOWN` (landings #14/#26 fixed only the
+    `_with_params` arm). A `Holder { stream: Stream<u8> }` field lost the
+    resource, so `build_propagation_closure` did not admit `Stream`
+    through an interface op returning `Holder`, and `with MyIO` callers
+    failed with `missing resource 'Stream'`. `resolve_type_static` now
+    delegates to `resolve_type_static_with_params(…, &[])`. Clears
+    effect_propagation_struct_field / _signature_nested; production
+    unaffected.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2566
-/ 2664** under `WADO_REIFY=1`; 98 reify-specific failures across 57
+Largest first, by fixture-name prefix (after the landings above). **2570
+/ 2664** under `WADO_REIFY=1`; 94 reify-specific failures across 55
 unique fixtures remain:
 
 - **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
