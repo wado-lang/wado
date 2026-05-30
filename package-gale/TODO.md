@@ -69,10 +69,6 @@ Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Rou
 - **Recursive lexer rule with `.+?` / `.*?` wildcard.** `LexerExec/RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`: nested `/* /*...*/ */` comments mistokenize because the recursive call doesn't re-enter under the non-greedy bound.
 - **`-> more, mode(...)` chain across modes.** `LexerExec/ZeroLengthToken`: a token built via `-> more, pushMode(...)` followed by `-> more, mode(...)` should merge into a single token spanning all the `more`'d chars, but Gale emits the final piece only.
 
-### Runtime gaps (test compiles, fails at runtime)
-
-- **Non-default-channel tokens don't appear in `to_lexer_string`** — `LexerExec/ReservedWordsEscaping`. Fix: either land non-default-channel tokens in the main stream (with a channel attribute) and have the parser filter, or extend `to_lexer_string` to walk `Token.leading_trivia` in source order.
-
 ## Stage C — action / predicate execution
 
 Gale currently **recognises** but **silently discards** the contents of `{ ... }` action blocks and `{ ... }?` semantic predicates. The g4 parser accepts them, so grammars that contain them (`ANTLRv4Lexer`, `RustLexer`, `RustParser`, `TypeScriptLexer`, `TypeScriptParser`) load cleanly — but the generated lexer/parser behaves as if every predicate were `true` and every action were a no-op. That is wrong for:
