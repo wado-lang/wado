@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780140479783,
+  "lastUpdate": 1780142733040,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27821,6 +27821,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aba3c4d46fc8e47bf85f9f921ec7269e4f5d16ea"
         },
         "date": 1780140479307,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16963,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 458952,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "79f55a459e9aaac2f0d7e800df1c81566d47f6ae",
+          "message": "Merge pull request #1244 from wado-lang/claude/parser-error-resilience-lsp-Co3vH\n\nfeat: recover from parser syntax errors for the LSP",
+          "timestamp": "2026-05-30T20:54:53+09:00",
+          "tree_id": "67a906439d557f90f65623fb79306550a2b69916",
+          "url": "https://github.com/wado-lang/wado/commit/79f55a459e9aaac2f0d7e800df1c81566d47f6ae"
+        },
+        "date": 1780142732550,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
