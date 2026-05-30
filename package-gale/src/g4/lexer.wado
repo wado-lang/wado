@@ -1,14 +1,29 @@
-use { Span, Token } from "../runtime.wado";
+use { Span, Token, LexerSlice } from "../runtime.wado";
 use { G4Token, make_token } from "./token.wado";
 
 pub struct G4Lexer {
-    chars: Array<char>,
+    chars: &Array<char>,
     pos: i32,
 }
 
 impl G4Lexer {
-    pub fn new(input: String) -> G4Lexer {
-        return G4Lexer { chars: input.chars().collect(), pos: 0 };
+    pub fn new(chars: &Array<char>) -> G4Lexer with stores[chars] {
+        return G4Lexer { chars, pos: 0 };
+    }
+
+    /// Mint a token whose text is a verbatim copy of the source span
+    /// `[start, end)`. The owned char buffer is built in a single pass with
+    /// exact capacity, avoiding both the intermediate `String` and the
+    /// re-`collect` that `make_token`'s `String` -> `LexerSlice` round-trip
+    /// incurred per token. Used for every token whose text equals its raw
+    /// source span (char classes, operators, EOF); identifiers and ints
+    /// build their buffer inline while scanning.
+    fn owned_token(&self, kind: G4Token, start: i32, end: i32) -> Token {
+        let mut buf: Array<char> = Array::with_capacity(end - start);
+        for let mut i = start; i < end; i += 1 {
+            buf.push(self.chars[i]);
+        }
+        return Token::new(kind as i32, owned_slice(buf), Span::new(start, end));
     }
 
     fn at_end(&self) -> bool {
@@ -85,7 +100,11 @@ impl G4Lexer {
     fn read_string_literal(&mut self) -> Token {
         let start = self.pos;
         self.pos += 1;
-        let mut text = String::with_capacity(16);
+        // String literals are the one token kind whose text is transformed
+        // (escapes resolved), so it cannot alias the raw source. Build the
+        // owned char buffer directly instead of going through an intermediate
+        // String + re-collect.
+        let mut text: Array<char> = [];
         loop {
             if self.at_end() {
                 return make_token(G4Token::Error, "unterminated string", start, self.pos);
@@ -93,7 +112,7 @@ impl G4Lexer {
             let c = self.chars[self.pos];
             self.pos += 1;
             if c == '\'' {
-                return make_token(G4Token::StringLit, text, start, self.pos);
+                return Token::new(G4Token::StringLit as i32, owned_slice(text), Span::new(start, self.pos));
             } else if c == '\\' && !self.at_end() {
                 self.read_string_escape(&mut text);
             } else {
@@ -102,7 +121,7 @@ impl G4Lexer {
         }
     }
 
-    fn read_string_escape(&mut self, text: &mut String) {
+    fn read_string_escape(&mut self, text: &mut Array<char>) {
         let ec = self.chars[self.pos];
         self.pos += 1;
         if ec == 'u' {
@@ -149,8 +168,9 @@ impl G4Lexer {
         // parser via re-scanning, not at this layer.
         let start = self.pos;
         self.pos += 1;
-        let mut text = String::with_capacity(16);
-        text.push('[');
+        // The char-class text is a verbatim copy of its source span (every
+        // char, including the backslash and its escaped successor, is kept
+        // as-is). Scan to the closing `]`, then copy the span once.
         loop {
             if self.at_end() {
                 return make_token(G4Token::Error, "unterminated char class", start, self.pos);
@@ -158,43 +178,39 @@ impl G4Lexer {
             let c = self.chars[self.pos];
             self.pos += 1;
             if c == '\\' {
-                text.push(c);
                 if !self.at_end() {
-                    text.push(self.chars[self.pos]);
                     self.pos += 1;
                 }
                 continue;
             }
             if c == ']' {
-                text.push(c);
-                return make_token(G4Token::CharClass, text, start, self.pos);
+                return self.owned_token(G4Token::CharClass, start, self.pos);
             }
-            text.push(c);
         }
     }
 
     fn read_int_literal(&mut self) -> Token {
         let start = self.pos;
-        let mut text = String::with_capacity(4);
+        let mut buf: Array<char> = Array::with_capacity(4);
         while !self.at_end() {
             let c = self.chars[self.pos];
             if '0' <= c <= '9' {
-                text.push(c);
+                buf.push(c);
                 self.pos += 1;
             } else {
                 break;
             }
         }
-        return make_token(G4Token::IntLit, text, start, self.pos);
+        return Token::new(G4Token::IntLit as i32, owned_slice(buf), Span::new(start, self.pos));
     }
 
     fn read_identifier(&mut self) -> Token {
         let start = self.pos;
-        let mut text = String::with_capacity(16);
+        let mut buf: Array<char> = Array::with_capacity(16);
         while !self.at_end() {
             let c = self.chars[self.pos];
             if is_ident_char(c) {
-                text.push(c);
+                buf.push(c);
                 self.pos += 1;
             } else {
                 break;
@@ -206,19 +222,21 @@ impl G4Lexer {
         // `type`, and the rule prequel keywords (`returns`, `throws`, `locals`,
         // `catch`, `finally`, `import`, `options`, `tokens`, `channels`,
         // `parser`, `lexer`) remain plain identifiers — they are matched by
-        // text in the parser when their context demands it.
-        let kind = match text {
-            "grammar" => G4Token::Grammar,
-            "fragment" => G4Token::Fragment,
+        // text in the parser when their context demands it. The length gate
+        // skips the char comparison for the overwhelming majority of
+        // identifiers, which are neither 7 nor 8 chars long.
+        let kind = match buf.len() {
+            7 => if buf_eq(&buf, &"grammar") { G4Token::Grammar } else { G4Token::Identifier },
+            8 => if buf_eq(&buf, &"fragment") { G4Token::Fragment } else { G4Token::Identifier },
             _ => G4Token::Identifier,
         };
-        return make_token(kind, text, start, self.pos);
+        return Token::new(kind as i32, owned_slice(buf), Span::new(start, self.pos));
     }
 
     pub fn next_token(&mut self) -> Token {
         self.skip_whitespace_and_comments();
         if self.at_end() {
-            return make_token(G4Token::Eof, "", self.pos, self.pos);
+            return self.owned_token(G4Token::Eof, self.pos, self.pos);
         }
         let start = self.pos;
         let c = self.chars[self.pos];
@@ -237,14 +255,13 @@ impl G4Lexer {
         // Two-char operators: peek ahead before consuming `c`.
         if c == '+' && self.peek_at(1) matches { Some('=') } {
             self.pos += 2;
-            return make_token(G4Token::PlusAssign, "+=", start, self.pos);
+            return self.owned_token(G4Token::PlusAssign, start, self.pos);
         }
         if c == ':' && self.peek_at(1) matches { Some(':') } {
             self.pos += 2;
-            return make_token(G4Token::ColonColon, "::", start, self.pos);
+            return self.owned_token(G4Token::ColonColon, start, self.pos);
         }
         self.pos += 1;
-        let text = String::from(c);
         let kind = match c {
             ':' => G4Token::Colon,
             ';' => G4Token::Semicolon,
@@ -266,18 +283,28 @@ impl G4Lexer {
             '>' => G4Token::RAngle,
             '-' && !self.at_end() && self.chars[self.pos] == '>' => {
                 self.pos += 1;
-                return make_token(G4Token::Arrow, "->", start, self.pos);
+                return self.owned_token(G4Token::Arrow, start, self.pos);
             },
             _ => {
                 return make_token(G4Token::Error, `unexpected char: {c}`, start, self.pos);
             },
         };
-        return make_token(kind, text, start, self.pos);
+        return self.owned_token(kind, start, self.pos);
     }
 }
 
 pub fn tokenize(input: String) -> Array<Token> {
-    let mut lexer = G4Lexer::new(input);
+    let chars: Array<char> = input.chars().collect();
+    return tokenize_chars(&chars);
+}
+
+/// Tokenize directly from an already-collected char buffer. `parse` uses
+/// this to share the single `Array<char>` collection between the lexer and
+/// the parser (which keeps it for `rescan_balanced`), instead of collecting
+/// the whole input twice. Token text is owned (`owned_slice`), so
+/// the tokens do not alias `chars` and the buffer may be moved afterwards.
+pub fn tokenize_chars(chars: &Array<char>) -> Array<Token> {
+    let mut lexer = G4Lexer::new(chars);
     let mut tokens: Array<Token> = [];
     loop {
         let tok = lexer.next_token();
@@ -288,6 +315,28 @@ pub fn tokenize(input: String) -> Array<Token> {
         }
     }
     return tokens;
+}
+
+/// Wrap an owned char buffer as a `LexerSlice` over its full extent, without
+/// the `String` round-trip + re-`collect` that `LexerSlice::from_string`
+/// performs. Kept local to the g4 frontend so it is not inlined into every
+/// generated parser through `runtime.wado`.
+fn owned_slice(buf: Array<char>) -> LexerSlice {
+    let n = buf.len();
+    return LexerSlice { chars: &buf, start: 0, end: n };
+}
+
+/// Compare an owned char buffer against a keyword literal. Callers gate on
+/// `buf.len()` first, so this only runs for length-matched candidates.
+fn buf_eq(buf: &Array<char>, lit: &String) -> bool {
+    let mut i = 0;
+    for let c of lit.chars() {
+        if i >= buf.len() || buf[i] != c {
+            return false;
+        }
+        i += 1;
+    }
+    return i == buf.len();
 }
 
 fn is_ident_start(c: char) -> bool {

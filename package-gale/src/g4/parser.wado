@@ -35,7 +35,7 @@ use {
     synthesize_implicit_tokens,
 } from "../ir.wado";
 use { G4Token, make_token } from "./token.wado";
-use { tokenize } from "./lexer.wado";
+use { tokenize_chars } from "./lexer.wado";
 
 pub struct G4Parser {
     tokens: Array<Token>,
@@ -1709,8 +1709,11 @@ fn parse_int_literal(text: &String) -> i32 {
 /// instead, or follow `parse` with `check_references` (from `ir.wado`)
 /// on the merged grammar.
 pub fn parse(input: String) -> Result<Grammar, ParseError> {
+    // Collect the source once and share it between the lexer and the parser.
+    // Tokens own their text, so the buffer can be handed off to the parser
+    // (which retains it for `rescan_balanced`) after tokenization.
     let chars: Array<char> = input.chars().collect();
-    let tokens = tokenize(input);
+    let tokens = tokenize_chars(&chars);
     let mut parser = G4Parser::new(tokens, chars);
     return parser.parse_grammar();
 }
