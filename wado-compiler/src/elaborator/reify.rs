@@ -7343,7 +7343,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// pattern to `TirPattern::Enum`.
     fn scrutinee_enum_case_index(&self, scrutinee_type: TypeId, case_name: &str) -> Option<u32> {
         use crate::tir::ResolvedType;
-        let decl_name = match self.tysys.type_table.borrow().get(scrutinee_type).clone() {
+        // Peel references for match ergonomics: `match &c { Red => … }`
+        // presents the scrutinee as `&Color`.
+        let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+        let decl_name = match self.tysys.type_table.borrow().get(peeled).clone() {
             ResolvedType::Enum { name, .. } => name,
             _ => return None,
         };
@@ -7359,7 +7362,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// instance) whose cases include `case_name`.
     fn scrutinee_has_variant_case(&self, scrutinee_type: TypeId, case_name: &str) -> bool {
         use crate::tir::ResolvedType;
-        let decl_name = match self.tysys.type_table.borrow().get(scrutinee_type).clone() {
+        let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+        let decl_name = match self.tysys.type_table.borrow().get(peeled).clone() {
             ResolvedType::Variant { name, .. } | ResolvedType::GenericInstance { name, .. } => name,
             _ => return false,
         };
@@ -7378,17 +7382,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         case_name: &str,
     ) -> TirPattern {
         use crate::tir::ResolvedType;
-        let (decl_name, type_args) =
-            match self.tysys.type_table.borrow().get(scrutinee_type).clone() {
-                ResolvedType::Variant { name, .. } => (name, Vec::<TypeId>::new()),
-                ResolvedType::GenericInstance {
-                    name, type_args, ..
-                } => (name, type_args),
-                _ => (String::new(), Vec::new()),
-            };
+        // Peel references (match ergonomics): `if let None = rn` with
+        // `rn: &Option<T>` matches a nullary case through the reference.
+        let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+        let (decl_name, type_args) = match self.tysys.type_table.borrow().get(peeled).clone() {
+            ResolvedType::Variant { name, .. } => (name, Vec::<TypeId>::new()),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => (name, type_args),
+            _ => (String::new(), Vec::new()),
+        };
         let payload_type = self.get_variant_case_payload_type(&decl_name, case_name, &type_args);
         TirPattern::Variant {
-            enum_type: scrutinee_type,
+            enum_type: peeled,
             variant_name: case_name.to_string(),
             bindings: vec![],
             payload_type,
@@ -7488,7 +7494,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // global, then binding.
                 if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, name) {
                     return TirPattern::Enum {
-                        enum_type: scrutinee_type,
+                        enum_type: self.tysys.type_table.borrow().peel_refs(scrutinee_type),
                         case_name: name.clone(),
                         case_index,
                     };
@@ -7598,7 +7604,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, &case_name)
                 {
                     return TirPattern::Enum {
-                        enum_type: scrutinee_type,
+                        enum_type: self.tysys.type_table.borrow().peel_refs(scrutinee_type),
                         case_name,
                         case_index,
                     };
