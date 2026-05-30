@@ -11,13 +11,6 @@ This file lists what is **not yet done**. Closed work belongs in commit history.
 
 Grammar-authoring DX gaps surfaced while writing a new `.g4` against Gale.
 
-Part 1 — parse-error position and rule context — has landed: generated
-parsers now resolve a `line:col` from `span.start` (`Parser::error` →
-`line_col_at`), carry a `rule_stack` filled by per-rule entry wrappers
-(`gen_rule_entry_wrapper`, innermost-first), and `ParseError` renders a
-`parse error at L:C: <msg>\n  in rule: outer > … > inner` diagnostic via its
-`Display` impl. Remaining parts:
-
 - **Runtime traps on valid input (part 2).** A generated scanner that traps
   (e.g. an out-of-bounds) only shows a wasm backtrace of synthetic function
   names. Unscannable shapes should be caught at codegen time (or degraded to
