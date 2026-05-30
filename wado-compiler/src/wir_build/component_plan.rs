@@ -91,6 +91,11 @@ pub struct TestExportPlan {
     pub core_func_name: String,
     /// Component export name in kebab-case (e.g., "test-0-simple", "test-trap-0-panics", "test-todo-0-not-yet")
     pub export_name: String,
+    /// Original, lossless `test "name"` string (`None` for unnamed tests).
+    /// `export_name` is ASCII-folded and lowercased, so this is the only
+    /// faithful record of the name. Emitted into the `wado:test-names` custom
+    /// section so the runner can display what the user actually wrote.
+    pub original_name: Option<String>,
     /// Whether this test is expected to trap (derived from the `#[expect_trap]` attribute)
     pub expect_trap: bool,
     /// Whether this is a TODO placeholder test (derived from the `#[TODO]` attribute).
@@ -112,6 +117,7 @@ pub fn build_component_plan(
     is_test_world: bool,
     target_world: &str,
     tests: &[TirTest],
+    test_name_filters: &[String],
     export_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
     cm_interface_registry: &CmInterfaceRegistry,
@@ -133,6 +139,11 @@ pub fn build_component_plan(
     let test_exports: Vec<TestExportPlan> = if is_test_world {
         tests
             .iter()
+            // Keep the same selection as `synthesis::cm_binding` step 6, so the
+            // exports we plan match the adapters that survived early DCE.
+            // Unselected tests have no adapter and were dropped; planning them
+            // here would reference a function that no longer exists.
+            .filter(|test| crate::package::test_selected(test.name.as_deref(), test_name_filters))
             .map(|test| {
                 let export_name = sanitize_kebab_export_name(&test.function_name);
                 let core_func_name = export_binding_names
@@ -143,6 +154,7 @@ pub fn build_component_plan(
                     function_name: test.function_name.clone(),
                     core_func_name,
                     export_name,
+                    original_name: test.name.clone(),
                     expect_trap: test.expect_trap,
                     is_todo: test.is_todo,
                     timeout_ms: test.timeout_ms,

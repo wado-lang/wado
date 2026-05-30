@@ -1184,6 +1184,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve effects while effect params are still in scope
         let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
 
+        // Stash the resolved `Vec<EffectRef>` for reify (Stage 5): reify
+        // cannot reconstruct effect-param canonicalisation without
+        // `current_effect_param_decls`, so the annotate phase records
+        // the already-resolved list here keyed by the function's `AstId`.
+        scope
+            .sem
+            .types
+            .function_effects
+            .insert(func.id, effects.clone());
+
         // Restore effect params scope
         scope.current_effect_params = old_effect_params;
         scope.current_effect_param_decls = old_effect_param_decls;
@@ -1262,12 +1272,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let function_name = match &test_decl.name {
             Some(name) => {
-                // Convert test name to snake_case for function name
-                let snake_name: String = name
-                    .chars()
-                    .map(|c| if c.is_alphanumeric() { c } else { '_' })
-                    .collect::<String>()
-                    .to_lowercase();
+                // Convert the test name to an ASCII snake_case segment. Non-ASCII
+                // characters collapse to `_` so the derived CM kebab export name
+                // stays valid; the lossless original name is preserved on
+                // `TirTest::name` for display and `--test-name` filtering.
+                let snake_name = crate::name::test_name_to_snake(name);
                 format!("{prefix}_{test_index}_{snake_name}")
             }
             None => format!("{prefix}_{test_index}"),
@@ -1766,6 +1775,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve effects while effect params are still in scope
         let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
+
+        // Stash the resolved `Vec<EffectRef>` for reify (Stage 5): reify
+        // cannot reconstruct effect-param canonicalisation without
+        // `current_effect_param_decls`, so the annotate phase records
+        // the already-resolved list here keyed by the method's `AstId`.
+        scope
+            .sem
+            .types
+            .function_effects
+            .insert(func.id, effects.clone());
 
         // Restore effect params and Self type. `trait_ctx` is auto-restored on
         // `drop(scope)`, which replaces everything set up above.

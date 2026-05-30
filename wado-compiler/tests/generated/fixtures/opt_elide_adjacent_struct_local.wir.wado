@@ -119,6 +119,10 @@ fn "wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado/count_a"(c
             if i >= _licm_used_8 {
                 break b0;
             }
+            if builtin::unlikely(i >= _licm_used_8) {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            }
             self_6 = builtin::array_get<char>(_licm_repr_9, i);
             if "core:prelude/primitive.wado/char::to_ascii_lowercase"(self_6) == "core:prelude/primitive.wado/char::to_ascii_lowercase"(97) {
                 n = n + 1;
@@ -142,9 +146,9 @@ fn "wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado/run"() wit
     __v0 = "wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado/count_a"(__b_0);
     __cond = __v0 == 3;
     if __cond == 0 {
-        "core:internal/panic"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(140), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_4, 114); "core:prelude/string.wado/String::push"(__local_4, 117); "core:prelude/string.wado/String::push"(__local_4, 110); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado"), used: 65 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 }; f_25 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(28, f_25); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:internal/panic"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(140), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_4, 114); "core:prelude/string.wado/String::push"(__local_4, 117); "core:prelude/string.wado/String::push"(__local_4, 110); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado"), used: 65 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_25 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(28, f_25); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: count_a(&chars) == 3
-"), used: 33 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("count_a(&chars): "), used: 17 }); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 }; f_30 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_30); "core:prelude/string.wado/String::push"(__local_4, 10); __local_4);
+"), used: 33 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("count_a(&chars): "), used: 17 }); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_30 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_30); "core:prelude/string.wado/String::push"(__local_4, 10); __local_4);
         unreachable;
     }
 }
@@ -157,14 +161,14 @@ fn "wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado/__cm_expor
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b5: block {
-        l6: loop {
+    b6: block {
+        l7: loop {
             if i >= len {
-                break b5;
+                break b6;
             }
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l6;
+            continue l7;
         };
     };
 }
@@ -247,14 +251,14 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b11: block {
-        l12: loop {
+    b12: block {
+        l13: loop {
             if t <= 0_i64 {
-                break b11;
+                break b12;
             }
             n = n + 1;
             t = t / 10_i64;
-            continue l12;
+            continue l13;
         };
     };
     return n;
@@ -268,15 +272,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b15: block {
-            l16: loop {
+        b16: block {
+            l17: loop {
                 if temp <= 0_i64 {
-                    break b15;
+                    break b16;
                 }
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l16;
+                continue l17;
             };
         };
     }
@@ -379,14 +383,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b27: block {
-        l28: loop {
+    b28: block {
+        l29: loop {
             if i >= n {
-                break b27;
+                break b28;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l28;
+            continue l29;
         };
     };
 }

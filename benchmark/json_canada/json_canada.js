@@ -11,7 +11,7 @@ const jsonData = fs.readFileSync(
   path.join(__dirname, "canada.json"),
   "utf-8",
 );
-const iterations = 1;
+const iterations = 10;
 
 console.log(`json-canada: ${jsonData.length} bytes, ${iterations} iterations`);
 

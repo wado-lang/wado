@@ -1119,6 +1119,8 @@ Test blocks compile to the `test` world. Files with test blocks are discovered a
 wado test                            # walk the project for every *.wado file
 wado test file.wado                  # run a specific file
 wado test --filter '*pattern*'       # keep files whose path matches the wildcard
+wado test --test-name 'addition'     # run only test blocks whose name contains "addition"
+wado test file.wado --test-name add  # narrow both: this file, those test names
 wado compile --world test file.wado  # compile a single file with the test world
 ```
 
@@ -1133,6 +1135,16 @@ files with `test` blocks register and run tests.
 is _not_ a regex. To match anywhere in a path, wrap the term in `*`s, e.g.
 `'*foo*'`. The runner exits non-zero on any compile failure, test failure,
 or `#[TODO]` test that resolved unexpectedly.
+
+`--test-name <pattern>` selects individual `test "name"` blocks the way
+`cargo test <name>` does: a case-sensitive substring match against the test's
+original name (matched against the source name, so multibyte names work).
+It is repeatable and combines with OR — a test runs if its name contains any
+pattern. It composes with `--filter`: `--filter` narrows which files are
+compiled, `--test-name` narrows which tests within them run. Unmatched test
+blocks are dropped before codegen, so they are not compiled at all — handy for
+iterating on one test in a large file. Unnamed `test { … }` blocks have no name
+to match and are skipped whenever `--test-name` is given.
 
 ```wado
 test {

@@ -684,6 +684,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             crate::name::mangle_generic_name(&builder_base_name, &type_arg_names)
         };
 
+        // Stage 5 (WEP 2026-05-26): record the resolved
+        // `KeyValueLiteralBuilder` impl data so reify can rebuild the
+        // same `__kv_lit:` desugar block deterministically.
+        self.sem.types.key_value_coercions.insert(
+            expr.id(),
+            super::sem::types::KeyValueCoercionFacts {
+                builder_type,
+                value_type,
+                insert_self_kind,
+                trait_name: trait_name.clone(),
+                target_type,
+                impl_module_source: impl_module_source.clone(),
+                builder_base_name: builder_base_name.clone(),
+                mangled_builder_name: mangled_builder_name.clone(),
+                type_arg_ids: type_arg_ids.clone(),
+                type_arg_names: type_arg_names.clone(),
+                use_new_api,
+            },
+        );
+
         // Build LabeledBlock:
         //   __kv_lit: {
         //     let mut __b = Builder::new_literal(capacity);
@@ -993,6 +1013,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             crate::name::mangle_generic_name(&builder_base_name, &type_arg_names)
         };
+
+        // Stage 5 (WEP 2026-05-26): record the resolved
+        // `SequenceLiteralBuilder` impl data so reify can rebuild the
+        // same `__seq_lit:` desugar block deterministically — the
+        // trait-impl lookup chain (newtype peel + sequence-trait
+        // search) and the type-arg mangling are not reproducible from
+        // the AST alone.
+        self.sem.types.sequence_coercions.insert(
+            expr.id(),
+            super::sem::types::SequenceCoercionFacts {
+                builder_type,
+                element_type,
+                push_self_kind,
+                trait_name: trait_name.clone(),
+                output_type,
+                impl_module_source: impl_module_source.clone(),
+                builder_base_name: builder_base_name.clone(),
+                mangled_builder_name: mangled_builder_name.clone(),
+                type_arg_ids: type_arg_ids.clone(),
+                type_arg_names: type_arg_names.clone(),
+                newtype_cast_to: if needs_newtype_cast {
+                    Some(target_type)
+                } else {
+                    None
+                },
+            },
+        );
 
         let label = "__seq_lit".to_string();
         ctx.enter_scope();

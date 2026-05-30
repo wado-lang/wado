@@ -120,6 +120,21 @@ pub fn prewarm() {
     let _ = get_or_init_snapshot();
 }
 
+/// True while the current thread is inside [`build_snapshot`].
+///
+/// Stage 5 / WEP 2026-05-26: the `WADO_REIFY` env var enables the
+/// reify orchestration switch on user-module compilation but not on
+/// snapshot building. The snapshot is the rehydration target the
+/// per-compile pipeline depends on, so it must be produced by the
+/// stable production path until reify reaches feature parity for
+/// every stdlib-shaped construct (currently incomplete; see Stage 5
+/// follow-up list in `docs/wep-2026-05-26-elaborator-rearchitecture.md`).
+/// The orchestration consults this predicate to bypass reify while a
+/// snapshot is under construction.
+pub(crate) fn is_building() -> bool {
+    BUILDING.with(Cell::get)
+}
+
 /// Drive the full loader + `semantics_with_logger` pipeline on an empty
 /// entry source.  The loader's implicit-modules pass pulls in
 /// `core:prelude` and its transitive closure, matching the stdlib

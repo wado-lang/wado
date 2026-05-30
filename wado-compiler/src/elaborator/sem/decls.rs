@@ -63,6 +63,36 @@ pub(crate) struct ModuleDecls {
     /// [`super::super::Elaborator::resolve_module`].
     pub(crate) pending_anonymous_structs: Vec<crate::tir::TirStruct>,
 
+    /// Synthesis requests recorded by `impl Trait for Type;`
+    /// (Gap 12 / Stage 5). The elaborator pushes one per
+    /// `is_synthesize_request` impl block; `reify_module` reads
+    /// this list and pushes each onto the emitted
+    /// `TirModule::synthesis_requests`. Decouples annotate
+    /// (which records) from reify (which emits) while preserving
+    /// the same per-module output the existing combined walk
+    /// produces.
+    ///
+    /// `#[allow(dead_code)]` until the recording site at the
+    /// elaborator's existing `tir_module.synthesis_requests.push`
+    /// is rerouted through `Elaborator::record_pending_synthesis_request`
+    /// and `reify_module` reads the list.
+    #[allow(dead_code)]
+    pub(crate) pending_synthesis_requests: Vec<crate::tir::SynthesisRequest>,
+
+    /// Default-method synthesis output (Gap 12 / Stage 5). When
+    /// an impl omits methods that the trait decl declares with a
+    /// default body, the elaborator synthesises a `TirFunction`
+    /// per missing default and records it here. `reify_module`
+    /// reads this list and pushes each onto the emitted
+    /// `TirModule`'s function list, preserving the existing
+    /// dispatch behaviour without re-running the default-method
+    /// synthesis inside reify.
+    ///
+    /// `#[allow(dead_code)]` for the same reason as
+    /// `pending_synthesis_requests` above.
+    #[allow(dead_code)]
+    pub(crate) pending_default_methods: Vec<crate::tir::TirFunction>,
+
     /// Per-module additions to the type tables, consulted by
     /// [`super::super::types::TypeLookup`] before the shared `all_*` tables.
     /// Populated by [`super::super::Elaborator::collect_types`] and by call

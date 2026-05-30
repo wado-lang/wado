@@ -109,12 +109,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let AssertCaptureContext {
             slots,
+            ast_id_to_slot,
             emitted_lets,
             ..
         } = ctx
             .assert_capture_ctx
             .take()
             .expect("assert_capture_ctx must survive resolution");
+
+        // Stage 5 (Gap 5 of WEP 2026-05-26): record the capture-slot
+        // table so reify can pick the same sub-expressions for `let __vK
+        // = …;` materialisation. `ast_id_to_slot` maps each flagged
+        // sub-expression to its slot index; invert it so the recorded
+        // `slots` vector is indexed by slot (matching `__vK` naming).
+        let mut slot_ast_ids: Vec<Option<AstId>> = vec![None; slots.len()];
+        for (&ast_id, &slot_idx) in &ast_id_to_slot {
+            if let Some(entry) = slot_ast_ids.get_mut(slot_idx) {
+                *entry = Some(ast_id);
+            }
+        }
+        let stage5_slots: Vec<super::sem::types::AssertSlot> = slots
+            .iter()
+            .enumerate()
+            .filter_map(|(i, c)| {
+                slot_ast_ids[i].map(|ast_id| super::sem::types::AssertSlot {
+                    ast_id,
+                    capture_label: c.source.clone(),
+                })
+            })
+            .collect();
+        let emitted_slot_indices: Vec<u32> = slots
+            .iter()
+            .enumerate()
+            .filter_map(|(i, c)| if c.emitted { Some(i as u32) } else { None })
+            .collect();
+        self.record_assert_captures(
+            assert_stmt.id,
+            super::sem::types::AssertCaptureInfo {
+                slots: stage5_slots,
+                emitted_slot_indices,
+            },
+        );
 
         let mut inner_stmts: Vec<TirStmt> = Vec::with_capacity(emitted_lets.len() + 2);
         inner_stmts.extend(emitted_lets);
@@ -291,6 +326,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     sign_plus: false,
                     alternate: false,
                     zero_pad: false,
+                    // No precision: the `:?` dump lets sequence Inspect apply
+                    // its default cap, leaving floats etc. rendered naturally.
                     width: None,
                     precision: None,
                     type_char: Some('?'),

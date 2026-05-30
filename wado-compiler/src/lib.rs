@@ -34,6 +34,7 @@ pub mod parser;
 pub mod semantics;
 pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
+pub mod test_names;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
 pub mod niri;
 pub mod symbol;
@@ -186,6 +187,12 @@ pub struct CompilerOptions {
     /// that have run the Kiln pipeline (wado-cli, wado-lsp) populate this;
     /// everyone else leaves it empty.
     pub invocations: kiln::InvocationIndex,
+    /// `--test-name` substring filters for the test world. When non-empty,
+    /// only `test "name"` blocks whose name contains one of these strings are
+    /// exported; the rest become dead code and are removed by early DCE, so
+    /// filtered-out tests are never compiled into the output. Empty means
+    /// "run every test". Ignored outside the test world.
+    pub test_name_filters: Vec<String>,
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
@@ -435,6 +442,7 @@ fn compile_after_load<H: CompilerHost>(
         package.target_world = world;
     }
     package.skip_validation = options.skip_validation;
+    package.test_name_filters = options.test_name_filters;
     package.wasm_assets = wasm_assets;
 
     // Select allocator: find the function tagged with #[allocator("...")] matching the

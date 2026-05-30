@@ -3455,6 +3455,15 @@ assert x > 0;
 assert x > 0, "x must be checked elsewhere";
 ```
 
+To keep a failure readable, each captured operand is rendered with `Inspect`
+(`:?`), which caps sequence types at a default length (`DEFAULT_SEQ_LIMIT` = 256):
+a `String` operand is truncated to 256 characters with a `...` marker and an
+`Array` operand to 256 elements (see [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md)).
+Non-sequence operands such as floats keep their natural rendering. The optional
+user message is formatted with the user's own template specifiers (typically
+`Display`, which is never capped) — opt into a longer dump by formatting the
+value yourself.
+
 ## Testing
 
 Wado has built-in support for writing and running tests. Test declarations are first-class syntax, and the `wado test` command provides a test runner similar to `cargo test` or `moon test`.

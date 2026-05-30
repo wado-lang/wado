@@ -64,6 +64,9 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
+
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -95,9 +98,9 @@ jobs:
   # Tasks that require `wado` / `wado-dev-tools` binaries to be built.
   # `wado doc -f markdown` is itself dprint-stable (see wado-cli/src/doc.rs),
   # so the regenerated `docs/stdlib-*.md` files do not need a follow-up
-  # format pass — committed stdlib docs are always dprint-stable, so the
-  # `format-md` step in tidy-rust is a no-op against them and the two
-  # parallel patches do not conflict on `docs/stdlib-*.md`.
+  # format pass from tidy-rust. Where the two parallel jobs do touch the
+  # same file (e.g. `Cargo.lock`), the aggregator's `--3way` apply merges
+  # the overlapping patches — see the "Apply patches" step.
   tidy-wado:
     name: Tidy (Wado)
     needs: precheck
@@ -109,6 +112,9 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.head_ref }}
+
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -215,12 +221,29 @@ jobs:
         if: needs.precheck.outputs.should-run == 'true'
         run: |
           set -e
-          if [ -s tidy-rust.patch ]; then
-            git apply --index --whitespace=nowarn tidy-rust.patch
-          fi
-          if [ -s tidy-wado.patch ]; then
-            git apply --index --whitespace=nowarn tidy-wado.patch
-          fi
+          # Both patches are full diffs taken from the same HEAD by two
+          # parallel jobs, so any file touched by both makes a plain
+          # `git apply` of the second patch reject ("patch does not apply").
+          # This happens whenever the jobs converge on the same file — most
+          # commonly `Cargo.lock`, which both `clippy-fix`/`cargo fmt`
+          # (tidy-rust) and `cargo build` (tidy-wado) regenerate identically
+          # once it is stale, but also any doc both jobs rewrite.
+          #
+          # `--3way` falls back to a 3-way merge against the blob ids recorded
+          # in the patch (the HEAD blobs, present because the aggregator checked
+          # out the same ref): identical or non-overlapping edits merge cleanly,
+          # and only a genuine content conflict between the two tidy jobs fails
+          # — which is a real bug worth surfacing red. `--3way` implies `--index`.
+          apply_patch() {
+            local patch="$1"
+            [ -s "$patch" ] || return 0
+            if ! git apply --3way --whitespace=nowarn "$patch"; then
+              echo "::error::Failed to apply ${patch}: the two parallel tidy jobs produced conflicting edits to the same file."
+              exit 1
+            fi
+          }
+          apply_patch tidy-rust.patch
+          apply_patch tidy-wado.patch
 
       - name: Detect changes
         id: changes

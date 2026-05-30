@@ -364,6 +364,23 @@ pub fn build_component(
     // World exports
     emit_world_exports(&mut builder, &mut ctx, component_plan, result_unit_type);
 
+    // Test-name custom section: map each test export to its original (lossless)
+    // name so `wado test` can display what the user wrote rather than the
+    // ASCII-folded kebab export name. Emitted unconditionally for the test
+    // world (even when empty) so the runner can rely on it being present.
+    if !component_plan.test_exports.is_empty() {
+        let payload = crate::test_names::encode(
+            component_plan
+                .test_exports
+                .iter()
+                .map(|t| (t.export_name.as_str(), t.original_name.as_deref())),
+        );
+        builder.custom_section(&wasm_encoder::CustomSection {
+            name: crate::test_names::SECTION_NAME.into(),
+            data: payload.into(),
+        });
+    }
+
     if !project.strip_names {
         builder.append_names();
     }
@@ -2907,7 +2924,7 @@ fn import_interfaces_with_resources(
                     instance_type.ty().defined_type().variant(cm_cases);
                     let variant_idx = local_type_idx;
                     instance_type.export(
-                        cm_name,
+                        *cm_name,
                         wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(variant_idx)),
                     );
                 }

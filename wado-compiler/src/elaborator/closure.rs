@@ -144,9 +144,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Step 2: For each assigned name that resolves to an outer `mut`
         // local, materialize a `&mut T` reference in the outer context and
-        // rewrite inner uses to deref that reference.
+        // rewrite inner uses to deref that reference. Also accumulate the
+        // Stage 5 `MutCapture` records that reify replays in the same
+        // order (Gap 4 of WEP 2026-05-26).
         let mut ref_stmts: Vec<TirStmt> = Vec::new();
         let mut deref_overrides: IndexMap<String, (String, TypeId)> = IndexMap::default();
+        let mut mut_captures: Vec<super::sem::types::MutCapture> = Vec::new();
         let mut any_mutating_capture = false;
 
         for var_name in &assigned_names {
@@ -188,6 +191,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span,
                 ));
 
+                mut_captures.push(super::sem::types::MutCapture {
+                    var_name: var_name.clone(),
+                    ref_name: ref_name.clone(),
+                    inner_type,
+                    ref_type,
+                    outer_index,
+                });
                 deref_overrides.insert(var_name.clone(), (ref_name, inner_type));
             }
         }
@@ -226,6 +236,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 is_mut: local.is_mut,
             })
             .collect();
+
+        // Stage 5 (Gap 4 of WEP 2026-05-26): record the capture-analysis
+        // result so reify can replay the `__ref_*` materialisation and
+        // build the same `TirCapture` list without re-running
+        // `collect_mutated_vars` / closure-scope plumbing.
+        self.record_closure_captures(
+            closure.id,
+            super::sem::types::ClosureCaptureInfo {
+                mut_captures,
+                captures: captures
+                    .iter()
+                    .map(|c| super::sem::types::CaptureEntry {
+                        name: c.name.clone(),
+                        outer_index: c.outer_index,
+                        type_id: c.type_id,
+                        is_mut: c.is_mut,
+                    })
+                    .collect(),
+                is_mutating: any_mutating_capture,
+            },
+        );
 
         // Step 7: Determine the return type.
         //

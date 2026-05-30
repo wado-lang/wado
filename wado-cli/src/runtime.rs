@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 use wasmtime::component::{Linker, ResourceTable};
 use wasmtime::{
-    Config, Engine, InstanceAllocationStrategy, OptLevel, PoolingAllocationConfig,
+    Collector, Config, Engine, InstanceAllocationStrategy, OptLevel, PoolingAllocationConfig,
     ProfilingStrategy, Store,
 };
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
@@ -245,14 +245,38 @@ pub enum ProfileMode {
     },
 }
 
+/// wado's default GC collector.
+///
+/// wasmtime's own default ([`Collector::Auto`]) still resolves to the deferred
+/// reference-counting collector in this generation. We prefer the copying
+/// collector: on allocation-heavy / small-live-set workloads it is several
+/// times faster at the same resident set size, and it collects cycles.
+pub const DEFAULT_COLLECTOR: Collector = Collector::Copying;
+
+/// Parse a `--collector` argument value into a wasmtime [`Collector`].
+///
+/// # Errors
+///
+/// Returns an error message if the collector name is unrecognized.
+pub fn parse_collector(s: &str) -> Result<Collector, String> {
+    match s {
+        "copying" => Ok(Collector::Copying),
+        "drc" => Ok(Collector::DeferredReferenceCounting),
+        "null" => Ok(Collector::Null),
+        other => Err(format!(
+            "unknown collector '{other}'. Use copying, drc, or null"
+        )),
+    }
+}
+
 /// Create a wasmtime Config with all required Wasm features enabled.
 #[must_use]
-pub fn create_config(opt_level: OptLevel, profile: &ProfileMode) -> Config {
+pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, collector: Collector) -> Config {
     let mut config = Config::new();
     config.wasm_component_model(true);
     config.wasm_component_model_gc(true);
     config.wasm_component_model_async(true);
-    config.wasm_component_model_async_builtins(true);
+    config.wasm_component_model_more_async_builtins(true);
     config.wasm_component_model_async_stackful(true);
     config.wasm_simd(true);
     config.wasm_wide_arithmetic(true);
@@ -260,6 +284,11 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode) -> Config {
     // config.wasm_stack_switching(true); // Not supported on macOS
     config.wasm_gc(true);
     config.wasm_function_references(true);
+    // Honor the `metadata.code.branch_hint` custom section so Cranelift can
+    // lay out hinted branches (from `builtin::likely`/`unlikely`) for the
+    // predicted-taken path.
+    config.wasm_branch_hinting(true);
+    config.collector(collector);
 
     config.cranelift_opt_level(opt_level);
 
@@ -284,8 +313,12 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode) -> Config {
 /// # Errors
 ///
 /// Returns an error if the engine cannot be created with the given configuration.
-pub fn create_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<Engine> {
-    Ok(Engine::new(&create_config(opt_level, profile))?)
+pub fn create_engine(
+    opt_level: OptLevel,
+    profile: &ProfileMode,
+    collector: Collector,
+) -> Result<Engine> {
+    Ok(Engine::new(&create_config(opt_level, profile, collector))?)
 }
 
 /// Create a wasmtime Engine tuned for Kiln generator execution.
@@ -298,7 +331,7 @@ pub fn create_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<Engin
 ///
 /// Returns an error if the engine cannot be created with the given configuration.
 pub fn create_kiln_engine(opt_level: OptLevel) -> Result<Engine> {
-    let mut config = create_config(opt_level, &ProfileMode::None);
+    let mut config = create_config(opt_level, &ProfileMode::None, DEFAULT_COLLECTOR);
     config.consume_fuel(true);
     Ok(Engine::new(&config)?)
 }
@@ -309,7 +342,7 @@ pub fn create_kiln_engine(opt_level: OptLevel) -> Result<Engine> {
 ///
 /// Returns an error if the engine cannot be created with the given configuration.
 pub fn create_test_engine(opt_level: OptLevel) -> Result<Engine> {
-    let mut config = create_config(opt_level, &ProfileMode::None);
+    let mut config = create_config(opt_level, &ProfileMode::None, DEFAULT_COLLECTOR);
     config.epoch_interruption(true);
     Ok(Engine::new(&config)?)
 }
@@ -340,8 +373,9 @@ pub fn create_serve_engine(
     opt_level: OptLevel,
     max_instances: u32,
     max_concurrency: u32,
+    collector: Collector,
 ) -> Result<Engine> {
-    let mut config = create_config(opt_level, &ProfileMode::None);
+    let mut config = create_config(opt_level, &ProfileMode::None, collector);
     config.epoch_interruption(true);
 
     // Generous per-instance multipliers: a single component instantiation

@@ -1090,23 +1090,81 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 default_scope_module: None,
                 invocations: Rc::clone(&state.invocations),
                 interner: Rc::clone(&state.interner),
+                pending_method_dispatch: None,
+                pending_operator_ast_id: None,
             };
 
             // Set file context so diagnostics emitted during resolution
             // carry the correct module filename (not the entry module).
             logger.set_file(module_source.diagnostic_filename());
 
-            // Errors are emitted to the logger; if resolve_module returns Bail,
-            // we continue to resolve remaining modules to collect more errors
+            // Phase 1 — `annotate_bodies`: run the existing body
+            // walk to populate `ModuleSemantics`. The TIR it
+            // produces is discarded; reify produces the final
+            // TIR from the recorded annotations.
+            //
+            // Stage 5 / WEP 2026-05-26: the `WADO_REIFY` env var
+            // gates the orchestration switch — when unset, the
+            // annotate-half's TIR is used directly (preserving
+            // the pre-Stage-5 behaviour for the residual cases
+            // reify's body-walk has not yet ported). When set,
+            // reify is the source of truth and any reach into a
+            // `todo!` panics loudly so the gap surfaces.
             let resolve_result = elaborator.resolve_module(module, module_source.clone());
+            let saved_sem = elaborator.sem;
             // Re-install the (now-populated) `ModuleSemantics` even on bail
             // so the LSP can answer cursor queries against whatever bindings
             // the elaborator did reach before bailing.
             state
                 .module_semantics
-                .insert(module_source.clone(), elaborator.sem);
+                .insert(module_source.clone(), saved_sem);
+
+            // Stage 5 / WEP 2026-05-26: WADO_REIFY enables reify for
+            // user-module compilation only. Stdlib modules
+            // (`Core` / `Wasi` / `Wasm`) — whether in the snapshot
+            // cache or live-loaded — go through the production path
+            // until reify reaches feature parity for every
+            // stdlib-shaped construct. See the Stage 5 follow-up list
+            // in `docs/wep-2026-05-26-elaborator-rearchitecture.md`.
+            // The snapshot bypass also applies during snapshot
+            // construction (`is_building == true`) so the snapshot's
+            // foundation TIR never depends on reify.
+            let is_stdlib = matches!(
+                module_source,
+                ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
+            );
+            let use_reify = !crate::stdlib_snapshot::is_building()
+                && !is_stdlib
+                && std::env::var("WADO_REIFY")
+                    .map(|v| v == "1" || v == "true")
+                    .unwrap_or(false);
+
             if let Ok(tir_module) = resolve_result {
-                result.insert(module_source.clone(), tir_module);
+                if use_reify {
+                    // Phase 2 — `reify_modules`: walk the AST +
+                    // `ModuleSemantics` to produce the TIR. The
+                    // annotate-side TirModule is dropped on the
+                    // floor; reify is the source of truth.
+                    let sem_ref = state
+                        .module_semantics
+                        .get(module_source)
+                        .expect("just re-installed above");
+                    let mut reify = super::reify::Reify::new(
+                        state.tysys.clone(),
+                        sem_ref,
+                        symbols,
+                        modules,
+                        logger,
+                        entry_module_source.clone(),
+                        Rc::clone(&state.interner),
+                        Rc::clone(&state.invocations),
+                    );
+                    if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
+                        result.insert(module_source.clone(), reified);
+                    }
+                } else {
+                    result.insert(module_source.clone(), tir_module);
+                }
             }
         }
 

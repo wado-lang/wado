@@ -1199,6 +1199,9 @@ pub(super) struct FunctionContext {
     /// so the hook is a single `Option` discriminant check on the hot
     /// path.
     pub(super) assert_capture_ctx: Option<super::assert::AssertCaptureContext>,
+    /// Reify-side counterpart to [`Self::assert_capture_ctx`].
+    /// Independent so production and reify never share state.
+    pub(super) reify_assert_capture_ctx: Option<super::reify::ReifyAssertCaptureContext>,
 }
 
 impl FunctionContext {
@@ -1224,6 +1227,7 @@ impl FunctionContext {
             next_loop_id: 0,
             for_continue_labels: Vec::new(),
             assert_capture_ctx: None,
+            reify_assert_capture_ctx: None,
         }
     }
 
@@ -1282,6 +1286,7 @@ impl FunctionContext {
             next_loop_id: 0,
             for_continue_labels: Vec::new(),
             assert_capture_ctx: None,
+            reify_assert_capture_ctx: None,
         }
     }
 

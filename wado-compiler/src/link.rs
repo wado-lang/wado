@@ -50,6 +50,7 @@ pub fn link(package: Package) -> FlatPackage {
         is_test_world,
         &package.target_world,
         entry_tests,
+        &package.test_name_filters,
         &package.export_binding_names,
         package.world_registry,
         package.cm_interface_registry,

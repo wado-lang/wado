@@ -180,6 +180,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file("json_twitter/twitter.json");
     let mut b = Benchmark::new("json-twitter");
     b.input_size = Option::Some(json_data.len());
+    b.iterations = 10;
 
     let count = b.run("", || parse_statuses(json_data));
     assert count == 100;
