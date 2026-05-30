@@ -990,8 +990,22 @@ modules no longer collide.
 
 ##### Remaining singles (5, fail O0+O2)
 
-- `effect_handler_with_do` — codegen-level effect-handler residual.
-- `opt_sroa_variant_return_if_descent` — optimizer pass divergence.
+- `effect_handler_with_do` — a struct field typed by a **re-exported**
+  newtype reifies as `unknown`. `Mark = u64` lives in
+  `wasi:clocks/monotonic_clock.wado` and reaches the test through two
+  `pub use` hops; `reify_struct` reads field types from
+  `tysys.all_struct_fields` (decl-resolved during annotate), and there
+  `FixedClock.mark` is `unknown` (vs production's `u64`) — so the TIR dump
+  shows `mark: unknown` and dispatches `unknown^Eq::eq` / `unknown^Ord::cmp`,
+  and codegen fails `expected i32, found i64`. The gap is annotate's decl
+  field-type resolution not following the multi-hop `pub use` re-export chain
+  for newtypes; fix it where `all_struct_fields` is populated, not in reify.
+- `opt_sroa_variant_return_if_descent` — a `wir_expect:O2` test: the
+  `wir/sroa_variant_returns` pass must SROA `leaf`'s `Result` return through a
+  `Return(If(...))` wrapper. reify's pre-pass WIR diverges from production
+  (diff `WADO_DUMP_PASS_BEFORE=wir/sroa_variant_returns` with/without
+  `WADO_REIFY`); the candidate `Call(leaf)` inside the if-branch is shaped
+  differently, so the pass's validator over-invalidates it.
 - `if_merged` / `for_merged` / `loop_nested` — large multi-feature files;
   `if_merged` traps at runtime, the other two fail test-world assertions.
 
