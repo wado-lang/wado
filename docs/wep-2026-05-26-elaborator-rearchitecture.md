@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2589 / 2664 fixtures passing under
+      suite reaches **2595 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 75 remaining failures are all reify-specific). The
+      so the 69 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -738,11 +738,22 @@ Landed:
     assoc bindings in scope). Clears closure_fn_bound_with_{effect_param,
     regular_type_param}, closure_bound_with_multi_effect,
     closure_generic_bound_fn, closure_method_fn_bound.
+31. **Carry the impl's trait type args onto `method_info` (2589 → 2595).**
+    The effect-dispatch synthesis keys its handler index on
+    `(struct, effect_module, base_trait, trait_type_args)` read off each
+    method function's `method_info`. reify left `trait_type_args` empty,
+    so a generic-effect handler (`impl Future<i32> for MockFuture`) was
+    keyed `Future<>` while the `with &mut f do` binding referenced
+    `Future<i32>` — no `DispatchPlan` matched and synthesis panicked.
+    annotate now records the resolved trait type args on
+    `ImplFacts.trait_type_args` (mirroring item.rs:1621) and reify_method
+    writes them onto `LocalMethodName.trait_type_args`. Clears
+    effect_handler_resource_{future,stream,stream_self_delegation}.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2589
-/ 2664** under `WADO_REIFY=1`; 75 reify-specific failures across 45
+Largest first, by fixture-name prefix (after the landings above). **2595
+/ 2664** under `WADO_REIFY=1`; 69 reify-specific failures across 42
 unique fixtures remain:
 
 - **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
