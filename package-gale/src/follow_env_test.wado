@@ -69,7 +69,14 @@ test "build: empty grammar produces empty env" {
 }
 
 test "build: rule with tail-greedy Y? has TK_Y in tail_greedy" {
-    let rules: Array<ParserRule> = [mk_rule("a", [alt([tk("X"), opt(tk("Y"))])])];
+    let rules: Array<ParserRule> = [
+        mk_rule("a", [
+            alt([
+                tk("X"),
+                opt(tk("Y")),
+            ]),
+        ]),
+    ];
     let mut ctx = mk_ctx(&rules);
     let start = no_start();
     let env = build(&rules, &mut ctx, &start);
@@ -80,7 +87,14 @@ test "build: rule with tail-greedy Y? has TK_Y in tail_greedy" {
 }
 
 test "build: rule with mandatory tail has empty tail_greedy" {
-    let rules: Array<ParserRule> = [mk_rule("b", [alt([tk("X"), tk("Y")])])];
+    let rules: Array<ParserRule> = [
+        mk_rule("b", [
+            alt([
+                tk("X"),
+                tk("Y"),
+            ]),
+        ]),
+    ];
     let mut ctx = mk_ctx(&rules);
     let start = no_start();
     let env = build(&rules, &mut ctx, &start);
@@ -89,7 +103,18 @@ test "build: rule with mandatory tail has empty tail_greedy" {
 }
 
 test "build: tail-greedy unions across alts" {
-    let rules: Array<ParserRule> = [mk_rule("c", [alt([tk("X"), opt(tk("Y"))]), alt([tk("Z"), opt(tk("W"))])])];
+    let rules: Array<ParserRule> = [
+        mk_rule("c", [
+            alt([
+                tk("X"),
+                opt(tk("Y")),
+            ]),
+            alt([
+                tk("Z"),
+                opt(tk("W")),
+            ]),
+        ]),
+    ];
     let mut ctx = mk_ctx(&rules);
     let start = no_start();
     let env = build(&rules, &mut ctx, &start);
@@ -101,7 +126,15 @@ test "build: tail-greedy unions across alts" {
 }
 
 test "build: transitive tail-greedy through RuleRef" {
-    let rules: Array<ParserRule> = [mk_rule("d", [alt([rr("a")])]), mk_rule("a", [alt([tk("X"), opt(tk("Y"))])])];
+    let rules: Array<ParserRule> = [
+        mk_rule("d", [alt([rr("a")])]),
+        mk_rule("a", [
+            alt([
+                tk("X"),
+                opt(tk("Y")),
+            ]),
+        ]),
+    ];
     let mut ctx = mk_ctx(&rules);
     let start = no_start();
     let env = build(&rules, &mut ctx, &start);
@@ -112,7 +145,16 @@ test "build: transitive tail-greedy through RuleRef" {
 }
 
 test "build: left-recursive rule does not infinitely recurse" {
-    let rules: Array<ParserRule> = [mk_rule("e", [alt([rr("e"), tk("PLUS"), rr("e")]), alt([tk("X")])])];
+    let rules: Array<ParserRule> = [
+        mk_rule("e", [
+            alt([
+                rr("e"),
+                tk("PLUS"),
+                rr("e"),
+            ]),
+            alt([tk("X")]),
+        ]),
+    ];
     let mut ctx = mk_ctx(&rules);
     let start = no_start();
     let env = build(&rules, &mut ctx, &start);
@@ -133,7 +175,15 @@ test "rule_follow: start rule seeded with EOF when named" {
 
 test "rule_follow: callee gets first(suffix) of caller alt" {
     // r : a B ;
-    let rules: Array<ParserRule> = [mk_rule("r", [alt([rr("a"), tk("B")])]), mk_rule("a", [alt([tk("X")])])];
+    let rules: Array<ParserRule> = [
+        mk_rule("r", [
+            alt([
+                rr("a"),
+                tk("B"),
+            ]),
+        ]),
+        mk_rule("a", [alt([tk("X")])]),
+    ];
     let mut ctx = mk_ctx(&rules);
     let start = "r";
     let env = build(&rules, &mut ctx, &start);
@@ -146,7 +196,10 @@ test "rule_follow: callee at deep-nullable suffix inherits caller's FOLLOW" {
     // r : a ;        // a is at deep-nullable suffix (nothing follows in r)
     // a : X ;
     // FOLLOW(r) = {EOF}, so FOLLOW(a) ⊇ {EOF}.
-    let rules: Array<ParserRule> = [mk_rule("r", [alt([rr("a")])]), mk_rule("a", [alt([tk("X")])])];
+    let rules: Array<ParserRule> = [
+        mk_rule("r", [alt([rr("a")])]),
+        mk_rule("a", [alt([tk("X")])]),
+    ];
     let mut ctx = mk_ctx(&rules);
     let start = "r";
     let env = build(&rules, &mut ctx, &start);
@@ -161,9 +214,25 @@ test "rule_follow: ll_ctx_follow grammar yields FOLLOW(a) = {TK_Y, TK_EOF}" {
     // a : X Y? ;
     // b : Y ;
     let rules: Array<ParserRule> = [
-        mk_rule("r", [alt([group([alt([rr("wrapper"), rr("b")]), alt([rr("wrapper")])]), tk("EOF")])]),
+        mk_rule("r", [
+            alt([
+                group([
+                    alt([
+                        rr("wrapper"),
+                        rr("b"),
+                    ]),
+                    alt([rr("wrapper")]),
+                ]),
+                tk("EOF"),
+            ]),
+        ]),
         mk_rule("wrapper", [alt([rr("a")])]),
-        mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]),
+        mk_rule("a", [
+            alt([
+                tk("X"),
+                opt(tk("Y")),
+            ]),
+        ]),
         mk_rule("b", [alt([tk("Y")])]),
     ];
     let mut ctx = mk_ctx(&rules);
@@ -188,8 +257,19 @@ test "rule_follow: nullable suffix propagates FOLLOW through Optional" {
     // b : Y ;
     // FOLLOW(a) ⊇ first(b? EOF) = {Y, EOF}.
     let rules: Array<ParserRule> = [
-        mk_rule("r", [alt([rr("a"), opt(rr("b")), tk("EOF")])]),
-        mk_rule("a", [alt([tk("X"), opt(tk("Y"))])]),
+        mk_rule("r", [
+            alt([
+                rr("a"),
+                opt(rr("b")),
+                tk("EOF"),
+            ]),
+        ]),
+        mk_rule("a", [
+            alt([
+                tk("X"),
+                opt(tk("Y")),
+            ]),
+        ]),
         mk_rule("b", [alt([tk("Y")])]),
     ];
     let mut ctx = mk_ctx(&rules);
@@ -203,7 +283,16 @@ test "rule_follow: nullable suffix propagates FOLLOW through Optional" {
 
 test "rule_follow: terminates on left recursion" {
     // e : e PLUS e | X ;
-    let rules: Array<ParserRule> = [mk_rule("e", [alt([rr("e"), tk("PLUS"), rr("e")]), alt([tk("X")])])];
+    let rules: Array<ParserRule> = [
+        mk_rule("e", [
+            alt([
+                rr("e"),
+                tk("PLUS"),
+                rr("e"),
+            ]),
+            alt([tk("X")]),
+        ]),
+    ];
     let mut ctx = mk_ctx(&rules);
     let start = "e";
     let env = build(&rules, &mut ctx, &start);
@@ -213,4 +302,3 @@ test "rule_follow: terminates on left recursion" {
     assert fs_e.kinds.contains("TK_EOF");
     assert fs_e.kinds.contains("TK_PLUS");
 }
-

@@ -1,3 +1,4 @@
+#![stdlib("core:json")]
 //! JSON serialization and deserialization (self-describing format).
 //!
 //! Implements the `core:serde` `Serializer` and `Deserializer` traits for JSON.
@@ -7,7 +8,7 @@
 //!
 //!   let json = to_string::<i32>(&42);            // "42"
 //!   let val = from_string::<i32>("42");           // Result::Ok(42)
-#![stdlib("core:json")]
+
 
 use {
     Serialize,
@@ -1672,7 +1673,8 @@ impl DeserializeStruct for JsonStructAccess {
         // Fast path: scan JSON string key without allocating.
         // For unescaped keys (the common case), we pass the byte range
         // directly to the lookup function, avoiding String allocation entirely.
-        if builtin::unlikely(self.de.pos >= self.de.input.len() || self.de.input.get_byte_unchecked(self.de.pos) as i32 != '"' as i32) {
+        if builtin::unlikely(self.de.pos >= self.de.input.len()
+            || self.de.input.get_byte_unchecked(self.de.pos) as i32 != '"' as i32) {
             return Result::Err(DeserializeError::unexpected_type(
                 "expected string key",
                 self.de.pos as i64,
@@ -2095,8 +2097,7 @@ pub fn to_bytes<T: Serialize>(value: &T) -> Result<Array<u8>, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = JsonSerializer { buf: &mut buf };
     value.serialize::<JsonSerializer>(&mut ser)?;
-    return Result::Ok(
-        Array::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
+    return Result::Ok(Array::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
 }
 
 /// Serializes a value to a pretty JSON string.

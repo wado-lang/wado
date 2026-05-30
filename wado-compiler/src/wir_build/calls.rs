@@ -162,9 +162,25 @@ impl FunctionTranslator<'_, '_> {
                     addr: Box::new(addr),
                 })
             }
+            "builtin::i32_load8_s" => {
+                let addr = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32Load8S {
+                    offset: 0,
+                    align: 0,
+                    addr: Box::new(addr),
+                })
+            }
             "builtin::i32_load16_u" => {
                 let addr = self.translate_expr(&args[0].expr);
                 Some(WirInstr::I32Load16U {
+                    offset: 0,
+                    align: 1,
+                    addr: Box::new(addr),
+                })
+            }
+            "builtin::i32_load16_s" => {
+                let addr = self.translate_expr(&args[0].expr);
+                Some(WirInstr::I32Load16S {
                     offset: 0,
                     align: 1,
                     addr: Box::new(addr),

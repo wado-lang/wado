@@ -1,3 +1,4 @@
+#![stdlib("core:benchmark")]
 //! Benchmark utilities: lazy headers, timed phases, per-iteration reports.
 //!
 //! Used by files in `benchmark/`. A benchmark typically looks like:
@@ -24,7 +25,7 @@
 //! let compressed = b.run("compress", || zlib_compress(&data));
 //! let _ = b.run("decompress", || inflate_zlib(&compressed).unwrap());
 //! ```
-#![stdlib("core:benchmark")]
+
 
 use { println, Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
@@ -54,9 +55,7 @@ impl Benchmark {
     /// timed iteration's value.
     ///
     /// `label` may be empty for an unlabeled single-phase benchmark.
-    pub fn run<T>(&mut self, label: String, mut f: fn mut() -> T) -> T
-        with Stdout, MonotonicClock
-    {
+    pub fn run<T>(&mut self, label: String, mut f: fn mut() -> T) -> T with Stdout, MonotonicClock {
         self.ensure_header();
         let warmup_n = self.effective_warmup();
         for let mut w = 0; w < warmup_n; w += 1 {
@@ -118,25 +117,23 @@ impl Benchmark {
 fn report(label: String, elapsed_ns: u64, iterations: i32) with Stdout {
     let total_str = format_ms(elapsed_ns);
     if iterations > 1 {
-        let per_str = format_ms(elapsed_ns / (iterations as u64));
+        let per_str = format_ms(elapsed_ns / iterations as u64);
         if label.len() > 0 {
             println(`  {label}: {total_str} ms total   {per_str} ms/iter`);
         } else {
             println(`  Elapsed: {total_str} ms total   {per_str} ms/iter`);
         }
+    } else if label.len() > 0 {
+        println(`  {label}: {total_str} ms`);
     } else {
-        if label.len() > 0 {
-            println(`  {label}: {total_str} ms`);
-        } else {
-            println(`  Elapsed: {total_str} ms`);
-        }
+        println(`  Elapsed: {total_str} ms`);
     }
 }
 
 /// Format nanoseconds as `MS.FFF` (3 decimal digits = microseconds).
 fn format_ms(ns: u64) -> String {
     let ms = ns / 1_000_000;
-    let us = (ns / 1_000) % 1_000;
+    let us = ns / 1_000 % 1_000;
     if us >= 100 {
         return `{ms}.{us}`;
     }

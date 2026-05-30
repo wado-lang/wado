@@ -255,21 +255,27 @@ test "normalize_tree single line passthrough" {
 
 test "highlight_html escapes HTML and wraps captures" {
     let source = "<div>";
-    let captures: Array<HighlightCapture> = [HighlightCapture { capture: "tag", start: 0, end: 5 }];
+    let captures: Array<HighlightCapture> = [
+        HighlightCapture { capture: "tag", start: 0, end: 5 },
+    ];
     let html = highlight_html(&source, &captures);
     assert html == `<span class="tag">&lt;div&gt;</span>`, `got: {html}`;
 }
 
 test "highlight_html emits plain text for gaps" {
     let source = "a + b";
-    let captures: Array<HighlightCapture> = [HighlightCapture { capture: "operator", start: 2, end: 3 }];
+    let captures: Array<HighlightCapture> = [
+        HighlightCapture { capture: "operator", start: 2, end: 3 },
+    ];
     let html = highlight_html(&source, &captures);
     assert html == `a <span class="operator">+</span> b`, `got: {html}`;
 }
 
 test "highlight_html converts dot-separated captures to CSS classes" {
     let source = "{";
-    let captures: Array<HighlightCapture> = [HighlightCapture { capture: "punctuation.bracket", start: 0, end: 1 }];
+    let captures: Array<HighlightCapture> = [
+        HighlightCapture { capture: "punctuation.bracket", start: 0, end: 1 },
+    ];
     let html = highlight_html(&source, &captures);
     assert html == `<span class="punctuation bracket">\{</span>`, `got: {html}`;
 }
@@ -299,7 +305,9 @@ test "HighlightVisitor applies context overrides" {
     let mapping = HighlightMapping {
         defaults: ["string"],
         rule_names: ["root", "pair"],
-        overrides: [HighlightOverride { rule_name: "pair", token_kind: 0, capture: "string.special.key" }],
+        overrides: [
+            HighlightOverride { rule_name: "pair", token_kind: 0, capture: "string.special.key" },
+        ],
     };
     let mut visitor = HighlightVisitor::new(mapping);
     visitor.enter_rule(0, &"root", &Span::new(0, 20));

@@ -137,12 +137,12 @@ pub struct Grammar {
 /// Must run before `check_references`; `Combined`-only because
 /// split-grammar halves are about to merge a sibling lexer.
 pub fn synthesize_implicit_tokens(grammar: &mut Grammar) {
-    if !(grammar.kind matches { Combined }) {
+    if !grammar.kind matches { Combined } {
         return;
     }
     let mut synthesized: Array<String> = [];
     for let r of &grammar.pending_refs {
-        if !(r.kind matches { TokenRef }) {
+        if !r.kind matches { TokenRef } {
             continue;
         }
         if r.referenced_name == "EOF" {

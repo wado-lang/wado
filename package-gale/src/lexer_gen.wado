@@ -204,7 +204,7 @@ fn parse_token_type_numeric(s: &String) -> Option<i32> {
         if c < '0' || c > '9' {
             return null;
         }
-        acc = acc * 10 + ((c as i32) - ('0' as i32)) as i64;
+        acc = acc * 10 + (c as i32 - '0' as i32) as i64;
         if acc > i32::MAX as i64 {
             return null;
         }
@@ -508,14 +508,7 @@ fn lexer_suffix_is_peekable(elements: &Array<LexerElement>) -> bool {
 /// consume the suffix normally. This is the standard lexer
 /// longest-match algorithm (NFA→DFA with accept-state tracking),
 /// performed without any try-fail-retry backtracking.
-fn gen_lexer_repeat_lookahead_aware(
-    w: &mut CodeWriter,
-    rep: &LexerRepeatElement,
-    suffix: &Array<LexerElement>,
-    all_rules: &Array<LexerRule>,
-    fail_action: &String,
-    ci: bool,
-) {
+fn gen_lexer_repeat_lookahead_aware(w: &mut CodeWriter, rep: &LexerRepeatElement, suffix: &Array<LexerElement>, all_rules: &Array<LexerRule>, fail_action: &String, ci: bool) {
     let id = w.next_id();
     let accept_var = `accept_{id}`;
     let loop_label = `la_rep_{id}`;
@@ -574,13 +567,7 @@ fn gen_lexer_repeat_lookahead_aware(
 /// position in `accept_var` iff every suffix element would match
 /// starting here. Pos is restored unconditionally so the surrounding
 /// forward scan continues without committing the peeked suffix.
-fn gen_lexer_suffix_peek(
-    w: &mut CodeWriter,
-    suffix: &Array<LexerElement>,
-    all_rules: &Array<LexerRule>,
-    accept_var: &String,
-    ci: bool,
-) {
+fn gen_lexer_suffix_peek(w: &mut CodeWriter, suffix: &Array<LexerElement>, all_rules: &Array<LexerRule>, accept_var: &String, ci: bool) {
     let id = w.next_id();
     let save_var = `peek_save_{id}`;
     let matched_var = `peek_ok_{id}`;

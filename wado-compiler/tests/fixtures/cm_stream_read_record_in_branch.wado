@@ -1,0 +1,57 @@
+// Regression: a non-u8 (record) `Stream<T>.read()` nested inside a container
+// expression (here an `if`-expression branch) must still synthesize its
+// `__cm_stream_read_<T>` binding function.
+//
+// The CM-binding rewriter descends into container expressions (if/match/block/
+// binary/...) when rewriting `stream-read` method calls into calls to the
+// generated `__cm_stream_read_<T>` function. The discovery pass that *creates*
+// that function must descend into the same containers; otherwise the rewrite
+// targets a function that was never synthesized, producing a dangling call that
+// fails WIR resolution. This fixture reads directory entries (a WASI record
+// stream) from inside an `if`-expression so the read is never in a plain `let`.
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, DescriptorType, DescriptorFlags, PathFlags, OpenFlags, DirectoryEntry } from "wasi:filesystem";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("no preopened directories available");
+        return;
+    }
+
+    let dir = dirs[0].0;
+    let [dir_stream, _done] = dir.read_directory();
+
+    // The record stream read is nested inside an `if`-expression branch — a
+    // position the discovery walker historically did not visit.
+    let entries = if dirs.len() > 0 {
+        dir_stream.read(100)
+    } else {
+        dir_stream.read(0)
+    };
+
+    let mut found_hello = false;
+    for let entry of entries {
+        if entry.name == "hello.txt" {
+            found_hello = true;
+        }
+    }
+
+    _done.drop();
+    dir_stream.drop();
+
+    if found_hello {
+        println("found hello.txt");
+    } else {
+        eprintln("missing hello.txt");
+    }
+}
+
+__DATA__
+{
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout_contains": [
+        "found hello.txt"
+    ]
+}

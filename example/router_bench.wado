@@ -20,10 +20,7 @@ use { println, Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Benchmark } from "core:benchmark";
 use { TreeMap } from "core:collections";
-use {
-    AccessRequest, Method, RoutePattern,
-    build_routes, build_access_pattern,
-} from "./router_common.wado";
+use { AccessRequest, Method, RoutePattern, build_routes, build_access_pattern } from "./router_common.wado";
 use { LinearRouter } from "./router_linear.wado";
 use { RadixRouter } from "./router_radix.wado";
 use { DfaRouter } from "./router_dfa.wado";
@@ -91,7 +88,9 @@ fn maps_equal(a: &TreeMap<String, String>, b: &TreeMap<String, String>) -> bool 
                     return false;
                 }
             },
-            None => { return false; },
+            None => {
+                return false;
+            },
         }
     }
     return true;
@@ -101,12 +100,7 @@ fn maps_equal(a: &TreeMap<String, String>, b: &TreeMap<String, String>) -> bool 
 /// *and* identical params for every entry in the access pattern. Run
 /// before timing so a regression in one engine doesn't masquerade as a
 /// speedup.
-fn verify_engines_agree(
-    linear: &LinearRouter,
-    radix: &RadixRouter,
-    dfa: &DfaRouter,
-    pattern: &Array<AccessRequest>,
-) with Stdout {
+fn verify_engines_agree(linear: &LinearRouter, radix: &RadixRouter, dfa: &DfaRouter, pattern: &Array<AccessRequest>) with Stdout {
     let mut all_ok = true;
     for let req of pattern {
         let l = linear.match_path(req.method, &req.path);
@@ -114,7 +108,9 @@ fn verify_engines_agree(
         let d = dfa.match_path(req.method, &req.path);
         let expected = req.expected_handler_id;
         if l.handler_id != expected || r.handler_id != expected || d.handler_id != expected {
-            println(`MISMATCH on {req.path}: expected={expected} linear={l.handler_id} radix={r.handler_id} dfa={d.handler_id}`);
+            println(
+                `MISMATCH on {req.path}: expected={expected} linear={l.handler_id} radix={r.handler_id} dfa={d.handler_id}`,
+            );
             all_ok = false;
             continue;
         }
@@ -160,7 +156,7 @@ export fn run() with Stdout, MonotonicClock {
     }
 
     // Linear-only best/worst spread.
-    let best_path = "/health";        // first route in build_routes()
+    let best_path = "/health";  // first route in build_routes()
     let worst_path = "/api/v1/does/not/exist";  // miss => full N-route walk
     let mut blin = Benchmark::new(`linear best/worst x {LINEAR_REPEAT} iter`);
     let acc_b = blin.run("linear (best ) ", || run_linear_one(&linear, Method::Get, &best_path, LINEAR_REPEAT));

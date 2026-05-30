@@ -226,9 +226,11 @@ description = "Format all Wado source files"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo run --bin wado -- format -w \
-    $(grep -L '"compile_error"' wado-compiler/tests/fixtures/**/*.wado) \
-    $(find wado-compiler/lib example benchmark wasm-size package-gale/src -name '*.wado')
+# Format the whole workspace. Each package's wado.toml [format] section
+# controls its own exclusions (e.g. wado-compiler excludes `tests/**`);
+# generated/ and build/ directories, vendor submodules, and gitignored paths
+# are skipped automatically.
+cargo run --bin wado -- format -w .
 """
 
 [tasks.clippy]

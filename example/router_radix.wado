@@ -11,10 +11,7 @@
 //! '/'-delimited segment or the whole tail respectively.
 
 use { TreeMap } from "core:collections";
-use {
-    Method, MatchResult, RoutePattern, Segment,
-    no_match, parse_pattern,
-} from "./router_common.wado";
+use { Method, MatchResult, RoutePattern, Segment, no_match, parse_pattern } from "./router_common.wado";
 
 struct RadixEdge {
     label: String,
@@ -23,12 +20,12 @@ struct RadixEdge {
 
 struct RadixNode {
     edges: Array<RadixEdge>,
-    param_target: i32,         // -1 if no param child
+    param_target: i32,  // -1 if no param child
     param_name: String,
-    wildcard_handler: i32,     // -1 if no wildcard route
+    wildcard_handler: i32,  // -1 if no wildcard route
     wildcard_method: Method,
     wildcard_name: String,
-    handler_id: i32,           // -1 if not terminal
+    handler_id: i32,  // -1 if not terminal
     method: Method,
 }
 
@@ -46,7 +43,7 @@ fn new_node() -> RadixNode {
 }
 
 pub struct RadixRouter {
-    nodes: Array<RadixNode>,   // node 0 is the root
+    nodes: Array<RadixNode>,
 }
 
 impl RadixRouter {
@@ -66,7 +63,8 @@ impl RadixRouter {
         // so walk's edge-driven traversal cannot reach it. Match path "/"
         // against root.handler_id directly before falling back to walk —
         // walk still handles a wildcard registered at root (`/*x`).
-        if plen == 1 && path.get_byte_unchecked(0) == '/' as u8
+        if plen == 1
+            && path.get_byte_unchecked(0) == '/' as u8
             && self.nodes[0].handler_id >= 0
             && self.nodes[0].method == method {
             return MatchResult { handler_id: self.nodes[0].handler_id, params };
@@ -144,7 +142,8 @@ impl RadixRouter {
             let elen = self.nodes[current].edges[found_idx].label.len();
             let llen = remaining.len();
             let mut cp = 0;
-            while cp < elen && cp < llen
+            while cp < elen
+                && cp < llen
                 && self.nodes[current].edges[found_idx].label.get_byte_unchecked(cp) == remaining.get_byte_unchecked(cp) {
                 cp += 1;
             }
@@ -235,8 +234,12 @@ impl RadixRouter {
                     return h;
                 }
                 match prev {
-                    Some(v) => { params[pname] = v; },
-                    None => { params.remove(pname); },
+                    Some(v) => {
+                        params[pname] = v;
+                    },
+                    None => {
+                        params.remove(pname);
+                    },
                 }
             }
         }

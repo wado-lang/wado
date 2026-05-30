@@ -701,8 +701,7 @@ impl String {
     /// Panics if the range is out of bounds or either end is not on a UTF-8 boundary.
     pub fn substr_bytes(&self, start: i32, end: i32) -> String {
         assert 0 <= start && start <= end && end <= self.used, "byte range out of bounds";
-        assert self.is_char_boundary(start) && self.is_char_boundary(end),
-            "byte range not on UTF-8 character boundaries";
+        assert self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries";
         return self.substr_bytes_unchecked(start, end);
     }
 
