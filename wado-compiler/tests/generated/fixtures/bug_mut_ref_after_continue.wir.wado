@@ -164,7 +164,7 @@ fn "wado-compiler/tests/fixtures/bug_mut_ref_after_continue.wado/run"() with Std
             if pos_2.value >= _licm_used_124 {
                 break b0;
             }
-            if index_45 = pos_2.value; if index_45 >= _licm_used_124 {
+            if index_45 = pos_2.value; if builtin::unlikely(index_45 >= _licm_used_124) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<i32>(_licm_repr_125, index_45) < 20 {
@@ -172,7 +172,7 @@ fn "wado-compiler/tests/fixtures/bug_mut_ref_after_continue.wado/run"() with Std
                 continue l1;
             }
             index_50 = pos_2.value;
-            if index_50 >= _licm_used_124 {
+            if builtin::unlikely(index_50 >= _licm_used_124) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
@@ -194,7 +194,7 @@ condition: pos == 2
                 unreachable;
             }
             index_89 = pos_2.value;
-            if index_89 >= _licm_used_124 {
+            if builtin::unlikely(index_89 >= _licm_used_124) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }

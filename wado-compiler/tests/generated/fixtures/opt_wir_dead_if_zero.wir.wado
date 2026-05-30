@@ -109,8 +109,12 @@ fn "wado-compiler/tests/fixtures/opt_wir_dead_if_zero.wado/run"() {
     let f_24: ref "core:prelude/format.wado//Formatter";
     let f_29: ref "core:prelude/format.wado//Formatter";
     __b_0 = struct.new "core:prelude//Array<u16>" { repr: array.new_fixed<u16>(10, 20, 30), used: 3 };
-    __v0 = block {
-    }; builtin::array_get<u16>(__b_0.repr, 0) + block {
+    __v0 = if builtin::unlikely(0) {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    }; builtin::array_get<u16>(__b_0.repr, 0) + if builtin::unlikely(0) {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
     }; builtin::array_get<u16>(__b_0.repr, 1);
     __cond = __v0 == 30;
     if __cond == 0 {

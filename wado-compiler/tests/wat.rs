@@ -41,29 +41,71 @@ fn test_branch_hints_emitted() {
     );
 }
 
-/// Test that branch hints have correct values for likely (1) and unlikely (0)
+/// Decode an unsigned LEB128 at `bytes[i]`, returning (value, `next_index`).
+fn read_uleb(bytes: &[u8], mut i: usize) -> (u64, usize) {
+    let mut result: u64 = 0;
+    let mut shift = 0;
+    loop {
+        let byte = bytes[i];
+        i += 1;
+        result |= u64::from(byte & 0x7f) << shift;
+        if byte & 0x80 == 0 {
+            break;
+        }
+        shift += 7;
+    }
+    (result, i)
+}
+
+/// Collect every branch-hint value emitted across all `metadata.code.branch_hint`
+/// custom sections in `wasm`. Each `metadata.code.branch_hint` payload is a
+/// `vec(funcidx, vec(byte_offset, 1, value))`, where value is 0 (unlikely) or
+/// 1 (likely). See the WebAssembly branch-hinting proposal.
+fn collect_branch_hint_values(wasm: &[u8]) -> Vec<u8> {
+    let name = b"metadata.code.branch_hint";
+    let mut values = Vec::new();
+    for start in 0..wasm.len().saturating_sub(name.len()) {
+        if &wasm[start..start + name.len()] != name {
+            continue;
+        }
+        // Payload (the func vec) begins immediately after the section name.
+        let (func_count, mut i) = read_uleb(wasm, start + name.len());
+        for _ in 0..func_count {
+            let (_func_idx, n) = read_uleb(wasm, i);
+            let (hint_count, n) = read_uleb(wasm, n);
+            i = n;
+            for _ in 0..hint_count {
+                let (_offset, n) = read_uleb(wasm, i);
+                let (_len, n) = read_uleb(wasm, n); // reserved length, == 1
+                values.push(wasm[n]); // 0 = unlikely, 1 = likely
+                i = n + 1;
+            }
+        }
+    }
+    values
+}
+
+/// Test that branch hints are not only present but carry the expected values:
+/// `likely_unlikely.wado` emits a `likely` (1) hint in `check_likely` and an
+/// `unlikely` (0) hint in `check_unlikely`. Parsing the actual custom-section
+/// payload guards against `emit.rs` regressing to an empty or malformed
+/// section (which the byte-substring presence check alone would not catch).
 #[test]
 fn test_branch_hints_values() {
     let result = compile_fixture("likely_unlikely.wado");
-    let wasm = result.wasm;
+    let values = collect_branch_hint_values(&result.wasm);
 
-    // Find the branch hints section
-    let section_name = b"metadata.code.branch_hint";
-    let pos = wasm
-        .windows(section_name.len())
-        .position(|window| window == section_name);
-
-    assert!(pos.is_some(), "Branch hints section not found");
-
-    // The section should contain hints for both check_likely (hint=1) and check_unlikely (hint=0)
-    let section_start = pos.unwrap();
-    let section_end = section_start + section_name.len();
-
-    // Section data starts after the name length and name
-    // There should be at least a few bytes of data
     assert!(
-        wasm.len() > section_end + 5,
-        "Branch hints section appears to be empty or too short"
+        !values.is_empty(),
+        "No branch-hint entries decoded from the wasm custom section"
+    );
+    assert!(
+        values.contains(&1),
+        "Expected a `likely` (value 1) branch hint; decoded values: {values:?}"
+    );
+    assert!(
+        values.contains(&0),
+        "Expected an `unlikely` (value 0) branch hint; decoded values: {values:?}"
     );
 }
 

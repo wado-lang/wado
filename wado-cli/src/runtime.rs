@@ -284,6 +284,10 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, collector: Coll
     // config.wasm_stack_switching(true); // Not supported on macOS
     config.wasm_gc(true);
     config.wasm_function_references(true);
+    // Honor the `metadata.code.branch_hint` custom section so Cranelift can
+    // lay out hinted branches (from `builtin::likely`/`unlikely`) for the
+    // predicted-taken path.
+    config.wasm_branch_hinting(true);
     config.collector(collector);
 
     config.cranelift_opt_level(opt_level);

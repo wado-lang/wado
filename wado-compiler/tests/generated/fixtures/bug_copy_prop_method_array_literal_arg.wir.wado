@@ -445,7 +445,7 @@ fn "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Sta
     let tok: ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token";
     let index: i32;
     index = self.pos;
-    if index >= self.tokens.used {
+    if builtin::unlikely(index >= self.tokens.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -459,7 +459,7 @@ fn "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Sta
     let __iter_3: ref "core:prelude/array.wado//ArrayIter<i32>";
     let index_7: i32;
     let index_10: i32;
-    k = index_7 = self.pos; if index_7 >= self.tokens.used {
+    k = index_7 = self.pos; if builtin::unlikely(index_7 >= self.tokens.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token">(self.tokens.repr, index_7).kind;
@@ -472,7 +472,7 @@ fn "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Sta
             if __sroa___match_5_discriminant == 0 {
                 if __sroa___match_5_payload_0 == k {
                     if k == 0 {
-                        return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token,wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Err>::Ok" { discriminant: 0, payload_0: ref.as_non_null(index_10 = self.pos; if index_10 >= self.tokens.used {
+                        return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token,wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Err>::Ok" { discriminant: 0, payload_0: ref.as_non_null(index_10 = self.pos; if builtin::unlikely(index_10 >= self.tokens.used) {
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         }; builtin::array_get<ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token">(self.tokens.repr, index_10)) };

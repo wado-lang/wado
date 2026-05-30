@@ -430,7 +430,10 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<wado-c
                 s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
                 "core:prelude/string.wado/String::push_str"(f.buf, s_11);
             }
-            "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<Node>" { value: builtin::array_get<ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node">(_licm_repr_21, i) }, f);
+            "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<Node>" { value: ref.as_non_null(if builtin::unlikely(i >= _licm_used_20) {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            }; builtin::array_get<ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node">(_licm_repr_21, i)) }, f);
             shown = shown + 1;
             i = i + 1;
             continue l20;
@@ -630,14 +633,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b40: block {
-        l41: loop {
+    b41: block {
+        l42: loop {
             if i >= n {
-                break b40;
+                break b41;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l41;
+            continue l42;
         };
     };
 }
@@ -744,16 +747,16 @@ fn "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/inline_mutual_rec
     _licm_used_3 = self.used;
     _licm_repr_4 = self.repr;
     _licm_repr_5 = other.repr;
-    b62: block {
-        l63: loop {
+    b63: block {
+        l64: loop {
             if i >= _licm_used_3 {
-                break b62;
+                break b63;
             }
             if "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node^Eq::eq"(struct.new "core:prelude/types.wado//Box<Node>" { value: builtin::array_get<ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node">(_licm_repr_4, i) }, struct.new "core:prelude/types.wado//Box<Node>" { value: builtin::array_get<ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node">(_licm_repr_5, i) }) == 0 {
                 return 0;
             }
             i = i + 1;
-            continue l63;
+            continue l64;
         };
     };
     return 1;

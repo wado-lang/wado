@@ -149,12 +149,12 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_struct.wado/_force_array_i32
     x = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(4), used: 0 };
     "core:prelude/array.wado/Array<i32>::push"(x, 1);
     "core:prelude/array.wado/Array<i32>::push"(x, 2);
-    if 0 >= x.used {
+    if builtin::unlikely(0 >= x.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     builtin::array_set<i32>(x.repr, 0, 10);
-    if 0 >= x.used {
+    if builtin::unlikely(0 >= x.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -170,12 +170,12 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_struct.wado/_force_array_i64
     x = struct.new "core:prelude//Array<i64>" { repr: builtin::array_new<i64>(4), used: 0 };
     "core:prelude/array.wado/Array<i64>::push"(x, 1_i64);
     "core:prelude/array.wado/Array<i64>::push"(x, 2_i64);
-    if 0 >= x.used {
+    if builtin::unlikely(0 >= x.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     builtin::array_set<i64>(x.repr, 0, 10_i64);
-    if 0 >= x.used {
+    if builtin::unlikely(0 >= x.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -212,7 +212,10 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_struct.wado/build_and_sum_po
             if i >= _licm_used_13 {
                 break b4;
             }
-            sum = sum + (builtin::array_get<i32>(_licm_repr_14, i) + if i >= _licm_used_15 {
+            sum = sum + (if builtin::unlikely(i >= _licm_used_13) {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            }; builtin::array_get<i32>(_licm_repr_14, i) + if builtin::unlikely(i >= _licm_used_15) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<i32>(_licm_repr_16, i));
@@ -236,46 +239,46 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_struct.wado/slot_copy_points
     "core:prelude/array.wado/Array<i32>::push"(__csroa_v_1, 200);
     "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 3);
     "core:prelude/array.wado/Array<i32>::push"(__csroa_v_1, 300);
-    if 1 >= __csroa_v_0.used {
+    if builtin::unlikely(1 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     value_8 = builtin::array_get<i32>(__csroa_v_0.repr, 1);
-    if 2 >= __csroa_v_0.used {
+    if builtin::unlikely(2 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     builtin::array_set<i32>(__csroa_v_0.repr, 2, value_8);
-    if 1 >= __csroa_v_1.used {
+    if builtin::unlikely(1 >= __csroa_v_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     value_13 = builtin::array_get<i32>(__csroa_v_1.repr, 1);
-    if 2 >= __csroa_v_1.used {
+    if builtin::unlikely(2 >= __csroa_v_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     builtin::array_set<i32>(__csroa_v_1.repr, 2, value_13);
-    if 0 >= __csroa_v_0.used {
+    if builtin::unlikely(0 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     builtin::array_set<i32>(__csroa_v_0.repr, 0, 9);
-    if 0 >= __csroa_v_1.used {
+    if builtin::unlikely(0 >= __csroa_v_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     builtin::array_set<i32>(__csroa_v_1.repr, 0, 900);
-    return ((if 0 >= __csroa_v_0.used {
+    return ((if builtin::unlikely(0 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__csroa_v_0.repr, 0) + if 0 >= __csroa_v_1.used {
+    }; builtin::array_get<i32>(__csroa_v_0.repr, 0) + if builtin::unlikely(0 >= __csroa_v_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__csroa_v_1.repr, 0)) + if 2 >= __csroa_v_0.used {
+    }; builtin::array_get<i32>(__csroa_v_1.repr, 0)) + if builtin::unlikely(2 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__csroa_v_0.repr, 2)) + if 2 >= __csroa_v_1.used {
+    }; builtin::array_get<i32>(__csroa_v_0.repr, 2)) + if builtin::unlikely(2 >= __csroa_v_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__csroa_v_1.repr, 2);
@@ -302,17 +305,20 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_struct.wado/with_capacity_po
     _licm_repr_13 = __csroa_v_0.repr;
     _licm_used_14 = __csroa_v_1.used;
     _licm_repr_15 = __csroa_v_1.repr;
-    b18: block {
-        l19: loop {
+    b19: block {
+        l20: loop {
             if i >= _licm_used_12 {
-                break b18;
+                break b19;
             }
-            sum = sum + (builtin::array_get<i32>(_licm_repr_13, i) * if i >= _licm_used_14 {
+            sum = sum + (if builtin::unlikely(i >= _licm_used_12) {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            }; builtin::array_get<i32>(_licm_repr_13, i) * if builtin::unlikely(i >= _licm_used_14) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<i32>(_licm_repr_15, i));
             i = i + 1;
-            continue l19;
+            continue l20;
         };
     };
     return sum;
@@ -333,46 +339,46 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_struct.wado/cross_candidate_
     "core:prelude/array.wado/Array<i32>::push"(__csroa_w_1, 300);
     __csroa_v_0 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     __csroa_v_1 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, if 0 >= __csroa_w_0.used {
+    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, if builtin::unlikely(0 >= __csroa_w_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__csroa_w_0.repr, 0));
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_1, if 0 >= __csroa_w_1.used {
+    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_1, if builtin::unlikely(0 >= __csroa_w_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__csroa_w_1.repr, 0));
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, if 1 >= __csroa_w_0.used {
+    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, if builtin::unlikely(1 >= __csroa_w_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__csroa_w_0.repr, 1));
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_1, if 1 >= __csroa_w_1.used {
+    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_1, if builtin::unlikely(1 >= __csroa_w_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__csroa_w_1.repr, 1));
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, if 2 >= __csroa_w_0.used {
+    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, if builtin::unlikely(2 >= __csroa_w_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__csroa_w_0.repr, 2));
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_1, if 2 >= __csroa_w_1.used {
+    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_1, if builtin::unlikely(2 >= __csroa_w_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__csroa_w_1.repr, 2));
-    return ((((if 0 >= __csroa_v_0.used {
+    return ((((if builtin::unlikely(0 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__csroa_v_0.repr, 0) + if 0 >= __csroa_v_1.used {
+    }; builtin::array_get<i32>(__csroa_v_0.repr, 0) + if builtin::unlikely(0 >= __csroa_v_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__csroa_v_1.repr, 0)) + if 1 >= __csroa_v_0.used {
+    }; builtin::array_get<i32>(__csroa_v_1.repr, 0)) + if builtin::unlikely(1 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__csroa_v_0.repr, 1)) + if 1 >= __csroa_v_1.used {
+    }; builtin::array_get<i32>(__csroa_v_0.repr, 1)) + if builtin::unlikely(1 >= __csroa_v_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__csroa_v_1.repr, 1)) + if 2 >= __csroa_v_0.used {
+    }; builtin::array_get<i32>(__csroa_v_1.repr, 1)) + if builtin::unlikely(2 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__csroa_v_0.repr, 2)) + if 2 >= __csroa_v_1.used {
+    }; builtin::array_get<i32>(__csroa_v_0.repr, 2)) + if builtin::unlikely(2 >= __csroa_v_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__csroa_v_1.repr, 2);
@@ -403,18 +409,21 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_struct.wado/mixed_field_type
     _licm_repr_15 = __csroa_rows_0.repr;
     _licm_used_16 = __csroa_rows_1.used;
     _licm_repr_17 = __csroa_rows_1.repr;
-    b34: block {
-        l35: loop {
+    b36: block {
+        l37: loop {
             if i >= _licm_used_14 {
-                break b34;
+                break b36;
             }
-            id_sum = id_sum + builtin::array_get<i64>(_licm_repr_15, i);
-            val_sum = val_sum + if i >= _licm_used_16 {
+            id_sum = id_sum + if builtin::unlikely(i >= _licm_used_14) {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            }; builtin::array_get<i64>(_licm_repr_15, i);
+            val_sum = val_sum + if builtin::unlikely(i >= _licm_used_16) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<i32>(_licm_repr_17, i);
             i = i + 1;
-            continue l35;
+            continue l37;
         };
     };
     return id_sum + builtin::i64_extend_i32_s(val_sum);
@@ -429,16 +438,16 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_struct.wado/field_order_shor
     "core:prelude/array.wado/Array<i32>::push"(__csroa_v_1, 31);
     "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 7);
     "core:prelude/array.wado/Array<i32>::push"(__csroa_v_1, 13);
-    return ((if 0 >= __csroa_v_0.used {
+    return ((if builtin::unlikely(0 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__csroa_v_0.repr, 0) + if 0 >= __csroa_v_1.used {
+    }; builtin::array_get<i32>(__csroa_v_0.repr, 0) + if builtin::unlikely(0 >= __csroa_v_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__csroa_v_1.repr, 0)) + if 1 >= __csroa_v_0.used {
+    }; builtin::array_get<i32>(__csroa_v_1.repr, 0)) + if builtin::unlikely(1 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__csroa_v_0.repr, 1)) + if 1 >= __csroa_v_1.used {
+    }; builtin::array_get<i32>(__csroa_v_0.repr, 1)) + if builtin::unlikely(1 >= __csroa_v_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__csroa_v_1.repr, 1);
@@ -615,14 +624,14 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b51: block {
-        l52: loop {
+    b54: block {
+        l55: loop {
             if i >= len {
-                break b51;
+                break b54;
             }
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l52;
+            continue l55;
         };
     };
 }
@@ -705,14 +714,14 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b57: block {
-        l58: loop {
+    b60: block {
+        l61: loop {
             if t <= 0_i64 {
-                break b57;
+                break b60;
             }
             n = n + 1;
             t = t / 10_i64;
-            continue l58;
+            continue l61;
         };
     };
     return n;
@@ -726,15 +735,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b61: block {
-            l62: loop {
+        b64: block {
+            l65: loop {
                 if temp <= 0_i64 {
-                    break b61;
+                    break b64;
                 }
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l62;
+                continue l65;
             };
         };
     }
@@ -856,14 +865,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b73: block {
-        l74: loop {
+    b76: block {
+        l77: loop {
             if i >= n {
-                break b73;
+                break b76;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l74;
+            continue l77;
         };
     };
 }
