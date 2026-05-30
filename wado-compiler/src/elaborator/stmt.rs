@@ -3363,7 +3363,7 @@ fn collect_ast_pattern_binding_ids(
 }
 
 /// Collect binding names, local indices, and types from a TIR pattern for or-pattern validation.
-fn collect_pattern_bindings_with_index(
+pub(super) fn collect_pattern_bindings_with_index(
     pattern: &TirPattern,
 ) -> Vec<(String, u32, crate::tir::TypeId)> {
     let mut bindings = Vec::new();
@@ -3413,7 +3413,7 @@ fn collect_pattern_bindings_with_index_inner(
 }
 
 /// Remap a specific `local_index` in a pattern to a new value.
-fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) {
+pub(super) fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) {
     match pattern {
         TirPattern::Binding { local_index, .. } => {
             if *local_index == from {

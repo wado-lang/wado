@@ -7945,15 +7945,49 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Pattern::Or(alternatives) => {
                 // Or patterns match any alternative. Each alternative
-                // reifies against the same scrutinee type. Annotate
-                // already validated that alternatives bind the same
-                // set of names; reify trusts the validated shape and
-                // only forwards the recursion.
-                let sub: Vec<TirPattern> = alternatives
-                    .iter()
-                    .map(|p| self.reify_pattern(p, scrutinee_type, ctx))
-                    .collect();
-                TirPattern::Or(sub)
+                // binds the same names, but a naive per-alternative walk
+                // gives each its own local slot — so `Num(n) | Neg(n)`
+                // would extract the payload into one slot and the arm body
+                // read another. Mirror `resolve_if_pattern_inner`
+                // (stmt.rs:1798): remap each later alternative's binding
+                // locals onto the first alternative's, then point the
+                // arm-scope bindings at the first alternative's locals.
+                let mut resolved: Vec<TirPattern> = Vec::with_capacity(alternatives.len());
+                if let Some(first_alt) = alternatives.first() {
+                    let first = self.reify_pattern(first_alt, scrutinee_type, ctx);
+                    let first_bindings = super::stmt::collect_pattern_bindings_with_index(&first);
+                    resolved.push(first);
+
+                    for alt in alternatives.iter().skip(1) {
+                        let alt_resolved = self.reify_pattern(alt, scrutinee_type, ctx);
+                        let alt_bindings =
+                            super::stmt::collect_pattern_bindings_with_index(&alt_resolved);
+                        let mut remapped = alt_resolved;
+                        for (first_bind, alt_bind) in first_bindings.iter().zip(alt_bindings.iter())
+                        {
+                            if first_bind.1 != alt_bind.1 {
+                                super::stmt::remap_pattern_local(
+                                    &mut remapped,
+                                    alt_bind.1,
+                                    first_bind.1,
+                                );
+                            }
+                        }
+                        resolved.push(remapped);
+                    }
+
+                    // Point the arm-scope bindings at the first
+                    // alternative's locals so the body reads the slot the
+                    // payload was extracted into.
+                    for (name, local_index, _type_id) in &first_bindings {
+                        if let Some(scope) = ctx.scopes.last_mut()
+                            && let Some(var) = scope.get_mut(name)
+                        {
+                            var.index = *local_index;
+                        }
+                    }
+                }
+                TirPattern::Or(resolved)
             }
             ast::Pattern::Range {
                 start, end, kind, ..
