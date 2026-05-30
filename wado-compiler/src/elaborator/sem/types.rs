@@ -621,6 +621,16 @@ pub(crate) struct OperatorDispatch {
     /// Return type the elaborator resolved for the method call. Pinned
     /// here so reify reads it without re-running impl-table lookups.
     pub(crate) return_type: TypeId,
+    /// `true` when reify must wrap the method call in an outer
+    /// `Unary { Deref }` — the `Index` trait returns `&Output`, so
+    /// `expr[i]` lowers to `*expr.index(i)`. `IndexValue` and the
+    /// arithmetic/comparison operator dispatches return the value
+    /// directly and set this `false`. Recorded explicitly because the
+    /// return-type shape alone is ambiguous: an `IndexValue` whose
+    /// `Output` is itself a reference (`Array<&i32>::index_value` →
+    /// `&i32`) would otherwise be mistaken for the `Index` shape and
+    /// double-dereferenced.
+    pub(crate) needs_deref: bool,
 }
 
 /// `for x of expr` iterator dispatch result (Gap 6 of Stage 5).

@@ -1819,6 +1819,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self_kind: trait_info.self_kind,
                         arg_ref_wraps: vec![false],
                         return_type: ref_output_type,
+                        needs_deref: true,
                     },
                 );
 
@@ -1888,6 +1889,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self_kind: trait_info.self_kind,
                         arg_ref_wraps: vec![false],
                         return_type: trait_info.output_type,
+                        needs_deref: false,
                     },
                 );
 

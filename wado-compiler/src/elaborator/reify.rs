@@ -4778,15 +4778,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 dispatch.return_type,
                 index.span,
             );
-            // `Index` trait returns `&Output`, so the outer wrap is
-            // a `Deref`. Detect via the recorded `return_type`'s
-            // `Ref` shape — IndexValue's record has the raw output
-            // type and skips the wrap.
-            let needs_deref = matches!(
-                self.tysys.type_table.borrow().get(dispatch.return_type),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_),
-            );
-            if needs_deref {
+            // `Index` trait returns `&Output`, so the outer wrap is a
+            // `Deref` (`expr[i]` → `*expr.index(i)`). Annotate records
+            // this explicitly: a return-type-shape check would misfire
+            // for an `IndexValue` whose `Output` is itself a reference
+            // (`Array<&i32>::index_value` → `&i32`) and double-deref.
+            if dispatch.needs_deref {
                 return TirExpr::new(
                     TirExprKind::Unary {
                         op: TirUnaryOp::Deref,
