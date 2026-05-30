@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2530 / 2664 fixtures passing under
+      suite reaches **2539 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 134 remaining failures are all reify-specific). The
+      so the 125 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -641,11 +641,22 @@ Landed:
     expression type) and a static-method `Call` (gated on the type being
     a struct in `ns_source`). Earlier analysis blamed annotate; the real
     fix was reify reaching these `Call` shapes. namespace_import 8/8.
+22. **Numeric-literal cast operand re-typed to target width (2530 →
+    2539).** A numeric literal under `as Ty` adopts the target's width in
+    production (`9007199254740992 as i64` types the literal i64). annotate
+    propagates the target to a _direct_ literal cast operand but not
+    through a unary `Neg`, so `-9007199254740992 as i64` reified the inner
+    literal i32 — codegen's `i32.const` truncated the value
+    (`2^53 mod 2^32 == 0`) to 0 before the cast widened. reify's Cast arm
+    now reifies a `Number` literal operand (bare or under `Neg`) at the
+    target type when the target is an integer. +9 fixtures
+    (serde_json_large_int / scientific_notation and other wide-cast
+    sites).
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2530
-/ 2664** under `WADO_REIFY=1`; 134 reify-specific failures across 76
+Largest first, by fixture-name prefix (after the landings above). **2539
+/ 2664** under `WADO_REIFY=1`; 125 reify-specific failures across 72
 unique fixtures remain:
 
 - **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
