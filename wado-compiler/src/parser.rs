@@ -55,6 +55,9 @@ pub struct Parser {
     /// Trivia attached to AST nodes during parsing. Exposed via
     /// [`Parser::take_trivia`] for the formatter pipeline.
     trivia: crate::comment::TriviaMap,
+    /// Syntax errors collected during error recovery. Drained via
+    /// [`Parser::take_errors`] after [`Parser::parse`].
+    errors: Vec<ParseError>,
 }
 
 #[derive(Debug)]
@@ -86,6 +89,7 @@ struct ParserCheckpoint {
     comment_cursor: usize,
     next_ast_id: u32,
     pending_gt: bool,
+    errors_len: usize,
 }
 
 /// Groups of comparison operators for chain validation
@@ -147,7 +151,13 @@ impl Parser {
             comments,
             comment_cursor: 0,
             trivia: crate::comment::TriviaMap::new(),
+            errors: Vec::new(),
         }
+    }
+
+    /// Drain the syntax errors collected during error recovery.
+    pub fn take_errors(&mut self) -> Vec<ParseError> {
+        std::mem::take(&mut self.errors)
     }
 
     /// Allocate a fresh [`AstId`] for an AST node currently being constructed.
@@ -215,6 +225,7 @@ impl Parser {
             comment_cursor: self.comment_cursor,
             next_ast_id: self.next_ast_id,
             pending_gt: self.pending_gt,
+            errors_len: self.errors.len(),
         }
     }
 
@@ -224,6 +235,8 @@ impl Parser {
         self.trivia.discard_from(crate::ast::AstId(cp.next_ast_id));
         self.next_ast_id = cp.next_ast_id;
         self.pending_gt = cp.pending_gt;
+        // Drop errors recorded inside the speculative branch being rolled back.
+        self.errors.truncate(cp.errors_len);
     }
 
     /// Returns true if the parsed inner attributes include `#![TODO]`.
@@ -278,26 +291,124 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> ParseResult<Module> {
+    /// Parse the token stream into a [`Module`]. Always succeeds: syntax
+    /// errors are recovered (see [`Parser::recover_item`]) and collected into
+    /// `self.errors`, drained by [`Parser::take_errors`]. The returned module
+    /// covers the whole input — broken regions become [`Item::Error`] nodes.
+    pub fn parse(&mut self) -> Module {
         // Parse inner attributes at the start of the module.
         // Store them so has_todo() works even if item parsing fails later.
-        let inner_attributes = self.parse_inner_attributes()?;
+        let inner_attributes = match self.parse_inner_attributes() {
+            Ok(attrs) => attrs,
+            Err(e) => {
+                self.errors.push(e);
+                Vec::new()
+            }
+        };
         self.parsed_inner_attributes.clone_from(&inner_attributes);
 
         let mut items = Vec::new();
 
         while !self.is_at_end() {
-            items.push(self.parse_item()?);
+            let before = self.pos;
+            match self.parse_item() {
+                Ok(item) => items.push(item),
+                Err(e) => {
+                    self.errors.push(e);
+                    items.push(self.recover_item(before));
+                }
+            }
         }
 
-        Ok(Module::with_metadata(
+        let has_syntax_errors = !self.errors.is_empty();
+        Module::with_metadata(
             items,
             inner_attributes,
             self.shebang.take(),
             self.data_section.take(),
             std::mem::take(&mut self.include_paths),
             self.next_ast_id,
-        ))
+            has_syntax_errors,
+        )
+    }
+
+    /// True when the current token is a *hard* item keyword: a reserved word
+    /// that can only begin a top-level item and never appears as an identifier
+    /// or statement start. This is the safe sync set for *block* termination —
+    /// a missing `}` is recovered by ending the block here. It deliberately
+    /// excludes the contextual keywords `flags` and `type` (both valid as
+    /// identifiers, e.g. `flags = flags | 1;` or `type` as a name), the
+    /// attribute-start `#` (also begins `#include_str(...)`), and the
+    /// contextual `test` keyword (an ordinary identifier, e.g. `test(1, 2)`).
+    fn at_hard_item_keyword(&self) -> bool {
+        use TokenKind::*;
+        matches!(
+            self.peek_kind(),
+            Use | Fn
+                | Interface
+                | Struct
+                | Enum
+                | Variant
+                | Impl
+                | Trait
+                | Resource
+                | World
+                | Global
+                | Pub
+                | Export
+        )
+    }
+
+    /// True when the current token can begin a top-level item. This is the sync
+    /// set for the item-loop's panic-mode recovery, where (unlike inside a
+    /// block) every item keyword — including the contextual `flags` / `type` /
+    /// `test` and the attribute-start `#` — unambiguously starts the next item.
+    fn at_item_start(&self) -> bool {
+        use TokenKind::*;
+        if self.at_hard_item_keyword() || matches!(self.peek_kind(), Flags | Type | Hash) {
+            return true;
+        }
+        matches!(self.peek_kind(), TokenKind::Ident(name) if name == "test")
+    }
+
+    /// Skip the unparsable token run starting at `before` up to (but not
+    /// including) the next item-start token or EOF, and return an
+    /// [`Item::Error`] covering it. Guarantees forward progress: if no token
+    /// was consumed before the failure, consume one here so the caller's loop
+    /// cannot spin.
+    fn recover_item(&mut self, before: usize) -> Item {
+        let id = self.alloc_ast_id();
+        let start = self.tokens[before].span;
+        if self.pos == before {
+            self.advance();
+        }
+        while !self.is_at_end() && !self.at_item_start() {
+            self.advance();
+        }
+        let end = self.tokens[self.pos.saturating_sub(1)].span;
+        Item::Error(crate::ast::ErrorItem {
+            id,
+            span: start.merge(&end),
+        })
+    }
+
+    /// Skip tokens after a failed statement until a statement/block boundary:
+    /// a `;` (consumed), or `}` / an item-start token / EOF (left in place).
+    /// Guarantees forward progress.
+    fn recover_in_block(&mut self, before: usize) {
+        if self.pos == before {
+            self.advance();
+        }
+        loop {
+            if self.is_at_end() || self.check(&TokenKind::RBrace) || self.at_hard_item_keyword() {
+                break;
+            }
+            if self.check(&TokenKind::Semicolon) {
+                self.advance();
+                break;
+            }
+            self.advance();
+        }
     }
 
     // Token handling
@@ -1529,13 +1640,34 @@ impl Parser {
 
         let mut stmts = Vec::new();
 
-        while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-            // Try to parse a statement, allowing optional trailing semicolon for final expression
-            let stmt = self.parse_stmt_in_block()?;
-            stmts.push(stmt);
+        // Stop at a hard item keyword too: a missing `}` should close the block
+        // here rather than letting the body swallow the next item. Only hard
+        // keywords qualify — `flags`/`type` as identifiers, `test(...)`, and
+        // `#include_str(...)` are all valid statements, so `at_hard_item_keyword`
+        // (not `at_item_start`) is correct.
+        while !self.check(&TokenKind::RBrace) && !self.is_at_end() && !self.at_hard_item_keyword() {
+            let before = self.pos;
+            match self.parse_stmt_in_block() {
+                Ok(stmt) => stmts.push(stmt),
+                Err(e) => {
+                    // Drop the broken statement (no Stmt::Error node yet) and
+                    // recover to the next boundary so the rest of the block,
+                    // and any following items, still parse.
+                    self.errors.push(e);
+                    self.recover_in_block(before);
+                }
+            }
         }
 
-        let end_span = self.expect(&TokenKind::RBrace)?.span;
+        // Close the block. A missing `}` is reported but recovered: the block
+        // ends at the previous token so following items are unaffected.
+        let end_span = if self.check(&TokenKind::RBrace) {
+            self.advance().span
+        } else {
+            self.errors
+                .push(self.error_at_span(self.peek().span, "expected `}`"));
+            self.tokens[self.pos.saturating_sub(1)].span
+        };
 
         Ok(Block {
             id,
@@ -5363,12 +5495,31 @@ mod tests {
     use super::*;
     use crate::lexer::Lexer;
 
+    /// Parse helper for tests: maps the error-recovering parser back to a
+    /// `Result` (first recovered error as `Err`) so existing `.unwrap()` /
+    /// `.unwrap_err()` call sites keep working.
     fn parse(source: &str) -> ParseResult<Module> {
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().expect("lexer error");
         let (data_section, _comments, shebang) = lexer.into_parts();
         let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-        parser.parse()
+        let module = parser.parse();
+        match parser.take_errors().into_iter().next() {
+            Some(e) => Err(e),
+            None => Ok(module),
+        }
+    }
+
+    /// Parse helper that exposes the full recovery result: the (always
+    /// produced) module plus every recovered syntax error.
+    fn parse_recovering(source: &str) -> (Module, Vec<ParseError>) {
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("lexer error");
+        let (data_section, _comments, shebang) = lexer.into_parts();
+        let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+        let module = parser.parse();
+        let errors = parser.take_errors();
+        (module, errors)
     }
 
     #[test]
@@ -6927,6 +7078,106 @@ line 2
             brk.span.end_column < 28,
             "break span should not include `}}`: end_column={}",
             brk.span.end_column
+        );
+    }
+
+    fn fn_name(item: &Item) -> Option<&str> {
+        match item {
+            Item::Function(f) => Some(&f.name),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn recovery_collects_multiple_top_level_errors() {
+        // Two broken items between two valid ones: each error is collected,
+        // and the surrounding functions survive. The garbage tokens (`)` `]`)
+        // lex fine but can't begin an item.
+        let (module, errors) = parse_recovering("fn a() {}\n) ) )\nfn b() {}\n] ] ]\nfn c() {}\n");
+        assert!(
+            errors.len() >= 2,
+            "expected >= 2 recovered errors, got {}",
+            errors.len()
+        );
+        let names: Vec<&str> = module.items.iter().filter_map(fn_name).collect();
+        assert!(
+            names.contains(&"a") && names.contains(&"b") && names.contains(&"c"),
+            "all valid functions should survive recovery, got {names:?}",
+        );
+        assert!(module.has_syntax_errors());
+    }
+
+    #[test]
+    fn recovery_missing_brace_keeps_following_item() {
+        // `f` is missing its closing brace; `g` must still parse as a full item.
+        let (module, errors) = parse_recovering(
+            "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n\nfn g() -> i32 {\n    return 2;\n}\n",
+        );
+        assert!(!errors.is_empty(), "missing brace should be reported");
+        let names: Vec<&str> = module.items.iter().filter_map(fn_name).collect();
+        assert!(
+            names.contains(&"g"),
+            "function g should survive the missing brace in f, got {names:?}",
+        );
+    }
+
+    #[test]
+    fn block_termination_ignores_contextual_keywords() {
+        // `flags` and `type` are item keywords but also valid identifiers; a
+        // statement using them must not trip block-termination recovery. This
+        // well-formed function must parse with zero errors.
+        let (_module, errors) = parse_recovering(
+            "fn f(mut flags: i32) -> i32 {\n    flags = flags | 1;\n    let type: i32 = flags;\n    return type;\n}\n",
+        );
+        assert!(
+            errors.is_empty(),
+            "contextual keywords in statements must not trigger recovery: {errors:?}",
+        );
+    }
+
+    #[test]
+    fn recovery_terminates_on_garbage() {
+        // A stream of stray-but-lexable tokens must not hang; it yields >= 1
+        // error and at least one Item::Error. (Reaching the assertions proves
+        // termination.)
+        let (module, errors) = parse_recovering(") ] } ) ] } , , =\n");
+        assert!(!errors.is_empty());
+        assert!(
+            module.items.iter().any(|i| matches!(i, Item::Error(_))),
+            "garbage should produce an Item::Error",
+        );
+    }
+
+    #[test]
+    fn recovery_block_internal_error_has_no_item_error() {
+        // A broken statement inside an otherwise valid function: the item shape
+        // is intact (no Item::Error), but the syntax error is still recorded.
+        let (module, errors) =
+            parse_recovering("fn f() -> i32 {\n    let x: i32 = ;\n    return 0;\n}\n");
+        assert!(
+            !errors.is_empty(),
+            "block-internal error should be reported"
+        );
+        assert!(
+            module.has_syntax_errors(),
+            "module must remember the block-internal syntax error",
+        );
+        assert!(
+            !module.items.iter().any(|i| matches!(i, Item::Error(_))),
+            "a recovered statement should not produce an Item::Error",
+        );
+    }
+
+    #[test]
+    fn speculative_parse_does_not_leak_errors() {
+        // Valid input that exercises checkpoint/restore (struct-literal vs block
+        // disambiguation in an `if` condition) must parse with zero errors.
+        let (_module, errors) = parse_recovering(
+            "fn f(p: Point) -> i32 {\n    if p.x > 0 {\n        return 1;\n    }\n    return 0;\n}\n",
+        );
+        assert!(
+            errors.is_empty(),
+            "speculative backtracking must not leak errors: {errors:?}",
         );
     }
 }

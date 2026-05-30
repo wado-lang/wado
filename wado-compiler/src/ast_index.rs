@@ -374,7 +374,9 @@ mod tests {
     fn parse(source: &str) -> Module {
         let tokens = Lexer::new(source).tokenize().expect("lex");
         let mut parser = Parser::new(tokens);
-        parser.parse().expect("parse")
+        let module = parser.parse();
+        assert!(parser.take_errors().is_empty(), "parse");
+        module
     }
 
     #[test]
