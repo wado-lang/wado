@@ -636,13 +636,7 @@ fn "wado-compiler/tests/fixtures/array_index_2.wado/Container<core:prelude/strin
             if i >= _licm_used_7 {
                 break b60;
             }
-            if builtin::unlikely(i >= _licm_used_7) {
-                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                unreachable;
-            }
-            if builtin::array_get<bool>(_licm_repr_8, i) {
-                count = count + 1;
-            }
+            count = count + builtin::array_get<bool>(_licm_repr_8, i);
             i = i + 1;
             continue l61;
         };

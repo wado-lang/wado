@@ -1,0 +1,61 @@
+// Regression: a type parameter that appears ONLY inside another parameter's
+// associated-type-equality bound must be inferred from the call site instead
+// of being left unbound (which trapped codegen with "unsubstituted TypeParam").
+//
+// `T` here is determined solely by `I: Iterator<Item = T>`: it never appears
+// in a value parameter, so it cannot be inferred from the arguments directly.
+// Once `I = Gen<i32>` is inferred from `it`, `T` must be resolved as
+// `Gen<i32>::Item == i32` via the bound.
+//
+// NOTE: `T` must not appear in any value parameter — otherwise it would be
+// inferable from the argument and this would not exercise bound-driven
+// inference at all.
+
+struct Gen<T> {
+    items: Array<T>,
+    idx: i32,
+}
+
+impl<T> Iterator for Gen<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        if self.idx >= self.items.len() {
+            return null;
+        }
+        let v = self.items[self.idx];
+        self.idx += 1;
+        return Option::Some(v);
+    }
+}
+
+// `T` is named only in the bound `Iterator<Item = T>` and the return type.
+fn first<T, I: Iterator<Item = T>>(mut it: I) -> Option<T> {
+    return it.next();
+}
+
+// `T` also only in the bound; used in the returned generic struct.
+struct Holder<T, I: Iterator<Item = T>> {
+    inner: I,
+    seen: Option<T>,
+}
+
+fn hold<T, I: Iterator<Item = T>>(it: I) -> Holder<T, I> {
+    return Holder { inner: it, seen: null };
+}
+
+test "type param inferred solely from associated-type bound" {
+    let g: Gen<i32> = Gen { items: [42, 43], idx: 0 };
+    assert first(g) matches { Some(42) };
+}
+
+test "bound-only type param used in returned generic struct" {
+    let g: Gen<i32> = Gen { items: [7, 8], idx: 0 };
+    let mut h = hold(g);
+    assert h.seen matches { None };
+    h.seen = h.inner.next();
+    assert h.seen matches { Some(7) };
+    assert h.inner.next() matches { Some(8) };
+}
+
+__DATA__
+{"test": {}}

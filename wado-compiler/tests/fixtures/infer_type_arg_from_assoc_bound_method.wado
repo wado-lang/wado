@@ -1,0 +1,60 @@
+// Regression: bound-driven type-parameter inference must also work for
+// generic METHOD calls, not just free functions. `T` appears only in the
+// method's `I: Iterator<Item = T>` bound (never in a value parameter), so it
+// must be projected from `I` once `I` is inferred from the argument.
+//
+// Before the fix the method path emitted "cannot infer type parameter `T`"
+// and required a turbofish; now it infers `T = Gen<i32>::Item == i32`.
+
+struct Gen<T> {
+    items: Array<T>,
+    idx: i32,
+}
+
+impl<T> Iterator for Gen<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        if self.idx >= self.items.len() {
+            return null;
+        }
+        let v = self.items[self.idx];
+        self.idx += 1;
+        return Option::Some(v);
+    }
+}
+
+struct Maker {}
+
+impl Maker {
+    // `T` is named only in the bound — must be inferred via the bound.
+    fn first<T, I: Iterator<Item = T>>(&self, mut it: I) -> Option<T> {
+        return it.next();
+    }
+}
+
+// Also exercise an impl with its own type parameter, so the method type
+// params sit at a non-zero `impl_offset`.
+struct Wrapper<A> {
+    tag: A,
+}
+
+impl<A> Wrapper<A> {
+    fn head<T, I: Iterator<Item = T>>(&self, mut it: I) -> Option<T> {
+        return it.next();
+    }
+}
+
+test "bound-only type param inferred on a generic method" {
+    let m = Maker {};
+    let g: Gen<i32> = Gen { items: [11, 12], idx: 0 };
+    assert m.first(g) matches { Some(11) };
+}
+
+test "bound-only type param inferred on a method of a generic impl" {
+    let w: Wrapper<bool> = Wrapper { tag: true };
+    let g: Gen<i32> = Gen { items: [21, 22], idx: 0 };
+    assert w.head(g) matches { Some(21) };
+}
+
+__DATA__
+{"test": {}}
