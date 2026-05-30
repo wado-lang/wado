@@ -458,6 +458,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             v.visit_type(&g.ty);
             v.visit_expr(&g.initializer);
         }
+        Item::Error(e) => v.visit_id(e.id, e.span),
     }
 }
 
@@ -904,6 +905,16 @@ pub enum Item {
     World(WorldDecl),
     Test(TestDecl),
     Global(GlobalDecl),
+    /// Unparsable token run, emitted by error recovery so one syntax error
+    /// doesn't discard the rest of the module.
+    Error(ErrorItem),
+}
+
+/// Placeholder for a token run that failed to parse as an item. See [`Item::Error`].
+#[derive(Debug, Clone)]
+pub struct ErrorItem {
+    pub id: AstId,
+    pub span: Span,
 }
 
 /// Test declaration: `test "name" { ... }` or `test { ... }`

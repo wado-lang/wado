@@ -549,6 +549,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 Item::TupleTypeDecl(_) => {
                     // Tuple type family declaration — handled in orchestration
                 }
+
+                Item::Error(_) => {
+                    // Error-recovery placeholder; no symbol to define.
+                }
             }
         }
     }

@@ -565,6 +565,7 @@ fn is_pub_or_export(item: &Item) -> bool {
         Item::Impl(_) => true,
         Item::TupleTypeDecl(d) => d.is_pub,
         Item::Use(_) | Item::World(_) | Item::Test(_) => false,
+        Item::Error(_) => false,
     }
 }
 

@@ -340,6 +340,9 @@ impl<'a> Unparser<'a> {
             Item::Test(t) => self.unparse_test(t),
             Item::Global(g) => self.unparse_global(g),
             Item::TupleTypeDecl(d) => self.unparse_tuple_type_decl(d),
+            // Unreachable in practice: formatting is fail-fast on syntax
+            // errors, so no Item::Error reaches the unparser. Emit nothing.
+            Item::Error(_) => {}
         }
 
         self.emit_trailing_for(id);
@@ -2603,6 +2606,7 @@ pub fn get_item_span(item: &Item) -> Span {
         Item::Test(t) => t.span,
         Item::Global(g) => g.span,
         Item::TupleTypeDecl(d) => d.span,
+        Item::Error(e) => e.span,
     }
 }
 
@@ -2623,6 +2627,7 @@ pub fn get_item_id(item: &Item) -> crate::ast::AstId {
         Item::Test(t) => t.id,
         Item::Global(g) => g.id,
         Item::TupleTypeDecl(d) => d.id,
+        Item::Error(e) => e.id,
     }
 }
 
