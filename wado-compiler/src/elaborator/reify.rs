@@ -1984,6 +1984,29 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::Unary(unary) => {
                 let op = ast_unary_op_to_tir(unary.op);
                 let inner = self.reify_expr(&unary.expr, ctx, None);
+                if let Some(dispatch) = self.sem.types.operator_dispatch.get(&unary.id).cloned() {
+                    // Operator-trait dispatch path for `-x` / `~x` on a
+                    // user type (`Neg::neg` / `BitNot::bitnot`). Mirrors the
+                    // binary path: a bare `Unary` on a struct operand would
+                    // be rejected by codegen (`expected i32, found (ref $T)`),
+                    // so replay the recorded method call instead. Unary
+                    // operators take no extra arguments.
+                    let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                        inner,
+                        dispatch.self_kind,
+                        /* is_ref_impl */ false,
+                        span,
+                        &self.tysys.type_table,
+                    );
+                    return super::Elaborator::<H>::build_tir_method_call(
+                        receiver,
+                        dispatch.function_ref,
+                        vec![],
+                        vec![],
+                        dispatch.return_type,
+                        span,
+                    );
+                }
                 // Track address-taken locals for `&x` / `&mut x`, mirroring
                 // `Elaborator::resolve_unary` (operators.rs:834). The
                 // boxing pass (`lower::plan::boxing`) reads

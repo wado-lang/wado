@@ -917,6 +917,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )
                     });
                 if let Some(resolved) = resolved {
+                    // Record the dispatch keyed by the unary expr's AstId
+                    // (via the `pending_operator_ast_id` side-channel) so
+                    // reify can replay the `Neg::neg` / `BitNot::bitnot`
+                    // method call instead of emitting a bare `Unary` on a
+                    // struct (which codegen rejects: `expected i32, found
+                    // (ref $T)`). Mirrors the binary-operator path.
+                    self.pending_operator_ast_id = Some(unary.id);
                     return self.build_trait_op_method_call_on_resolved(
                         expr,
                         vec![],
