@@ -1648,16 +1648,29 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     tr_stmt.span,
                 )]
             }
-            ast::Stmt::Break(break_stmt) => vec![TirStmt::new(
-                TirStmtKind::Break {
-                    label: break_stmt.label.clone(),
-                    value: break_stmt
-                        .value
-                        .as_ref()
-                        .map(|e| self.reify_expr(e, ctx, None)),
-                },
-                break_stmt.span,
-            )],
+            ast::Stmt::Break(break_stmt) => {
+                // Resolve `break label: value` against the target block's
+                // expected type so a `null` / bare literal value coerces to
+                // the block's result type (e.g. `Option<i32>`) rather than
+                // reaching WIR as an unresolved `Option<UNKNOWN>` / nullref.
+                let break_expected = break_stmt.label.as_ref().and_then(|label| {
+                    ctx.labeled_block_targets
+                        .iter()
+                        .rev()
+                        .find(|t| &t.label == label)
+                        .and_then(|t| t.expected_type)
+                });
+                vec![TirStmt::new(
+                    TirStmtKind::Break {
+                        label: break_stmt.label.clone(),
+                        value: break_stmt
+                            .value
+                            .as_ref()
+                            .map(|e| self.reify_expr(e, ctx, break_expected)),
+                    },
+                    break_stmt.span,
+                )]
+            }
             ast::Stmt::Continue(continue_stmt) => {
                 vec![TirStmt::new(TirStmtKind::Continue, continue_stmt.span)]
             }
@@ -2087,10 +2100,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // recorded `expression_types[lb.id]`; annotate already
                 // unified break types into it.
                 use crate::elaborator::types::LabeledBlockTarget;
+                // Fall back to the block's unified result type when the use
+                // site supplies no expected type, so a `break label: null`
+                // whose `Option<T>` only resolves from a sibling break still
+                // coerces (annotate unified the breaks into `recorded_type`).
                 ctx.labeled_block_targets.push(LabeledBlockTarget {
                     label: lb.label.clone(),
                     break_types: Vec::new(),
-                    expected_type,
+                    expected_type: expected_type.or(Some(recorded_type)),
                 });
                 ctx.active_labels.push(lb.label.clone());
                 let tir_block = self.reify_block(&lb.block, ctx, expected_type);

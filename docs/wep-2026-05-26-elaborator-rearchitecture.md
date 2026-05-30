@@ -806,14 +806,25 @@ Landed:
     carries the exact `type_args` the production builder put on the `Call`
     (recorded at all four dispatch sites); reify replays it verbatim. Fixes
     infer_static_method_from_lhs; production unaffected.
+37. **Coerce `break label: value` against the block's result type in reify
+    (2610 → 2611).** Reify resolved every `break label: value` with
+    `expected = None`, so a `break label: null` whose `Option<T>` is only
+    pinned by a sibling break (`break label: Option::Some(5)`) reached WIR
+    as a nullref and failed validation (`expected (ref $type), found
+    nullref`). The labeled-block frame now falls back to the block's
+    unified result type (`recorded_type`) when the use site supplies no
+    expected type, and the `break` stmt resolves its value against the
+    matching frame's expected type. Fixes labeled_block_break_null_coercion;
+    production unaffected.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2610
+Largest first, by fixture-name prefix (after the landings above). **2611
 / 2664** under `WADO_REIFY=1`. A full-suite scan after landing #35 found 34
-unique reify-only failing fixtures (landing #36 then cleared
-infer_static_method_from_lhs); the prior effect_handler_resource_*
-cluster is resolved (compiles clean — likely a side effect of landing #31).
+unique reify-only failing fixtures (landings #36/#37 then cleared
+infer_static_method_from_lhs and labeled_block_break_null_coercion); the
+prior effect_handler_resource_* cluster is resolved (compiles clean —
+likely a side effect of landing #31).
 The remaining set is: variadic_* (6), tuple_* (tuple_zip, tuple_for_of,
 tuple_1, tuple_name_collision×2, tuple_literal_expected_type_in_branch,
 opt_container_sroa_tuple), newtype_* (newtype_chained_method,
