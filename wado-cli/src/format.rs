@@ -119,9 +119,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<FormatOptions, CliExit> 
 }
 
 /// Expand the raw input paths into a concrete list of `*.wado` files.
-/// A file is kept as-is; a directory is searched recursively, honoring the
-/// `[format]` exclude/include globs of the `wado.toml` rooted at that
-/// directory (plus `.gitignore` and git submodules).
+/// A file is kept as-is; a directory is searched recursively per package (see
+/// [`collect_package_tree`]), honoring each package's `[format]` filters plus
+/// `.gitignore` and git submodules.
 fn resolve_inputs(inputs: &[String]) -> Result<Vec<PathBuf>, CliExit> {
     let mut files = Vec::new();
     for input in inputs {

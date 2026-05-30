@@ -3607,10 +3607,6 @@ pub fn unparse_with_clause_into(effects: &[String], stores: &[String], output: &
     }
 }
 
-/// with-clause for function-type position (`stores[0, 1]` with positional indices).
-/// Bound-context variant of `fn(...)` printing. Multi-effect `with` clauses
-/// are parens-grouped because comma at this level separates trait bounds
-/// (and `stores[...]` never appears in bound position).
 /// Emit ` -> <ret>` for a function type, omitting it entirely when the return
 /// is the unit type — same rule as function declarations, so `fn mut(T)` and
 /// `fn mut(T) -> ()` round-trip to the canonical arrowless form.
@@ -3621,6 +3617,10 @@ fn unparse_fn_return_into(return_type: &Type, output: &mut String) {
     }
 }
 
+/// with-clause for function-type position (`stores[0, 1]` with positional indices).
+/// Bound-context variant of `fn(...)` printing. Multi-effect `with` clauses
+/// are parens-grouped because comma at this level separates trait bounds
+/// (and `stores[...]` never appears in bound position).
 fn unparse_fn_signature_in_bound_into(sig: &FunctionType, output: &mut String) {
     output.push_str(if sig.is_mut { "fn mut" } else { "fn" });
     delimited_into("(", ")", &sig.params, output, unparse_type_into);
