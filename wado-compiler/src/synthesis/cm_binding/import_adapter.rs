@@ -67,8 +67,12 @@ const MAX_FLAT_RESULTS: usize = 1;
 
 /// Synthesize lifting of a flat Result discriminant into a GC variant struct.
 ///
-/// For `Result<(), ()>`: disc==0 → Ok, disc==1 → Err (no payloads)
-/// For `Result<(), ErrorCode>`: disc==0 → Ok, disc!=0 → `Err(lift_error)`
+/// Only reached for a Result that flattens to a bare discriminant (one flat
+/// slot) — i.e. `Result<(), ()>`: disc==0 → Ok, disc==1 → Err, neither
+/// carrying a payload. Any payload-bearing Result flattens to >1 slot and is
+/// lifted through the outptr return path instead, so it never arrives here.
+/// (The non-unit Err branch below therefore stays defensive — see the
+/// `debug_assert!` on `ok_is_unit`.)
 ///
 /// `result_type_id` is the resolved `Result<T, E>` `TypeId` shared with
 /// the caller's `result_local`; the emitted `VariantConstruct` exprs use

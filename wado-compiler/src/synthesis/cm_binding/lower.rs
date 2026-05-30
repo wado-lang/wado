@@ -729,6 +729,14 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                                 let (pl, pt) = payload_locals[i];
                                 // A case may produce a narrower flat than the
                                 // joined slot (e.g. i32 into an i64 slot); cast.
+                                //
+                                // For every WASI variant bound today the cases
+                                // agree on each slot's type, so this cast is a
+                                // no-op. If a future binding mixes kinds/widths
+                                // at one slot, `flatten_param_type` joins to i32
+                                // and `cast` does a *numeric* conversion, not a
+                                // bit reinterpret — revisit this (and the join
+                                // rule) before binding such a variant.
                                 let v = if flat_val.type_id != pt {
                                     cast(flat_val, pt)
                                 } else {
