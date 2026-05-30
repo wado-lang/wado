@@ -1511,235 +1511,79 @@ pub(super) fn collect_effect_calls_in_block(
     effects: &mut IndexSet<String>,
     cm_interface_registry: &CmInterfaceRegistry,
 ) {
-    for stmt in &block.stmts {
-        collect_effect_calls_in_stmt(stmt, effects, cm_interface_registry);
+    EffectCallCollector {
+        effects,
+        cm_interface_registry,
     }
+    .visit_block(block);
 }
 
-fn collect_effect_calls_in_stmt(
-    stmt: &TirStmt,
-    effects: &mut IndexSet<String>,
-    cm_interface_registry: &CmInterfaceRegistry,
-) {
-    match &stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
-            collect_effect_calls_in_expr(value, effects, cm_interface_registry);
-        }
-        TirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                collect_effect_calls_in_expr(v, effects, cm_interface_registry);
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            collect_effect_calls_in_expr(condition, effects, cm_interface_registry);
-            collect_effect_calls_in_block(then_block, effects, cm_interface_registry);
-            if let Some(blk) = else_block {
-                collect_effect_calls_in_block(blk, effects, cm_interface_registry);
-            }
-        }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            collect_effect_calls_in_block(body, effects, cm_interface_registry);
-        }
-        TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                collect_effect_calls_in_expr(v, effects, cm_interface_registry);
-            }
-        }
-        TirStmtKind::LetDestructure { value, .. } => {
-            collect_effect_calls_in_expr(value, effects, cm_interface_registry);
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::TaskReturn { value } => {
-            collect_effect_calls_in_expr(value, effects, cm_interface_registry);
-        }
-        TirStmtKind::VariadicForOf { .. } => {}
-    }
+/// Discovery pass that records every used WASI effect call and resource
+/// method call so [`super::generate_adapters`] synthesizes a binding for
+/// each. Detection fires on `Call` / `MethodCall`; the exhaustive
+/// `TirRefVisitor` walk reaches every other position (closures, `with`
+/// handler bodies, match arms, template interpolations, …) so an effect
+/// call nested anywhere still triggers adapter generation.
+struct EffectCallCollector<'a> {
+    effects: &'a mut IndexSet<String>,
+    cm_interface_registry: &'a CmInterfaceRegistry,
 }
 
-fn collect_effect_calls_in_expr(
-    expr: &TirExpr,
-    effects: &mut IndexSet<String>,
-    cm_interface_registry: &CmInterfaceRegistry,
-) {
-    match &expr.kind {
-        TirExprKind::Call { func, args, .. } => {
-            // Collect effect-like Call nodes (sync WASI calls like Environment::get_arguments)
-            if func.module_source.clone().is_effect_like()
-                && let Some(interface_name) = func.module_source.clone().interface_name()
-            {
-                let method_name = func.name.clone();
-                let qualified = format!("{interface_name}::{method_name}");
-                if cm_interface_registry.get_function(&qualified).is_some() {
-                    effects.insert(qualified);
-                }
-            }
-            // Also check if this is a WASI resource static method call (e.g., Response::new)
-            if func.method_info.is_some() {
-                let func_name = func.name.clone();
-                if cm_interface_registry.get_function(&func_name).is_some() {
-                    effects.insert(func_name);
-                }
-            }
-            for arg in args {
-                collect_effect_calls_in_expr(&arg.expr, effects, cm_interface_registry);
-            }
+impl TirRefVisitor for EffectCallCollector<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        // `TaskReturn` is still present this early (stripped in a later
+        // step); descend into its value without the default walk's guard.
+        if let TirStmtKind::TaskReturn { value } = &stmt.kind {
+            self.visit_expr(value);
+        } else {
+            self.walk_stmt(stmt);
         }
-        TirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_effect_calls_in_expr(arg, effects, cm_interface_registry);
-            }
-        }
-        TirExprKind::MethodCall {
-            receiver,
-            func,
-            args,
-            ..
-        } => {
-            // Check if this is a WASI resource method call
-            if let Some(method_info) = func.method_info.clone() {
-                let qualified = format!(
-                    "{}::{}",
-                    method_info.base_struct_name, method_info.method_name
-                );
-                if cm_interface_registry.get_function(&qualified).is_some() {
-                    effects.insert(qualified);
-                } else if let Some(source) =
-                    cm_interface_registry.find_wasi_newtype_source(&method_info.base_struct_name)
-                    && let Some(Type::Named(resolved)) = cm_interface_registry
-                        .get_newtype_by_source(source, &method_info.base_struct_name)
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::Call { func, .. } => {
+                // Sync WASI effect calls (e.g. `Environment::get_arguments`).
+                if func.module_source.clone().is_effect_like()
+                    && let Some(interface_name) = func.module_source.clone().interface_name()
                 {
-                    // Resolve through type aliases (e.g., Headers -> Fields)
-                    let aliased = format!("{}::{}", resolved.name, method_info.method_name);
-                    if cm_interface_registry.get_function(&aliased).is_some() {
-                        effects.insert(aliased);
+                    let qualified = format!("{interface_name}::{}", func.name);
+                    if self.cm_interface_registry.get_function(&qualified).is_some() {
+                        self.effects.insert(qualified);
+                    }
+                }
+                // WASI resource static method calls (e.g. `Response::new`).
+                if func.method_info.is_some()
+                    && self.cm_interface_registry.get_function(&func.name).is_some()
+                {
+                    self.effects.insert(func.name.clone());
+                }
+            }
+            TirExprKind::MethodCall { func, .. } => {
+                if let Some(method_info) = func.method_info.clone() {
+                    let qualified = format!(
+                        "{}::{}",
+                        method_info.base_struct_name, method_info.method_name
+                    );
+                    if self.cm_interface_registry.get_function(&qualified).is_some() {
+                        self.effects.insert(qualified);
+                    } else if let Some(source) = self
+                        .cm_interface_registry
+                        .find_wasi_newtype_source(&method_info.base_struct_name)
+                        && let Some(Type::Named(resolved)) = self
+                            .cm_interface_registry
+                            .get_newtype_by_source(source, &method_info.base_struct_name)
+                    {
+                        // Resolve through type aliases (e.g. Headers -> Fields).
+                        let aliased = format!("{}::{}", resolved.name, method_info.method_name);
+                        if self.cm_interface_registry.get_function(&aliased).is_some() {
+                            self.effects.insert(aliased);
+                        }
                     }
                 }
             }
-            collect_effect_calls_in_expr(receiver, effects, cm_interface_registry);
-            for arg in args {
-                collect_effect_calls_in_expr(&arg.expr, effects, cm_interface_registry);
-            }
+            _ => {}
         }
-        TirExprKind::IndirectCall { callee, args } => {
-            collect_effect_calls_in_expr(callee, effects, cm_interface_registry);
-            for arg in args {
-                collect_effect_calls_in_expr(arg, effects, cm_interface_registry);
-            }
-        }
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            collect_effect_calls_in_block(block, effects, cm_interface_registry);
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            collect_effect_calls_in_expr(left, effects, cm_interface_registry);
-            collect_effect_calls_in_expr(right, effects, cm_interface_registry);
-        }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. } => {
-            collect_effect_calls_in_expr(inner, effects, cm_interface_registry);
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_effect_calls_in_expr(condition, effects, cm_interface_registry);
-            collect_effect_calls_in_block(then_branch, effects, cm_interface_registry);
-            if let Some(blk) = else_branch {
-                collect_effect_calls_in_block(blk, effects, cm_interface_registry);
-            }
-        }
-        TirExprKind::Index { expr: e, index }
-        | TirExprKind::Assign {
-            target: e,
-            value: index,
-        } => {
-            collect_effect_calls_in_expr(e, effects, cm_interface_registry);
-            collect_effect_calls_in_expr(index, effects, cm_interface_registry);
-        }
-        TirExprKind::Match {
-            expr: scrutinee,
-            arms,
-        } => {
-            collect_effect_calls_in_expr(scrutinee, effects, cm_interface_registry);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    collect_effect_calls_in_expr(guard, effects, cm_interface_registry);
-                }
-                collect_effect_calls_in_expr(&arm.body, effects, cm_interface_registry);
-            }
-        }
-        TirExprKind::Closure { body, .. } => {
-            collect_effect_calls_in_expr(body, effects, cm_interface_registry);
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_effect_calls_in_expr(&field.value, effects, cm_interface_registry);
-            }
-        }
-        TirExprKind::GlobalVarSet { value, .. } => {
-            collect_effect_calls_in_expr(value, effects, cm_interface_registry);
-        }
-        TirExprKind::WithHandler { bindings, body, .. } => {
-            // Walk the handler value and the do-block body so effect calls
-            // reached only from inside `with E => h do { ... }` (which the
-            // effect-dispatch synthesis later routes through wrapper
-            // functions whose else-branch falls back to the CM-binding
-            // adapter) still trigger adapter generation here.
-            for binding in bindings {
-                collect_effect_calls_in_expr(&binding.handler, effects, cm_interface_registry);
-            }
-            collect_effect_calls_in_block(body, effects, cm_interface_registry);
-        }
-        TirExprKind::Resume { value } => {
-            collect_effect_calls_in_expr(value, effects, cm_interface_registry);
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                collect_effect_calls_in_expr(elem, effects, cm_interface_registry);
-            }
-        }
-        TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. } => {
-            collect_effect_calls_in_expr(inner, effects, cm_interface_registry);
-        }
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                collect_effect_calls_in_expr(payload_expr, effects, cm_interface_registry);
-            }
-        }
-        TirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                    collect_effect_calls_in_expr(inner, effects, cm_interface_registry);
-                }
-            }
-        }
-        // Leaf nodes — no sub-expressions. Enumerated explicitly so a new
-        // `TirExprKind` variant added in tir.rs forces this match to be
-        // updated rather than silently no-op'd by a catch-all.
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Local { .. }
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Capture { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
+        self.walk_expr(expr);
     }
 }
