@@ -2570,6 +2570,33 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             )
                         })
                         .collect();
+                    // A generic newtype (`type MyArray<T> = Array<T>`)
+                    // resolves to a `Newtype` over the instantiated base,
+                    // mirroring `type_resolution.rs:418`. Without this it
+                    // falls through to `UNKNOWN`, the newtype's inherited
+                    // base methods (`MyArray<i32>::len` → `Array<i32>::len`)
+                    // never resolve, and monomorphization can't reach them.
+                    if let Some(gn_info) = lookup.generic_newtype(&generic.name).cloned() {
+                        let concrete_base = super::type_resolution::substitute_type_params(
+                            &gn_info.base_type_ast,
+                            &gn_info.type_params,
+                            &generic.args,
+                        );
+                        let base_type_id = Self::resolve_type_static_with_params(
+                            &concrete_base,
+                            type_table,
+                            lookup,
+                            type_params,
+                        );
+                        let arg_names: Vec<String> =
+                            type_args.iter().map(|&t| type_table.type_name(t)).collect();
+                        let display_name = format!("{}<{}>", generic.name, arg_names.join(", "));
+                        return type_table.make_newtype(
+                            display_name,
+                            gn_info.module_source.clone(),
+                            base_type_id,
+                        );
+                    }
                     // A generic resource (`Stream<u8>`, `Future<T>`) must
                     // resolve to a `GenericResource`, not a
                     // `GenericInstance` — otherwise the resource-store

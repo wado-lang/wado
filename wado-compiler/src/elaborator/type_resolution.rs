@@ -12,7 +12,7 @@ use crate::symbol::SymbolKind;
 
 /// Substitute named type parameters in an AST type.
 /// `params[i]` is replaced by `args[i]` throughout the type.
-fn substitute_type_params(ty: &Type, params: &[String], args: &[Type]) -> Type {
+pub(super) fn substitute_type_params(ty: &Type, params: &[String], args: &[Type]) -> Type {
     match ty {
         Type::Named(named) => {
             if let Some(i) = params.iter().position(|p| p == &named.name) {
