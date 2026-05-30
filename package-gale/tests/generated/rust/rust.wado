@@ -7713,6 +7713,13 @@ fn try_at(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn try_underscore(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '_' { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn try_dot(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '.' { return -1; }
@@ -7860,14 +7867,6 @@ fn try_rparen(chars: &Array<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != ')' { return -1; }
     pos += 1;
     return pos;
-}
-
-fn classify_keyword(chars: &Array<char>, start: i32, end: i32) -> i32 {
-    let len = end - start;
-    if len == 1 {
-        if chars[start + 0] == '_' { return TK_UNDERSCORE; }
-    }
-    return -1;
 }
 
 pub fn tokenize(input: &String) -> Array<Token> {
@@ -8268,7 +8267,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_CARET; best_channel = 0; }
             end = try_careteq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_CARETEQ; best_channel = 0; }
-        } else if first_char == '_' || first_char == '\u{2118}' || first_char == '\u{212e}' {
+        } else if first_char == '_' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8279,6 +8278,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; best_channel = 0; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; best_channel = 0; }
+            end = try_underscore(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNDERSCORE; best_channel = 0; }
         } else if first_char == 'a' {
             end = try_kw_as(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_AS; best_channel = 0; }
@@ -8628,6 +8629,17 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; best_channel = 0; }
             end = try_rcurlybrace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_RCURLYBRACE; best_channel = 0; }
+        } else if first_char == '\u{2118}' || first_char == '\u{212e}' {
+            end = try_non_keyword_identifier(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
+            end = try_block_comment_or_doc(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; best_channel = 1; }
+            end = try_shebang(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SHEBANG; best_channel = 1; }
+            end = try_integer_literal(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; best_channel = 0; }
+            end = try_float_literal(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; best_channel = 0; }
         } else if 'A' <= first_char <= 'Z' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
@@ -8863,10 +8875,6 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_DEC_LITERAL; best_channel = 0; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; best_channel = 0; }
-        }
-        if best_end > start {
-            let kw_kind = classify_keyword(&lexer.chars, start, best_end);
-            if kw_kind >= 0 { best_kind = kw_kind; }
         }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
