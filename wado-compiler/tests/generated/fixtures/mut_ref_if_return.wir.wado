@@ -166,7 +166,7 @@ fn "wado-compiler/tests/fixtures/mut_ref_if_return.wado/parse_item"(p) {
     let __qm_v_9: ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token";
     let __qm_e_10: ref "core:prelude/string.wado//String";
     let tok: ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token";
-    kind = index = p.pos; if builtin::unlikely(index >= p.tokens.used) {
+    kind = index = p.pos; if index >= p.tokens.used {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(p.tokens.repr, index).kind;
@@ -211,7 +211,7 @@ fn "wado-compiler/tests/fixtures/mut_ref_if_return.wado/parse_root"(p) {
     let index: i32;
     b4: block {
         l5: loop {
-            if index = p.pos; if builtin::unlikely(index >= p.tokens.used) {
+            if index = p.pos; if index >= p.tokens.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(p.tokens.repr, index).kind != 1 {
@@ -232,9 +232,9 @@ fn "wado-compiler/tests/fixtures/mut_ref_if_return.wado/parse_root"(p) {
     __v0 = p.pos;
     __cond = __v0 == 1;
     if __cond == 0 {
-        "core:internal/panic"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(138), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("parse_root"), used: 10 }); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_ref_if_return.wado"), used: 51 }); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; f_14 = __local_9; "core:prelude/primitive.wado/i32::fmt_decimal"(53, f_14); "core:prelude/string.wado/String::push"(__local_8, 58); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected pos=1, got pos="), used: 24 }); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; self_21 = p.pos; "core:prelude/primitive.wado/i32::fmt_decimal"(self_21, __local_7); __local_6); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:internal/panic"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(138), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("parse_root"), used: 10 }); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/mut_ref_if_return.wado"), used: 51 }); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 }; f_14 = __local_9; "core:prelude/primitive.wado/i32::fmt_decimal"(53, f_14); "core:prelude/string.wado/String::push"(__local_8, 58); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected pos=1, got pos="), used: 24 }); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 }; self_21 = p.pos; "core:prelude/primitive.wado/i32::fmt_decimal"(self_21, __local_7); __local_6); "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: p.pos == 1
-"), used: 23 }); "core:prelude/string.wado/String::push"(__local_8, 112); "core:prelude/string.wado/String::push"(__local_8, 46); "core:prelude/string.wado/String::push"(__local_8, 112); "core:prelude/string.wado/String::push"(__local_8, 111); "core:prelude/string.wado/String::push"(__local_8, 115); "core:prelude/string.wado/String::push"(__local_8, 58); "core:prelude/string.wado/String::push"(__local_8, 32); __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; f_25 = __local_9; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_25); "core:prelude/string.wado/String::push"(__local_8, 10); __local_8);
+"), used: 23 }); "core:prelude/string.wado/String::push"(__local_8, 112); "core:prelude/string.wado/String::push"(__local_8, 46); "core:prelude/string.wado/String::push"(__local_8, 112); "core:prelude/string.wado/String::push"(__local_8, 111); "core:prelude/string.wado/String::push"(__local_8, 115); "core:prelude/string.wado/String::push"(__local_8, 58); "core:prelude/string.wado/String::push"(__local_8, 32); __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 }; f_25 = __local_9; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_25); "core:prelude/string.wado/String::push"(__local_8, 10); __local_8);
         unreachable;
     }
     return 0, 0, ref.null none;
@@ -479,7 +479,7 @@ fn "wado-compiler/tests/fixtures/mut_ref_if_return.wado/Parser::advance"(self) {
     let tok: ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token";
     let index: i32;
     index = self.pos;
-    if builtin::unlikely(index >= self.tokens.used) {
+    if index >= self.tokens.used {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -492,13 +492,13 @@ fn "wado-compiler/tests/fixtures/mut_ref_if_return.wado/Parser::expect"(self, ki
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let index: i32;
-    if index = self.pos; if builtin::unlikely(index >= self.tokens.used) {
+    if index = self.pos; if index >= self.tokens.used {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(self.tokens.repr, index).kind == kind {
         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/mut_ref_if_return.wado/Token,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: ref.as_non_null("wado-compiler/tests/fixtures/mut_ref_if_return.wado/Parser::advance"(self)) };
     }
-    return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/mut_ref_if_return.wado/Token,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: ref.as_non_null(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected "), used: 9 }); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(kind, __local_3); __local_2) };
+    return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/mut_ref_if_return.wado/Token,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: ref.as_non_null(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected "), used: 9 }); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(kind, __local_3); __local_2) };
 }
 
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {

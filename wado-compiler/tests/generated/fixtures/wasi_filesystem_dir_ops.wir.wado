@@ -322,7 +322,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
         return;
     }
-    dir = if builtin::unlikely(0 >= dirs.used) {
+    dir = if 0 >= dirs.used {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).0;
@@ -445,7 +445,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     } else {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_directory: missing test_newdir"), used: 35 });
     }
-    "core:cli/println"(__local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(48), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_directory: total entries = "), used: 32 }); __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_17 }; self_42 = entry_count; "core:prelude/primitive.wado/i32::fmt_decimal"(self_42, __local_18); __local_17);
+    "core:cli/println"(__local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(48), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_directory: total entries = "), used: 32 }); __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 }; self_42 = entry_count; "core:prelude/primitive.wado/i32::fmt_decimal"(self_42, __local_18); __local_17);
     rmdir_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_remove_directory_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 }));
     if ref.is_null(rmdir_result) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("remove_directory_at: succeeded"), used: 30 });

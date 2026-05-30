@@ -72,10 +72,10 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/array_bounds_check_oob_read.wado/run"() {
     let __b_0: ref "core:prelude//Array<i32>";
     __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
-    if builtin::unlikely(1) {
+    block {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }
+    };
     drop(builtin::array_get<i32>(__b_0.repr, 3));
 }
 

@@ -814,6 +814,7 @@ impl ShortCircuitGuard {
 
     /// Check if `check_var >= check_bound` is implied false by this guard.
     fn implies_false(&self, condition: &NirExpr, defs: &DefMap) -> bool {
+        let condition = peel_branch_hint(condition);
         let NirExprKind::Binary { left, op, right } = &condition.kind else {
             return false;
         };
@@ -997,6 +998,7 @@ impl ShortCircuitGuard {
 ///
 /// `(x & MASK) >= BOUND` is false when `MASK >= 0` and `BOUND > MASK`.
 fn is_bitmask_bounded(condition: &NirExpr, defs: &DefMap) -> bool {
+    let condition = peel_branch_hint(condition);
     let NirExprKind::Binary { left, op, right } = &condition.kind else {
         return false;
     };
@@ -1107,6 +1109,7 @@ fn resolve_constant_through_struct(
 ///   `check_var >= check_bound` is false when `check_var` resolves to var
 ///   AND `check_bound` resolves to `limit + 1`.
 fn is_implied_false(condition: &NirExpr, guard: &LoopGuard, defs: &DefMap) -> bool {
+    let condition = peel_branch_hint(condition);
     let NirExprKind::Binary { left, op, right } = &condition.kind else {
         return false;
     };
@@ -1143,6 +1146,22 @@ fn is_implied_false(condition: &NirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
     }
 }
 
+/// Peel a `builtin::likely` / `builtin::unlikely` branch-hint wrapper so the
+/// underlying condition can be analyzed. The hint annotates branch prediction
+/// without changing the condition's value, so a guarded bounds check written as
+/// `if builtin::unlikely(i >= len) { panic }` must be seen through to reach the
+/// `i >= len` comparison.
+fn peel_branch_hint(condition: &NirExpr) -> &NirExpr {
+    if let NirExprKind::Call { func, args, .. } = &condition.kind
+        && args.len() == 1
+        && func.module_source.is_core_builtin()
+        && (func.name == "likely" || func.name == "unlikely")
+    {
+        return peel_branch_hint(&args[0].expr);
+    }
+    condition
+}
+
 /// Check if a condition is implied false by the loop guard OR any dominating guard.
 fn is_implied_false_by_any(
     condition: &NirExpr,
@@ -1171,6 +1190,7 @@ fn is_implied_by_dominating_guard(
     dg: &DominatingGuard,
     defs: &DefMap,
 ) -> bool {
+    let condition = peel_branch_hint(condition);
     let NirExprKind::Binary { left, op, right } = &condition.kind else {
         return false;
     };

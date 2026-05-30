@@ -147,7 +147,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_ref_type"() with Stdout {
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(12, __local_3); __local_2);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(12, __local_3); __local_2);
 }
 
 fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_result_eq"() with Stdout {
@@ -176,7 +176,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_struct_field_bou
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let self_21: i32;
     __b = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(5, 3, 8, 1, 4), used: 5 };
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; self_21 = "wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min"(__b); "core:prelude/primitive.wado/i32::fmt_decimal"(self_21, __local_3); __local_2);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 }; self_21 = "wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min"(__b); "core:prelude/primitive.wado/i32::fmt_decimal"(self_21, __local_3); __local_2);
 }
 
 fn "wado-compiler/tests/fixtures/trait_bound_7.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -552,7 +552,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min"(self) {
     let other: ref "core:prelude/types.wado//Box<i32>";
     let _licm_used_12: i32;
     let _licm_repr_13: ref builtin::array<i32>;
-    if builtin::unlikely(0 >= self.used) {
+    if 0 >= self.used {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -566,10 +566,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min"(self) {
                 break b50;
             }
             if __inline_i32_Ord__cmp_3: block -> "core:prelude/traits.wado//enum:Ordering" {
-                self_8 = struct.new "core:prelude/types.wado//Box<i32>" { value: if builtin::unlikely(i >= _licm_used_12) {
-                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                    unreachable;
-                }; builtin::array_get<i32>(_licm_repr_13, i) };
+                self_8 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(_licm_repr_13, i) };
                 other = struct.new "core:prelude/types.wado//Box<i32>" { value: m };
                 if self_8.value < m {
                     break __inline_i32_Ord__cmp_3: 0;
@@ -579,10 +576,6 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min"(self) {
                 }
                 break __inline_i32_Ord__cmp_3: 1;
             } == 0 {
-                if builtin::unlikely(i >= _licm_used_12) {
-                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                    unreachable;
-                }
                 m = builtin::array_get<i32>(_licm_repr_13, i);
             }
             i = i + 1;

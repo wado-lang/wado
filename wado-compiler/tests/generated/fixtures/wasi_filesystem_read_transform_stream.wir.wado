@@ -237,10 +237,6 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/to_u
             if i >= _licm_used_11 {
                 break b0;
             }
-            if builtin::unlikely(i >= _licm_used_11) {
-                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                unreachable;
-            }
             b = builtin::array_get<u8>(_licm_repr_12, i);
             if (if b >=u 97 -> i32 {
                 b <=u 122;
@@ -272,7 +268,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/run"
     if dirs.used == 0 {
         return;
     }
-    dir = if builtin::unlikely(0 >= dirs.used) {
+    dir = if 0 >= dirs.used {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).0;
@@ -288,14 +284,14 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/run"
         let __mv_hi_1: i32;
         multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
         subtask = "wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/__cm_binding__Stdout_write_via_stream"(__mv_lo_1);
-        b9: block {
-            l10: loop {
+        b8: block {
+            l9: loop {
                 chunk = "core:internal/cm_stream_read_u8"(file_rx, 4096);
                 if chunk.used == 0 {
-                    break b9;
+                    break b8;
                 }
                 "core:internal/cm_stream_write_u8"(__mv_hi_1, "wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/to_upper"(chunk));
-                continue l10;
+                continue l9;
             };
         };
         "wasi/stream-drop-readable"(file_rx);
@@ -330,10 +326,10 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/__cm
     __count = builtin::load_i32(__outptr + 4);
     __result = struct.new "core:prelude//Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[Descriptor, String]">(__count), used: 0 };
     __i = 0;
-    b12: block {
-        l13: loop {
+    b11: block {
+        l12: loop {
             if __i >= __count {
-                break b12;
+                break b11;
             }
             __elem_addr = __base + (__i * 12);
             __lifted_result_6 = builtin::load_i32(__elem_addr + 0);
@@ -344,7 +340,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/__cm
             "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::push"(__result, struct.new "tuple//[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
-            continue l13;
+            continue l12;
         };
     };
     if __count > 0 {
@@ -497,14 +493,14 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     let i: i32;
     arr = builtin::array_new<u8>(len);
     i = 0;
-    b54: block {
-        l55: loop {
+    b53: block {
+        l54: loop {
             if i >= len {
-                break b54;
+                break b53;
             }
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
-            continue l55;
+            continue l54;
         };
     };
     return arr;
@@ -513,14 +509,14 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b57: block {
-        l58: loop {
+    b56: block {
+        l57: loop {
             if i >= len {
-                break b57;
+                break b56;
             }
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l58;
+            continue l57;
         };
     };
 }
@@ -672,16 +668,16 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesy
     if handle_1 != 0 {
         ws_3 = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle_1, ws_3);
-        b66: block {
-            l67: loop {
+        b65: block {
+            l66: loop {
                 let event_mv_code: i32;
                 let event_mv_handle: i32;
                 let event_mv_payload: u32;
                 multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:internal/cm_waitable_set_wait"(ws_3);
                 if event_mv_payload == 2 {
-                    break b66;
+                    break b65;
                 }
-                continue l67;
+                continue l66;
             };
         };
         "wasi/subtask-drop"(handle_1);

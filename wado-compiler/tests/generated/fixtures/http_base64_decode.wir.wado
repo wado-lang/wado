@@ -520,7 +520,7 @@ fn "wado-compiler/tests/fixtures/http_base64_decode.wado/handle"(request) {
         0;
     });
     if __cond == 0 {
-        "core:internal/panic"(__local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_13, 104); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 110); "core:prelude/string.wado/String::push"(__local_13, 100); "core:prelude/string.wado/String::push"(__local_13, 108); "core:prelude/string.wado/String::push"(__local_13, 101); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 116); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_base64_decode.wado"), used: 52 }); "core:prelude/string.wado/String::push"(__local_13, 58); __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_13 }; "core:prelude/primitive.wado/i32::fmt_decimal"(7, __local_14); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:internal/panic"(__local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_13, 104); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 110); "core:prelude/string.wado/String::push"(__local_13, 100); "core:prelude/string.wado/String::push"(__local_13, 108); "core:prelude/string.wado/String::push"(__local_13, 101); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 116); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_base64_decode.wado"), used: 52 }); "core:prelude/string.wado/String::push"(__local_13, 58); __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 }; "core:prelude/primitive.wado/i32::fmt_decimal"(7, __local_14); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: result matches { Some(bytes) && bytes.len() == 3 }
 "), used: 63 }); __local_13);
         unreachable;
@@ -951,7 +951,7 @@ fn "core:base64/build_decode_table"() {
             }
             index_8 = 65 + i_1;
             value_9 = i_1 & 255;
-            if builtin::unlikely(index_8 >= _licm_used_31) {
+            if index_8 >= _licm_used_31 {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
@@ -970,7 +970,7 @@ fn "core:base64/build_decode_table"() {
             }
             index_11 = 97 + i_2;
             value_12 = (26 + i_2) & 255;
-            if builtin::unlikely(index_11 >= _licm_used_33) {
+            if index_11 >= _licm_used_33 {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
@@ -989,7 +989,7 @@ fn "core:base64/build_decode_table"() {
             }
             index_14 = 48 + i_3;
             value_15 = (52 + i_3) & 255;
-            if builtin::unlikely(index_14 >= _licm_used_35) {
+            if index_14 >= _licm_used_35 {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
@@ -998,30 +998,20 @@ fn "core:base64/build_decode_table"() {
             continue l77;
         };
     };
-    if builtin::unlikely(0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    }
+    block {
+    };
     builtin::array_set_u8(table.repr, 43, 62);
-    if builtin::unlikely(0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    }
+    block {
+    };
     builtin::array_set_u8(table.repr, 47, 63);
-    if builtin::unlikely(0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    }
+    block {
+    };
     builtin::array_set_u8(table.repr, 45, 62);
-    if builtin::unlikely(0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    }
+    block {
+    };
     builtin::array_set_u8(table.repr, 95, 63);
-    if builtin::unlikely(0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    }
+    block {
+    };
     builtin::array_set_u8(table.repr, 61, 254);
     return table;
 }
@@ -1071,7 +1061,7 @@ fn "core:base64/decode_impl"(input, input_len) {
     b85: block {
         l86: loop {
             if (if end > 0 -> i32 {
-                index_19 = end - 1; if builtin::unlikely(index_19 >= _licm_used_58) {
+                index_19 = end - 1; if index_19 >= _licm_used_58 {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<u8>(_licm_repr_59, index_19) == 61;
@@ -1108,44 +1098,44 @@ fn "core:base64/decode_impl"(input, input_len) {
             if __cse_57 >= end {
                 break b93;
             }
-            if builtin::unlikely(i >= _licm_used_60) {
+            if i >= _licm_used_60 {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             index_24 = builtin::array_get<u8>(_licm_repr_61, i);
-            if builtin::unlikely(index_24 >= _licm_used_62) {
+            if index_24 >= _licm_used_62 {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             v0_9 = builtin::array_get<u8>(_licm_repr_63, index_24);
             index_26 = i + 1;
-            if builtin::unlikely(index_26 >= _licm_used_60) {
+            if index_26 >= _licm_used_60 {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             index_28 = builtin::array_get<u8>(_licm_repr_61, index_26);
-            if builtin::unlikely(index_28 >= _licm_used_62) {
+            if index_28 >= _licm_used_62 {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             v1_10 = builtin::array_get<u8>(_licm_repr_63, index_28);
             index_30 = i + 2;
-            if builtin::unlikely(index_30 >= _licm_used_60) {
+            if index_30 >= _licm_used_60 {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             index_32 = builtin::array_get<u8>(_licm_repr_61, index_30);
-            if builtin::unlikely(index_32 >= _licm_used_62) {
+            if index_32 >= _licm_used_62 {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             v2_11 = builtin::array_get<u8>(_licm_repr_63, index_32);
-            if builtin::unlikely(__cse_57 >= _licm_used_60) {
+            if __cse_57 >= _licm_used_60 {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             index_36 = builtin::array_get<u8>(_licm_repr_61, __cse_57);
-            if builtin::unlikely(index_36 >= _licm_used_62) {
+            if index_36 >= _licm_used_62 {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
@@ -1173,23 +1163,23 @@ fn "core:base64/decode_impl"(input, input_len) {
         };
     };
     if remainder == 2 {
-        if builtin::unlikely(i >= input.used) {
+        if i >= input.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         index_40 = builtin::array_get<u8>(input.repr, i);
-        if builtin::unlikely(index_40 >= table.used) {
+        if index_40 >= table.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         v0_13 = builtin::array_get<u8>(table.repr, index_40);
         index_42 = i + 1;
-        if builtin::unlikely(index_42 >= input.used) {
+        if index_42 >= input.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         index_44 = builtin::array_get<u8>(input.repr, index_42);
-        if builtin::unlikely(index_44 >= table.used) {
+        if index_44 >= table.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
@@ -1203,34 +1193,34 @@ fn "core:base64/decode_impl"(input, input_len) {
         }
         "core:prelude/array.wado/Array<u8>::push"(out, ((v0_13 << 2) | (v1_14 >> 4)) & 255);
     } else if remainder == 3 {
-        if builtin::unlikely(i >= input.used) {
+        if i >= input.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         index_48 = builtin::array_get<u8>(input.repr, i);
-        if builtin::unlikely(index_48 >= table.used) {
+        if index_48 >= table.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         v0_15 = builtin::array_get<u8>(table.repr, index_48);
         index_50 = i + 1;
-        if builtin::unlikely(index_50 >= input.used) {
+        if index_50 >= input.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         index_52 = builtin::array_get<u8>(input.repr, index_50);
-        if builtin::unlikely(index_52 >= table.used) {
+        if index_52 >= table.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         v1_16 = builtin::array_get<u8>(table.repr, index_52);
         index_54 = i + 2;
-        if builtin::unlikely(index_54 >= input.used) {
+        if index_54 >= input.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         index_56 = builtin::array_get<u8>(input.repr, index_54);
-        if builtin::unlikely(index_56 >= table.used) {
+        if index_56 >= table.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
