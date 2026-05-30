@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2578 / 2664 fixtures passing under
+      suite reaches **2579 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 86 remaining failures are all reify-specific). The
+      so the 85 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -727,8 +727,8 @@ Landed:
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2578
-/ 2664** under `WADO_REIFY=1`; 86 reify-specific failures across ~49
+Largest first, by fixture-name prefix (after the landings above). **2579
+/ 2664** under `WADO_REIFY=1`; 85 reify-specific failures across 50
 unique fixtures remain:
 
 - **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
