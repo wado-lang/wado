@@ -29,6 +29,7 @@ use {
     DeserializeMap,
     DeserializeStruct,
     DeserializeVariant,
+    FieldSchema,
     SerializeError,
     SerializeErrorKind,
     DeserializeError,
@@ -381,7 +382,10 @@ impl DeserializeMap for NsdMapAccess {
 }
 
 impl DeserializeStruct for NsdStructAccess {
-    fn next_field(&mut self) -> Result<Option<i32>, DeserializeError> {
+    // NSD is positional: the field schema `S` is irrelevant here. It stays in
+    // the signature to satisfy the `DeserializeStruct` trait; the same generated
+    // `next_field::<T>()` call site drives both SD and NSD formats.
+    fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
         self.de.skip_whitespace();
         if self.de.pos >= self.de.input.len() {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
@@ -524,7 +528,7 @@ impl Deserializer for NsdDeserializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<NsdStructAccess, DeserializeError> with stores[self] {
+    fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<NsdStructAccess, DeserializeError> with stores[self] {
         // NSD: struct encoded as array
         let r = self.de.expect_char('[' as i32);
         if let Err(e) = r {

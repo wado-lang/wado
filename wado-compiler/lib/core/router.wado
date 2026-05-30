@@ -32,6 +32,7 @@ use {
     DeserializeMap,
     DeserializeStruct,
     DeserializeVariant,
+    FieldSchema,
     Visitor,
 } from "core:serde";
 pub use { Method } from "wasi:http";
@@ -813,7 +814,6 @@ struct PathParamsDeserializer {
 
 struct PathParamsStructAccess {
     de: PathParamsDeserializer,
-    lookup: fn mut(&String, i32, i32) -> Option<i32>,
 }
 
 impl Deserializer for PathParamsDeserializer {
@@ -916,7 +916,7 @@ impl Deserializer for PathParamsDeserializer {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a map", -1));
     }
 
-    fn begin_struct(&mut self, _name: &String, _num_fields: i32, lookup: fn mut(&String, i32, i32) -> Option<i32>) -> Result<PathParamsStructAccess, DeserializeError> with stores[self] {
+    fn begin_struct(&mut self, _name: &String, _num_fields: i32) -> Result<PathParamsStructAccess, DeserializeError> with stores[self] {
         // Nested structs are unsupported: `PathParams` is a flat key/value
         // surface, so a nested `begin_struct` (cursor != 0) means a field
         // typed as another struct asked us to descend into it. Refuse loudly
@@ -927,7 +927,7 @@ impl Deserializer for PathParamsDeserializer {
                 -1,
             ));
         }
-        return Result::Ok(PathParamsStructAccess { de: *self, lookup });
+        return Result::Ok(PathParamsStructAccess { de: *self });
     }
 
     fn begin_variant(&mut self, _type_name: &String, _num_cases: i32) -> Result<PathParamsVariantStub, DeserializeError> with stores[self] {
@@ -1003,13 +1003,13 @@ impl PathParamsDeserializer {
 }
 
 impl DeserializeStruct for PathParamsStructAccess {
-    fn next_field(&mut self) -> Result<Option<i32>, DeserializeError> {
+    fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
         if self.de.cursor >= self.de.src.names.len() {
             return Result::Ok(null);
         }
         let name = &self.de.src.names[self.de.cursor];
         self.de.cursor += 1;
-        let idx = match (self.lookup)(name, 0, name.len()) {
+        let idx = match S::lookup(name, 0, name.len()) {
             Some(v) => v,
             None => -1,
         };

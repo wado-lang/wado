@@ -151,9 +151,24 @@ impl Deserialize for Config;
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
+### `pub trait FieldSchema`
+
+Static, per-type, format-agnostic field-name → index mapping.
+
+The struct-deserialize synthesiser implements `FieldSchema` for every
+deserializable struct, generating a `lookup` that byte-compares
+`input[start..end]` against the wire-form field names. Self-describing
+formats invoke it from `DeserializeStruct::next_field`; non-self-describing
+formats ignore the schema and stay positional.
+
+`lookup` is a static method resolved at monomorphization, so the call is
+direct and inlinable — no closure value, no per-decode allocation.
+
+#### `fn lookup(input: &String, start: i32, end: i32) -> Option<i32>`
+
 ### `pub trait DeserializeStruct`
 
-#### `fn next_field(&mut self) -> Result<Option<i32>, DeserializeError>`
+#### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
 
 #### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
 
@@ -217,7 +232,7 @@ impl Deserialize for Config;
 
 #### `fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError>`
 
-#### `fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn mut(&String, i32, i32) -> Option<i32>) -> Result<Self::StructAccess, DeserializeError>`
+#### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<Self::StructAccess, DeserializeError>`
 
 #### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>`
 

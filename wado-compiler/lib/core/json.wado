@@ -23,6 +23,7 @@ use {
     DeserializeMap,
     DeserializeStruct,
     DeserializeVariant,
+    FieldSchema,
     SerializeError,
     SerializeErrorKind,
     DeserializeError,
@@ -1583,7 +1584,6 @@ struct JsonMapAccess {
 
 struct JsonStructAccess {
     de: &mut JsonDeserializer,
-    lookup: fn mut(&String, i32, i32) -> Option<i32>,
     first: bool,
 }
 
@@ -1649,7 +1649,7 @@ impl DeserializeMap for JsonMapAccess {
 }
 
 impl DeserializeStruct for JsonStructAccess {
-    fn next_field(&mut self) -> Result<Option<i32>, DeserializeError> {
+    fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
         self.de.skip_whitespace();
         if builtin::unlikely(self.de.pos >= self.de.input.len()) {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
@@ -1704,7 +1704,7 @@ impl DeserializeStruct for JsonStructAccess {
             } else {
                 self.de.expect_char(':' as i32)?;
             }
-            let idx = match (self.lookup)(&self.de.input, key_start, key_end) {
+            let idx = match S::lookup(&self.de.input, key_start, key_end) {
                 Some(i) => i,
                 None => -1,
             };
@@ -1716,7 +1716,7 @@ impl DeserializeStruct for JsonStructAccess {
         self.de.pos = key_start - 1;
         let key = self.de.read_json_string()?;
         self.de.expect_char(':' as i32)?;
-        let idx = match (self.lookup)(&key, 0, key.len()) {
+        let idx = match S::lookup(&key, 0, key.len()) {
             Some(i) => i,
             None => -1,
         };
@@ -1989,11 +1989,10 @@ impl Deserializer for JsonDeserializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn mut(&String, i32, i32) -> Option<i32>) -> Result<JsonStructAccess, DeserializeError> with stores[self] {
+    fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<JsonStructAccess, DeserializeError> with stores[self] {
         self.expect_char('{' as i32)?;
         return Result::Ok(JsonStructAccess {
             de: self,
-            lookup,
             first: true,
         });
     }
