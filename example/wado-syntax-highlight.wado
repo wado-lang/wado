@@ -1,0 +1,82 @@
+//! Syntax-highlighting driver for Wado source.
+//!
+//! The inline `with { generator: { ... } }` clause runs Gale (the
+//! ANTLR4-compatible parser generator in `package-gale`) over `./Wado.g4`
+//! at compile time, and the loader redirect rewrites the
+//! `use wado from "./Wado.g4"` import to the freshly generated parser
+//! module. We then read a `.wado` file given on the command line, parse it
+//! to confirm the grammar accepts it, and print a syntax-highlighted HTML
+//! rendering to stdout.
+//!
+//! Run it against the bundled hello-world example:
+//!
+//! ```sh
+//! wado run example/wado-syntax-highlight.wado example/hello.wado
+//! ```
+
+use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+
+use wado from "./Wado.g4"
+    with {
+        generator: {
+            module: "../package-gale/src/generator.wado",
+            options: { highlight: true },
+            output_dir: "build/wado-highlight",
+        },
+    };
+
+export fn run() with Stdout, Stderr, Environment, Preopens {
+    let arguments = args();
+    if arguments.len() < 1 {
+        eprintln("Usage: wado-syntax-highlight <input.wado>");
+        return;
+    }
+    let path = arguments[0];
+
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("error: no preopened directories available");
+        return;
+    }
+    let root = dirs[0].0;
+
+    let open_result = root.open_at(
+        PathFlags::none(),
+        path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ).wait();
+    if let Err(_) = open_result {
+        eprintln(`error: {path}: cannot open file`);
+        return;
+    }
+    let file = open_result.unwrap();
+    let input = String::from_utf8_unchecked(read_all(&file));
+
+    // Parse first so a grammar gap surfaces as a clear error rather than
+    // silently falling back to token-only highlighting.
+    match wado::parse(&input) {
+        Ok(_) => {
+            eprintln(`{path}: parsed OK`);
+            print(wado::highlight(&input));
+        },
+        Err(e) => eprintln(`{path}: parse error: {e.message}`),
+    }
+}
+
+fn read_all(file: &Descriptor) -> Array<u8> {
+    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut result: Array<u8> = [];
+    loop {
+        let chunk = read_stream.read(65536);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let b of chunk {
+            result.push(b);
+        }
+    }
+    read_stream.drop();
+    return result;
+}
