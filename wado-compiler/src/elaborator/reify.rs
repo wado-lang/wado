@@ -7027,20 +7027,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source,
                     type_args,
                 } => (name, Some(module_source), type_args),
+                // Peel references and newtypes and recurse, mirroring the
+                // elaborator's `lookup_field_type` (expr.rs:1500): `&Point`,
+                // `&mut Point`, a newtype `Location = Point`, and chained
+                // newtypes / `&Location` all resolve their fields against the
+                // ultimate underlying struct. Without the `Newtype` arm a
+                // `loc: Location` receiver fell to the fallback and every field
+                // reified with `field_index = 0`, which `nir/sroa` later keys
+                // on to alias `.y` onto the `.x` scalar local.
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    match self.tysys.type_table.borrow().get(inner).clone() {
-                        ResolvedType::Struct {
-                            name,
-                            module_source,
-                            ..
-                        } => (name, Some(module_source), vec![]),
-                        ResolvedType::GenericInstance {
-                            name,
-                            module_source,
-                            type_args,
-                        } => (name, Some(module_source), type_args),
-                        _ => return (0, field_name.to_string(), None),
-                    }
+                    return self.lookup_struct_field_index(inner, field_name);
+                }
+                ResolvedType::Newtype { base_type, .. } => {
+                    return self.lookup_struct_field_index(base_type, field_name);
                 }
                 _ => return (0, field_name.to_string(), None),
             };

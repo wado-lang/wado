@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2635 / 2678 fixtures passing under
+      suite reaches **2653 / 2678 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2678/2678,
-      so the 28 remaining unique failures are all reify-specific;
+      so the 25 remaining unique failures are all reify-specific;
       count as of the 2026-05-30 `origin/main` merge). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
@@ -852,17 +852,34 @@ Landed:
     on a non-reference primitive local, the receiver local is inserted into
     `address_taken_locals`. Fixes bug_store_load_forward_mut_method_receiver;
     production unaffected.
+41. **Peel references and newtypes in reify's field-index lookup (2635 →
+    2638).** `lookup_struct_field_index` (reify's field-access index resolver,
+    reify.rs:7006) matched only `Struct` / `GenericInstance` / `Ref` / `MutRef`
+    receivers and fell to a `(0, field_name, None)` fallback for everything
+    else. A field access on a newtype receiver (`loc.y` where
+    `loc: Location` and `type Location = Point`) hit the fallback and reified
+    every field with `field_index = 0`. The text dumps stayed identical
+    (`nir_unparse` prints `FieldAccess` by name and drops the index) and
+    `-O0` masked it, but `nir/sroa` keys per-field scalar locals on
+    `(local, field_index)` (sroa.rs:1163), so `.y` aliased onto the `.x`
+    scalar local — `clone: (10, 20)` became `clone: (10, 10)` at `-O2`.
+    `lookup_struct_field_index` now recurses through `Ref` / `MutRef` and a new
+    `Newtype` arm (peeling to `base_type`), mirroring the elaborator's
+    `lookup_field_type` newtype arm (expr.rs:1500); this also covers chained
+    newtypes and `&Location`. Clears the newtype `-O2` cluster
+    (newtype_return_type, newtype_chained_method, newtype_method_inheritance);
+    production unaffected (the helper is reify-only).
 
 #### Re-triaged remaining clusters
 
-Largest first, grouped by cluster. **2635 / 2678** passing under
+Largest first, grouped by cluster. **2638 / 2678** passing under
 `WADO_REIFY=1` (fresh full-suite scan on 2026-05-30, after merging
-`origin/main`; every fixture `main` added passes under reify). **28 unique
-fixtures fail** — 15 at `-O0` (also `-O2`), 13 only at `-O2`. The localized
+`origin/main`; every fixture `main` added passes under reify). **25 unique
+fixtures fail** — 15 at `-O0` (also `-O2`), 10 only at `-O2`. The localized
 "missing annotation channel" gaps are gone; each remaining cluster is
 feature-level work, not a one-line replay fix.
 
-##### O2-only — optimizer / `TypeId`-identity divergence (13)
+##### O2-only — optimizer / `TypeId`-identity divergence (10)
 
 Pass at `-O0`, fail only at `-O2`: the reified TIR is behaviourally correct
 but some sub-node carries a `TypeId` that prints the same yet interns
@@ -871,8 +888,6 @@ diverges and trips WIR validation. Diff with
 `WADO_REIFY=1 wado dump --nir -O2 fixture.wado` vs the same without the env
 var; the first node whose type differs is the cut point.
 
-- `newtype_chained_method`, `newtype_method_inheritance`,
-  `newtype_return_type` — newtype method values through `-O2`.
 - `tuple_1`, `tuple_literal_expected_type_in_branch`,
   `opt_container_sroa_tuple` — tuple field / SROA identity.
 - `tuple_name_collision`, `tuple_name_collision_2` — a user-defined
@@ -916,18 +931,19 @@ reify (see `wep-2026-03-14-variadic-type-parameters.md`).
 
 ##### Where to start next
 
-Highest leverage: the **O2-only `TypeId`-identity cluster** (13 fixtures,
-likely a small number of shared root causes). Start with the smallest —
-`newtype_return_type` — `dump --nir -O2` reify vs production, find the first
-differing-`TypeId` node, and trace back to where reify interns it. The
-`#### Recipe for adding a new reify gap`, `#### Gotchas`, and `#### Endgame`
-below still apply unchanged.
+Highest leverage: the **O2-only `TypeId`-identity cluster** (10 fixtures,
+likely a small number of shared root causes). The newtype sub-cluster is
+cleared (landing #41); the remaining shape is the tuple SROA-identity
+fixtures. Start with the smallest — `tuple_1` — `dump --nir -O2` reify vs
+production, find the first differing-`TypeId` node, and trace back to where
+reify interns it. The `#### Recipe for adding a new reify gap`,
+`#### Gotchas`, and `#### Endgame` below still apply unchanged.
 
 ### Stage 5 handover
 
 The recording half is complete: every landed gap has an annotation channel
 on `sem.types` and reify consumes it. What remains is per-shape parity for
-the 28 clusters above (mostly `-O2` `TypeId` identity + variadic/tuple
+the 25 fixtures above (mostly `-O2` `TypeId` identity + variadic/tuple
 expansion), then the final orchestration cut (`#### Endgame`).
 
 #### Gotchas seen in this session — read before continuing
