@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2664 / 2678 fixtures passing under
+      suite reaches **2666 / 2678 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2678/2678,
-      so the 7 remaining unique failures are all reify-specific;
+      so the 6 remaining unique failures are all reify-specific;
       count as of the 2026-05-30 `origin/main` merge). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
@@ -956,12 +956,28 @@ Landed:
     explicit `needs_deref` flag (true only at the `Index` site); reify reads
     it. Clears trait_bound_1. Production unaffected (only reify consumes the
     flag).
+48. **Recover re-exported decl field types in reify_struct (2664 → 2666).** A
+    struct field typed by a `pub use`-re-exported decl reified as `unknown`.
+    `reify_struct` reads field types from `all_struct_fields`, populated by the
+    static decl-field resolver (`resolve_type_static` → `TypeLookup`), which
+    cannot follow `pub use` chains (`TypeLookup` has no `loaded_modules`).
+    `Mark = u64` is defined in `wasi:clocks/monotonic_clock.wado` and `use`d
+    from `wasi:clocks` (one re-export hop), so `FixedClock.mark` landed
+    `unknown`; codegen then failed `expected i32, found i64`. Production has the
+    same `unknown` in `all_struct_fields` but masks it by re-resolving each
+    field via the instance resolver `resolve_named_type` (type_resolution.rs:254)
+    at emission. Added `TypeTable::find_unique_decl_type_by_name` (scans
+    interned enum / resource / flags / variant / newtype decls by name, returns
+    the id only when unambiguous so a cross-module collision never picks wrong)
+    and call it in `reify_struct` for a bare imported `Named` field whose
+    snapshot type is `UNKNOWN`. Clears effect_handler_with_do; production
+    unaffected.
 
 #### Re-triaged remaining clusters
 
-Largest first, grouped by cluster. **2664 / 2678** passing under
+Largest first, grouped by cluster. **2666 / 2678** passing under
 `WADO_REIFY=1` (fresh full-suite scan on 2026-05-30, after merging
-`origin/main`; every fixture `main` added passes under reify). **7 unique
+`origin/main`; every fixture `main` added passes under reify). **6 unique
 fixtures fail**, all at `-O0` and `-O2`. The localized "missing annotation
 channel" gaps are gone; the `-O2`-only `TypeId`-identity cluster (landings
 #41 / #42) and the entire variadic type-pack cluster (landings #43–#45) are

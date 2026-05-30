@@ -720,7 +720,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `tysys.all_struct_fields`. Snapshot the per-field types into
         // an owned `Vec` so the borrow on `self.tysys` ends here —
         // the field-default reify below mutably borrows `self`.
-        let field_types: Vec<TypeId> = {
+        let mut field_types: Vec<TypeId> = {
             let field_info = self
                 .tysys
                 .all_struct_fields
@@ -734,6 +734,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 })
                 .collect()
         };
+
+        // The static decl-field pass (`resolve_type_static` → `TypeLookup`
+        // without `loaded_modules`) cannot follow `pub use` re-export chains,
+        // so a field typed by a re-exported decl (e.g. `Mark = u64` re-exported
+        // from `wasi:clocks`) lands `UNKNOWN`. Reify's own [`Self::resolve_type`]
+        // carries `loaded_modules`, so re-resolving the field's AST annotation
+        // recovers the real type. Production masks the same `UNKNOWN` by
+        // re-resolving through the instance resolver at emission time.
+        for (index, field) in struct_decl.fields.iter().enumerate() {
+            if field_types[index] == crate::tir::TypeTable::UNKNOWN {
+                field_types[index] = self.resolve_type(&field.ty);
+            }
+        }
 
         // Field-default expressions resolve in a per-struct
         // `FunctionContext` keyed `struct:<name>` (no self, no other
