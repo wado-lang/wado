@@ -173,15 +173,7 @@ fn "wado-compiler/tests/fixtures/array_bounds.wado/array_bounds_elim_redundant"(
             if i >= _licm_used_43 {
                 break b5;
             }
-            if builtin::unlikely(i >= _licm_used_43) {
-                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                unreachable;
-            }
             a = builtin::array_get<i32>(_licm_repr_44, i);
-            if builtin::unlikely(i >= _licm_used_43) {
-                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                unreachable;
-            }
             b = builtin::array_get<i32>(_licm_repr_44, i);
             sum = sum + (a + b);
             i = i + 1;
@@ -241,14 +233,14 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b12: block {
-        l13: loop {
+    b10: block {
+        l11: loop {
             if i >= len {
-                break b12;
+                break b10;
             }
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l13;
+            continue l11;
         };
     };
 }
@@ -331,14 +323,14 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b18: block {
-        l19: loop {
+    b16: block {
+        l17: loop {
             if t <= 0_i64 {
-                break b18;
+                break b16;
             }
             n = n + 1;
             t = t / 10_i64;
-            continue l19;
+            continue l17;
         };
     };
     return n;
@@ -352,15 +344,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b22: block {
-            l23: loop {
+        b20: block {
+            l21: loop {
                 if temp <= 0_i64 {
-                    break b22;
+                    break b20;
                 }
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l23;
+                continue l21;
             };
         };
     }
@@ -454,14 +446,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b33: block {
-        l34: loop {
+    b31: block {
+        l32: loop {
             if i >= n {
-                break b33;
+                break b31;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l34;
+            continue l32;
         };
     };
 }

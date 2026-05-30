@@ -3577,14 +3577,22 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
         (1 - p1);
     };
     let total_digits: i32 = (decimal_pos + precision);
+    if (total_digits <= 0) {
+        if (total_digits < 0) {
+            return FormatResult { digits: 0, exponent: -precision };
+        }
+        let p: i32 = -log10_e63;
+        let lp: i32 = "core::prelude/fpfmt.wado::log2_pow10"(p);
+        let pm: PmHiLo = "core::prelude/fpfmt.wado::get_pow10"(p);
+        let s: i32 = -((e + lp) + 3);
+        let u: u64 = "core::prelude/fpfmt.wado::uscale"(m, pm.hi, pm.lo, s);
+        let d: u64 = "core::prelude/fpfmt.wado::unrounded_round"("core::prelude/fpfmt.wado::unrounded_div"(u, "core::prelude/fpfmt.wado::pow10"((p - precision))));
+        return FormatResult { digits: d, exponent: -precision };
+    }
     let n: i32 = if (total_digits > 18) {
         18;
     } else {
-        if (total_digits < 1) {
-            1;
-        } else {
-            total_digits;
-        };
+        total_digits;
     };
     let p: i32 = ((n - 1) - log10_e63);
     let lp: i32 = "core::prelude/fpfmt.wado::log2_pow10"(p);
@@ -3861,6 +3869,10 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
     let decimal_pos: i32 = (nd + p);
     if (decimal_pos <= 0) {
         let leading_zeros: i32 = -decimal_pos;
+        if (precision == 0) {
+            buf.String::push_str(&"0");
+            return;
+        }
         buf.String::push_str(&"0.");
         if (precision <= leading_zeros) {
             "core::prelude/fpfmt.wado::fill_zeros"(buf, precision);

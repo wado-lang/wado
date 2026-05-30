@@ -330,16 +330,41 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let s1 = -(e + lp1 + 3);
     let u1 = uscale(m, pm1.hi, pm1.lo, s1);
     let d1_floor = unrounded_floor(u1);
+    // log10_pow2 underestimates floor(log10(f)) by one exactly when the
+    // one-digit floor reaches 10, in which case the decimal position is one
+    // larger than the first estimate.
     let decimal_pos = if d1_floor >= 10 { 2 - p1 } else { 1 - p1 };
 
     // Phase 2: Compute fixed_width(f, n) reusing the unpacked mantissa and exponent.
     // Use decimal_pos directly: for numbers < 1.0 (decimal_pos <= 0), the leading "0."
     // is not a significant digit, so we need exactly (decimal_pos + precision) digits.
     let total_digits = decimal_pos + precision;
+
+    if total_digits <= 0 {
+        // f lies below the last printed place (10^-precision), so it rounds to
+        // either 0 or a single 1 in that place. total_digits < 0 means
+        // f < 0.5 * 10^-precision, which always rounds down to zero.
+        if total_digits < 0 {
+            return FormatResult { digits: 0, exponent: -precision };
+        }
+        // total_digits == 0: f is in [10^(-precision-1), 10^-precision), one
+        // decade below the last printed place. Scale for a single significant
+        // digit (p = -log10_e63, which fpfmt keeps well-conditioned for any
+        // magnitude — unlike scaling for 0 digits, where the shift would reach
+        // 64), then divide down to the 10^-precision place and round to nearest.
+        // The gap p - precision is 1, or 2 when log10_pow2 underestimated the
+        // exponent. The result is 0 or 1.
+        let p = -log10_e63;
+        let lp = log2_pow10(p);
+        let pm = get_pow10(p);
+        let s = -(e + lp + 3);
+        let u = uscale(m, pm.hi, pm.lo, s);
+        let d = unrounded_round(unrounded_div(u, pow10(p - precision)));
+        return FormatResult { digits: d, exponent: -precision };
+    }
+
     let n = if total_digits > 18 {
         18;
-    } else if total_digits < 1 {
-        1;
     } else {
         total_digits;
     };
@@ -653,6 +678,12 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
 
     if decimal_pos <= 0 {
         let leading_zeros = -decimal_pos;
+        // value < 1, so the integer part is "0"; with no precision there is no
+        // fractional part and hence no decimal point (e.g. `{0.4:.0f}` -> "0").
+        if precision == 0 {
+            buf.push_str(&"0");
+            return;
+        }
         buf.push_str(&"0.");
         if precision <= leading_zeros {
             fill_zeros(buf, precision);

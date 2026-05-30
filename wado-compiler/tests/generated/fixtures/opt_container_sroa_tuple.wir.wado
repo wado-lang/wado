@@ -170,10 +170,7 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_tuple.wado/build_and_sum_pus
             if i >= _licm_used_13 {
                 break b2;
             }
-            sum = sum + (if builtin::unlikely(i >= _licm_used_13) {
-                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                unreachable;
-            }; builtin::array_get<i32>(_licm_repr_14, i) + if builtin::unlikely(i >= _licm_used_15) {
+            sum = sum + (builtin::array_get<i32>(_licm_repr_14, i) + if builtin::unlikely(i >= _licm_used_15) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<i32>(_licm_repr_16, i));
@@ -263,20 +260,17 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_tuple.wado/with_capacity_ini
     _licm_repr_13 = __csroa_v_0.repr;
     _licm_used_14 = __csroa_v_1.used;
     _licm_repr_15 = __csroa_v_1.repr;
-    b17: block {
-        l18: loop {
+    b16: block {
+        l17: loop {
             if i >= _licm_used_12 {
-                break b17;
+                break b16;
             }
-            sum = sum + (if builtin::unlikely(i >= _licm_used_12) {
-                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                unreachable;
-            }; builtin::array_get<i32>(_licm_repr_13, i) * if builtin::unlikely(i >= _licm_used_14) {
+            sum = sum + (builtin::array_get<i32>(_licm_repr_13, i) * if builtin::unlikely(i >= _licm_used_14) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<i32>(_licm_repr_15, i));
             i = i + 1;
-            continue l18;
+            continue l17;
         };
     };
     return sum;
@@ -383,14 +377,14 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b27: block {
-        l28: loop {
+    b25: block {
+        l26: loop {
             if i >= len {
-                break b27;
+                break b25;
             }
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l28;
+            continue l26;
         };
     };
 }
@@ -473,14 +467,14 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b33: block {
-        l34: loop {
+    b31: block {
+        l32: loop {
             if t <= 0_i64 {
-                break b33;
+                break b31;
             }
             n = n + 1;
             t = t / 10_i64;
-            continue l34;
+            continue l32;
         };
     };
     return n;
@@ -494,15 +488,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b37: block {
-            l38: loop {
+        b35: block {
+            l36: loop {
                 if temp <= 0_i64 {
-                    break b37;
+                    break b35;
                 }
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l38;
+                continue l36;
             };
         };
     }
@@ -596,14 +590,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b48: block {
-        l49: loop {
+    b46: block {
+        l47: loop {
             if i >= n {
-                break b48;
+                break b46;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l49;
+            continue l47;
         };
     };
 }

@@ -1859,6 +1859,15 @@ fn collect_type_dependencies(
                 collect_type_transitive(*arg, type_table, reachable);
             }
         }
+        // An associated-type projection (`I::Item`) depends on the
+        // parameter it projects from. Without following `param_id`, a
+        // surviving projection (e.g. a field type of a retained generic
+        // template) would dangle when the parameter type is pruned,
+        // crashing later name-mangling.
+        ResolvedType::AssocTypeProjection { param_id, .. } => {
+            collect_type_transitive(*param_id, type_table, reachable);
+        }
+
         // Leaf types - no dependencies
         ResolvedType::Primitive(_)
         | ResolvedType::Unit
@@ -1870,8 +1879,7 @@ fn collect_type_dependencies(
         | ResolvedType::Variant { .. }
         | ResolvedType::Resource { .. }
         | ResolvedType::TypeParam { .. }
-        | ResolvedType::TypePack { .. }
-        | ResolvedType::AssocTypeProjection { .. } => {}
+        | ResolvedType::TypePack { .. } => {}
 
         // Newtype: collect dependency on base type
         ResolvedType::Newtype { base_type, .. } => {
