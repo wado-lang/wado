@@ -310,12 +310,16 @@ test "generate group variant type for repeated group" {
                             Element::Repeat(RepeatElement {
                                 kind: RepeatKind::Star,
                                 element: Element::Group(GroupElement::new([
-                                    Alternative { label: null, options: [], elements: [
-                                        Element::RuleRef(RuleRefElement::new("stmt")),
-                                    ] },
-                                    Alternative { label: null, options: [], elements: [
-                                        Element::RuleRef(RuleRefElement::new("error")),
-                                    ] },
+                                    Alternative {
+                                        label: null,
+                                        options: [],
+                                        elements: [Element::RuleRef(RuleRefElement::new("stmt"))],
+                                    },
+                                    Alternative {
+                                        label: null,
+                                        options: [],
+                                        elements: [Element::RuleRef(RuleRefElement::new("error"))],
+                                    },
                                 ])),
                                 non_greedy: false,
                             }),
@@ -466,12 +470,16 @@ test "generate standalone group as optional field" {
                         options: [],
                         elements: [
                             Element::Group(GroupElement::new([
-                                Alternative { label: null, options: [], elements: [
-                                    Element::RuleRef(RuleRefElement::new("foo")),
-                                ] },
-                                Alternative { label: null, options: [], elements: [
-                                    Element::RuleRef(RuleRefElement::new("bar")),
-                                ] },
+                                Alternative {
+                                    label: null,
+                                    options: [],
+                                    elements: [Element::RuleRef(RuleRefElement::new("foo"))],
+                                },
+                                Alternative {
+                                    label: null,
+                                    options: [],
+                                    elements: [Element::RuleRef(RuleRefElement::new("bar"))],
+                                },
                             ])),
                             Element::TokenRef(TokenRefElement::new("EOF")),
                         ],
@@ -557,7 +565,11 @@ test "generate lexer set_mode" {
                 pop_mode: false,
                 is_virtual: false,
                 options: [],
-                body: [LexerAlt { elements: [LexerElement::Literal("<")] }],
+                body: [
+                    LexerAlt {
+                        elements: [LexerElement::Literal("<")],
+                    },
+                ],
             },
             LexerRule {
                 name: "TAG_NAME",
@@ -573,7 +585,11 @@ test "generate lexer set_mode" {
                 pop_mode: false,
                 is_virtual: false,
                 options: [],
-                body: [LexerAlt { elements: [LexerElement::Literal("a")] }],
+                body: [
+                    LexerAlt {
+                        elements: [LexerElement::Literal("a")],
+                    },
+                ],
             },
         ],
         mode_names: ["DEFAULT_MODE", "TAG_MODE"],
@@ -609,7 +625,11 @@ test "generate lexer more" {
                 pop_mode: false,
                 is_virtual: false,
                 options: [],
-                body: [LexerAlt { elements: [LexerElement::Literal("a")] }],
+                body: [
+                    LexerAlt {
+                        elements: [LexerElement::Literal("a")],
+                    },
+                ],
             },
         ],
         mode_names: ["DEFAULT_MODE"],
@@ -645,7 +665,11 @@ test "generate lexer type_override" {
                 pop_mode: false,
                 is_virtual: false,
                 options: [],
-                body: [LexerAlt { elements: [LexerElement::Literal("x")] }],
+                body: [
+                    LexerAlt {
+                        elements: [LexerElement::Literal("x")],
+                    },
+                ],
             },
             LexerRule {
                 name: "IF",
@@ -661,7 +685,11 @@ test "generate lexer type_override" {
                 pop_mode: false,
                 is_virtual: false,
                 options: [],
-                body: [LexerAlt { elements: [LexerElement::Literal("if")] }],
+                body: [
+                    LexerAlt {
+                        elements: [LexerElement::Literal("if")],
+                    },
+                ],
             },
         ],
         mode_names: ["DEFAULT_MODE"],
@@ -699,7 +727,11 @@ test "generate lexer channel" {
                 pop_mode: false,
                 is_virtual: false,
                 options: [],
-                body: [LexerAlt { elements: [LexerElement::Literal("#")] }],
+                body: [
+                    LexerAlt {
+                        elements: [LexerElement::Literal("#")],
+                    },
+                ],
             },
         ],
         mode_names: ["DEFAULT_MODE"],
@@ -837,15 +869,11 @@ WS : [ \\t\\n]+ -> skip ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let helper = extract_fn_body(&output, &"fn _parse_expr_lr_1");
     // Send is the second LR alt of two left-assoc: own_prec=1, conflict_min=2.
-    assert !str_contains(&helper, &"_parse_expr(p)?"),
-        `bare _parse_expr(p)? leaks default min_prec=0:\n{helper}`;
-    assert str_contains(&helper, &"_parse_expr(p, 2)?"),
-        `expected _parse_expr(p, 2)? for inner / trailing self-refs:\n{helper}`;
+    assert !str_contains(&helper, &"_parse_expr(p)?"), `bare _parse_expr(p)? leaks default min_prec=0:\n{helper}`;
+    assert str_contains(&helper, &"_parse_expr(p, 2)?"), `expected _parse_expr(p, 2)? for inner / trailing self-refs:\n{helper}`;
     let scan_helper = extract_fn_body(&output, &"fn scan_expr_lr_1");
-    assert !str_contains(&scan_helper, &"scan_expr(tokens, pos, 0)"),
-        `bare scan_expr(_, _, 0) leaks default min_prec=0:\n{scan_helper}`;
-    assert str_contains(&scan_helper, &"scan_expr(tokens, pos, 2)"),
-        `expected scan_expr(tokens, pos, 2):\n{scan_helper}`;
+    assert !str_contains(&scan_helper, &"scan_expr(tokens, pos, 0)"), `bare scan_expr(_, _, 0) leaks default min_prec=0:\n{scan_helper}`;
+    assert str_contains(&scan_helper, &"scan_expr(tokens, pos, 2)"), `expected scan_expr(tokens, pos, 2):\n{scan_helper}`;
 }
 
 test "SimpleCst group emit threads min_prec_arg on a self-ref alt inside an LR suffix" {
@@ -863,8 +891,7 @@ WS : [ \\t\\n]+ -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let helper = extract_fn_body(&output, &"fn _parse_expr_lr_");
-    assert !str_contains(&helper, &"_parse_expr(p)?"),
-        `SimpleCst self-ref alt must thread min_prec:\n{helper}`;
+    assert !str_contains(&helper, &"_parse_expr(p)?"), `SimpleCst self-ref alt must thread min_prec:\n{helper}`;
 }
 
 test "LR parse loop predicts via scan when suffix's first token is shared with the atom" {
@@ -1279,6 +1306,25 @@ WS : [ \\t\\n\\r]+ -> skip ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert !str_contains(&output, &"fn try_a("), `try_a must not be generated when an ID carrier exists:\n{output}`;
     assert str_contains(&output, &"classify_keyword"), `keyword classifier must still be emitted:\n{output}`;
+}
+
+test "keyword candidate declared after a colliding carrier falls back to its own matcher" {
+    // `A : 'a' EOF ;` is a carrier for the single-char literal `B : 'a' ;`,
+    // but B is declared *after* A. Under ANTLR4 longest-match-then-first-rule
+    // both match `a` (A also consumes the trailing EOF), so A wins. The keyword
+    // classifier reclassifies a carrier match into the keyword unconditionally,
+    // so admitting B as a keyword would mis-tag A's match as B (the
+    // `LexerExec/EOFSuffixInFirstRule_2` descriptor regression). B must instead
+    // fall back to regular first-character dispatch, where the strict `>`
+    // longest-match tiebreak keeps the earlier rule A.
+    let input = "lexer grammar L;
+A : 'a' EOF ;
+B : 'a' ;
+C : 'c' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, &"fn try_b("), `B must fall back to its own matcher when its only carrier precedes it:\n{output}`;
 }
 
 fn str_contains(haystack: &String, needle: &String) -> bool {

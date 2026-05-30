@@ -17,6 +17,24 @@ pub struct Manifest {
     pub build_dependencies: IndexMap<String, Dependency>,
     pub workspace: Option<Workspace>,
     pub test: TestSettings,
+    pub format: FormatSettings,
+}
+
+/// The `[format]` section of `wado.toml`.
+///
+/// Controls which `*.wado` files `wado format` discovers when given a
+/// directory. Mirrors `[test]`: `exclude` drops paths, `include` carves them
+/// back in. Typical use is excluding hand-authored e2e fixtures whose layout
+/// is part of the test and must not be rewritten by the formatter.
+#[derive(Debug, Clone, Default)]
+pub struct FormatSettings {
+    /// Glob patterns (relative to the manifest root) for paths to exclude from
+    /// format discovery.
+    pub exclude: Vec<String>,
+    /// Glob patterns (relative to the manifest root) for paths to keep in
+    /// format discovery even when they would otherwise be excluded. Patterns
+    /// here win over `exclude`.
+    pub include: Vec<String>,
 }
 
 /// The `[test]` section of `wado.toml`.
@@ -198,10 +216,17 @@ struct RawManifest {
     build_dependencies: Option<IndexMap<String, RawDependency>>,
     workspace: Option<RawWorkspace>,
     test: Option<RawTestSettings>,
+    format: Option<RawFormatSettings>,
 }
 
 #[derive(Deserialize)]
 struct RawTestSettings {
+    exclude: Option<Vec<String>>,
+    include: Option<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+struct RawFormatSettings {
     exclude: Option<Vec<String>>,
     include: Option<Vec<String>>,
 }
@@ -245,6 +270,7 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
     let build_dependencies = convert_deps(raw.build_dependencies.unwrap_or_default())?;
     let workspace = raw.workspace.map(convert_workspace).transpose()?;
     let test = raw.test.map(convert_test).unwrap_or_default();
+    let format = raw.format.map(convert_format).unwrap_or_default();
 
     Ok(Manifest {
         package,
@@ -254,11 +280,19 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
         build_dependencies,
         workspace,
         test,
+        format,
     })
 }
 
 fn convert_test(raw: RawTestSettings) -> TestSettings {
     TestSettings {
+        exclude: raw.exclude.unwrap_or_default(),
+        include: raw.include.unwrap_or_default(),
+    }
+}
+
+fn convert_format(raw: RawFormatSettings) -> FormatSettings {
+    FormatSettings {
         exclude: raw.exclude.unwrap_or_default(),
         include: raw.include.unwrap_or_default(),
     }
@@ -596,6 +630,39 @@ include = ["lib/**/*_test.wado"]
         let m = toml.parse::<Manifest>().unwrap();
         assert_eq!(m.test.exclude, vec!["lib/core/prelude/**"]);
         assert_eq!(m.test.include, vec!["lib/**/*_test.wado"]);
+    }
+
+    #[test]
+    fn parse_format_exclude_include() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "main.wado"
+
+[format]
+exclude = ["wado-compiler/tests/fixtures/**"]
+include = ["wado-compiler/tests/fixtures/keepme.wado"]
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        assert_eq!(m.format.exclude, vec!["wado-compiler/tests/fixtures/**"]);
+        assert_eq!(
+            m.format.include,
+            vec!["wado-compiler/tests/fixtures/keepme.wado"]
+        );
+    }
+
+    #[test]
+    fn format_section_defaults_when_omitted() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "main.wado"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        assert!(m.format.exclude.is_empty());
+        assert!(m.format.include.is_empty());
     }
 
     #[test]

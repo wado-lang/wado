@@ -136,7 +136,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem.wado/run"() with Stdout, Preope
     dir_count = dirs.used;
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: preopens returned "), used: 24 }); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(dir_count, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" directories"), used: 12 }); __local_4);
     if dir_count > 0 {
-        if 0 >= dirs.used {
+        if builtin::unlikely(0 >= dirs.used) {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }

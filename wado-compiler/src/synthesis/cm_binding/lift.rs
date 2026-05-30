@@ -140,8 +140,13 @@ fn synthesize_lift_inner(
                 "i64" | "u64" => builtin_call("i64_load", vec![addr], TypeTable::I64),
                 "f32" => builtin_call("f32_load", vec![addr], TypeTable::F32),
                 "f64" => builtin_call("f64_load", vec![addr], TypeTable::F64),
-                "i8" | "u8" => builtin_call("i32_load8_u", vec![addr], TypeTable::U8),
-                "i16" | "u16" => builtin_call("i32_load16_u", vec![addr], TypeTable::U16),
+                // Signed 8/16-bit CM values (`s8`/`s16`) must sign-extend on
+                // load; using the unsigned load would turn a foreign `-1`
+                // into `255`. Keep the result type matching the signedness.
+                "i8" => builtin_call("i32_load8_s", vec![addr], TypeTable::I8),
+                "u8" => builtin_call("i32_load8_u", vec![addr], TypeTable::U8),
+                "i16" => builtin_call("i32_load16_s", vec![addr], TypeTable::I16),
+                "u16" => builtin_call("i32_load16_u", vec![addr], TypeTable::U16),
                 "bool" => {
                     let raw = builtin_call("i32_load8_u", vec![addr], TypeTable::U8);
                     binary(TirBinaryOp::NotEq, raw, i32_const(0), TypeTable::BOOL)

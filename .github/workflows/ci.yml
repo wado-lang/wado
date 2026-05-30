@@ -18,6 +18,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -33,6 +35,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -48,6 +52,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -56,6 +62,23 @@ jobs:
 
       - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o1
 
+  test-e2e-o2:
+    name: Test (E2E O2)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
+      - uses: rui314/setup-mold@v1
+
+      - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o2
+
   test-e2e-o3:
     name: Test (E2E O3)
     runs-on: ubuntu-latest
@@ -63,6 +86,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -78,6 +103,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -93,6 +120,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -115,6 +144,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -137,6 +168,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -159,6 +192,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -181,6 +216,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
       - run: cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
 
   check-deps:
@@ -190,6 +227,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -216,6 +255,7 @@ jobs:
         test-gale-o3,
         test-e2e-o0,
         test-e2e-o1,
+        test-e2e-o2,
         test-e2e-o3,
         test-e2e-os,
         check-wasm32,
@@ -226,7 +266,7 @@ jobs:
     steps:
       - name: Check all jobs passed
         run: |
-          results="${{ needs.test-core.result }} ${{ needs.test-wado.result }} ${{ needs.test-gale-o1.result }} ${{ needs.test-gale-o2.result }} ${{ needs.test-gale-o3.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o1.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }} ${{ needs.check-wasm32.result }} ${{ needs.check-deps.result }}"
+          results="${{ needs.test-core.result }} ${{ needs.test-wado.result }} ${{ needs.test-gale-o1.result }} ${{ needs.test-gale-o2.result }} ${{ needs.test-gale-o3.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o1.result }} ${{ needs.test-e2e-o2.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }} ${{ needs.check-wasm32.result }} ${{ needs.check-deps.result }}"
           for result in $results; do
             if [ "$result" != "success" ]; then
               echo "One or more jobs failed"

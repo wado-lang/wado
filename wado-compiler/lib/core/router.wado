@@ -1,3 +1,4 @@
+#![stdlib("core:router")]
 //! HTTP path router (`core:router`).
 //!
 //! Generic over the handler type `H`. Match algorithm is a segment-level
@@ -21,13 +22,17 @@
 //!
 //! See `docs/wep-2026-05-06-core-router.md`.
 
-#![stdlib("core:router")]
 
 use { Request } from "wasi:http";
 use {
-    Deserialize, DeserializeError,
-    Deserializer, DeserializeSeq, DeserializeMap, DeserializeStruct,
-    DeserializeVariant, Visitor,
+    Deserialize,
+    DeserializeError,
+    Deserializer,
+    DeserializeSeq,
+    DeserializeMap,
+    DeserializeStruct,
+    DeserializeVariant,
+    Visitor,
 } from "core:serde";
 pub use { Method } from "wasi:http";
 
@@ -74,9 +79,7 @@ impl PathParams {
     /// Deserialize captured parameters into a typed struct `T`. Scalar
     /// fields parse directly from path bytes; only `String` fields incur
     /// a substring allocation.
-    pub fn deserialize<T: Deserialize>(&self) -> Result<T, DeserializeError>
-        with stores[self]
-    {
+    pub fn deserialize<T: Deserialize>(&self) -> Result<T, DeserializeError> with stores[self] {
         let mut d = PathParamsDeserializer { src: self, cursor: 0 };
         return T::deserialize(&mut d);
     }
@@ -150,7 +153,7 @@ fn new_state() -> DfaState {
 
 /// Sorted entry for the static-route fast path.
 struct StaticEntry<H> {
-    method: Option<Method>,  // None means `any`
+    method: Option<Method>,
     pattern: String,
     rm: RouteMatch<H>,
 }
@@ -188,27 +191,30 @@ impl<H> Router<H> {
 
     /// Registers a handler for `(method, pattern)`. Last-write-wins.
     /// Panics on a malformed pattern.
-    pub fn route(&mut self, method: Method, pattern: String, handler: H)
-        with stores[handler]
-    {
+    pub fn route(&mut self, method: Method, pattern: String, handler: H) with stores[handler] {
         self.insert(Option::Some(method), pattern, handler);
     }
 
     pub fn get(&mut self, pattern: String, handler: H) with stores[handler] {
         self.route(Method::Get, pattern, handler);
     }
+
     pub fn post(&mut self, pattern: String, handler: H) with stores[handler] {
         self.route(Method::Post, pattern, handler);
     }
+
     pub fn put(&mut self, pattern: String, handler: H) with stores[handler] {
         self.route(Method::Put, pattern, handler);
     }
+
     pub fn patch(&mut self, pattern: String, handler: H) with stores[handler] {
         self.route(Method::Patch, pattern, handler);
     }
+
     pub fn delete(&mut self, pattern: String, handler: H) with stores[handler] {
         self.route(Method::Delete, pattern, handler);
     }
+
     pub fn options(&mut self, pattern: String, handler: H) with stores[handler] {
         self.route(Method::Options, pattern, handler);
     }
@@ -220,9 +226,7 @@ impl<H> Router<H> {
         self.insert(null, pattern, handler);
     }
 
-    fn insert(&mut self, method_opt: Option<Method>, pattern: String, handler: H)
-        with stores[handler]
-    {
+    fn insert(&mut self, method_opt: Option<Method>, pattern: String, handler: H) with stores[handler] {
         let segs = parse_pattern(&pattern);
         if is_static_pattern(&segs) {
             self.insert_static(method_opt, pattern, handler);
@@ -231,9 +235,7 @@ impl<H> Router<H> {
         self.insert_dynamic(&method_opt, &segs, handler);
     }
 
-    fn insert_static(&mut self, method_opt: Option<Method>, pattern: String, handler: H)
-        with stores[handler]
-    {
+    fn insert_static(&mut self, method_opt: Option<Method>, pattern: String, handler: H) with stores[handler] {
         // `static_entries` is kept sorted by `static_entry_cmp` so both
         // `match_static` and this last-write-wins lookup can locate an
         // existing entry in O(log n). The narrow `[lo, hi)` range covers
@@ -264,9 +266,7 @@ impl<H> Router<H> {
         self.static_entries.insert(pos, new_entry);
     }
 
-    fn insert_dynamic(&mut self, method_opt: &Option<Method>, segs: &Array<Segment>, handler: H)
-        with stores[handler]
-    {
+    fn insert_dynamic(&mut self, method_opt: &Option<Method>, segs: &Array<Segment>, handler: H) with stores[handler] {
         let mut cur: i32 = 0;
         let mut names: Array<String> = [];
         let nseg = segs.len();
@@ -290,8 +290,7 @@ impl<H> Router<H> {
                     let handler_idx = self.handlers.len();
                     self.handlers.push(handler);
                     if let Some(m) = method_opt {
-                        set_method_specific(
-                            &mut self.states[cur].wildcard_methods, *m, handler_idx);
+                        set_method_specific(&mut self.states[cur].wildcard_methods, *m, handler_idx);
                     } else {
                         self.states[cur].wildcard_any_idx = handler_idx;
                     }
@@ -334,8 +333,7 @@ impl<H> Router<H> {
         let handler_idx = self.handlers.len();
         self.handlers.push(handler);
         if let Some(m) = method_opt {
-            set_method_specific(
-                &mut self.states[cur].terminal_methods, *m, handler_idx);
+            set_method_specific(&mut self.states[cur].terminal_methods, *m, handler_idx);
         } else {
             self.states[cur].terminal_any_idx = handler_idx;
         }
@@ -343,18 +341,14 @@ impl<H> Router<H> {
 
     /// Matches `(method, path)`. The path argument must be a URL path
     /// (no query string, no fragment).
-    pub fn match_path(&self, method: Method, path: &String) -> Option<&RouteMatch<H>>
-        with stores[self, path]
-    {
+    pub fn match_path(&self, method: Method, path: &String) -> Option<&RouteMatch<H>> with stores[self, path] {
         if let Some(rm) = self.match_static(&method, path) {
             return Option::Some(rm);
         }
         return self.match_dynamic(&method, path);
     }
 
-    fn match_static(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>>
-        with stores[self]
-    {
+    fn match_static(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>> with stores[self] {
         let [lo, hi] = bsearch_pattern_range(&self.static_entries, path);
         if lo >= hi {
             return null;
@@ -388,9 +382,7 @@ impl<H> Router<H> {
     /// migrate to GC-managed storage and live as long as the caller
     /// retains the reference. The `stores[self, path]` annotation is what
     /// makes returning a ref derived from `&self` and `path` legal here.
-    fn match_dynamic(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>>
-        with stores[self, path]
-    {
+    fn match_dynamic(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>> with stores[self, path] {
         let plen = path.len();
         let mut pos = if plen > 0 && path.get_byte_unchecked(0) == '/' as u8 { 1 } else { 0 };
         let mut state: i32 = 0;
@@ -548,9 +540,7 @@ impl<H> Router<H> {
 
     /// Matches against a `wasi:http` `Request`. Strips `?query` / `#frag`
     /// from the path before matching.
-    pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>>
-        with stores[self]
-    {
+    pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>> with stores[self] {
         let method = request.get_method();
         let pq = match request.get_path_with_query() {
             Some(s) => s,
@@ -565,8 +555,11 @@ fn is_static_pattern(segs: &Array<Segment>) -> bool {
     let n = segs.len();
     for let mut i = 0; i < n; i += 1 {
         match &segs[i] {
-            Literal(_) => {},
-            _ => { return false; },
+            Literal(_) => {
+            },
+            _ => {
+                return false;
+            },
         }
     }
     return true;
@@ -575,14 +568,22 @@ fn is_static_pattern(segs: &Array<Segment>) -> bool {
 fn method_opt_eq(a: &Option<Method>, b: &Option<Method>) -> bool {
     match a {
         Some(am) => match b {
-            Some(bm) => return *am == *bm,
-            None => return false,
+            Some(bm) => {
+                return *am == *bm;
+            },
+            None => {
+                return false;
+            },
         },
         None => match b {
-            Some(_) => return false,
-            None => return true,
+            Some(_) => {
+                return false;
+            },
+            None => {
+                return true;
+            },
         },
-    };
+    }
 }
 
 /// Compare two static entries by (pattern, method-rank). `any` (None) sorts
@@ -592,8 +593,12 @@ fn static_entry_cmp<H>(a: &StaticEntry<H>, b: &StaticEntry<H>) -> Ordering {
     if c matches { Equal } {
         let ar = method_rank(&a.method);
         let br = method_rank(&b.method);
-        if ar < br { return Ordering::Less; }
-        if ar > br { return Ordering::Greater; }
+        if ar < br {
+            return Ordering::Less;
+        }
+        if ar > br {
+            return Ordering::Greater;
+        }
         return Ordering::Equal;
     }
     return c;
@@ -615,8 +620,12 @@ fn bsearch_pattern_range<H>(entries: &Array<StaticEntry<H>>, path: &String) -> [
     while lo < hi {
         let mid = (lo + hi) / 2;
         match entries[mid].pattern.cmp(path) {
-            Less => { lo = mid + 1; },
-            _ => { hi = mid; },
+            Less => {
+                lo = mid + 1;
+            },
+            _ => {
+                hi = mid;
+            },
         }
     }
     let lower = lo;
@@ -626,8 +635,12 @@ fn bsearch_pattern_range<H>(entries: &Array<StaticEntry<H>>, path: &String) -> [
     while lo < hi {
         let mid = (lo + hi) / 2;
         match entries[mid].pattern.cmp(path) {
-            Greater => { hi = mid; },
-            _ => { lo = mid + 1; },
+            Greater => {
+                hi = mid;
+            },
+            _ => {
+                lo = mid + 1;
+            },
         }
     }
     return [lower, lo];
@@ -708,7 +721,7 @@ fn parse_pattern(path: &String) -> Array<Segment> {
                 if name.is_empty() {
                     panic("parameter name after ':' must not be empty");
                 }
-                Segment::Param(name)
+                Segment::Param(name);
             },
             '*' => {
                 let name = seg.substr_bytes(1, seg.len());
@@ -716,7 +729,7 @@ fn parse_pattern(path: &String) -> Array<Segment> {
                     panic("wildcard name after '*' must not be empty");
                 }
                 wildcard_seen = true;
-                Segment::Wildcard(name)
+                Segment::Wildcard(name);
             },
             _ => Segment::Literal(seg),
         };
@@ -732,9 +745,15 @@ fn bsearch_label(edges: &Array<LiteralEdge>, key: &String) -> [i32, bool] {
     while lo < hi {
         let mid = (lo + hi) / 2;
         match edges[mid].label.cmp(key) {
-            Less => { lo = mid + 1; },
-            Greater => { hi = mid; },
-            Equal => { return [mid, true]; },
+            Less => {
+                lo = mid + 1;
+            },
+            Greater => {
+                hi = mid;
+            },
+            Equal => {
+                return [mid, true];
+            },
         }
     }
     return [lo, false];
@@ -746,9 +765,15 @@ fn bsearch_target_by_bytes(edges: &Array<LiteralEdge>, path: &String, start: i32
     while lo < hi {
         let mid = (lo + hi) / 2;
         match cmp_string_to_byte_range(&edges[mid].label, path, start, end) {
-            Less => { lo = mid + 1; },
-            Greater => { hi = mid; },
-            Equal => { return edges[mid].target; },
+            Less => {
+                lo = mid + 1;
+            },
+            Greater => {
+                hi = mid;
+            },
+            Equal => {
+                return edges[mid].target;
+            },
         }
     }
     return -1;
@@ -797,14 +822,38 @@ impl Deserializer for PathParamsDeserializer {
     type StructAccess = PathParamsStructAccess;
     type VariantAccess = PathParamsVariantStub;
 
-    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> { return self.parse_scalar::<i32>("i32"); }
-    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> { return self.parse_scalar::<i64>("i64"); }
-    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> { return self.parse_scalar::<u32>("u32"); }
-    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> { return self.parse_scalar::<u64>("u64"); }
-    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> { return self.parse_scalar::<i128>("i128"); }
-    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> { return self.parse_scalar::<u128>("u128"); }
-    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> { return self.parse_scalar::<f32>("f32"); }
-    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> { return self.parse_scalar::<f64>("f64"); }
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        return self.parse_scalar::<i32>("i32");
+    }
+
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
+        return self.parse_scalar::<i64>("i64");
+    }
+
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        return self.parse_scalar::<u32>("u32");
+    }
+
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
+        return self.parse_scalar::<u64>("u64");
+    }
+
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
+        return self.parse_scalar::<i128>("i128");
+    }
+
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
+        return self.parse_scalar::<u128>("u128");
+    }
+
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
+        return self.parse_scalar::<f32>("f32");
+    }
+
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
+        return self.parse_scalar::<f64>("f64");
+    }
+
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
         self.require_active_param()?;
         let [s, e] = self.current_range();
@@ -817,6 +866,7 @@ impl Deserializer for PathParamsDeserializer {
         }
         return Result::Err(DeserializeError::invalid_value(self.format_error("bool"), s as i64));
     }
+
     fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
         self.require_active_param()?;
         let [s, e] = self.current_range();
@@ -828,7 +878,17 @@ impl Deserializer for PathParamsDeserializer {
         // verify the captured slice encodes exactly one codepoint.
         // `String::char_at_byte` decodes without substring allocation.
         let b0 = self.src.path.get_byte_unchecked(s);
-        let expected = if b0 < 0x80 { 1 } else if b0 < 0xC0 { 0 } else if b0 < 0xE0 { 2 } else if b0 < 0xF0 { 3 } else { 4 };
+        let expected = if b0 < 0x80 {
+            1;
+        } else if b0 < 0xC0 {
+            0;
+        } else if b0 < 0xE0 {
+            2;
+        } else if b0 < 0xF0 {
+            3;
+        } else {
+            4;
+        };
         if expected == 0 || len != expected {
             return Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64));
         }
@@ -837,40 +897,43 @@ impl Deserializer for PathParamsDeserializer {
             None => Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64)),
         };
     }
+
     fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
         self.require_active_param()?;
         let [s, e] = self.current_range();
         return Result::Ok(self.src.path.substr_bytes(s, e));
     }
+
     fn is_null(&mut self) -> Result<bool, DeserializeError> {
         return Result::Ok(false);
     }
+
     fn begin_seq(&mut self) -> Result<PathParamsSeqStub, DeserializeError> with stores[self] {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a seq", -1));
     }
+
     fn begin_map(&mut self) -> Result<PathParamsMapStub, DeserializeError> with stores[self] {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a map", -1));
     }
-    fn begin_struct(&mut self, _name: &String, _num_fields: i32,
-                    lookup: fn mut(&String, i32, i32) -> Option<i32>)
-        -> Result<PathParamsStructAccess, DeserializeError>
-        with stores[self]
-    {
+
+    fn begin_struct(&mut self, _name: &String, _num_fields: i32, lookup: fn mut(&String, i32, i32) -> Option<i32>) -> Result<PathParamsStructAccess, DeserializeError> with stores[self] {
         // Nested structs are unsupported: `PathParams` is a flat key/value
         // surface, so a nested `begin_struct` (cursor != 0) means a field
         // typed as another struct asked us to descend into it. Refuse loudly
         // rather than silently re-running the field loop for the inner type.
         if self.cursor != 0 {
-            return Result::Err(DeserializeError::unexpected_type("path params cannot deserialize a nested struct field", -1));
+            return Result::Err(DeserializeError::unexpected_type(
+                "path params cannot deserialize a nested struct field",
+                -1,
+            ));
         }
         return Result::Ok(PathParamsStructAccess { de: *self, lookup });
     }
-    fn begin_variant(&mut self, _type_name: &String, _num_cases: i32)
-        -> Result<PathParamsVariantStub, DeserializeError>
-        with stores[self]
-    {
+
+    fn begin_variant(&mut self, _type_name: &String, _num_cases: i32) -> Result<PathParamsVariantStub, DeserializeError> with stores[self] {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a variant", -1));
     }
+
     fn deserialize_any<V: Visitor>(&mut self, _visitor: &mut V) -> Result<V::Value, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params do not support dynamic deserialize_any", -1));
     }
@@ -952,12 +1015,15 @@ impl DeserializeStruct for PathParamsStructAccess {
         };
         return Result::Ok(Option::Some(idx));
     }
+
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
         return T::deserialize(&mut self.de);
     }
+
     fn skip(&mut self) -> Result<(), DeserializeError> {
         return Result::Ok(());
     }
+
     fn end(&mut self) -> Result<(), DeserializeError> {
         return Result::Ok(());
     }
@@ -968,43 +1034,53 @@ impl DeserializeStruct for PathParamsStructAccess {
 // (or scalar at the field level), so seq/map/variant accesses are stubs that
 // fail if invoked.
 
-struct PathParamsSeqStub {}
+struct PathParamsSeqStub {
+}
 impl DeserializeSeq for PathParamsSeqStub {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params: seq not supported", -1));
     }
+
     fn end(&mut self) -> Result<(), DeserializeError> {
         return Result::Ok(());
     }
 }
 
-struct PathParamsMapStub {}
+struct PathParamsMapStub {
+}
 impl DeserializeMap for PathParamsMapStub {
     fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params: map not supported", -1));
     }
+
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params: map not supported", -1));
     }
+
     fn end(&mut self) -> Result<(), DeserializeError> {
         return Result::Ok(());
     }
 }
 
-struct PathParamsVariantStub {}
+struct PathParamsVariantStub {
+}
 impl DeserializeVariant for PathParamsVariantStub {
     fn variant_name(&mut self) -> Result<String, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params: variant not supported", -1));
     }
+
     fn disc(&mut self) -> Result<i32, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params: variant not supported", -1));
     }
+
     fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params: variant not supported", -1));
     }
+
     fn is_unit(&mut self) -> Result<bool, DeserializeError> {
         return Result::Ok(false);
     }
+
     fn end(&mut self) -> Result<(), DeserializeError> {
         return Result::Ok(());
     }

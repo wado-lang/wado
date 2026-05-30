@@ -30,6 +30,9 @@ jobs:
           # source, not main.
           ref: ${{ inputs.tag || github.ref }}
 
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
+
       - name: Determine version from tag
         id: v
         shell: bash
@@ -83,6 +86,9 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ needs.validate.outputs.tag }}
+
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
 
       - name: Install Rust target
         # rust-toolchain.toml is honored automatically by rustup; we only

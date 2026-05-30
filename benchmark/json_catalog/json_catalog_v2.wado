@@ -260,7 +260,7 @@ impl P {
     }
 
     fn skip_object(&mut self) {
-        self.pos += 1; // consume '{'
+        self.pos += 1;  // consume '{'
         self.skip_ws();
         if self.peek() == '}' as i32 {
             self.pos += 1;
@@ -316,7 +316,12 @@ impl P {
         }
         while self.pos < len {
             let b = self.input.get_byte_unchecked(self.pos) as i32;
-            if ('0' as i32 <= b <= '9' as i32) || b == '.' as i32 || b == 'e' as i32 || b == 'E' as i32 || b == '+' as i32 || b == '-' as i32 {
+            if '0' as i32 <= b <= '9' as i32
+                || b == '.' as i32
+                || b == 'e' as i32
+                || b == 'E' as i32
+                || b == '+' as i32
+                || b == '-' as i32 {
                 self.pos += 1;
             } else {
                 return;
@@ -406,8 +411,14 @@ impl P {
             // skip ws
             while pos < len {
                 let b = builtin::array_get_u8(raw, pos) as i32;
-                if b > 32 { break; }
-                if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+                if b > 32 {
+                    break;
+                }
+                if b == 32 || b == 10 || b == 13 || b == 9 {
+                    pos += 1;
+                } else {
+                    break;
+                }
             }
             // parse i64 inline
             let mut neg = false;
@@ -429,8 +440,14 @@ impl P {
             // skip ws
             while pos < len {
                 let b = builtin::array_get_u8(raw, pos) as i32;
-                if b > 32 { break; }
-                if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+                if b > 32 {
+                    break;
+                }
+                if b == 32 || b == 10 || b == 13 || b == 9 {
+                    pos += 1;
+                } else {
+                    break;
+                }
             }
             if pos >= len {
                 panic("array<i64>: EOF");
@@ -610,8 +627,14 @@ impl P {
         // skip ws + '{'
         while pos < len {
             let b = builtin::array_get_u8(raw, pos) as i32;
-            if b > 32 { break; }
-            if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+            if b > 32 {
+                break;
+            }
+            if b == 32 || b == 10 || b == 13 || b == 9 {
+                pos += 1;
+            } else {
+                break;
+            }
         }
         if pos >= len || builtin::array_get_u8(raw, pos) as i32 != '{' as i32 {
             panic("area: expected '{'");
@@ -624,8 +647,14 @@ impl P {
         // skip ws (peek for '}')
         while pos < len {
             let b = builtin::array_get_u8(raw, pos) as i32;
-            if b > 32 { break; }
-            if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+            if b > 32 {
+                break;
+            }
+            if b == 32 || b == 10 || b == 13 || b == 9 {
+                pos += 1;
+            } else {
+                break;
+            }
         }
         if pos < len && builtin::array_get_u8(raw, pos) as i32 == '}' as i32 {
             self.pos = pos + 1;
@@ -635,8 +664,14 @@ impl P {
             // skip ws before key
             while pos < len {
                 let b = builtin::array_get_u8(raw, pos) as i32;
-                if b > 32 { break; }
-                if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+                if b > 32 {
+                    break;
+                }
+                if b == 32 || b == 10 || b == 13 || b == 9 {
+                    pos += 1;
+                } else {
+                    break;
+                }
             }
             if pos >= len || builtin::array_get_u8(raw, pos) as i32 != '"' as i32 {
                 panic("area: expected key");
@@ -645,18 +680,26 @@ impl P {
             let key_start = pos;
             while pos < len {
                 let b = builtin::array_get_u8(raw, pos) as i32;
-                if b == '"' as i32 { break; }
+                if b == '"' as i32 {
+                    break;
+                }
                 pos += 1;
             }
             let key_end = pos;
             let klen = key_end - key_start;
-            pos += 1; // consume closing '"'
+            pos += 1;  // consume closing '"'
 
             // skip ws + ':'
             while pos < len {
                 let b = builtin::array_get_u8(raw, pos) as i32;
-                if b > 32 { break; }
-                if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+                if b > 32 {
+                    break;
+                }
+                if b == 32 || b == 10 || b == 13 || b == 9 {
+                    pos += 1;
+                } else {
+                    break;
+                }
             }
             if pos >= len || builtin::array_get_u8(raw, pos) as i32 != ':' as i32 {
                 panic("area: expected ':'");
@@ -682,8 +725,14 @@ impl P {
             // skip ws + check ',' or '}'
             while pos < len {
                 let b = builtin::array_get_u8(raw, pos) as i32;
-                if b > 32 { break; }
-                if b == 32 || b == 10 || b == 13 || b == 9 { pos += 1; } else { break; }
+                if b > 32 {
+                    break;
+                }
+                if b == 32 || b == 10 || b == 13 || b == 9 {
+                    pos += 1;
+                } else {
+                    break;
+                }
             }
             if pos >= len {
                 panic("area: EOF");
@@ -875,7 +924,17 @@ impl P {
             let c = self.peek();
             if c == '}' as i32 {
                 self.pos += 1;
-                return Performance { event_id, id, logo, name, prices, seat_categories, seat_map_image, start, venue_code };
+                return Performance {
+                    event_id,
+                    id,
+                    logo,
+                    name,
+                    prices,
+                    seat_categories,
+                    seat_map_image,
+                    start,
+                    venue_code,
+                };
             }
             if c != ',' as i32 {
                 panic("performance: expected ',' or '}'");
@@ -1012,9 +1071,17 @@ impl P {
         if self.peek() == '}' as i32 {
             self.pos += 1;
             return CitmCatalog {
-                area_names, audience_sub_category_names, block_names, events,
-                performances, seat_category_names, sub_topic_names,
-                subject_names, topic_names, topic_sub_topics, venue_names,
+                area_names,
+                audience_sub_category_names,
+                block_names,
+                events,
+                performances,
+                seat_category_names,
+                sub_topic_names,
+                subject_names,
+                topic_names,
+                topic_sub_topics,
+                venue_names,
             };
         }
         loop {
@@ -1089,9 +1156,17 @@ impl P {
             if c == '}' as i32 {
                 self.pos += 1;
                 return CitmCatalog {
-                    area_names, audience_sub_category_names, block_names, events,
-                    performances, seat_category_names, sub_topic_names,
-                    subject_names, topic_names, topic_sub_topics, venue_names,
+                    area_names,
+                    audience_sub_category_names,
+                    block_names,
+                    events,
+                    performances,
+                    seat_category_names,
+                    sub_topic_names,
+                    subject_names,
+                    topic_names,
+                    topic_sub_topics,
+                    venue_names,
                 };
             }
             if c != ',' as i32 {
@@ -1148,7 +1223,9 @@ fn parse_counts_v2(json_data: String) -> CatalogCounts {
 }
 
 test "smoke" {
-    let counts = parse_counts_v2("{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}");
+    let counts = parse_counts_v2(
+        "{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}",
+    );
     assert counts.events == 0;
     assert counts.performances == 0;
 }
@@ -1157,7 +1234,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file("json_catalog/citm_catalog.json");
     let mut b = Benchmark::new("json-catalog-v2");
     b.input_size = Option::Some(json_data.len());
-    b.iterations = 5;
+    b.iterations = 10;
 
     let counts = b.run("", || parse_counts_v2(json_data));
     assert counts.events == 184;

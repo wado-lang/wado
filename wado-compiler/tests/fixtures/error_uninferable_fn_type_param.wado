@@ -1,0 +1,17 @@
+// Regression: a generic free function whose type parameter cannot be inferred
+// from the call site must report a clean "cannot infer type parameter"
+// diagnostic, not trap codegen with an "unsubstituted TypeParam" panic.
+//
+// `T` is unconstrained by the (empty) argument list, so `nothing()` cannot
+// pin it without a turbofish.
+
+fn nothing<T>() -> i32 {
+    return 0;
+}
+
+export fn run() {
+    let _ = nothing();
+}
+
+__DATA__
+{"compile_error": "cannot infer type parameter `T` of function `nothing`"}

@@ -5,7 +5,12 @@
 
 use { TreeMap } from "core:collections";
 
-pub enum Method { Get, Post, Put, Delete }
+pub enum Method {
+    Get,
+    Post,
+    Put,
+    Delete,
+}
 
 pub struct RoutePattern {
     pub method: Method,
@@ -42,107 +47,44 @@ pub fn build_routes() -> Array<RoutePattern> {
     let mut id = 0;
 
     let static_shallow: Array<String> = [
-        "/health",
-        "/version",
-        "/metrics",
-        "/ping",
-        "/robots.txt",
-        "/favicon.ico",
-        "/api/v1/health",
-        "/api/v1/version",
-        "/api/v1/status",
-        "/api/v1/metrics",
-        "/api/v2/health",
-        "/api/v2/version",
-        "/admin/login",
-        "/admin/logout",
-        "/admin/dashboard",
-        "/auth/login",
-        "/auth/logout",
-        "/auth/refresh",
-        "/docs",
-        "/openapi.json",
+        "/health", "/version", "/metrics", "/ping", "/robots.txt", "/favicon.ico", "/api/v1/health", "/api/v1/version",
+        "/api/v1/status", "/api/v1/metrics", "/api/v2/health", "/api/v2/version", "/admin/login", "/admin/logout",
+        "/admin/dashboard", "/auth/login", "/auth/logout", "/auth/refresh", "/docs", "/openapi.json",
     ];
 
     let static_medium: Array<String> = [
-        "/api/v1/users/list",
-        "/api/v1/users/create",
-        "/api/v1/users/search",
-        "/api/v1/users/me",
-        "/api/v1/posts/list",
-        "/api/v1/posts/create",
-        "/api/v1/posts/search",
-        "/api/v1/posts/popular",
-        "/api/v1/products/list",
-        "/api/v1/products/create",
-        "/api/v1/products/search",
-        "/api/v1/products/featured",
-        "/api/v1/orders/list",
-        "/api/v1/orders/create",
-        "/api/v1/orders/recent",
-        "/api/v1/comments/list",
-        "/api/v1/comments/create",
-        "/api/v1/comments/recent",
-        "/api/v1/admin/users/list",
-        "/api/v1/admin/users/create",
-        "/api/v1/admin/posts/list",
-        "/api/v1/admin/posts/moderate",
-        "/api/v1/admin/products/list",
-        "/api/v1/admin/orders/list",
-        "/api/v1/admin/config/get",
-        "/api/v1/admin/config/set",
-        "/api/v1/admin/stats/users",
-        "/api/v1/admin/stats/orders",
-        "/api/v1/admin/stats/revenue",
-        "/api/v1/admin/stats/traffic",
+        "/api/v1/users/list", "/api/v1/users/create", "/api/v1/users/search", "/api/v1/users/me", "/api/v1/posts/list",
+        "/api/v1/posts/create", "/api/v1/posts/search", "/api/v1/posts/popular", "/api/v1/products/list",
+        "/api/v1/products/create", "/api/v1/products/search", "/api/v1/products/featured", "/api/v1/orders/list",
+        "/api/v1/orders/create", "/api/v1/orders/recent", "/api/v1/comments/list", "/api/v1/comments/create",
+        "/api/v1/comments/recent", "/api/v1/admin/users/list", "/api/v1/admin/users/create", "/api/v1/admin/posts/list",
+        "/api/v1/admin/posts/moderate", "/api/v1/admin/products/list", "/api/v1/admin/orders/list",
+        "/api/v1/admin/config/get", "/api/v1/admin/config/set", "/api/v1/admin/stats/users",
+        "/api/v1/admin/stats/orders", "/api/v1/admin/stats/revenue", "/api/v1/admin/stats/traffic",
     ];
 
     let static_deep: Array<String> = [
-        "/api/v1/admin/users/sessions/active",
-        "/api/v1/admin/users/sessions/expired",
-        "/api/v1/admin/users/permissions/list",
-        "/api/v1/admin/users/permissions/create",
-        "/api/v1/admin/posts/comments/flagged",
-        "/api/v1/admin/posts/comments/deleted",
-        "/api/v1/admin/products/inventory/low",
-        "/api/v1/admin/products/inventory/zero",
-        "/api/v1/admin/products/categories/list",
-        "/api/v1/admin/products/categories/create",
-        "/api/v1/admin/orders/payments/pending",
-        "/api/v1/admin/orders/payments/failed",
-        "/api/v1/admin/orders/shipments/pending",
-        "/api/v1/admin/orders/shipments/late",
-        "/api/v1/admin/system/logs/recent",
-        "/api/v1/admin/system/logs/errors",
-        "/api/v1/admin/system/jobs/running",
-        "/api/v1/admin/system/jobs/failed",
-        "/api/v1/admin/system/cache/stats",
-        "/api/v1/admin/system/cache/clear",
+        "/api/v1/admin/users/sessions/active", "/api/v1/admin/users/sessions/expired",
+        "/api/v1/admin/users/permissions/list", "/api/v1/admin/users/permissions/create",
+        "/api/v1/admin/posts/comments/flagged", "/api/v1/admin/posts/comments/deleted",
+        "/api/v1/admin/products/inventory/low", "/api/v1/admin/products/inventory/zero",
+        "/api/v1/admin/products/categories/list", "/api/v1/admin/products/categories/create",
+        "/api/v1/admin/orders/payments/pending", "/api/v1/admin/orders/payments/failed",
+        "/api/v1/admin/orders/shipments/pending", "/api/v1/admin/orders/shipments/late",
+        "/api/v1/admin/system/logs/recent", "/api/v1/admin/system/logs/errors", "/api/v1/admin/system/jobs/running",
+        "/api/v1/admin/system/jobs/failed", "/api/v1/admin/system/cache/stats", "/api/v1/admin/system/cache/clear",
     ];
 
     let param1: Array<String> = [
-        "/api/v1/users/:id",
-        "/api/v1/posts/:id",
-        "/api/v1/products/:id",
-        "/api/v1/orders/:id",
-        "/api/v1/comments/:id",
-        "/api/v1/categories/:slug",
-        "/api/v1/tags/:tag",
-        "/api/v1/profile/:username",
-        "/api/v1/auth/sessions/:token",
+        "/api/v1/users/:id", "/api/v1/posts/:id", "/api/v1/products/:id", "/api/v1/orders/:id", "/api/v1/comments/:id",
+        "/api/v1/categories/:slug", "/api/v1/tags/:tag", "/api/v1/profile/:username", "/api/v1/auth/sessions/:token",
         "/api/v1/files/:filename",
     ];
 
     let param2: Array<String> = [
-        "/api/v1/users/:id/posts/:pid",
-        "/api/v1/users/:id/comments/:cid",
-        "/api/v1/users/:id/orders/:oid",
-        "/api/v1/users/:id/profile/:section",
-        "/api/v1/posts/:id/comments/:cid",
-        "/api/v1/posts/:id/reactions/:rid",
-        "/api/v1/products/:id/reviews/:rid",
-        "/api/v1/products/:id/variants/:vid",
-        "/api/v1/orders/:id/items/:item_id",
+        "/api/v1/users/:id/posts/:pid", "/api/v1/users/:id/comments/:cid", "/api/v1/users/:id/orders/:oid",
+        "/api/v1/users/:id/profile/:section", "/api/v1/posts/:id/comments/:cid", "/api/v1/posts/:id/reactions/:rid",
+        "/api/v1/products/:id/reviews/:rid", "/api/v1/products/:id/variants/:vid", "/api/v1/orders/:id/items/:item_id",
         "/api/v1/categories/:slug/products/:pid",
     ];
 
@@ -155,19 +97,13 @@ pub fn build_routes() -> Array<RoutePattern> {
     // independently. The cross-engine `verify_engines_agree` check would
     // catch such a mismatch — see the bench driver.
     let param3: Array<String> = [
-        "/api/v1/users/:id/posts/:pid/comments/:cid",
-        "/api/v1/users/:id/posts/:pid/reactions/:rid",
-        "/api/v1/products/:id/variants/:vid/reviews/:rid",
-        "/api/v1/orders/:id/items/:item_id/refunds/:rid",
+        "/api/v1/users/:id/posts/:pid/comments/:cid", "/api/v1/users/:id/posts/:pid/reactions/:rid",
+        "/api/v1/products/:id/variants/:vid/reviews/:rid", "/api/v1/orders/:id/items/:item_id/refunds/:rid",
         "/api/v1/categories/:slug/products/:pid/reviews/:rid",
     ];
 
     let wildcards: Array<String> = [
-        "/static/*path",
-        "/files/:bucket/*key",
-        "/assets/*path",
-        "/downloads/:user/*path",
-        "/uploads/*path",
+        "/static/*path", "/files/:bucket/*key", "/assets/*path", "/downloads/:user/*path", "/uploads/*path",
     ];
 
     for let p of static_shallow {
@@ -206,23 +142,23 @@ pub fn build_routes() -> Array<RoutePattern> {
 /// the index assigned by `build_routes()`.
 pub fn build_access_pattern() -> Array<AccessRequest> {
     return [
-        AccessRequest { method: Method::Get, path: "/api/v1/health",                                        expected_handler_id: 6 },
-        AccessRequest { method: Method::Get, path: "/api/v1/users/list",                                    expected_handler_id: 20 },
-        AccessRequest { method: Method::Get, path: "/api/v1/admin/users/sessions/active",                   expected_handler_id: 50 },
-        AccessRequest { method: Method::Get, path: "/api/v1/users/12345",                                   expected_handler_id: 70 },
-        AccessRequest { method: Method::Get, path: "/api/v1/users/12345/posts/678",                         expected_handler_id: 80 },
-        AccessRequest { method: Method::Get, path: "/api/v1/users/12345/posts/678/comments/9",              expected_handler_id: 90 },
-        AccessRequest { method: Method::Get, path: "/static/css/main.css",                                  expected_handler_id: 95 },
-        AccessRequest { method: Method::Get, path: "/api/v1/products/list",                                 expected_handler_id: 28 },
-        AccessRequest { method: Method::Get, path: "/api/v1/users/12345/profile/email",                     expected_handler_id: 83 },
-        AccessRequest { method: Method::Get, path: "/api/v1/does/not/exist",                                expected_handler_id: -1 },
+        AccessRequest { method: Method::Get, path: "/api/v1/health", expected_handler_id: 6 },
+        AccessRequest { method: Method::Get, path: "/api/v1/users/list", expected_handler_id: 20 },
+        AccessRequest { method: Method::Get, path: "/api/v1/admin/users/sessions/active", expected_handler_id: 50 },
+        AccessRequest { method: Method::Get, path: "/api/v1/users/12345", expected_handler_id: 70 },
+        AccessRequest { method: Method::Get, path: "/api/v1/users/12345/posts/678", expected_handler_id: 80 },
+        AccessRequest { method: Method::Get, path: "/api/v1/users/12345/posts/678/comments/9", expected_handler_id: 90 },
+        AccessRequest { method: Method::Get, path: "/static/css/main.css", expected_handler_id: 95 },
+        AccessRequest { method: Method::Get, path: "/api/v1/products/list", expected_handler_id: 28 },
+        AccessRequest { method: Method::Get, path: "/api/v1/users/12345/profile/email", expected_handler_id: 83 },
+        AccessRequest { method: Method::Get, path: "/api/v1/does/not/exist", expected_handler_id: -1 },
     ] as Array<AccessRequest>;
 }
 
 /// Parsed segment of a route pattern, shared between engines.
 pub variant Segment {
     Literal(String),
-    Param(String),     // name without the leading ":"
+    Param(String),  // name without the leading ":"
     Wildcard(String),  // name without the leading "*", must be the last segment
 }
 
@@ -300,10 +236,12 @@ test "parse_pattern: root pattern yields empty" {
     assert segs.len() == 0;
 }
 
+
 #[expect_trap]
 test "parse_pattern: missing leading slash panics" {
     parse_pattern(&"foo");
 }
+
 
 #[expect_trap]
 test "parse_pattern: empty pattern panics" {

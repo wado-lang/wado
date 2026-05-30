@@ -79,7 +79,7 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_complex.wado/run"() with 
     "core:prelude/array.wado/Array<i32>::push"(__b_0, 1);
     "core:prelude/array.wado/Array<i32>::push"(__b_0, 2);
     "core:prelude/array.wado/Array<i32>::push"(__b_0, 3);
-    if 5 >= __b_0.used {
+    if builtin::unlikely(5 >= __b_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }

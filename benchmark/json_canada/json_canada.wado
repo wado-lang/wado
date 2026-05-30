@@ -64,7 +64,9 @@ fn read_file(path: String) -> String with Preopens {
 
 test "smoke" {
     // Tiny GeoJSON FeatureCollection with one feature, two coordinates.
-    let count = count_points("{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"x\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,1.0]]]}}]}");
+    let count = count_points(
+        "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"x\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,1.0]]]}}]}",
+    );
     assert count == 2;
 }
 
@@ -86,6 +88,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file("json_canada/canada.json");
     let mut b = Benchmark::new("json-canada");
     b.input_size = Option::Some(json_data.len());
+    b.iterations = 10;
 
     let total_points = b.run("", || count_points(json_data));
     assert total_points == 55563;

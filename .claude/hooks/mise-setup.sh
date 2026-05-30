@@ -102,7 +102,6 @@ if [ -n "$CLAUDE_ENV_FILE" ]; then
 export PATH="$HOME/.local/bin:$PATH"
 export MISE_YES=true
 export MISE_TRUSTED_CONFIG_PATHS="$HOME:$PWD"
-export MISE_GITHUB_TOKEN=$(gh auth token)
 eval "$(mise activate bash)"
 EOF
     log "Environment persisted to CLAUDE_ENV_FILE"
@@ -120,6 +119,20 @@ if mise install; then
     log "Project tools installed successfully"
 else
     log "Warning: Some tools may have failed to install"
+fi
+
+# Initialize the wasmtime submodule. wado-compiler has a path dependency on
+# vendor/wasmtime/crates/wasmtime (see [workspace.dependencies] in Cargo.toml),
+# so any cargo build/test/benchmark fails without it. Only this submodule is
+# needed for builds; the rest of vendor/ holds reference specs that can be
+# initialized on demand. --recommend-shallow keeps the checkout small.
+if [ -f .gitmodules ] && [ ! -f vendor/wasmtime/Cargo.toml ]; then
+    log "Initializing vendor/wasmtime submodule..."
+    if git submodule update --init --recommend-shallow vendor/wasmtime; then
+        log "vendor/wasmtime initialized"
+    else
+        log "Warning: failed to initialize vendor/wasmtime submodule"
+    fi
 fi
 
 log "mise setup complete"

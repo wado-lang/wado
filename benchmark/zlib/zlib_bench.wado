@@ -38,9 +38,8 @@ fn read_file_bytes(path: String) -> Array<u8> with Preopens {
 test "smoke" {
     // Round-trip a tiny in-memory buffer; no Preopens needed.
     let data: Array<u8> = [
-        72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8,
-        44 as u8, 32 as u8,
-        87 as u8, 111 as u8, 114 as u8, 108 as u8, 100 as u8, 33 as u8,
+        72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8, 44 as u8, 32 as u8, 87 as u8, 111 as u8, 114 as u8,
+        108 as u8, 100 as u8, 33 as u8,
     ];
     let compressed = zlib_compress(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();
@@ -53,7 +52,7 @@ test "smoke" {
 export fn run() with Stdout, MonotonicClock, Preopens {
     let data = read_file_bytes("json_twitter/twitter.json");
     let mut b = Benchmark::new("zlib");
-    b.iterations = 10;
+    b.iterations = 100;
     b.input_size = Option::Some(data.len());
 
     let compressed = b.run("compress", || zlib_compress(&data));

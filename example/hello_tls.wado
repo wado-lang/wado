@@ -56,7 +56,8 @@ export fn run() with Stdout, IpNameLookup, TcpSocket, Connector, Error {
         Err(_) => panic("TcpSocket::create failed"),
     };
     match sock.connect(socket_address(ip, port)).wait() {
-        Ok(_) => {},
+        Ok(_) => {
+        },
         Err(_) => panic(`TCP connect to {domain}:{port as i32} failed`),
     }
 
@@ -73,7 +74,8 @@ export fn run() with Stdout, IpNameLookup, TcpSocket, Connector, Error {
 
     // Both streams must be wired up before the handshake.
     match Connector::connect(conn, domain).wait() {
-        Ok(_) => {},
+        Ok(_) => {
+        },
         Err(e) => panic(`TLS handshake failed: {e.to_debug_string()}`),
     }
 

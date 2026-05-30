@@ -2,6 +2,16 @@
 
 Immutable knowledge and standing rules for developing Gale. Volatile state (current pass/fail numbers, test inventory) lives in CI and the source tree; open work is tracked in [`TODO.md`](./TODO.md); the antlr4 compatibility contract, descriptor-test pipeline, and regeneration commands live in [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 
+## First: initialize the ANTLR4 submodule
+
+Do this before anything else — the descriptor corpus, `.g4` semantics, and test regeneration all depend on it:
+
+```sh
+git submodule update --init --recommend-shallow vendor/antlr4
+```
+
+Files headed `// Do not edit by hand` are generated; never hand-edit them. To change one, edit its source (e.g. `status.toml`) and regenerate via `scripts/extract-antlr4-descriptors.sh` — which requires this submodule.
+
 ## Overview
 
 Gale is a Wado-native parser generator. See [README.md](./README.md) and [WEP: Gale](../docs/wep-2026-03-02-gale.md) for design context.

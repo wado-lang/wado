@@ -1,7 +1,8 @@
-// 128-bit Integer Types
-// Implemented as structs wrapping two 64-bit values, using Wasm Wide Arithmetic instructions.
 #![no_prelude]
 #![stdlib("core:prelude/int128.wado")]
+// 128-bit Integer Types
+// Implemented as structs wrapping two 64-bit values, using Wasm Wide Arithmetic instructions.
+
 
 use {
     IntErrorKind,
@@ -142,7 +143,10 @@ impl u128 {
 
         // Quick return if dividend == divisor
         if *self == *divisor {
-            return [u128::one(), u128::zero()];
+            return [
+                u128::one(),
+                u128::zero(),
+            ];
         }
 
         // Binary long division
@@ -320,6 +324,7 @@ impl u128 {
 
 impl FromStr for u128 {
     type Err = ParseIntError;
+
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<u128, ParseIntError> {
         return u128::from_str_radix_range(s, start, end, 10);
     }
@@ -697,13 +702,19 @@ impl i128 {
                 if v > max_neg_abs {
                     Result::Err(ParseIntError::new(IntErrorKind::NegOverflow));
                 } else {
-                    let pos = i128 { low: v.low(), high: v.high() as i64 };
+                    let pos = i128 {
+                        low: v.low(),
+                        high: v.high() as i64,
+                    };
                     Result::Ok(pos.neg());
                 }
             } else if v > max_pos {
                 Result::Err(ParseIntError::new(IntErrorKind::PosOverflow));
             } else {
-                Result::Ok(i128 { low: v.low(), high: v.high() as i64 });
+                Result::Ok(i128 {
+                    low: v.low(),
+                    high: v.high() as i64,
+                });
             },
             Err(k) => {
                 let kind = if is_negative && k == IntErrorKind::PosOverflow { IntErrorKind::NegOverflow } else { k };
@@ -939,6 +950,7 @@ impl i128 {
 
 impl FromStr for i128 {
     type Err = ParseIntError;
+
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<i128, ParseIntError> {
         return i128::from_str_radix_range(s, start, end, 10);
     }

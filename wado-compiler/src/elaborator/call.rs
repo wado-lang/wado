@@ -1068,7 +1068,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check trait bounds on function type arguments
         if !type_args.is_empty() {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
+            // Resolve any type parameter that appears only inside another
+            // parameter's associated-type-equality bound (e.g.
+            // `fn f<T, I: Iterator<Item = T>>`). The bounds check above
+            // registered the owner's associated types, so this can now
+            // project them.
+            self.infer_type_args_from_assoc_bounds(&callee, &mut type_args);
         }
+
+        // Diagnose type parameters that could not be inferred at all, so a
+        // generic call like `nothing()` (where `T` is unconstrained by the
+        // arguments) reports a clean error instead of trapping codegen with
+        // an "unsubstituted TypeParam" panic. Mirrors the method-call path.
+        self.report_uninferred_fn_type_args(&callee, &type_args, call.span);
 
         // Look up function return type
         let mut return_type = self.lookup_function_return_type(&callee);
@@ -2093,6 +2105,165 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return vec![];
         }
         inferred
+    }
+
+    /// Resolve type parameters that appear only inside another parameter's
+    /// associated-type-equality bound, e.g. `fn f<T, I: Iterator<Item = T>>`.
+    ///
+    /// [`Self::infer_fn_type_args`] binds `I` from the argument but leaves `T`
+    /// unbound, because `T` never appears in a parameter type. For each bound
+    /// `Owner: Trait<Assoc = Target>` whose `Owner` is already inferred to a
+    /// concrete type, project that type's `Assoc` to bind `Target`. Without
+    /// this, `T` would survive monomorphization and trap codegen as an
+    /// unsubstituted type parameter. Iterates to a fixpoint so chained
+    /// bounds resolve regardless of declaration order.
+    fn infer_type_args_from_assoc_bounds(&mut self, callee: &CalleeRef, type_args: &mut [TypeId]) {
+        let params = self.lookup_function_type_params(callee);
+        self.resolve_assoc_bound_args(&params, type_args);
+    }
+
+    /// Report a clean "cannot infer type parameter" diagnostic when a generic
+    /// function call leaves one of its declared type parameters unbound, so it
+    /// fails at the call site instead of reaching codegen as an unsubstituted
+    /// `TypeParam` (which traps). Mirrors the method-call path in
+    /// `infer_method_type_args`.
+    ///
+    /// A parameter is only flagged when it is genuinely unresolvable:
+    /// - effect parameters are skipped (handled separately);
+    /// - `fn`-bound parameters (`<F: fn(...) -> ...>`) are skipped — they are
+    ///   constrained structurally by the bound, not by call-site inference;
+    /// - parameters with a declared default are skipped;
+    /// - a parameter bound to an outer-scope `TypeParam` (the caller forwarding
+    ///   its own generics) is fine and left for monomorphization.
+    fn report_uninferred_fn_type_args(
+        &mut self,
+        callee: &CalleeRef,
+        type_args: &[TypeId],
+        span: crate::token::Span,
+    ) {
+        let params = self.lookup_function_type_params(callee);
+        let inferable: Vec<&ast::GenericParam> = params
+            .iter()
+            .filter(|p| {
+                !p.is_effect
+                    && p.default.is_none()
+                    && !p.bounds.iter().any(|b| b.fn_signature.is_some())
+            })
+            .collect();
+        if inferable.is_empty() {
+            return;
+        }
+        let scope_params: Vec<TypeId> = self
+            .trait_ctx
+            .type_params
+            .values()
+            .map(|&(_, tid)| tid)
+            .collect();
+
+        // When inference produced no type args at all, every inferable
+        // parameter is unresolved. Otherwise check each against its inferred
+        // slot (parallel to the full declared parameter list).
+        let unresolved: Vec<&str> = if type_args.is_empty() {
+            inferable.iter().map(|p| p.name.as_str()).collect()
+        } else if type_args.len() == params.len() {
+            params
+                .iter()
+                .zip(type_args.iter())
+                .filter(|&(p, &tid)| {
+                    !p.is_effect
+                        && p.default.is_none()
+                        && !p.bounds.iter().any(|b| b.fn_signature.is_some())
+                        && self.is_unbound_type_param(tid)
+                        && !scope_params.contains(&tid)
+                })
+                .map(|(p, _)| p.name.as_str())
+                .collect()
+        } else {
+            // Length mismatch (packs/effects interleaved): be conservative
+            // and do not risk a false diagnostic.
+            return;
+        };
+
+        if unresolved.is_empty() {
+            return;
+        }
+        let names = unresolved
+            .iter()
+            .map(|n| format!("`{n}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let func_name = callee.name.as_str();
+        let _ = self.logger.error(TypeError::CannotInferType {
+            message: format!(
+                "cannot infer type parameter {names} of function `{func_name}`; \
+                 add a turbofish (`{func_name}::<...>()`) or a type annotation"
+            ),
+            span,
+        });
+    }
+
+    /// Shared core of bound-driven inference: for each generic parameter in
+    /// `params` already inferred to a concrete type, look at its trait bounds'
+    /// associated-type-equality bindings (`Trait<Assoc = Target>`); when
+    /// `Target` names another, still-unbound parameter, project the owner's
+    /// `Assoc` and bind it. `params` and `args` are parallel (same index
+    /// space). Iterates to a fixpoint so chained bounds resolve regardless of
+    /// declaration order.
+    ///
+    /// Used by both free-function calls ([`Self::infer_type_args_from_assoc_bounds`])
+    /// and method calls (`infer_method_type_args`).
+    pub(super) fn resolve_assoc_bound_args(
+        &self,
+        params: &[ast::GenericParam],
+        args: &mut [TypeId],
+    ) {
+        if params.len() != args.len() {
+            return;
+        }
+        loop {
+            let mut progressed = false;
+            for (owner_idx, param) in params.iter().enumerate() {
+                let owner_ty = args[owner_idx];
+                if self.is_unbound_type_param(owner_ty) {
+                    continue;
+                }
+                for bound in &param.bounds {
+                    for assoc in &bound.assoc_types {
+                        let Type::Named(named) = &assoc.ty else {
+                            continue;
+                        };
+                        let Some(target_idx) = params.iter().position(|p| p.name == named.name)
+                        else {
+                            continue;
+                        };
+                        if !self.is_unbound_type_param(args[target_idx]) {
+                            continue;
+                        }
+                        let resolved = {
+                            let tt = self.tysys.type_table.borrow();
+                            tt.resolve_assoc_type(owner_ty, &assoc.name)
+                                .or_else(|| tt.resolve_generic_assoc_type(owner_ty, &assoc.name))
+                        };
+                        if let Some(resolved) = resolved {
+                            args[target_idx] = resolved;
+                            progressed = true;
+                        }
+                    }
+                }
+            }
+            if !progressed {
+                break;
+            }
+        }
+    }
+
+    /// Whether `ty` is still an unbound generic parameter / pack (as opposed to
+    /// a concrete type inferred from the call site).
+    pub(super) fn is_unbound_type_param(&self, ty: TypeId) -> bool {
+        matches!(
+            self.tysys.type_table.borrow().get(ty),
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+        )
     }
 
     /// Look up a generic function (current or imported) and produce a temporary

@@ -138,6 +138,14 @@ impl TypeSystem {
     /// catch-all `_` so that adding a new [`Expr`] variant produces a
     /// compile error here, forcing a deliberate decision about whether
     /// the new shape should participate in numeric-literal coercion.
+    /// Whether `expr` is the bare `null` literal. A bare `null` initially
+    /// resolves to `Option<UNKNOWN>` and only acquires its inner type from an
+    /// expected-type context, so callers that can supply one (e.g. binary
+    /// operands) check this to route the type through.
+    pub(crate) fn is_null_literal(&self, expr: &Expr) -> bool {
+        matches!(expr, Expr::Literal(lit) if matches!(lit.value, Literal::Null))
+    }
+
     pub(crate) fn is_numeric_literal(&self, expr: &Expr) -> bool {
         match expr {
             Expr::Literal(lit) => matches!(lit.value, Literal::Number(_)),

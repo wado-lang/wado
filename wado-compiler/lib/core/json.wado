@@ -1,3 +1,4 @@
+#![stdlib("core:json")]
 //! JSON serialization and deserialization (self-describing format).
 //!
 //! Implements the `core:serde` `Serializer` and `Deserializer` traits for JSON.
@@ -7,7 +8,7 @@
 //!
 //!   let json = to_string::<i32>(&42);            // "42"
 //!   let val = from_string::<i32>("42");           // Result::Ok(42)
-#![stdlib("core:json")]
+
 
 use {
     Serialize,
@@ -648,11 +649,11 @@ impl JsonDeserializer {
 
     pub fn expect_char(&mut self, c: i32) -> Result<(), DeserializeError> {
         self.skip_whitespace();
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let b = self.input.get_byte_unchecked(self.pos) as i32;
-        if b != c {
+        if builtin::unlikely(b != c) {
             return Result::Err(DeserializeError::malformed(
                 `expected '{c as u8 as char}', found '{b as u8 as char}'`,
                 self.pos as i64,
@@ -683,10 +684,10 @@ impl JsonDeserializer {
     pub fn read_json_string(&mut self) -> Result<String, DeserializeError> {
         self.skip_whitespace();
         let input_len = self.input.len();
-        if self.pos >= input_len {
+        if builtin::unlikely(self.pos >= input_len) {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        if self.input.get_byte_unchecked(self.pos) as i32 != '"' as i32 {
+        if builtin::unlikely(self.input.get_byte_unchecked(self.pos) as i32 != '"' as i32) {
             return Result::Err(DeserializeError::unexpected_type(
                 "expected string",
                 self.pos as i64,
@@ -803,17 +804,17 @@ impl JsonDeserializer {
     pub fn read_number_raw(&mut self) -> Result<String, DeserializeError> {
         self.skip_whitespace();
         let start = self.pos;
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         if self.input.get_byte_unchecked(self.pos) as i32 == '-' as i32 {
             self.pos += 1;
         }
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let first = self.input.get_byte_unchecked(self.pos) as i32;
-        if first < '0' as i32 || first > '9' as i32 {
+        if builtin::unlikely(first < '0' as i32 || first > '9' as i32) {
             return Result::Err(DeserializeError::unexpected_type(
                 "expected number",
                 self.pos as i64,
@@ -1010,7 +1011,7 @@ impl JsonDeserializer {
     pub fn parse_i32_direct(&mut self) -> Result<i32, DeserializeError> {
         self.skip_whitespace();
         let start = self.pos as i64;
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(start));
         }
         let mut neg = false;
@@ -1018,11 +1019,11 @@ impl JsonDeserializer {
             neg = true;
             self.pos += 1;
         }
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let first = self.input.get_byte_unchecked(self.pos) as i32;
-        if first < '0' as i32 || first > '9' as i32 {
+        if builtin::unlikely(first < '0' as i32 || first > '9' as i32) {
             return Result::Err(DeserializeError::unexpected_type(
                 "expected number",
                 self.pos as i64,
@@ -1111,7 +1112,7 @@ impl JsonDeserializer {
     pub fn parse_i64_direct(&mut self) -> Result<i64, DeserializeError> {
         self.skip_whitespace();
         let start = self.pos as i64;
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(start));
         }
         let mut neg = false;
@@ -1119,11 +1120,11 @@ impl JsonDeserializer {
             neg = true;
             self.pos += 1;
         }
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let first = self.input.get_byte_unchecked(self.pos) as i32;
-        if first < '0' as i32 || first > '9' as i32 {
+        if builtin::unlikely(first < '0' as i32 || first > '9' as i32) {
             return Result::Err(DeserializeError::unexpected_type(
                 "expected number",
                 self.pos as i64,
@@ -1204,14 +1205,14 @@ impl JsonDeserializer {
     pub fn parse_u64_direct(&mut self) -> Result<u64, DeserializeError> {
         self.skip_whitespace();
         let start = self.pos as i64;
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(start));
         }
         if self.input.get_byte_unchecked(self.pos) as i32 == '-' as i32 {
             return Result::Err(DeserializeError::overflow("negative value for u64", start));
         }
         let first = self.input.get_byte_unchecked(self.pos) as i32;
-        if first < '0' as i32 || first > '9' as i32 {
+        if builtin::unlikely(first < '0' as i32 || first > '9' as i32) {
             return Result::Err(DeserializeError::unexpected_type(
                 "expected number",
                 self.pos as i64,
@@ -1295,7 +1296,7 @@ impl JsonDeserializer {
     pub fn parse_f64_direct(&mut self) -> Result<f64, DeserializeError> {
         self.skip_whitespace();
         let start = self.pos as i64;
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(start));
         }
         let mut neg = false;
@@ -1303,11 +1304,11 @@ impl JsonDeserializer {
             neg = true;
             self.pos += 1;
         }
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let first = self.input.get_byte_unchecked(self.pos) as i32;
-        if first < '0' as i32 || first > '9' as i32 {
+        if builtin::unlikely(first < '0' as i32 || first > '9' as i32) {
             return Result::Err(DeserializeError::unexpected_type(
                 "expected number",
                 self.pos as i64,
@@ -1461,7 +1462,7 @@ impl JsonDeserializer {
     /// Skips the next JSON value without allocating.
     pub fn skip_value(&mut self) -> Result<(), DeserializeError> {
         self.skip_whitespace();
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let b = self.input.get_byte_unchecked(self.pos) as u8 as char;
@@ -1595,7 +1596,7 @@ struct JsonVariantAccess {
 impl DeserializeSeq for JsonSeqAccess {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
         self.de.skip_whitespace();
-        if self.de.pos >= self.de.input.len() {
+        if builtin::unlikely(self.de.pos >= self.de.input.len()) {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
         if self.de.input.get_byte_unchecked(self.de.pos) as i32 == ']' as i32 {
@@ -1650,7 +1651,7 @@ impl DeserializeMap for JsonMapAccess {
 impl DeserializeStruct for JsonStructAccess {
     fn next_field(&mut self) -> Result<Option<i32>, DeserializeError> {
         self.de.skip_whitespace();
-        if self.de.pos >= self.de.input.len() {
+        if builtin::unlikely(self.de.pos >= self.de.input.len()) {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
         let b = self.de.input.get_byte_unchecked(self.de.pos) as i32;
@@ -1658,7 +1659,7 @@ impl DeserializeStruct for JsonStructAccess {
             return Result::Ok(null);
         }
         if !self.first {
-            if b != ',' as i32 {
+            if builtin::unlikely(b != ',' as i32) {
                 return Result::Err(DeserializeError::malformed(
                     "expected ',' or '}'",
                     self.de.pos as i64,
@@ -1672,7 +1673,8 @@ impl DeserializeStruct for JsonStructAccess {
         // Fast path: scan JSON string key without allocating.
         // For unescaped keys (the common case), we pass the byte range
         // directly to the lookup function, avoiding String allocation entirely.
-        if self.de.pos >= self.de.input.len() || self.de.input.get_byte_unchecked(self.de.pos) as i32 != '"' as i32 {
+        if builtin::unlikely(self.de.pos >= self.de.input.len()
+            || self.de.input.get_byte_unchecked(self.de.pos) as i32 != '"' as i32) {
             return Result::Err(DeserializeError::unexpected_type(
                 "expected string key",
                 self.de.pos as i64,
@@ -1693,7 +1695,7 @@ impl DeserializeStruct for JsonStructAccess {
             self.de.pos += 1;
         }
 
-        if !has_escape {
+        if builtin::likely(!has_escape) {
             // Fast path: key has no escapes, compare directly from input buffer
             let key_end = self.de.pos;
             self.de.pos += 1;  // skip closing '"'
@@ -1915,7 +1917,7 @@ impl Deserializer for JsonDeserializer {
 
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
         self.skip_whitespace();
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let b = self.input.get_byte_unchecked(self.pos) as i32;
@@ -1998,7 +2000,7 @@ impl Deserializer for JsonDeserializer {
 
     fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<JsonVariantAccess, DeserializeError> with stores[self] {
         self.skip_whitespace();
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let b = self.input.get_byte_unchecked(self.pos) as u8 as char;
@@ -2032,7 +2034,7 @@ impl Deserializer for JsonDeserializer {
 
     fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
         self.skip_whitespace();
-        if self.pos >= self.input.len() {
+        if builtin::unlikely(self.pos >= self.input.len()) {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let b = self.input.get_byte_unchecked(self.pos) as u8 as char;
@@ -2095,8 +2097,7 @@ pub fn to_bytes<T: Serialize>(value: &T) -> Result<Array<u8>, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = JsonSerializer { buf: &mut buf };
     value.serialize::<JsonSerializer>(&mut ser)?;
-    return Result::Ok(
-        Array::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
+    return Result::Ok(Array::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
 }
 
 /// Serializes a value to a pretty JSON string.

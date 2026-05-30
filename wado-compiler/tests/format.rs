@@ -153,6 +153,213 @@ fn run() {
     assert_eq!(formatted1, formatted2, "format should be idempotent");
 }
 
+/// A `use { ... } from "..."` whose item list fits in 120 chars but whose
+/// full line (including the ` from "..."` clause) exceeds it must wrap the
+/// item list one-per-line. Regression test for the width check that used to
+/// exclude the from-clause (issue #1234).
+#[test]
+fn test_format_use_wraps_when_from_clause_overflows() {
+    let source = "use { Ordering, Eq, Ord, IndexValue, IndexAssign, Iterator, IntoIterator, FromIterator, Display } from \"core:prelude/traits.wado\";\n";
+    let expected = r#"use {
+    Ordering,
+    Eq,
+    Ord,
+    IndexValue,
+    IndexAssign,
+    Iterator,
+    IntoIterator,
+    FromIterator,
+    Display,
+} from "core:prelude/traits.wado";
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+/// A namespace import with a long `with { ... }` clause wraps the with-clause
+/// onto its own line and expands the attribute object, recursively keeping
+/// short nested objects inline.
+#[test]
+fn test_format_use_wraps_long_with_clause() {
+    let source = "use sqlite from \"../../package-gale/tests/grammars/SQLite.g4\" with { generator: { module: \"../../package-gale/src/generator.wado\", options: { highlight: false } } };\n";
+    let expected = r#"use sqlite from "../../package-gale/tests/grammars/SQLite.g4"
+    with {
+        generator: {
+            module: "../../package-gale/src/generator.wado",
+            options: { highlight: false },
+        },
+    };
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+/// A long item list paired with a short `with { ... }` clause wraps the item
+/// list but keeps the (short) with-clause inline on the closing line.
+#[test]
+fn test_format_use_wraps_items_keeps_short_with_inline() {
+    let source = "use { sin, cos, tan, asin, acos, atan, atan2, sinh, cosh, tanh, exp, log, log2, log10, sqrt, cbrt, floor } from \"../libm.wat\" with { type: \"wat\" };\n";
+    let expected = r#"use {
+    sin,
+    cos,
+    tan,
+    asin,
+    acos,
+    atan,
+    atan2,
+    sinh,
+    cosh,
+    tanh,
+    exp,
+    log,
+    log2,
+    log10,
+    sqrt,
+    cbrt,
+    floor,
+} from "../libm.wat" with { type: "wat" };
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+/// A long nested array inside a `with { ... }` clause wraps one element per
+/// line; short scalar values stay inline.
+#[test]
+fn test_format_use_with_wraps_nested_array() {
+    let source = "use g from \"./x.g4\" with { generator: { inputs: [\"./grammars/AAAAAAAAAAAAAAAA.g4\", \"./grammars/BBBBBBBBBBBBBBBB.g4\", \"./grammars/CCCCCCCCCCCCCCCC.g4\"], output_dir: \"tests/generated/x\" } };\n";
+    let expected = r#"use g from "./x.g4"
+    with {
+        generator: {
+            inputs: [
+                "./grammars/AAAAAAAAAAAAAAAA.g4",
+                "./grammars/BBBBBBBBBBBBBBBB.g4",
+                "./grammars/CCCCCCCCCCCCCCCC.g4",
+            ],
+            output_dir: "tests/generated/x",
+        },
+    };
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+/// A `test` item carrying a leading comment and an outer attribute must format
+/// idempotently — the blank line between the comment and the attribute must not
+/// grow on repeated passes. Regression test: `Item::Test` was missing from
+/// `get_item_first_line`, so the attribute line was miscounted as a blank.
+#[test]
+fn test_format_test_attr_blank_line_idempotent() {
+    let source = "// note\n\n#[TODO]\ntest \"x\" {\n    assert true;\n}\n";
+    let once = wado_compiler::format(source).expect("format failed");
+    let twice = wado_compiler::format(&once).expect("format failed");
+    assert_eq!(
+        once, twice,
+        "format must be idempotent\n--- once ---\n{once}"
+    );
+    // Exactly one blank line (the source's) sits between comment and attribute.
+    assert_eq!(
+        once,
+        "// note\n\n#[TODO]\ntest \"x\" {\n    assert true;\n}\n"
+    );
+}
+
+/// A function type with a unit return omits the `-> ()`, matching the rule for
+/// function declarations. The arrow is kept for non-unit returns.
+#[test]
+fn test_format_fn_type_omits_unit_return() {
+    let source = "trait Each {\n    fn run(&self, f: fn mut(i32));\n    fn map(&self, g: fn(i32) -> i32);\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        !formatted.contains("-> ()"),
+        "unit return should be omitted, got:\n{formatted}"
+    );
+    assert!(formatted.contains("fn mut(i32)"), "got:\n{formatted}");
+    assert!(formatted.contains("fn(i32) -> i32"), "got:\n{formatted}");
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "idempotent");
+}
+
+/// An array whose elements are themselves containers (here 2-tuples) is forced
+/// one entry per line by the depth rule — the old KV-list special case.
+#[test]
+fn test_format_array_of_tuples_one_per_line() {
+    let source = "fn run() {\n    let m = [[\"a\", 1], [\"b\", 2]];\n}\n";
+    let expected = r#"fn run() {
+    let m = [
+        ["a", 1],
+        ["b", 2],
+    ];
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "idempotent");
+}
+
+/// The depth rule generalizes beyond 2-tuples: an array of 3-element tuples
+/// also wraps one entry per line (the old KV-list rule only handled 2-tuples).
+#[test]
+fn test_format_array_of_triples_one_per_line() {
+    let source = "fn run() {\n    let m = [[1, 2, 3], [4, 5, 6]];\n}\n";
+    let expected = r"fn run() {
+    let m = [
+        [1, 2, 3],
+        [4, 5, 6],
+    ];
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "idempotent");
+}
+
+/// A flat scalar array that fits stays inline (no nested container, no calls).
+#[test]
+fn test_format_flat_array_stays_inline() {
+    let source = "fn run() {\n    let m = [1, 2, 3];\n}\n";
+    let expected = "fn run() {\n    let m = [1, 2, 3];\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+}
+
+/// A nested struct literal forces the outer struct multi-line, one field per
+/// line, while the (flat) inner struct stays inline.
+#[test]
+fn test_format_nested_struct_breaks_outer() {
+    let source = "fn run() {\n    let c = Config { server: Server { host: \"h\", port: 8080 }, debug: true };\n}\n";
+    let expected = r#"fn run() {
+    let c = Config {
+        server: Server { host: "h", port: 8080 },
+        debug: true,
+    };
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "idempotent");
+}
+
+/// A flat struct literal that fits stays inline.
+#[test]
+fn test_format_flat_struct_stays_inline() {
+    let source = "fn run() {\n    let p = Point { x: 1, y: 2 };\n}\n";
+    let expected = "fn run() {\n    let p = Point { x: 1, y: 2 };\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+}
+
 #[test]
 fn test_format_idempotent_with_imports() {
     let source = r#"

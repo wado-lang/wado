@@ -64,6 +64,12 @@ impl Monomorphizer {
             .map(|(param, &arg)| (param.index, arg))
             .collect();
 
+        // Record this monomorphized struct's associated-type resolutions so
+        // that projections like `I::Item` (where `I` is later substituted with
+        // this monomorphized struct, which carries no type args) can still be
+        // resolved by `resolve_assoc_type`.
+        type_table.register_monomorphized_assoc_types(concrete_type_id, &key.name, &substitution);
+
         // Substitute types in fields (now self-references can be resolved)
         let fields: Vec<TirField> = generic
             .fields

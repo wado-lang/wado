@@ -1,0 +1,82 @@
+// Regression: a generic method whose body composes two methods that both
+// return a projected associated type (`Option<I::Item>`) — the shape of
+// `Peekable::next_if`, which calls `peek()` then `next()`.
+//
+// `SubstitutionContext::substitute` used to collapse `I::Item` to the bare
+// parameter `I` whenever the projected parameter substituted to itself
+// (`I -> I`), so the call-site return type of `self.peek()` became
+// `Option<I>` instead of `Option<I::Item>`. After monomorphization this
+// produced mismatched GC struct types (`Option<Gen<i32>>` vs `Option<i32>`)
+// and trapped codegen with a `ref null` / `ref` validation error.
+
+struct Gen<T> {
+    items: Array<T>,
+    idx: i32,
+}
+
+impl<T> Iterator for Gen<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        if self.idx >= self.items.len() {
+            return null;
+        }
+        let v = self.items[self.idx];
+        self.idx += 1;
+        return Option::Some(v);
+    }
+}
+
+struct Peekable<I: Iterator> {
+    inner: I,
+    peeked: Option<Option<I::Item>>,
+}
+
+impl<I: Iterator> Peekable<I> {
+    fn peek(&mut self) -> Option<I::Item> {
+        if let Some(buffered) = self.peeked {
+            return buffered;
+        }
+        let nxt = self.inner.next();
+        self.peeked = Option::Some(nxt);
+        return nxt;
+    }
+
+    // Composes peek() + next() — both return `Option<I::Item>`.
+    fn next_if(&mut self, mut pred: fn mut(I::Item) -> bool) -> Option<I::Item> {
+        if let Some(item) = self.peek() {
+            if pred(item) {
+                return self.next();
+            }
+        }
+        return null;
+    }
+}
+
+impl<I: Iterator> Iterator for Peekable<I> {
+    type Item = I::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(buffered) = self.peeked {
+            self.peeked = null;
+            return buffered;
+        }
+        return self.inner.next();
+    }
+}
+
+fn peekable<I: Iterator>(iter: I) -> Peekable<I> {
+    return Peekable { inner: iter, peeked: null };
+}
+
+test "method composing peek + next over a projected associated type" {
+    let g: Gen<i32> = Gen { items: [1, 2, 3, 4], idx: 0 };
+    let mut p = peekable(g);
+    assert p.next_if(|x: i32| x < 3) matches { Some(1) };
+    assert p.next_if(|x: i32| x < 3) matches { Some(2) };
+    assert p.next_if(|x: i32| x < 3) matches { None };
+    assert p.next() matches { Some(3) };
+    assert p.next() matches { Some(4) };
+    assert p.next() matches { None };
+}
+
+__DATA__
+{"test": {}}

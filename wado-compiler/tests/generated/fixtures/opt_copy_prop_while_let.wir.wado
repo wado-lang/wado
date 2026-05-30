@@ -124,7 +124,7 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/iter_next"(it) {
         return 1, 0;
     }
     index = it.pos;
-    if index >= it.items.used {
+    if builtin::unlikely(index >= it.items.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }

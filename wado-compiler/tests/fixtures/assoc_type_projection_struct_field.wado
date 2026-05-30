@@ -1,0 +1,62 @@
+// Regression: a generic struct that stores a projected associated type of a
+// generic parameter (`I::Item`) in a field. Before the fix this ICE'd during
+// monomorphization name-mangling / WIR build, because the DCE reachability
+// walk pruned the projection's parameter type and because a monomorphized
+// struct's associated types were never registered for later resolution.
+//
+// `Gen<T>::Item == T` (the iterator's Item is its own type parameter), which
+// is the case that exercises generic associated-type resolution through a
+// monomorphized struct.
+
+struct Gen<T> {
+    items: Array<T>,
+    idx: i32,
+}
+
+impl<T> Iterator for Gen<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        if self.idx >= self.items.len() {
+            return null;
+        }
+        let v = self.items[self.idx];
+        self.idx += 1;
+        return Option::Some(v);
+    }
+}
+
+// Field is `Option<I::Item>` (the shape a Peekable buffer needs).
+struct Buffered<I: Iterator> {
+    inner: I,
+    last: Option<I::Item>,
+}
+
+impl<I: Iterator> Buffered<I> {
+    fn fill(&mut self) {
+        self.last = self.inner.next();
+    }
+    fn take_last(&mut self) -> Option<I::Item> {
+        let v = self.last;
+        self.last = null;
+        return v;
+    }
+}
+
+fn buffered<I: Iterator>(iter: I) -> Buffered<I> {
+    return Buffered { inner: iter, last: null };
+}
+
+test "projected assoc type stored in a generic struct field" {
+    let g: Gen<i32> = Gen { items: [10, 20, 30], idx: 0 };
+    let mut b = buffered(g);
+    assert b.take_last() matches { None };
+    b.fill();
+    assert b.take_last() matches { Some(10) };
+    assert b.take_last() matches { None };
+    b.fill();
+    assert b.take_last() matches { Some(20) };
+    assert b.inner.next() matches { Some(30) };
+}
+
+__DATA__
+{"test": {}}

@@ -1,6 +1,6 @@
 // Sieve of Eratosthenes benchmark for C
 // Counts primes up to LIMIT using the sieve algorithm
-// Reference: π(10,000,000) = 664,579
+// Reference: π(100,000,000) = 5,761,455
 //
 // How to run:
 //   mise run benchmark-sieve
@@ -53,7 +53,7 @@ int sieve_count(int limit) {
 }
 
 int main() {
-    int limit = 10000000;
+    int limit = 100000000;
 
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);

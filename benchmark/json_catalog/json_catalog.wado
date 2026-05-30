@@ -123,7 +123,9 @@ fn read_file(path: String) -> String with Preopens {
 
 test "smoke" {
     // Minimal valid CitmCatalog with empty maps and no events / performances.
-    let counts = parse_counts("{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}");
+    let counts = parse_counts(
+        "{\"areaNames\":{},\"audienceSubCategoryNames\":{},\"blockNames\":{},\"events\":{},\"performances\":[],\"seatCategoryNames\":{},\"subTopicNames\":{},\"subjectNames\":{},\"topicNames\":{},\"topicSubTopics\":{},\"venueNames\":{}}",
+    );
     assert counts.events == 0;
     assert counts.performances == 0;
 }
@@ -148,6 +150,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file("json_catalog/citm_catalog.json");
     let mut b = Benchmark::new("json-catalog");
     b.input_size = Option::Some(json_data.len());
+    b.iterations = 10;
 
     let counts = b.run("", || parse_counts(json_data));
     assert counts.events == 184;

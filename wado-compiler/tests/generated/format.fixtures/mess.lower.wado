@@ -933,7 +933,11 @@ fn f64_store(addr: i32, value: f64);
 
 fn i32_load8_u(addr: i32) -> u8;
 
+fn i32_load8_s(addr: i32) -> i8;
+
 fn i32_load16_u(addr: i32) -> u16;
+
+fn i32_load16_s(addr: i32) -> i16;
 
 fn i32_store8(addr: i32, value: u8);
 
@@ -3532,7 +3536,7 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
                 __r.String::push_str(&"core:prelude/fpfmt.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 290 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 292 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"digits must be <= 18");
                 __r.String::push_str(&"\ncondition: n <= 18\n");
@@ -3577,14 +3581,22 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
         (1 - p1);
     };
     let total_digits: i32 = (decimal_pos + precision);
+    if (total_digits <= 0) {
+        if (total_digits < 0) {
+            return FormatResult { digits: 0, exponent: -precision };
+        }
+        let p: i32 = -log10_e63;
+        let lp: i32 = "core::prelude/fpfmt.wado::log2_pow10"(p);
+        let pm: PmHiLo = "core::prelude/fpfmt.wado::get_pow10"(p);
+        let s: i32 = -((e + lp) + 3);
+        let u: u64 = "core::prelude/fpfmt.wado::uscale"(m, pm.hi, pm.lo, s);
+        let d: u64 = "core::prelude/fpfmt.wado::unrounded_round"("core::prelude/fpfmt.wado::unrounded_div"(u, "core::prelude/fpfmt.wado::pow10"((p - precision))));
+        return FormatResult { digits: d, exponent: -precision };
+    }
     let n: i32 = if (total_digits > 18) {
         18;
     } else {
-        if (total_digits < 1) {
-            1;
-        } else {
-            total_digits;
-        };
+        total_digits;
     };
     let p: i32 = ((n - 1) - log10_e63);
     let lp: i32 = "core::prelude/fpfmt.wado::log2_pow10"(p);
@@ -3861,6 +3873,10 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
     let decimal_pos: i32 = (nd + p);
     if (decimal_pos <= 0) {
         let leading_zeros: i32 = -decimal_pos;
+        if (precision == 0) {
+            buf.String::push_str(&"0");
+            return;
+        }
         buf.String::push_str(&"0.");
         if (precision <= leading_zeros) {
             "core::prelude/fpfmt.wado::fill_zeros"(buf, precision);
@@ -10931,7 +10947,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 841 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 840 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -10989,7 +11005,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 882 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 881 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert_str index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -11035,7 +11051,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 910 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 909 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"index out of bounds");
                 __r.String::push_str(&"\ncondition: byte_index >= 0 && byte_index < self.used\n");
@@ -11075,7 +11091,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 911 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 910 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"remove index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -18348,7 +18364,7 @@ pub fn "Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"(self: Box<R
 }
 
 fn "Array<u64>^IndexValue<i32>::index_value"(self: &Array<u64>, index: i32) -> u64 {
-    if (index >= self.used) {
+    if core::builtin::unlikely((index >= self.used)) {
         core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<u64>(self.repr, index);
@@ -18377,7 +18393,7 @@ pub fn "Array<u8>::internal_raw_data"(self: &Array<u8>) -> builtin::array<u8> {
 }
 
 fn "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>^IndexValue<i32>::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
-    if (index >= self.used) {
+    if core::builtin::unlikely((index >= self.used)) {
         core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<[String, String]>(self.repr, index);

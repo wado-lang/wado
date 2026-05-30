@@ -13,10 +13,44 @@ use {
     HighlightCapture,
     HighlightVisitor,
     highlight_html,
+    to_lexer_string,
 } from "./runtime.wado";
 
 fn ls(text: String) -> LexerSlice {
     return LexerSlice::from_string(text);
+}
+
+test "to_lexer_string interleaves non-default-channel trivia in source order" {
+    // `A: 'a' -> mode(for);` then `B: 'b' -> channel(break);` (channel 2).
+    // The B token is non-default-channel, so the generated tokenizer parks it
+    // in the following token's leading_trivia. ANTLR4 still emits it into the
+    // stream in source order with a `channel=N` attribute and a sequential
+    // index. Mirrors `LexerExec/ReservedWordsEscaping`.
+    let a = Token::new(0, ls("a"), Span::new(0, 1));
+    let b = Token::with_channel(1, ls("b"), Span::new(1, 2), [], 2);
+    let eof = Token::with_trivia(2, ls(""), Span::new(2, 2), [b]);
+    let tokens: Array<Token> = [a, eof];
+    let actual = to_lexer_string(&tokens, &"ab", 2);
+    let expected = "[@0,0:0='a',<1>,1:0]
+[@1,1:1='b',<2>,channel=2,1:1]
+[@2,2:1='<EOF>',<-1>,1:2]
+";
+    assert actual == expected, `actual:\n{actual}\nexpected:\n{expected}`;
+}
+
+test "to_lexer_string skips default-channel (skip) trivia without consuming an index" {
+    // Skip tokens also land in leading_trivia but carry channel 0; ANTLR4
+    // discards them entirely, so they must neither appear in the dump nor
+    // advance the `@index` counter.
+    let a = Token::new(0, ls("a"), Span::new(0, 1));
+    let ws = Token::new(1, ls(" "), Span::new(1, 2));
+    let c = Token::with_trivia(0, ls("c"), Span::new(2, 3), [ws]);
+    let tokens: Array<Token> = [a, c];
+    let actual = to_lexer_string(&tokens, &"a c", 2);
+    let expected = "[@0,0:0='a',<1>,1:0]
+[@1,2:2='c',<1>,1:2]
+";
+    assert actual == expected, `actual:\n{actual}\nexpected:\n{expected}`;
 }
 
 test "Span::new creates span" {
@@ -221,21 +255,27 @@ test "normalize_tree single line passthrough" {
 
 test "highlight_html escapes HTML and wraps captures" {
     let source = "<div>";
-    let captures: Array<HighlightCapture> = [HighlightCapture { capture: "tag", start: 0, end: 5 }];
+    let captures: Array<HighlightCapture> = [
+        HighlightCapture { capture: "tag", start: 0, end: 5 },
+    ];
     let html = highlight_html(&source, &captures);
     assert html == `<span class="tag">&lt;div&gt;</span>`, `got: {html}`;
 }
 
 test "highlight_html emits plain text for gaps" {
     let source = "a + b";
-    let captures: Array<HighlightCapture> = [HighlightCapture { capture: "operator", start: 2, end: 3 }];
+    let captures: Array<HighlightCapture> = [
+        HighlightCapture { capture: "operator", start: 2, end: 3 },
+    ];
     let html = highlight_html(&source, &captures);
     assert html == `a <span class="operator">+</span> b`, `got: {html}`;
 }
 
 test "highlight_html converts dot-separated captures to CSS classes" {
     let source = "{";
-    let captures: Array<HighlightCapture> = [HighlightCapture { capture: "punctuation.bracket", start: 0, end: 1 }];
+    let captures: Array<HighlightCapture> = [
+        HighlightCapture { capture: "punctuation.bracket", start: 0, end: 1 },
+    ];
     let html = highlight_html(&source, &captures);
     assert html == `<span class="punctuation bracket">\{</span>`, `got: {html}`;
 }
@@ -265,7 +305,9 @@ test "HighlightVisitor applies context overrides" {
     let mapping = HighlightMapping {
         defaults: ["string"],
         rule_names: ["root", "pair"],
-        overrides: [HighlightOverride { rule_name: "pair", token_kind: 0, capture: "string.special.key" }],
+        overrides: [
+            HighlightOverride { rule_name: "pair", token_kind: 0, capture: "string.special.key" },
+        ],
     };
     let mut visitor = HighlightVisitor::new(mapping);
     visitor.enter_rule(0, &"root", &Span::new(0, 20));

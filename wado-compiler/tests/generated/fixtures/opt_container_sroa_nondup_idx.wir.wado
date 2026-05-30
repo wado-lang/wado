@@ -146,12 +146,12 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/_force_array
     x = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(4), used: 0 };
     "core:prelude/array.wado/Array<i32>::push"(x, 1);
     "core:prelude/array.wado/Array<i32>::push"(x, 2);
-    if 0 >= x.used {
+    if builtin::unlikely(0 >= x.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     builtin::array_set<i32>(x.repr, 0, 10);
-    if 0 >= x.used {
+    if builtin::unlikely(0 >= x.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -174,24 +174,24 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/cross_push_w
     "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(__b_2, struct.new "tuple//[i32, i32]" { 0: 10, 1: 100 });
     "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(__b_2, struct.new "tuple//[i32, i32]" { 0: 20, 1: 200 });
     "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(__b_2, struct.new "tuple//[i32, i32]" { 0: 30, 1: 300 });
-    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(__b_0, index_11 = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(1); if index_11 >= __b_2.used {
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(__b_0, index_11 = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(1); if builtin::unlikely(index_11 >= __b_2.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "tuple//[i32, i32]">(__b_2.repr, index_11));
-    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(__b_0, index_13 = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(2); if index_13 >= __b_2.used {
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(__b_0, index_13 = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(2); if builtin::unlikely(index_13 >= __b_2.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "tuple//[i32, i32]">(__b_2.repr, index_13));
-    return ((if 0 >= __b_0.used {
+    return ((if builtin::unlikely(0 >= __b_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[i32, i32]">(__b_0.repr, 0).0 + if 0 >= __b_0.used {
+    }; builtin::array_get<ref "tuple//[i32, i32]">(__b_0.repr, 0).0 + if builtin::unlikely(0 >= __b_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[i32, i32]">(__b_0.repr, 0).1) + if 1 >= __b_0.used {
+    }; builtin::array_get<ref "tuple//[i32, i32]">(__b_0.repr, 0).1) + if builtin::unlikely(1 >= __b_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[i32, i32]">(__b_0.repr, 1).0) + if 1 >= __b_0.used {
+    }; builtin::array_get<ref "tuple//[i32, i32]">(__b_0.repr, 1).0) + if builtin::unlikely(1 >= __b_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "tuple//[i32, i32]">(__b_0.repr, 1).1;
@@ -206,32 +206,32 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/slot_copy_wi
     "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(__b, struct.new "tuple//[i32, i32]" { 0: 2, 1: 20 });
     "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(__b, struct.new "tuple//[i32, i32]" { 0: 3, 1: 30 });
     index_6 = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(2);
-    if 1 >= __b.used {
+    if builtin::unlikely(1 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     value = builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 1);
-    if index_6 >= __b.used {
+    if builtin::unlikely(index_6 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     builtin::array_set<ref "tuple//[i32, i32]">(__b.repr, index_6, value);
-    return ((((if 0 >= __b.used {
+    return ((((if builtin::unlikely(0 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 0).0 + if 0 >= __b.used {
+    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 0).0 + if builtin::unlikely(0 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 0).1) + if 1 >= __b.used {
+    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 0).1) + if builtin::unlikely(1 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 1).0) + if 1 >= __b.used {
+    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 1).0) + if builtin::unlikely(1 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 1).1) + if 2 >= __b.used {
+    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 1).1) + if builtin::unlikely(2 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 2).0) + if 2 >= __b.used {
+    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 2).0) + if builtin::unlikely(2 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 2).1;
@@ -246,32 +246,32 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/slot_copy_wi
     "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(__b, struct.new "tuple//[i32, i32]" { 0: 2, 1: 20 });
     "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<i32,i32>>::push"(__b, struct.new "tuple//[i32, i32]" { 0: 3, 1: 30 });
     index_9 = "wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado/opaque_idx"(2);
-    if index_9 >= __b.used {
+    if builtin::unlikely(index_9 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     value = builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, index_9);
-    if 0 >= __b.used {
+    if builtin::unlikely(0 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     builtin::array_set<ref "tuple//[i32, i32]">(__b.repr, 0, value);
-    return ((((if 0 >= __b.used {
+    return ((((if builtin::unlikely(0 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 0).0 + if 0 >= __b.used {
+    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 0).0 + if builtin::unlikely(0 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 0).1) + if 1 >= __b.used {
+    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 0).1) + if builtin::unlikely(1 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 1).0) + if 1 >= __b.used {
+    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 1).0) + if builtin::unlikely(1 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 1).1) + if 2 >= __b.used {
+    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 1).1) + if builtin::unlikely(2 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 2).0) + if 2 >= __b.used {
+    }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 2).0) + if builtin::unlikely(2 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "tuple//[i32, i32]">(__b.repr, 2).1;

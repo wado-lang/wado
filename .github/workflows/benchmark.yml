@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
 
       - uses: actions/setup-node@v4
         with:

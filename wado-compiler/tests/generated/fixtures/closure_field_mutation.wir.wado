@@ -217,7 +217,7 @@ fn "wado-compiler/tests/fixtures/closure_field_mutation.wado/__test_2_index_assi
     let __indirect_call_0: ref "canonical//CanonicalClosure_0";
     __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(set_first);
     call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
-    if 0 >= __b.used {
+    if builtin::unlikely(0 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -594,7 +594,7 @@ fn "wado-compiler/tests/fixtures/closure_field_mutation.wado/__Closure_3::__call
 fn "wado-compiler/tests/fixtures/closure_field_mutation.wado/__Closure_4::__call"(self) {
     let self_1: ref "core:prelude//Array<i32>";
     self_1 = self.__capture_0;
-    if 0 >= self_1.used {
+    if builtin::unlikely(0 >= self_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }

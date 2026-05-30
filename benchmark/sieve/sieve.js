@@ -1,6 +1,6 @@
 // Sieve of Eratosthenes benchmark for JavaScript
 // Counts primes up to LIMIT using the sieve algorithm
-// Reference: π(10,000,000) = 664,579
+// Reference: π(100,000,000) = 5,761,455
 //
 // How to run:
 //   mise run benchmark-sieve
@@ -39,7 +39,7 @@ function sieveCount(limit) {
 }
 
 function main() {
-    const limit = 10000000;
+    const limit = 100000000;
 
     const start = performance.now();
     const count = sieveCount(limit);

@@ -1001,12 +1001,12 @@ fn "core:json/JsonDeserializer::expect_char"(self, c) {
     let index: i32;
     let offset_13: i64;
     "core:json/JsonDeserializer::skip_whitespace"(self);
-    if self.pos >= self.input.used {
+    if builtin::unlikely(self.pos >= self.input.used) {
         return ref.as_non_null(offset_6 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_6 });
     }
     index = self.pos;
     b = builtin::array_get_u8(self.input.repr, index);
-    if b != c {
+    if builtin::unlikely(b != c) {
         return ref.as_non_null(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(53), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected '"), used: 10 }); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: c & 255 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("', found '"), used: 10 }); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: b & 255 }, __local_4); "core:prelude/string.wado/String::push"(__local_3, 39); offset_13 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 6, message: __local_3, offset: offset_13 });
     }
     self.pos = self.pos + 1;
@@ -1051,10 +1051,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
     let __hfs_call_51: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>";
     "core:json/JsonDeserializer::skip_whitespace"(self);
     input_len = self.input.used;
-    if self.pos >= input_len {
+    if builtin::unlikely(self.pos >= input_len) {
         return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(offset_18 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_18 }) };
     }
-    if index_20 = self.pos; builtin::array_get_u8(self.input.repr, index_20) != 34 {
+    if builtin::unlikely(index_20 = self.pos; builtin::array_get_u8(self.input.repr, index_20) != 34) {
         return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(msg_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected string"), used: 15 }; offset_22 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 0, message: msg_21, offset: offset_22 }) };
     }
     self.pos = self.pos + 1;
@@ -1245,7 +1245,7 @@ fn "core:json/JsonDeserializer^Deserializer::begin_variant"(self, type_name, num
     let msg: ref "core:prelude/string.wado//String";
     let offset_18: i64;
     "core:json/JsonDeserializer::skip_whitespace"(self);
-    if self.pos >= self.input.used {
+    if builtin::unlikely(self.pos >= self.input.used) {
         return 1, ref.null none, ref.as_non_null(offset_14 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_14 });
     }
     b = index = self.pos; builtin::array_get_u8(self.input.repr, index) & 255;

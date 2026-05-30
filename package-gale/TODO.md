@@ -61,19 +61,13 @@ Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Rou
 
 ### Parser codegen
 
-- **LR rule with `returns` + list-label combination.** `LeftRecursion/ReturnValueAndActionsList1_{2,4}`: parse stops at the first comma in the input list. Investigate the LR-alt-rewrite path's interaction with list-label storage.
-- **LR operator-precedence chain.** `Performance/DropLoopEntryBranchInLRRule_4`: Gale picks the wrong precedence chain for an or-then-and expression.
+- **LR operator-precedence chain.** `Performance/DropLoopEntryBranchInLRRule_4`: Gale picks the wrong precedence chain for an or-then-and expression. This is ATN-class: the inner `expr` of `'between' expr 'and' expr` is parsed at `min_prec=0` (matching ANTLR4, which gives middle refs precedence 0), and ANTLR4 only resolves the greedy binary-`and` capture via full-context adaptive prediction at the LR loop-entry (the "drop loop entry branch" optimisation the descriptor is named after). Gale's static `scan_expr_lr_*` sees `and X2` matches and commits. See the **ATN-class grammars** section above.
 - **Non-greedy `??` prediction layer.** `ParserExec/IfIfElseNonGreedyBinding1`: the emit shape is `Option<T>` (compile-blocker gone) but the dispatch reuses the greedy first-set predictor, so the dangling `else` binds to the inner `if` instead of the outer one ANTLR4 picks. Needs either a follow-guarded Optional dispatcher or runtime ATN simulation.
 
 ### Lexer codegen
 
-- **EOF-suffixed rule priority.** `LexerExec/EOFSuffixInFirstRule_2`: when two rules can match the same prefix (`A : 'a' EOF;` vs `B : 'a';`), ANTLR4 prefers the one that consumes the trailing EOF. Gale picks the lexically-later rule. Fix in the longest-match tiebreaker.
 - **Recursive lexer rule with `.+?` / `.*?` wildcard.** `LexerExec/RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`: nested `/* /*...*/ */` comments mistokenize because the recursive call doesn't re-enter under the non-greedy bound.
 - **`-> more, mode(...)` chain across modes.** `LexerExec/ZeroLengthToken`: a token built via `-> more, pushMode(...)` followed by `-> more, mode(...)` should merge into a single token spanning all the `more`'d chars, but Gale emits the final piece only.
-
-### Runtime gaps (test compiles, fails at runtime)
-
-- **Non-default-channel tokens don't appear in `to_lexer_string`** — `LexerExec/ReservedWordsEscaping`. Fix: either land non-default-channel tokens in the main stream (with a channel attribute) and have the parser filter, or extend `to_lexer_string` to walk `Token.leading_trivia` in source order.
 
 ## Stage C — action / predicate execution
 

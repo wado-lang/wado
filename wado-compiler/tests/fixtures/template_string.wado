@@ -109,6 +109,20 @@ fn template_string_two_middle() with Stdout {
     println(`a {s1} b {s2} c`);
 }
 
+// Interpolations hold arbitrary expressions, so an `if`/`match` expression can
+// appear inside `{...}` — and each arm can itself be a template string, nesting
+// interpolation within interpolation.
+fn template_string_nested_expr() with Stdout {
+    let n = 7;
+    // `if` expression with nested template strings in both arms.
+    println(`status: {if n % 2 == 0 { `{n} is even` } else { `{n} is odd` }}`);
+    // `match` expression with nested template strings in the arms.
+    println(`{match n { 0 => `zero`, _ => `nonzero ({n})` }}`);
+    // Nested interpolation can stack more than one level deep.
+    let inner = 1;
+    println(`{if n > 0 { `inner={if inner == 1 { `one` } else { `other` }}` } else { `none` }}`);
+}
+
 export fn run() with Stdout {
     template_string_bool();
     template_string_char();
@@ -121,7 +135,8 @@ export fn run() with Stdout {
     template_string_two_end();
     template_string_two_interp();
     template_string_two_middle();
+    template_string_nested_expr();
 }
 
 __DATA__
-{"stdout": "true: true\nfalse: false\nchar A: A\nchar Z: Z\n\npi: 3.14159\nnegative: -2.5\npositive: 42\nnegative: -17\nzero: 0\npositive: 12345\nbig: 100000000000\nnegative: -9876\nLine 1\nLine 2\nLine 3\nDear Alice,\n\nWelcome to Wado!\n\nBest regards\nFirst: 1\nSecond: 2\nSum: 3\ndone\nX a Y c Z\na X b Y\nX a Y c\na X b Y c\n"}
+{"stdout": "true: true\nfalse: false\nchar A: A\nchar Z: Z\n\npi: 3.14159\nnegative: -2.5\npositive: 42\nnegative: -17\nzero: 0\npositive: 12345\nbig: 100000000000\nnegative: -9876\nLine 1\nLine 2\nLine 3\nDear Alice,\n\nWelcome to Wado!\n\nBest regards\nFirst: 1\nSecond: 2\nSum: 3\ndone\nX a Y c Z\na X b Y\nX a Y c\na X b Y c\nstatus: 7 is odd\nnonzero (7)\ninner=one\n"}

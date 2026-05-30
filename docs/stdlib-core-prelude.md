@@ -269,7 +269,7 @@ Transforms each element using a function.
 Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
 Always returns a value (unlike `reduce`, which returns None for empty iterators).
 
-#### `fn for_each(&mut self, f: fn mut(Self::Item) -> ())`
+#### `fn for_each(&mut self, f: fn mut(Self::Item))`
 
 Calls `f` for every remaining element. Consumes the iterator.
 
@@ -598,7 +598,7 @@ Transforms each element using a function.
 Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
 Always returns a value (unlike `reduce`, which returns None for empty iterators).
 
-#### `fn for_each(&mut self, f: fn mut(Self::Item) -> ())`
+#### `fn for_each(&mut self, f: fn mut(Self::Item))`
 
 Calls `f` for every remaining element. Consumes the iterator.
 

@@ -246,7 +246,7 @@ fn "wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado/run"() 
     if dirs.used == 0 {
         return;
     }
-    result = "wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado/write_helper"(if 0 >= dirs.used {
+    result = "wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado/write_helper"(if builtin::unlikely(0 >= dirs.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("never_actually_opened.txt"), used: 25 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });

@@ -11,7 +11,7 @@ const jsonData = fs.readFileSync(
   path.join(__dirname, "twitter.json"),
   "utf-8",
 );
-const iterations = 1;
+const iterations = 10;
 
 console.log(`json-twitter: ${jsonData.length} bytes, ${iterations} iterations`);
 

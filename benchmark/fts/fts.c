@@ -1,5 +1,5 @@
 // Float-to-string benchmark
-// Converts 500K random f64 values to decimal strings using %.6f format.
+// Converts 5M random f64 values to decimal strings using %.6f format.
 // Uses a linear congruential generator for deterministic float sequence.
 //
 // How to run:
@@ -9,7 +9,7 @@
 #include <time.h>
 
 int main(void) {
-    const int n = 500000;
+    const int n = 5000000;
     unsigned int state = 42;
     char buf[32];
     long total_bytes = 0;
@@ -32,7 +32,7 @@ int main(void) {
     long elapsed_ms = (t1.tv_sec - t0.tv_sec) * 1000 +
                       (t1.tv_nsec - t0.tv_nsec) / 1000000;
 
-    printf("fts: 500000 f64 conversions (%%.6f)\n");
+    printf("fts: 5000000 f64 conversions (%%.6f)\n");
     printf("Total bytes: %ld, byte sum: %lu\n", total_bytes, byte_sum);
     printf("Elapsed: %ld ms\n", elapsed_ms);
     return 0;
