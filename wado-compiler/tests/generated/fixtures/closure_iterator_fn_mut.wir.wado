@@ -298,7 +298,7 @@ fn "wado-compiler/tests/fixtures/closure_iterator_fn_mut.wado/__test_2_pure_fn_s
     let f_46: ref "core:prelude/format.wado//Formatter";
     __b = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     doubled = "core:prelude/traits.wado/IterMap<core:prelude/array.wado/ArrayIter<i32>,i32>^Iterator::collect"(f_22 = struct.new "canonical//CanonicalClosure_2" { env: struct.new "wado-compiler/tests/fixtures/closure_iterator_fn_mut.wado//__Closure_4" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/closure_iterator_fn_mut.wado/__closure_wrapper_2" }; struct.new "core:prelude/traits.wado//IterMap<core:prelude/array.wado/ArrayIter<i32>,i32>" { inner: struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: __b.repr, used: __b.used, index: 0 }, f: f_22 });
-    if 0 >= doubled.used {
+    if builtin::unlikely(0 >= doubled.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -310,7 +310,7 @@ condition: doubled[0] == 2
 "), used: 28 }); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("doubled[0]: "), used: 12 }); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; f_33 = __local_8; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_3, f_33); "core:prelude/string.wado/String::push"(__local_7, 10); __local_7);
         unreachable;
     }
-    if 2 >= doubled.used {
+    if builtin::unlikely(2 >= doubled.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }

@@ -475,7 +475,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
         return;
     }
-    dir = if 0 >= dirs.used {
+    dir = if builtin::unlikely(0 >= dirs.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).0;
@@ -517,35 +517,35 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
         }
         content = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/read_all"(file);
         if (if (if (if (if (if content.used == 5 -> i32 {
-            if 0 >= content.used {
+            if builtin::unlikely(0 >= content.used) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<u8>(content.repr, 0) == 65;
         } else {
             0;
         }) -> i32 {
-            if 1 >= content.used {
+            if builtin::unlikely(1 >= content.used) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<u8>(content.repr, 1) == 66;
         } else {
             0;
         }) -> i32 {
-            if 2 >= content.used {
+            if builtin::unlikely(2 >= content.used) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<u8>(content.repr, 2) == 67;
         } else {
             0;
         }) -> i32 {
-            if 3 >= content.used {
+            if builtin::unlikely(3 >= content.used) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<u8>(content.repr, 3) == 68;
         } else {
             0;
         }) -> i32 {
-            if 4 >= content.used {
+            if builtin::unlikely(4 >= content.used) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<u8>(content.repr, 4) == 69;

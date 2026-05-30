@@ -229,7 +229,7 @@ condition: indexed.len() == 3
 "), used: 31 }); "core:prelude/string.wado/String::push_str"(__local_23, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("indexed.len(): "), used: 15 }); __local_24 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_23 }; f_110 = __local_24; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_11, f_110); "core:prelude/string.wado/String::push"(__local_23, 10); __local_23);
         unreachable;
     }
-    if 0 >= __b_9.values.used {
+    if builtin::unlikely(0 >= __b_9.values.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -241,7 +241,7 @@ condition: indexed.get_by_index(0) == 100
 "), used: 43 }); "core:prelude/string.wado/String::push_str"(__local_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("indexed.get_by_index(0): "), used: 25 }); __local_26 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_25 }; f_125 = __local_26; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_13, f_125); "core:prelude/string.wado/String::push"(__local_25, 10); __local_25);
         unreachable;
     }
-    if 2 >= __b_9.values.used {
+    if builtin::unlikely(2 >= __b_9.values.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -677,6 +677,10 @@ fn "wado-compiler/tests/fixtures/key_value_literal_both_traits.wado/Bag<i32>::ge
                 break b60;
             }
             if __inline_String_Eq__eq_2: block -> bool {
+                if builtin::unlikely(i >= _licm_used_13) {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                }
                 self_6 = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_14, i);
                 len_a = self_6.used;
                 if len_a != _licm_used_21 {
@@ -684,7 +688,7 @@ fn "wado-compiler/tests/fixtures/key_value_literal_both_traits.wado/Bag<i32>::ge
                 }
                 break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_6.repr, key.repr, len_a);
             } {
-                return 0, if i >= _licm_used_15 {
+                return 0, if builtin::unlikely(i >= _licm_used_15) {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<i32>(_licm_repr_16, i);

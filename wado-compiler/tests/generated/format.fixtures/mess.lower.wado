@@ -18348,7 +18348,7 @@ pub fn "Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"(self: Box<R
 }
 
 fn "Array<u64>^IndexValue<i32>::index_value"(self: &Array<u64>, index: i32) -> u64 {
-    if (index >= self.used) {
+    if core::builtin::unlikely((index >= self.used)) {
         core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<u64>(self.repr, index);
@@ -18377,7 +18377,7 @@ pub fn "Array<u8>::internal_raw_data"(self: &Array<u8>) -> builtin::array<u8> {
 }
 
 fn "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>^IndexValue<i32>::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
-    if (index >= self.used) {
+    if core::builtin::unlikely((index >= self.used)) {
         core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<[String, String]>(self.repr, index);

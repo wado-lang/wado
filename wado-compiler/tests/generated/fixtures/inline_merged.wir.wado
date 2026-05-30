@@ -197,7 +197,10 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_generic_nested_ref"() w
             if i >= _licm_used_23 {
                 break b3;
             }
-            "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; self_21 = builtin::array_get<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(_licm_repr_24, i).value; "core:prelude/primitive.wado/i32::fmt_decimal"(self_21, __local_6); __local_5);
+            "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; self_21 = if builtin::unlikely(i >= _licm_used_23) {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            }; builtin::array_get<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(_licm_repr_24, i).value; "core:prelude/primitive.wado/i32::fmt_decimal"(self_21, __local_6); __local_5);
             i = i + 1;
             continue l4;
         };
@@ -205,49 +208,49 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_generic_nested_ref"() w
 }
 
 fn "wado-compiler/tests/fixtures/inline_merged.wado/inline_big_match"(idx) {
-    return b6: block -> ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" {
-        b7: block {
-            b8: block {
-                b9: block {
-                    b10: block {
-                        b11: block {
-                            b12: block {
-                                b13: block {
-                                    b14: block {
-                                        b15: block {
-                                            b16: block {
-                                                b17: block {
+    return b7: block -> ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" {
+        b8: block {
+            b9: block {
+                b10: block {
+                    b11: block {
+                        b12: block {
+                            b13: block {
+                                b14: block {
+                                    b15: block {
+                                        b16: block {
+                                            b17: block {
+                                                b18: block {
                                                     br_table idx [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] default=0;
                                                 };
                                                 struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 99_i64, b: 99_i64 };
-                                                break b6;
+                                                break b7;
                                             };
                                             struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 0_i64, b: 0_i64 };
-                                            break b6;
+                                            break b7;
                                         };
                                         struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 1_i64, b: 1_i64 };
-                                        break b6;
+                                        break b7;
                                     };
                                     struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 2_i64, b: 2_i64 };
-                                    break b6;
+                                    break b7;
                                 };
                                 struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 3_i64, b: 3_i64 };
-                                break b6;
+                                break b7;
                             };
                             struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 4_i64, b: 4_i64 };
-                            break b6;
+                            break b7;
                         };
                         struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 5_i64, b: 5_i64 };
-                        break b6;
+                        break b7;
                     };
                     struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 6_i64, b: 6_i64 };
-                    break b6;
+                    break b7;
                 };
                 struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 7_i64, b: 7_i64 };
-                break b6;
+                break b7;
             };
             struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 8_i64, b: 8_i64 };
-            break b6;
+            break b7;
         };
         struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineS" { a: 9_i64, b: 9_i64 };
     };
@@ -299,12 +302,12 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_method_minimal"() with 
     "core:prelude/array.wado/Array<i32>::push"(__b_0, 1);
     "core:prelude/array.wado/Array<i32>::push"(__b_0, 2);
     "core:prelude/array.wado/Array<i32>::push"(__b_2, 3);
-    if 0 >= __b_0.used {
+    if builtin::unlikely(0 >= __b_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     a = builtin::array_get<i32>(__b_0.repr, 0);
-    if 0 >= __b_2.used {
+    if builtin::unlikely(0 >= __b_2.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -357,14 +360,14 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b23: block {
-        l24: loop {
+    b24: block {
+        l25: loop {
             if i >= len {
-                break b23;
+                break b24;
             }
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l24;
+            continue l25;
         };
     };
 }
@@ -447,14 +450,14 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b29: block {
-        l30: loop {
+    b30: block {
+        l31: loop {
             if t <= 0_i64 {
-                break b29;
+                break b30;
             }
             n = n + 1;
             t = t / 10_i64;
-            continue l30;
+            continue l31;
         };
     };
     return n;
@@ -468,15 +471,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b33: block {
-            l34: loop {
+        b34: block {
+            l35: loop {
                 if temp <= 0_i64 {
-                    break b33;
+                    break b34;
                 }
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l34;
+                continue l35;
             };
         };
     }
@@ -598,14 +601,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b45: block {
-        l46: loop {
+    b46: block {
+        l47: loop {
             if i >= n {
-                break b45;
+                break b46;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l46;
+            continue l47;
         };
     };
 }

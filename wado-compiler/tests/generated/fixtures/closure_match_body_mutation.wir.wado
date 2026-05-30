@@ -569,7 +569,7 @@ fn "wado-compiler/tests/fixtures/closure_match_body_mutation.wado/__Closure_3::_
 }
 
 fn "wado-compiler/tests/fixtures/closure_match_body_mutation.wado/__Closure_4::__call"(self, i) {
-    if i >= self.__capture_0.used {
+    if builtin::unlikely(i >= self.__capture_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }

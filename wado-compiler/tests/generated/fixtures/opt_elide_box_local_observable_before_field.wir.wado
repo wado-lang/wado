@@ -130,7 +130,7 @@ fn "wado-compiler/tests/fixtures/opt_elide_box_local_observable_before_field.wad
     let __sroa_boxed_v: i32;
     __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     __sroa_boxed_v = "wado-compiler/tests/fixtures/opt_elide_box_local_observable_before_field.wado/step"();
-    n = index = global:idx; if index >= 3 {
+    n = index = global:idx; if builtin::unlikely(index >= 3) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__b_0.repr, index) + __sroa_boxed_v;

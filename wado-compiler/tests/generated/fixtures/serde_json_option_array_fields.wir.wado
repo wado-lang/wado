@@ -599,7 +599,7 @@ condition: parsed.scores.len() == 1
 "), used: 37 }); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("parsed.scores.len(): "), used: 21 }); __local_20 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_19 }; f_66 = __local_20; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_11, f_66); "core:prelude/string.wado/String::push"(__local_19, 10); __local_19);
                 unreachable;
             }
-            if 0 >= parsed.scores.used {
+            if builtin::unlikely(0 >= parsed.scores.used) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
