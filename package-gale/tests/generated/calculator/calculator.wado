@@ -146,15 +146,67 @@ impl Token {
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
 /// ParseError represents a parse failure with location and expected tokens.
+///
+/// `message` is the local "expected X, got Y" description, kept free of
+/// position and rule context so it stays composable. `line`/`col` are a
+/// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
+/// from `span.start` against the source at error-construction time;
+/// `Parser::error` fills them in. `rule_stack` records the chain of parser
+/// rules that were active when the error was raised, innermost first — each
+/// rule entry wrapper pushes its own name as the `Err` propagates outward,
+/// so the last element is the start rule and the first is the rule the
+/// failing token sat in. The `Display` impl renders all of this into a
+/// human-readable diagnostic.
 pub struct ParseError {
     pub message: String,
     pub span: Span,
     pub expected: Array<String>,
+    pub line: i32 = 1,
+    pub col: i32 = 0,
+    pub rule_stack: Array<String> = [],
 }
 
 impl ParseError {
     pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
         return ParseError { message, span, expected };
+    }
+
+    /// Construct a ParseError whose position is already resolved. Used by
+    /// `Parser::error`, which has the source on hand to compute line/col.
+    pub fn at(message: String, span: Span, expected: Array<String>, line: i32, col: i32) -> ParseError {
+        return ParseError { message, span, expected, line, col, rule_stack: [] };
+    }
+
+    /// Render the rule chain as `outer > ... > inner` (start rule first).
+    /// `rule_stack` is stored innermost-first, so iterate it in reverse.
+    /// Consecutive duplicates are collapsed: a left-recursive rule re-enters
+    /// itself once per precedence level, which would otherwise print
+    /// `expr > expr > expr` for a deep expression.
+    pub fn rule_path(&self) -> String {
+        let mut out = String::with_capacity(self.rule_stack.len() * 8);
+        let n = self.rule_stack.len();
+        let mut written = 0;
+        for let mut i = 0; i < n; i += 1 {
+            let name = &self.rule_stack[n - 1 - i];
+            if written > 0 && *name == self.rule_stack[n - i] {
+                continue;
+            }
+            if written > 0 {
+                out.push_str(&" > ");
+            }
+            out.push_str(name);
+            written += 1;
+        }
+        return out;
+    }
+}
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&`parse error at {self.line}:{self.col}: {self.message}`);
+        if !self.rule_stack.is_empty() {
+            f.write_str(&`\n  in rule: {self.rule_path()}`);
+        }
     }
 }
 
@@ -1518,11 +1570,17 @@ pub fn token_kind_name(kind: i32) -> String {
 struct Parser {
     tokens: Array<Token>,
     pos: i32,
+    chars: Array<char>,
 }
 
 impl Parser {
-    fn new(tokens: Array<Token>) -> Parser {
-        return Parser { tokens, pos: 0 };
+    fn new(tokens: Array<Token>, chars: Array<char>) -> Parser {
+        return Parser { tokens, pos: 0, chars };
+    }
+
+    fn error(&self, message: String, span: Span, expected: Array<String>) -> ParseError {
+        let lc = line_col_at(&self.chars, span.start);
+        return ParseError::at(message, span, expected, lc.0, lc.1);
     }
 
     fn peek(&self) -> &Token {
@@ -1559,7 +1617,7 @@ impl Parser {
         }
         let tok = &self.tokens[self.pos];
         let name = token_kind_name(kind);
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -1568,7 +1626,7 @@ impl Parser {
 
     fn fail(&self, name: String) -> Result<Token, ParseError> {
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -1580,7 +1638,7 @@ impl Parser {
             return Result::<Token, ParseError>::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected any token, got "{tok.text}"`,
             tok.span,
             ["any token"],
@@ -1602,7 +1660,7 @@ impl Parser {
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["set complement"],
@@ -1620,7 +1678,7 @@ impl Parser {
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["token set"],
@@ -1894,7 +1952,7 @@ fn scan_relop(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return -1;
 }
 
-fn _parse_equation(p: &mut Parser) -> Result<EquationNode, ParseError> {
+fn _parse_equation__inner(p: &mut Parser) -> Result<EquationNode, ParseError> {
     let start = p.peek().span.start;
     let expression = _parse_expression(p)?;
     let relop = _parse_relop(p)?;
@@ -1909,7 +1967,16 @@ fn _parse_equation(p: &mut Parser) -> Result<EquationNode, ParseError> {
     });
 }
 
-fn _parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
+fn _parse_equation(p: &mut Parser) -> Result<EquationNode, ParseError> {
+    let r = _parse_equation__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("equation");
+        return Result::<EquationNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_expression__inner(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let multiplying_expression = _parse_multiplying_expression(p)?;
     let mut item_multiplying_expression_list: Array<ItemMultiplyingExpressionItem> = [];
@@ -1961,7 +2028,16 @@ fn _parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     });
 }
 
-fn _parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionNode, ParseError> {
+fn _parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
+    let r = _parse_expression__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("expression");
+        return Result::<ExpressionNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_multiplying_expression__inner(p: &mut Parser) -> Result<MultiplyingExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let pow_expression = _parse_pow_expression(p)?;
     let mut item_pow_expression_list: Array<ItemPowExpressionItem> = [];
@@ -2013,7 +2089,16 @@ fn _parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpression
     });
 }
 
-fn _parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError> {
+fn _parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionNode, ParseError> {
+    let r = _parse_multiplying_expression__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("multiplyingExpression");
+        return Result::<MultiplyingExpressionNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_pow_expression__inner(p: &mut Parser) -> Result<PowExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let signed_atom = _parse_signed_atom(p)?;
     let mut pow_signed_atom_list: Array<PowSignedAtomItem> = [];
@@ -2051,7 +2136,16 @@ fn _parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError
     });
 }
 
-fn _parse_signed_atom(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
+fn _parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError> {
+    let r = _parse_pow_expression__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("powExpression");
+        return Result::<PowExpressionNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_signed_atom__inner(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_PLUS {
@@ -2086,14 +2180,23 @@ fn _parse_signed_atom(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
             atom,
         }));
     }
-    return Result::<SignedAtomNode, ParseError>::Err(ParseError::new(
+    return Result::<SignedAtomNode, ParseError>::Err(p.error(
         "expected signedAtom",
         p.peek().span,
         ["TK_PLUS", "TK_MINUS", "TK_COS", "TK_TAN", "TK_SIN", "TK_ACOS", "TK_ATAN", "TK_ASIN", "TK_LOG", "TK_LN", "TK_SQRT", "TK_SCIENTIFIC_NUMBER", "TK_VARIABLE", "TK_PI", "TK_EULER", "TK_I", "TK_LPAREN"],
     ));
 }
 
-fn _parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
+fn _parse_signed_atom(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
+    let r = _parse_signed_atom__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("signedAtom");
+        return Result::<SignedAtomNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_atom__inner(p: &mut Parser) -> Result<AtomNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_SCIENTIFIC_NUMBER {
@@ -2128,14 +2231,23 @@ fn _parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
             rparen,
         }));
     }
-    return Result::<AtomNode, ParseError>::Err(ParseError::new(
+    return Result::<AtomNode, ParseError>::Err(p.error(
         "expected atom",
         p.peek().span,
         ["TK_SCIENTIFIC_NUMBER", "TK_VARIABLE", "TK_PI", "TK_EULER", "TK_I", "TK_LPAREN"],
     ));
 }
 
-fn _parse_scientific(p: &mut Parser) -> Result<ScientificNode, ParseError> {
+fn _parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
+    let r = _parse_atom__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("atom");
+        return Result::<AtomNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_scientific__inner(p: &mut Parser) -> Result<ScientificNode, ParseError> {
     let start = p.peek().span.start;
     let scientific_number = p.expect(TK_SCIENTIFIC_NUMBER)?;
     return Result::<ScientificNode, ParseError>::Ok(ScientificNode {
@@ -2144,7 +2256,16 @@ fn _parse_scientific(p: &mut Parser) -> Result<ScientificNode, ParseError> {
     });
 }
 
-fn _parse_constant(p: &mut Parser) -> Result<ConstantNode, ParseError> {
+fn _parse_scientific(p: &mut Parser) -> Result<ScientificNode, ParseError> {
+    let r = _parse_scientific__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("scientific");
+        return Result::<ScientificNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_constant__inner(p: &mut Parser) -> Result<ConstantNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_PI {
@@ -2168,14 +2289,23 @@ fn _parse_constant(p: &mut Parser) -> Result<ConstantNode, ParseError> {
             i,
         }));
     }
-    return Result::<ConstantNode, ParseError>::Err(ParseError::new(
+    return Result::<ConstantNode, ParseError>::Err(p.error(
         "expected constant",
         p.peek().span,
         ["TK_PI", "TK_EULER", "TK_I"],
     ));
 }
 
-fn _parse_variable(p: &mut Parser) -> Result<VariableNode, ParseError> {
+fn _parse_constant(p: &mut Parser) -> Result<ConstantNode, ParseError> {
+    let r = _parse_constant__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("constant");
+        return Result::<ConstantNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_variable__inner(p: &mut Parser) -> Result<VariableNode, ParseError> {
     let start = p.peek().span.start;
     let variable = p.expect(TK_VARIABLE)?;
     return Result::<VariableNode, ParseError>::Ok(VariableNode {
@@ -2184,7 +2314,16 @@ fn _parse_variable(p: &mut Parser) -> Result<VariableNode, ParseError> {
     });
 }
 
-fn _parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
+fn _parse_variable(p: &mut Parser) -> Result<VariableNode, ParseError> {
+    let r = _parse_variable__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("variable");
+        return Result::<VariableNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_func___inner(p: &mut Parser) -> Result<FuncNode, ParseError> {
     let start = p.peek().span.start;
     let funcname = _parse_funcname(p)?;
     let lparen = p.expect(TK_LPAREN)?;
@@ -2228,7 +2367,16 @@ fn _parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
     });
 }
 
-fn _parse_funcname(p: &mut Parser) -> Result<FuncnameNode, ParseError> {
+fn _parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
+    let r = _parse_func___inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("func_");
+        return Result::<FuncNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_funcname__inner(p: &mut Parser) -> Result<FuncnameNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_COS {
@@ -2294,14 +2442,23 @@ fn _parse_funcname(p: &mut Parser) -> Result<FuncnameNode, ParseError> {
             sqrt,
         }));
     }
-    return Result::<FuncnameNode, ParseError>::Err(ParseError::new(
+    return Result::<FuncnameNode, ParseError>::Err(p.error(
         "expected funcname",
         p.peek().span,
         ["TK_COS", "TK_TAN", "TK_SIN", "TK_ACOS", "TK_ATAN", "TK_ASIN", "TK_LOG", "TK_LN", "TK_SQRT"],
     ));
 }
 
-fn _parse_relop(p: &mut Parser) -> Result<RelopNode, ParseError> {
+fn _parse_funcname(p: &mut Parser) -> Result<FuncnameNode, ParseError> {
+    let r = _parse_funcname__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("funcname");
+        return Result::<FuncnameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_relop__inner(p: &mut Parser) -> Result<RelopNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_EQ {
@@ -2325,82 +2482,103 @@ fn _parse_relop(p: &mut Parser) -> Result<RelopNode, ParseError> {
             lt,
         }));
     }
-    return Result::<RelopNode, ParseError>::Err(ParseError::new(
+    return Result::<RelopNode, ParseError>::Err(p.error(
         "expected relop",
         p.peek().span,
         ["TK_EQ", "TK_GT", "TK_LT"],
     ));
 }
 
+fn _parse_relop(p: &mut Parser) -> Result<RelopNode, ParseError> {
+    let r = _parse_relop__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("relop");
+        return Result::<RelopNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
 pub fn parse_equation(input: &String) -> Result<EquationNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_equation(&mut parser);
 }
 
 pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_expression(&mut parser);
 }
 
 pub fn parse_multiplying_expression(input: &String) -> Result<MultiplyingExpressionNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_multiplying_expression(&mut parser);
 }
 
 pub fn parse_pow_expression(input: &String) -> Result<PowExpressionNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_pow_expression(&mut parser);
 }
 
 pub fn parse_signed_atom(input: &String) -> Result<SignedAtomNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_signed_atom(&mut parser);
 }
 
 pub fn parse_atom(input: &String) -> Result<AtomNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_atom(&mut parser);
 }
 
 pub fn parse_scientific(input: &String) -> Result<ScientificNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_scientific(&mut parser);
 }
 
 pub fn parse_constant(input: &String) -> Result<ConstantNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_constant(&mut parser);
 }
 
 pub fn parse_variable(input: &String) -> Result<VariableNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_variable(&mut parser);
 }
 
 pub fn parse_func_(input: &String) -> Result<FuncNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_func_(&mut parser);
 }
 
 pub fn parse_funcname(input: &String) -> Result<FuncnameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_funcname(&mut parser);
 }
 
 pub fn parse_relop(input: &String) -> Result<RelopNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_relop(&mut parser);
 }
 

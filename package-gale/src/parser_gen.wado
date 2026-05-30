@@ -183,11 +183,13 @@ fn emit_follow_variant_from_gir(w: &mut CodeWriter, variant_rule: &Rule, ctx: &m
     // be swapped here.
     let scan_name = `scan_{rule.snake_name}__follow_{entry.id}`;
     let parse_name = `_parse_{rule.snake_name}__follow_{entry.id}`;
+    let parse_inner = `{parse_name}__inner`;
     if entry.scan_used {
         gen_scan_function_named(w, rule, variant_rule, ctx, &scan_name, /*allow_lr_split=*/ true);
     }
     if entry.parse_used {
-        gen_parse_fn_named(w, rule, variant_rule, ctx, &parse_name, &scan_name, /*emit_visibility=*/ false);
+        gen_parse_fn_named(w, rule, variant_rule, ctx, &parse_inner, &scan_name, /*emit_visibility=*/ false);
+        gen_rule_entry_wrapper(w, &parse_name, &parse_inner, &rule.type_name, &rule.name, rule_takes_min_prec(variant_rule));
     }
 }
 
@@ -195,6 +197,9 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     let mut s = StructSpec::new("Parser");
     s.add_field(&"tokens", &"Array<Token>");
     s.add_field(&"pos", &"i32");
+    // Source characters, kept so error sites can resolve a byte/char offset
+    // (`span.start`) into a human-readable `line:col` via `line_col_at`.
+    s.add_field(&"chars", &"Array<char>");
     s.emit(w);
     w.blank();
 
@@ -202,9 +207,25 @@ fn gen_parser_struct(w: &mut CodeWriter) {
 
     let mut f = FnSpec::new("new");
     f.add_param(&"tokens", &"Array<Token>");
+    f.add_param(&"chars", &"Array<char>");
     f.set_return_type(&"Parser");
     f.emit_begin(w);
-    w.line(&"return Parser { tokens, pos: 0 };");
+    w.line(&"return Parser { tokens, pos: 0, chars };");
+    w.end();
+    w.blank();
+
+    // Build a ParseError at the current position, resolving `line:col` from
+    // the source so the diagnostic carries a location. `rule_stack` is left
+    // empty here; the rule-entry wrappers fill it as the error propagates.
+    let mut fe = FnSpec::new("error");
+    fe.set_receiver(&"&self");
+    fe.add_param(&"message", &"String");
+    fe.add_param(&"span", &"Span");
+    fe.add_param(&"expected", &"Array<String>");
+    fe.set_return_type(&"ParseError");
+    fe.emit_begin(w);
+    w.line(&"let lc = line_col_at(&self.chars, span.start);");
+    w.line(&"return ParseError::at(message, span, expected, lc.0, lc.1);");
     w.end();
     w.blank();
 
@@ -273,7 +294,7 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.end();
     w.line(&"let tok = &self.tokens[self.pos];");
     w.line(&"let name = token_kind_name(kind);");
-    w.line(&"return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.line(&"return Result::<Token, ParseError>::Err(self.error(");
     w.indent();
     w.line(&"`expected {name}, got \"{tok.text}\"`,");
     w.line(&"tok.span,");
@@ -289,7 +310,7 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     f8.set_return_type(&"Result<Token, ParseError>");
     f8.emit_begin(w);
     w.line(&"let tok = &self.tokens[self.pos];");
-    w.line(&"return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.line(&"return Result::<Token, ParseError>::Err(self.error(");
     w.indent();
     w.line(&"`expected {name}, got \"{tok.text}\"`,");
     w.line(&"tok.span,");
@@ -309,7 +330,7 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.line(&"return Result::<Token, ParseError>::Ok(self.advance());");
     w.end();
     w.line(&"let tok = &self.tokens[self.pos];");
-    w.line(&"return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.line(&"return Result::<Token, ParseError>::Err(self.error(");
     w.indent();
     w.line(&"`expected any token, got \"{tok.text}\"`,");
     w.line(&"tok.span,");
@@ -342,7 +363,7 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.end();
     w.end();
     w.line(&"let tok = &self.tokens[self.pos];");
-    w.line(&"return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.line(&"return Result::<Token, ParseError>::Err(self.error(");
     w.indent();
     w.line(&"`unexpected token \"{tok.text}\"`,");
     w.line(&"tok.span,");
@@ -374,7 +395,7 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.end();
     w.end();
     w.line(&"let tok = &self.tokens[self.pos];");
-    w.line(&"return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.line(&"return Result::<Token, ParseError>::Err(self.error(");
     w.indent();
     w.line(&"`unexpected token \"{tok.text}\"`,");
     w.line(&"tok.span,");
@@ -1616,20 +1637,68 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
     // its own focused emit entry; the existing internal helpers
     // carry the body emission but no longer need to re-classify
     // the rule from surface IR.
-    let fn_name = `_parse_{rule.snake_name}`;
+    // The canonical name every other rule (and the public input entry)
+    // calls. We emit the rule body under `<canonical>__inner` and wrap it
+    // with a thin entry that records the rule on the rule stack when its
+    // body fails — see `gen_rule_entry_wrapper`.
+    let canonical = `_parse_{rule.snake_name}`;
+    let inner = `{canonical}__inner`;
     let scan_fn_name = `scan_{rule.snake_name}`;
     match *lowered_rule {
-        Simple(_) => gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, &fn_name, /*emit_visibility=*/ true),
+        Simple(_) => gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, &inner, /*emit_visibility=*/ true),
         MultiAlt(_) | LeftRecursive(_) => gen_parse_fn_named(
             w,
             rule,
             lowered_rule,
             ctx,
-            &fn_name,
+            &inner,
             &scan_fn_name,
             true,
         ),
     }
+    gen_rule_entry_wrapper(w, &canonical, &inner, &rule.type_name, &rule.name, rule_takes_min_prec(lowered_rule));
+}
+
+/// Emit a thin entry wrapper named `outer_name` that delegates to
+/// `inner_name` and, on failure, records `rule_display` onto the
+/// propagating `ParseError`'s rule stack. Every cross-rule call site and
+/// the public input entry reference the canonical `_parse_<rule>` name, so
+/// making that name the wrapper threads the whole call chain through it
+/// without touching any call site.
+///
+/// The success path is a single not-taken branch, so the rule context is
+/// paid for only when a parse actually fails. `rule_stack` is stored
+/// innermost-first: the failing token's rule pushes first as the `Err`
+/// unwinds, the start rule last.
+///
+/// `takes_min_prec` mirrors the wrapped function's signature. Left-recursive
+/// rule entries carry a defaulted `min_prec` (callers pass it only at
+/// precedence-aware self-ref sites), so the wrapper reproduces that default.
+fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &String, type_name: &String, rule_display: &String, takes_min_prec: bool) {
+    let mut f = FnSpec::new(outer_name);
+    f.add_param(&"p", &"&mut Parser");
+    if takes_min_prec {
+        f.add_param_spec(ParamSpec {
+            name: "min_prec",
+            type_str: "i32",
+            default_value: Option::<String>::Some("0"),
+        });
+    }
+    f.set_return_type(&`Result<{type_name}, ParseError>`);
+    f.emit_begin(w);
+    if takes_min_prec {
+        w.line(&`let r = {*inner_name}(p, min_prec);`);
+    } else {
+        w.line(&`let r = {*inner_name}(p);`);
+    }
+    w.begin(&"if let Err(mut e) = r");
+    let lit = escape_string(rule_display);
+    w.line(&`e.rule_stack.push({lit});`);
+    w.line(&`return Result::<{type_name}, ParseError>::Err(e);`);
+    w.end();
+    w.line(&"return r;");
+    w.end();
+    w.blank();
 }
 
 /// Body emitter for a single-alt rule, parameterised by function
@@ -5227,7 +5296,8 @@ fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
     f.set_return_type(&`Result<{header.type_name}, ParseError>`);
     f.emit_begin(w);
     w.line(&"let tokens = tokenize(input);");
-    w.line(&"let mut parser = Parser::new(tokens);");
+    w.line(&"let chars: Array<char> = input.chars().collect();");
+    w.line(&"let mut parser = Parser::new(tokens, chars);");
     if rule_takes_min_prec(rule) {
         w.line(&`return _parse_{header.snake_name}(&mut parser, 0);`);
     } else {
@@ -5322,7 +5392,7 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         dedup_append_arr(&mut expected, &first);
     }
     let msg = escape_string(&`expected {rule.name}`);
-    w.line(&`return Result::<{type_name}, ParseError>::Err(ParseError::new(`);
+    w.line(&`return Result::<{type_name}, ParseError>::Err(p.error(`);
     w.indent();
     w.line(&`{msg},`);
     w.line(&"p.peek().span,");

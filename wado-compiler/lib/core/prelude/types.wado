@@ -70,6 +70,14 @@ impl Option<T> {
         }
         panic("called Option::unwrap() on a None value");
     }
+
+    /// Returns the contained value, panicking with `msg` if None.
+    pub fn expect(&self, msg: String) -> T {
+        if let Some(v) = *self {
+            return v;
+        }
+        panic(msg);
+    }
 }
 
 impl Result<T, E> {
@@ -95,6 +103,30 @@ impl Result<T, E> {
             return true;
         }
         return false;
+    }
+
+    /// Returns the contained Ok value, panicking with `msg` if Err.
+    pub fn expect(&self, msg: String) -> T {
+        if let Ok(v) = *self {
+            return v;
+        }
+        panic(msg);
+    }
+
+    /// Returns the contained Err value, panicking if Ok.
+    pub fn unwrap_err(&self) -> E {
+        if let Err(e) = *self {
+            return e;
+        }
+        panic("called Result::unwrap_err() on an Ok value");
+    }
+
+    /// Returns the contained Err value, panicking with `msg` if Ok.
+    pub fn expect_err(&self, msg: String) -> E {
+        if let Err(e) = *self {
+            return e;
+        }
+        panic(msg);
     }
 }
 

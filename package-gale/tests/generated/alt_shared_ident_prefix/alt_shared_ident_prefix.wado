@@ -146,15 +146,67 @@ impl Token {
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
 /// ParseError represents a parse failure with location and expected tokens.
+///
+/// `message` is the local "expected X, got Y" description, kept free of
+/// position and rule context so it stays composable. `line`/`col` are a
+/// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
+/// from `span.start` against the source at error-construction time;
+/// `Parser::error` fills them in. `rule_stack` records the chain of parser
+/// rules that were active when the error was raised, innermost first — each
+/// rule entry wrapper pushes its own name as the `Err` propagates outward,
+/// so the last element is the start rule and the first is the rule the
+/// failing token sat in. The `Display` impl renders all of this into a
+/// human-readable diagnostic.
 pub struct ParseError {
     pub message: String,
     pub span: Span,
     pub expected: Array<String>,
+    pub line: i32 = 1,
+    pub col: i32 = 0,
+    pub rule_stack: Array<String> = [],
 }
 
 impl ParseError {
     pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
         return ParseError { message, span, expected };
+    }
+
+    /// Construct a ParseError whose position is already resolved. Used by
+    /// `Parser::error`, which has the source on hand to compute line/col.
+    pub fn at(message: String, span: Span, expected: Array<String>, line: i32, col: i32) -> ParseError {
+        return ParseError { message, span, expected, line, col, rule_stack: [] };
+    }
+
+    /// Render the rule chain as `outer > ... > inner` (start rule first).
+    /// `rule_stack` is stored innermost-first, so iterate it in reverse.
+    /// Consecutive duplicates are collapsed: a left-recursive rule re-enters
+    /// itself once per precedence level, which would otherwise print
+    /// `expr > expr > expr` for a deep expression.
+    pub fn rule_path(&self) -> String {
+        let mut out = String::with_capacity(self.rule_stack.len() * 8);
+        let n = self.rule_stack.len();
+        let mut written = 0;
+        for let mut i = 0; i < n; i += 1 {
+            let name = &self.rule_stack[n - 1 - i];
+            if written > 0 && *name == self.rule_stack[n - i] {
+                continue;
+            }
+            if written > 0 {
+                out.push_str(&" > ");
+            }
+            out.push_str(name);
+            written += 1;
+        }
+        return out;
+    }
+}
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&`parse error at {self.line}:{self.col}: {self.message}`);
+        if !self.rule_stack.is_empty() {
+            f.write_str(&`\n  in rule: {self.rule_path()}`);
+        }
     }
 }
 
@@ -957,11 +1009,17 @@ pub fn token_kind_name(kind: i32) -> String {
 struct Parser {
     tokens: Array<Token>,
     pos: i32,
+    chars: Array<char>,
 }
 
 impl Parser {
-    fn new(tokens: Array<Token>) -> Parser {
-        return Parser { tokens, pos: 0 };
+    fn new(tokens: Array<Token>, chars: Array<char>) -> Parser {
+        return Parser { tokens, pos: 0, chars };
+    }
+
+    fn error(&self, message: String, span: Span, expected: Array<String>) -> ParseError {
+        let lc = line_col_at(&self.chars, span.start);
+        return ParseError::at(message, span, expected, lc.0, lc.1);
     }
 
     fn peek(&self) -> &Token {
@@ -998,7 +1056,7 @@ impl Parser {
         }
         let tok = &self.tokens[self.pos];
         let name = token_kind_name(kind);
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -1007,7 +1065,7 @@ impl Parser {
 
     fn fail(&self, name: String) -> Result<Token, ParseError> {
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -1019,7 +1077,7 @@ impl Parser {
             return Result::<Token, ParseError>::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected any token, got "{tok.text}"`,
             tok.span,
             ["any token"],
@@ -1041,7 +1099,7 @@ impl Parser {
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["set complement"],
@@ -1059,7 +1117,7 @@ impl Parser {
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["token set"],
@@ -1286,7 +1344,7 @@ fn scan_path(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
+fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
     let start = p.peek().span.start;
     let match_expr = _parse_match_expr(p)?;
     let eof = p.expect(TK_EOF)?;
@@ -1297,7 +1355,16 @@ fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     });
 }
 
-fn _parse_match_expr(p: &mut Parser) -> Result<MatchExprNode, ParseError> {
+fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
+    let r = _parse_prog__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("prog");
+        return Result::<ProgNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_match_expr__inner(p: &mut Parser) -> Result<MatchExprNode, ParseError> {
     let start = p.peek().span.start;
     let lit_match = p.expect(TK_LIT_MATCH)?;
     let ident = p.expect(TK_IDENT)?;
@@ -1386,7 +1453,16 @@ fn _parse_match_expr(p: &mut Parser) -> Result<MatchExprNode, ParseError> {
     });
 }
 
-fn _parse_arm(p: &mut Parser) -> Result<ArmNode, ParseError> {
+fn _parse_match_expr(p: &mut Parser) -> Result<MatchExprNode, ParseError> {
+    let r = _parse_match_expr__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("matchExpr");
+        return Result::<MatchExprNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_arm__inner(p: &mut Parser) -> Result<ArmNode, ParseError> {
     let start = p.peek().span.start;
     let pattern = _parse_pattern(p)?;
     let lit_eqgt = p.expect(TK_LIT_EQGT)?;
@@ -1399,7 +1475,16 @@ fn _parse_arm(p: &mut Parser) -> Result<ArmNode, ParseError> {
     });
 }
 
-fn _parse_pattern_bt_1(p: &mut Parser) -> Result<PatternNode, ParseError> {
+fn _parse_arm(p: &mut Parser) -> Result<ArmNode, ParseError> {
+    let r = _parse_arm__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("arm");
+        return Result::<ArmNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_pattern__inner_bt_1(p: &mut Parser) -> Result<PatternNode, ParseError> {
     let start = p.peek().span.start;
     let lit_mut: Option<Token> = if p.peek_kind() == TK_LIT_MUT {
         let lit_mut = p.expect(TK_LIT_MUT)?;
@@ -1415,7 +1500,7 @@ fn _parse_pattern_bt_1(p: &mut Parser) -> Result<PatternNode, ParseError> {
     }));
 }
 
-fn _parse_pattern_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_pattern__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_MUT {
         let sp = pos;
@@ -1427,7 +1512,7 @@ fn _parse_pattern_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_pattern_bt_2(p: &mut Parser) -> Result<PatternNode, ParseError> {
+fn _parse_pattern__inner_bt_2(p: &mut Parser) -> Result<PatternNode, ParseError> {
     let start = p.peek().span.start;
     let path = _parse_path(p)?;
     let lparen_item_rparen: Option<LparenItemOptRparenItem> = if p.peek_kind() == TK_LIT_LPAREN {
@@ -1510,7 +1595,7 @@ fn _parse_pattern_bt_2(p: &mut Parser) -> Result<PatternNode, ParseError> {
     }));
 }
 
-fn _parse_pattern_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_pattern__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_path(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -1558,7 +1643,7 @@ fn _parse_pattern_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_pattern(p: &mut Parser) -> Result<PatternNode, ParseError> {
+fn _parse_pattern__inner(p: &mut Parser) -> Result<PatternNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_U5f {
@@ -1572,8 +1657,8 @@ fn _parse_pattern(p: &mut Parser) -> Result<PatternNode, ParseError> {
         if p.peek_kind() == TK_IDENT {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_1 = _parse_pattern_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_pattern_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_pattern__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_pattern__inner_scan_2(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -1585,14 +1670,14 @@ fn _parse_pattern(p: &mut Parser) -> Result<PatternNode, ParseError> {
                 _sd_best_i = 2;
             }
             if _sd_best_i == 1 {
-                return _parse_pattern_bt_1(p);
+                return _parse_pattern__inner_bt_1(p);
             }
             if _sd_best_i == 2 {
-                return _parse_pattern_bt_2(p);
+                return _parse_pattern__inner_bt_2(p);
             }
-            return _parse_pattern_bt_2(p);
+            return _parse_pattern__inner_bt_2(p);
         } else if p.peek_kind() == TK_LIT_MUT {
-            return _parse_pattern_bt_1(p);
+            return _parse_pattern__inner_bt_1(p);
         }
     }
     if kind == TK_LIT_LPAREN {
@@ -1666,14 +1751,23 @@ fn _parse_pattern(p: &mut Parser) -> Result<PatternNode, ParseError> {
             rparen,
         }));
     }
-    return Result::<PatternNode, ParseError>::Err(ParseError::new(
+    return Result::<PatternNode, ParseError>::Err(p.error(
         "expected pattern",
         p.peek().span,
         ["TK_LIT_U5f", "TK_LIT_MUT", "TK_IDENT", "TK_LIT_LPAREN"],
     ));
 }
 
-fn _parse_path(p: &mut Parser) -> Result<PathNode, ParseError> {
+fn _parse_pattern(p: &mut Parser) -> Result<PatternNode, ParseError> {
+    let r = _parse_pattern__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("pattern");
+        return Result::<PatternNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_path__inner(p: &mut Parser) -> Result<PathNode, ParseError> {
     let start = p.peek().span.start;
     let ident = p.expect(TK_IDENT)?;
     let mut lit_coloncolon_ident_list: Array<LitColoncolonIdentItem> = [];
@@ -1711,33 +1805,47 @@ fn _parse_path(p: &mut Parser) -> Result<PathNode, ParseError> {
     });
 }
 
+fn _parse_path(p: &mut Parser) -> Result<PathNode, ParseError> {
+    let r = _parse_path__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("path");
+        return Result::<PathNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
 pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_prog(&mut parser);
 }
 
 pub fn parse_match_expr(input: &String) -> Result<MatchExprNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_match_expr(&mut parser);
 }
 
 pub fn parse_arm(input: &String) -> Result<ArmNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_arm(&mut parser);
 }
 
 pub fn parse_pattern(input: &String) -> Result<PatternNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_pattern(&mut parser);
 }
 
 pub fn parse_path(input: &String) -> Result<PathNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_path(&mut parser);
 }
 

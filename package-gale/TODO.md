@@ -7,6 +7,24 @@ Open work towards full ANTLR4 compatibility and the performance budget it implie
 
 This file lists what is **not yet done**. Closed work belongs in commit history.
 
+## Diagnostics & introspection ([#1246](https://github.com/wado-lang/wado/issues/1246))
+
+Grammar-authoring DX gaps surfaced while writing a new `.g4` against Gale.
+
+- **Runtime traps on valid input (part 2).** A generated scanner that traps
+  (e.g. an out-of-bounds) only shows a wasm backtrace of synthetic function
+  names. Unscannable shapes should be caught at codegen time (or degraded to
+  a `ParseError`), never surfaced as a runtime trap.
+- **Grammar-bug vs Gale-bug warnings (part 3).** Gale has no warning surface
+  for prediction limits. Surface prediction-strategy decisions ("fell back to
+  first-success-wins", "could not use shape-lookahead, using scan-guard",
+  "alts share a prefix and may not be longest-match") as warnings so grammar
+  authors can question their own grammar.
+- **Lowering/prediction introspection (part 4).** `gale dump` stops at the
+  surface `Grammar` IR. Add a dump of the lowered GIR and the per-rule/per-alt
+  prediction strategy actually chosen (shape-lookahead vs scan-guard,
+  first-success vs tournament).
+
 ## LL prediction — remaining gaps
 
 ### Iter-body K-prefix for `Repeat` inner `RuleRef`s

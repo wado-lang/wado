@@ -149,15 +149,67 @@ impl Token {
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
 /// ParseError represents a parse failure with location and expected tokens.
+///
+/// `message` is the local "expected X, got Y" description, kept free of
+/// position and rule context so it stays composable. `line`/`col` are a
+/// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
+/// from `span.start` against the source at error-construction time;
+/// `Parser::error` fills them in. `rule_stack` records the chain of parser
+/// rules that were active when the error was raised, innermost first — each
+/// rule entry wrapper pushes its own name as the `Err` propagates outward,
+/// so the last element is the start rule and the first is the rule the
+/// failing token sat in. The `Display` impl renders all of this into a
+/// human-readable diagnostic.
 pub struct ParseError {
     pub message: String,
     pub span: Span,
     pub expected: Array<String>,
+    pub line: i32 = 1,
+    pub col: i32 = 0,
+    pub rule_stack: Array<String> = [],
 }
 
 impl ParseError {
     pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
         return ParseError { message, span, expected };
+    }
+
+    /// Construct a ParseError whose position is already resolved. Used by
+    /// `Parser::error`, which has the source on hand to compute line/col.
+    pub fn at(message: String, span: Span, expected: Array<String>, line: i32, col: i32) -> ParseError {
+        return ParseError { message, span, expected, line, col, rule_stack: [] };
+    }
+
+    /// Render the rule chain as `outer > ... > inner` (start rule first).
+    /// `rule_stack` is stored innermost-first, so iterate it in reverse.
+    /// Consecutive duplicates are collapsed: a left-recursive rule re-enters
+    /// itself once per precedence level, which would otherwise print
+    /// `expr > expr > expr` for a deep expression.
+    pub fn rule_path(&self) -> String {
+        let mut out = String::with_capacity(self.rule_stack.len() * 8);
+        let n = self.rule_stack.len();
+        let mut written = 0;
+        for let mut i = 0; i < n; i += 1 {
+            let name = &self.rule_stack[n - 1 - i];
+            if written > 0 && *name == self.rule_stack[n - i] {
+                continue;
+            }
+            if written > 0 {
+                out.push_str(&" > ");
+            }
+            out.push_str(name);
+            written += 1;
+        }
+        return out;
+    }
+}
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&`parse error at {self.line}:{self.col}: {self.message}`);
+        if !self.rule_stack.is_empty() {
+            f.write_str(&`\n  in rule: {self.rule_path()}`);
+        }
     }
 }
 
@@ -2143,11 +2195,17 @@ pub fn token_kind_name(kind: i32) -> String {
 struct Parser {
     tokens: Array<Token>,
     pos: i32,
+    chars: Array<char>,
 }
 
 impl Parser {
-    fn new(tokens: Array<Token>) -> Parser {
-        return Parser { tokens, pos: 0 };
+    fn new(tokens: Array<Token>, chars: Array<char>) -> Parser {
+        return Parser { tokens, pos: 0, chars };
+    }
+
+    fn error(&self, message: String, span: Span, expected: Array<String>) -> ParseError {
+        let lc = line_col_at(&self.chars, span.start);
+        return ParseError::at(message, span, expected, lc.0, lc.1);
     }
 
     fn peek(&self) -> &Token {
@@ -2184,7 +2242,7 @@ impl Parser {
         }
         let tok = &self.tokens[self.pos];
         let name = token_kind_name(kind);
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -2193,7 +2251,7 @@ impl Parser {
 
     fn fail(&self, name: String) -> Result<Token, ParseError> {
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -2205,7 +2263,7 @@ impl Parser {
             return Result::<Token, ParseError>::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected any token, got "{tok.text}"`,
             tok.span,
             ["any token"],
@@ -2227,7 +2285,7 @@ impl Parser {
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["set complement"],
@@ -2245,7 +2303,7 @@ impl Parser {
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["token set"],
@@ -2569,7 +2627,7 @@ fn scan_style(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_html_document(p: &mut Parser) -> Result<HtmlDocumentNode, ParseError> {
+fn _parse_html_document__inner(p: &mut Parser) -> Result<HtmlDocumentNode, ParseError> {
     let start = p.peek().span.start;
     let mut scriptlet_or_sea_ws_list: Array<ScriptletOrSeaWsNode> = [];
     loop {
@@ -2654,7 +2712,16 @@ fn _parse_html_document(p: &mut Parser) -> Result<HtmlDocumentNode, ParseError> 
     });
 }
 
-fn _parse_scriptlet_or_sea_ws(p: &mut Parser) -> Result<ScriptletOrSeaWsNode, ParseError> {
+fn _parse_html_document(p: &mut Parser) -> Result<HtmlDocumentNode, ParseError> {
+    let r = _parse_html_document__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("htmlDocument");
+        return Result::<HtmlDocumentNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser) -> Result<ScriptletOrSeaWsNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_SCRIPTLET {
@@ -2671,14 +2738,23 @@ fn _parse_scriptlet_or_sea_ws(p: &mut Parser) -> Result<ScriptletOrSeaWsNode, Pa
             sea_ws,
         }));
     }
-    return Result::<ScriptletOrSeaWsNode, ParseError>::Err(ParseError::new(
+    return Result::<ScriptletOrSeaWsNode, ParseError>::Err(p.error(
         "expected scriptletOrSeaWs",
         p.peek().span,
         ["TK_SCRIPTLET", "TK_SEA_WS"],
     ));
 }
 
-fn _parse_html_elements(p: &mut Parser) -> Result<HtmlElementsNode, ParseError> {
+fn _parse_scriptlet_or_sea_ws(p: &mut Parser) -> Result<ScriptletOrSeaWsNode, ParseError> {
+    let r = _parse_scriptlet_or_sea_ws__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("scriptletOrSeaWs");
+        return Result::<ScriptletOrSeaWsNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_html_elements__inner(p: &mut Parser) -> Result<HtmlElementsNode, ParseError> {
     let start = p.peek().span.start;
     let mut html_misc_list: Array<HtmlMiscNode> = [];
     loop {
@@ -2719,7 +2795,16 @@ fn _parse_html_elements(p: &mut Parser) -> Result<HtmlElementsNode, ParseError> 
     });
 }
 
-fn _parse_html_element(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
+fn _parse_html_elements(p: &mut Parser) -> Result<HtmlElementsNode, ParseError> {
+    let r = _parse_html_elements__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("htmlElements");
+        return Result::<HtmlElementsNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_html_element__inner(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_TAG_OPEN {
@@ -2817,14 +2902,23 @@ fn _parse_html_element(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
             style,
         }));
     }
-    return Result::<HtmlElementNode, ParseError>::Err(ParseError::new(
+    return Result::<HtmlElementNode, ParseError>::Err(p.error(
         "expected htmlElement",
         p.peek().span,
         ["TK_TAG_OPEN", "TK_SCRIPTLET", "TK_SCRIPT_OPEN", "TK_STYLE_OPEN"],
     ));
 }
 
-fn _parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
+fn _parse_html_element(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
+    let r = _parse_html_element__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("htmlElement");
+        return Result::<HtmlElementNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_html_content__inner(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
     let start = p.peek().span.start;
     let html_chardata: Option<HtmlChardataNode> = if _gale_kind_set_7(p.peek_kind()) {
         let html_chardata = _parse_html_chardata(p)?;
@@ -2916,7 +3010,16 @@ fn _parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
     });
 }
 
-fn _parse_html_attribute(p: &mut Parser) -> Result<HtmlAttributeNode, ParseError> {
+fn _parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
+    let r = _parse_html_content__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("htmlContent");
+        return Result::<HtmlContentNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_html_attribute__inner(p: &mut Parser) -> Result<HtmlAttributeNode, ParseError> {
     let start = p.peek().span.start;
     let tag_name = p.expect(TK_TAG_NAME)?;
     let tag_equals_attvalue_value: Option<TagEqualsAttvalueValueItem> = if p.peek_kind() == TK_TAG_EQUALS && p.peek_at(1) == TK_ATTVALUE_VALUE {
@@ -2937,7 +3040,16 @@ fn _parse_html_attribute(p: &mut Parser) -> Result<HtmlAttributeNode, ParseError
     });
 }
 
-fn _parse_html_chardata(p: &mut Parser) -> Result<HtmlChardataNode, ParseError> {
+fn _parse_html_attribute(p: &mut Parser) -> Result<HtmlAttributeNode, ParseError> {
+    let r = _parse_html_attribute__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("htmlAttribute");
+        return Result::<HtmlAttributeNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_html_chardata__inner(p: &mut Parser) -> Result<HtmlChardataNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_HTML_TEXT {
@@ -2954,14 +3066,23 @@ fn _parse_html_chardata(p: &mut Parser) -> Result<HtmlChardataNode, ParseError> 
             sea_ws,
         }));
     }
-    return Result::<HtmlChardataNode, ParseError>::Err(ParseError::new(
+    return Result::<HtmlChardataNode, ParseError>::Err(p.error(
         "expected htmlChardata",
         p.peek().span,
         ["TK_HTML_TEXT", "TK_SEA_WS"],
     ));
 }
 
-fn _parse_html_misc(p: &mut Parser) -> Result<HtmlMiscNode, ParseError> {
+fn _parse_html_chardata(p: &mut Parser) -> Result<HtmlChardataNode, ParseError> {
+    let r = _parse_html_chardata__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("htmlChardata");
+        return Result::<HtmlChardataNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_html_misc__inner(p: &mut Parser) -> Result<HtmlMiscNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_6(kind) {
@@ -2978,14 +3099,23 @@ fn _parse_html_misc(p: &mut Parser) -> Result<HtmlMiscNode, ParseError> {
             sea_ws,
         }));
     }
-    return Result::<HtmlMiscNode, ParseError>::Err(ParseError::new(
+    return Result::<HtmlMiscNode, ParseError>::Err(p.error(
         "expected htmlMisc",
         p.peek().span,
         ["TK_HTML_COMMENT", "TK_HTML_CONDITIONAL_COMMENT", "TK_SEA_WS"],
     ));
 }
 
-fn _parse_html_comment(p: &mut Parser) -> Result<HtmlCommentNode, ParseError> {
+fn _parse_html_misc(p: &mut Parser) -> Result<HtmlMiscNode, ParseError> {
+    let r = _parse_html_misc__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("htmlMisc");
+        return Result::<HtmlMiscNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_html_comment__inner(p: &mut Parser) -> Result<HtmlCommentNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_HTML_COMMENT {
@@ -3002,14 +3132,23 @@ fn _parse_html_comment(p: &mut Parser) -> Result<HtmlCommentNode, ParseError> {
             html_conditional_comment,
         }));
     }
-    return Result::<HtmlCommentNode, ParseError>::Err(ParseError::new(
+    return Result::<HtmlCommentNode, ParseError>::Err(p.error(
         "expected htmlComment",
         p.peek().span,
         ["TK_HTML_COMMENT", "TK_HTML_CONDITIONAL_COMMENT"],
     ));
 }
 
-fn _parse_script(p: &mut Parser) -> Result<ScriptNode, ParseError> {
+fn _parse_html_comment(p: &mut Parser) -> Result<HtmlCommentNode, ParseError> {
+    let r = _parse_html_comment__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("htmlComment");
+        return Result::<HtmlCommentNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_script__inner(p: &mut Parser) -> Result<ScriptNode, ParseError> {
     let start = p.peek().span.start;
     let script_open = p.expect(TK_SCRIPT_OPEN)?;
     let script_body_or_script_short_body = p.match_set([TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY])?;
@@ -3020,7 +3159,16 @@ fn _parse_script(p: &mut Parser) -> Result<ScriptNode, ParseError> {
     });
 }
 
-fn _parse_style(p: &mut Parser) -> Result<StyleNode, ParseError> {
+fn _parse_script(p: &mut Parser) -> Result<ScriptNode, ParseError> {
+    let r = _parse_script__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("script");
+        return Result::<ScriptNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_style__inner(p: &mut Parser) -> Result<StyleNode, ParseError> {
     let start = p.peek().span.start;
     let style_open = p.expect(TK_STYLE_OPEN)?;
     let style_body_or_style_short_body = p.match_set([TK_STYLE_BODY, TK_STYLE_SHORT_BODY])?;
@@ -3031,6 +3179,15 @@ fn _parse_style(p: &mut Parser) -> Result<StyleNode, ParseError> {
     });
 }
 
+fn _parse_style(p: &mut Parser) -> Result<StyleNode, ParseError> {
+    let r = _parse_style__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("style");
+        return Result::<StyleNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
 fn scan_html_elements__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_html_element(tokens, pos, 0);
@@ -3038,7 +3195,7 @@ fn scan_html_elements__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 =
     return pos;
 }
 
-fn _parse_html_elements__follow_0(p: &mut Parser) -> Result<HtmlElementsNode, ParseError> {
+fn _parse_html_elements__follow_0__inner(p: &mut Parser) -> Result<HtmlElementsNode, ParseError> {
     let start = p.peek().span.start;
     let mut html_misc_list: Array<HtmlMiscNode> = [];
     let html_element = _parse_html_element(p)?;
@@ -3049,6 +3206,15 @@ fn _parse_html_elements__follow_0(p: &mut Parser) -> Result<HtmlElementsNode, Pa
         html_element,
         html_misc_list_2,
     });
+}
+
+fn _parse_html_elements__follow_0(p: &mut Parser) -> Result<HtmlElementsNode, ParseError> {
+    let r = _parse_html_elements__follow_0__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("htmlElements");
+        return Result::<HtmlElementsNode, ParseError>::Err(e);
+    }
+    return r;
 }
 
 fn scan_html_content__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -3102,7 +3268,7 @@ fn scan_html_content__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 
     return pos;
 }
 
-fn _parse_html_content__follow_1(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
+fn _parse_html_content__follow_1__inner(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
     let start = p.peek().span.start;
     let html_chardata: Option<HtmlChardataNode> = if p.peek_kind() == TK_TAG_OPEN && p.peek_at(1) == TK_TAG_SLASH && p.peek_at(2) == TK_TAG_NAME && p.peek_at(3) == TK_TAG_CLOSE {
         null
@@ -3197,6 +3363,15 @@ fn _parse_html_content__follow_1(p: &mut Parser) -> Result<HtmlContentNode, Pars
     });
 }
 
+fn _parse_html_content__follow_1(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
+    let r = _parse_html_content__follow_1__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("htmlContent");
+        return Result::<HtmlContentNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
 fn scan_html_element__follow_2(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -3288,7 +3463,7 @@ fn scan_html_element__follow_2(tokens: &Array<Token>, pos: i32, min_prec: i32 = 
     return pos;
 }
 
-fn _parse_html_element__follow_2(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
+fn _parse_html_element__follow_2__inner(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_TAG_OPEN {
@@ -3386,76 +3561,96 @@ fn _parse_html_element__follow_2(p: &mut Parser) -> Result<HtmlElementNode, Pars
             style,
         }));
     }
-    return Result::<HtmlElementNode, ParseError>::Err(ParseError::new(
+    return Result::<HtmlElementNode, ParseError>::Err(p.error(
         "expected htmlElement",
         p.peek().span,
         ["TK_TAG_OPEN", "TK_SCRIPTLET", "TK_SCRIPT_OPEN", "TK_STYLE_OPEN"],
     ));
 }
 
+fn _parse_html_element__follow_2(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
+    let r = _parse_html_element__follow_2__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("htmlElement");
+        return Result::<HtmlElementNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
 pub fn parse_html_document(input: &String) -> Result<HtmlDocumentNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_html_document(&mut parser);
 }
 
 pub fn parse_scriptlet_or_sea_ws(input: &String) -> Result<ScriptletOrSeaWsNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_scriptlet_or_sea_ws(&mut parser);
 }
 
 pub fn parse_html_elements(input: &String) -> Result<HtmlElementsNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_html_elements(&mut parser);
 }
 
 pub fn parse_html_element(input: &String) -> Result<HtmlElementNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_html_element(&mut parser);
 }
 
 pub fn parse_html_content(input: &String) -> Result<HtmlContentNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_html_content(&mut parser);
 }
 
 pub fn parse_html_attribute(input: &String) -> Result<HtmlAttributeNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_html_attribute(&mut parser);
 }
 
 pub fn parse_html_chardata(input: &String) -> Result<HtmlChardataNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_html_chardata(&mut parser);
 }
 
 pub fn parse_html_misc(input: &String) -> Result<HtmlMiscNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_html_misc(&mut parser);
 }
 
 pub fn parse_html_comment(input: &String) -> Result<HtmlCommentNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_html_comment(&mut parser);
 }
 
 pub fn parse_script(input: &String) -> Result<ScriptNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_script(&mut parser);
 }
 
 pub fn parse_style(input: &String) -> Result<StyleNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_style(&mut parser);
 }
 

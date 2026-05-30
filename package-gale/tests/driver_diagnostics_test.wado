@@ -1,0 +1,52 @@
+// End-to-end diagnostics tests for generated parsers (issue #1246, part 1):
+// a parse error must carry a source `line:col` and the rule context that was
+// active when it was raised. Driven through the JSON grammar so the rule
+// chain (json > value > obj > pair > value) is predictable.
+//
+// Inputs are plain double-quoted strings (not template literals) so the
+// braces are not mistaken for interpolation.
+
+use json from "./grammars/JSON.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/diagnostics",
+        },
+    };
+
+test "parse error carries a 1-based line and 0-based column" {
+    // `{"a": }` — after the colon a value is required but `}` appears at
+    // column 6 on line 1.
+    let e = json::parse(&"{\"a\": }").unwrap_err();
+    assert e.line == 1;
+    assert e.col == 6;
+}
+
+test "parse error reports the active rule chain" {
+    let e = json::parse(&"{\"a\": }").unwrap_err();
+    assert !e.rule_stack.is_empty();
+    // The start rule sits at the outer end of the path, the failing token's
+    // rule at the inner end.
+    assert e.rule_path().starts_with("json");
+    assert e.rule_path().ends_with("value");
+}
+
+test "parse error Display includes position, message, and rule path" {
+    let e = json::parse(&"{\"a\": }").unwrap_err();
+    let text = `{e}`;
+    assert text.starts_with("parse error at 1:6:");
+    assert text.contains("in rule: json");
+}
+
+test "line and column advance across newlines" {
+    // The unexpected `}` is on line 3, column 0.
+    let e = json::parse(&"{\n  \"a\":\n}").unwrap_err();
+    assert e.line == 3;
+    assert e.col == 0;
+}
+
+test "a valid parse still succeeds" {
+    let result = json::parse(&"{\"a\": 1}");
+    assert result matches { Ok(_) };
+}
