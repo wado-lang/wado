@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780122908536,
+  "lastUpdate": 1780124716757,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27645,6 +27645,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/59c0c68439dfc2c1ffa3def8e6e334801d632ff8"
         },
         "date": 1780122908047,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16963,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 458952,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "97f66e502c92e7dbe595787becc66c7188c7b138",
+          "message": "Merge pull request #1239 from wado-lang/claude/formatter-bug-ewXA5\n\nfeat(format): fix long-import wrapping (#1234), unify literal layout, add `[format]` config",
+          "timestamp": "2026-05-30T15:53:17+09:00",
+          "tree_id": "827b9bf0566d4d4d1888789d32630c00d1c8a1f8",
+          "url": "https://github.com/wado-lang/wado/commit/97f66e502c92e7dbe595787becc66c7188c7b138"
+        },
+        "date": 1780124716274,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
