@@ -7335,14 +7335,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         repr: repr.clone(),
                     }
                 } else {
-                    let value: u64 = if let Some(stripped) = repr.strip_prefix("0x") {
+                    // Strip digit separators (`0x1234_5678` → `0x12345678`)
+                    // before parsing, matching the elaborator
+                    // (expr.rs:4368). Without this, `from_str_radix` /
+                    // `parse` reject the `_` and fall to 0.
+                    let digits = repr.replace('_', "");
+                    let value: u64 = if let Some(stripped) = digits.strip_prefix("0x") {
                         u64::from_str_radix(stripped, 16).unwrap_or(0)
-                    } else if let Some(stripped) = repr.strip_prefix("0o") {
+                    } else if let Some(stripped) = digits.strip_prefix("0o") {
                         u64::from_str_radix(stripped, 8).unwrap_or(0)
-                    } else if let Some(stripped) = repr.strip_prefix("0b") {
+                    } else if let Some(stripped) = digits.strip_prefix("0b") {
                         u64::from_str_radix(stripped, 2).unwrap_or(0)
                     } else {
-                        repr.parse::<u64>().unwrap_or(0)
+                        digits.parse::<u64>().unwrap_or(0)
                     };
                     TirExprKind::IntLiteral {
                         value,
@@ -8165,14 +8170,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 fn pattern_endpoint_to_i128(endpoint: &ast::Pattern) -> i128 {
     match endpoint {
         ast::Pattern::Literal(ast::Literal::Number(repr)) => {
-            if let Some(stripped) = repr.strip_prefix("0x") {
+            let digits = repr.replace('_', "");
+            if let Some(stripped) = digits.strip_prefix("0x") {
                 i128::from_str_radix(stripped, 16).unwrap_or(0)
-            } else if let Some(stripped) = repr.strip_prefix("0o") {
+            } else if let Some(stripped) = digits.strip_prefix("0o") {
                 i128::from_str_radix(stripped, 8).unwrap_or(0)
-            } else if let Some(stripped) = repr.strip_prefix("0b") {
+            } else if let Some(stripped) = digits.strip_prefix("0b") {
                 i128::from_str_radix(stripped, 2).unwrap_or(0)
             } else {
-                repr.parse::<i128>().unwrap_or(0)
+                digits.parse::<i128>().unwrap_or(0)
             }
         }
         ast::Pattern::Literal(ast::Literal::Char(s)) => {
@@ -8201,14 +8207,15 @@ fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
             // hex/oct/bin radix, else decimal. Pattern position
             // never sees float literals (the elaborator rejects
             // them earlier), so decode as integer.
-            let value: i128 = if let Some(stripped) = repr.strip_prefix("0x") {
+            let digits = repr.replace('_', "");
+            let value: i128 = if let Some(stripped) = digits.strip_prefix("0x") {
                 i128::from_str_radix(stripped, 16).unwrap_or(0)
-            } else if let Some(stripped) = repr.strip_prefix("0o") {
+            } else if let Some(stripped) = digits.strip_prefix("0o") {
                 i128::from_str_radix(stripped, 8).unwrap_or(0)
-            } else if let Some(stripped) = repr.strip_prefix("0b") {
+            } else if let Some(stripped) = digits.strip_prefix("0b") {
                 i128::from_str_radix(stripped, 2).unwrap_or(0)
             } else {
-                repr.parse::<i128>().unwrap_or(0)
+                digits.parse::<i128>().unwrap_or(0)
             };
             TirLiteralPattern::I128(value)
         }
