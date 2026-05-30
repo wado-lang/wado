@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2570 / 2664 fixtures passing under
+      suite reaches **2578 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 94 remaining failures are all reify-specific). The
+      so the 86 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -708,11 +708,27 @@ Landed:
     delegates to `resolve_type_static_with_params(…, &[])`. Clears
     effect_propagation_struct_field / _signature_nested; production
     unaffected.
+28. **Numeric-literal parsing via shared `util` helpers (2570 → 2578).**
+    reify hand-decoded numeric literals keyed on the _target_ type: a
+    float target ran `parse::<f64>()` (failing on `0xFF` / `0b1010` →
+    0.0), an int target parsed digits directly (failing on scientific
+    `1e2` → 0), and neither stripped digit separators (`0x1234_5678` →
+    0). Now uses `util::parse_u128_literal` / `util::parse_float_literal`
+    keyed on `is_float_only_literal`, converting an integer-form literal
+    to f64 for a float target — also applied to the pattern / range-bound
+    decoders. Clears coerce_struct_field, number_literal.
+29. **Struct field access resolved against the receiver's module.**
+    `lookup_struct_field_index` looked the struct up by name only, so two
+    same-named structs in different modules (local `Pair` vs imported
+    `helper::Pair`) resolved fields against whichever the current module
+    saw first — `remote.y` read the wrong field. Now keys on the
+    receiver's `(module_source, name)` via `tysys.all_struct_fields`.
+    Clears struct_name_conflict.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2570
-/ 2664** under `WADO_REIFY=1`; 94 reify-specific failures across 55
+Largest first, by fixture-name prefix (after the landings above). **2578
+/ 2664** under `WADO_REIFY=1`; 86 reify-specific failures across ~49
 unique fixtures remain:
 
 - **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
