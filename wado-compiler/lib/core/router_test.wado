@@ -299,9 +299,11 @@ test "router: deserialize params into struct" {
     assert p.id == 42 as u64;
 }
 
-test "router: deserialize multiple params (camelCase rename)" {
+test "router: deserialize multiple snake_case params" {
     let mut r = Router::<i32>::new();
-    r.get("/users/:userId/posts/:postId", 1);
+    // Path parameter names are matched against the Wado source field names
+    // verbatim (identity), so multi-word `:user_id` binds to field `user_id`.
+    r.get("/users/:user_id/posts/:post_id", 1);
 
     let m = r.match_path(Method::Get, &"/users/7/posts/99").unwrap();
     let p = m.params.deserialize::<PostParams>().unwrap();

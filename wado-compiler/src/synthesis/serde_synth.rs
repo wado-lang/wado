@@ -234,6 +234,24 @@ use super::common::{
     return_stmt, string_lit, synth_span,
 };
 
+/// Wire-form name for a struct field.
+///
+/// Single source of truth for the serialized key: an explicit
+/// `#[serde(rename = "...")]` wins; otherwise `#[serde(rename_all = "...")]`
+/// applies its case strategy; otherwise the Wado source field name is used
+/// verbatim (identity — `user_id` stays `"user_id"`, `userId` stays
+/// `"userId"`). Used by both the serialize and deserialize synthesisers so the
+/// two never disagree.
+fn serialized_field_name(f: &crate::tir::TirField, struct_def: &crate::tir::TirStruct) -> String {
+    f.serde_rename.clone().unwrap_or_else(|| {
+        if let Some(strategy) = &struct_def.serde_rename_all {
+            apply_rename_all(&f.name, strategy)
+        } else {
+            f.name.clone()
+        }
+    })
+}
+
 fn apply_rename_all(s: &str, strategy: &str) -> String {
     match strategy {
         "camelCase" => snake_to_camel(s),
@@ -791,13 +809,7 @@ fn generate_struct_serialize(
         .fields
         .iter()
         .map(|f| {
-            let serialized_name = f.serde_rename.clone().unwrap_or_else(|| {
-                if let Some(strategy) = &struct_def.serde_rename_all {
-                    apply_rename_all(&f.name, strategy)
-                } else {
-                    snake_to_camel(&f.name)
-                }
-            });
+            let serialized_name = serialized_field_name(f, struct_def);
             (f.name.clone(), serialized_name, f.type_id, f.index)
         })
         .collect();
@@ -850,7 +862,7 @@ fn generate_struct_serialize(
     ));
 
     let mut then_stmts = Vec::new();
-    for (i, (field_name, camel_name, field_type, field_index)) in fields.iter().enumerate() {
+    for (i, (field_name, wire_name, field_type, field_index)) in fields.iter().enumerate() {
         let self_ref = local_ref(0, "self", ref_self_type);
         let self_deref = deref_expr(self_ref, struct_type, span);
         let field_val = field_access(self_deref, *field_index, field_name, *field_type, span);
@@ -866,7 +878,7 @@ fn generate_struct_serialize(
             vec![*field_type],
             vec![
                 ref_expr(
-                    string_lit(camel_name, string_type, span),
+                    string_lit(wire_name, string_type, span),
                     ref_string_type,
                     span,
                 ),
@@ -1018,13 +1030,7 @@ fn generate_struct_deserialize(
         .fields
         .iter()
         .map(|f| {
-            let serialized_name = f.serde_rename.clone().unwrap_or_else(|| {
-                if let Some(strategy) = &struct_def.serde_rename_all {
-                    apply_rename_all(&f.name, strategy)
-                } else {
-                    snake_to_camel(&f.name)
-                }
-            });
+            let serialized_name = serialized_field_name(f, struct_def);
             (f.name.clone(), serialized_name, f.type_id, f.index)
         })
         .collect();
@@ -1604,8 +1610,8 @@ fn generate_lookup_function(
 
     // For each field, generate:
     //   if __len == N && input.get_byte(start + 0) as i32 == B0 && ... { return Some(i); }
-    for (i, (_, camel_name, _, _)) in fields.iter().enumerate() {
-        let name_bytes = camel_name.as_bytes();
+    for (i, (_, wire_name, _, _)) in fields.iter().enumerate() {
+        let name_bytes = wire_name.as_bytes();
         let name_len = name_bytes.len() as i32;
 
         // Start with: __len == name_len

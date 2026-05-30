@@ -15,26 +15,27 @@ use { Serialize, Deserialize, SerializeError, DeserializeError } from "core:serd
 
 ## Field naming on the wire
 
-Wado fields are `snake_case` by convention, but the default wire-form key
-is `camelCase`. Override per struct with `#[serde(rename_all = "...")]`,
-or per field with `#[serde(rename = "...")]` (which takes precedence).
+By default the wire-form key is the Wado source field name verbatim
+(identity): `user_name` stays `"user_name"`, `userId` stays `"userId"`.
+The field name as written is the single source of truth. Override per
+struct with `#[serde(rename_all = "...")]`, or per field with
+`#[serde(rename = "...")]` (which takes precedence).
 
-`rename_all` strategies: `"camelCase"` (default), `"snake_case"`,
-`"PascalCase"`, `"SCREAMING_SNAKE_CASE"`, `"kebab-case"`,
-`"SCREAMING-KEBAB-CASE"`.
+`rename_all` strategies: `"camelCase"`, `"snake_case"`, `"PascalCase"`,
+`"SCREAMING_SNAKE_CASE"`, `"kebab-case"`, `"SCREAMING-KEBAB-CASE"`.
 
 ```wado
-// Default — wire keys are camelCase
+// Default — wire keys are the field names as written
 struct User {
-    user_name: String,        // wire key: "userName"
-    account_id: i64,          // wire key: "accountId"
+    user_name: String,        // wire key: "user_name"
+    account_id: i64,          // wire key: "account_id"
 }
 
-// Per-struct convention
-#[serde(rename_all = "snake_case")]
+// Per-struct convention (e.g. camelCase for a JS-facing API)
+#[serde(rename_all = "camelCase")]
 struct Event {
-    created_at: String,       // wire key: "created_at"
-    event_type: String,       // wire key: "event_type"
+    created_at: String,       // wire key: "createdAt"
+    event_type: String,       // wire key: "eventType"
 }
 
 // Per-field override (wins over rename_all)

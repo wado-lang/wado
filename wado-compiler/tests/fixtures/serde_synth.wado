@@ -31,6 +31,7 @@ test "synthesized deserialize Point out-of-order fields" {
     }
 }
 
+#[serde(rename_all = "camelCase")]
 struct User {
     user_name: String,
     age: i32,
@@ -99,7 +100,7 @@ test "synthesized serialize Point" {
 
 impl Serialize for User;
 
-test "synthesized serialize User with snake_case -> camelCase" {
+test "synthesized serialize User with rename_all camelCase" {
     let u = User { user_name: "Alice", age: 30, active: true };
     let r = to_string::<User>(&u);
     if let Ok(s) = r {
