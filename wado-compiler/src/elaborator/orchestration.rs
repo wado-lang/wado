@@ -2710,7 +2710,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     stores: vec![],
                 })
             }
-            _ => TypeTable::UNKNOWN,
+            // A variadic type-pack spread `..T` resolves to a `TypePack`
+            // keyed by the param's positional index, mirroring the instance
+            // resolver's `trait_ctx.type_params` lookup (type_resolution.rs:103).
+            // Without this arm a `[..T]` parameter resolves its element to
+            // `UNKNOWN`, so a generic tuple method (`Tuple<..T>^Eq::eq`)
+            // monomorphizes against `Tuple<unknown>` and never registers at
+            // WIR build.
+            Type::TypePackSpread(name, _span) => {
+                if let Some(index) = type_params.iter().position(|p| p == name) {
+                    type_table.make_type_pack(name.clone(), index as u32)
+                } else {
+                    TypeTable::UNKNOWN
+                }
+            }
         }
     }
 
