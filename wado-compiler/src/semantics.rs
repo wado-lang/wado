@@ -684,7 +684,11 @@ pub async fn semantics<H: CompilerHost>(
         }
     };
     // Surface every recovered syntax error, then analyze the partial AST so
-    // queries still resolve in the regions outside the error.
+    // queries still resolve in the regions outside the error. If load/bind
+    // then fails on the partial AST, the result still collapses to
+    // `Semantics::empty()` below — recovery helps only when binding succeeds,
+    // which holds for the common cases (missing brace, garbage item) where
+    // scopes stay separate.
     for e in &parsed.errors {
         host.emit_diagnostic(parse_error_diagnostic(e, filename));
     }

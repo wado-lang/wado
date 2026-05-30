@@ -160,6 +160,18 @@ impl Parser {
         std::mem::take(&mut self.errors)
     }
 
+    /// Parse fail-fast: return the [`Module`] only if no syntax error was
+    /// recovered, otherwise the first error. For callers that require a clean
+    /// parse (stdlib loading, expression-snippet tests) and want the old
+    /// `Result`-returning shape.
+    pub fn parse_strict(&mut self) -> ParseResult<Module> {
+        let module = self.parse();
+        match self.take_errors().into_iter().next() {
+            Some(e) => Err(e),
+            None => Ok(module),
+        }
+    }
+
     /// Allocate a fresh [`AstId`] for an AST node currently being constructed.
     /// Ids are dense in `0..next_ast_id` and assigned in parse order.
     ///
@@ -240,7 +252,8 @@ impl Parser {
     }
 
     /// Returns true if the parsed inner attributes include `#![TODO]`.
-    /// Valid even after a parse error, since inner attributes are parsed first.
+    /// Valid even after a parse error: each inner attribute is recorded as it
+    /// parses, so the valid ones survive a later malformed attribute or item.
     pub fn has_todo(&self) -> bool {
         self.parsed_inner_attributes
             .iter()
@@ -296,16 +309,12 @@ impl Parser {
     /// `self.errors`, drained by [`Parser::take_errors`]. The returned module
     /// covers the whole input — broken regions become [`Item::Error`] nodes.
     pub fn parse(&mut self) -> Module {
-        // Parse inner attributes at the start of the module.
-        // Store them so has_todo() works even if item parsing fails later.
-        let inner_attributes = match self.parse_inner_attributes() {
-            Ok(attrs) => attrs,
-            Err(e) => {
-                self.errors.push(e);
-                Vec::new()
-            }
-        };
-        self.parsed_inner_attributes.clone_from(&inner_attributes);
+        // `parse_inner_attributes` records each attribute as it parses, so a
+        // malformed one only loses itself; the rest stay in the module.
+        if let Err(e) = self.parse_inner_attributes() {
+            self.errors.push(e);
+        }
+        let inner_attributes = self.parsed_inner_attributes.clone();
 
         let mut items = Vec::new();
 
@@ -341,21 +350,22 @@ impl Parser {
     /// attribute-start `#` (also begins `#include_str(...)`), and the
     /// contextual `test` keyword (an ordinary identifier, e.g. `test(1, 2)`).
     fn at_hard_item_keyword(&self) -> bool {
-        use TokenKind::*;
+        use TokenKind as T;
         matches!(
             self.peek_kind(),
-            Use | Fn
-                | Interface
-                | Struct
-                | Enum
-                | Variant
-                | Impl
-                | Trait
-                | Resource
-                | World
-                | Global
-                | Pub
-                | Export
+            T::Use
+                | T::Fn
+                | T::Interface
+                | T::Struct
+                | T::Enum
+                | T::Variant
+                | T::Impl
+                | T::Trait
+                | T::Resource
+                | T::World
+                | T::Global
+                | T::Pub
+                | T::Export
         )
     }
 
@@ -364,8 +374,8 @@ impl Parser {
     /// block) every item keyword — including the contextual `flags` / `type` /
     /// `test` and the attribute-start `#` — unambiguously starts the next item.
     fn at_item_start(&self) -> bool {
-        use TokenKind::*;
-        if self.at_hard_item_keyword() || matches!(self.peek_kind(), Flags | Type | Hash) {
+        use TokenKind as T;
+        if self.at_hard_item_keyword() || matches!(self.peek_kind(), T::Flags | T::Type | T::Hash) {
             return true;
         }
         matches!(self.peek_kind(), TokenKind::Ident(name) if name == "test")
@@ -393,7 +403,7 @@ impl Parser {
     }
 
     /// Skip tokens after a failed statement until a statement/block boundary:
-    /// a `;` (consumed), or `}` / an item-start token / EOF (left in place).
+    /// a `;` (consumed), or `}` / a hard item keyword / EOF (left in place).
     /// Guarantees forward progress.
     fn recover_in_block(&mut self, before: usize) {
         if self.pos == before {
@@ -858,14 +868,16 @@ impl Parser {
     }
 
     /// Parse inner attributes at the start of a module: `#![name]`
-    fn parse_inner_attributes(&mut self) -> ParseResult<Vec<InnerAttribute>> {
-        let mut attrs = Vec::new();
-
+    /// Parse the run of `#![...]` inner attributes at the module start. Each
+    /// attribute is recorded in `parsed_inner_attributes` as soon as it parses,
+    /// so a later malformed attribute does not discard the valid ones already
+    /// seen — `has_todo()` stays correct across recovery.
+    fn parse_inner_attributes(&mut self) -> ParseResult<()> {
         while self.check(&TokenKind::Hash) && self.peek_nth(1).kind == TokenKind::Not {
-            attrs.push(self.parse_inner_attribute()?);
+            let attr = self.parse_inner_attribute()?;
+            self.parsed_inner_attributes.push(attr);
         }
-
-        Ok(attrs)
+        Ok(())
     }
 
     /// Parse a single inner attribute: `#![name]`, `#![name("arg")]`, or
@@ -1644,7 +1656,10 @@ impl Parser {
         // here rather than letting the body swallow the next item. Only hard
         // keywords qualify — `flags`/`type` as identifiers, `test(...)`, and
         // `#include_str(...)` are all valid statements, so `at_hard_item_keyword`
-        // (not `at_item_start`) is correct.
+        // (not `at_item_start`) is correct. The trade-off: a brace-less block
+        // immediately before a `#[attr]`-prefixed item still over-reads (the `#`
+        // parses as a compile-time literal and fails), so that one case yields a
+        // less precise diagnostic. The following item itself still recovers.
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() && !self.at_hard_item_keyword() {
             let before = self.pos;
             match self.parse_stmt_in_block() {
@@ -5503,11 +5518,7 @@ mod tests {
         let tokens = lexer.tokenize().expect("lexer error");
         let (data_section, _comments, shebang) = lexer.into_parts();
         let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-        let module = parser.parse();
-        match parser.take_errors().into_iter().next() {
-            Some(e) => Err(e),
-            None => Ok(module),
-        }
+        parser.parse_strict()
     }
 
     /// Parse helper that exposes the full recovery result: the (always
@@ -7178,6 +7189,63 @@ line 2
         assert!(
             errors.is_empty(),
             "speculative backtracking must not leak errors: {errors:?}",
+        );
+    }
+
+    #[test]
+    fn recovery_resyncs_to_every_item_keyword() {
+        // Guards `at_item_start` against drifting from `parse_item`: a leading
+        // garbage token forces recovery, and each item kind that follows must
+        // still parse (i.e. its start token is in the recovery sync set). If a
+        // new item keyword is added to `parse_item` without updating
+        // `at_item_start`, recovery would swallow it and this test fails.
+        let item_sources = [
+            "use { x } from \"core:cli\";",
+            "fn a() {}",
+            "interface I { fn m(); }",
+            "struct S { x: i32 }",
+            "enum E { A, B }",
+            "variant V { A(i32), B }",
+            "flags F { A, B }",
+            "type T = i32;",
+            "impl S {}",
+            "trait Tr {}",
+            "resource R {}",
+            "world W {}",
+            "global G: i32 = 0;",
+            "test \"t\" {}",
+            "pub fn b() {}",
+        ];
+        for src in item_sources {
+            let full = format!("] {src}\n");
+            let (module, errors) = parse_recovering(&full);
+            assert!(!errors.is_empty(), "leading `]` should error: {src}");
+            let recovered = module.items.iter().any(|i| !matches!(i, Item::Error(_)));
+            assert!(
+                recovered,
+                "recovery must re-sync to and parse the item: {src}",
+            );
+        }
+    }
+
+    #[test]
+    fn has_todo_survives_a_failing_later_inner_attribute() {
+        // `#![TODO]` parses fine but the next inner attribute is malformed. The
+        // valid `#![TODO]` must not be discarded by recovery, so has_todo() and
+        // the module's inner attributes still see it.
+        let mut lexer = Lexer::new("#![TODO]\n#![wasm_module(\n");
+        let tokens = lexer.tokenize().expect("lexer error");
+        let (data_section, _comments, shebang) = lexer.into_parts();
+        let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+        let module = parser.parse();
+        assert!(
+            !parser.take_errors().is_empty(),
+            "malformed attr is an error"
+        );
+        assert!(parser.has_todo(), "has_todo() must still see #![TODO]");
+        assert!(
+            module.has_todo(),
+            "module must retain #![TODO] despite the later failure",
         );
     }
 }

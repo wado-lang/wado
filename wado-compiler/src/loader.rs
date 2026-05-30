@@ -810,9 +810,7 @@ mod tests {
         let tokens = lexer.tokenize().expect("test source must lex");
         let (data_section, _comments, shebang) = lexer.into_parts();
         let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-        let ast = parser.parse();
-        assert!(parser.take_errors().is_empty(), "test source must parse");
-        ast
+        parser.parse_strict().expect("test source must parse")
     }
 
     #[test]

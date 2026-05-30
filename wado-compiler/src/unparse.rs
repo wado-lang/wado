@@ -340,8 +340,8 @@ impl<'a> Unparser<'a> {
             Item::Test(t) => self.unparse_test(t),
             Item::Global(g) => self.unparse_global(g),
             Item::TupleTypeDecl(d) => self.unparse_tuple_type_decl(d),
-            // Unreachable in practice: formatting is fail-fast on syntax
-            // errors, so no Item::Error reaches the unparser. Emit nothing.
+            // The formatter's fail-fast path produces no Item::Error; emit
+            // nothing if one is ever unparsed (e.g. a future partial-AST caller).
             Item::Error(_) => {}
         }
 

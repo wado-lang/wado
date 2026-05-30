@@ -1021,8 +1021,6 @@ pub struct ParseResult {
     pub trivia: comment::TriviaMap,
     /// Syntax errors recovered during parsing, in source order.
     pub errors: Vec<parser::ParseError>,
-    /// `#![TODO]` present in the parsed inner attributes.
-    pub had_todo: bool,
 }
 
 impl ParseResult {
@@ -1037,7 +1035,7 @@ impl ParseResult {
                 line: e.span.line,
                 column: e.span.column,
                 filename: None,
-                is_todo_module: self.had_todo,
+                is_todo_module: self.ast.has_todo(),
             });
         }
         Ok(self)
@@ -1085,7 +1083,6 @@ pub fn parse(source: &str) -> Result<ParseResult, CompileError> {
     // `ParseResult::errors` and `into_fail_fast` for callers that need them.
     let ast = parser.parse();
     let errors = parser.take_errors();
-    let had_todo = parser.has_todo();
     let mut trivia = parser.take_trivia();
     comment::populate_trailing(&mut trivia, &ast);
     comment::populate_inner_tail(&mut trivia, &ast);
@@ -1093,7 +1090,6 @@ pub fn parse(source: &str) -> Result<ParseResult, CompileError> {
         ast,
         trivia,
         errors,
-        had_todo,
     })
 }
 

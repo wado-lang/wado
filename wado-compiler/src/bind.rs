@@ -1247,9 +1247,7 @@ mod tests {
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().unwrap();
         let mut parser = Parser::new(tokens);
-        let module = parser.parse();
-        assert!(parser.take_errors().is_empty(), "parse error");
-        module
+        parser.parse_strict().expect("parse error")
     }
 
     fn bind_and_check(module: &Module) -> (bool, Vec<crate::compiler_host::Diagnostic>) {
