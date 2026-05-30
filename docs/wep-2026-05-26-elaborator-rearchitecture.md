@@ -816,15 +816,25 @@ Landed:
     expected type, and the `break` stmt resolves its value against the
     matching frame's expected type. Fixes labeled_block_break_null_coercion;
     production unaffected.
+38. **ASCII-only test export-name mangling in reify (2611 → 2612).** Reify
+    built a test's internal function name with a Unicode-aware
+    `is_alphanumeric`, letting multibyte letters (`日`, `é`) survive into the
+    Component Model kebab-case export name and crash Wasm validation
+    (`export name test-0-日本語のテスト-ok is not a valid extern name`).
+    Reify now uses the shared `name::test_name_to_snake` (ASCII-only,
+    matching item.rs). Fixes test_unicode_names; production unaffected (it
+    already used the helper). ice_array_iter_into_iterator also dropped off
+    the failing list (cleared by an earlier landing).
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2611
+Largest first, by fixture-name prefix (after the landings above). **2612
 / 2664** under `WADO_REIFY=1`. A full-suite scan after landing #35 found 34
-unique reify-only failing fixtures (landings #36/#37 then cleared
-infer_static_method_from_lhs and labeled_block_break_null_coercion); the
-prior effect_handler_resource_* cluster is resolved (compiles clean —
-likely a side effect of landing #31).
+unique reify-only failing fixtures; landings #36–#38 then cleared
+infer_static_method_from_lhs, labeled_block_break_null_coercion,
+test_unicode_names, and ice_array_iter_into_iterator. The prior
+effect_handler_resource_* cluster is resolved (compiles clean — likely a
+side effect of landing #31).
 The remaining set is: variadic_* (6), tuple_* (tuple_zip, tuple_for_of,
 tuple_1, tuple_name_collision×2, tuple_literal_expected_type_in_branch,
 opt_container_sroa_tuple), newtype_* (newtype_chained_method,

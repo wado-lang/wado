@@ -1489,12 +1489,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             (_, _, None) => "__test".to_string(),
         };
         let function_name = match &test_decl.name {
+            // Use the shared ASCII-only snake conversion: non-ASCII letters
+            // must collapse to `_` so the segment downgrades losslessly into
+            // a Component Model kebab-case export name. A Unicode-aware
+            // `is_alphanumeric` here would leak multibyte letters into the
+            // export name and crash Wasm validation (matches item.rs).
             Some(name) => {
-                let snake_name: String = name
-                    .chars()
-                    .map(|c| if c.is_alphanumeric() { c } else { '_' })
-                    .collect::<String>()
-                    .to_lowercase();
+                let snake_name = crate::name::test_name_to_snake(name);
                 format!("{prefix}_{test_index}_{snake_name}")
             }
             None => format!("{prefix}_{test_index}"),
