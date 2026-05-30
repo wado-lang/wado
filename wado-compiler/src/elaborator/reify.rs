@@ -6433,17 +6433,30 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &self.tysys.type_table,
         );
 
-        // Explicit method-level type args resolved against the current
-        // type-param scope. Inferred type args (the generic-instantiation
-        // path) live on `sem.types.generic_instantiations` but the
-        // elaborator's `FunctionRef.method_info.method_type_args` already
-        // carries the mangled form — reify trusts the recorded
-        // `FunctionRef` and only resolves the syntactic type args here.
-        let type_args: Vec<TypeId> = method_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
+        // Method-level type args for the TIR `MethodCall` node. The
+        // monomorphizer's `collect_func_instantiation_sites` keys off this
+        // field to queue `Struct^Trait::method<Args>` instances, so it
+        // must carry the *resolved* args — including ones inferred from
+        // argument types when there is no turbofish (`c.transform(42)`
+        // infers `T = i32`). Explicit turbofish resolves against the
+        // current type-param scope; otherwise fall back to the inferred
+        // args the elaborator baked into the recorded `FunctionRef`'s
+        // `monomorph_info` (production passes the same vector as the node
+        // type args at `method_call.rs:817`).
+        let type_args: Vec<TypeId> = if !method_call.type_args.is_empty() {
+            method_call
+                .type_args
+                .iter()
+                .map(|ty| self.resolve_type(ty))
+                .collect()
+        } else {
+            dispatch
+                .function_ref
+                .monomorph_info
+                .as_ref()
+                .map(|mi| mi.method_type_args.clone())
+                .unwrap_or_default()
+        };
 
         // Per-arg `is_mut` comes from the recorded `MethodDispatch`
         // (drained from `lookup_method_param_is_mut` at annotate time).
