@@ -1,0 +1,1852 @@
+#![generated(by = "local:src/generator.wado", sources = ["grammars/alt_shared_ident_prefix.g4"])]
+#![generated(by = "gale", sources = ["alt_shared_ident_prefix.g4"])]
+
+/// Span represents a byte range in source text.
+pub struct Span {
+    pub start: i32,
+    pub end: i32,
+}
+
+impl Span {
+    pub fn new(start: i32, end: i32) -> Span {
+        return Span { start, end };
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    pub fn merge(&self, other: &Span) -> Span {
+        let start = if self.start < other.start { self.start } else { other.start };
+        let end = if self.end > other.end { self.end } else { other.end };
+        return Span { start, end };
+    }
+}
+
+impl Eq for Span {
+    fn eq(&self, other: &Self) -> bool {
+        return self.start == other.start && self.end == other.end;
+    }
+}
+
+/// LexerSlice is a lazy reference to a range of characters in the source input.
+/// It avoids allocating a String for every token during tokenization.
+pub struct LexerSlice {
+    pub chars: &Array<char>,
+    pub start: i32,
+    pub end: i32,
+}
+
+impl LexerSlice {
+    pub fn new(chars: &Array<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
+        return LexerSlice { chars, start, end };
+    }
+
+    pub fn empty(chars: &Array<char>) -> LexerSlice with stores[chars] {
+        return LexerSlice { chars, start: 0, end: 0 };
+    }
+
+    pub fn from_string(s: String) -> LexerSlice {
+        let chars = s.chars().collect();
+        return LexerSlice { chars: &chars, start: 0, end: chars.len() };
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.start >= self.end;
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    pub fn push_to(&self, out: &mut String) {
+        for let mut i = self.start; i < self.end; i += 1 {
+            out.push(self.chars[i]);
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut s = String::with_capacity(self.end - self.start);
+        self.push_to(&mut s);
+        return s;
+    }
+
+    pub fn eq_str(a: &String, b: &LexerSlice) -> bool {
+        let a_chars = a.chars();
+        let mut a_iter = a_chars;
+        let mut i = b.start;
+        loop {
+            let a_next = a_iter.next();
+            if i >= b.end {
+                return a_next matches { None };
+            }
+            if let Some(ac) = a_next {
+                if ac != b.chars[i] {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+            i += 1;
+        }
+    }
+}
+
+impl Display for LexerSlice {
+    fn fmt(&self, f: &mut Formatter) {
+        for let mut i = self.start; i < self.end; i += 1 {
+            f.write_char(self.chars[i]);
+        }
+    }
+}
+
+impl Eq for LexerSlice {
+    fn eq(&self, other: &Self) -> bool {
+        let len = self.end - self.start;
+        if len != other.end - other.start {
+            return false;
+        }
+        for let mut i = 0; i < len; i += 1 {
+            if self.chars[self.start + i] != other.chars[other.start + i] {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+/// Token represents a lexed token with its kind, text, and position.
+/// Leading trivia (whitespace, comments) is attached to each token.
+/// `channel` is the ANTLR4 channel id (0 = default, 1 = HIDDEN; named
+/// channels resolve to integer ids declared in the grammar).
+pub struct Token {
+    pub kind: i32,
+    pub text: LexerSlice,
+    pub span: Span,
+    pub leading_trivia: Array<Token>,
+    pub channel: i32,
+}
+
+impl Token {
+    pub fn new(kind: i32, text: LexerSlice, span: Span) -> Token {
+        return Token { kind, text, span, leading_trivia: [], channel: 0 };
+    }
+
+    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>) -> Token {
+        return Token { kind, text, span, leading_trivia, channel: 0 };
+    }
+
+    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>, channel: i32) -> Token {
+        return Token { kind, text, span, leading_trivia, channel };
+    }
+}
+
+// Note: Token Eq is intentionally omitted. Auto-derived Eq on recursive structs
+// with reference-containing fields triggers a compiler bug
+// (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
+
+/// ParseError represents a parse failure with location and expected tokens.
+pub struct ParseError {
+    pub message: String,
+    pub span: Span,
+    pub expected: Array<String>,
+}
+
+impl ParseError {
+    pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
+        return ParseError { message, span, expected };
+    }
+}
+
+/// CstChild is either a terminal token or a non-terminal sub-tree.
+pub variant CstChild {
+    Token(Token),
+    Node(CstNode),
+}
+
+/// CstNode is a generic (untyped) concrete syntax tree node.
+pub struct CstNode {
+    pub name: String,
+    pub span: Span,
+    pub children: Array<CstChild>,
+}
+
+impl CstNode {
+    /// Produce an ANTLR4-style S-expression representation of this tree.
+    /// Rule nodes become `(name child1 child2 ...)`, tokens become their text.
+    /// Tokens with empty text (e.g. EOF) are omitted.
+    pub fn to_string_tree(&self) -> String {
+        let mut out = String::with_capacity(256);
+        cst_to_string_tree_impl(&mut out, self);
+        return out;
+    }
+}
+
+fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
+    out.push_str(&`({node.name}`);
+    for let child of &node.children {
+        if let Token(t) = *child {
+            if !t.text.is_empty() {
+                out.push_str(&` {t.text}`);
+            }
+        } else if let Node(n) = *child {
+            out.push_str(&" ");
+            cst_to_string_tree_impl(out, &n);
+        }
+    }
+    out.push_str(&")");
+}
+
+/// Normalize a multi-line S-expression string for comparison.
+/// Collapses whitespace runs to single spaces and trims, while preserving
+/// whitespace inside double-quoted strings.
+pub fn normalize_tree(s: &String) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_string = false;
+    let mut space_pending = false;
+    for let c of s.chars() {
+        if in_string {
+            out.push(c);
+            if c == '"' {
+                in_string = false;
+            }
+        } else if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
+            if out.len() > 0 {
+                space_pending = true;
+            }
+        } else {
+            if space_pending {
+                out.push(' ');
+                space_pending = false;
+            }
+            if c == '"' {
+                in_string = true;
+            }
+            out.push(c);
+        }
+    }
+    return out;
+}
+
+/// Find the first direct child Node of `parent` whose rule name equals
+/// `name`. Returns `None` when no such child exists.
+///
+/// Used by Stage B sub-tree drivers: many ANTLR4 descriptors print a
+/// labelled sub-tree (`@after { <ToStringTree("$r.ctx"):writeln()> }`)
+/// rather than the start rule's full tree. Gale's `parse()` always
+/// returns the full tree, so the test must navigate down to the
+/// referenced child before comparing.
+pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode> {
+    for let child of &parent.children {
+        if let Node(n) = *child {
+            if n.name == *name {
+                return Option::<CstNode>::Some(n);
+            }
+        }
+    }
+    return null;
+}
+
+/// Produce an ANTLR4-style `Token.toString()` dump of the token stream:
+///
+///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]\n  (per token)
+///
+/// Used by Stage L (token-stream equivalence) tests against the upstream
+/// `LexerExec` / etc. `[output]` blocks.
+///
+/// - `tokens` is the public-channel stream returned by the generated
+///   `tokenize(input)`. Skip-channel tokens never reach this array, so no
+///   filtering is needed here.
+/// - `input` is the original source; passed in so line/col can be
+///   computed from byte offsets (Gale's `Token` does not carry these).
+/// - `eof_kind` is the value of the generated `TK_EOF` constant; EOF
+///   tokens print as `<EOF>` text with type id `-1`.
+///
+/// Type IDs are remapped from Gale's 0-based numbering to ANTLR4's
+/// 1-based: `kind + 1` for explicit lexer rules, `-1` for EOF. Lexer-only
+/// grammars never introduce implicit literals, so the contiguous
+/// `0..num_lexer_rules` range maps directly onto ANTLR4's
+/// `1..num_lexer_rules+1`.
+///
+/// Text escaping follows `CommonToken.toString` (`vendor/antlr4/runtime/
+/// Java/src/org/antlr/v4/runtime/CommonToken.java`): only `\n`, `\r`,
+/// `\t` are escaped; backslashes and quotes pass through unchanged.
+pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
+    let chars: Array<char> = input.chars().collect();
+    let mut out = String::with_capacity(tokens.len() * 32);
+    let mut index = 0;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        let tok = &tokens[i];
+        // Non-default-channel tokens (e.g. `-> channel(HIDDEN)`) are invisible
+        // to the parser, so the generated tokenizer parks them in the next
+        // token's `leading_trivia` alongside skip tokens. ANTLR4 still emits
+        // them into the token dump in source order with a `channel=N`
+        // attribute and a sequential index, so interleave them ahead of their
+        // host token. Skip tokens carry channel 0 and are discarded entirely —
+        // they neither print nor advance the index (matching ANTLR4's
+        // `Lexer.skip()`).
+        for let tr of &tok.leading_trivia {
+            if tr.channel != 0 {
+                emit_lexer_token(&mut out, tr, &chars, index, eof_kind);
+                index += 1;
+            }
+        }
+        emit_lexer_token(&mut out, tok, &chars, index, eof_kind);
+        index += 1;
+    }
+    return out;
+}
+
+/// Renders a single token in ANTLR4's `CommonToken.toString` format, used by
+/// `to_lexer_string` for both main-stream tokens and interleaved
+/// non-default-channel trivia. `channel=N` is printed only for non-default
+/// channels, matching ANTLR4.
+fn emit_lexer_token(out: &mut String, tok: &Token, chars: &Array<char>, index: i32, eof_kind: i32) {
+    let is_eof = tok.kind == eof_kind;
+    let mut text_buf = String::with_capacity(16);
+    if is_eof {
+        text_buf.push_str(&"<EOF>");
+    } else {
+        for let mut j = tok.text.start; j < tok.text.end; j += 1 {
+            let c = tok.text.chars[j];
+            match c {
+                '\n' => text_buf.push_str(&"\\n"),
+                '\r' => text_buf.push_str(&"\\r"),
+                '\t' => text_buf.push_str(&"\\t"),
+                _ => text_buf.push(c),
+            }
+        }
+    }
+    let type_id = if is_eof { -1 } else { tok.kind + 1 };
+    let line_col = line_col_at(chars, tok.span.start);
+    let line = line_col.0;
+    let col = line_col.1;
+    let end_inclusive = tok.span.end - 1;
+    let channel_attr = if tok.channel != 0 { `channel={tok.channel},` } else { String::from("") };
+    out.push_str(&`[@{index},{tok.span.start}:{end_inclusive}='{text_buf}',<{type_id}>,{channel_attr}{line}:{col}]\n`);
+}
+
+/// Compute (line, column) at a 0-based char index in `chars`, with
+/// 1-based line and 0-based column to match ANTLR4's `Token` getters.
+fn line_col_at(chars: &Array<char>, pos: i32) -> [i32, i32] {
+    let mut line = 1;
+    let mut col = 0;
+    let cap = if pos < chars.len() { pos } else { chars.len() };
+    for let mut i = 0; i < cap; i += 1 {
+        if chars[i] == '\n' {
+            line += 1;
+            col = 0;
+        } else {
+            col += 1;
+        }
+    }
+    return [line, col];
+}
+
+/// Highlight override: when inside a specific rule, override the capture for a token kind.
+pub struct HighlightOverride {
+    pub rule_name: String,
+    pub token_kind: i32,
+    pub capture: String,
+}
+
+/// Highlight mapping: defaults by token kind + context-aware overrides.
+///
+/// `rule_names` is the canonical name table used to resolve override
+/// `rule_name`s into integer ids that match what the generated walker
+/// passes to `Visitor::enter_rule`. The generator emits the names in
+/// parser-rule declaration order; index = rule id.
+pub struct HighlightMapping {
+    pub defaults: Array<String>,
+    pub rule_names: Array<String>,
+    pub overrides: Array<HighlightOverride>,
+}
+
+/// A single highlight capture: a named range in the source text.
+pub struct HighlightCapture {
+    pub capture: String,
+    pub start: i32,
+    pub end: i32,
+}
+
+/// Internal override form with the rule resolved to an integer id so the
+/// per-token classify loop avoids a String compare on every iteration.
+struct ResolvedOverride {
+    rule_id: i32,
+    token_kind: i32,
+    capture: String,
+}
+
+/// HighlightVisitor collects highlight captures during a CST walk.
+pub struct HighlightVisitor {
+    defaults: Array<String>,
+    overrides: Array<ResolvedOverride>,
+    rule_stack: Array<i32>,
+    pub captures: Array<HighlightCapture>,
+}
+
+impl HighlightVisitor {
+    pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
+        let mut overrides: Array<ResolvedOverride> = Array::with_capacity(mapping.overrides.len());
+        for let ov of &mapping.overrides {
+            let mut id: i32 = -1;
+            for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
+                if mapping.rule_names[i] == ov.rule_name {
+                    id = i;
+                    break;
+                }
+            }
+            // Skip overrides whose rule_name doesn't match any known rule —
+            // they can never fire (no rule_id on the stack is ever < 0) and
+            // would otherwise waste a comparison on every classify() call.
+            if id < 0 {
+                continue;
+            }
+            overrides.push(ResolvedOverride {
+                rule_id: id,
+                token_kind: ov.token_kind,
+                capture: ov.capture,
+            });
+        }
+        return HighlightVisitor {
+            defaults: mapping.defaults,
+            overrides,
+            rule_stack: [],
+            captures: [],
+        };
+    }
+
+    fn classify(&self, kind: i32) -> String {
+        for let ov of &self.overrides {
+            if ov.token_kind == kind {
+                for let rule_id of &self.rule_stack {
+                    if *rule_id == ov.rule_id {
+                        return ov.capture;
+                    }
+                }
+            }
+        }
+        if kind >= 0 && kind < self.defaults.len() {
+            return self.defaults[kind];
+        }
+        return "";
+    }
+}
+
+impl Visitor for HighlightVisitor {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.rule_stack.push(rule_id);
+    }
+
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.rule_stack.pop();
+    }
+
+    fn visit_token(&mut self, token: &Token) {
+        for let trivia of &token.leading_trivia {
+            let cap = self.classify(trivia.kind);
+            if !cap.is_empty() {
+                self.captures.push(HighlightCapture { capture: cap, start: trivia.span.start, end: trivia.span.end });
+            }
+        }
+        if token.text.is_empty() {
+            return;
+        }
+        let cap = self.classify(token.kind);
+        if !cap.is_empty() {
+            self.captures.push(HighlightCapture { capture: cap, start: token.span.start, end: token.span.end });
+        }
+    }
+}
+
+fn escape_html(out: &mut String, text: &String) {
+    for let c of text.chars() {
+        if c == '&' {
+            out.push_str(&"&amp;");
+        } else if c == '<' {
+            out.push_str(&"&lt;");
+        } else if c == '>' {
+            out.push_str(&"&gt;");
+        } else if c == '"' {
+            out.push_str(&"&quot;");
+        } else {
+            out.push(c);
+        }
+    }
+}
+
+fn escape_html_char(out: &mut String, c: char) {
+    if c == '&' {
+        out.push_str(&"&amp;");
+    } else if c == '<' {
+        out.push_str(&"&lt;");
+    } else if c == '>' {
+        out.push_str(&"&gt;");
+    } else if c == '"' {
+        out.push_str(&"&quot;");
+    } else {
+        out.push(c);
+    }
+}
+
+fn push_class(out: &mut String, capture: &String) {
+    for let c of capture.chars() {
+        if c == '.' {
+            out.push(' ');
+        } else {
+            out.push(c);
+        }
+    }
+}
+
+/// Produce a highlighted HTML fragment from source text and captures.
+/// Captures must be sorted by start position (as produced by HighlightVisitor).
+pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> String {
+    let mut out = String::with_capacity(source.len() * 5);
+    let mut pos = 0;
+    let mut iter = source.chars();
+    for let cap of captures {
+        while pos < cap.start {
+            if let Some(c) = iter.next() {
+                escape_html_char(&mut out, c);
+            }
+            pos += 1;
+        }
+        out.push_str(&"<span class=\"");
+        push_class(&mut out, &cap.capture);
+        out.push_str(&"\">");
+        let end = cap.end;
+        while pos < end {
+            if let Some(c) = iter.next() {
+                escape_html_char(&mut out, c);
+            }
+            pos += 1;
+        }
+        out.push_str(&"</span>");
+    }
+    while let Some(c) = iter.next() {
+        escape_html_char(&mut out, c);
+    }
+    return out;
+}
+
+fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
+    let mut out = String::with_capacity(end - start);
+    let mut i = start;
+    while i < end && i < chars.len() {
+        out.push(chars[i]);
+        i += 1;
+    }
+    return out;
+}
+
+/// Visitor trait for walking typed CST nodes.
+/// Default methods are no-ops; override to add behavior.
+///
+/// `rule_id` is the parser-rule's index in the grammar's parser_rules array
+/// (0..n in declaration order). It's passed alongside `name` so visitors
+/// that want cheap dispatch (HighlightVisitor's rule stack) can avoid
+/// String compares while visitors that care about the name (TreeRecorder)
+/// can still use it.
+pub trait Visitor {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+    }
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+    }
+    fn visit_token(&mut self, token: &Token) {
+    }
+}
+
+/// TreeRecorder is a Visitor that records events for building a CstNode tree.
+pub struct TreeRecorder {
+    events: Array<TreeEvent>,
+}
+
+variant TreeEvent {
+    Enter(TreeEnterInfo),
+    Exit,
+    VisitToken(Token),
+}
+
+struct TreeEnterInfo {
+    name: String,
+    span: Span,
+}
+
+impl TreeRecorder {
+    pub fn new() -> TreeRecorder {
+        return TreeRecorder { events: [] };
+    }
+
+    pub fn build(&self) -> CstNode {
+        let mut pos = 0;
+        return tree_build_node(&self.events, &mut pos);
+    }
+}
+
+impl Visitor for TreeRecorder {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
+    }
+
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.events.push(TreeEvent::Exit);
+    }
+
+    fn visit_token(&mut self, token: &Token) {
+        self.events.push(TreeEvent::VisitToken(*token));
+    }
+}
+
+fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
+    if let Enter(info) = events[*pos] {
+        *pos += 1;
+        let mut children: Array<CstChild> = [];
+        loop {
+            if *pos >= events.len() {
+                break;
+            }
+            let ev = events[*pos];
+            if let Exit = ev {
+                *pos += 1;
+                break;
+            }
+            if let Enter(_) = ev {
+                children.push(CstChild::Node(tree_build_node(events, pos)));
+            } else if let VisitToken(t) = ev {
+                children.push(CstChild::Token(t));
+                *pos += 1;
+            }
+        }
+        return CstNode { name: info.name, span: info.span, children };
+    }
+    panic("TreeRecorder: expected Enter event");
+    return CstNode { name: "", span: Span::new(0, 0), children: [] };
+}
+
+pub enum TokenKind {
+    IDENT,
+    WS,
+    Eof,
+    Error,
+}
+
+pub struct ProgNode {
+    pub span: Span,
+    pub match_expr: MatchExprNode,
+    pub eof: Token,
+}
+
+pub struct CommaArmItem {
+    pub comma: Token,
+    pub arm: ArmNode,
+}
+
+pub struct ArmItemListCommaOptItem {
+    pub arm: ArmNode,
+    pub comma_arm_list: Array<CommaArmItem>,
+    pub comma: Option<Token>,
+}
+
+pub struct MatchExprNode {
+    pub span: Span,
+    pub lit_match: Token,
+    pub ident: Token,
+    pub lbrace: Token,
+    pub arm_item_comma: Option<ArmItemListCommaOptItem>,
+    pub rbrace: Token,
+}
+
+pub struct ArmNode {
+    pub span: Span,
+    pub pattern: PatternNode,
+    pub lit_eqgt: Token,
+    pub ident: Token,
+}
+
+pub variant PatternNode {
+    Alt0(PatternAlt0),
+    Alt1(PatternAlt1),
+    Alt2(PatternAlt2),
+    Alt3(PatternAlt3),
+}
+
+pub struct PatternAlt0 {
+    pub span: Span,
+    pub lit_u5f: Token,
+}
+
+pub struct PatternAlt1 {
+    pub span: Span,
+    pub lit_mut: Option<Token>,
+    pub ident: Token,
+}
+
+pub struct CommaPatternItem {
+    pub comma: Token,
+    pub pattern: PatternNode,
+}
+
+pub struct PatternItemListItem {
+    pub pattern: PatternNode,
+    pub comma_pattern_list: Array<CommaPatternItem>,
+}
+
+pub struct LparenItemOptRparenItem {
+    pub lparen: Token,
+    pub pattern_item: Option<PatternItemListItem>,
+    pub rparen: Token,
+}
+
+pub struct PatternAlt2 {
+    pub span: Span,
+    pub path: PathNode,
+    pub lparen_item_rparen: Option<LparenItemOptRparenItem>,
+}
+
+pub struct PatternAlt3 {
+    pub span: Span,
+    pub lparen: Token,
+    pub pattern_item: Option<PatternItemListItem>,
+    pub rparen: Token,
+}
+
+pub struct LitColoncolonIdentItem {
+    pub lit_coloncolon: Token,
+    pub ident: Token,
+}
+
+pub struct PathNode {
+    pub span: Span,
+    pub ident: Token,
+    pub lit_coloncolon_ident_list: Array<LitColoncolonIdentItem>,
+}
+
+global TK_IDENT: i32 = 0;
+global TK_WS: i32 = 1;
+global TK_EOF: i32 = 2;
+global TK_ERROR: i32 = 3;
+global TK_LIT_MATCH: i32 = 4;
+global TK_LIT_LBRACE: i32 = 5;
+global TK_LIT_COMMA: i32 = 6;
+global TK_LIT_RBRACE: i32 = 7;
+global TK_LIT_EQGT: i32 = 8;
+global TK_LIT_U5f: i32 = 9;
+global TK_LIT_MUT: i32 = 10;
+global TK_LIT_LPAREN: i32 = 11;
+global TK_LIT_RPAREN: i32 = 12;
+global TK_LIT_COLONCOLON: i32 = 13;
+
+struct Lexer {
+    chars: Array<char>,
+    pos: i32,
+}
+
+impl Lexer {
+    fn new(input: &String) -> Lexer {
+        return Lexer { chars: input.chars().collect(), pos: 0 };
+    }
+
+    fn at_end(&self) -> bool {
+        return self.pos >= self.chars.len();
+    }
+
+    fn slice(&self, start: i32, end: i32) -> LexerSlice {
+        return LexerSlice::new(&self.chars, start, end);
+    }
+}
+
+fn try_ident(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() { return -1; }
+    if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || chars[pos] == '_') { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_0 = pos;
+        rep_0: {
+            if pos >= chars.len() { break rep_0; }
+            if !(false || 'a' <= chars[pos] <= 'z' || 'A' <= chars[pos] <= 'Z' || '0' <= chars[pos] <= '9' || chars[pos] == '_') { break rep_0; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_0;
+        break;
+    }
+    return pos;
+}
+
+fn try_ws(chars: &Array<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() { return -1; }
+    if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_1 = pos;
+        rep_1: {
+            if pos >= chars.len() { break rep_1; }
+            if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_1; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_1;
+        break;
+    }
+    return pos;
+}
+
+fn try_lit_match(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'm' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != 'a' { return -1; }
+    if pos + 2 >= chars.len() || chars[pos + 2] != 't' { return -1; }
+    if pos + 3 >= chars.len() || chars[pos + 3] != 'c' { return -1; }
+    if pos + 4 >= chars.len() || chars[pos + 4] != 'h' { return -1; }
+    return pos + 5;
+}
+
+fn try_lit_lbrace(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '{' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_comma(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != ',' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_rbrace(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '}' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_eqgt(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '=' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != '>' { return -1; }
+    return pos + 2;
+}
+
+fn try_lit_u5f(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '_' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_mut(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'm' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != 'u' { return -1; }
+    if pos + 2 >= chars.len() || chars[pos + 2] != 't' { return -1; }
+    return pos + 3;
+}
+
+fn try_lit_lparen(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != '(' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_rparen(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != ')' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_coloncolon(chars: &Array<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != ':' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != ':' { return -1; }
+    return pos + 2;
+}
+
+pub fn tokenize(input: &String) -> Array<Token> {
+    let mut lexer = Lexer::new(input);
+    let mut tokens: Array<Token> = Array::with_capacity(lexer.chars.len() / 4 + 1);
+    let mut trivia: Array<Token> = [];
+    while !lexer.at_end() {
+        let start = lexer.pos;
+        let mut best_end: i32 = -1;
+        let mut best_kind: i32 = TK_ERROR;
+        let mut end: i32 = -1;
+        let first_char = lexer.chars[start];
+        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
+            end = try_ws(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WS; }
+        } else if first_char == '(' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LPAREN; }
+        } else if first_char == ')' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RPAREN; }
+        } else if first_char == ',' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_COMMA; }
+        } else if first_char == ':' {
+            end = try_lit_coloncolon(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_COLONCOLON; }
+        } else if first_char == '=' {
+            end = try_lit_eqgt(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_EQGT; }
+        } else if first_char == '_' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_U5f; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_IDENT; }
+        } else if first_char == 'm' {
+            end = try_lit_match(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_MATCH; }
+            end = try_lit_mut(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_MUT; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_IDENT; }
+        } else if first_char == '{' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LBRACE; }
+        } else if first_char == '}' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RBRACE; }
+        } else if 'a' <= first_char <= 'z' {
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_IDENT; }
+        } else if 'A' <= first_char <= 'Z' {
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_IDENT; }
+        } else {
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_IDENT; }
+        }
+        if best_end <= start {
+            let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
+            tokens.push(tok);
+            trivia = [];
+            lexer.pos = start + 1;
+        } else {
+            let tok_start = start;
+            let is_skip = best_kind matches { TK_WS };
+            if is_skip {
+                trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));
+            } else {
+                let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);
+                tokens.push(tok);
+                trivia = [];
+            }
+            lexer.pos = best_end;
+        }
+    }
+    tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
+    return tokens;
+}
+
+pub fn token_kind_name(kind: i32) -> String {
+    return match kind {
+        TK_IDENT => "IDENT",
+        TK_WS => "WS",
+        TK_EOF => "Eof",
+        TK_ERROR => "Error",
+        TK_LIT_MATCH => "TK_LIT_MATCH",
+        TK_LIT_LBRACE => "TK_LIT_LBRACE",
+        TK_LIT_COMMA => "TK_LIT_COMMA",
+        TK_LIT_RBRACE => "TK_LIT_RBRACE",
+        TK_LIT_EQGT => "TK_LIT_EQGT",
+        TK_LIT_U5f => "TK_LIT_U5f",
+        TK_LIT_MUT => "TK_LIT_MUT",
+        TK_LIT_LPAREN => "TK_LIT_LPAREN",
+        TK_LIT_RPAREN => "TK_LIT_RPAREN",
+        TK_LIT_COLONCOLON => "TK_LIT_COLONCOLON",
+        _ => "Unknown",
+    };
+}
+
+struct Parser {
+    tokens: Array<Token>,
+    pos: i32,
+}
+
+impl Parser {
+    fn new(tokens: Array<Token>) -> Parser {
+        return Parser { tokens, pos: 0 };
+    }
+
+    fn peek(&self) -> &Token {
+        return &self.tokens[self.pos];
+    }
+
+    fn peek_kind(&self) -> i32 {
+        return self.tokens[self.pos].kind;
+    }
+
+    fn peek_at(&self, offset: i32) -> i32 {
+        let idx = self.pos + offset;
+        if idx >= self.tokens.len() { return TK_EOF; }
+        return self.tokens[idx].kind;
+    }
+
+    fn advance(&mut self) -> Token {
+        let tok = self.tokens[self.pos];
+        self.pos += 1;
+        return tok;
+    }
+
+    fn last_end(&self) -> i32 {
+        if self.pos == 0 { return 0; }
+        return self.tokens[self.pos - 1].span.end;
+    }
+
+    fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
+        if self.tokens[self.pos].kind == kind {
+            if kind == TK_EOF {
+                return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+            }
+            return Result::<Token, ParseError>::Ok(self.advance());
+        }
+        let tok = &self.tokens[self.pos];
+        let name = token_kind_name(kind);
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+
+    fn fail(&self, name: String) -> Result<Token, ParseError> {
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+
+    fn match_any(&mut self) -> Result<Token, ParseError> {
+        if self.tokens[self.pos].kind != TK_EOF {
+            return Result::<Token, ParseError>::Ok(self.advance());
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected any token, got "{tok.text}"`,
+            tok.span,
+            ["any token"],
+        ));
+    }
+
+    fn match_not(&mut self, excluded: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        if k != TK_EOF {
+            let mut blocked = false;
+            for let x of excluded {
+                if x == k {
+                    blocked = true;
+                    break;
+                }
+            }
+            if !blocked {
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["set complement"],
+        ));
+    }
+
+    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    return Result::<Token, ParseError>::Ok(self.tokens[self.pos]);
+                }
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["token set"],
+        ));
+    }
+}
+
+fn scan_prog(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_match_expr(tokens, pos, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_match_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MATCH { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+        let sp = pos;
+        sg_0_done: {
+            sg_0: {
+                pos = scan_arm(tokens, pos, 0);
+                if pos < 0 { break sg_0; }
+                while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+                    let sp = pos;
+                    sg_1_done: {
+                        sg_1: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_1; }
+                            pos += 1;
+                            pos = scan_arm(tokens, pos, 0);
+                            if pos < 0 { break sg_1; }
+                            break sg_1_done;
+                        }
+                        pos = -1;
+                    }
+                    if pos < 0 { pos = sp; break; }
+                    if pos == sp { break; }
+                }
+                if pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+                    let sp = pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
+                    if pos < 0 { pos = sp; }
+                }
+                break sg_0_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_arm(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_pattern(tokens, pos, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_EQGT { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_pattern(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let start = pos;
+    let mut pos = pos;
+    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    scan_alts: {
+        if alt_kind == TK_LIT_U5f {
+            pos = start;
+            try_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_U5f { break try_0; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_LIT_MUT {
+            pos = start;
+            try_1: {
+                if pos < tokens.len() && tokens[pos].kind == TK_LIT_MUT {
+                    let sp = pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MUT { pos = -1; } else { pos += 1; }
+                    if pos < 0 { pos = sp; }
+                }
+                if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { break try_1; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_IDENT {
+            let mut best: i32 = -1;
+            pos = start;
+            try_1: {
+                if pos < tokens.len() && tokens[pos].kind == TK_LIT_MUT {
+                    let sp = pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MUT { pos = -1; } else { pos += 1; }
+                    if pos < 0 { pos = sp; }
+                }
+                if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { break try_1; }
+                pos += 1;
+                if pos > best { best = pos; }
+            }
+            pos = start;
+            try_2: {
+                pos = scan_path(tokens, pos, 0);
+                if pos < 0 { break try_2; }
+                if pos < tokens.len() && tokens[pos].kind == TK_LIT_LPAREN {
+                    let sp = pos;
+                    sg_2_done: {
+                        sg_2: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break sg_2; }
+                            pos += 1;
+                            if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+                                let sp = pos;
+                                sg_3_done: {
+                                    sg_3: {
+                                        pos = scan_pattern(tokens, pos, 0);
+                                        if pos < 0 { break sg_3; }
+                                        while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+                                            let sp = pos;
+                                            sg_4_done: {
+                                                sg_4: {
+                                                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_4; }
+                                                    pos += 1;
+                                                    pos = scan_pattern(tokens, pos, 0);
+                                                    if pos < 0 { break sg_4; }
+                                                    break sg_4_done;
+                                                }
+                                                pos = -1;
+                                            }
+                                            if pos < 0 { pos = sp; break; }
+                                            if pos == sp { break; }
+                                        }
+                                        break sg_3_done;
+                                    }
+                                    pos = -1;
+                                }
+                                if pos < 0 { pos = sp; }
+                            }
+                            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break sg_2; }
+                            pos += 1;
+                            break sg_2_done;
+                        }
+                        pos = -1;
+                    }
+                    if pos < 0 { pos = sp; }
+                }
+                if pos > best { best = pos; }
+            }
+            if best >= 0 { pos = best; break scan_alts; }
+            return -1;
+        } else if alt_kind == TK_LIT_LPAREN {
+            pos = start;
+            try_3: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_3; }
+                pos += 1;
+                if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+                    let sp = pos;
+                    sg_5_done: {
+                        sg_5: {
+                            pos = scan_pattern(tokens, pos, 0);
+                            if pos < 0 { break sg_5; }
+                            while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+                                let sp = pos;
+                                sg_6_done: {
+                                    sg_6: {
+                                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_6; }
+                                        pos += 1;
+                                        pos = scan_pattern(tokens, pos, 0);
+                                        if pos < 0 { break sg_6; }
+                                        break sg_6_done;
+                                    }
+                                    pos = -1;
+                                }
+                                if pos < 0 { pos = sp; break; }
+                                if pos == sp { break; }
+                            }
+                            break sg_5_done;
+                        }
+                        pos = -1;
+                    }
+                    if pos < 0 { pos = sp; }
+                }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_3; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else {
+            return -1;
+        }
+    }
+    return pos;
+}
+
+fn scan_path(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { return -1; }
+    pos += 1;
+    while pos < tokens.len() && tokens[pos].kind == TK_LIT_COLONCOLON {
+        let sp = pos;
+        sg_7_done: {
+            sg_7: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLONCOLON { break sg_7; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { break sg_7; }
+                pos += 1;
+                break sg_7_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    return pos;
+}
+
+fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
+    let start = p.peek().span.start;
+    let match_expr = _parse_match_expr(p)?;
+    let eof = p.expect(TK_EOF)?;
+    return Result::<ProgNode, ParseError>::Ok(ProgNode {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        match_expr,
+        eof,
+    });
+}
+
+fn _parse_match_expr(p: &mut Parser) -> Result<MatchExprNode, ParseError> {
+    let start = p.peek().span.start;
+    let lit_match = p.expect(TK_LIT_MATCH)?;
+    let ident = p.expect(TK_IDENT)?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
+    let mut opt_scan_pos: i32 = -1;
+    opt_scan: {
+        let tokens = &p.tokens;
+        let mut pos: i32 = p.pos;
+        pos = scan_arm(tokens, pos, 0);
+        if pos < 0 { break opt_scan; }
+        while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+            let sp = pos;
+            sg_8_done: {
+                sg_8: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_8; }
+                    pos += 1;
+                    pos = scan_arm(tokens, pos, 0);
+                    if pos < 0 { break sg_8; }
+                    break sg_8_done;
+                }
+                pos = -1;
+            }
+            if pos < 0 { pos = sp; break; }
+            if pos == sp { break; }
+        }
+        if pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+            let sp = pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
+            if pos < 0 { pos = sp; }
+        }
+        opt_scan_pos = pos;
+    }
+    let arm_item_comma: Option<ArmItemListCommaOptItem> = if opt_scan_pos >= 0 {
+        let arm = _parse_arm(p)?;
+        let mut comma_arm_list: Array<CommaArmItem> = [];
+        loop {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                sg_9_done: {
+                    sg_9: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_9; }
+                        pos += 1;
+                        pos = scan_arm(tokens, pos, 0);
+                        if pos < 0 { break sg_9; }
+                        break sg_9_done;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+            let comma = p.expect(TK_LIT_COMMA)?;
+            let arm = _parse_arm(p)?;
+            let comma_arm = CommaArmItem {
+                comma,
+                arm,
+            };
+            comma_arm_list.push(comma_arm);
+        }
+        let comma: Option<Token> = if p.peek_kind() == TK_LIT_COMMA {
+            let comma = p.expect(TK_LIT_COMMA)?;
+            Option::<Token>::Some(comma)
+        } else {
+            null
+        };
+        let arm_item_comma = ArmItemListCommaOptItem {
+            arm,
+            comma_arm_list,
+            comma,
+        };
+        Option::<ArmItemListCommaOptItem>::Some(arm_item_comma)
+    } else {
+        null
+    };
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
+    return Result::<MatchExprNode, ParseError>::Ok(MatchExprNode {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        lit_match,
+        ident,
+        lbrace,
+        arm_item_comma,
+        rbrace,
+    });
+}
+
+fn _parse_arm(p: &mut Parser) -> Result<ArmNode, ParseError> {
+    let start = p.peek().span.start;
+    let pattern = _parse_pattern(p)?;
+    let lit_eqgt = p.expect(TK_LIT_EQGT)?;
+    let ident = p.expect(TK_IDENT)?;
+    return Result::<ArmNode, ParseError>::Ok(ArmNode {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        pattern,
+        lit_eqgt,
+        ident,
+    });
+}
+
+fn _parse_pattern_bt_1(p: &mut Parser) -> Result<PatternNode, ParseError> {
+    let start = p.peek().span.start;
+    let lit_mut: Option<Token> = if p.peek_kind() == TK_LIT_MUT {
+        let lit_mut = p.expect(TK_LIT_MUT)?;
+        Option::<Token>::Some(lit_mut)
+    } else {
+        null
+    };
+    let ident = p.expect(TK_IDENT)?;
+    return Result::<PatternNode, ParseError>::Ok(PatternNode::Alt1(PatternAlt1 {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        lit_mut,
+        ident,
+    }));
+}
+
+fn _parse_pattern_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind == TK_LIT_MUT {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MUT { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn _parse_pattern_bt_2(p: &mut Parser) -> Result<PatternNode, ParseError> {
+    let start = p.peek().span.start;
+    let path = _parse_path(p)?;
+    let lparen_item_rparen: Option<LparenItemOptRparenItem> = if p.peek_kind() == TK_LIT_LPAREN {
+        let lparen = p.expect(TK_LIT_LPAREN)?;
+        let mut opt_scan_pos: i32 = -1;
+        opt_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_pattern(tokens, pos, 0);
+            if pos < 0 { break opt_scan; }
+            while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+                let sp = pos;
+                sg_10_done: {
+                    sg_10: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_10; }
+                        pos += 1;
+                        pos = scan_pattern(tokens, pos, 0);
+                        if pos < 0 { break sg_10; }
+                        break sg_10_done;
+                    }
+                    pos = -1;
+                }
+                if pos < 0 { pos = sp; break; }
+                if pos == sp { break; }
+            }
+            opt_scan_pos = pos;
+        }
+        let pattern_item: Option<PatternItemListItem> = if opt_scan_pos >= 0 {
+            let pattern = _parse_pattern(p)?;
+            let mut comma_pattern_list: Array<CommaPatternItem> = [];
+            loop {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    sg_11_done: {
+                        sg_11: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_11; }
+                            pos += 1;
+                            pos = scan_pattern(tokens, pos, 0);
+                            if pos < 0 { break sg_11; }
+                            break sg_11_done;
+                        }
+                        break rep_scan;
+                    }
+                    if pos <= p.pos { break rep_scan; }
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
+                let comma = p.expect(TK_LIT_COMMA)?;
+                let pattern = _parse_pattern(p)?;
+                let comma_pattern = CommaPatternItem {
+                    comma,
+                    pattern,
+                };
+                comma_pattern_list.push(comma_pattern);
+            }
+            let pattern_item = PatternItemListItem {
+                pattern,
+                comma_pattern_list,
+            };
+            Option::<PatternItemListItem>::Some(pattern_item)
+        } else {
+            null
+        };
+        let rparen = p.expect(TK_LIT_RPAREN)?;
+        let lparen_item_rparen = LparenItemOptRparenItem {
+            lparen,
+            pattern_item,
+            rparen,
+        };
+        Option::<LparenItemOptRparenItem>::Some(lparen_item_rparen)
+    } else {
+        null
+    };
+    return Result::<PatternNode, ParseError>::Ok(PatternNode::Alt2(PatternAlt2 {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        path,
+        lparen_item_rparen,
+    }));
+}
+
+fn _parse_pattern_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_path(tokens, pos, 0);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind == TK_LIT_LPAREN {
+        let sp = pos;
+        sg_12_done: {
+            sg_12: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break sg_12; }
+                pos += 1;
+                if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+                    let sp = pos;
+                    sg_13_done: {
+                        sg_13: {
+                            pos = scan_pattern(tokens, pos, 0);
+                            if pos < 0 { break sg_13; }
+                            while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+                                let sp = pos;
+                                sg_14_done: {
+                                    sg_14: {
+                                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_14; }
+                                        pos += 1;
+                                        pos = scan_pattern(tokens, pos, 0);
+                                        if pos < 0 { break sg_14; }
+                                        break sg_14_done;
+                                    }
+                                    pos = -1;
+                                }
+                                if pos < 0 { pos = sp; break; }
+                                if pos == sp { break; }
+                            }
+                            break sg_13_done;
+                        }
+                        pos = -1;
+                    }
+                    if pos < 0 { pos = sp; }
+                }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break sg_12; }
+                pos += 1;
+                break sg_12_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn _parse_pattern(p: &mut Parser) -> Result<PatternNode, ParseError> {
+    let start = p.peek().span.start;
+    let kind = p.peek_kind();
+    if kind == TK_LIT_U5f {
+        let lit_u5f = p.expect(TK_LIT_U5f)?;
+        return Result::<PatternNode, ParseError>::Ok(PatternNode::Alt0(PatternAlt0 {
+            span: Span::new(start, i32::max(start, p.last_end())),
+            lit_u5f,
+        }));
+    }
+    if _gale_kind_set_1(kind) {
+        if p.peek_kind() == TK_IDENT {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_1 = _parse_pattern_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_pattern_scan_2(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_best_i == 1 {
+                return _parse_pattern_bt_1(p);
+            }
+            if _sd_best_i == 2 {
+                return _parse_pattern_bt_2(p);
+            }
+            return _parse_pattern_bt_2(p);
+        } else if p.peek_kind() == TK_LIT_MUT {
+            return _parse_pattern_bt_1(p);
+        }
+    }
+    if kind == TK_LIT_LPAREN {
+        let lparen = p.expect(TK_LIT_LPAREN)?;
+        let mut opt_scan_pos: i32 = -1;
+        opt_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_pattern(tokens, pos, 0);
+            if pos < 0 { break opt_scan; }
+            while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+                let sp = pos;
+                sg_15_done: {
+                    sg_15: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_15; }
+                        pos += 1;
+                        pos = scan_pattern(tokens, pos, 0);
+                        if pos < 0 { break sg_15; }
+                        break sg_15_done;
+                    }
+                    pos = -1;
+                }
+                if pos < 0 { pos = sp; break; }
+                if pos == sp { break; }
+            }
+            opt_scan_pos = pos;
+        }
+        let pattern_item: Option<PatternItemListItem> = if opt_scan_pos >= 0 {
+            let pattern = _parse_pattern(p)?;
+            let mut comma_pattern_list: Array<CommaPatternItem> = [];
+            loop {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    sg_16_done: {
+                        sg_16: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_16; }
+                            pos += 1;
+                            pos = scan_pattern(tokens, pos, 0);
+                            if pos < 0 { break sg_16; }
+                            break sg_16_done;
+                        }
+                        break rep_scan;
+                    }
+                    if pos <= p.pos { break rep_scan; }
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
+                let comma = p.expect(TK_LIT_COMMA)?;
+                let pattern = _parse_pattern(p)?;
+                let comma_pattern = CommaPatternItem {
+                    comma,
+                    pattern,
+                };
+                comma_pattern_list.push(comma_pattern);
+            }
+            let pattern_item = PatternItemListItem {
+                pattern,
+                comma_pattern_list,
+            };
+            Option::<PatternItemListItem>::Some(pattern_item)
+        } else {
+            null
+        };
+        let rparen = p.expect(TK_LIT_RPAREN)?;
+        return Result::<PatternNode, ParseError>::Ok(PatternNode::Alt3(PatternAlt3 {
+            span: Span::new(start, i32::max(start, p.last_end())),
+            lparen,
+            pattern_item,
+            rparen,
+        }));
+    }
+    return Result::<PatternNode, ParseError>::Err(ParseError::new(
+        "expected pattern",
+        p.peek().span,
+        ["TK_LIT_U5f", "TK_LIT_MUT", "TK_IDENT", "TK_LIT_LPAREN"],
+    ));
+}
+
+fn _parse_path(p: &mut Parser) -> Result<PathNode, ParseError> {
+    let start = p.peek().span.start;
+    let ident = p.expect(TK_IDENT)?;
+    let mut lit_coloncolon_ident_list: Array<LitColoncolonIdentItem> = [];
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            sg_17_done: {
+                sg_17: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLONCOLON { break sg_17; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_IDENT { break sg_17; }
+                    pos += 1;
+                    break sg_17_done;
+                }
+                break rep_scan;
+            }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
+        let lit_coloncolon = p.expect(TK_LIT_COLONCOLON)?;
+        let ident = p.expect(TK_IDENT)?;
+        let lit_coloncolon_ident = LitColoncolonIdentItem {
+            lit_coloncolon,
+            ident,
+        };
+        lit_coloncolon_ident_list.push(lit_coloncolon_ident);
+    }
+    return Result::<PathNode, ParseError>::Ok(PathNode {
+        span: Span::new(start, i32::max(start, p.last_end())),
+        ident,
+        lit_coloncolon_ident_list,
+    });
+}
+
+pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_prog(&mut parser);
+}
+
+pub fn parse_match_expr(input: &String) -> Result<MatchExprNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_match_expr(&mut parser);
+}
+
+pub fn parse_arm(input: &String) -> Result<ArmNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_arm(&mut parser);
+}
+
+pub fn parse_pattern(input: &String) -> Result<PatternNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_pattern(&mut parser);
+}
+
+pub fn parse_path(input: &String) -> Result<PathNode, ParseError> {
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    return _parse_path(&mut parser);
+}
+
+pub fn parse(input: &String) -> Result<ProgNode, ParseError> {
+    return parse_prog(input);
+}
+
+pub fn walk_prog<V: Visitor>(v: &mut V, node: &ProgNode) {
+    v.enter_rule(0, &"prog", &node.span);
+    walk_matchExpr(v, &node.match_expr);
+    v.visit_token(&node.eof);
+    v.exit_rule(0, &"prog", &node.span);
+}
+
+pub fn walk_matchExpr<V: Visitor>(v: &mut V, node: &MatchExprNode) {
+    v.enter_rule(1, &"matchExpr", &node.span);
+    v.visit_token(&node.lit_match);
+    v.visit_token(&node.ident);
+    v.visit_token(&node.lbrace);
+    if let Some(item) = &node.arm_item_comma {
+        walk_arm(v, &item.arm);
+        for let item of &item.comma_arm_list {
+            v.visit_token(&item.comma);
+            walk_arm(v, &item.arm);
+        }
+        if let Some(item) = &item.comma {
+            v.visit_token(item);
+        }
+    }
+    v.visit_token(&node.rbrace);
+    v.exit_rule(1, &"matchExpr", &node.span);
+}
+
+pub fn walk_arm<V: Visitor>(v: &mut V, node: &ArmNode) {
+    v.enter_rule(2, &"arm", &node.span);
+    walk_pattern(v, &node.pattern);
+    v.visit_token(&node.lit_eqgt);
+    v.visit_token(&node.ident);
+    v.exit_rule(2, &"arm", &node.span);
+}
+
+pub fn walk_pattern<V: Visitor>(v: &mut V, node: &PatternNode) {
+    match node {
+        Alt0(n) => {
+            v.enter_rule(3, &"pattern", &n.span);
+            v.visit_token(&n.lit_u5f);
+            v.exit_rule(3, &"pattern", &n.span);
+        }
+        Alt1(n) => {
+            v.enter_rule(3, &"pattern", &n.span);
+            if let Some(item) = &n.lit_mut {
+                v.visit_token(item);
+            }
+            v.visit_token(&n.ident);
+            v.exit_rule(3, &"pattern", &n.span);
+        }
+        Alt2(n) => {
+            v.enter_rule(3, &"pattern", &n.span);
+            walk_path(v, &n.path);
+            if let Some(item) = &n.lparen_item_rparen {
+                v.visit_token(&item.lparen);
+                if let Some(item) = &item.pattern_item {
+                    walk_pattern(v, &item.pattern);
+                    for let item of &item.comma_pattern_list {
+                        v.visit_token(&item.comma);
+                        walk_pattern(v, &item.pattern);
+                    }
+                }
+                v.visit_token(&item.rparen);
+            }
+            v.exit_rule(3, &"pattern", &n.span);
+        }
+        Alt3(n) => {
+            v.enter_rule(3, &"pattern", &n.span);
+            v.visit_token(&n.lparen);
+            if let Some(item) = &n.pattern_item {
+                walk_pattern(v, &item.pattern);
+                for let item of &item.comma_pattern_list {
+                    v.visit_token(&item.comma);
+                    walk_pattern(v, &item.pattern);
+                }
+            }
+            v.visit_token(&n.rparen);
+            v.exit_rule(3, &"pattern", &n.span);
+        }
+    }
+}
+
+pub fn walk_path<V: Visitor>(v: &mut V, node: &PathNode) {
+    v.enter_rule(4, &"path", &node.span);
+    v.visit_token(&node.ident);
+    for let item of &node.lit_coloncolon_ident_list {
+        v.visit_token(&item.lit_coloncolon);
+        v.visit_token(&item.ident);
+    }
+    v.exit_rule(4, &"path", &node.span);
+}
+
+pub fn to_tree(node: &ProgNode) -> CstNode {
+    let mut recorder = TreeRecorder::new();
+    walk_prog(&mut recorder, node);
+    return recorder.build();
+}
+
+fn _gale_kind_set_0(k: i32) -> bool {
+    return k matches { TK_IDENT | TK_LIT_LPAREN | TK_LIT_MUT | TK_LIT_U5f };
+}
+
+fn _gale_kind_set_1(k: i32) -> bool {
+    return k matches { TK_IDENT | TK_LIT_MUT };
+}
+

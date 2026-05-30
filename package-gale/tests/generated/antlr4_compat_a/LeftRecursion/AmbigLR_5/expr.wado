@@ -1104,6 +1104,7 @@ fn scan_stat(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_ID {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_1; }
@@ -1114,7 +1115,7 @@ fn scan_stat(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_NEWLINE { break try_1; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
@@ -1122,8 +1123,9 @@ fn scan_stat(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_NEWLINE { break try_0; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_NEWLINE {
             pos = start;

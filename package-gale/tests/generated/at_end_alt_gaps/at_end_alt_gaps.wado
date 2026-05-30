@@ -1032,6 +1032,7 @@ fn scan_typespec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
+            let mut best: i32 = -1;
             pos = start;
             try_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_1; }
@@ -1040,14 +1041,15 @@ fn scan_typespec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break try_1; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_ID { break try_0; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
             return -1;

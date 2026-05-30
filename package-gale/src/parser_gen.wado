@@ -1048,24 +1048,28 @@ fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, ungua
         w.line(&"return -1;");
         return;
     }
+    // Longest-match tournament. First-success-wins is unsound when alts
+    // share a prefix and tie on static length (`'mut'? IDENT` vs
+    // `path '(' ... ')'` on `N(n)`): try each from `start`, keep the
+    // greatest successful end.
+    w.line(&"let mut best: i32 = -1;");
+    let mut all_idx: Array<i32> = [];
     for let i of guarded_alts {
-        let label = `try_{*i}`;
-        w.line(&"pos = start;");
-        w.begin(&`{label}:`);
-        let body = &scan_alts[*i];
-        gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &label);
-        w.line(&"break scan_alts;");
-        w.end();
+        all_idx.push(*i);
     }
     for let i of unguarded_alts {
+        all_idx.push(*i);
+    }
+    for let i of &all_idx {
         let label = `try_{*i}`;
         w.line(&"pos = start;");
         w.begin(&`{label}:`);
         let body = &scan_alts[*i];
         gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &label);
-        w.line(&"break scan_alts;");
+        w.line(&"if pos > best { best = pos; }");
         w.end();
     }
+    w.line(&"if best >= 0 { pos = best; break scan_alts; }");
     w.line(&"return -1;");
 }
 

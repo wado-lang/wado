@@ -1327,6 +1327,7 @@ fn scan_item(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_LPAREN {
+            let mut best: i32 = -1;
             pos = start;
             try_2: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { break try_2; }
@@ -1339,14 +1340,15 @@ fn scan_item(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 if pos < 0 { break try_2; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { break try_2; }
                 pos += 1;
-                break scan_alts;
+                if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
                 pos = scan_list_(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                break scan_alts;
+                if pos > best { best = pos; }
             }
+            if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
             return -1;
