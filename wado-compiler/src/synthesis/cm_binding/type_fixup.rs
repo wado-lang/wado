@@ -19,7 +19,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
     CallArg, FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt,
-    TirStmtKind, TirTemplatePart, TypeId, TypeTable,
+    TirStmtKind, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
@@ -605,117 +605,54 @@ pub(super) fn rewrite_calls_in_block(
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
 ) {
-    for stmt in &mut block.stmts {
-        rewrite_calls_in_stmt(
-            stmt,
-            adapters,
-            entry_source,
-            cm_interface_registry,
-            type_table,
-        );
+    CallRewriteWalker {
+        adapters,
+        entry_source,
+        cm_interface_registry,
+        type_table,
     }
+    .visit_block(block);
 }
 
-fn rewrite_calls_in_stmt(
-    stmt: &mut TirStmt,
-    adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
-    entry_source: &ModuleSource,
-    cm_interface_registry: &CmInterfaceRegistry,
-    type_table: &Rc<RefCell<TypeTable>>,
-) {
-    match &mut stmt.kind {
-        TirStmtKind::Let { value, type_id, .. } => {
-            let old_type = value.type_id;
-            rewrite_calls_in_expr(
-                value,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-            // If the expression type changed (e.g., streaming adapter returns i32
-            // instead of Result<(), ErrorCode>), update the let binding's type.
-            if value.type_id != old_type {
-                *type_id = value.type_id;
+/// Drives the exhaustive block / statement / generic-expression traversal for
+/// [`rewrite_calls_in_expr`]. The per-node rewrite logic (effect calls,
+/// resource methods, resource statics) lives in `rewrite_calls_in_expr`, which
+/// this walker re-enters via `visit_expr`; the walker supplies only the shared
+/// traversal plus the `Let` type-sync and the defensive `TaskReturn` descent.
+struct CallRewriteWalker<'a> {
+    adapters: &'a IndexMap<String, Rc<RefCell<TirFunction>>>,
+    entry_source: &'a ModuleSource,
+    cm_interface_registry: &'a CmInterfaceRegistry,
+    type_table: &'a Rc<RefCell<TypeTable>>,
+}
+
+impl TirMutVisitor for CallRewriteWalker<'_> {
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+        match &mut stmt.kind {
+            TirStmtKind::Let { value, type_id, .. } => {
+                let old_type = value.type_id;
+                self.visit_expr(value);
+                // A streaming-binding rewrite can retype the let value (e.g. to
+                // i32); keep the binding's recorded type in sync.
+                if value.type_id != old_type {
+                    *type_id = value.type_id;
+                }
             }
+            // `TaskReturn` is still present this early (stripped in a later
+            // step); descend into its value without the default walk's guard.
+            TirStmtKind::TaskReturn { value } => self.visit_expr(value),
+            _ => self.walk_stmt(stmt),
         }
-        TirStmtKind::Expr(value) => {
-            rewrite_calls_in_expr(
-                value,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-        }
-        TirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                rewrite_calls_in_expr(v, adapters, entry_source, cm_interface_registry, type_table);
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            rewrite_calls_in_expr(
-                condition,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-            rewrite_calls_in_block(
-                then_block,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-            if let Some(blk) = else_block {
-                rewrite_calls_in_block(
-                    blk,
-                    adapters,
-                    entry_source,
-                    cm_interface_registry,
-                    type_table,
-                );
-            }
-        }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            rewrite_calls_in_block(
-                body,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-        }
-        TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                rewrite_calls_in_expr(v, adapters, entry_source, cm_interface_registry, type_table);
-            }
-        }
-        TirStmtKind::LetDestructure { value, .. } => {
-            rewrite_calls_in_expr(
-                value,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::TaskReturn { value } => {
-            rewrite_calls_in_expr(
-                value,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-        }
-        TirStmtKind::VariadicForOf { .. } => {}
+    }
+
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        rewrite_calls_in_expr(
+            expr,
+            self.adapters,
+            self.entry_source,
+            self.cm_interface_registry,
+            self.type_table,
+        );
     }
 }
 
@@ -1205,305 +1142,16 @@ fn rewrite_calls_in_expr(
         }
     }
 
-    // Recurse into sub-expressions
-    match &mut expr.kind {
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                rewrite_calls_in_expr(
-                    &mut arg.expr,
-                    adapters,
-                    entry_source,
-                    cm_interface_registry,
-                    type_table,
-                );
-            }
-        }
-        TirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                rewrite_calls_in_expr(
-                    arg,
-                    adapters,
-                    entry_source,
-                    cm_interface_registry,
-                    type_table,
-                );
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            rewrite_calls_in_expr(
-                receiver,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-            for arg in args {
-                rewrite_calls_in_expr(
-                    &mut arg.expr,
-                    adapters,
-                    entry_source,
-                    cm_interface_registry,
-                    type_table,
-                );
-            }
-        }
-        TirExprKind::IndirectCall { callee, args } => {
-            rewrite_calls_in_expr(
-                callee,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-            for arg in args {
-                rewrite_calls_in_expr(
-                    arg,
-                    adapters,
-                    entry_source,
-                    cm_interface_registry,
-                    type_table,
-                );
-            }
-        }
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            rewrite_calls_in_block(
-                block,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            rewrite_calls_in_expr(
-                left,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-            rewrite_calls_in_expr(
-                right,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-        }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. } => {
-            rewrite_calls_in_expr(
-                inner,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            rewrite_calls_in_expr(
-                condition,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-            rewrite_calls_in_block(
-                then_branch,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-            if let Some(blk) = else_branch {
-                rewrite_calls_in_block(
-                    blk,
-                    adapters,
-                    entry_source,
-                    cm_interface_registry,
-                    type_table,
-                );
-            }
-        }
-        TirExprKind::Index { expr: e, index }
-        | TirExprKind::Assign {
-            target: e,
-            value: index,
-        } => {
-            rewrite_calls_in_expr(e, adapters, entry_source, cm_interface_registry, type_table);
-            rewrite_calls_in_expr(
-                index,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-        }
-        TirExprKind::Match {
-            expr: scrutinee,
-            arms,
-        } => {
-            rewrite_calls_in_expr(
-                scrutinee,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-            for arm in arms {
-                if let Some(guard) = &mut arm.guard {
-                    rewrite_calls_in_expr(
-                        guard,
-                        adapters,
-                        entry_source,
-                        cm_interface_registry,
-                        type_table,
-                    );
-                }
-                rewrite_calls_in_expr(
-                    &mut arm.body,
-                    adapters,
-                    entry_source,
-                    cm_interface_registry,
-                    type_table,
-                );
-            }
-        }
-        TirExprKind::Closure { body, .. } => {
-            rewrite_calls_in_expr(
-                body,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in &mut fields.iter_mut() {
-                rewrite_calls_in_expr(
-                    &mut field.value,
-                    adapters,
-                    entry_source,
-                    cm_interface_registry,
-                    type_table,
-                );
-            }
-        }
-        TirExprKind::GlobalVarSet { value, .. } => {
-            rewrite_calls_in_expr(
-                value,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-        }
-        TirExprKind::WithHandler { bindings, body, .. } => {
-            // Walk the handler value and the do-block body so calls
-            // inside `with E => h do { ... }` get the same adapter-binding
-            // rewrite the rest of the function gets. The effect-dispatch
-            // synthesis pass that runs next consumes
-            // `__cm_binding__<E>_<op>` Calls and routes them through
-            // dispatch wrappers.
-            for binding in bindings {
-                rewrite_calls_in_expr(
-                    &mut binding.handler,
-                    adapters,
-                    entry_source,
-                    cm_interface_registry,
-                    type_table,
-                );
-            }
-            rewrite_calls_in_block(
-                body,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-        }
-        TirExprKind::Resume { value } => {
-            rewrite_calls_in_expr(
-                value,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                rewrite_calls_in_expr(
-                    elem,
-                    adapters,
-                    entry_source,
-                    cm_interface_registry,
-                    type_table,
-                );
-            }
-        }
-        TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. } => {
-            rewrite_calls_in_expr(
-                inner,
-                adapters,
-                entry_source,
-                cm_interface_registry,
-                type_table,
-            );
-        }
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                rewrite_calls_in_expr(
-                    payload_expr,
-                    adapters,
-                    entry_source,
-                    cm_interface_registry,
-                    type_table,
-                );
-            }
-        }
-        TirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                    rewrite_calls_in_expr(
-                        inner,
-                        adapters,
-                        entry_source,
-                        cm_interface_registry,
-                        type_table,
-                    );
-                }
-            }
-        }
-        // Leaf nodes — no sub-expressions. Enumerated explicitly so a new
-        // `TirExprKind` variant added in tir.rs forces this match to be
-        // updated rather than silently no-op'd by a catch-all.
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Local { .. }
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Capture { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
+    // Recurse into sub-expressions through the shared exhaustive walk; each
+    // child re-enters `rewrite_calls_in_expr` via the walker's `visit_expr`,
+    // so a rewrite-eligible call nested anywhere is still rewritten.
+    CallRewriteWalker {
+        adapters,
+        entry_source,
+        cm_interface_registry,
+        type_table,
     }
+    .walk_expr(expr);
 }
 
 pub(super) fn collect_effect_calls_in_block(
