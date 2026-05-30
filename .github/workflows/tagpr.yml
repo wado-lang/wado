@@ -23,6 +23,17 @@ jobs:
           fetch-depth: 0
           token: "${{ steps.app-token.outputs.token }}"
 
+      # tagpr's postVersionCommand (`cargo update --workspace`, see .tagpr) has
+      # to resolve the whole workspace, which depends on the vendored wasmtime
+      # fork via a `path = "vendor/wasmtime/..."` dependency. Without the
+      # submodule that path is an empty directory, so `cargo update` fails;
+      # tagpr then commits the bumped Cargo.toml without a synced Cargo.lock,
+      # leaving every `--locked` job on the release branch broken with
+      # "cannot update the lock file ... because --locked was passed". Check
+      # the submodule out exactly as ci.yml does so the lock stays in sync.
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
+
       - uses: Songmu/tagpr@v1
         env:
           GITHUB_TOKEN: "${{ steps.app-token.outputs.token }}"
