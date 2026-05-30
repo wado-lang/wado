@@ -916,14 +916,11 @@ fn try_extract_keyword_info(rule: &LexerRule, all_rules: &Array<LexerRule>, gram
 ///
 /// The keyword path is an optimisation: instead of dispatching keyword-shaped
 /// rules through their own first-character branch, the tokenize loop runs
-/// `classify_keyword` after a longer non-keyword rule has already matched the
-/// same characters (the gate is `best_end > start`). The optimisation is
-/// only sound when some non-keyword rule could match the keyword's first
-/// character — otherwise the classifier never runs and the rule is
-/// unreachable. ANTLR4 has no such precondition (every lexer rule is its own
-/// dispatch path); to stay compatible Gale must not classify a rule as a
-/// keyword unless that precondition holds. Candidates that fail the check
-/// fall back to the regular dispatch path (`gen_lexer_match_fn`).
+/// `classify_keyword` after a carrier rule has matched the same characters
+/// (the gate is `best_end > start`). ANTLR4 has no such precondition (every
+/// lexer rule is its own dispatch path), so a candidate is admitted only when
+/// `keyword_carrier_admits` confirms the shortcut stays ANTLR4-faithful;
+/// the rest fall back to the regular dispatch path (`gen_lexer_match_fn`).
 pub fn collect_keyword_rules(lexer_rules: &Array<LexerRule>, grammar_opts: &Array<GrammarOption>) -> Array<KeywordInfo> {
     let mut candidates: Array<KeywordInfo> = [];
     let mut candidate_indices: Array<i32> = [];
