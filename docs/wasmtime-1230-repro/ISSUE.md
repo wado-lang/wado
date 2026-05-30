@@ -24,7 +24,7 @@ the public `StreamReader::pipe` / `FutureReader` APIs is affected.
 
 Two match arms are no-ops where they must finalize the host end:
 
-* `Instance::host_drop_writer` — when the guest drops the **writable** end:
+- `Instance::host_drop_writer` — when the guest drops the **writable** end:
 
   ```rust
   ReadState::HostReady { .. } | ReadState::HostToHost { .. } => {}
@@ -37,7 +37,7 @@ Two match arms are no-ops where they must finalize the host end:
   I/O error — on a clean close it relies on being dropped, which never
   happens — so the dependent `write-via-stream` future also never resolves.)
 
-* `Instance::host_drop_reader` — when the guest drops the **readable** end:
+- `Instance::host_drop_reader` — when the guest drops the **readable** end:
 
   ```rust
   WriteState::HostReady { .. } => {}
@@ -56,21 +56,21 @@ Two minimal components (attached). Each leaves **6** entries in the
 concurrent-state table after `run()` returns (1 stream transmit = state + 2
 handles, 1 future transmit = state + 2 handles):
 
-### 1. `leak_write_via_stream.wat` — host *consumer* (stream) + host *producer* (future)
+### 1. `leak_write_via_stream.wat` — host _consumer_ (stream) + host _producer_ (future)
 
 Guest: `stream.new`, hand the readable end to `wasi:cli/stdout.write-via-stream`
 (host registers a consumer via `pipe`), write to the writable end, drop it,
 then drop the readable end of the returned future without reading it.
 
-* Stream → `host_drop_writer` with `ReadState::HostReady` (host consumer) leaks.
-* Future → `host_drop_reader` with `WriteState::HostReady` (host producer) leaks.
+- Stream → `host_drop_writer` with `ReadState::HostReady` (host consumer) leaks.
+- Future → `host_drop_reader` with `WriteState::HostReady` (host producer) leaks.
 
-### 2. `leak_read_via_stream.wat` — host *producer* (stream + future)
+### 2. `leak_read_via_stream.wat` — host _producer_ (stream + future)
 
 Guest: call `wasi:cli/stdin.read-via-stream()` (host produces both the stream
 and the future), then drop both readable ends without reading.
 
-* Stream + Future → `host_drop_reader` with `WriteState::HostReady` leaks.
+- Stream + Future → `host_drop_reader` with `WriteState::HostReady` leaks.
 
 ### Harness (sketch)
 
@@ -88,11 +88,11 @@ store.assert_concurrent_state_empty(); // panics: non-empty table: [3, 4, 5, 7, 
 
 Finalize the stranded host end on guest end-drop:
 
-* In `host_drop_writer`, when the read side is `HostReady`/`HostToHost` and the
+- In `host_drop_writer`, when the read side is `HostReady`/`HostToHost` and the
   writer is now `Dropped`, set read to `Dropped` and `delete_transmit` (which
   drops the consumer, releasing e.g. `OutputStreamConsumer::result_tx` so the
   dependent future resolves).
-* In `host_drop_reader`, when the write side is `HostReady`, finalize the host
+- In `host_drop_reader`, when the write side is `HostReady`, finalize the host
   producer and `delete_transmit`.
 
 A local patch covering exactly these two arms takes both reproductions from 6
