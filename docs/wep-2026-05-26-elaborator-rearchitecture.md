@@ -841,15 +841,26 @@ Landed:
     `fn(...) with E` params (closure_effect_generic, effect_1, …) would
     carry `Concrete { E }` and fail to unify with the recorded `Param { E }`
     declared effect. Fixes effect_indirect_call_error; production unaffected.
+40. **Mark primitive `&mut self` method receivers address-taken in reify
+    (2613 → 2614).** A mutating trait method on a primitive local
+    (`x.bump()` where `fn bump(&mut self)` on `i32`) left `x` unchanged
+    under reify: the value-copied primitive was never marked address-taken,
+    so the boxing pass didn't box it and the mutation through `&mut self`
+    was lost. Reify now mirrors `Elaborator::resolve_method_call_with`
+    (method_call.rs:517) — when the dispatch is `&mut self` (non-ref-impl)
+    on a non-reference primitive local, the receiver local is inserted into
+    `address_taken_locals`. Fixes bug_store_load_forward_mut_method_receiver;
+    production unaffected.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2613
+Largest first, by fixture-name prefix (after the landings above). **2614
 / 2664** under `WADO_REIFY=1`. A full-suite scan after landing #35 found 34
-unique reify-only failing fixtures; landings #36–#39 then cleared
+unique reify-only failing fixtures; landings #36–#40 then cleared
 infer_static_method_from_lhs, labeled_block_break_null_coercion,
-test_unicode_names, ice_array_iter_into_iterator, and
-effect_indirect_call_error. The prior
+test_unicode_names, ice_array_iter_into_iterator,
+effect_indirect_call_error, and
+bug_store_load_forward_mut_method_receiver. The prior
 effect_handler_resource_* cluster is resolved (compiles clean — likely a
 side effect of landing #31).
 The remaining set is: variadic_* (6), tuple_* (tuple_zip, tuple_for_of,

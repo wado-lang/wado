@@ -6880,6 +6880,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // shares the adjuster with the elaborator so the same TIR shape
         // (Unary{Ref}/Unary{MutRef}/Deref wrapping) lands.
         let raw_receiver = self.reify_expr(&method_call.receiver, ctx, None);
+
+        // Track implicit `&mut self` borrowing for primitive local receivers,
+        // mirroring `Elaborator::resolve_method_call_with` (method_call.rs:517):
+        // a primitive is value-copied by default, so `x.bump()` must mark `x`
+        // address-taken or the boxing pass won't write the mutation back.
+        let needs_implicit_mut_borrow =
+            !dispatch.is_ref_impl && matches!(dispatch.self_kind, ast::SelfKind::MutRef) && {
+                let tt = self.tysys.type_table.borrow();
+                !matches!(
+                    tt.get(raw_receiver.type_id),
+                    crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+                ) && matches!(
+                    tt.get(tt.get_ultimate_base_type(raw_receiver.type_id)),
+                    crate::tir::ResolvedType::Primitive(_)
+                )
+            };
+        if needs_implicit_mut_borrow && let TirExprKind::Local { index, .. } = &raw_receiver.kind {
+            ctx.address_taken_locals.insert(*index);
+        }
+
         let adjusted_receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
             raw_receiver,
             dispatch.self_kind,
