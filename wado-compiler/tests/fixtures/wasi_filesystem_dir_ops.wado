@@ -1,11 +1,13 @@
 // Tests: Descriptor::create_directory_at, read_directory, remove_directory_at
 //
 // Verifies that:
-// - create_directory_at creates a new directory
-// - read_directory lists entries including known files
-// - DirectoryEntry has correct type fields
+// - create_directory_at creates a directory, and returns Exist on a duplicate
+// - read_directory lists exactly the entries the fixture created, with correct
+//   DescriptorType fields
 // - remove_directory_at removes an empty directory
-// - create_directory_at on existing directory returns Exist error
+//
+// Uses an empty scratch preopen so the fixture owns the whole directory and the
+// read_directory expectations can be exact.
 
 use { println, eprintln, Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, DescriptorType, DescriptorFlags, PathFlags, OpenFlags, DirectoryEntry } from "wasi:filesystem";
@@ -19,10 +21,27 @@ export fn run() with Stdout, Stderr, Preopens {
 
     let dir = dirs[0].0;
 
-    // Clean up any leftover from previous runs
-    dir.remove_directory_at("test_newdir").wait();
+    // Seed the scratch directory with one regular file so read_directory has a
+    // RegularFile entry to report.
+    let file_result = dir.open_at(
+        PathFlags::none(),
+        "alpha.txt",
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Write | DescriptorFlags::Read,
+    ).wait();
+    if let Err(_) = file_result {
+        eprintln("setup: failed to create alpha.txt");
+        return;
+    }
 
-    // Create a new directory
+    // Seed a nested directory so read_directory has a pre-existing Directory entry.
+    let nested_result = dir.create_directory_at("nested").wait();
+    if let Err(_) = nested_result {
+        eprintln("setup: failed to create nested");
+        return;
+    }
+
+    // Create a new directory.
     let mkdir_result = dir.create_directory_at("test_newdir").wait();
     if let Ok(_) = mkdir_result {
         println("create_directory_at: succeeded");
@@ -31,7 +50,7 @@ export fn run() with Stdout, Stderr, Preopens {
         return;
     }
 
-    // Creating the same directory again should fail with Exist
+    // Creating the same directory again should fail with Exist.
     let mkdir_dup = dir.create_directory_at("test_newdir").wait();
     if let Err(err) = mkdir_dup {
         if err matches { Exist } {
@@ -43,11 +62,11 @@ export fn run() with Stdout, Stderr, Preopens {
         eprintln("create_directory_at: duplicate should fail");
     }
 
-    // Read directory entries
+    // Read directory entries. The scratch directory now holds exactly:
+    //   alpha.txt (RegularFile), nested (Directory), test_newdir (Directory).
     let [dir_stream, _done] = dir.read_directory();
-    let mut found_hello = false;
-    let mut found_binary = false;
-    let mut found_subdir = false;
+    let mut found_alpha = false;
+    let mut found_nested = false;
     let mut found_newdir = false;
     let mut entry_count = 0;
 
@@ -55,19 +74,16 @@ export fn run() with Stdout, Stderr, Preopens {
         let entries = dir_stream.read(100);
         for let entry of entries {
             entry_count += 1;
-            if entry.name == "hello.txt" {
-                found_hello = true;
+            if entry.name == "alpha.txt" {
+                found_alpha = true;
                 if entry.type matches { RegularFile } {
-                    println("read_directory: hello.txt is RegularFile (correct)");
+                    println("read_directory: alpha.txt is RegularFile (correct)");
                 }
             }
-            if entry.name == "binary.dat" {
-                found_binary = true;
-            }
-            if entry.name == "subdir" {
-                found_subdir = true;
+            if entry.name == "nested" {
+                found_nested = true;
                 if entry.type matches { Directory } {
-                    println("read_directory: subdir is Directory (correct)");
+                    println("read_directory: nested is Directory (correct)");
                 }
             }
             if entry.name == "test_newdir" {
@@ -81,30 +97,28 @@ export fn run() with Stdout, Stderr, Preopens {
     _done.drop();
     dir_stream.drop();
 
-    if found_hello {
-        println("read_directory: found hello.txt");
+    if found_alpha {
+        println("read_directory: found alpha.txt");
     } else {
-        eprintln("read_directory: missing hello.txt");
+        eprintln("read_directory: missing alpha.txt");
     }
-    if found_binary {
-        println("read_directory: found binary.dat");
+    if found_nested {
+        println("read_directory: found nested");
     } else {
-        eprintln("read_directory: missing binary.dat");
-    }
-    if found_subdir {
-        println("read_directory: found subdir");
-    } else {
-        eprintln("read_directory: missing subdir");
+        eprintln("read_directory: missing nested");
     }
     if found_newdir {
         println("read_directory: found test_newdir");
     } else {
         eprintln("read_directory: missing test_newdir");
     }
+    if entry_count == 3 {
+        println("read_directory: entry count is exactly 3 (correct)");
+    } else {
+        eprintln(`read_directory: unexpected entry count = {entry_count}`);
+    }
 
-    println(`read_directory: total entries = {entry_count}`);
-
-    // Remove the created directory
+    // Remove the created directory.
     let rmdir_result = dir.remove_directory_at("test_newdir").wait();
     if let Ok(_) = rmdir_result {
         println("remove_directory_at: succeeded");
@@ -112,7 +126,7 @@ export fn run() with Stdout, Stderr, Preopens {
         eprintln("remove_directory_at: failed");
     }
 
-    // Verify it's gone
+    // Verify it's gone: removing again should fail.
     let rmdir_again = dir.remove_directory_at("test_newdir").wait();
     if let Err(_) = rmdir_again {
         println("remove_directory_at: already removed (correct)");
@@ -125,15 +139,17 @@ export fn run() with Stdout, Stderr, Preopens {
 
 __DATA__
 {
-    
-    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "preopened_dirs": [["", "scratch"]],
     "stdout_contains": [
         "create_directory_at: succeeded",
         "create_directory_at: duplicate returns Exist (correct)",
-        "read_directory: found hello.txt",
-        "read_directory: found binary.dat",
-        "read_directory: found subdir",
+        "read_directory: alpha.txt is RegularFile (correct)",
+        "read_directory: nested is Directory (correct)",
+        "read_directory: test_newdir is Directory (correct)",
+        "read_directory: found alpha.txt",
+        "read_directory: found nested",
         "read_directory: found test_newdir",
+        "read_directory: entry count is exactly 3 (correct)",
         "remove_directory_at: succeeded",
         "remove_directory_at: already removed (correct)",
         "all dir_ops tests passed"
