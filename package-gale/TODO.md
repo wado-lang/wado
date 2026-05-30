@@ -61,7 +61,7 @@ Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Rou
 
 ### Parser codegen
 
-- **LR operator-precedence chain.** `Performance/DropLoopEntryBranchInLRRule_4`: Gale picks the wrong precedence chain for an or-then-and expression. This is ATN-class: the inner `expr` of `'between' expr 'and' expr` is parsed at `min_prec=0` (matching ANTLR4, which gives middle refs precedence 0), and ANTLR4 only resolves the greedy binary-`and` capture via full-context adaptive prediction at the LR loop-entry (the "drop loop entry branch" optimisation the descriptor is named after). Gale's static `scan_expr_lr_*` sees `and X2` matches and commits. See the **ATN-class grammars** section below.
+- **LR operator-precedence chain.** `Performance/DropLoopEntryBranchInLRRule_4`: Gale picks the wrong precedence chain for an or-then-and expression. This is ATN-class: the inner `expr` of `'between' expr 'and' expr` is parsed at `min_prec=0` (matching ANTLR4, which gives middle refs precedence 0), and ANTLR4 only resolves the greedy binary-`and` capture via full-context adaptive prediction at the LR loop-entry (the "drop loop entry branch" optimisation the descriptor is named after). Gale's static `scan_expr_lr_*` sees `and X2` matches and commits. See the **ATN-class grammars** section above.
 - **Non-greedy `??` prediction layer.** `ParserExec/IfIfElseNonGreedyBinding1`: the emit shape is `Option<T>` (compile-blocker gone) but the dispatch reuses the greedy first-set predictor, so the dangling `else` binds to the inner `if` instead of the outer one ANTLR4 picks. Needs either a follow-guarded Optional dispatcher or runtime ATN simulation.
 
 ### Lexer codegen
