@@ -1,15 +1,6 @@
-// Regression: a rule with two alternatives that share an `IDENT`
-// leading prefix, where the *longer* alt continues past the bare
-// identifier — `'mut'? IDENT` vs `path '(' ... ')'`. For input `N(n)`
-// the scanner must pick the longer `path '(' pattern ')'` alt, not
-// commit to the bare-`IDENT` alt and leave `( n )` unconsumed (which
-// surfaced as "expected RBRACE, got N" when such a pattern appeared in
-// a match arm).
-//
-// This mirrors the `pattern` rule of a real language grammar, where a
-// bare identifier is a binding and `Name(sub)` is a variant pattern.
-//
-// Original work, written as a Gale regression fixture.
+// Regression: two alts share an IDENT prefix and tie on static length
+// (`'mut'? IDENT` vs `path '(' ... ')'`). For `N(n)` the scanner must
+// pick the longer variant alt, not commit to the bare-IDENT one.
 grammar alt_shared_ident_prefix;
 
 prog

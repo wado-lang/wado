@@ -2046,10 +2046,7 @@ fn has_nested_optional_in_alt(alt: &Alternative) -> bool {
     return false;
 }
 
-/// True when any top-level element of `alt` is a variable-length
-/// repeat (`Star` / `Plus`). Shape-lookahead enumeration cannot model
-/// these (see `try_optional_shape_lookahead`), so the scan side must
-/// fall back to its regular repeat loop instead.
+/// True when any element of `alt` contains a variable-length repeat.
 fn alt_has_variable_repeat(alt: &Alternative) -> bool {
     for let elem of &alt.elements {
         if surface_contains_variable_repeat(elem) {
@@ -2071,10 +2068,8 @@ fn surface_is_optional_repeat(elem: &Element) -> bool {
     return false;
 }
 
-/// True when `elem` is (or wraps) a variable-length repeat — `Star`
-/// (`*` / `*?`) or `Plus` (`+` / `+?`). Used to bail out of fixed
-/// shape-lookahead enumeration, which can only model bounded
-/// present/absent positions (see `try_optional_shape_lookahead`).
+/// True when `elem` contains a variable-length repeat (`Star` / `Plus`),
+/// even nested in an optional or group. Shape-lookahead can't model these.
 fn surface_contains_variable_repeat(elem: &Element) -> bool {
     if let Repeat(rep) = elem {
         let self_is_variable = match rep.kind {
@@ -2085,12 +2080,8 @@ fn surface_contains_variable_repeat(elem: &Element) -> bool {
         if self_is_variable {
             return true;
         }
-        // An `Optional` whose inner hides a Star/Plus still defeats shape
-        // enumeration: `( pattern (',' pattern)* )?` nests the Star one
-        // level down, and the enclosing shape's per-position signature
-        // collapses the "list present" and "list absent" cases the same
-        // way the top-level Star does. Recurse through the optional's
-        // inner so the guard sees it.
+        // A Star/Plus nested in an `Optional` (`( a (',' a)* )?`) defeats
+        // shape enumeration too, so recurse through the optional's inner.
         return surface_contains_variable_repeat(&rep.element);
     }
     if let Group(g) = elem {
@@ -3460,15 +3451,9 @@ fn try_optional_shape_lookahead(inner: &Element, ctx: &mut GenContext) -> Option
             return null;
         }
         let elements = &g.alternatives[0].elements;
-        // Shape enumeration assigns each nullable position a single
-        // present/absent bit and a fixed-length lookahead signature. A
-        // variable-length repeat (`Star` / `Plus`) breaks both
-        // assumptions: it consumes an unbounded number of tokens, and
-        // its first token can coincide with a later element's
-        // (`( arm (',' arm)* ','? )` — the Star's ',' equals the
-        // trailing ','?), so two distinct shapes collapse to the same
-        // signature and the shorter one shadows the loop. Bail out and
-        // let the scan-guard fallback parse the body greedily.
+        // A variable-length repeat breaks fixed shape enumeration (two
+        // shapes collapse to one signature), so fall back to the scan
+        // guard. `( arm (',' arm)* ','? )` is the canonical case.
         for let elem of elements {
             if surface_contains_variable_repeat(elem) {
                 return null;

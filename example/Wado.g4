@@ -1,39 +1,8 @@
-/*
- * Wado grammar (ANTLR4 syntax), consumed by Gale (package-gale).
- *
- * Scope: a precise-but-partial grammar for the Wado language, tracking the
- * token vocabulary in `wado-compiler/src/token.rs` and the lexical forms in
- * `wado-compiler/src/lexer.rs`. It covers the syntax exercised by the CLI
- * examples (`example/hello.wado`, `fizzbuzz.wado`, `romu.wado`, `tree.wado`):
- *
- *   - attributes (`#[...]`) and inner attributes (`#![...]`)
- *   - declarations: function, struct, enum, variant, trait, impl, with
- *     generic parameters and trait bounds; `use` imports with `as` aliases
- *   - statements: let, return, if/else, C-style and for-of `for`, while,
- *     loop, break, continue, bare `match`, expression statements, assignment
- *     / compound assignment
- *   - an expression grammar with C-like operator precedence, `as` casts,
- *     `..<` / `..=` ranges, `::` paths with turbofish, call / method / field
- *     / index postfixes, the `?` try operator, `matches`, closures, tuple /
- *     array / struct literals, and `if` / `match` expressions
- *   - the pattern grammar: bindings, wildcards, literals, tuple / struct /
- *     variant patterns with rest (`..`), and match guards (`&&`)
- *   - integer / float / string / template / char literals and the
- *     `true` / `false` / `null` constants
- *
- * It is meant to grow toward full coverage of the e2e fixtures in
- * `wado-compiler/tests/` and the `wasi/*` stdlib. Effects/handlers, the
- * `world` / `interface` / `resource` / `flags` declarations, let-chains, and
- * template-string interpolation internals are intentionally left for later.
- *
- * Original work, written for the Wado language.
- */
+// Partial ANTLR4 grammar for Wado, consumed by Gale. Covers the syntax in
+// the CLI examples (hello, fizzbuzz, romu, tree). Effects/handlers, world /
+// interface / resource / flags, and let-chains are not yet modeled.
 
 grammar Wado;
-
-// ===========================================================================
-// Parser rules
-// ===========================================================================
 
 sourceFile
     : innerAttribute* item* EOF
@@ -54,15 +23,10 @@ itemKind
     | testDecl
     ;
 
-// `test "name" { ... }` / `test { ... }` blocks. `test` is a contextual
-// keyword in Wado (a valid identifier elsewhere); none of the bundled
-// examples use it as an identifier, so the example grammar models it as
-// a literal keyword for simplicity.
+// `test` is a contextual keyword; modeled as a literal here for simplicity.
 testDecl
     : 'test' STRING_LITERAL? block
     ;
-
-// --- Attributes ------------------------------------------------------------
 
 attribute
     : '#' '[' IDENTIFIER attrArgs? ']'
@@ -82,8 +46,6 @@ attrArg
     | literal
     ;
 
-// --- Imports ---------------------------------------------------------------
-
 useDecl
     : 'use' importGroup 'from' STRING_LITERAL ';'
     ;
@@ -100,8 +62,6 @@ importList
 importItem
     : IDENTIFIER ('as' IDENTIFIER)?
     ;
-
-// --- Declarations ----------------------------------------------------------
 
 functionDecl
     : ('pub' | 'export' 'async'?)? 'fn' IDENTIFIER genericParams? '(' paramList? ')'
@@ -185,8 +145,6 @@ implMember
     | 'pub'? functionDecl
     ;
 
-// --- Generics & types ------------------------------------------------------
-
 genericParams
     : '<' genericParam (',' genericParam)* '>'
     ;
@@ -217,9 +175,7 @@ path
     : IDENTIFIER ('::' IDENTIFIER)*
     ;
 
-// Member name after `.`: Wado allows any keyword as a field or method name
-// (see `consume_field_name` in wado-compiler/src/parser.rs), so `entry.type`
-// and the like must lex the keyword and still be accepted here.
+// Any keyword may be a field/method name after `.` (e.g. `entry.type`).
 memberName
     : IDENTIFIER
     | 'use' | 'from' | 'as' | 'fn' | 'with' | 'let' | 'mut' | 'return'
@@ -231,12 +187,7 @@ memberName
     | 'stores' | 'true' | 'false' | 'null'
     ;
 
-// --- Statements ------------------------------------------------------------
-
-// A block is a sequence of statements, optionally followed by a final
-// expression with no trailing `;` — the block's value (`{ 1 }`,
-// `if c { a } else { b }`). The trailing expression is struct-literal-
-// unrestricted because a `}` (not a `{`) closes the block.
+// Optional trailing expression with no `;` is the block's value (`{ 1 }`).
 block
     : '{' statement* expression? '}'
     ;
@@ -296,7 +247,6 @@ continueStatement
     : 'continue' ';'
     ;
 
-// A bare `match` used as a statement carries no trailing `;`.
 matchStatement
     : matchExpr
     ;
@@ -305,11 +255,7 @@ exprStatement
     : expression ';'
     ;
 
-// --- Expressions -----------------------------------------------------------
-//
-// Precedence is encoded by left recursion, lowest to highest. Gale rewrites
-// the direct left recursion the same way ANTLR4 does.
-
+// Precedence by left recursion, lowest to highest.
 expression
     : expression ('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^=' | '<<=' | '>>=') expression
     | expression ('..<' | '..=') expression
@@ -363,15 +309,8 @@ primary
     | '(' expression ')'
     ;
 
-// `exprNoStruct` is the struct-literal-restricted expression used in the
-// header position of `if` / `while` / `for`, where a `{` opens the body.
-// It mirrors the full `expression` precedence chain but its leaf
-// `primaryNoStruct` drops the `structLiteral` alternative, so `while a {`
-// parses `a` as a path and leaves `{` to open the loop body instead of
-// being misread as the empty struct literal `a {}`. Sub-expressions
-// reachable through `( )`, `[ ]`, or call arguments reset to the full
-// `expression`, so a struct literal is still allowed when explicitly
-// parenthesised (`while (Foo { x: 1 }).flag {`).
+// `expression` minus struct literals, for `if` / `while` / `for` headers
+// where a `{` opens the body. Mirrors the chain with a struct-free leaf.
 exprNoStruct
     : exprNoStruct ('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^=' | '<<=' | '>>=') exprNoStruct
     | exprNoStruct ('..<' | '..=') exprNoStruct
@@ -456,8 +395,6 @@ matchArm
     : pattern ('&&' expression)? '=>' (block | expression)
     ;
 
-// --- Patterns --------------------------------------------------------------
-
 pattern
     : '_'
     | 'mut'? IDENTIFIER
@@ -483,8 +420,6 @@ patternField
     | IDENTIFIER
     ;
 
-// --- Literals --------------------------------------------------------------
-
 literal
     : INTEGER
     | FLOAT
@@ -495,10 +430,6 @@ literal
     | 'false'
     | 'null'
     ;
-
-// ===========================================================================
-// Lexer rules
-// ===========================================================================
 
 FLOAT
     : [0-9] [0-9_]* '.' [0-9] [0-9_]* ([eE] [+-]? [0-9]+)?
@@ -528,9 +459,7 @@ IDENTIFIER
     : [a-zA-Z_] [a-zA-Z0-9_]*
     ;
 
-// `#!` at the start of a line is a shebang (e.g. `#!/usr/bin/env wado`).
-// The negated `[` after `#!` keeps inner attributes (`#![...]`) lexing as
-// `#` `!` `[`, so only a real shebang is captured here.
+// Shebang line; the negated `[` keeps `#![...]` inner attributes separate.
 SHEBANG
     : '#!' ~[[\r\n] ~[\r\n]* -> channel(HIDDEN)
     ;

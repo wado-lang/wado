@@ -1,18 +1,7 @@
-//! Syntax-highlighting driver for Wado source.
+//! Highlights a Wado source file using a parser Gale generates from
+//! `./Wado.g4` at compile time.
 //!
-//! The inline `with { generator: { ... } }` clause runs Gale (the
-//! ANTLR4-compatible parser generator in `package-gale`) over `./Wado.g4`
-//! at compile time, and the loader redirect rewrites the
-//! `use wado from "./Wado.g4"` import to the freshly generated parser
-//! module. We then read a `.wado` file given on the command line, parse it
-//! to confirm the grammar accepts it, and print a syntax-highlighted HTML
-//! rendering to stdout.
-//!
-//! Run it against the bundled hello-world example:
-//!
-//! ```sh
-//! wado run example/wado-syntax-highlight.wado example/hello.wado
-//! ```
+//!     wado run example/wado-syntax-highlight.wado example/hello.wado
 
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
@@ -54,8 +43,6 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     let file = open_result.unwrap();
     let input = String::from_utf8_unchecked(read_all(&file));
 
-    // Parse first so a grammar gap surfaces as a clear error rather than
-    // silently falling back to token-only highlighting.
     match wado::parse(&input) {
         Ok(_) => {
             eprintln(`{path}: parsed OK`);

@@ -1048,14 +1048,10 @@ fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, ungua
         w.line(&"return -1;");
         return;
     }
-    // Longest-match tournament. First-success-wins is unsound when two
-    // alts share a prefix and neither is statically longer — e.g.
-    // `'mut'? IDENT` vs `path '(' ... ')'`, where for input `N(n)` the
-    // bare-IDENT alt scans successfully (consuming just `N`) but the
-    // variant alt is the intended longer match. Static sort keys
-    // (`element_count`, `ll_match_length`) tie on such pairs, so we must
-    // decide at runtime: try every candidate from `start`, keep the
-    // greatest successful end position, and commit to that.
+    // Longest-match tournament. First-success-wins is unsound when alts
+    // share a prefix and tie on static length (`'mut'? IDENT` vs
+    // `path '(' ... ')'` on `N(n)`): try each from `start`, keep the
+    // greatest successful end.
     w.line(&"let mut best: i32 = -1;");
     let mut all_idx: Array<i32> = [];
     for let i of guarded_alts {
