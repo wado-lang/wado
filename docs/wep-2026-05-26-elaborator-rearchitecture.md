@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2539 / 2664 fixtures passing under
+      suite reaches **2558 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 125 remaining failures are all reify-specific). The
+      so the 106 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -652,11 +652,40 @@ Landed:
     target type when the target is an integer. +9 fixtures
     (serde_json_large_int / scientific_notation and other wide-cast
     sites).
+23. **Literal-pattern decoding (u128 signedness, char/string escapes,
+    null→None).** reify's literal-pattern arm went through
+    `ast_literal_to_pattern`, which ignored the scrutinee and always
+    emitted `I128` for numerics, read `chars().next()` for chars (so
+    `'\n'` → `'\'`), cloned the raw string, and never mapped `null` to a
+    `None` case. A `u128` scrutinee compared via `i128::*` — codegen
+    emitted the `(ref $u128)` vs `(ref $i128)` mismatch (which had been
+    mis-triaged as a deep interning bug) and `parse::<i128>` of a value
+    > i128::MAX truncated to 0. The arm now mirrors
+    > `resolve_if_pattern_inner` (stmt.rs:1344); the char _expression_
+    > literal (`reify_literal`) is fixed the same way (it shared the broken
+    > decode). Clears match_literal, match_literal_i128_{guarded,large,
+    > side_effect}.
+24. **Or-pattern alternative bindings remapped to shared locals.**
+    `Num(n) | Neg(n)` gave each alternative its own local for `n` — the
+    matched alternative extracted the payload into one slot while the arm
+    body read the other. reify now mirrors `resolve_if_pattern_inner`
+    (stmt.rs:1798): remap later alternatives' binding locals onto the
+    first's and point the arm scope at the first's locals (reusing the
+    now-`pub(super)` `collect_pattern_bindings_with_index` /
+    `remap_pattern_local`). Clears match_or_pattern_5 / _iflet_1.
+25. **Match ergonomics for struct / tuple let-destructure through a ref.**
+    `let { x, y } = &p` / `let [a, b] = &t` bind `&field` / `&elem`.
+    reify's struct- and tuple-pattern arms read the decl / elements off
+    the _unpeeled_ `&Point` / `&[…]` scrutinee, so they resolved nothing
+    and the bindings typed `unknown`. Both arms now peel references for
+    the lookup and wrap each binding in the scrutinee's reference kind
+    via `apply_scrutinee_ref_kind`. Clears match_ergonomics_let_destructure
+    (the match cluster is now clean).
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2539
-/ 2664** under `WADO_REIFY=1`; 125 reify-specific failures across 72
+Largest first, by fixture-name prefix (after the landings above). **2558
+/ 2664** under `WADO_REIFY=1`; 106 reify-specific failures across 61
 unique fixtures remain:
 
 - **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
@@ -665,19 +694,15 @@ unique fixtures remain:
   `synthesize_dispatch_infrastructure` out of sync) — reify is not
   forwarding some effect-dispatch annotation the synthesis needs. Others
   (`effect_propagation_*`, `effect_handler_with_do`) are codegen-level.
-- **Codegen type-identity mismatches (`match_literal`, `match_ergonomics`,
-  `nested_variant_match_ref`, ~8).** `WIR pipeline generated invalid core
-  Wasm: type mismatch: expected (ref [null] $type), found (ref $type)` —
-  reify interns a structurally-identical type with a different `TypeId`
-  (or a null-vs-non-null ref) than production, surfacing only at Wasm
-  validation.
-- **serde (~6).** `serde_json_*` (large_int, scientific_notation) are
-  runtime value mismatches: a numeric literal `> i32::MAX` under
-  `-x as i64` is i32-typed by `expression_types`, so reify's
-  `reify_literal` emits an `i32.const` that truncates (2^53 mod 2^32 = 0)
-  before the cast widens — production re-types the cast operand to i64.
-  Needs reify to re-type a numeric-literal cast operand to the target
-  width (or apply the recorded coercion through `Neg`).
+- **Codegen type-identity mismatches (`tuple_name_collision`,
+  `struct_name_conflict`, ~4).** A user-defined `struct Tuple` / `struct
+  Tuple<T>` (or other name colliding with a built-in) interns to a
+  different `TypeId` under reify than production, surfacing as
+  `(ref $type)` vs `(ref $type)` at Wasm validation. The match_literal /
+  match_ergonomics members of this cluster turned out to be the
+  literal-pattern + ref-binding bugs (landings #23/#25), not interning.
+- **serde (~2).** `serde_json_primitives` (a char-serialization test
+  traps) and `serde_ndjson_wrapper` — narrow runtime cases.
 - Smaller tails: **wasi_clocks (2), tuple_name (2), namespace_import (2),
   match_or (2), httpbin_server (2), cross_module (2), closure_fn (2)**,
   and assorted single fixtures (variant_qualified, variadic_*,
