@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780081044020,
+  "lastUpdate": 1780099481498,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27381,6 +27381,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8769cf0891ebfe83832d20a69e3d0a2435c2e27e"
         },
         "date": 1780081043608,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9494,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16564,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "550c63b4d242976315677a9dca1871fd6a47f865",
+          "message": "Merge pull request #1231 from wado-lang/claude/benchmark-all-readme-update-9nU7t\n\nbench: denominate light benchmarks; refresh results (best-of-three, whole-ms) and skill",
+          "timestamp": "2026-05-30T08:56:22+09:00",
+          "tree_id": "ebd1cba1701a0d575f5cfb4ead441faa886e1ddf",
+          "url": "https://github.com/wado-lang/wado/commit/550c63b4d242976315677a9dca1871fd6a47f865"
+        },
+        "date": 1780099481024,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
