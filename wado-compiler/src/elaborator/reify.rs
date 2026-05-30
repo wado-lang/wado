@@ -326,7 +326,83 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     self.resolve_type_with_self(inner, type_params, self_type, assoc_type_bindings);
                 self.tysys.type_table.borrow_mut().make_mut_ref(inner_id)
             }
+            // A generic application (`Option<Self::Item>`,
+            // `Result<T, Self::Error>`) or tuple (`[Self::Item, bool]`)
+            // can mention `Self` / `Self::Assoc` inside its arguments. The
+            // static resolver below has no self / assoc context, so it
+            // would resolve the nested projection to `unknown`. When an
+            // argument mentions `Self`, rebuild the instance from
+            // self-substituted argument ids (mirroring the static
+            // resolver's `Type::Generic` base handling: `Option` special
+            // case, else struct / variant / enum lookup). Self-free types
+            // keep the proven static path unchanged.
+            ast::Type::Generic(generic) if Self::type_mentions_self(ty) => {
+                let arg_ids: Vec<TypeId> = generic
+                    .args
+                    .iter()
+                    .map(|a| {
+                        self.resolve_type_with_self(a, type_params, self_type, assoc_type_bindings)
+                    })
+                    .collect();
+                if generic.name == "Option" && arg_ids.len() == 1 {
+                    return self.tysys.type_table.borrow_mut().make_option(arg_ids[0]);
+                }
+                let module_source = {
+                    let lookup = self.type_lookup();
+                    lookup
+                        .struct_fields(&generic.name)
+                        .map(|i| i.module_source.clone())
+                        .or_else(|| {
+                            lookup
+                                .variant_case(&generic.name)
+                                .map(|i| i.module_source.clone())
+                        })
+                        .or_else(|| {
+                            lookup
+                                .enum_case(&generic.name)
+                                .map(|i| i.module_source.clone())
+                        })
+                };
+                match module_source {
+                    Some(m) => self.tysys.type_table.borrow_mut().make_generic_instance(
+                        generic.name.clone(),
+                        m,
+                        arg_ids,
+                    ),
+                    None => crate::tir::TypeTable::UNKNOWN,
+                }
+            }
+            ast::Type::Tuple(elems) if Self::type_mentions_self(ty) => {
+                let elem_ids: Vec<TypeId> = elems
+                    .iter()
+                    .map(|e| {
+                        self.resolve_type_with_self(e, type_params, self_type, assoc_type_bindings)
+                    })
+                    .collect();
+                self.tysys.type_table.borrow_mut().make_tuple(elem_ids)
+            }
             _ => self.resolve_type_in_scope(ty, type_params),
+        }
+    }
+
+    /// Syntactic check: does `ty` mention `Self` (bare or as a
+    /// `Self::Assoc` projection) anywhere in its tree? Gates the
+    /// self-substituting reconstruction in [`Self::resolve_type_with_self`]
+    /// so self-free types keep the proven static-resolver path.
+    fn type_mentions_self(ty: &ast::Type) -> bool {
+        match ty {
+            ast::Type::Named(n) => n.name == "Self",
+            ast::Type::NamespacedGeneric(ns) => {
+                ns.namespace == "Self" || ns.args.iter().any(Self::type_mentions_self)
+            }
+            ast::Type::Generic(g) => g.args.iter().any(Self::type_mentions_self),
+            ast::Type::Tuple(elems) => elems.iter().any(Self::type_mentions_self),
+            ast::Type::Reference(i) | ast::Type::MutReference(i) => Self::type_mentions_self(i),
+            ast::Type::Function(f) => {
+                f.params.iter().any(Self::type_mentions_self)
+                    || Self::type_mentions_self(&f.return_type)
+            }
+            ast::Type::TypePackSpread(..) => false,
         }
     }
 
