@@ -2593,7 +2593,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         let display_name = format!("{}<{}>", generic.name, arg_names.join(", "));
                         return type_table.make_newtype(
                             display_name,
-                            gn_info.module_source.clone(),
+                            gn_info.module_source,
                             base_type_id,
                         );
                     }

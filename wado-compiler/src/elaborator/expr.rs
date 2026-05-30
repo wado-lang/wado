@@ -1233,7 +1233,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `FuncRef { type_args }`. Without the recorded args reify would emit
     /// `FuncRef { type_args: [] }`, leaving the name unmangled after
     /// monomorphization and tripping the `lower::closure` invariant
-    /// ("FuncRef should be wrapped in a Closure"). Non-generic references
+    /// ("`FuncRef` should be wrapped in a Closure"). Non-generic references
     /// pass an empty `type_args` and are skipped — they need no record.
     fn record_func_ref_instantiation(
         &mut self,

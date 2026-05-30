@@ -3995,7 +3995,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .unwrap_or((recorded_type, Vec::new()));
 
         let mangled_struct_name = if generic_args.is_empty() {
-            struct_name.clone()
+            struct_name
         } else {
             let arg_names: Vec<String> = generic_args
                 .iter()
@@ -6918,19 +6918,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // args the elaborator baked into the recorded `FunctionRef`'s
         // `monomorph_info` (production passes the same vector as the node
         // type args at `method_call.rs:817`).
-        let type_args: Vec<TypeId> = if !method_call.type_args.is_empty() {
-            method_call
-                .type_args
-                .iter()
-                .map(|ty| self.resolve_type(ty))
-                .collect()
-        } else {
+        let type_args: Vec<TypeId> = if method_call.type_args.is_empty() {
             dispatch
                 .function_ref
                 .monomorph_info
                 .as_ref()
                 .map(|mi| mi.method_type_args.clone())
                 .unwrap_or_default()
+        } else {
+            method_call
+                .type_args
+                .iter()
+                .map(|ty| self.resolve_type(ty))
+                .collect()
         };
 
         // Per-arg `is_mut` comes from the recorded `MethodDispatch`
