@@ -47,13 +47,21 @@ test "ParserRule with alternatives" {
         Visibility::Default,
         [],
         [
-            Alternative { label: Option::<String>::Some("Str"), options: [], elements: [
-                Element::TokenRef(TokenRefElement::new("STRING")),
-            ] },
-            Alternative { label: Option::<String>::Some("Num"), options: [], elements: [
-                Element::TokenRef(TokenRefElement::new("NUMBER")),
-            ] },
-            Alternative { label: null, options: [], elements: [Element::Literal(LiteralElement::new("true"))] },
+            Alternative {
+                label: Option::<String>::Some("Str"),
+                options: [],
+                elements: [Element::TokenRef(TokenRefElement::new("STRING"))],
+            },
+            Alternative {
+                label: Option::<String>::Some("Num"),
+                options: [],
+                elements: [Element::TokenRef(TokenRefElement::new("NUMBER"))],
+            },
+            Alternative {
+                label: null,
+                options: [],
+                elements: [Element::Literal(LiteralElement::new("true"))],
+            },
         ],
     );
     assert rule.name == "value";
@@ -169,7 +177,9 @@ test "synthesize_implicit_tokens: dedups repeated references" {
     synthesize_implicit_tokens(&mut g);
     let mut count = 0;
     for let lr of &g.lexer_rules {
-        if lr.name == "K_IN" { count += 1; }
+        if lr.name == "K_IN" {
+            count += 1;
+        }
     }
     assert count == 1, `expected 1 K_IN, got {count}`;
 }

@@ -376,23 +376,27 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
     // Terminal: if token matches, advance past this element.
     if let TokenRef(t) = elem {
         if `TK_{t.name}` == *token {
-            return [SllConfig {
+            return [
+                SllConfig {
                     alt_index: c.alt_index,
                     elements: c.elements,
                     pos: c.pos + 1,
                     return_stack: c.return_stack,
-                }];
+                },
+            ];
         }
         return [];
     }
     if let Literal(l) = elem {
         if literal_const_name(&l.text) == *token {
-            return [SllConfig {
+            return [
+                SllConfig {
                     alt_index: c.alt_index,
                     elements: c.elements,
                     pos: c.pos + 1,
                     return_stack: c.return_stack,
-                }];
+                },
+            ];
         }
         return [];
     }
@@ -409,16 +413,20 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
         let mut st_visiting: Array<String> = [];
         if ctx.rule_is_single_token(&r.name, &mut st_visiting) {
             // Single-token rule: safe to advance, element position == token position.
-            return [SllConfig {
+            return [
+                SllConfig {
                     alt_index: c.alt_index,
                     elements: c.elements,
                     pos: c.pos + 1,
                     return_stack: c.return_stack,
-                }];
+                },
+            ];
         }
         // Multi-token rule: token matches FIRST but we can't advance past it.
         // Return config with pos = -1 as a sentinel meaning "opaque match".
-        return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1, return_stack: c.return_stack }];
+        return [
+            SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1, return_stack: c.return_stack },
+        ];
     }
 
     // Group: treat as consuming one token if the token is in FIRST(group).
@@ -430,12 +438,14 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
             str_set_insert_all(&mut group_first, &af);
         }
         if group_first.contains(*token) {
-            return [SllConfig {
+            return [
+                SllConfig {
                     alt_index: c.alt_index,
                     elements: c.elements,
                     pos: c.pos + 1,
                     return_stack: c.return_stack,
-                }];
+                },
+            ];
         }
         return [];
     }
@@ -447,12 +457,14 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
         inner_first = ctx.first_of_element(&rep.element, &mut visiting);
         if first_contains(&inner_first, token) {
             // Advance past the repeat element (simplified: treat as consuming 1 token).
-            return [SllConfig {
+            return [
+                SllConfig {
                     alt_index: c.alt_index,
                     elements: c.elements,
                     pos: c.pos + 1,
                     return_stack: c.return_stack,
-                }];
+                },
+            ];
         }
         return [];
     }
@@ -618,7 +630,10 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
         if idx >= 0 {
             branches[idx].tokens.push(*tk);
         } else {
-            branches.push(PredictionBranch { tokens: [*tk], child });
+            branches.push(PredictionBranch {
+                tokens: [*tk],
+                child,
+            });
         }
     }
 
@@ -770,7 +785,10 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         if idx >= 0 {
             branches[idx].tokens.push(*tk);
         } else {
-            branches.push(PredictionBranch { tokens: [*tk], child });
+            branches.push(PredictionBranch {
+                tokens: [*tk],
+                child,
+            });
         }
     }
     if !has_improvement || branches.is_empty() {

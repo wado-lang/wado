@@ -9,9 +9,7 @@
 // Run with wado serve:
 //   cargo run --bin wado -- serve benchmark/http_routing/app.wado
 
-use {
-    Request, Response, ErrorCode, Fields, FieldValue, Trailers, StatusCode,
-} from "wasi:http";
+use { Request, Response, ErrorCode, Fields, FieldValue, Trailers, StatusCode } from "wasi:http";
 use { Router, PathParams } from "core:router";
 use { Serialize } from "core:serde";
 use json from "core:json";
@@ -51,20 +49,18 @@ fn ok0(route: String) -> RouteResponse {
 fn build_router() -> Router<Handler> {
     let mut r = Router::<Handler>::new();
 
-    r.get("/user",          |_req, _p| ok0("user"));
+    r.get("/user", |_req, _p| ok0("user"));
     r.get("/user/comments", |_req, _p| ok0("user.comments"));
-    r.get("/user/avatar",   |_req, _p| ok0("user.avatar"));
-    r.get("/user/lookup/username/:username",
-          |_req, p| ok("user.lookup.username", [p["username"]]));
-    r.get("/user/lookup/email/:address",
-          |_req, p| ok("user.lookup.email", [p["address"]]));
-    r.get("/event/:id",          |_req, p| ok("event.show", [p["id"]]));
+    r.get("/user/avatar", |_req, _p| ok0("user.avatar"));
+    r.get("/user/lookup/username/:username", |_req, p| ok("user.lookup.username", [p["username"]]));
+    r.get("/user/lookup/email/:address", |_req, p| ok("user.lookup.email", [p["address"]]));
+    r.get("/event/:id", |_req, p| ok("event.show", [p["id"]]));
     r.get("/event/:id/comments", |_req, p| ok("event.comments", [p["id"]]));
     r.post("/event/:id/comment", |_req, p| ok("event.comment.create", [p["id"]]));
     r.get("/map/:location/events", |_req, p| ok("map.events", [p["location"]]));
-    r.get("/status",         |_req, _p| ok0("status"));
+    r.get("/status", |_req, _p| ok0("status"));
     r.get("/very/deeply/nested/route/hello/there", |_req, _p| ok0("deeply.nested"));
-    r.get("/static/*path",   |_req, p| ok("static", [p["path"]]));
+    r.get("/static/*path", |_req, p| ok("static", [p["path"]]));
 
     return r;
 }
@@ -73,9 +69,9 @@ global ROUTER: Router<Handler> = build_router();
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let resp = if let Some(m) = ROUTER.match_request(&request) {
-        (m.handler)(request, m.params)
+        (m.handler)(request, m.params);
     } else {
-        RouteResponse { status: 404, body: body_for("not-found", [] as Array<String>) }
+        RouteResponse { status: 404, body: body_for("not-found", [] as Array<String>) };
     };
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();

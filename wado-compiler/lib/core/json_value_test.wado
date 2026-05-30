@@ -66,13 +66,20 @@ test "Value::Array empty serialize" {
 }
 
 test "Value::Array serialize" {
-    let v = Value::Array([Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]);
+    let v = Value::Array([
+        Value::Number(1.0),
+        Value::Number(2.0),
+        Value::Number(3.0),
+    ]);
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "[1,2,3]" };
 }
 
 test "Value::Array mixed serialize" {
-    let v = Value::Array([Value::Null, Value::Bool(true), Value::String("x")]);
+    let v = Value::Array([
+        Value::Null, Value::Bool(true),
+        Value::String("x"),
+    ]);
     let r = to_string(&v);
     assert r matches { Ok(s) && s == `[null,true,"x"]` };
 }
@@ -84,7 +91,9 @@ test "Value::Object empty serialize" {
 }
 
 test "Value::Object serialize" {
-    let v = Value::Object(obj([["key", Value::String("value")]]));
+    let v = Value::Object(obj([
+        ["key", Value::String("value")],
+    ]));
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "{\"key\":\"value\"}" };
 }
@@ -145,7 +154,11 @@ test "Value::Array empty deserialize" {
 
 test "Value::Array deserialize" {
     let r: Result<Value, DeserializeError> = from_string("[1,2,3]");
-    assert r matches { Ok(v) && v == Value::Array([Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]) };
+    assert r matches { Ok(v) && v == Value::Array([
+        Value::Number(1.0),
+        Value::Number(2.0),
+        Value::Number(3.0),
+    ]) };
 }
 
 test "Value::Object empty deserialize" {
@@ -155,14 +168,21 @@ test "Value::Object empty deserialize" {
 
 test "Value::Object deserialize" {
     let r: Result<Value, DeserializeError> = from_string("{\"key\":\"value\"}");
-    assert r matches { Ok(v) && v == Value::Object(obj([["key", Value::String("value")]])) };
+    assert r matches { Ok(v) && v == Value::Object(obj([
+        ["key", Value::String("value")],
+    ])) };
 }
 
 test "Value nested object with array deserialize" {
     let r: Result<Value, DeserializeError> = from_string("{\"nums\":[1,2],\"flag\":true}");
     if let Ok(v) = r {
         let expected = Value::Object(obj([
-            ["nums", Value::Array([Value::Number(1.0), Value::Number(2.0)])],
+            [
+                "nums", Value::Array([
+                    Value::Number(1.0),
+                    Value::Number(2.0),
+                ]),
+            ],
             ["flag", Value::Bool(true)],
         ]));
         assert v == expected;
@@ -182,7 +202,12 @@ test "Value round-trip nested" {
     let original = Value::Object(obj([
         ["name", Value::String("Alice")],
         ["age", Value::Number(30.0)],
-        ["tags", Value::Array([Value::String("admin"), Value::String("user")])],
+        [
+            "tags", Value::Array([
+                Value::String("admin"),
+                Value::String("user"),
+            ]),
+        ],
         ["active", Value::Bool(true)],
         ["notes", Value::Null],
     ]));
@@ -197,7 +222,9 @@ test "Value round-trip nested" {
 
 test "Value whitespace tolerance" {
     let r: Result<Value, DeserializeError> = from_string("  {  \"x\"  :  1  }  ");
-    assert r matches { Ok(v) && v == Value::Object(obj([["x", Value::Number(1.0)]])) };
+    assert r matches { Ok(v) && v == Value::Object(obj([
+        ["x", Value::Number(1.0)],
+    ])) };
 }
 
 test "inspect null" {
@@ -219,7 +246,10 @@ test "inspect string" {
 }
 
 test "inspect array" {
-    let v = Value::Array([Value::Number(1.0), Value::Bool(true), Value::Null]);
+    let v = Value::Array([
+        Value::Number(1.0),
+        Value::Bool(true), Value::Null,
+    ]);
     assert `{v:?}` == "[1.0, true, null]";
 }
 
@@ -228,7 +258,9 @@ test "inspect empty array" {
 }
 
 test "inspect object" {
-    let v = Value::Object(obj([["a", Value::Number(1.0)]]));
+    let v = Value::Object(obj([
+        ["a", Value::Number(1.0)],
+    ]));
     assert `{v:?}` == "{\"a\": 1.0}";
 }
 
@@ -248,7 +280,14 @@ test "pretty-print object" {
 }
 
 test "pretty-print nested" {
-    let v = Value::Object(obj([["items", Value::Array([Value::Number(1.0), Value::Number(2.0)])]]));
+    let v = Value::Object(obj([
+        [
+            "items", Value::Array([
+                Value::Number(1.0),
+                Value::Number(2.0),
+            ]),
+        ],
+    ]));
     assert `{v:#?}` == "{
   \"items\": [
     1.0,
@@ -287,6 +326,14 @@ test "Value eq array" {
 
 test "Value eq object" {
     assert Value::Object(obj([])) == Value::Object(obj([]));
-    assert Value::Object(obj([["k", Value::Null]])) == Value::Object(obj([["k", Value::Null]]));
-    assert !(Value::Object(obj([["k", Value::Null]])) == Value::Object(obj([["k", Value::Bool(false)]])));
+    assert Value::Object(obj([
+        ["k", Value::Null],
+    ])) == Value::Object(obj([
+        ["k", Value::Null],
+    ]));
+    assert !(Value::Object(obj([
+        ["k", Value::Null],
+    ])) == Value::Object(obj([
+        ["k", Value::Bool(false)],
+    ])));
 }

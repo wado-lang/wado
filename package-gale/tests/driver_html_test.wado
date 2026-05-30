@@ -153,8 +153,7 @@ test "HIDDEN channel: TAG_WHITESPACE routed to trivia" {
     // No main-channel token may have kind TAG_WHITESPACE — HIDDEN tokens
     // are hidden from the parser.
     for let t of &tokens {
-        assert t.kind != TK_TAG_WHITESPACE,
-            "TAG_WHITESPACE leaked into main token stream";
+        assert t.kind != TK_TAG_WHITESPACE, "TAG_WHITESPACE leaked into main token stream";
     }
     // After `<p` the next non-hidden token is the TAG_NAME `class`; the
     // space between `p` and `class` must show up in its leading_trivia.
@@ -167,8 +166,7 @@ test "HIDDEN channel: TAG_WHITESPACE routed to trivia" {
             if tag_name_count == 2 {
                 for let trivia of &t.leading_trivia {
                     if trivia.kind == TK_TAG_WHITESPACE {
-                        assert trivia.channel == 1,
-                            `expected HIDDEN channel 1, got {trivia.channel}`;
+                        assert trivia.channel == 1, `expected HIDDEN channel 1, got {trivia.channel}`;
                         found_hidden_ws = true;
                     }
                 }

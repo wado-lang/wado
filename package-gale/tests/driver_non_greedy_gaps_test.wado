@@ -57,8 +57,7 @@ test "single constant is captured in constant_item_list" {
     // `has_field(Wildcard) == true` for parser-level `.*?`.
     let input = "pre = 1 ; public static final int A";
     let root = ng::parse(&input).unwrap();
-    assert root.constant_item_list.len() == 1,
-        `expected exactly 1 constant, got {root.constant_item_list.len()}`;
+    assert root.constant_item_list.len() == 1, `expected exactly 1 constant, got {root.constant_item_list.len()}`;
     assert LexerSlice::eq_str(&"A", &root.constant_item_list[0].constant.id.text);
 }
 
@@ -68,8 +67,7 @@ test "two constants separated by junk are both captured" {
     // (`public`) so the repetition can consume the second constant.
     let input = "pre = 1 ; public static final int A ; middle ; public static final int B ; end";
     let root = ng::parse(&input).unwrap();
-    assert root.constant_item_list.len() == 2,
-        `expected exactly 2 constants, got {root.constant_item_list.len()}`;
+    assert root.constant_item_list.len() == 2, `expected exactly 2 constants, got {root.constant_item_list.len()}`;
     assert LexerSlice::eq_str(&"A", &root.constant_item_list[0].constant.id.text);
     assert LexerSlice::eq_str(&"B", &root.constant_item_list[1].constant.id.text);
 }

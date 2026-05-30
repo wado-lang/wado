@@ -195,11 +195,13 @@ test "router: generic over String handler" {
     assert r.match_path(Method::Get, &"/hello").unwrap().handler == "hi";
 }
 
+
 #[expect_trap]
 test "router: panic on missing leading slash" {
     let mut r = Router::<i32>::new();
     r.get("foo", 1);
 }
+
 
 #[expect_trap]
 test "router: panic on empty pattern" {
@@ -207,11 +209,13 @@ test "router: panic on empty pattern" {
     r.get("", 1);
 }
 
+
 #[expect_trap]
 test "router: panic on wildcard not last" {
     let mut r = Router::<i32>::new();
     r.get("/a/*x/b", 1);
 }
+
 
 #[expect_trap]
 test "router: panic on empty param name" {
@@ -219,11 +223,13 @@ test "router: panic on empty param name" {
     r.get("/:", 1);
 }
 
+
 #[expect_trap]
 test "router: panic on empty wildcard name" {
     let mut r = Router::<i32>::new();
     r.get("/*", 1);
 }
+
 
 #[expect_trap]
 test "router: panic on trailing slash in pattern" {
@@ -231,11 +237,13 @@ test "router: panic on trailing slash in pattern" {
     r.get("/foo/", 1);
 }
 
+
 #[expect_trap]
 test "router: panic on doubled slash in pattern" {
     let mut r = Router::<i32>::new();
     r.get("/a//b", 1);
 }
+
 
 #[expect_trap]
 test "router: panic on conflicting param names at same node" {
@@ -244,6 +252,7 @@ test "router: panic on conflicting param names at same node" {
     r.get("/users/:name/profile", 2);
 }
 
+
 #[expect_trap]
 test "router: panic on conflicting wildcard names at same node" {
     let mut r = Router::<i32>::new();
@@ -251,22 +260,34 @@ test "router: panic on conflicting wildcard names at same node" {
     r.post("/static/*tail", 2);
 }
 
-struct GetUserParams { id: u64 }
+struct GetUserParams {
+    id: u64,
+}
 impl Deserialize for GetUserParams;
 
-struct PostParams { user_id: i32, post_id: u32 }
+struct PostParams {
+    user_id: i32,
+    post_id: u32,
+}
 impl Deserialize for PostParams;
 
-struct StaticOnly {}
+struct StaticOnly {
+}
 impl Deserialize for StaticOnly;
 
-struct StringParam { slug: String }
+struct StringParam {
+    slug: String,
+}
 impl Deserialize for StringParam;
 
-struct InnerParam { id: u64 }
+struct InnerParam {
+    id: u64,
+}
 impl Deserialize for InnerParam;
 
-struct NestedParam { inner: InnerParam }
+struct NestedParam {
+    inner: InnerParam,
+}
 impl Deserialize for NestedParam;
 
 test "router: deserialize params into struct" {

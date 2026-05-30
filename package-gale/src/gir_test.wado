@@ -212,24 +212,34 @@ test "Op::Repeat carries inner element and strategy" {
 
 test "RepeatStrategy variants round-trip" {
     let plain = RepeatStrategy::Plain;
-    let with_follow = RepeatStrategy::WithFollowSubtraction(WithFollowSubtractionStrategy { effective_first: ["TK_A"] });
+    let with_follow = RepeatStrategy::WithFollowSubtraction(WithFollowSubtractionStrategy {
+        effective_first: ["TK_A"],
+    });
     let non_greedy = RepeatStrategy::NonGreedy(NonGreedyStrategy {
         exit_first: ["TK_END"],
         exit_second: [],
     });
     let lookahead_strategy = OptionalLookaheadStrategy {
-        sig: [["TK_X"], ["TK_Y"]],
+        sig: [
+            ["TK_X"],
+            ["TK_Y"],
+        ],
     };
     let lookahead = RepeatStrategy::OptionalLookahead(lookahead_strategy);
     let shape_strategy = OptionalShapeLookaheadStrategy {
         shapes: [
             OptionalLookaheadShape {
                 positions: [0, 1],
-                sig: [["TK_X"], ["TK_Y"]],
+                sig: [
+                    ["TK_X"],
+                    ["TK_Y"],
+                ],
             },
             OptionalLookaheadShape {
                 positions: [0],
-                sig: [["TK_X"]],
+                sig: [
+                    ["TK_X"],
+                ],
             },
         ],
     };
@@ -326,7 +336,9 @@ test "GroupShape variants round-trip" {
 
 test "MultiAltDispatch flat variants round-trip" {
     let direct = direct_single_alt(0);
-    let tournament = MultiAltDispatch::Tournament(TournamentDispatch { alts: [0, 1] });
+    let tournament = MultiAltDispatch::Tournament(TournamentDispatch {
+        alts: [0, 1],
+    });
 
     if let Direct(d) = &direct {
         assert d.branches.len() == 1;
@@ -348,7 +360,9 @@ test "MultiAltDispatch variant set is exactly { Direct, Tournament }" {
     // the matching emit translator are updated. See the doc-comment in
     // gir.wado for the rationale.
     let direct = direct_single_alt(0);
-    let tournament = MultiAltDispatch::Tournament(TournamentDispatch { alts: [0] });
+    let tournament = MultiAltDispatch::Tournament(TournamentDispatch {
+        alts: [0],
+    });
 
     let label_direct: String = match direct {
         Direct(_) => "Direct",
@@ -370,7 +384,9 @@ test "ScanElement variants round-trip" {
         min_prec_arg: null,
     });
     let any = ScanElement::Wildcard;
-    let excl = ScanElement::Excluded(ScanExcludedElem { kinds: ["TK_A"] });
+    let excl = ScanElement::Excluded(ScanExcludedElem {
+        kinds: ["TK_A"],
+    });
     let inner_scan = ScanElement::Token(ScanTokenElem { kind: "TK_X" });
     let rep = ScanElement::Repeat(ScanRepeatElem {
         kind: RepeatKind::Plus,
@@ -443,7 +459,10 @@ test "FieldDecl and KindSet" {
     }
     assert f.name == "expr_2";
 
-    let ks = KindSet { id: 0, tokens: ["TK_A", "TK_B"] };
+    let ks = KindSet {
+        id: 0,
+        tokens: ["TK_A", "TK_B"],
+    };
     assert ks.id == 0;
     assert ks.tokens.len() == 2;
 }

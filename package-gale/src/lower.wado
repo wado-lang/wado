@@ -43,7 +43,16 @@
 //! result through a thin emit adapter; until then this file is
 //! exercised only by `lower_test.wado`.
 
-use { Grammar, ParserRule, Alternative, Element, LabelElement, RepeatElement, RepeatKind, GroupElement } from "./ir.wado";
+use {
+    Grammar,
+    ParserRule,
+    Alternative,
+    Element,
+    LabelElement,
+    RepeatElement,
+    RepeatKind,
+    GroupElement,
+} from "./ir.wado";
 use { alt_is_wildcard_led } from "./alt_grouping.wado";
 use {
     rule_type_name,
@@ -352,7 +361,9 @@ fn scan_element_contains_self_ref(se: &ScanElement, rule_snake: &String) -> bool
                         break;
                     }
                 }
-                if found { break; }
+                if found {
+                    break;
+                }
             }
             found;
         },
@@ -365,7 +376,9 @@ fn scan_element_contains_self_ref(se: &ScanElement, rule_snake: &String) -> bool
                         break;
                     }
                 }
-                if found { break; }
+                if found {
+                    break;
+                }
             }
             found;
         },
@@ -924,7 +937,9 @@ fn op_subtree_contains_self_ref(op: &Op, rule_name: &String) -> bool {
                         break;
                     }
                 }
-                if found { break; }
+                if found {
+                    break;
+                }
             }
             found;
         },
@@ -1252,7 +1267,9 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
     // ops both named `e` and the resulting CST struct would carry
     // duplicate fields.
     let prefix_field = lr_prefix_field_decl(&alt.elements[0], &rule.name);
-    let mut name_counts: Array<[String, i32]> = [[prefix_field.name, 1]];
+    let mut name_counts: Array<[String, i32]> = [
+        [prefix_field.name, 1],
+    ];
     let mut ops: Array<Op> = [];
     // Same per-element follow logic as `lower_alt_body`, but the
     // suffix starts at index 1 (index 0 is the stripped leading
@@ -1801,7 +1818,9 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array
             wildcard_indices.push(0);
         }
         return ScanElement::Group(ScanGroupElem {
-            alts: [ScanBody { elements }],
+            alts: [
+                ScanBody { elements },
+            ],
             dispatch: empty_direct_dispatch(),
             lenient: false,
             alt_first_sets: [alt_first],
@@ -1813,17 +1832,19 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array
         let mut first_sets: Array<Array<String>> = [];
         for let alt of alts {
             let elem = &alt.elements[0];
-            bodies.push(ScanBody { elements: [
-                lower_scan_element(
-                    elem,
-                    ctx,
-                    outer_follow,
-                    &empty_k_prefix(),
-                    variant_mask,
-                    variant_k_prefix_mask,
-                    &empty_k_prefix(),
-                ),
-            ] });
+            bodies.push(ScanBody {
+                elements: [
+                    lower_scan_element(
+                        elem,
+                        ctx,
+                        outer_follow,
+                        &empty_k_prefix(),
+                        variant_mask,
+                        variant_k_prefix_mask,
+                        &empty_k_prefix(),
+                    ),
+                ],
+            });
             first_sets.push([token_only_kind(elem)]);
         }
         return ScanElement::Group(ScanGroupElem {
@@ -1831,7 +1852,7 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &Array
             dispatch: build_direct_dispatch(&first_sets),
             lenient: false,
             alt_first_sets: first_sets,
-            wildcard_alt_indices: ([] as Array<i32>),
+            wildcard_alt_indices: [] as Array<i32>,
         });
     }
     if is_simple_cst_group(alts) {
@@ -2681,17 +2702,19 @@ fn lower_token_only_group(alts: &Array<Alternative>, name_counts: &mut Array<[St
         // Token-only alts are by construction leaves with no inner
         // Repeats — outer_follow is irrelevant, pass empty.
         let empty_follow: Array<String> = [];
-        scan_bodies.push(ScanBody { elements: [
-            lower_scan_element(
-                elem,
-                ctx,
-                &empty_follow,
-                &empty_k_prefix(),
-                variant_mask,
-                variant_k_prefix_mask,
-                &empty_k_prefix(),
-            ),
-        ] });
+        scan_bodies.push(ScanBody {
+            elements: [
+                lower_scan_element(
+                    elem,
+                    ctx,
+                    &empty_follow,
+                    &empty_k_prefix(),
+                    variant_mask,
+                    variant_k_prefix_mask,
+                    &empty_k_prefix(),
+                ),
+            ],
+        });
         first_sets.push([token_only_kind(elem)]);
     }
     let dispatch = build_direct_dispatch(&first_sets);
@@ -2772,17 +2795,19 @@ fn lower_simple_cst_group(alts: &Array<Alternative>, name_counts: &mut Array<[St
         // not propagate into the callee (whole-rule follow is the
         // callee's concern via Phase 2.6 variants).
         let empty_follow: Array<String> = [];
-        scan_bodies.push(ScanBody { elements: [
-            lower_scan_element(
-                elem,
-                ctx,
-                &empty_follow,
-                &empty_k_prefix(),
-                variant_mask,
-                variant_k_prefix_mask,
-                &empty_k_prefix(),
-            ),
-        ] });
+        scan_bodies.push(ScanBody {
+            elements: [
+                lower_scan_element(
+                    elem,
+                    ctx,
+                    &empty_follow,
+                    &empty_k_prefix(),
+                    variant_mask,
+                    variant_k_prefix_mask,
+                    &empty_k_prefix(),
+                ),
+            ],
+        });
         all_indices.push(i);
     }
     let dispatch = build_overlap_dispatch(&"SimpleCst group", alts, &all_indices, &first_sets, ctx);
@@ -2820,17 +2845,19 @@ fn lower_simple_cst_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, 
         // (`is_simple_cst_group`), so `lower_scan_element` produces a
         // `ScanRuleCall` here, never a Repeat — no caller-follow
         // rebind is needed.
-        bodies.push(ScanBody { elements: [
-            lower_scan_element(
-                elem,
-                ctx,
-                outer_follow,
-                &empty_k_prefix(),
-                variant_mask,
-                variant_k_prefix_mask,
-                &empty_k_prefix(),
-            ),
-        ] });
+        bodies.push(ScanBody {
+            elements: [
+                lower_scan_element(
+                    elem,
+                    ctx,
+                    outer_follow,
+                    &empty_k_prefix(),
+                    variant_mask,
+                    variant_k_prefix_mask,
+                    &empty_k_prefix(),
+                ),
+            ],
+        });
         let mut visiting: Array<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
         all_indices.push(i);
@@ -2841,7 +2868,7 @@ fn lower_simple_cst_scan_group(alts: &Array<Alternative>, ctx: &mut GenContext, 
         dispatch: dispatch,
         lenient: true,
         alt_first_sets: first_sets,
-        wildcard_alt_indices: ([] as Array<i32>),
+        wildcard_alt_indices: [] as Array<i32>,
     });
 }
 
@@ -3736,11 +3763,13 @@ fn lower_label_op(lab: &LabelElement, name_counts: &mut Array<[String, i32]>, ru
 /// agree with whatever shape the lowering chose. emit reads this
 /// list directly to lay out the struct.
 fn enumerate_alt_field_decls(ops: &Array<Op>) -> Array<FieldDecl> {
-    let mut fields: Array<FieldDecl> = [FieldDecl {
+    let mut fields: Array<FieldDecl> = [
+        FieldDecl {
             name: "span",
             type_str: "Span",
             kind: FieldKind::Span,
-        }];
+        },
+    ];
     let op_fields = enumerate_op_field_decls(ops);
     for let f of &op_fields {
         fields.push(*f);

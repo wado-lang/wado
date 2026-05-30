@@ -630,7 +630,9 @@ test "tree: array type with const size" {
 }
 
 test "tree: nested generics" {
-    assert_tree(&"struct Wrap<T> { inner: Option<Vec<T>> }", &"
+    assert_tree(
+        &"struct Wrap<T> { inner: Option<Vec<T>> }",
+        &"
         (crate (item (visItem (struct_ (structStruct
             struct (identifier Wrap)
             (genericParams < (genericParam (typeParam (identifier T))) >)
@@ -649,5 +651,6 @@ test "tree: nested generics" {
                                             >))))))))
                             >)))))))))
             })))))
-    ");
+    ",
+    );
 }
