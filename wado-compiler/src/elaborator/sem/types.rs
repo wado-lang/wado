@@ -180,6 +180,13 @@ pub(crate) struct TypeAnnotations {
     /// Stage 5). Keyed by the [`crate::ast::ClosureExpr`]'s [`AstId`].
     /// See [`ClosureCaptureInfo`].
     pub(crate) closure_captures: IndexMap<AstId, ClosureCaptureInfo>,
+    /// Resolved (type-arg-substituted) parameter types for a free /
+    /// imported function call, keyed by the call expression's [`AstId`].
+    /// Reify uses these to drive per-argument expected types — chiefly so
+    /// a closure-literal argument coerced to a `fn`-typed (or `fn`-newtype)
+    /// parameter sees the function signature, inferring unannotated closure
+    /// params and producing the functor specialization the call site needs.
+    pub(crate) call_param_types: IndexMap<AstId, Vec<TypeId>>,
     /// Power-assert capture-slot map for each assert statement (Gap 5
     /// of Stage 5). Keyed by the [`crate::ast::AssertStmt`]'s [`AstId`].
     /// See [`AssertCaptureInfo`].

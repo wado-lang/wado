@@ -1126,6 +1126,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
         }
+        // Record the resolved param types so reify can replay per-argument
+        // expected types (closure-literal coercion to a fn-typed param).
+        if !check_param_types.is_empty() {
+            self.record_call_param_types(call.id, check_param_types.clone());
+        }
 
         let param_is_mut = self.lookup_function_param_is_mut(&call.callee);
         let call_args: Vec<CallArg> = args

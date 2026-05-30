@@ -776,14 +776,42 @@ Landed:
     (mirroring the binary path), and reify's `Unary` arm replays the
     recorded `Neg::neg` / `BitNot::bitnot` method call. Fixes
     newtype_operator_trait; production unaffected.
+35. **Forward per-argument expected types for unannotated-param closure
+    args (2608 → 2609).** Reify resolved every call argument with
+    `expected = None`, so a closure literal passed where the param is a
+    `fn`-newtype (`type Reducer = fn(i32, i32) -> i32`) never saw the
+    function signature: its unannotated params (`|a, b| ...`) stayed
+    UNKNOWN, its functor `__call` lowered with `unknown` param types, and
+    the method was dropped before codegen (`fold$__Closure_4` referenced a
+    `__Closure_4::__call` that no longer existed). The elaborator now
+    records the resolved (type-arg-substituted) param types per call site
+    (`sem.types.call_param_types`, keyed by the call `AstId`); reify reads
+    them and forwards the matching param type as the expected type, but
+    only for closure args that have an unannotated param
+    (`arg_is_unannotated_closure`). The restriction keeps effect-
+    polymorphic closures (`each(items, |x: i32| { println(...) })` against
+    `fn mut(i32) with E`) inferring their effects from the body instead of
+    pinning `declared_effects` to the generic effect param. reify_closure
+    also peels newtypes before reading the expected fn signature. Fixes
+    newtype_closure_coercion; production unaffected.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2608
-/ 2664** under `WADO_REIFY=1`. Note: the effect_handler_resource_* cluster
-listed below is now stale — those fixtures compile clean again (likely a
-side effect of landing #31). A fresh full-suite scan is in flight to
-re-triage. Most remaining failures are **O2-only optimizer interactions**
+Largest first, by fixture-name prefix (after the landings above). **2609
+/ 2664** under `WADO_REIFY=1`. A full-suite scan after landing #34 found 35
+unique reify-only failing fixtures; the prior effect_handler_resource_*
+cluster is resolved (compiles clean — likely a side effect of landing #31).
+The remaining set is: variadic_* (6), tuple_* (tuple_zip, tuple_for_of,
+tuple_1, tuple_name_collision×2, tuple_literal_expected_type_in_branch,
+opt_container_sroa_tuple), newtype_* (newtype_chained_method,
+newtype_method_inheritance, newtype_return_type — O2-only),
+cross_module_same_name_fn(_infer), infer_lhs_overrides_literal,
+infer_static_method_from_lhs, {if,for,return}_merged, loop_nested,
+trait_bound_1, opt_sroa_variant_return_if_descent, effect_indirect_call_error,
+effect_handler_with_do, default_arg_private_item, test_unicode_names,
+ice_array_iter_into_iterator, labeled_block_break_null_coercion,
+bug_store_load_forward_mut_method_receiver, wasm_name_conflict_generic_fn.
+Most are **O2-only optimizer interactions**
 (pass at -O0, fail at -O2: newtype method values, tuple field access,
 cross_module same-name generics, `opt_*`), **codegen type-identity** GC
 collisions, **variadic pack machinery**, and specific deep cases

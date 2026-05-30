@@ -4760,8 +4760,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // AST (resolved via the outer scope's type-param view); if
         // the expected fn type is available, prefer its param types
         // for cases where the closure has no explicit annotation.
+        // Peel newtypes so a closure coerced to a `type Reducer = fn(..)`
+        // newtype still sees the underlying function signature; otherwise
+        // unannotated closure params (`|a, b| ...`) resolve to UNKNOWN and
+        // the functor signature diverges from the call site, leaving the
+        // `__call` method unreachable. Mirrors production's coercion-aware
+        // param inference.
+        let expected_fn_type = expected_type.map(|t| {
+            let table = self.tysys.type_table.borrow();
+            table.get_ultimate_base_type(table.peel_refs(t))
+        });
         let expected_fn_params: Option<Vec<TypeId>> =
-            expected_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
+            expected_fn_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
                 ResolvedType::Function { params, .. } => Some(params.clone()),
                 _ => None,
             });
@@ -4784,7 +4794,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Step 4: reify the body in the closure scope.
         let body_expected =
-            expected_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
+            expected_fn_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
                 ResolvedType::Function { return_type, .. } => Some(*return_type),
                 _ => None,
             });
@@ -6150,9 +6160,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // impl lookup, mangled-name construction, or monomorph-info
         // shaping (none of which are tractable from the AST alone).
         if let Some(dispatch) = self.sem.types.static_method_dispatch.get(&call.id).cloned() {
+            // Forward per-argument expected types for closure args that have
+            // an unannotated param, so `|a, b| ...` coerced to a `fn`-typed
+            // (or `fn`-newtype) param infers its params; otherwise the
+            // closure's params stay UNKNOWN and its functor `__call` is
+            // generated with `unknown` param types and dropped before codegen.
+            // Restricted to unannotated-param closures so we never override the
+            // body-inferred effects of an effect-polymorphic closure (an
+            // expected `fn() with E` whose `E` is a generic effect param would
+            // otherwise pin `declared_effects` to the param instead of the
+            // closure's actual effects).
+            let call_param_types = self.sem.types.call_param_types.get(&call.id).cloned();
             let mut arg_exprs: Vec<CallArg> = call
                 .args
                 .iter()
+                .enumerate()
                 .zip(
                     dispatch
                         .param_is_mut
@@ -6160,8 +6182,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .copied()
                         .chain(std::iter::repeat(false)),
                 )
-                .map(|(a, is_mut)| {
-                    let arg = self.reify_expr(a, ctx, None);
+                .map(|((i, a), is_mut)| {
+                    let expected = if arg_is_unannotated_closure(a) {
+                        call_param_types
+                            .as_ref()
+                            .and_then(|pts| pts.get(i).copied())
+                    } else {
+                        None
+                    };
+                    let arg = self.reify_expr(a, ctx, expected);
                     CallArg::new(arg, is_mut)
                 })
                 .collect();
@@ -6390,16 +6419,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .collect()
             };
 
-            // TODO(stage-5-bodies): callee param types drive literal
-            // re-coercion + `is_mut` per-arg. Until those records
-            // land, reify resolves each arg with `expected = None`
-            // and emits `is_mut = false`; matches the elaborator's
-            // output for the no-coercion / no-mut common case.
+            // Per-argument expected types come from the recorded resolved
+            // param types. They are required for unannotated-param closure
+            // args (`|a, b| ...`) coerced to a `fn`-typed (or `fn`-newtype)
+            // param, so the closure infers its params and produces the functor
+            // specialization the call site needs. Literal re-coercion and
+            // `is_mut` per-arg are still handled elsewhere (`coercions`); see
+            // `arg_is_unannotated_closure` for why the forward is restricted.
+            let call_param_types = self.sem.types.call_param_types.get(&call.id);
             let args: Vec<CallArg> = call
                 .args
                 .iter()
-                .map(|a| {
-                    let arg = self.reify_expr(a, ctx, None);
+                .enumerate()
+                .map(|(i, a)| {
+                    let expected = if arg_is_unannotated_closure(a) {
+                        call_param_types.and_then(|pts| pts.get(i).copied())
+                    } else {
+                        None
+                    };
+                    let arg = self.reify_expr(a, ctx, expected);
                     CallArg::new(arg, false)
                 })
                 .collect();
@@ -8452,6 +8490,18 @@ fn ast_type_name_static(ty: &ast::Type) -> String {
         | ast::Type::NamespacedGeneric(_)
         | ast::Type::TypePackSpread(_, _) => "Unknown".to_string(),
     }
+}
+
+/// True when `arg` is a closure literal with at least one param that lacks a
+/// type annotation. Reify forwards the recorded callee param type as the
+/// closure's expected type only in this case: it is what lets an unannotated
+/// `|a, b| ...` infer its params from a `fn`-typed (or `fn`-newtype) param.
+/// Closures whose params are fully annotated (or take no params) gain nothing
+/// and must not receive the expected type — doing so would pin an
+/// effect-polymorphic closure's `declared_effects` to a generic effect param
+/// instead of the effects inferred from its body.
+fn arg_is_unannotated_closure(arg: &ast::Expr) -> bool {
+    matches!(arg, ast::Expr::Closure(c) if c.params.iter().any(|p| p.ty.is_none()))
 }
 
 fn ast_unary_op_to_tir(op: ast::UnaryOp) -> crate::tir::TirUnaryOp {

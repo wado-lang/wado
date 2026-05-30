@@ -584,6 +584,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         );
     }
 
+    /// Record the resolved (type-arg-substituted) parameter types for the
+    /// call at `ast_id`, so reify can replay per-argument expected types.
+    pub(super) fn record_call_param_types(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        param_types: Vec<TypeId>,
+    ) {
+        self.sem.types.call_param_types.insert(ast_id, param_types);
+    }
+
     /// Record the capture-analysis result for the closure expression at
     /// `ast_id` (Gap 4 of Stage 5). See [`sem::types::ClosureCaptureInfo`].
     pub(super) fn record_closure_captures(
