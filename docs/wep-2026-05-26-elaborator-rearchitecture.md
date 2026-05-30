@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2558 / 2664 fixtures passing under
+      suite reaches **2566 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 106 remaining failures are all reify-specific). The
+      so the 98 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -681,11 +681,26 @@ Landed:
     the lookup and wrap each binding in the scrutinee's reference kind
     via `apply_scrutinee_ref_kind`. Clears match_ergonomics_let_destructure
     (the match cluster is now clean).
+26. **Generic resource types in the static resolver (2558 → 2566).**
+    `resolve_type_static_with_params`'s `Type::Generic` arm checked
+    struct / variant / enum but not resources, so a generic resource
+    (`Stream<u8>`, `Future<T>`) resolved to `UNKNOWN`. reify uses this
+    resolver for parameter / field types, so `fn consume(rx: Stream<u8>)`
+    lost the resource — the effect-check resource-store inference
+    (`signature_resources`) saw no `Stream`, and the body's
+    `Stream::<u8>::new()` failed with `missing resource 'Stream'`. The arm
+    now resolves a generic resource to
+    `GenericResource { name, module_source, type_args }` via
+    `lookup.resource_type`. +8 fixtures (effect_propagation_signature_*,
+    variant_payload, and other generic-resource signature sites). The
+    struct-field / nested members (`effect_propagation_struct_field`,
+    `_signature_nested`) still need `collect_resource_refs` to recurse
+    through an interface op's struct return into its resource fields.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2558
-/ 2664** under `WADO_REIFY=1`; 106 reify-specific failures across 61
+Largest first, by fixture-name prefix (after the landings above). **2566
+/ 2664** under `WADO_REIFY=1`; 98 reify-specific failures across 57
 unique fixtures remain:
 
 - **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
