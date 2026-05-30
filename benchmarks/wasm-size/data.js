@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780099481498,
+  "lastUpdate": 1780102149143,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27445,6 +27445,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 451282,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "abcffeff1475014414acb8dd64148e29497b1382",
+          "message": "Merge pull request #1232 from wado-lang/claude/json-catalog-benchmark-OkmXf\n\nperf(json): enable wasm branch hinting and mark cold deserialize branches",
+          "timestamp": "2026-05-30T09:40:53+09:00",
+          "tree_id": "cd60b0ddfbf08f88f37a3c069e6c65dcd7cfc57e",
+          "url": "https://github.com/wado-lang/wado/commit/abcffeff1475014414acb8dd64148e29497b1382"
+        },
+        "date": 1780102148664,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9512,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17303,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 491625,
             "unit": "bytes"
           }
         ]
