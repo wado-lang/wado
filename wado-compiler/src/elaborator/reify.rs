@@ -5898,6 +5898,51 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         span,
                     );
                 }
+            } else if let Some(inner) = suffix.find("::")
+                && let Some(ns_source) = self.sem.imports.namespace_imports.get(prefix).cloned()
+            {
+                // `ns::Type::Case(payload)` — a namespace-imported variant
+                // constructor with a payload. The nullary form is handled
+                // in `reify_ident`; the payload form parses as a `Call`.
+                // The case lives in the namespace's variant table; the
+                // instance type is the call's recorded expression type
+                // (annotate resolved it).
+                let type_name = &suffix[..inner];
+                let case_name = &suffix[inner + 2..];
+                if let Some(variant_info) = self
+                    .tysys
+                    .all_variant_cases
+                    .get(&ns_source)
+                    .and_then(|m| m.get(type_name))
+                    .cloned()
+                    && let Some((case_index, case_data)) = variant_info
+                        .cases
+                        .iter()
+                        .enumerate()
+                        .find(|(_, c)| c.name == case_name)
+                        .map(|(i, c)| (i, c.clone()))
+                {
+                    let variant_type = self
+                        .sem
+                        .types
+                        .generic_instantiations
+                        .get(&call.id)
+                        .map(|gi| gi.instance_type)
+                        .unwrap_or(recorded_type);
+                    let payload = call.args.first().map(|arg_expr| {
+                        Box::new(self.reify_expr(arg_expr, ctx, Some(case_data.payload)))
+                    });
+                    return TirExpr::new(
+                        TirExprKind::VariantConstruct {
+                            variant_type,
+                            case_index: case_index as u32,
+                            case_name: case_data.name,
+                            payload,
+                        },
+                        variant_type,
+                        span,
+                    );
+                }
             }
         }
 
