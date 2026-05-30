@@ -737,10 +737,10 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                                 // and `cast` does a *numeric* conversion, not a
                                 // bit reinterpret — revisit this (and the join
                                 // rule) before binding such a variant.
-                                let v = if flat_val.type_id != pt {
-                                    cast(flat_val, pt)
-                                } else {
+                                let v = if flat_val.type_id == pt {
                                     flat_val
+                                } else {
+                                    cast(flat_val, pt)
                                 };
                                 case_stmts.push(expr_stmt(assign(
                                     local_ref(pl, &format!("{prefix}_p{i}"), pt),

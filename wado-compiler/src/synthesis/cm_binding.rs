@@ -831,7 +831,7 @@ mod tests {
                 &fix.ctx(),
             );
             match expr.kind {
-                TirExprKind::Call { func, .. } => (func.name.clone(), expr.type_id),
+                TirExprKind::Call { func, .. } => (func.name, expr.type_id),
                 other => panic!("expected Call for {name}, got {other:?}"),
             }
         }
