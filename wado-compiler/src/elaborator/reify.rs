@@ -146,6 +146,14 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// Entry module, used for cross-module import dedup.
     #[allow(dead_code)]
     pub(crate) entry_module_source: ModuleSource,
+    /// Type-parameter names in scope for the function/method body
+    /// currently being reified (impl params first, then method-level
+    /// params, matching the index layout reify builds in
+    /// `reify_method` / `reify_function`). Empty outside a body walk.
+    /// `resolve_type` consults this so a turbofish type argument naming
+    /// an enclosing type param (`v.serialize::<S>(s)` inside a generic
+    /// method) resolves to its `TypeParam` slot instead of `unknown`.
+    pub(crate) current_type_param_names: Vec<String>,
 }
 
 #[allow(dead_code)]
@@ -184,6 +192,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             interner,
             invocations,
             entry_module_source,
+            current_type_param_names: Vec::new(),
         }
     }
 
@@ -260,10 +269,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// host-agnostic and operates over the [`TypeLookup`] view above.
     fn resolve_type(&mut self, ty: &ast::Type) -> TypeId {
         let lookup = self.type_lookup();
-        super::Elaborator::<H>::resolve_type_static(
+        // Resolve within the current body's type-parameter scope so a
+        // turbofish argument that names an enclosing type param resolves
+        // to its `TypeParam` slot. Outside a body walk the scope is empty,
+        // so this is identical to the scope-free path.
+        super::Elaborator::<H>::resolve_type_static_with_params(
             ty,
             &mut self.tysys.type_table.borrow_mut(),
             &lookup,
+            &self.current_type_param_names,
         )
     }
 
@@ -836,6 +850,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|p| p.name.clone())
             .collect();
 
+        // Publish the body's type-param scope (see `reify_method`).
+        let saved_type_param_names =
+            std::mem::replace(&mut self.current_type_param_names, type_param_names.clone());
+
         let mut params = Vec::with_capacity(func.params.len());
         for param in &func.params {
             let type_id = self.resolve_type_in_scope(&param.ty, &type_param_names);
@@ -858,6 +876,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .body
             .as_ref()
             .map(|b| self.reify_block(b, &mut ctx, None));
+
+        self.current_type_param_names = saved_type_param_names;
 
         let mut non_effect_non_fn_idx: u32 = 0;
         let type_params: Vec<crate::tir::TirTypeParam> = func
@@ -1136,6 +1156,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ctx.task_return_type = Some(return_type);
         }
 
+        // Publish the body's type-param scope so turbofish args in the
+        // body (`v.serialize::<S>(s)`) resolve against it. Restored before
+        // returning so decl-level resolution stays scope-free.
+        let saved_type_param_names =
+            std::mem::replace(&mut self.current_type_param_names, type_param_names.clone());
+
         let mut params = Vec::with_capacity(func.params.len());
         for p in &func.params {
             let type_id = match p.self_kind {
@@ -1176,6 +1202,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .body
             .as_ref()
             .map(|b| self.reify_block(b, &mut ctx, None));
+
+        self.current_type_param_names = saved_type_param_names;
 
         // Method-level type-param projection: same filter as
         // `reify_function`'s (skip effect params and `<F: fn(...)>`
@@ -7410,6 +7438,39 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         None
     }
 
+    /// Wrap `inner` in the reference kind of `scrutinee_type` for match
+    /// ergonomics. Walks the reference layers of the scrutinee: a `&mut`
+    /// sets `&mut` unless a `&` is also present (most restrictive wins),
+    /// matching `Elaborator::resolve_if_pattern`'s `RefBinding`. A
+    /// non-reference scrutinee returns `inner` unchanged.
+    fn apply_scrutinee_ref_kind(&self, scrutinee_type: TypeId, inner: TypeId) -> TypeId {
+        use crate::tir::ResolvedType;
+        let mut cur = scrutinee_type;
+        let mut saw_ref = false;
+        let mut saw_mut_ref = false;
+        loop {
+            let resolved = self.tysys.type_table.borrow().get(cur).clone();
+            match resolved {
+                ResolvedType::Ref(i) => {
+                    saw_ref = true;
+                    cur = i;
+                }
+                ResolvedType::MutRef(i) => {
+                    saw_mut_ref = true;
+                    cur = i;
+                }
+                _ => break,
+            }
+        }
+        if saw_ref {
+            self.tysys.type_table.borrow_mut().make_ref(inner)
+        } else if saw_mut_ref {
+            self.tysys.type_table.borrow_mut().make_mut_ref(inner)
+        } else {
+            inner
+        }
+    }
+
     pub(super) fn reify_pattern(
         &mut self,
         pattern: &ast::Pattern,
@@ -7549,10 +7610,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // variant decl + payload type resolve through the
                 // underlying `Option<T>` rather than falling to the
                 // unknown-payload `_` arm.
+                let peeled_scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
                 let (payload_type, _payload_decl_module) = {
                     use crate::tir::ResolvedType;
-                    let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
-                    let resolved = self.tysys.type_table.borrow().get(peeled).clone();
+                    let resolved = self.tysys.type_table.borrow().get(peeled_scrutinee).clone();
                     let (decl_name, type_args) = match resolved {
                         ResolvedType::Variant {
                             name,
@@ -7573,12 +7634,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     (payload, type_args.1)
                 };
 
+                // Match ergonomics: when the scrutinee is a reference
+                // (`match self { Some(v) => … }` with `self: &Option<T>`),
+                // the payload binding inherits the reference kind — `v` is
+                // `&T`, not `T`, so it forwards directly to a `&self`
+                // method. Mirrors `Elaborator::resolve_if_pattern`'s
+                // `RefBinding` handling (stmt.rs:1213+): `&` downgrades a
+                // `&mut` (most restrictive wins). The `payload_type` field
+                // and `enum_type` stay the unwrapped (peeled) forms — the
+                // variant extraction reads the value through the peeled
+                // variant type; only the binding scrutinee carries the
+                // reference.
+                let binding_scrutinee = self.apply_scrutinee_ref_kind(scrutinee_type, payload_type);
                 let sub_patterns: Vec<TirPattern> = bindings
                     .iter()
-                    .map(|p| self.reify_pattern(p, payload_type, ctx))
+                    .map(|p| self.reify_pattern(p, binding_scrutinee, ctx))
                     .collect();
                 TirPattern::Variant {
-                    enum_type: scrutinee_type,
+                    enum_type: peeled_scrutinee,
                     variant_name: case_name,
                     bindings: sub_patterns,
                     payload_type,
