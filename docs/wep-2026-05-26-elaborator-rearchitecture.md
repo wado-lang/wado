@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2656 / 2678 fixtures passing under
+      suite reaches **2660 / 2678 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2678/2678,
-      so the 11 remaining unique failures are all reify-specific;
+      so the 9 remaining unique failures are all reify-specific;
       count as of the 2026-05-30 `origin/main` merge). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
@@ -914,26 +914,48 @@ Landed:
     2678/2678 — production resolves these spreads through its instance
     resolver, which already handled them).
 
+45. **Mangle variadic-tuple impl methods as `Tuple` in reify (2656 → 2660).**
+    `reify_method` derived a method's base struct name from
+    `type_name(facts.self_type)` truncated at `<`. For an
+    `impl<..T> Trait for [..T]` the self type renders in bracket notation
+    (`[..T]`, no `<`), so the method registered as `[..T]^Trait::method`
+    instead of the generic `Tuple^Trait::method` production emits (confirmed
+    by instrumenting `monomorphize.rs`: reify registered
+    `[..T]^Countable::count` vs production's `Tuple^Countable::count`). The
+    call site replays annotate's production `FunctionRef`, whose
+    `monomorph_info.generic_name` is `Tuple^…`, and the monomorphizer's
+    tuple-variadic instantiation path is gated on
+    `struct_name == TUPLE_TYPE_NAME` (func_inst.rs:888) — so neither found the
+    `[..T]^…` template and WIR build panicked (`unresolved MethodCall:
+    Tuple<i32,bool>^Trait::method`). reify_method now uses `TUPLE_TYPE_NAME`
+    when the impl self type is a builtin tuple, matching production
+    (item.rs:660). Clears variadic_for_of_generic_method and
+    variadic_impl_method_type_param; production unaffected (reify_method is
+    reify-only). A companion `monomorphize.rs` change keys `generic_functions`
+    on `(module_source, name)` so same-named generic tuple methods across
+    modules coexist.
+
 #### Re-triaged remaining clusters
 
-Largest first, grouped by cluster. **2656 / 2678** passing under
+Largest first, grouped by cluster. **2660 / 2678** passing under
 `WADO_REIFY=1` (fresh full-suite scan on 2026-05-30, after merging
-`origin/main`; every fixture `main` added passes under reify). **11 unique
+`origin/main`; every fixture `main` added passes under reify). **9 unique
 fixtures fail**, all at `-O0` and `-O2`. The localized "missing annotation
-channel" gaps are gone, and the `-O2`-only `TypeId`-identity cluster is now
-cleared too (landings #41 / #42); each remaining cluster is feature-level
-work, not a one-line replay fix.
+channel" gaps are gone; the `-O2`-only `TypeId`-identity cluster (landings
+#41 / #42) and the entire variadic type-pack cluster (landings #43–#45) are
+cleared; each remaining cluster is feature-level work, not a one-line replay
+fix.
 
-##### Variadic type-pack machinery (2, fail O0+O2)
+##### Variadic type-pack machinery — CLEARED (landings #43–#45)
 
-`variadic_for_of_generic_method`, `variadic_impl_method_type_param`. Both use
-an `impl<..T> Trait for [..T]` whose monomorphized tuple-method instance
-(`Tuple<i32,bool>^Trait::method`) is not queued at WIR build. The remaining
-gap is reproducing the monomorphizer's variadic-tuple-impl instantiation
-collection in reify (`monomorphize/func_inst.rs:857`), which keys on the
-impl's `TirTypeParam` pack shape. Landings #43 / #44 cleared the other four
-variadic fixtures (spread literals + type-pack signature resolution); see
-`wep-2026-03-14-variadic-type-parameters.md`.
+The six variadic fixtures all pass under reify now. Three coupled gaps were
+closed: spread elements in reify tuple literals (#43), `Type::TypePackSpread`
+resolution in the static type resolver (#44), and — for the
+`impl<..T> Trait for [..T]` shape — mangling the method's base struct name as
+`Tuple` rather than the bracket-rendered `[..T]` (#45). The last bit landed
+alongside a `monomorphize.rs` change that keys `generic_functions` on
+`(module_source, name)` so same-named generic tuple methods from different
+modules no longer collide.
 
 ##### Compile-time tuple enumeration (2, fail O0+O2)
 
@@ -973,9 +995,9 @@ below still apply unchanged.
 
 The recording half is complete: every landed gap has an annotation channel
 on `sem.types` and reify consumes it. What remains is per-shape parity for
-the 11 fixtures above (variadic-tuple impl-method monomorphization,
-compile-time tuple enumeration, and the remaining feature-level singles — the
-`-O2` `TypeId`-identity cluster is cleared), then the final orchestration cut
+the 9 fixtures above (compile-time tuple enumeration and the remaining
+feature-level singles — the `-O2` `TypeId`-identity and variadic type-pack
+clusters are cleared), then the final orchestration cut
 (`#### Endgame`).
 
 #### Gotchas seen in this session — read before continuing
