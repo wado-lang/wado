@@ -34,6 +34,45 @@ jobs:
       - name: Check out the vendored wasmtime fork (path dependency)
         run: git submodule update --init --depth 1 vendor/wasmtime
 
+      # Reuse the CI target/registry cache (read-only) so building
+      # wado-dev-tools for the changelog-format step below is cheap.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
+
       - uses: Songmu/tagpr@v1
+        id: tagpr
         env:
           GITHUB_TOKEN: "${{ steps.app-token.outputs.token }}"
+
+      # tagpr writes CHANGELOG.md with no blank line after the release heading,
+      # which `wado-dev-tools format-md` (dprint) inserts. Left alone, the Tidy
+      # workflow pushes a follow-up `chore: tidy` to every release PR, which
+      # retriggers all of CI. Format the changelog here, on the release branch
+      # tagpr just pushed, so the PR lands tidy. This can't live in .tagpr:
+      # postVersionCommand runs before tagpr generates the changelog. Only runs
+      # on the PR-maintenance path (pull_request output set), not on tag pushes.
+      - name: Format the release changelog
+        if: steps.tagpr.outputs.pull_request != ''
+        env:
+          GH_TOKEN: "${{ steps.app-token.outputs.token }}"
+          APP_SLUG: "${{ steps.app-token.outputs.app-slug }}"
+          TAGPR_PR: "${{ steps.tagpr.outputs.pull_request }}"
+        run: |
+          set -e
+          branch=$(jq -r .head.ref <<<"$TAGPR_PR")
+          git fetch origin "$branch"
+          git checkout "$branch"
+          git submodule update --init --depth 1 vendor/wasmtime
+          cargo run -p wado-dev-tools --quiet -- format-md CHANGELOG.md
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "CHANGELOG.md already formatted; nothing to do."
+            exit 0
+          fi
+          user_id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "chore: format CHANGELOG.md"
+          git push origin "HEAD:$branch"
