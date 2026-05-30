@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2458 / 2664 fixtures passing under
+      suite reaches **2495 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 206 remaining failures are all reify-specific). The
+      so the 169 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -588,11 +588,44 @@ Landed:
     `scrutinee_enum_case_index`, `scrutinee_has_variant_case`,
     `reify_nullary_variant_case`, and both `TirPattern::Enum`
     constructions now peel references and store the peeled `enum_type`.
+17. **Abstract `T::method()` static-call dispatch replay.** A call
+    through an abstract type parameter (`T::read()`,
+    `T::from_str_range()` inside `fn f<T: Bound>()`) is resolved by
+    `resolve_type_param_static_call` into a `Call` whose `method_info`
+    carries `is_type_param_receiver = true`, so monomorphization rewrites
+    `T` to the concrete type at each instantiation. reify had no
+    trait-bound context to reconstruct this and emitted a bare
+    `name="T::read"` call that never resolved at WIR build. annotate now
+    records the resolved `FunctionRef` on `static_method_dispatch` keyed
+    by the CallExpr id (collision-free with StaticMethodCall ids), and
+    reify's existing `static_method_dispatch` replay arm picks it up.
+18. **Inferred method-level type args on MethodCall nodes.** The
+    monomorphizer's instantiation-site collector keys off a `MethodCall`
+    node's `type_args` to queue `Struct^Trait::method<Args>` instances.
+    reify populated that field only from the syntactic turbofish, so a
+    call whose method type params are inferred from argument types
+    (`c.transform(42)` infers `T = i32`) reached WIR with empty
+    `type_args`, no instance was generated, and the call was unresolved.
+    reify now falls back to the inferred args the elaborator baked into
+    the recorded `FunctionRef.monomorph_info.method_type_args`.
+19. **`Self` / `Self::Assoc` nested in generic / tuple types.**
+    `resolve_type_with_self` substituted bare `Self` and a top-level
+    `Self::Assoc` projection (and through references), but a projection
+    nested inside a generic application or tuple — `Option<Self::Item>`,
+    `Result<T, Self::Error>`, `[Self::Item, bool]` — fell to the static
+    resolver, which has no self/assoc context and produced `unknown`. An
+    impl method `fn get(&self) -> Option<Self::Item>` therefore reified
+    its return as `Option<unknown>`; the monomorphized instance "still
+    contained a type param" and `wir_build::register_methods` skipped it,
+    leaving `Box_<i32>^Container::get` (and `GenericMapIter<…>^Iterator::next`)
+    unresolved. reify now rebuilds generic / tuple types from
+    self-substituted argument ids when an argument mentions `Self`
+    (self-free types keep the proven static path).
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2458
-/ 2664** under `WADO_REIFY=1`; 206 reify-specific failures across 113
+Largest first, by fixture-name prefix (after the landings above). **2495
+/ 2664** under `WADO_REIFY=1`; 169 reify-specific failures across 93
 unique fixtures remain:
 
 - **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
@@ -607,10 +640,15 @@ unique fixtures remain:
   reify interns a structurally-identical type with a different `TypeId`
   (or a null-vs-non-null ref) than production, surfacing only at Wasm
   validation.
-- **serde_json (~4), type_param / trait_default / trait_generic (~8),
-  iterator_generic (~3), match_or (~2), cross_module (~2)** and smaller
-  tails (variadic, tuple_name, namespace_import, wasi_clocks,
-  closure_fn, …).
+- **serde (~6).** `serde_json_*` (large_int, scientific_notation,
+  string_escape) and `serde_serialize_variant` are runtime
+  value/format mismatches (e.g. double-escaped `\"` in the serialized
+  string), not compile failures — narrow numeric/string-formatting edge
+  cases.
+- Smaller tails: **wasi_clocks (2), tuple_name (2), namespace_import (2),
+  match_or (2), httpbin_server (2), cross_module (2), closure_fn (2)**,
+  and assorted single fixtures (variant_qualified, variadic_*,
+  wasm_name, wasi_filesystem, …).
 
 <!-- superseded: the CM binding cluster below is resolved by landings
 11-12; kept for the original diagnosis trail. -->
