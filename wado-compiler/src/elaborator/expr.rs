@@ -1156,6 +1156,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let type_id = self
                 .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &resolved_args)
                 .unwrap_or(TypeTable::UNKNOWN);
+            self.record_func_ref_instantiation(ident.id, &resolved_args, type_id);
             return TirExpr::new(
                 TirExprKind::FuncRef {
                     module_source,
@@ -1190,6 +1191,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let type_id = self
                         .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &inferred)
                         .unwrap_or(TypeTable::UNKNOWN);
+                    self.record_func_ref_instantiation(ident.id, &inferred, type_id);
                     return TirExpr::new(
                         TirExprKind::FuncRef {
                             module_source,
@@ -1224,6 +1226,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: ident.span,
         });
         TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
+    }
+
+    /// Record the resolved type arguments and instance type of a generic
+    /// function-reference identifier so reify can rebuild the same
+    /// `FuncRef { type_args }`. Without the recorded args reify would emit
+    /// `FuncRef { type_args: [] }`, leaving the name unmangled after
+    /// monomorphization and tripping the `lower::closure` invariant
+    /// ("`FuncRef` should be wrapped in a Closure"). Non-generic references
+    /// pass an empty `type_args` and are skipped — they need no record.
+    fn record_func_ref_instantiation(
+        &mut self,
+        ident_id: AstId,
+        type_args: &[TypeId],
+        instance_type: TypeId,
+    ) {
+        if type_args.is_empty() {
+            return;
+        }
+        self.sem.types.generic_instantiations.insert(
+            ident_id,
+            super::sem::types::GenericInstantiation {
+                type_args: type_args.to_vec(),
+                instance_type,
+            },
+        );
     }
 
     /// Look up the AST [`ast::Function`], defining module, and the name the
@@ -2698,62 +2725,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 match parse_result {
                     Ok(value) => {
-                        // If value fits in u64/i64, use the cheaper from_u64/from_i64
-                        let use_small = if name == "u128" {
-                            u64::try_from(value).is_ok()
-                        } else {
-                            i64::try_from(value).is_ok()
-                        };
-
-                        if use_small {
-                            let (inner_type, method_name, store_value) = if name == "u128" {
-                                (
-                                    TypeTable::U64,
-                                    "from_u64",
-                                    u64::try_from(value).expect("value fits in u64"),
-                                )
-                            } else {
-                                (
-                                    TypeTable::I64,
-                                    "from_i64",
-                                    i64::try_from(value)
-                                        .expect("value fits in i64")
-                                        .cast_unsigned(),
-                                )
-                            };
-
-                            let inner_literal = TirExpr::new(
-                                TirExprKind::IntLiteral {
-                                    value: store_value,
-                                    repr: repr.clone(),
-                                },
-                                inner_type,
-                                lit.span,
-                            );
-
-                            let method_info =
-                                LocalMethodName::new(name.clone(), None, method_name.to_string());
-                            let mangled_func_name = method_info.to_mangled_name();
-
-                            return TirExpr::new(
-                                TirExprKind::Call {
-                                    func: FunctionRef {
-                                        module_source: ModuleSource::int128(),
-                                        name: mangled_func_name,
-                                        monomorph_info: None,
-                                        method_info: Some(method_info),
-                                    },
-                                    type_args: vec![],
-                                    args: vec![CallArg::new(inner_literal, false)],
-                                },
-                                target_type,
-                                cast.span,
-                            );
-                        }
-
-                        // Value doesn't fit in u64/i64, use from_pair
-                        let (low, high) = util::unpack_i128(value);
-                        return self.build_from_pair_call(name, low, high, target_type, cast.span);
+                        return super::coercion::build_int128_literal_call(
+                            name,
+                            value,
+                            repr,
+                            true,
+                            target_type,
+                            cast.span,
+                        );
                     }
                     Err(_) => {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
@@ -2775,8 +2754,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Parse the negated value directly using Rust's i128
                 let negated_repr = format!("-{repr}");
                 if let Ok(value) = util::parse_i128_literal(&negated_repr) {
-                    let (low, high) = util::unpack_i128(value);
-                    return self.build_from_pair_call(name, low, high, target_type, unary.span);
+                    return super::coercion::build_int128_literal_call(
+                        name,
+                        value,
+                        repr,
+                        false,
+                        target_type,
+                        unary.span,
+                    );
                 }
                 let _ = self.logger.error(TypeError::InvalidLiteral {
                     message: format!("invalid i128 literal: -{repr}"),
@@ -2792,14 +2777,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.tysys.type_table.borrow().is_integer(source_type)
                 || self.tysys.type_table.borrow().is_float(source_type)
             {
-                // Determine intermediate type and method based on target
-                let (intermediate_type, method_name) = if name == "u128" {
-                    (TypeTable::U64, "from_u64")
+                let intermediate_type = if name == "u128" {
+                    TypeTable::U64
                 } else {
-                    (TypeTable::I64, "from_i64")
+                    TypeTable::I64
                 };
 
-                // Cast the expression to intermediate type first
+                // Cast the expression to intermediate type first, then
+                // `name::from_u64/from_i64(expr as u64/i64)`.
                 let casted_expr = TirExpr::new(
                     TirExprKind::Cast {
                         expr: Box::new(expr_resolved),
@@ -2809,22 +2794,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     cast.span,
                 );
 
-                // Build static call: u128::from_u64(expr as u64)
-                // Note: i128/u128 are defined in core:prelude/int128
-                let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
-                let mangled_func_name = method_info.to_mangled_name();
-
-                return TirExpr::new(
-                    TirExprKind::Call {
-                        func: FunctionRef {
-                            module_source: ModuleSource::int128(),
-                            name: mangled_func_name,
-                            monomorph_info: None,
-                            method_info: Some(method_info),
-                        },
-                        type_args: vec![],
-                        args: vec![CallArg::new(casted_expr, false)],
-                    },
+                return super::coercion::build_int128_from_intermediate(
+                    name,
+                    casted_expr,
                     target_type,
                     cast.span,
                 );

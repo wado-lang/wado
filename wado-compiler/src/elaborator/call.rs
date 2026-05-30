@@ -9,7 +9,6 @@ use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable,
 };
-use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
@@ -616,7 +615,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let crate::tir::TirExprKind::Call {
                     func,
                     args: tir_args,
-                    ..
+                    type_args: tir_type_args,
                 } = &tir_call.kind
                 {
                     let func_ref = func.clone();
@@ -626,6 +625,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         super::sem::types::StaticMethodDispatch {
                             function_ref: func_ref,
                             param_is_mut,
+                            type_args: tir_type_args.clone(),
                         },
                     );
                 }
@@ -1139,6 +1139,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
         }
+        // Record the resolved param types so reify can replay per-argument
+        // expected types (closure-literal coercion to a fn-typed param).
+        if !check_param_types.is_empty() {
+            self.record_call_param_types(call.id, check_param_types.clone());
+        }
 
         let param_is_mut = self.lookup_function_param_is_mut(&call.callee);
         let call_args: Vec<CallArg> = args
@@ -1165,6 +1170,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::StaticMethodDispatch {
                 function_ref: func_ref.clone(),
                 param_is_mut,
+                type_args: type_args.clone(),
             },
         );
         TirExpr::new(
@@ -1675,59 +1681,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .make_compiler_struct(crate::compiler_item::CompilerItem::String)
-    }
-
-    /// Build a `from_pair` call for i128/u128 large literal construction
-    pub(super) fn build_from_pair_call(
-        &self,
-        type_name: &str,
-        low: u64,
-        high: i64,
-        target_type: TypeId,
-        span: Span,
-    ) -> TirExpr {
-        let low_literal = TirExpr::new(
-            TirExprKind::IntLiteral {
-                value: low,
-                repr: low.to_string(),
-            },
-            TypeTable::U64,
-            span,
-        );
-        let high_literal = TirExpr::new(
-            TirExprKind::IntLiteral {
-                value: high.cast_unsigned(),
-                repr: high.to_string(),
-            },
-            if type_name == "u128" {
-                TypeTable::U64
-            } else {
-                TypeTable::I64
-            },
-            span,
-        );
-
-        let method_info =
-            LocalMethodName::new(type_name.to_string(), None, "from_pair".to_string());
-        let mangled_func_name = method_info.to_mangled_name();
-
-        TirExpr::new(
-            TirExprKind::Call {
-                func: FunctionRef {
-                    module_source: ModuleSource::int128(),
-                    name: mangled_func_name,
-                    monomorph_info: None,
-                    method_info: Some(method_info),
-                },
-                type_args: vec![],
-                args: vec![
-                    CallArg::new(low_literal, false),
-                    CallArg::new(high_literal, false),
-                ],
-            },
-            target_type,
-            span,
-        )
     }
 
     /// Get the return type of a builtin function
@@ -2831,14 +2784,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
             };
 
+            let func_ref = FunctionRef {
+                module_source: self.current_module_source.clone(),
+                name: mangled_name,
+                monomorph_info,
+                method_info: Some(method_info),
+            };
+
+            // Record the resolved abstract `T::method(...)` dispatch so
+            // reify can replay the same `Call` without re-running
+            // trait-bound method lookup (reify has no `trait_ctx`). Keyed
+            // by the `CallExpr`'s AstId — distinct from any
+            // `StaticMethodCallExpr` id, so reusing `static_method_dispatch`
+            // is collision-free. Args here carry no `is_mut` (the
+            // production builder below uses all-false `CallArg`s).
+            self.sem.types.static_method_dispatch.insert(
+                call.id,
+                super::sem::types::StaticMethodDispatch {
+                    function_ref: func_ref.clone(),
+                    param_is_mut: vec![false; args.len()],
+                    type_args: vec![],
+                },
+            );
+
             return TirExpr::new(
                 TirExprKind::Call {
-                    func: FunctionRef {
-                        module_source: self.current_module_source.clone(),
-                        name: mangled_name,
-                        monomorph_info,
-                        method_info: Some(method_info),
-                    },
+                    func: func_ref,
                     type_args: vec![],
                     args: args
                         .iter()

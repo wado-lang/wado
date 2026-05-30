@@ -1491,14 +1491,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_reference_to_decl(static_call.method_id, &struct_module, method_ast_id);
         }
 
+        let func_ref = FunctionRef {
+            module_source: struct_module,
+            name: mangled_func_name,
+            monomorph_info,
+            method_info: Some(method_info),
+        };
+
+        // Stage 5 (WEP 2026-05-26): record the resolved static-method
+        // call so reify reproduces the same `FunctionRef` (mangled name,
+        // monomorph info, and `cm_name` for CM binding synthesis) without
+        // re-resolving the target type — reify's from-scratch resolution
+        // fails on imported / CM generic targets (`Future::<T>::new`,
+        // `Result::<…>::Ok`), yielding an empty struct name. Keyed on the
+        // `StaticMethodCallExpr`'s own `AstId`; variant-ctor turbofish
+        // shapes are handled by reify before this fact is consulted.
+        self.sem.types.static_method_dispatch.insert(
+            static_call.id,
+            super::sem::types::StaticMethodDispatch {
+                function_ref: func_ref.clone(),
+                param_is_mut: param_is_mut.clone(),
+                type_args: method_type_args.clone(),
+            },
+        );
+
         TirExpr::new(
             TirExprKind::Call {
-                func: FunctionRef {
-                    module_source: struct_module,
-                    name: mangled_func_name,
-                    monomorph_info,
-                    method_info: Some(method_info),
-                },
+                func: func_ref,
                 type_args: method_type_args,
                 args: args
                     .into_iter()

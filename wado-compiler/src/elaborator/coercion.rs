@@ -12,6 +12,7 @@ use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt,
     TirStmtKind, TypeId, TypeTable,
 };
+use crate::token::Span;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Coerce a numeric literal (or negated numeric literal) to the
@@ -259,65 +260,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 match parse_result {
                     Ok(value) => {
-                        // If value fits in u64/i64, use the cheaper from_u64/from_i64
-                        let use_small = if name == "u128" {
-                            u64::try_from(value).is_ok()
-                        } else {
-                            i64::try_from(value).is_ok()
-                        };
-
-                        if use_small {
-                            let (inner_type, method_name, store_value) = if name == "u128" {
-                                (
-                                    TypeTable::U64,
-                                    "from_u64",
-                                    u64::try_from(value).expect("value fits in u64"),
-                                )
-                            } else {
-                                (
-                                    TypeTable::I64,
-                                    "from_i64",
-                                    i64::try_from(value)
-                                        .expect("value fits in i64")
-                                        .cast_unsigned(),
-                                )
-                            };
-
-                            let inner_literal = TirExpr::new(
-                                TirExprKind::IntLiteral {
-                                    value: store_value,
-                                    repr: repr.clone(),
-                                },
-                                inner_type,
-                                lit.span,
-                            );
-
-                            let method_info =
-                                LocalMethodName::new(name, None, method_name.to_string());
-                            let mangled_func_name = method_info.to_mangled_name();
-
-                            return Some(TirExpr::new(
-                                TirExprKind::Call {
-                                    func: FunctionRef {
-                                        module_source: ModuleSource::int128(),
-                                        name: mangled_func_name,
-                                        monomorph_info: None,
-                                        method_info: Some(method_info),
-                                    },
-                                    type_args: vec![],
-                                    args: vec![CallArg::new(inner_literal, false)],
-                                },
-                                target_type,
-                                lit.span,
-                            ));
-                        }
-
-                        // Value doesn't fit in u64/i64, use from_pair
-                        let (low, high) = util::unpack_i128(value);
-                        return Some(self.build_from_pair_call(
+                        return Some(build_int128_literal_call(
                             &name,
-                            low,
-                            high,
+                            value,
+                            repr,
+                            true,
                             target_type,
                             lit.span,
                         ));
@@ -349,11 +296,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 let negated_repr = format!("-{repr}");
                 if let Ok(value) = util::parse_i128_literal(&negated_repr) {
-                    let (low, high) = util::unpack_i128(value);
-                    return Some(self.build_from_pair_call(
+                    return Some(build_int128_literal_call(
                         &name,
-                        low,
-                        high,
+                        value,
+                        repr,
+                        false,
                         target_type,
                         unary.span,
                     ));
@@ -1245,4 +1192,161 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(block_expr)
         }
     }
+}
+
+/// Build the `from_pair` call that materializes a 128-bit value from its
+/// `(low: u64, high: u64/i64)` halves. Pure and `self`-free so the
+/// elaborator's coercion / cast paths and the reify pass produce
+/// byte-identical TIR.
+pub(super) fn build_int128_from_pair(
+    type_name: &str,
+    low: u64,
+    high: i64,
+    target_type: TypeId,
+    span: Span,
+) -> TirExpr {
+    let low_literal = TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: low,
+            repr: low.to_string(),
+        },
+        TypeTable::U64,
+        span,
+    );
+    let high_literal = TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: high.cast_unsigned(),
+            repr: high.to_string(),
+        },
+        if type_name == "u128" {
+            TypeTable::U64
+        } else {
+            TypeTable::I64
+        },
+        span,
+    );
+
+    let method_info = LocalMethodName::new(type_name.to_string(), None, "from_pair".to_string());
+    let mangled_func_name = method_info.to_mangled_name();
+
+    TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef {
+                module_source: ModuleSource::int128(),
+                name: mangled_func_name,
+                monomorph_info: None,
+                method_info: Some(method_info),
+            },
+            type_args: vec![],
+            args: vec![
+                CallArg::new(low_literal, false),
+                CallArg::new(high_literal, false),
+            ],
+        },
+        target_type,
+        span,
+    )
+}
+
+/// Construct the TIR call that materializes an `i128` / `u128` value from
+/// a parsed numeric-literal `value`. Values that fit 64 bits take the
+/// cheaper `from_u64` / `from_i64` path when `allow_small` is set; the
+/// negated `-NUM` shape passes `allow_small = false` so it always uses
+/// `from_pair`, matching the elaborator's historical output. Pure and
+/// `self`-free so both the elaborator and reify build identical TIR.
+pub(super) fn build_int128_literal_call(
+    name: &str,
+    value: i128,
+    repr: &str,
+    allow_small: bool,
+    target_type: TypeId,
+    span: Span,
+) -> TirExpr {
+    let use_small = allow_small
+        && if name == "u128" {
+            u64::try_from(value).is_ok()
+        } else {
+            i64::try_from(value).is_ok()
+        };
+
+    if use_small {
+        let (inner_type, method_name, store_value) = if name == "u128" {
+            (
+                TypeTable::U64,
+                "from_u64",
+                u64::try_from(value).expect("value fits in u64"),
+            )
+        } else {
+            (
+                TypeTable::I64,
+                "from_i64",
+                i64::try_from(value)
+                    .expect("value fits in i64")
+                    .cast_unsigned(),
+            )
+        };
+
+        let inner_literal = TirExpr::new(
+            TirExprKind::IntLiteral {
+                value: store_value,
+                repr: repr.to_string(),
+            },
+            inner_type,
+            span,
+        );
+
+        let method_info = LocalMethodName::new(name.to_string(), None, method_name.to_string());
+        let mangled_func_name = method_info.to_mangled_name();
+
+        return TirExpr::new(
+            TirExprKind::Call {
+                func: FunctionRef {
+                    module_source: ModuleSource::int128(),
+                    name: mangled_func_name,
+                    monomorph_info: None,
+                    method_info: Some(method_info),
+                },
+                type_args: vec![],
+                args: vec![CallArg::new(inner_literal, false)],
+            },
+            target_type,
+            span,
+        );
+    }
+
+    let (low, high) = util::unpack_i128(value);
+    build_int128_from_pair(name, low, high, target_type, span)
+}
+
+/// Build `u128::from_u64(inner)` / `i128::from_i64(inner)` for the
+/// general (non-literal) `expr as i128/u128` cast path. `intermediate`
+/// is the source expression already cast to the `u64` / `i64` width.
+/// Pure and `self`-free so the elaborator and reify stay in lockstep.
+pub(super) fn build_int128_from_intermediate(
+    name: &str,
+    intermediate: TirExpr,
+    target_type: TypeId,
+    span: Span,
+) -> TirExpr {
+    let method_name = if name == "u128" {
+        "from_u64"
+    } else {
+        "from_i64"
+    };
+    let method_info = LocalMethodName::new(name.to_string(), None, method_name.to_string());
+    let mangled_func_name = method_info.to_mangled_name();
+    TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef {
+                module_source: ModuleSource::int128(),
+                name: mangled_func_name,
+                monomorph_info: None,
+                method_info: Some(method_info),
+            },
+            type_args: vec![],
+            args: vec![CallArg::new(intermediate, false)],
+        },
+        target_type,
+        span,
+    )
 }

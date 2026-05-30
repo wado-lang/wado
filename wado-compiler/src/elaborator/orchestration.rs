@@ -2486,125 +2486,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_table: &mut TypeTable,
         lookup: &TypeLookup<'_>,
     ) -> TypeId {
-        match ty {
-            Type::Named(named) => {
-                // Check newtypes first
-                if let Some(alias_type_id) = lookup.newtype(&named.name) {
-                    return alias_type_id;
-                }
-
-                // Built-in primitives
-                match named.name.as_str() {
-                    "bool" => TypeTable::BOOL,
-                    "char" => TypeTable::CHAR,
-                    "v128" => TypeTable::V128,
-                    "i8" => TypeTable::I8,
-                    "i16" => TypeTable::I16,
-                    "i32" => TypeTable::I32,
-                    "i64" => TypeTable::I64,
-                    "u8" => TypeTable::U8,
-                    "u16" => TypeTable::U16,
-                    "u32" => TypeTable::U32,
-                    "u64" => TypeTable::U64,
-                    "f32" => TypeTable::F32,
-                    "f64" => TypeTable::F64,
-                    "()" => TypeTable::UNIT,
-                    "!" => TypeTable::NEVER,
-                    _ => {
-                        // Use canonical name from info (not alias) for consistent TypeId interning
-                        if let Some(info) = lookup.struct_fields(&named.name) {
-                            type_table.make_struct(info.name.clone(), info.module_source.clone())
-                        } else if let Some(info) = lookup.resource_type(&named.name) {
-                            type_table.make_resource(info.name.clone(), info.module_source.clone())
-                        } else if let Some(info) = lookup.variant_case(&named.name) {
-                            type_table.make_variant(info.name.clone(), info.module_source.clone())
-                        } else if let Some(info) = lookup.enum_case(&named.name) {
-                            type_table.make_enum(info.name.clone(), info.module_source.clone())
-                        } else {
-                            // Flags are newtypes over u32 and should be picked up by the
-                            // newtype branch above; this catches unknown names too.
-                            TypeTable::UNKNOWN
-                        }
-                    }
-                }
-            }
-            Type::Generic(generic) => match generic.name.as_str() {
-                "Option" if !generic.args.is_empty() => {
-                    let inner = Self::resolve_type_static(&generic.args[0], type_table, lookup);
-                    type_table.make_option(inner)
-                }
-                _ => {
-                    // Check if it's a generic struct type
-                    if let Some(info) = lookup.struct_fields(&generic.name) {
-                        let module_source = info.module_source.clone();
-                        let type_args: Vec<TypeId> = generic
-                            .args
-                            .iter()
-                            .map(|arg| Self::resolve_type_static(arg, type_table, lookup))
-                            .collect();
-                        type_table.make_generic_instance(
-                            generic.name.clone(),
-                            module_source,
-                            type_args,
-                        )
-                    } else {
-                        TypeTable::UNKNOWN
-                    }
-                }
-            },
-            Type::Reference(inner) => {
-                let inner_type = Self::resolve_type_static(inner, type_table, lookup);
-                type_table.make_ref(inner_type)
-            }
-            Type::MutReference(inner) => {
-                let inner_type = Self::resolve_type_static(inner, type_table, lookup);
-                type_table.make_mut_ref(inner_type)
-            }
-            Type::NamespacedGeneric(namespaced) => {
-                // Handle builtin::array<T>
-                if namespaced.namespace == "builtin"
-                    && namespaced.name == "array"
-                    && let Some(elem_ty) = namespaced.args.first()
-                {
-                    let elem = Self::resolve_type_static(elem_ty, type_table, lookup);
-                    return type_table.make_builtin_array(elem);
-                }
-                TypeTable::UNKNOWN
-            }
-            Type::Tuple(elements) => {
-                let elem_types: Vec<TypeId> = elements
-                    .iter()
-                    .map(|e| Self::resolve_type_static(e, type_table, lookup))
-                    .collect();
-                type_table.make_tuple(elem_types)
-            }
-            Type::Function(func_ty) => {
-                // Resolve param / return types statically so that cross-module
-                // consumers of `all_struct_fields` (e.g. the CM-boundary
-                // closure check at item.rs) see a real `ResolvedType::Function`
-                // rather than `UNKNOWN`. Effects/stores get resolved later when
-                // a per-function scope exists; for this static pre-pass an
-                // empty effect set is fine because callers only read
-                // shape-level information (is the field a closure type?).
-                let params: Vec<TypeId> = func_ty
-                    .params
-                    .iter()
-                    .map(|p| Self::resolve_type_static(p, type_table, lookup))
-                    .collect();
-                let return_type =
-                    Self::resolve_type_static(&func_ty.return_type, type_table, lookup);
-                type_table.make_function_with_mut(
-                    func_ty.is_mut,
-                    params,
-                    return_type,
-                    Vec::new(),
-                    Vec::new(),
-                )
-            }
-            // TODO: ClosureType, etc. are not yet handled — returning UNKNOWN
-            // causes stale/wrong TypeIds in all_struct_fields when used as struct field types.
-            _ => TypeTable::UNKNOWN,
-        }
+        // Delegate to the type-param-aware resolver with an empty scope.
+        // Keeping a single implementation avoids the two arms drifting:
+        // `resolve_type_static` previously lacked the generic
+        // resource / variant / enum handling, so a struct field typed
+        // `Stream<u8>` / `Result<T, E>` resolved to `UNKNOWN`.
+        Self::resolve_type_static_with_params(ty, type_table, lookup, &[])
     }
 
     /// Static version of `resolve_type` with type parameters for variant payload resolution.
@@ -2671,20 +2558,80 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     type_table.make_option(inner)
                 }
                 _ => {
-                    if let Some(info) = lookup.struct_fields(&generic.name) {
-                        let module_source = info.module_source.clone();
-                        let type_args: Vec<TypeId> = generic
-                            .args
-                            .iter()
-                            .map(|arg| {
-                                Self::resolve_type_static_with_params(
-                                    arg,
-                                    type_table,
-                                    lookup,
-                                    type_params,
-                                )
-                            })
-                            .collect();
+                    let type_args: Vec<TypeId> = generic
+                        .args
+                        .iter()
+                        .map(|arg| {
+                            Self::resolve_type_static_with_params(
+                                arg,
+                                type_table,
+                                lookup,
+                                type_params,
+                            )
+                        })
+                        .collect();
+                    // A generic newtype (`type MyArray<T> = Array<T>`)
+                    // resolves to a `Newtype` over the instantiated base,
+                    // mirroring `type_resolution.rs:418`. Without this it
+                    // falls through to `UNKNOWN`, the newtype's inherited
+                    // base methods (`MyArray<i32>::len` → `Array<i32>::len`)
+                    // never resolve, and monomorphization can't reach them.
+                    if let Some(gn_info) = lookup.generic_newtype(&generic.name).cloned() {
+                        let concrete_base = super::type_resolution::substitute_type_params(
+                            &gn_info.base_type_ast,
+                            &gn_info.type_params,
+                            &generic.args,
+                        );
+                        let base_type_id = Self::resolve_type_static_with_params(
+                            &concrete_base,
+                            type_table,
+                            lookup,
+                            type_params,
+                        );
+                        let arg_names: Vec<String> =
+                            type_args.iter().map(|&t| type_table.type_name(t)).collect();
+                        let display_name = format!("{}<{}>", generic.name, arg_names.join(", "));
+                        return type_table.make_newtype(
+                            display_name,
+                            gn_info.module_source,
+                            base_type_id,
+                        );
+                    }
+                    // A generic resource (`Stream<u8>`, `Future<T>`) must
+                    // resolve to a `GenericResource`, not a
+                    // `GenericInstance` — otherwise the resource-store
+                    // inference (effect_check `signature_resources`) does
+                    // not see the resource a signature implies, and
+                    // `consume(rx: Stream<u8>)` fails with
+                    // `missing resource 'Stream'`.
+                    if let Some(info) = lookup.resource_type(&generic.name) {
+                        return type_table.intern(ResolvedType::GenericResource {
+                            name: generic.name.clone(),
+                            module_source: info.module_source.clone(),
+                            type_args,
+                        });
+                    }
+                    // A generic application `Name<args...>` may name a
+                    // struct, a variant (`Result<T, E>`), or an enum. The
+                    // `Type::Named` arm above already checks all three; the
+                    // generic arm must too, otherwise generic variants /
+                    // enums resolve to `UNKNOWN`. `make_generic_instance`
+                    // is name-based, so the same call shape works for every
+                    // kind.
+                    let module_source = lookup
+                        .struct_fields(&generic.name)
+                        .map(|info| info.module_source.clone())
+                        .or_else(|| {
+                            lookup
+                                .variant_case(&generic.name)
+                                .map(|info| info.module_source.clone())
+                        })
+                        .or_else(|| {
+                            lookup
+                                .enum_case(&generic.name)
+                                .map(|info| info.module_source.clone())
+                        });
+                    if let Some(module_source) = module_source {
                         type_table.make_generic_instance(
                             generic.name.clone(),
                             module_source,

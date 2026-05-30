@@ -584,6 +584,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         );
     }
 
+    /// Record the resolved (type-arg-substituted) parameter types for the
+    /// call at `ast_id`, so reify can replay per-argument expected types.
+    pub(super) fn record_call_param_types(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        param_types: Vec<TypeId>,
+    ) {
+        self.sem.types.call_param_types.insert(ast_id, param_types);
+    }
+
     /// Record the capture-analysis result for the closure expression at
     /// `ast_id` (Gap 4 of Stage 5). See [`sem::types::ClosureCaptureInfo`].
     pub(super) fn record_closure_captures(
@@ -1428,12 +1438,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 })
                             })
                             .collect();
+                        // Concrete type args of the impl's trait reference
+                        // (`impl Future<i32>` → `[i32]`), resolved in the
+                        // impl's type-param scope so generic impls
+                        // round-trip their `TypeParam` ids. Mirrors
+                        // `item.rs:1621`.
+                        let trait_type_args: Vec<crate::tir::TypeId> = match &impl_block.trait_type
+                        {
+                            Some(ast::Type::Generic(generic)) => generic
+                                .args
+                                .iter()
+                                .map(|arg| self.resolve_type(arg))
+                                .collect(),
+                            _ => Vec::new(),
+                        };
                         self.record_impl_facts(
                             impl_block.id,
                             sem::types::ImplFacts {
                                 self_type,
                                 trait_name_mangled: trait_name.clone(),
                                 trait_canonical,
+                                trait_type_args,
                                 impl_type_params: impl_type_params_tir,
                                 assoc_type_bindings: self.trait_ctx.assoc_type_bindings.clone(),
                                 is_handler_method,

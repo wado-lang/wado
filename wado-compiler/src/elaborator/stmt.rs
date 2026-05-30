@@ -2014,35 +2014,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         qualifier: Option<&Type>,
         const_name: &str,
     ) -> Option<i128> {
-        let ty_name = match qualifier? {
-            Type::Named(named) => named.name.as_str(),
-            Type::Generic(generic) => generic.name.as_str(),
-            Type::NamespacedGeneric(namespaced) => namespaced.name.as_str(),
-            Type::Function(_)
-            | Type::Tuple(_)
-            | Type::Reference(_)
-            | Type::MutReference(_)
-            | Type::TypePackSpread(_, _) => return None,
-        };
-        match (ty_name, const_name) {
-            ("i8", "MAX") => Some(i128::from(i8::MAX)),
-            ("i8", "MIN") => Some(i128::from(i8::MIN)),
-            ("i16", "MAX") => Some(i128::from(i16::MAX)),
-            ("i16", "MIN") => Some(i128::from(i16::MIN)),
-            ("i32", "MAX") => Some(i128::from(i32::MAX)),
-            ("i32", "MIN") => Some(i128::from(i32::MIN)),
-            ("i64", "MAX") => Some(i128::from(i64::MAX)),
-            ("i64", "MIN") => Some(i128::from(i64::MIN)),
-            ("u8", "MAX") => Some(i128::from(u8::MAX)),
-            ("u8", "MIN") => Some(i128::from(u8::MIN)),
-            ("u16", "MAX") => Some(i128::from(u16::MAX)),
-            ("u16", "MIN") => Some(i128::from(u16::MIN)),
-            ("u32", "MAX") => Some(i128::from(u32::MAX)),
-            ("u32", "MIN") => Some(i128::from(u32::MIN)),
-            ("u64", "MAX") => Some(i128::from(u64::MAX)),
-            ("u64", "MIN") => Some(i128::from(u64::MIN)),
-            _ => None,
-        }
+        primitive_assoc_const_to_i128(qualifier, const_name)
     }
 
     /// Get payload type for a variant case, substituting type parameters if needed
@@ -3391,7 +3363,7 @@ fn collect_ast_pattern_binding_ids(
 }
 
 /// Collect binding names, local indices, and types from a TIR pattern for or-pattern validation.
-fn collect_pattern_bindings_with_index(
+pub(super) fn collect_pattern_bindings_with_index(
     pattern: &TirPattern,
 ) -> Vec<(String, u32, crate::tir::TypeId)> {
     let mut bindings = Vec::new();
@@ -3441,7 +3413,7 @@ fn collect_pattern_bindings_with_index_inner(
 }
 
 /// Remap a specific `local_index` in a pattern to a new value.
-fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) {
+pub(super) fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) {
     match pattern {
         TirPattern::Binding { local_index, .. } => {
             if *local_index == from {
@@ -3473,5 +3445,45 @@ fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) {
         | TirPattern::Enum { .. }
         | TirPattern::ConstantValue { .. }
         | TirPattern::Range { .. } => {}
+    }
+}
+
+/// Resolve a primitive type's builtin associated constant (`i32::MIN`,
+/// `u8::MAX`, …) to its `i128` value. Pure and `self`-free so both the
+/// elaborator's pattern lowering and the reify pass share one source of
+/// truth for the range-endpoint / const-pattern paths. Returns `None`
+/// for non-primitive qualifiers or unknown const names.
+pub(super) fn primitive_assoc_const_to_i128(
+    qualifier: Option<&Type>,
+    const_name: &str,
+) -> Option<i128> {
+    let ty_name = match qualifier? {
+        Type::Named(named) => named.name.as_str(),
+        Type::Generic(generic) => generic.name.as_str(),
+        Type::NamespacedGeneric(namespaced) => namespaced.name.as_str(),
+        Type::Function(_)
+        | Type::Tuple(_)
+        | Type::Reference(_)
+        | Type::MutReference(_)
+        | Type::TypePackSpread(_, _) => return None,
+    };
+    match (ty_name, const_name) {
+        ("i8", "MAX") => Some(i128::from(i8::MAX)),
+        ("i8", "MIN") => Some(i128::from(i8::MIN)),
+        ("i16", "MAX") => Some(i128::from(i16::MAX)),
+        ("i16", "MIN") => Some(i128::from(i16::MIN)),
+        ("i32", "MAX") => Some(i128::from(i32::MAX)),
+        ("i32", "MIN") => Some(i128::from(i32::MIN)),
+        ("i64", "MAX") => Some(i128::from(i64::MAX)),
+        ("i64", "MIN") => Some(i128::from(i64::MIN)),
+        ("u8", "MAX") => Some(i128::from(u8::MAX)),
+        ("u8", "MIN") => Some(i128::from(u8::MIN)),
+        ("u16", "MAX") => Some(i128::from(u16::MAX)),
+        ("u16", "MIN") => Some(i128::from(u16::MIN)),
+        ("u32", "MAX") => Some(i128::from(u32::MAX)),
+        ("u32", "MIN") => Some(i128::from(u32::MIN)),
+        ("u64", "MAX") => Some(i128::from(u64::MAX)),
+        ("u64", "MIN") => Some(i128::from(u64::MIN)),
+        _ => None,
     }
 }

@@ -17,7 +17,7 @@
 //! range are emitted as `i128::from_pair(lo, hi)` /
 //! `u128::from_pair(lo, hi)` so the full 128 bits round-trip — same
 //! split the elaborator uses for source-level literals (see
-//! `elaborator::util::unpack_i128`, `elaborator::call::build_from_pair_call`).
+//! `elaborator::util::unpack_i128`, `elaborator::coercion::build_int128_from_pair`).
 //!
 //! The struct, module source, and method names are all resolved
 //! through the `CompilerItem` registry so a stdlib rename of `i128`,

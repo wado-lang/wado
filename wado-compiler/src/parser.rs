@@ -5178,8 +5178,16 @@ impl Parser {
             span,
         })?;
 
+        // Continue the parent's dense `AstId` space so interpolation
+        // sub-expressions get unique ids: a fresh `Parser` restarts at 0,
+        // and two interpolations (`{a}` and `{b}`) would then collide on
+        // `AstId(0)`, clobbering each other's entries in the per-`AstId`
+        // annotation maps (expression types, method/static dispatch).
         let mut parser = Parser::new(tokens);
-        parser.parse_expr()
+        parser.next_ast_id = self.next_ast_id;
+        let expr = parser.parse_expr()?;
+        self.next_ast_id = parser.next_ast_id;
+        Ok(expr)
     }
 
     /// Parse struct literal: `Point { x: 10, y: 20 }` or `Point { x, y }` (shorthand)

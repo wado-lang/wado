@@ -1194,6 +1194,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .function_effects
             .insert(func.id, effects.clone());
 
+        // Stage 5: an async function's wasm return type is erased to
+        // `()`; record the declared (pre-erasure) return type so reify
+        // can set `task_return_type` for resource-store inference.
+        if func.is_async {
+            scope
+                .sem
+                .types
+                .function_task_returns
+                .insert(func.id, declared_return_type);
+        }
+
         // Restore effect params scope
         scope.current_effect_params = old_effect_params;
         scope.current_effect_param_decls = old_effect_param_decls;

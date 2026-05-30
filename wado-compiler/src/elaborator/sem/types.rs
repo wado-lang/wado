@@ -129,9 +129,7 @@ pub(crate) enum CoercionKind {
 /// type. See [`CoercionKind`] for the variants.
 #[derive(Clone)]
 pub(crate) struct CoercionChoice {
-    #[allow(dead_code)]
     pub(crate) kind: CoercionKind,
-    #[allow(dead_code)]
     pub(crate) target_type: TypeId,
 }
 
@@ -182,6 +180,13 @@ pub(crate) struct TypeAnnotations {
     /// Stage 5). Keyed by the [`crate::ast::ClosureExpr`]'s [`AstId`].
     /// See [`ClosureCaptureInfo`].
     pub(crate) closure_captures: IndexMap<AstId, ClosureCaptureInfo>,
+    /// Resolved (type-arg-substituted) parameter types for a free /
+    /// imported function call, keyed by the call expression's [`AstId`].
+    /// Reify uses these to drive per-argument expected types — chiefly so
+    /// a closure-literal argument coerced to a `fn`-typed (or `fn`-newtype)
+    /// parameter sees the function signature, inferring unannotated closure
+    /// params and producing the functor specialization the call site needs.
+    pub(crate) call_param_types: IndexMap<AstId, Vec<TypeId>>,
     /// Power-assert capture-slot map for each assert statement (Gap 5
     /// of Stage 5). Keyed by the [`crate::ast::AssertStmt`]'s [`AstId`].
     /// See [`AssertCaptureInfo`].
@@ -243,6 +248,15 @@ pub(crate) struct TypeAnnotations {
     /// reproduce faithfully).
     #[allow(dead_code)]
     pub(crate) function_effects: IndexMap<AstId, Vec<crate::tir::EffectRef>>,
+    /// Declared (pre-erasure) return [`TypeId`] for every `async`
+    /// function / method, keyed by the function's [`AstId`]. An async
+    /// function's wasm-level `return_type` is erased to `()` (the value
+    /// travels via `task return`), so reify cannot recover the real type
+    /// from `function_return_types` (which records the erased unit).
+    /// reify reads this to set `TirFunction::task_return_type` — needed
+    /// for resource-store inference over the return type (e.g. an async
+    /// `handle` returning `Result<Response, _>` must surface `Response`).
+    pub(crate) function_task_returns: IndexMap<AstId, TypeId>,
     /// Resolved static-method call dispatch
     /// (`Type::method(args)` / `builtin::fn(args)` shape) recorded by
     /// the body walk. Keyed by the [`crate::ast::CallExpr`]'s [`AstId`].
@@ -371,6 +385,16 @@ pub(crate) struct StaticMethodDispatch {
     /// with the reified argument exprs to build [`crate::tir::CallArg`]s
     /// with the same `is_mut` shape annotate produced.
     pub(crate) param_is_mut: Vec<bool>,
+    /// The exact `type_args` the production builder put on the resulting
+    /// `TirExprKind::Call`. For a static method on a generic struct the
+    /// impl (struct) type args live in `function_ref.monomorph_info`, so
+    /// this list carries only the method-level type args (often empty);
+    /// for a free generic function it carries the function's type args.
+    /// Reify replays this verbatim instead of re-deriving from
+    /// `generic_instantiations`, which would (wrongly) feed the impl args
+    /// in as method-level type args and mangle `Container<i32>::make` as
+    /// `Container::make<i32>`.
+    pub(crate) type_args: Vec<crate::tir::TypeId>,
 }
 
 /// Generic-instantiation decision recorded by the body walk at a call,
@@ -539,6 +563,14 @@ pub(crate) struct ImplFacts {
     /// and disambiguates two modules' same-named traits in the
     /// `trait_env` dispatch indices.
     pub(crate) trait_canonical: Option<(crate::module_source::ModuleSource, String)>,
+    /// Concrete `TypeId`s of the trait/resource type arguments at the
+    /// impl site (`impl Future<i32> for …` → `[i32]`; `impl<T> Stream<T>`
+    /// → the impl's `TypeParam` id). Written onto each method's
+    /// `LocalMethodName::trait_type_args`; the effect-dispatch synthesis
+    /// keys its handler index on `(struct, effect_module, base_trait,
+    /// trait_type_args)`, so a generic-effect handler needs the args to
+    /// match the binding's instantiation.
+    pub(crate) trait_type_args: Vec<crate::tir::TypeId>,
     /// `TirTypeParam` projection of the impl's generic params, in
     /// declaration order, with concrete-typed positions skipped
     /// (e.g. `impl<i32, T>` projects only `T`). Written into
