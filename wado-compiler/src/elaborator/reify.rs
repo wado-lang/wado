@@ -281,6 +281,33 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// Resolve a parameter / return type where some type-param names are
+    /// `<F: fn(...)>` bounds, which the elaborator realises eagerly to the
+    /// bound's function type rather than a `TypeParam` slot (item.rs:1569).
+    /// `fn_bounds` maps each such name to its already-resolved function
+    /// `TypeId`; everything else resolves through the normal scope. Without
+    /// this a param typed `F` reifies to `TypeParam(F)` and reaches codegen
+    /// unsubstituted (monomorph only fills real type-param slots).
+    fn resolve_type_with_fn_bounds(
+        &mut self,
+        ty: &ast::Type,
+        type_params: &[String],
+        fn_bounds: &crate::hashmap::IndexMap<String, TypeId>,
+    ) -> TypeId {
+        match ty {
+            ast::Type::Named(n) if fn_bounds.contains_key(&n.name) => fn_bounds[&n.name],
+            ast::Type::Reference(inner) => {
+                let inner_id = self.resolve_type_with_fn_bounds(inner, type_params, fn_bounds);
+                self.tysys.type_table.borrow_mut().make_ref(inner_id)
+            }
+            ast::Type::MutReference(inner) => {
+                let inner_id = self.resolve_type_with_fn_bounds(inner, type_params, fn_bounds);
+                self.tysys.type_table.borrow_mut().make_mut_ref(inner_id)
+            }
+            _ => self.resolve_type_in_scope(ty, type_params),
+        }
+    }
+
     /// Like [`Self::resolve_type`] but with an explicit type-parameter
     /// scope so `T`/`U` in a generic decl's method signature resolve to
     /// the right `TypeParam` slot. Used by `reify_effect_decl` /
@@ -919,11 +946,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ctx.task_return_type = Some(return_type);
         }
 
+        // Real type params only (effect params and `<F: fn(...)>` bounds
+        // are excluded), so the positional indices stay dense and match
+        // the emitted `type_params` and monomorph's substitution keys.
         let type_param_names: Vec<String> = func
             .type_params
             .iter()
-            .filter(|p| !p.is_effect)
+            .filter(|p| !p.is_effect && !p.bounds.iter().any(|b| b.fn_signature.is_some()))
             .map(|p| p.name.clone())
+            .collect();
+
+        // `<F: fn(...)>` bounds → the bound's resolved function type,
+        // realised eagerly (item.rs:1569). The signature references the
+        // real type params, so resolve it in their scope.
+        let fn_bound_map: crate::hashmap::IndexMap<String, TypeId> = func
+            .type_params
+            .iter()
+            .filter_map(|p| {
+                let sig = p.bounds.iter().find_map(|b| b.fn_signature.as_ref())?;
+                let ty = self
+                    .resolve_type_in_scope(&ast::Type::Function(sig.clone()), &type_param_names);
+                Some((p.name.clone(), ty))
+            })
             .collect();
 
         // Publish the body's type-param scope (see `reify_method`).
@@ -932,7 +976,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let mut params = Vec::with_capacity(func.params.len());
         for param in &func.params {
-            let type_id = self.resolve_type_in_scope(&param.ty, &type_param_names);
+            let type_id =
+                self.resolve_type_with_fn_bounds(&param.ty, &type_param_names, &fn_bound_map);
             let default_expr = param
                 .default
                 .as_ref()
