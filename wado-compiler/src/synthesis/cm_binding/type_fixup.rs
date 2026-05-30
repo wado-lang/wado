@@ -21,6 +21,7 @@ use crate::tir::{
     CallArg, FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt,
     TirStmtKind, TirTemplatePart, TypeId, TypeTable,
 };
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
 use crate::synthesis::common::{cast, i32_const, option_none, synth_span};
 
@@ -242,7 +243,12 @@ fn replace_type_in_adapter(adapter: &mut TirFunction, old_type: TypeId, new_type
     }
     // Fix body
     if let Some(body) = &mut adapter.body {
-        replace_type_in_block(body, old_type, new_type);
+        TypeReplacer {
+            old_type,
+            new_type,
+            rename: None,
+        }
+        .visit_block(body);
     }
 }
 
@@ -276,289 +282,80 @@ fn replace_type_in_adapter_with_names(
         }
     }
     if let Some(body) = &mut adapter.body {
-        replace_type_and_names_in_block(body, old_type, new_type, old_name, new_name);
+        TypeReplacer {
+            old_type,
+            new_type,
+            rename: Some((old_name, new_name)),
+        }
+        .visit_block(body);
     }
 }
 
-fn replace_type_and_names_in_block(
-    block: &mut TirBlock,
+/// Replaces every occurrence of `old_type` with `new_type` throughout an
+/// adapter body, and — when `rename` is set — rewrites function references
+/// whose mangled name embeds `old_name` to use `new_name` (needed for
+/// monomorphized helpers like `Array<T>::with_capacity` where `T` is a
+/// WASI-derived type differing from the user's newtype alias).
+///
+/// Traversal is exhaustive via `TirMutVisitor`, so the swap reaches every
+/// expression position — match arms, nested blocks, closures, index/assign
+/// targets — rather than the partial set the previous hand-written walkers
+/// covered.
+struct TypeReplacer<'a> {
     old_type: TypeId,
     new_type: TypeId,
-    old_name: &str,
-    new_name: &str,
-) {
-    for stmt in &mut block.stmts {
-        replace_type_and_names_in_stmt(stmt, old_type, new_type, old_name, new_name);
+    rename: Option<(&'a str, &'a str)>,
+}
+
+impl TypeReplacer<'_> {
+    /// Apply the type swap (and optional rename) to a callee `FunctionRef`'s
+    /// name and monomorphization type arguments.
+    fn fix_func_ref(&self, func: &mut FunctionRef) {
+        if let Some((old_name, new_name)) = self.rename
+            && func.name.contains(old_name)
+        {
+            func.name = func.name.replace(old_name, new_name);
+        }
+        if let Some(mono) = &mut func.monomorph_info {
+            for ta in mono
+                .impl_type_args
+                .iter_mut()
+                .chain(mono.method_type_args.iter_mut())
+            {
+                if *ta == self.old_type {
+                    *ta = self.new_type;
+                }
+            }
+        }
     }
 }
 
-fn replace_type_and_names_in_stmt(
-    stmt: &mut TirStmt,
-    old_type: TypeId,
-    new_type: TypeId,
-    old_name: &str,
-    new_name: &str,
-) {
-    match &mut stmt.kind {
-        TirStmtKind::Expr(e) => {
-            replace_type_and_names_in_expr(e, old_type, new_type, old_name, new_name);
+impl TirMutVisitor for TypeReplacer<'_> {
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+        if let TirStmtKind::Let { type_id, .. } = &mut stmt.kind
+            && *type_id == self.old_type
+        {
+            *type_id = self.new_type;
         }
-        TirStmtKind::Return { value: Some(e), .. } => {
-            replace_type_and_names_in_expr(e, old_type, new_type, old_name, new_name);
-        }
-        TirStmtKind::Let { value, type_id, .. } => {
-            if *type_id == old_type {
-                *type_id = new_type;
-            }
-            replace_type_and_names_in_expr(value, old_type, new_type, old_name, new_name);
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-            ..
-        } => {
-            replace_type_and_names_in_expr(condition, old_type, new_type, old_name, new_name);
-            replace_type_and_names_in_block(then_block, old_type, new_type, old_name, new_name);
-            if let Some(eb) = else_block {
-                replace_type_and_names_in_block(eb, old_type, new_type, old_name, new_name);
-            }
-        }
-        TirStmtKind::Loop { body, .. } => {
-            replace_type_and_names_in_block(body, old_type, new_type, old_name, new_name);
-        }
-        _ => {}
+        self.walk_stmt(stmt);
     }
-}
 
-fn replace_type_and_names_in_expr(
-    expr: &mut TirExpr,
-    old_type: TypeId,
-    new_type: TypeId,
-    old_name: &str,
-    new_name: &str,
-) {
-    if expr.type_id == old_type {
-        expr.type_id = new_type;
-    }
-    match &mut expr.kind {
-        TirExprKind::Call { func, args, .. } => {
-            if func.name.contains(old_name) {
-                func.name = func.name.replace(old_name, new_name);
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        if expr.type_id == self.old_type {
+            expr.type_id = self.new_type;
+        }
+        match &mut expr.kind {
+            TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
+                self.fix_func_ref(func);
             }
-            if let Some(ref mut mono) = func.monomorph_info {
-                for ta in &mut mono.impl_type_args {
-                    if *ta == old_type {
-                        *ta = new_type;
-                    }
-                }
-                for ta in &mut mono.method_type_args {
-                    if *ta == old_type {
-                        *ta = new_type;
-                    }
+            TirExprKind::VariantConstruct { variant_type, .. } => {
+                if *variant_type == self.old_type {
+                    *variant_type = self.new_type;
                 }
             }
-            for arg in args {
-                replace_type_and_names_in_expr(
-                    &mut arg.expr,
-                    old_type,
-                    new_type,
-                    old_name,
-                    new_name,
-                );
-            }
+            _ => {}
         }
-        TirExprKind::MethodCall {
-            func,
-            receiver,
-            args,
-            ..
-        } => {
-            if func.name.contains(old_name) {
-                func.name = func.name.replace(old_name, new_name);
-            }
-            if let Some(ref mut mono) = func.monomorph_info {
-                for ta in &mut mono.impl_type_args {
-                    if *ta == old_type {
-                        *ta = new_type;
-                    }
-                }
-                for ta in &mut mono.method_type_args {
-                    if *ta == old_type {
-                        *ta = new_type;
-                    }
-                }
-            }
-            replace_type_and_names_in_expr(receiver, old_type, new_type, old_name, new_name);
-            for arg in args {
-                replace_type_and_names_in_expr(
-                    &mut arg.expr,
-                    old_type,
-                    new_type,
-                    old_name,
-                    new_name,
-                );
-            }
-        }
-        TirExprKind::FieldAccess { expr: inner, .. } => {
-            replace_type_and_names_in_expr(inner, old_type, new_type, old_name, new_name);
-        }
-        TirExprKind::Assign { target, value } => {
-            replace_type_and_names_in_expr(target, old_type, new_type, old_name, new_name);
-            replace_type_and_names_in_expr(value, old_type, new_type, old_name, new_name);
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            replace_type_and_names_in_expr(left, old_type, new_type, old_name, new_name);
-            replace_type_and_names_in_expr(right, old_type, new_type, old_name, new_name);
-        }
-        TirExprKind::Cast { expr: inner, .. } => {
-            replace_type_and_names_in_expr(inner, old_type, new_type, old_name, new_name);
-        }
-        TirExprKind::VariantConstruct {
-            variant_type,
-            payload,
-            ..
-        } => {
-            if *variant_type == old_type {
-                *variant_type = new_type;
-            }
-            if let Some(p) = payload {
-                replace_type_and_names_in_expr(p, old_type, new_type, old_name, new_name);
-            }
-        }
-        TirExprKind::Block(blk) => {
-            replace_type_and_names_in_block(blk, old_type, new_type, old_name, new_name);
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for f in fields {
-                replace_type_and_names_in_expr(
-                    &mut f.value,
-                    old_type,
-                    new_type,
-                    old_name,
-                    new_name,
-                );
-            }
-        }
-        _ => {}
-    }
-}
-
-fn replace_type_in_block(block: &mut TirBlock, old_type: TypeId, new_type: TypeId) {
-    for stmt in &mut block.stmts {
-        replace_type_in_stmt(stmt, old_type, new_type);
-    }
-}
-
-fn replace_type_in_stmt(stmt: &mut TirStmt, old_type: TypeId, new_type: TypeId) {
-    match &mut stmt.kind {
-        TirStmtKind::Let { value, type_id, .. } => {
-            if *type_id == old_type {
-                *type_id = new_type;
-            }
-            replace_type_in_expr(value, old_type, new_type);
-        }
-        TirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                replace_type_in_expr(v, old_type, new_type);
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            replace_type_in_expr(condition, old_type, new_type);
-            replace_type_in_block(then_block, old_type, new_type);
-            if let Some(blk) = else_block {
-                replace_type_in_block(blk, old_type, new_type);
-            }
-        }
-        TirStmtKind::Loop { body } => {
-            replace_type_in_block(body, old_type, new_type);
-        }
-        TirStmtKind::Expr(expr) => {
-            replace_type_in_expr(expr, old_type, new_type);
-        }
-        _ => {}
-    }
-}
-
-fn replace_type_in_expr(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) {
-    if expr.type_id == old_type {
-        expr.type_id = new_type;
-    }
-    match &mut expr.kind {
-        TirExprKind::Call { func, args, .. } => {
-            if let Some(ref mut mono) = func.monomorph_info {
-                for ta in &mut mono.impl_type_args {
-                    if *ta == old_type {
-                        *ta = new_type;
-                    }
-                }
-                for ta in &mut mono.method_type_args {
-                    if *ta == old_type {
-                        *ta = new_type;
-                    }
-                }
-            }
-            for arg in args {
-                replace_type_in_expr(&mut arg.expr, old_type, new_type);
-            }
-        }
-        TirExprKind::MethodCall {
-            func,
-            receiver,
-            args,
-            ..
-        } => {
-            if let Some(ref mut mono) = func.monomorph_info {
-                for ta in &mut mono.impl_type_args {
-                    if *ta == old_type {
-                        *ta = new_type;
-                    }
-                }
-                for ta in &mut mono.method_type_args {
-                    if *ta == old_type {
-                        *ta = new_type;
-                    }
-                }
-            }
-            replace_type_in_expr(receiver, old_type, new_type);
-            for arg in args {
-                replace_type_in_expr(&mut arg.expr, old_type, new_type);
-            }
-        }
-        TirExprKind::FieldAccess { expr: inner, .. } => {
-            replace_type_in_expr(inner, old_type, new_type);
-        }
-        TirExprKind::Assign { target, value } => {
-            replace_type_in_expr(target, old_type, new_type);
-            replace_type_in_expr(value, old_type, new_type);
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            replace_type_in_expr(left, old_type, new_type);
-            replace_type_in_expr(right, old_type, new_type);
-        }
-        TirExprKind::Cast { expr: inner, .. } => {
-            replace_type_in_expr(inner, old_type, new_type);
-        }
-        TirExprKind::VariantConstruct {
-            variant_type,
-            payload,
-            ..
-        } => {
-            if *variant_type == old_type {
-                *variant_type = new_type;
-            }
-            if let Some(p) = payload {
-                replace_type_in_expr(p, old_type, new_type);
-            }
-        }
-        TirExprKind::Block(blk) => {
-            replace_type_in_block(blk, old_type, new_type);
-        }
-        _ => {}
+        self.walk_expr(expr);
     }
 }
 
@@ -754,33 +551,50 @@ pub(super) fn collect_local_type_updates(
     locals: &[TirLocal],
     updates: &mut Vec<(usize, TypeId)>,
 ) {
-    for stmt in &block.stmts {
+    LocalTypeUpdateCollector { locals, updates }.visit_block(block);
+}
+
+/// Collects `(local_index, new_type)` for every `Let` whose recorded binding
+/// type drifted from the slot's `TirLocal` (e.g. a streaming binding call
+/// retyped the let from `Result<…>` to `i32`). Exhaustive traversal reaches
+/// lets nested in match arms / block expressions that the previous walker
+/// skipped.
+struct LocalTypeUpdateCollector<'a> {
+    locals: &'a [TirLocal],
+    updates: &'a mut Vec<(usize, TypeId)>,
+}
+
+impl TirRefVisitor for LocalTypeUpdateCollector<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
             TirStmtKind::Let {
                 local_index,
                 type_id,
+                value,
                 ..
             } => {
                 let idx = *local_index as usize;
-                if idx < locals.len() && locals[idx].type_id != *type_id {
-                    updates.push((idx, *type_id));
+                if idx < self.locals.len() && self.locals[idx].type_id != *type_id {
+                    self.updates.push((idx, *type_id));
                 }
+                self.visit_expr(value);
             }
-            TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                collect_local_type_updates(then_block, locals, updates);
-                if let Some(blk) = else_block {
-                    collect_local_type_updates(blk, locals, updates);
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                collect_local_type_updates(body, locals, updates);
-            }
-            _ => {}
+            // `TaskReturn` is still present this early (stripped in a later
+            // step); descend into its value without the default walk's
+            // `unreachable!` guard.
+            TirStmtKind::TaskReturn { value } => self.visit_expr(value),
+            _ => self.walk_stmt(stmt),
         }
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        // A closure body owns a separate local-index space; descending into it
+        // would collect `Let` indices that belong to the closure and wrongly
+        // apply them to the enclosing function's `locals`.
+        if matches!(expr.kind, TirExprKind::Closure { .. }) {
+            return;
+        }
+        self.walk_expr(expr);
     }
 }
 
