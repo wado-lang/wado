@@ -1,0 +1,67 @@
+use g from "./grammars/opt_sep_list.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/opt_sep_list",
+        },
+    };
+use { normalize_tree } from "./grammars/opt_sep_list.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = g::parse(input).unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+// Exercises the scan-side lowering: `wrapped` is an alternative
+// tournament, so the generated `scan_braced` runs over the optional
+// list before the parse side commits.
+fn assert_stmt_ok(input: &String) {
+    let root = g::parse_stmt(input);
+    if let Err(e) = &root {
+        panic(`parse_stmt failed for {*input}: {e.message}`);
+    }
+}
+
+test "tree: empty list" {
+    assert_tree(&"", &"(prog (list))");
+}
+
+test "tree: single arm" {
+    assert_tree(&"a", &"(prog (list (arm a)))");
+}
+
+test "tree: single arm trailing comma" {
+    assert_tree(&"a ,", &"(prog (list (arm a) ,))");
+}
+
+test "tree: two arms — the regression case" {
+    assert_tree(&"a , b", &"(prog (list (arm a) , (arm b)))");
+}
+
+test "tree: three arms" {
+    assert_tree(&"a , b , c", &"(prog (list (arm a) , (arm b) , (arm c)))");
+}
+
+test "tree: three arms trailing comma" {
+    assert_tree(&"a , b , c ,", &"(prog (list (arm a) , (arm b) , (arm c) ,))");
+}
+
+test "scan: braced empty list" {
+    assert_stmt_ok(&"{ }");
+}
+
+test "scan: braced two arms — the scan-side regression case" {
+    assert_stmt_ok(&"{ a , b }");
+}
+
+test "scan: braced three arms trailing comma" {
+    assert_stmt_ok(&"{ a , b , c , }");
+}
+
+test "scan: bare arm picks the other alternative" {
+    assert_stmt_ok(&"a");
+}
