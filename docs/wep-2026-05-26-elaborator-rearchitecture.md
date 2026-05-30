@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2653 / 2678 fixtures passing under
+      suite reaches **2648 / 2678 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2678/2678,
-      so the 25 remaining unique failures are all reify-specific;
+      so the 15 remaining unique failures are all reify-specific;
       count as of the 2026-05-30 `origin/main` merge). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
@@ -869,34 +869,36 @@ Landed:
     newtypes and `&Location`. Clears the newtype `-O2` cluster
     (newtype_return_type, newtype_chained_method, newtype_method_inheritance);
     production unaffected (the helper is reify-only).
+42. **Build reify's tuple-literal type bottom-up from its elements (2638 →
+    2648).** reify's `TupleLiteral` arm (reify.rs:2040) stamped the literal
+    with the recorded outer `TypeId` while each element carried its own
+    independently recorded type. The elaborator's `resolve_tuple_literal`
+    instead builds the tuple type bottom-up via `make_tuple(elem_types)`
+    (expr.rs:3896), so an outer tuple's element type is, by construction, the
+    identical interned id as the inner element's own type. For a nested tuple
+    (`nested: [Wrapper, [i32, i32]]`) the two ids print equal but interned
+    distinctly, so `nir/sroa` decomposed `nested` into a field-1 scalar local
+    typed with one tuple `TypeId` while the inner `nested.1.1` index read the
+    other — tripping WIR validation at `-O2` (`expected (ref null $type),
+    found i32`). The NIR text was byte-identical, so the divergence was
+    invisible in dumps and masked at `-O0`. reify now builds the tuple's
+    `TypeId` from its reified element types via `make_tuple`, mirroring
+    production. Clears the entire `-O2` `TypeId`-identity cluster (tuple_1,
+    tuple_literal_expected_type_in_branch, opt_container_sroa_tuple,
+    tuple_name_collision, tuple_name_collision_2 — and the
+    cross_module_same_name_fn / infer_lhs_overrides_literal / return_merged /
+    wasm_name_conflict_generic_fn sites that shared the same structural-tuple
+    interning gap); production unaffected (the arm is reify-only).
 
 #### Re-triaged remaining clusters
 
-Largest first, grouped by cluster. **2638 / 2678** passing under
+Largest first, grouped by cluster. **2648 / 2678** passing under
 `WADO_REIFY=1` (fresh full-suite scan on 2026-05-30, after merging
-`origin/main`; every fixture `main` added passes under reify). **25 unique
-fixtures fail** — 15 at `-O0` (also `-O2`), 10 only at `-O2`. The localized
-"missing annotation channel" gaps are gone; each remaining cluster is
-feature-level work, not a one-line replay fix.
-
-##### O2-only — optimizer / `TypeId`-identity divergence (10)
-
-Pass at `-O0`, fail only at `-O2`: the reified TIR is behaviourally correct
-but some sub-node carries a `TypeId` that prints the same yet interns
-distinctly from production, so an `-O2` pass (SROA / DCE / const-fold)
-diverges and trips WIR validation. Diff with
-`WADO_REIFY=1 wado dump --nir -O2 fixture.wado` vs the same without the env
-var; the first node whose type differs is the cut point.
-
-- `tuple_1`, `tuple_literal_expected_type_in_branch`,
-  `opt_container_sroa_tuple` — tuple field / SROA identity.
-- `tuple_name_collision`, `tuple_name_collision_2` — a user-defined
-  `struct Tuple` interns to a different `TypeId` than the builtin tuple.
-- `cross_module_same_name_fn`, `cross_module_same_name_fn_infer` — two
-  modules' same-named generic `wrap<T>` must monomorphize independently;
-  reify's instances appear to collide on name rather than `(module, name)`.
-- `infer_lhs_overrides_literal`, `return_merged`,
-  `wasm_name_conflict_generic_fn`.
+`origin/main`; every fixture `main` added passes under reify). **15 unique
+fixtures fail**, all at `-O0` and `-O2`. The localized "missing annotation
+channel" gaps are gone, and the `-O2`-only `TypeId`-identity cluster is now
+cleared too (landings #41 / #42); each remaining cluster is feature-level
+work, not a one-line replay fix.
 
 ##### Variadic type-pack machinery (6, fail O0+O2)
 
@@ -905,7 +907,7 @@ var; the first node whose type differs is the cut point.
 `variadic_trait_bound`. Need the type-pack expansion pipeline reproduced in
 reify (see `wep-2026-03-14-variadic-type-parameters.md`).
 
-##### Compile-time tuple enumeration (2, fail O0)
+##### Compile-time tuple enumeration (2, fail O0+O2)
 
 - `tuple_zip` — reify emits `TupleZip` but monomorphize never expands it
   (panic at `lower/translate.rs:1135`, "should be expanded by monomorphize");
@@ -914,7 +916,7 @@ reify (see `wep-2026-03-14-variadic-type-parameters.md`).
 - `tuple_for_of` — for-of over a heterogeneous tuple emits invalid Wasm in
   the **test world** only (clean as a CLI program).
 
-##### Remaining `-O0` singles (5)
+##### Remaining singles (7, fail O0+O2)
 
 - `default_arg_private_item` — a default expr that references a
   callee-module-private global (`paint(c = DEFAULT_VALUE)`) can't resolve:
@@ -931,20 +933,22 @@ reify (see `wep-2026-03-14-variadic-type-parameters.md`).
 
 ##### Where to start next
 
-Highest leverage: the **O2-only `TypeId`-identity cluster** (10 fixtures,
-likely a small number of shared root causes). The newtype sub-cluster is
-cleared (landing #41); the remaining shape is the tuple SROA-identity
-fixtures. Start with the smallest — `tuple_1` — `dump --nir -O2` reify vs
-production, find the first differing-`TypeId` node, and trace back to where
-reify interns it. The `#### Recipe for adding a new reify gap`,
+The remaining 15 are all feature-level, not `TypeId`-identity replay fixes.
+Highest leverage: the **variadic type-pack cluster** (6 fixtures, one shared
+mechanism — the type-pack expansion pipeline must be reproduced in reify; see
+`wep-2026-03-14-variadic-type-parameters.md`). After that, the **compile-time
+tuple enumeration** pair (`tuple_zip` / `tuple_for_of`) and the remaining
+singles. The `#### Recipe for adding a new reify gap`,
 `#### Gotchas`, and `#### Endgame` below still apply unchanged.
 
 ### Stage 5 handover
 
 The recording half is complete: every landed gap has an annotation channel
 on `sem.types` and reify consumes it. What remains is per-shape parity for
-the 25 fixtures above (mostly `-O2` `TypeId` identity + variadic/tuple
-expansion), then the final orchestration cut (`#### Endgame`).
+the 15 fixtures above (variadic type-pack expansion, compile-time tuple
+enumeration, and the remaining feature-level singles — the `-O2`
+`TypeId`-identity cluster is cleared), then the final orchestration cut
+(`#### Endgame`).
 
 #### Gotchas seen in this session — read before continuing
 
