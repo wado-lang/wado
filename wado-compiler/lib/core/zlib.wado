@@ -9,6 +9,14 @@
 //! RFC 1950 (zlib format) is supported except for preset dictionaries (FDICT);
 //! streams with FDICT set return `ZlibError::PresetDictionaryNotSupported`.
 //!
+//! The decoder is annotated against the format specifications, whose text is
+//! kept under `wado-compiler/ref/` (RFC 1950, RFC 1951, RFC 1952). Section
+//! references in the comments below point at those documents. The RFCs define
+//! only the bitstream formats, not encoder heuristics, and they ship no
+//! conformance vectors, so `zlib_test.wado` pairs hand-built, spec-anchored
+//! decode vectors (verified against a reference zlib) with cross-validation in
+//! `tests/zlib_interop.rs`.
+//!
 //! Features:
 //!
 //! - Adler-32 and CRC-32 checksums (with combine operations)
@@ -65,6 +73,10 @@ pub enum ZlibError {
     TruncatedTrailer,
     IsizeMismatch,
     OutputExceedsMax,
+    // The DEFLATE stream itself is malformed: a reserved block type (RFC 1951
+    // section 3.2.3, BTYPE=11), an invalid Huffman code, a back-reference past
+    // the start of the output, or a stream that ends before its final block.
+    InvalidDeflateData,
 }
 
 /// Returns the zlib version string.
@@ -375,7 +387,11 @@ global ENOUGH_DISTS: i32 = 592;
 global ENOUGH: i32 = 1444;  // ENOUGH_LENS + ENOUGH_DISTS
 global MAXBITS: i32 = 15;
 
-// Constant tables shared by deflate functions
+// Length and distance code tables shared by the deflate functions.
+// These reproduce the two tables in RFC 1951 section 3.2.5: length codes
+// 257..285 map to lengths 3..258 (LENGTH_BASE) plus 0..5 extra bits
+// (LENGTH_EXTRA), and distance codes 0..29 map to distances 1..32768
+// (DIST_BASE) plus 0..13 extra bits (DIST_EXTRA).
 global LENGTH_BASE: Array<i32> = [
     3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258,
 ];
@@ -452,7 +468,9 @@ fn inflate_table(codetype: i32, lens: &Array<u16>, lens_offset: i32, codes_count
     }
     root = i32::max(root, min_len);
 
-    // check for over-subscribed or incomplete set of lengths
+    // Check that the code lengths form a complete, non-over-subscribed prefix
+    // code (the canonical-code rules of RFC 1951 section 3.2.2). `left` tracks
+    // the unused coding space (Kraft sum) at each bit length.
     let mut left = 1;
     for let mut clen = 1; clen <= MAXBITS; clen += 1 {
         left = left << 1;
@@ -461,6 +479,9 @@ fn inflate_table(codetype: i32, lens: &Array<u16>, lens_offset: i32, codes_count
             return [-1, 0, 0];  // over-subscribed
         }
     }
+    // An incomplete code is rejected, except for the one documented special
+    // case: a distance code with a single symbol (max_len == 1), which RFC 1951
+    // section 3.2.7 permits when only one distance code is used.
     if left > 0 && (codetype == CODES_TYPE || max_len != 1) {
         return [-1, 0, 0];  // incomplete set
     }
@@ -642,7 +663,9 @@ enum InflateMode {
     Bad,
 }
 
-// Permutation of code lengths for dynamic blocks
+// Order in which the code-length code lengths are stored in a dynamic block
+// (RFC 1951 section 3.2.7): "(HCLEN + 4) x 3 bits: code lengths for the code
+// length alphabet given just above, in the order: 16, 17, 18, 0, 8, 7, ...".
 global INFLATE_ORDER: Array<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
 
 struct InflateState {
@@ -728,8 +751,9 @@ impl InflateState {
     }
 
     fn load_fixed_tables(&mut self) {
-        // Build fixed Huffman tables
-        // literal/length table: 0-143=8bits, 144-255=9bits, 256-279=7bits, 280-287=8bits
+        // Build the fixed Huffman tables of RFC 1951 section 3.2.6.
+        // Literal/length code lengths: 0-143 = 8 bits, 144-255 = 9 bits,
+        // 256-279 = 7 bits, 280-287 = 8 bits; all 30 distance codes are 5 bits.
         let mut sym = 0;
         while sym < 144 {
             self.lens[sym] = 8;
@@ -811,8 +835,13 @@ impl InflateState {
     }
 }
 
-// Decompress raw deflate data from a slice of input (no zlib/gzip header)
-fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [Array<u8>, i32] {
+// Decompress raw deflate data from a slice of input (no zlib/gzip header).
+// Implements the DEFLATE decoding loop of RFC 1951 section 3.2.3.
+// Returns [output, input_bytes_consumed, ok], where `ok` is true only when the
+// stream reached the end of its final block cleanly (mode Done). It is false
+// when the stream is invalid (mode Bad) or truncated before the final block,
+// so the zlib/gzip wrappers can reject malformed DEFLATE data precisely.
+fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [Array<u8>, i32, bool] {
     let mut state = InflateState::new(true);
     let mut output: Array<u8> = [];
 
@@ -851,6 +880,8 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     state.hold = state.hold >> 1;
                     state.bits -= 1;
 
+                    // BTYPE (RFC 1951 section 3.2.3): 00 stored, 01 fixed
+                    // Huffman, 10 dynamic Huffman, 11 reserved (error).
                     let block_type = (state.hold & 3) as i32;
                     state.hold = state.hold >> 2;
                     state.bits -= 2;
@@ -863,6 +894,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     } else if block_type == 2 {
                         state.mode = InflateMode::Table;
                     } else {
+                        // BTYPE=11 is reserved and must be rejected.
                         state.mode = InflateMode::Bad;
                     }
                 }
@@ -887,6 +919,8 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     break;
                 }
 
+                // Stored block (RFC 1951 section 3.2.4): LEN then NLEN, where
+                // NLEN is the one's complement of LEN. Reject any mismatch.
                 let stored_len = (state.hold & 0xFFFF) as i32;
                 let stored_nlen = (state.hold >> 16 & 0xFFFF) as i32;
                 if stored_len != stored_nlen ^ 0xFFFF {
@@ -933,6 +967,9 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     break;
                 }
 
+                // Dynamic block header (RFC 1951 section 3.2.7): HLIT+257
+                // literal/length codes, HDIST+1 distance codes, HCLEN+4 code
+                // length codes.
                 state.nlen = (state.hold & 0x1F) as i32 + 257;
                 state.hold = state.hold >> 5;
                 state.bits -= 5;
@@ -943,6 +980,8 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 state.hold = state.hold >> 4;
                 state.bits -= 4;
 
+                // 286/30 are the largest valid counts; 286-287 and 30-31 are
+                // reserved (RFC 1951 sections 3.2.5 and 3.2.7).
                 if state.nlen > 286 || state.ndist > 30 {
                     state.mode = InflateMode::Bad;
                 } else {
@@ -1331,11 +1370,16 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 state.mode = InflateMode::Match;
             },
             Match => {
-                // copy match from output or window
+                // Copy a <length, distance> back-reference (RFC 1951 section
+                // 3.2.5). The source may overlap the current position, so bytes
+                // are copied one at a time when they come from recent output.
                 let out_pos = output.len();
                 let mut copy = state.length;
                 if state.offset > out_pos {
-                    // need to copy from window
+                    // The distance reaches into the sliding window. A distance
+                    // that points before the start of the output is invalid
+                    // (RFC 1951 section 3.2.3: "a distance cannot refer past the
+                    // beginning of the output stream").
                     let mut win_copy = state.offset - out_pos;
                     if win_copy > state.whave {
                         state.mode = InflateMode::Bad;
@@ -1420,9 +1464,12 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
         state.update_window(&output, output.len(), wlen);
     }
 
-    // Return bytes consumed from input
+    // Return bytes consumed from input. The decode succeeded only if it ran to
+    // the end of the final block (RFC 1951 section 3.2.3): a Bad mode or an
+    // exhausted input mid-stream both leave `mode` short of Done.
     let consumed = inp - input_offset;
-    return [output, consumed];
+    let ok = state.mode matches { Done };
+    return [output, consumed, ok];
 }
 
 // Decompress raw deflate data from a slice of input (no zlib/gzip header)
@@ -1444,25 +1491,33 @@ pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
         return Result::Err(ZlibError::DataTooShort);
     }
 
-    // Check zlib header
+    // Check the 2-byte zlib header (RFC 1950 section 2.2).
     let cmf = input[0];
     let flg = input[1];
+    // FCHECK: CMF and FLG, viewed as a 16-bit big-endian value, must be a
+    // multiple of 31 (RFC 1950 section 2.2, FCHECK).
     if (cmf as i32 * 256 + flg as i32) % 31 != 0 {
         return Result::Err(ZlibError::InvalidHeader);
     }
+    // CM (low nibble of CMF) must be 8 = "deflate" (RFC 1950 section 2.2, CM).
     if cmf & 0x0F != 8 {
         return Result::Err(ZlibError::UnsupportedCompressionMethod);
     }
 
-    // Preset dictionary is not supported
+    // FDICT (RFC 1950 section 2.2): a preset dictionary is not supported.
     if flg & 0x20 != 0 {
         return Result::Err(ZlibError::PresetDictionaryNotSupported);
     }
 
-    // Decompress directly from input, skipping header (2 bytes) and trailer (4 bytes adler32)
-    let result = inflate_raw_from(input, 2, input.len() - 6);
+    // Decompress directly from input, skipping the 2-byte header and the
+    // trailing 4-byte Adler-32 (RFC 1950 section 2.2).
+    let [result, _consumed, ok] = inflate_raw_ex(input, 2, input.len() - 6);
+    if !ok {
+        return Result::Err(ZlibError::InvalidDeflateData);
+    }
 
-    // Verify adler32
+    // Verify the ADLER32 trailer over the uncompressed data (RFC 1950 section
+    // 2.2, ADLER32; the checksum stores s2 in the high 16 bits, big-endian).
     let computed = adler32(adler32_init(), &result, 0, result.len());
     let stored = input[input.len() - 4] as u32 << 24 | input[input.len() - 3] as u32 << 16 | input[input.len() - 2] as u32 << 8 | input[input.len(
     ) - 1] as u32;
@@ -3039,20 +3094,25 @@ global GZIP_FEXTRA: u8 = 4;
 global GZIP_FNAME: u8 = 8;
 global GZIP_FCOMMENT: u8 = 16;
 
-// Parse a single gzip member header, returning the data start position
+// Parse a single gzip member header (RFC 1952 section 2.3), returning the
+// position where the DEFLATE data starts.
 fn gzip_parse_header(input: &Array<u8>, start: i32) -> Result<i32, ZlibError> {
+    // The fixed header is 10 bytes: ID1, ID2, CM, FLG, MTIME(4), XFL, OS.
     if start + 10 > input.len() {
         return Result::Err(ZlibError::DataTooShort);
     }
 
+    // ID1=0x1f, ID2=0x8b identify the gzip format (RFC 1952 section 2.3.1).
     if input[start] != GZIP_MAGIC1 || input[start + 1] != GZIP_MAGIC2 {
         return Result::Err(ZlibError::InvalidMagicNumber);
     }
 
+    // CM=8 is the only defined compression method, "deflate".
     if input[start + 2] != 8 {
         return Result::Err(ZlibError::UnsupportedCompressionMethod);
     }
 
+    // FLG bits (RFC 1952 section 2.3.1): FTEXT, FHCRC, FEXTRA, FNAME, FCOMMENT.
     let flags = input[start + 3];
     let mut pos = start + 10;  // skip ID1, ID2, CM, FLG, MTIME(4), XFL, OS
 
@@ -3121,8 +3181,15 @@ pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
         let result = inflate_raw_ex(input, data_start, remaining);
         let member_output = result.0;
         let consumed = result.1;
+        let ok = result.2;
+        // Reject a malformed DEFLATE member before trusting `consumed` to locate
+        // the trailer (RFC 1951 section 3.2.3).
+        if !ok {
+            return Result::Err(ZlibError::InvalidDeflateData);
+        }
 
-        // Trailer starts after consumed deflate bytes
+        // The gzip trailer (RFC 1952 section 2.3.1) is CRC32 then ISIZE, each a
+        // 4-byte little-endian value, immediately after the DEFLATE member.
         let trailer_pos = data_start + consumed;
         if trailer_pos + 8 > input.len() {
             return Result::Err(ZlibError::TruncatedTrailer);

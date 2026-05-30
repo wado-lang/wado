@@ -13,6 +13,14 @@ Implements DEFLATE (RFC 1951) and gzip (RFC 1952) fully.
 RFC 1950 (zlib format) is supported except for preset dictionaries (FDICT);
 streams with FDICT set return `ZlibError::PresetDictionaryNotSupported`.
 
+The decoder is annotated against the format specifications, whose text is
+kept under `wado-compiler/ref/` (RFC 1950, RFC 1951, RFC 1952). Section
+references in the comments below point at those documents. The RFCs define
+only the bitstream formats, not encoder heuristics, and they ship no
+conformance vectors, so `zlib_test.wado` pairs hand-built, spec-anchored
+decode vectors (verified against a reference zlib) with cross-validation in
+`tests/zlib_interop.rs`.
+
 Features:
 
 - Adler-32 and CRC-32 checksums (with combine operations)
@@ -482,3 +490,5 @@ Error type for zlib/gzip decompression operations.
 #### `IsizeMismatch`
 
 #### `OutputExceedsMax`
+
+#### `InvalidDeflateData`
