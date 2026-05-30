@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780106754532,
+  "lastUpdate": 1780115819041,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27523,6 +27523,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "pi_approx",
             "value": 9512,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17303,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 491625,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "445bb7c0fc68f3edc7c3042a16f46b0fd6feda25",
+          "message": "Merge pull request #1237 from wado-lang/claude/fpfmt-bug-reproduction-3WY1r\n\nFix fixed-point formatting under-rounding of small-magnitude values",
+          "timestamp": "2026-05-30T13:28:36+09:00",
+          "tree_id": "b65bccb76a60818ed7607751fb394ab1ab176d49",
+          "url": "https://github.com/wado-lang/wado/commit/445bb7c0fc68f3edc7c3042a16f46b0fd6feda25"
+        },
+        "date": 1780115818564,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
             "unit": "bytes"
           },
           {
