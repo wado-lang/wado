@@ -7360,13 +7360,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirExprKind::StringLiteral(value)
             }
             ast::Literal::Char(s) => {
-                // The Char literal is the raw source text (e.g. "'a'").
-                // Strip the quotes and decode escapes the same way the
-                // elaborator does. Stage 5 follow-up: share the decoder
-                // with `Elaborator::resolve_char_literal` instead of
-                // re-implementing here.
-                let inner = s.trim_start_matches('\'').trim_end_matches('\'');
-                let ch = inner.chars().next().unwrap_or('\0');
+                // The Char literal is the raw source text (e.g. `'a'`,
+                // `'\n'`). Decode escapes via the shared `unescape_char`,
+                // matching the elaborator — a hand-rolled
+                // `chars().next()` reads the backslash of `'\n'` as `'\'`,
+                // which then fails to match a `'\n'` pattern that decodes
+                // correctly.
+                let ch = super::util::unescape_char(s).unwrap_or('\0');
                 TirExprKind::CharLiteral(ch)
             }
             ast::Literal::Bool(b) => TirExprKind::BoolLiteral(*b),
@@ -7762,8 +7762,57 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             }
             ast::Pattern::Literal(lit) => {
-                let lit_pat = ast_literal_to_pattern(lit);
-                TirPattern::Literal(lit_pat)
+                use crate::tir::{PrimitiveType, ResolvedType, TirLiteralPattern};
+                // Mirror `Elaborator::resolve_if_pattern_inner`'s literal
+                // arm (stmt.rs:1344): wide-int literals follow the
+                // scrutinee's signedness (a `u128` scrutinee must compare
+                // via `u128::*`, not `i128::*`, or codegen emits a
+                // `(ref $u128)` vs `(ref $i128)` mismatch), and char /
+                // string literals decode their escapes. `null` on a
+                // variant scrutinee with a `None` case lowers to that
+                // case.
+                let tir_lit = match lit {
+                    ast::Literal::Number(repr) => {
+                        let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
+                        let is_unsigned = matches!(
+                            resolved,
+                            ResolvedType::Primitive(
+                                PrimitiveType::U8
+                                    | PrimitiveType::U16
+                                    | PrimitiveType::U32
+                                    | PrimitiveType::U64
+                                    | PrimitiveType::U128
+                            )
+                        ) || matches!(
+                            resolved,
+                            ResolvedType::Struct { ref name, .. } if name == "u128"
+                        );
+                        if is_unsigned {
+                            TirLiteralPattern::U128(
+                                super::util::parse_u128_literal(repr).unwrap_or(0),
+                            )
+                        } else {
+                            TirLiteralPattern::I128(
+                                super::util::parse_i128_literal(repr).unwrap_or(0),
+                            )
+                        }
+                    }
+                    ast::Literal::Bool(b) => TirLiteralPattern::Bool(*b),
+                    ast::Literal::Char(raw) => {
+                        TirLiteralPattern::Char(super::util::unescape_char(raw).unwrap_or('\0'))
+                    }
+                    ast::Literal::String(raw) => TirLiteralPattern::String(
+                        super::util::unescape_string(raw).unwrap_or_default(),
+                    ),
+                    ast::Literal::Null => {
+                        if self.scrutinee_has_variant_case(scrutinee_type, "None") {
+                            return self.reify_nullary_variant_case(scrutinee_type, "None");
+                        }
+                        TirLiteralPattern::Null
+                    }
+                    _ => ast_literal_to_pattern(lit),
+                };
+                TirPattern::Literal(tir_lit)
             }
             ast::Pattern::Tuple(elements, has_rest) => {
                 // Tuple patterns destructure into the scrutinee's
