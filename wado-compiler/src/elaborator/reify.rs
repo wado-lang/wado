@@ -7447,8 +7447,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // (the elaborator rejects it). Mirrors
                 // `Elaborator::resolve_numeric_literal` (expr.rs:337) plus
                 // the numeric coercion.
+                // Peel newtypes (`type Meters = f64`) to the ultimate base
+                // so a float literal bound to a float-newtype target still
+                // takes the float path; otherwise it falls to the integer
+                // path and codegen sees `i32` where `f64` is expected.
+                let base_target = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .get_ultimate_base_type(recorded_type);
                 let is_float_target =
-                    recorded_type == TypeTable::F32 || recorded_type == TypeTable::F64;
+                    base_target == TypeTable::F32 || base_target == TypeTable::F64;
                 if is_float_target {
                     let value: f64 = if super::util::is_float_only_literal(repr) {
                         super::util::parse_float_literal(repr).unwrap_or(0.0)
