@@ -7216,7 +7216,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                 }
             }
-            ast::Literal::String(s) => TirExprKind::StringLiteral(s.clone()),
+            ast::Literal::String(s) => {
+                // Decode escape sequences (`\"`, `\n`, `\\`, …) the same
+                // way the elaborator does (expr.rs:403) — the AST holds
+                // the raw source text. Without this a literal like
+                // `"{\""` reaches codegen with the backslash intact and
+                // serializes as `{\"` instead of `{"`.
+                let value = super::util::unescape_string(s).unwrap_or_default();
+                TirExprKind::StringLiteral(value)
+            }
             ast::Literal::Char(s) => {
                 // The Char literal is the raw source text (e.g. "'a'").
                 // Strip the quotes and decode escapes the same way the
