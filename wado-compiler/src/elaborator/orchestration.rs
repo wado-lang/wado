@@ -2671,6 +2671,32 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     type_table.make_option(inner)
                 }
                 _ => {
+                    let type_args: Vec<TypeId> = generic
+                        .args
+                        .iter()
+                        .map(|arg| {
+                            Self::resolve_type_static_with_params(
+                                arg,
+                                type_table,
+                                lookup,
+                                type_params,
+                            )
+                        })
+                        .collect();
+                    // A generic resource (`Stream<u8>`, `Future<T>`) must
+                    // resolve to a `GenericResource`, not a
+                    // `GenericInstance` — otherwise the resource-store
+                    // inference (effect_check `signature_resources`) does
+                    // not see the resource a signature implies, and
+                    // `consume(rx: Stream<u8>)` fails with
+                    // `missing resource 'Stream'`.
+                    if let Some(info) = lookup.resource_type(&generic.name) {
+                        return type_table.intern(ResolvedType::GenericResource {
+                            name: generic.name.clone(),
+                            module_source: info.module_source.clone(),
+                            type_args,
+                        });
+                    }
                     // A generic application `Name<args...>` may name a
                     // struct, a variant (`Result<T, E>`), or an enum. The
                     // `Type::Named` arm above already checks all three; the
@@ -2692,18 +2718,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .map(|info| info.module_source.clone())
                         });
                     if let Some(module_source) = module_source {
-                        let type_args: Vec<TypeId> = generic
-                            .args
-                            .iter()
-                            .map(|arg| {
-                                Self::resolve_type_static_with_params(
-                                    arg,
-                                    type_table,
-                                    lookup,
-                                    type_params,
-                                )
-                            })
-                            .collect();
                         type_table.make_generic_instance(
                             generic.name.clone(),
                             module_source,
