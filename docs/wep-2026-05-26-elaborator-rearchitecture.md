@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2595 / 2664 fixtures passing under
+      suite reaches **2605 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 69 remaining failures are all reify-specific). The
+      so the 59 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -749,12 +749,25 @@ Landed:
     `ImplFacts.trait_type_args` (mirroring item.rs:1621) and reify_method
     writes them onto `LocalMethodName.trait_type_args`. Clears
     effect_handler_resource_{future,stream,stream_self_delegation}.
+32. **Peel newtypes for the float-literal decision (2595 → 2605).**
+    reify_literal chose float vs integer by comparing the recorded type
+    to F32/F64 exactly, so a float literal bound to a float _newtype_
+    target (`type Meters = f64; let m: Meters = 1000.0`) failed the check,
+    took the integer path, and reached codegen as `i32` where `f64` was
+    expected. Peel to the ultimate base type before the check. Clears
+    newtype_basic, newtype_float_types, newtype_impl,
+    newtype_option_pattern (float cluster now clean).
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2595
-/ 2664** under `WADO_REIFY=1`; 69 reify-specific failures across 42
-unique fixtures remain:
+Largest first, by fixture-name prefix (after the landings above). **2605
+/ 2664** under `WADO_REIFY=1`; 59 reify-specific failures across 37
+unique fixtures remain. Most are now **O2-only optimizer interactions**
+(pass at -O0, fail at -O2: newtype method values, tuple field access,
+cross_module same-name generics, `opt_*`), **codegen type-identity** GC
+collisions, **variadic pack machinery**, and specific deep cases
+(newtype generic-base method inheritance, closure functor `__call`,
+effect_handler_with_do):
 
 - **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
   panic in `synthesis/effect_dispatch.rs` with `no DispatchPlan for
