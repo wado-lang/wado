@@ -1763,6 +1763,10 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect_alt<i3
             }
             "core:prelude/string.wado/String::push"(f.buf, 10);
             "core:prelude/format.wado/Formatter::write_indent"(f);
+            if builtin::unlikely(i >= _licm_used_40) {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            }
             self_24 = builtin::array_get<i32>(_licm_repr_41, i);
             "core:prelude/primitive.wado/i32::fmt_decimal"(self_24, f);
             "core:prelude/string.wado/String::push"(f.buf, 44);
@@ -1811,24 +1815,10 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect_alt<wa
     i = 0;
     _licm_used_34 = arr.used;
     _licm_repr_35 = arr.repr;
-<<<<<<< HEAD
-    b172: block {
-        l173: loop {
-||||||| 03964a67
-    b173: block {
-        l174: loop {
-=======
     b176: block {
         l177: loop {
->>>>>>> origin/main
             if i >= _licm_used_34 {
-<<<<<<< HEAD
-                break b172;
-||||||| 03964a67
-                break b173;
-=======
                 break b176;
->>>>>>> origin/main
             }
             if (if limit >= 0 -> i32 {
                 shown >= limit;
@@ -1836,27 +1826,18 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect_alt<wa
                 0;
             }) {
                 truncated = 1;
-<<<<<<< HEAD
-                break b172;
-||||||| 03964a67
-                break b173;
-=======
                 break b176;
->>>>>>> origin/main
             }
             "core:prelude/string.wado/String::push"(f.buf, 10);
             "core:prelude/format.wado/Formatter::write_indent"(f);
-            "wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint^InspectAlt::inspect_alt"(builtin::array_get<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(_licm_repr_35, i), f);
+            "wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint^InspectAlt::inspect_alt"(if builtin::unlikely(i >= _licm_used_34) {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            }; builtin::array_get<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(_licm_repr_35, i), f);
             "core:prelude/string.wado/String::push"(f.buf, 44);
             shown = shown + 1;
             i = i + 1;
-<<<<<<< HEAD
-            continue l173;
-||||||| 03964a67
-            continue l174;
-=======
             continue l177;
->>>>>>> origin/main
         };
     };
     if (if marker -> i32 {
@@ -1891,24 +1872,10 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<wado-c
     i = 0;
     _licm_used_20 = arr.used;
     _licm_repr_21 = arr.repr;
-<<<<<<< HEAD
-    b179: block {
-        l180: loop {
-||||||| 03964a67
-    b181: block {
-        l182: loop {
-=======
     b184: block {
         l185: loop {
->>>>>>> origin/main
             if i >= _licm_used_20 {
-<<<<<<< HEAD
-                break b179;
-||||||| 03964a67
-                break b181;
-=======
                 break b184;
->>>>>>> origin/main
             }
             if (if limit >= 0 -> i32 {
                 shown >= limit;
@@ -1916,28 +1883,19 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<wado-c
                 0;
             }) {
                 truncated = 1;
-<<<<<<< HEAD
-                break b179;
-||||||| 03964a67
-                break b181;
-=======
                 break b184;
->>>>>>> origin/main
             }
             if shown > 0 {
                 s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
                 "core:prelude/string.wado/String::push_str"(f.buf, s_11);
             }
-            "wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint^Inspect::inspect"(builtin::array_get<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(_licm_repr_21, i), f);
+            "wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint^Inspect::inspect"(if builtin::unlikely(i >= _licm_used_20) {
+                "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                unreachable;
+            }; builtin::array_get<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(_licm_repr_21, i), f);
             shown = shown + 1;
             i = i + 1;
-<<<<<<< HEAD
-            continue l180;
-||||||| 03964a67
-            continue l182;
-=======
             continue l185;
->>>>>>> origin/main
         };
     };
     if (if marker -> i32 {
@@ -2150,36 +2108,16 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     i = 0;
-<<<<<<< HEAD
-    b211: block {
-        l212: loop {
-||||||| 03964a67
-    b214: block {
-        l215: loop {
-=======
     b217: block {
         l218: loop {
->>>>>>> origin/main
             if i >= len {
-<<<<<<< HEAD
-                break b211;
-||||||| 03964a67
-                break b214;
-=======
                 break b217;
->>>>>>> origin/main
             }
             if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                 return 0;
             }
             i = i + 1;
-<<<<<<< HEAD
-            continue l212;
-||||||| 03964a67
-            continue l215;
-=======
             continue l218;
->>>>>>> origin/main
         };
     };
     return 1;
@@ -2364,34 +2302,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-<<<<<<< HEAD
-    b227: block {
-        l228: loop {
-||||||| 03964a67
-    b230: block {
-        l231: loop {
-=======
     b233: block {
         l234: loop {
->>>>>>> origin/main
             if i >= n {
-<<<<<<< HEAD
-                break b227;
-||||||| 03964a67
-                break b230;
-=======
                 break b233;
->>>>>>> origin/main
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-<<<<<<< HEAD
-            continue l228;
-||||||| 03964a67
-            continue l231;
-=======
             continue l234;
->>>>>>> origin/main
         };
     };
 }
@@ -2444,71 +2362,31 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
         i_8 = content_len - 1;
         _licm_buf_29 = self.buf;
         _licm_repr_33 = _licm_buf_29.repr;
-<<<<<<< HEAD
-        b234: block {
-            l235: loop {
-||||||| 03964a67
-        b237: block {
-            l238: loop {
-=======
         b240: block {
             l241: loop {
->>>>>>> origin/main
                 if i_8 < 0 {
-<<<<<<< HEAD
-                    break b234;
-||||||| 03964a67
-                    break b237;
-=======
                     break b240;
->>>>>>> origin/main
                 }
                 index_14 = (start_pos + left_pad) + i_8;
                 index_17 = start_pos + i_8;
                 value_15 = builtin::array_get_u8(_licm_repr_33, index_17);
                 builtin::array_set_u8(_licm_repr_33, index_14, value_15);
                 i_8 = i_8 - 1;
-<<<<<<< HEAD
-                continue l235;
-||||||| 03964a67
-                continue l238;
-=======
                 continue l241;
->>>>>>> origin/main
             };
         };
         j_9 = 0;
         _licm_buf_30 = self.buf;
         _licm_repr_34 = _licm_buf_30.repr;
-<<<<<<< HEAD
-        b237: block {
-            l238: loop {
-||||||| 03964a67
-        b240: block {
-            l241: loop {
-=======
         b243: block {
             l244: loop {
->>>>>>> origin/main
                 if j_9 >= left_pad {
-<<<<<<< HEAD
-                    break b237;
-||||||| 03964a67
-                    break b240;
-=======
                     break b243;
->>>>>>> origin/main
                 }
                 index_19 = start_pos + j_9;
                 builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
                 j_9 = j_9 + 1;
-<<<<<<< HEAD
-                continue l238;
-||||||| 03964a67
-                continue l241;
-=======
                 continue l244;
->>>>>>> origin/main
             };
         };
         "core:prelude/string.wado/String::append_byte_filled"(self.buf, fill_byte, right_pad);
@@ -2517,71 +2395,31 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
         i_10 = content_len - 1;
         _licm_buf_31 = self.buf;
         _licm_repr_35 = _licm_buf_31.repr;
-<<<<<<< HEAD
-        b240: block {
-            l241: loop {
-||||||| 03964a67
-        b243: block {
-            l244: loop {
-=======
         b246: block {
             l247: loop {
->>>>>>> origin/main
                 if i_10 < 0 {
-<<<<<<< HEAD
-                    break b240;
-||||||| 03964a67
-                    break b243;
-=======
                     break b246;
->>>>>>> origin/main
                 }
                 index_22 = (start_pos + padding) + i_10;
                 index_25 = start_pos + i_10;
                 value_23 = builtin::array_get_u8(_licm_repr_35, index_25);
                 builtin::array_set_u8(_licm_repr_35, index_22, value_23);
                 i_10 = i_10 - 1;
-<<<<<<< HEAD
-                continue l241;
-||||||| 03964a67
-                continue l244;
-=======
                 continue l247;
->>>>>>> origin/main
             };
         };
         j_11 = 0;
         _licm_buf_32 = self.buf;
         _licm_repr_36 = _licm_buf_32.repr;
-<<<<<<< HEAD
-        b243: block {
-            l244: loop {
-||||||| 03964a67
-        b246: block {
-            l247: loop {
-=======
         b249: block {
             l250: loop {
->>>>>>> origin/main
                 if j_11 >= padding {
-<<<<<<< HEAD
-                    break b243;
-||||||| 03964a67
-                    break b246;
-=======
                     break b249;
->>>>>>> origin/main
                 }
                 index_27 = start_pos + j_11;
                 builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
                 j_11 = j_11 + 1;
-<<<<<<< HEAD
-                continue l244;
-||||||| 03964a67
-                continue l247;
-=======
                 continue l250;
->>>>>>> origin/main
             };
         };
     }
@@ -2675,35 +2513,15 @@ fn "core:prelude/format.wado/Formatter::write_indent"(self) {
     i = 0;
     _licm_indent_4 = self.indent;
     _licm_buf_5 = self.buf;
-<<<<<<< HEAD
-    b263: block {
-        l264: loop {
-||||||| 03964a67
-    b266: block {
-        l267: loop {
-=======
     b269: block {
         l270: loop {
->>>>>>> origin/main
             if i >= _licm_indent_4 {
-<<<<<<< HEAD
-                break b263;
-||||||| 03964a67
-                break b266;
-=======
                 break b269;
->>>>>>> origin/main
             }
             s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("  "), used: 2 };
             "core:prelude/string.wado/String::push_str"(_licm_buf_5, s);
             i = i + 1;
-<<<<<<< HEAD
-            continue l264;
-||||||| 03964a67
-            continue l267;
-=======
             continue l270;
->>>>>>> origin/main
         };
     };
 }
