@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780129019340,
+  "lastUpdate": 1780140479783,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27777,6 +27777,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b12fb886bc3c47c2d8cc66bcfdf5119bc820d9fd"
         },
         "date": 1780129018851,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16963,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 458952,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aba3c4d46fc8e47bf85f9f921ec7269e4f5d16ea",
+          "message": "Merge pull request #1243 from wado-lang/claude/elaborator-refactor-stage-5-GLvZh\n\nStage 5: drive reify toward production TIR parity (→ 2614/2664)",
+          "timestamp": "2026-05-30T20:19:43+09:00",
+          "tree_id": "56a253ca87464a4daee0eb8f0afbb3f5080c4f3e",
+          "url": "https://github.com/wado-lang/wado/commit/aba3c4d46fc8e47bf85f9f921ec7269e4f5d16ea"
+        },
+        "date": 1780140479307,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
