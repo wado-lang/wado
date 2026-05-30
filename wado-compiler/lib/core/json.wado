@@ -1672,7 +1672,7 @@ impl DeserializeStruct for JsonStructAccess {
 
         // Fast path: scan JSON string key without allocating.
         // For unescaped keys (the common case), we pass the byte range
-        // directly to the lookup function, avoiding String allocation entirely.
+        // directly to S::lookup, avoiding String allocation entirely.
         if builtin::unlikely(self.de.pos >= self.de.input.len()
             || self.de.input.get_byte_unchecked(self.de.pos) as i32 != '"' as i32) {
             return Result::Err(DeserializeError::unexpected_type(
