@@ -7820,11 +7820,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // arity; reify reads `tysys.type_table.as_tuple` to
                 // get the per-element types, falling back to
                 // UNKNOWN-typed inner walks for type-pack scrutinees.
+                // Destructuring through a reference (`let [a, b] = &t`)
+                // peels the ref for the element lookup, and each element
+                // binding inherits the reference kind (match ergonomics).
+                let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
                 let elem_types: Vec<TypeId> = self
                     .tysys
                     .type_table
                     .borrow()
-                    .as_tuple(scrutinee_type)
+                    .as_tuple(peeled)
                     .unwrap_or_default();
                 let sub_patterns: Vec<TirPattern> = elements
                     .iter()
@@ -7834,7 +7838,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             .get(i)
                             .copied()
                             .unwrap_or(crate::tir::TypeTable::UNKNOWN);
-                        self.reify_pattern(p, elem_ty, ctx)
+                        let binding_ty = self.apply_scrutinee_ref_kind(scrutinee_type, elem_ty);
+                        self.reify_pattern(p, binding_ty, ctx)
                     })
                     .collect();
                 TirPattern::Tuple(sub_patterns, *has_rest)
@@ -8048,12 +8053,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Determine the struct name: explicit `Type::Pattern` wins;
         // otherwise read from the scrutinee.
-        let scrutinee_struct_name = match self.tysys.type_table.borrow().get(scrutinee_type).clone()
-        {
-            ResolvedType::Struct { name, .. } => name,
-            ResolvedType::GenericInstance { name, .. } => name,
-            _ => String::new(),
-        };
+        // Destructuring through a reference (`let { x, y } = &p`)
+        // presents the scrutinee as `&Point`; peel references so the
+        // struct decl resolves (fields inherit the reference kind below).
+        let peeled_scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+        let scrutinee_struct_name =
+            match self.tysys.type_table.borrow().get(peeled_scrutinee).clone() {
+                ResolvedType::Struct { name, .. } => name,
+                ResolvedType::GenericInstance { name, .. } => name,
+                _ => String::new(),
+            };
         let lookup_name = type_name.unwrap_or(&scrutinee_struct_name);
 
         // Decl-interned struct info for field-name → (index, type)
@@ -8081,7 +8090,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .get(&f.field_name)
                     .copied()
                     .unwrap_or((0, crate::tir::TypeTable::UNKNOWN));
-                let pattern = self.reify_pattern(&f.pattern, field_ty, ctx);
+                // Match ergonomics: a field bound through a `&Point` /
+                // `&mut Point` scrutinee is `&field` / `&mut field`.
+                let binding_ty = self.apply_scrutinee_ref_kind(scrutinee_type, field_ty);
+                let pattern = self.reify_pattern(&f.pattern, binding_ty, ctx);
                 TirStructPatternField {
                     field_name: f.field_name.clone(),
                     field_index,
