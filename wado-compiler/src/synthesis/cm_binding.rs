@@ -836,8 +836,14 @@ mod tests {
             }
         }
 
-        assert_eq!(lifted_builtin("i8"), ("i32_load8_s".to_string(), TypeTable::I8));
-        assert_eq!(lifted_builtin("u8"), ("i32_load8_u".to_string(), TypeTable::U8));
+        assert_eq!(
+            lifted_builtin("i8"),
+            ("i32_load8_s".to_string(), TypeTable::I8)
+        );
+        assert_eq!(
+            lifted_builtin("u8"),
+            ("i32_load8_u".to_string(), TypeTable::U8)
+        );
         assert_eq!(
             lifted_builtin("i16"),
             ("i32_load16_s".to_string(), TypeTable::I16)

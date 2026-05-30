@@ -1548,13 +1548,20 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                     && let Some(interface_name) = func.module_source.clone().interface_name()
                 {
                     let qualified = format!("{interface_name}::{}", func.name);
-                    if self.cm_interface_registry.get_function(&qualified).is_some() {
+                    if self
+                        .cm_interface_registry
+                        .get_function(&qualified)
+                        .is_some()
+                    {
                         self.effects.insert(qualified);
                     }
                 }
                 // WASI resource static method calls (e.g. `Response::new`).
                 if func.method_info.is_some()
-                    && self.cm_interface_registry.get_function(&func.name).is_some()
+                    && self
+                        .cm_interface_registry
+                        .get_function(&func.name)
+                        .is_some()
                 {
                     self.effects.insert(func.name.clone());
                 }
@@ -1565,7 +1572,11 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                         "{}::{}",
                         method_info.base_struct_name, method_info.method_name
                     );
-                    if self.cm_interface_registry.get_function(&qualified).is_some() {
+                    if self
+                        .cm_interface_registry
+                        .get_function(&qualified)
+                        .is_some()
+                    {
                         self.effects.insert(qualified);
                     } else if let Some(source) = self
                         .cm_interface_registry

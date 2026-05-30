@@ -21,10 +21,10 @@ use crate::name::LocalMethodName;
 use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind,
-    TirTemplatePart, TypeId, TypeTable,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TypeId,
+    TypeTable,
 };
-use crate::tir_visitor::TirRefVisitor;
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
 use crate::synthesis::common::{
     assign, binary, break_stmt, builtin_call, cast, cm_raw_call, entry_call, expr_stmt, i32_const,
@@ -604,272 +604,97 @@ fn rewrite_cm_methods_in_block(
     entry_source: &ModuleSource,
     cm_interface_registry: &CmInterfaceRegistry,
 ) {
-    for stmt in &mut block.stmts {
-        rewrite_cm_methods_in_stmt(stmt, tt, entry_source, cm_interface_registry);
+    CmMethodRewriter {
+        tt,
+        entry_source,
+        cm_interface_registry,
     }
+    .visit_block(block);
 }
 
-fn rewrite_cm_methods_in_stmt(
-    stmt: &mut TirStmt,
-    tt: &TypeTable,
-    entry_source: &ModuleSource,
-    cm_interface_registry: &CmInterfaceRegistry,
-) {
-    match &mut stmt.kind {
-        TirStmtKind::Let { value, type_id, .. } => {
-            let old_type = value.type_id;
-            rewrite_cm_methods_in_expr(value, tt, entry_source, cm_interface_registry);
-            if value.type_id != old_type {
-                *type_id = value.type_id;
-            }
-        }
-        TirStmtKind::Expr(value) => {
-            rewrite_cm_methods_in_expr(value, tt, entry_source, cm_interface_registry);
-        }
-        TirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                rewrite_cm_methods_in_expr(v, tt, entry_source, cm_interface_registry);
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            rewrite_cm_methods_in_expr(condition, tt, entry_source, cm_interface_registry);
-            rewrite_cm_methods_in_block(then_block, tt, entry_source, cm_interface_registry);
-            if let Some(blk) = else_block {
-                rewrite_cm_methods_in_block(blk, tt, entry_source, cm_interface_registry);
-            }
-        }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            rewrite_cm_methods_in_block(body, tt, entry_source, cm_interface_registry);
-        }
-        TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                rewrite_cm_methods_in_expr(v, tt, entry_source, cm_interface_registry);
-            }
-        }
-        TirStmtKind::LetDestructure { value, .. } => {
-            rewrite_cm_methods_in_expr(value, tt, entry_source, cm_interface_registry);
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::TaskReturn { value } => {
-            rewrite_cm_methods_in_expr(value, tt, entry_source, cm_interface_registry);
-        }
-        TirStmtKind::VariadicForOf { .. } => {}
-    }
+/// Rewrites `#[cm("...")]` resource method calls into the appropriate
+/// raw / internal / entry-module call. Detection runs post-order — after the
+/// exhaustive `TirMutVisitor` walk has rewritten any nested calls — matching
+/// the previous hand-written walker's "recurse first, then rewrite" order.
+struct CmMethodRewriter<'a> {
+    tt: &'a TypeTable,
+    entry_source: &'a ModuleSource,
+    cm_interface_registry: &'a CmInterfaceRegistry,
 }
 
-fn rewrite_cm_methods_in_expr(
-    expr: &mut TirExpr,
-    tt: &TypeTable,
-    entry_source: &ModuleSource,
-    cm_interface_registry: &CmInterfaceRegistry,
-) {
-    // First, recurse into sub-expressions
-    match &mut expr.kind {
-        TirExprKind::Call { args, .. } => {
-            for arg in args.iter_mut() {
-                rewrite_cm_methods_in_expr(&mut arg.expr, tt, entry_source, cm_interface_registry);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            rewrite_cm_methods_in_expr(receiver, tt, entry_source, cm_interface_registry);
-            for arg in args.iter_mut() {
-                rewrite_cm_methods_in_expr(&mut arg.expr, tt, entry_source, cm_interface_registry);
-            }
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            rewrite_cm_methods_in_expr(left, tt, entry_source, cm_interface_registry);
-            rewrite_cm_methods_in_expr(right, tt, entry_source, cm_interface_registry);
-        }
-        TirExprKind::Unary { expr: inner, .. } => {
-            rewrite_cm_methods_in_expr(inner, tt, entry_source, cm_interface_registry);
-        }
-        TirExprKind::Cast { expr: inner, .. } => {
-            rewrite_cm_methods_in_expr(inner, tt, entry_source, cm_interface_registry);
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            rewrite_cm_methods_in_expr(condition, tt, entry_source, cm_interface_registry);
-            rewrite_cm_methods_in_block(then_branch, tt, entry_source, cm_interface_registry);
-            if let Some(blk) = else_branch {
-                rewrite_cm_methods_in_block(blk, tt, entry_source, cm_interface_registry);
-            }
-        }
-        TirExprKind::Match { expr, arms } => {
-            rewrite_cm_methods_in_expr(expr, tt, entry_source, cm_interface_registry);
-            for arm in arms {
-                rewrite_cm_methods_in_expr(&mut arm.body, tt, entry_source, cm_interface_registry);
-                if let Some(guard) = &mut arm.guard {
-                    rewrite_cm_methods_in_expr(guard, tt, entry_source, cm_interface_registry);
+impl TirMutVisitor for CmMethodRewriter<'_> {
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+        match &mut stmt.kind {
+            TirStmtKind::Let { value, type_id, .. } => {
+                let old_type = value.type_id;
+                self.visit_expr(value);
+                // A streaming rewrite can retype the let value (e.g. to i32);
+                // keep the binding's recorded type in sync.
+                if value.type_id != old_type {
+                    *type_id = value.type_id;
                 }
             }
+            // `TaskReturn` is normally stripped before this pass; descend into
+            // its value defensively rather than tripping the walk's guard.
+            TirStmtKind::TaskReturn { value } => self.visit_expr(value),
+            _ => self.walk_stmt(stmt),
         }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for f in fields {
-                rewrite_cm_methods_in_expr(&mut f.value, tt, entry_source, cm_interface_registry);
-            }
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            for e in elements {
-                rewrite_cm_methods_in_expr(e, tt, entry_source, cm_interface_registry);
-            }
-        }
-        TirExprKind::FieldAccess { expr, .. } => {
-            rewrite_cm_methods_in_expr(expr, tt, entry_source, cm_interface_registry);
-        }
-        TirExprKind::Index { expr, index, .. } => {
-            rewrite_cm_methods_in_expr(expr, tt, entry_source, cm_interface_registry);
-            rewrite_cm_methods_in_expr(index, tt, entry_source, cm_interface_registry);
-        }
-        TirExprKind::Assign { target, value } => {
-            rewrite_cm_methods_in_expr(target, tt, entry_source, cm_interface_registry);
-            rewrite_cm_methods_in_expr(value, tt, entry_source, cm_interface_registry);
-        }
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                rewrite_cm_methods_in_expr(p, tt, entry_source, cm_interface_registry);
-            }
-        }
-        TirExprKind::Block(block) => {
-            rewrite_cm_methods_in_block(block, tt, entry_source, cm_interface_registry);
-        }
-        // CM resource method calls inside `with E => h do { ... }` and
-        // its handler binding expressions need the same rewriting as
-        // calls in plain bodies — otherwise gap-2/3 dispatch wrappers
-        // never see a `__cm_*` shape and the un-rewritten MethodCall
-        // (with `cm_name` still set) reaches WIR build, which panics
-        // in `try_translate_canonical_method` for resource ops the
-        // canonical translator no longer handles.
-        TirExprKind::WithHandler { bindings, body, .. } => {
-            for binding in bindings {
-                rewrite_cm_methods_in_expr(
-                    &mut binding.handler,
-                    tt,
-                    entry_source,
-                    cm_interface_registry,
-                );
-            }
-            rewrite_cm_methods_in_block(body, tt, entry_source, cm_interface_registry);
-        }
-        TirExprKind::Resume { value } => {
-            rewrite_cm_methods_in_expr(value, tt, entry_source, cm_interface_registry);
-        }
-        TirExprKind::Closure { body, .. } => {
-            rewrite_cm_methods_in_expr(body, tt, entry_source, cm_interface_registry);
-        }
-        TirExprKind::IndirectCall { callee, args } => {
-            rewrite_cm_methods_in_expr(callee, tt, entry_source, cm_interface_registry);
-            for arg in args.iter_mut() {
-                rewrite_cm_methods_in_expr(arg, tt, entry_source, cm_interface_registry);
-            }
-        }
-        TirExprKind::CmRawCall { args, .. } => {
-            for arg in args.iter_mut() {
-                rewrite_cm_methods_in_expr(arg, tt, entry_source, cm_interface_registry);
-            }
-        }
-        TirExprKind::GlobalVarSet { value, .. } => {
-            rewrite_cm_methods_in_expr(value, tt, entry_source, cm_interface_registry);
-        }
-        TirExprKind::LabeledBlock { block, .. } => {
-            rewrite_cm_methods_in_block(block, tt, entry_source, cm_interface_registry);
-        }
-        TirExprKind::TupleSpread { expr: inner }
-        | TirExprKind::TupleZip { expr: inner }
-        | TirExprKind::TypePackExpansion {
-            call_expr: inner, ..
-        }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. } => {
-            rewrite_cm_methods_in_expr(inner, tt, entry_source, cm_interface_registry);
-        }
-        TirExprKind::TemplateString { parts } => {
-            for part in parts.iter_mut() {
-                if let TirTemplatePart::Interpolation { expr, .. } = part {
-                    rewrite_cm_methods_in_expr(expr, tt, entry_source, cm_interface_registry);
-                }
-            }
-        }
-        // Leaf-like: no nested expressions to recurse into.
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::FuncRef { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
     }
 
-    // Now check if this expression is a CM resource method call
-    let cm_name = match &expr.kind {
-        TirExprKind::MethodCall { func, .. } => {
-            func.method_info.as_ref().and_then(|m| m.cm_name.clone())
-        }
-        TirExprKind::Call { func, .. } => func.method_info.as_ref().and_then(|m| m.cm_name.clone()),
-        _ => None,
-    };
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        // Recurse first so nested CM calls are rewritten before this node.
+        self.walk_expr(expr);
 
-    let Some(cm_name) = cm_name else {
-        return;
-    };
+        let cm_name = match &expr.kind {
+            TirExprKind::MethodCall { func, .. } | TirExprKind::Call { func, .. } => {
+                func.method_info.as_ref().and_then(|m| m.cm_name.clone())
+            }
+            _ => return,
+        };
+        let Some(cm_name) = cm_name else {
+            return;
+        };
 
-    // stream-new / future-new remain handled by WIR translate for now,
-    // because they require i64→tuple splitting with proper GC type casting.
-    // stream-read for non-u8 element types also stays for WIR translate,
-    // which generates proper record lifting from linear memory.
-    if matches!(cm_name.as_str(), "stream-new" | "future-new") {
-        return;
-    }
-    if cm_name == "stream-read" && !is_u8_array_type(expr.type_id, tt) {
-        // Non-u8 stream reads use a generated binding function
-        if let Some(type_args) = tt.generic_type_args(expr.type_id)
-            && let Some(&elem_type_id) = type_args.first()
-        {
-            let elem_name = tt.base_type_name(elem_type_id);
-            let func_name = format!("__cm_stream_read_{elem_name}");
-            rewrite_cm_instance_method(expr, "entry", &func_name, entry_source);
+        // stream-new / future-new remain handled by WIR translate (they need
+        // i64→tuple splitting with proper GC type casting).
+        if matches!(cm_name.as_str(), "stream-new" | "future-new") {
             return;
         }
-        return;
-    }
-
-    // For stream operations on non-u8 types, parameterize the canonical name
-    // and rewrite as CmRawCall directly (since the name is dynamic).
-    if is_stream_cm_method(&cm_name) {
-        let parameterized = parameterize_stream_cm_name(&cm_name, expr, tt, cm_interface_registry);
-        if parameterized != cm_name {
-            rewrite_cm_instance_method(expr, "raw", &parameterized, entry_source);
+        // Non-u8 stream reads call a generated binding function.
+        if cm_name == "stream-read" && !is_u8_array_type(expr.type_id, self.tt) {
+            if let Some(type_args) = self.tt.generic_type_args(expr.type_id)
+                && let Some(&elem_type_id) = type_args.first()
+            {
+                let elem_name = self.tt.base_type_name(elem_type_id);
+                let func_name = format!("__cm_stream_read_{elem_name}");
+                rewrite_cm_instance_method(expr, "entry", &func_name, self.entry_source);
+            }
             return;
         }
-    }
-
-    // Look up the binding function
-    let Some((kind, func_name)) = cm_binding_function(&cm_name) else {
-        // Not handled by synthesis yet — will fall through to WIR translate
-        return;
-    };
-
-    match &mut expr.kind {
-        TirExprKind::MethodCall { .. } => {
-            rewrite_cm_instance_method(expr, kind, func_name, entry_source);
+        // Stream ops on non-u8 types: parameterize the canonical name and
+        // rewrite as a CmRawCall directly (the name is dynamic).
+        if is_stream_cm_method(&cm_name) {
+            let parameterized =
+                parameterize_stream_cm_name(&cm_name, expr, self.tt, self.cm_interface_registry);
+            if parameterized != cm_name {
+                rewrite_cm_instance_method(expr, "raw", &parameterized, self.entry_source);
+                return;
+            }
         }
-        TirExprKind::Call { .. } => {
-            rewrite_cm_static_method(expr, kind, func_name, entry_source);
+        // Look up the binding function for everything else.
+        let Some((kind, func_name)) = cm_binding_function(&cm_name) else {
+            // Not handled by synthesis yet — falls through to WIR translate.
+            return;
+        };
+        match &mut expr.kind {
+            TirExprKind::MethodCall { .. } => {
+                rewrite_cm_instance_method(expr, kind, func_name, self.entry_source);
+            }
+            TirExprKind::Call { .. } => {
+                rewrite_cm_static_method(expr, kind, func_name, self.entry_source);
+            }
+            _ => {}
         }
-        _ => {}
     }
 }
 

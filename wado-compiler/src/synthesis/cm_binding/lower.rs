@@ -675,10 +675,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 // Allocate mutable locals for each payload flat slot, zero-init.
                 let mut payload_locals: Vec<(u32, TypeId)> = Vec::new();
                 for i in 0..max_flat_count {
-                    let slot_ty = payload_slot_types
-                        .get(i)
-                        .copied()
-                        .unwrap_or(TypeTable::I32);
+                    let slot_ty = payload_slot_types.get(i).copied().unwrap_or(TypeTable::I32);
                     let local = alloc_local(next_local, locals, slot_ty);
                     stmts.push(let_mut_stmt(
                         &format!("{prefix}_p{i}"),
