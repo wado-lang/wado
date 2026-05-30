@@ -144,9 +144,9 @@ struct TestSpec {
     #[serde(default)]
     compile_error: Option<String>,
 
-    /// Preopened directories for WASI filesystem tests.
-    /// Each entry is `[host_path, guest_path]`.
-    /// Paths are relative to the workspace root (cargo test working directory).
+    /// Preopened directories, each `[template, guest_path]`. Every preopen is a
+    /// fresh temp dir (see `prepare_preopened_dirs`). `template` seeds it:
+    /// `""` for empty scratch, or a workspace-relative path to copy in.
     #[serde(default)]
     preopened_dirs: Vec<[String; 2]>,
 
@@ -858,12 +858,9 @@ fn run_normal_test(
         });
         verify_result(&result, spec, test_id);
     } else {
-        // Default: wasi:cli/command
-        let dirs: Vec<(String, String)> = spec
-            .preopened_dirs
-            .iter()
-            .map(|[h, g]| (h.clone(), g.clone()))
-            .collect();
+        // Default: wasi:cli/command. `_temp_dirs` must outlive the run: dropping
+        // a `TempDir` deletes it from disk.
+        let (dirs, _temp_dirs) = prepare_preopened_dirs(&spec.preopened_dirs, test_id);
         let result = common::run_wasm_with_full_options(
             compile_result.wasm,
             &dirs,
@@ -907,6 +904,55 @@ fn run_normal_test(
             );
         }
     }
+}
+
+/// Back each `preopened_dirs` entry with a fresh temp dir so filesystem tests
+/// stay hermetic across the parallel per-optimization-level runs. An empty
+/// `template` yields empty scratch; otherwise it is copied in as a seed corpus.
+/// Returns the `(host, guest)` pairs plus the owning `TempDir` guards, which the
+/// caller must keep alive until the guest finishes.
+fn prepare_preopened_dirs(
+    specs: &[[String; 2]],
+    test_id: &str,
+) -> (Vec<(String, String)>, Vec<tempfile::TempDir>) {
+    let mut dirs = Vec::with_capacity(specs.len());
+    let mut temp_dirs = Vec::with_capacity(specs.len());
+
+    for [template, guest_path] in specs {
+        let temp = tempfile::tempdir()
+            .unwrap_or_else(|e| panic!("[{test_id}] failed to create temp preopen dir: {e}"));
+
+        if !template.is_empty() {
+            copy_dir_recursive(Path::new(template), temp.path()).unwrap_or_else(|e| {
+                panic!("[{test_id}] failed to seed preopen dir from {template:?}: {e}")
+            });
+        }
+
+        dirs.push((
+            temp.path().to_string_lossy().into_owned(),
+            guest_path.clone(),
+        ));
+        temp_dirs.push(temp);
+    }
+
+    (dirs, temp_dirs)
+}
+
+/// Recursively copy the contents of `src` into the existing directory `dst`.
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            std::fs::create_dir(&to)?;
+            copy_dir_recursive(&from, &to)?;
+        } else {
+            std::fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
