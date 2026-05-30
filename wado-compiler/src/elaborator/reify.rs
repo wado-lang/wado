@@ -1216,7 +1216,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         let mut next_idx = impl_type_params.len();
         for p in &func.type_params {
-            if p.is_effect || type_param_names.iter().any(|n| n == &p.name) {
+            // Skip `<F: fn(...)>` bounds: like the elaborator they are
+            // realised eagerly to the bound's function type (built into
+            // `fn_bound_map` below) and must not consume a positional
+            // type-param slot, or the real method params shift index.
+            if p.is_effect
+                || p.bounds.iter().any(|b| b.fn_signature.is_some())
+                || type_param_names.iter().any(|n| n == &p.name)
+            {
                 continue;
             }
             if type_param_names.len() <= next_idx {
@@ -1225,6 +1232,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             type_param_names[next_idx] = p.name.clone();
             next_idx += 1;
         }
+
+        // `<F: fn(...)>` method-level bounds → their resolved function
+        // type (resolved with `Self` / assoc bindings in scope).
+        let fn_bound_map: crate::hashmap::IndexMap<String, TypeId> = func
+            .type_params
+            .iter()
+            .filter_map(|p| {
+                let sig = p.bounds.iter().find_map(|b| b.fn_signature.as_ref())?;
+                let ty = self.resolve_type_with_self(
+                    &ast::Type::Function(sig.clone()),
+                    &type_param_names,
+                    facts.self_type,
+                    &facts.assoc_type_bindings,
+                );
+                Some((p.name.clone(), ty))
+            })
+            .collect();
 
         // Derive the mangler's base-struct-name input from the
         // resolved `Self` type. The mangler wants the bare name
@@ -1286,6 +1310,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut params = Vec::with_capacity(func.params.len());
         for p in &func.params {
             let type_id = match p.self_kind {
+                // A param naming a `<F: fn(...)>` bound resolves to the
+                // realised function type; otherwise resolve with `Self`.
+                SelfKind::None if matches!(&p.ty, ast::Type::Named(n) if fn_bound_map.contains_key(&n.name)) =>
+                {
+                    let ast::Type::Named(n) = &p.ty else {
+                        unreachable!()
+                    };
+                    fn_bound_map[&n.name]
+                }
                 SelfKind::None => self.resolve_type_with_self(
                     &p.ty,
                     &type_param_names,
