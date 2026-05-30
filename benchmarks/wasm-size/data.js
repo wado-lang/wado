@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780102149143,
+  "lastUpdate": 1780106754532,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27469,6 +27469,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/abcffeff1475014414acb8dd64148e29497b1382"
         },
         "date": 1780102148664,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9512,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17303,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 491625,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "03964a671bd06bbc4576a4b843a0b26ccae9f083",
+          "message": "Merge pull request #1235 from wado-lang/claude/gale-flaky-test-jYZKo\n\nperf(gale): halve g4 lexer allocation to de-flake TypeScript grammar test",
+          "timestamp": "2026-05-30T10:57:31+09:00",
+          "tree_id": "395cf06b880443825343a0b481e7db9e334fe2bc",
+          "url": "https://github.com/wado-lang/wado/commit/03964a671bd06bbc4576a4b843a0b26ccae9f083"
+        },
+        "date": 1780106754056,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
