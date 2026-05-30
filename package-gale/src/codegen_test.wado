@@ -761,8 +761,8 @@ ID : [a-z]+ ;";
     // Parser-side contract: HIDDEN channel must not degrade to skip.
     for let r of &grammar.lexer_rules {
         if r.name == "WS" {
-            assert r.skip == false, "HIDDEN must not collapse to skip";
-            assert r.channel == 1, "HIDDEN must resolve to channel id 1";
+            assert r.skip == false;
+            assert r.channel == 1;
         }
     }
     // Generator-side contract: the emitted dispatch must route `best_channel
@@ -784,7 +784,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"_parse_expr__inner(p, 2)"), "left-assoc '**' alt should recurse with own_prec+1 (=2)";
+    assert str_contains(&output, &"_parse_expr__inner(p, 2)");
 }
 
 test "generate right-associative LR alt passes own_prec on right operand" {
@@ -797,9 +797,9 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"_parse_expr__inner(p, 1)"), "right-assoc '**' alt should recurse with own_prec (=1)";
+    assert str_contains(&output, &"_parse_expr__inner(p, 1)");
     // And the scan-side mirror must be kept in sync.
-    assert str_contains(&output, &"scan_expr(tokens, pos, 1)"), "scan-side must mirror the right-assoc precedence";
+    assert str_contains(&output, &"scan_expr(tokens, pos, 1)");
 }
 
 fn parse_grammar(input: String, path: String) -> Grammar {
@@ -827,8 +827,8 @@ letterA : 'a' ;
     let scan_body = extract_fn_body(&output, &"fn scan_statement(");
     // The LR loop must save `pos` before the suffix call and restore it on
     // failure. Look for the save+restore pair around `scan_statement_lr_1(`.
-    assert str_contains(&scan_body, &"let lr_saved_pos = pos;"), `scan_statement must save pos before the LR suffix call:\n{scan_body}`;
-    assert str_contains(&scan_body, &"pos = lr_saved_pos; break;"), `scan_statement must restore pos and break on LR suffix failure:\n{scan_body}`;
+    assert str_contains(&scan_body, &"let lr_saved_pos = pos;");
+    assert str_contains(&scan_body, &"pos = lr_saved_pos; break;");
 }
 
 test "LR helper wraps left into an array when the recursive-position label uses +=" {
@@ -847,7 +847,7 @@ WS : [ \\t\\n]+ -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let helper = extract_fn_body(&output, &"fn _parse_expr__inner_lr_");
-    assert str_contains(&helper, &"b: [left] as Array<ExprNode>,"), `LR helper must wrap a list-label \`left\` in an Array<T>-typed array literal:\n{helper}`;
+    assert str_contains(&helper, &"b: [left] as Array<ExprNode>,");
 }
 
 test "LR helper stamps min_prec on a self-ref nested inside a Repeat group" {
@@ -869,11 +869,11 @@ WS : [ \\t\\n]+ -> skip ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let helper = extract_fn_body(&output, &"fn _parse_expr__inner_lr_1");
     // Send is the second LR alt of two left-assoc: own_prec=1, conflict_min=2.
-    assert !str_contains(&helper, &"_parse_expr__inner(p)?"), `bare _parse_expr__inner(p)? leaks default min_prec=0:\n{helper}`;
-    assert str_contains(&helper, &"_parse_expr__inner(p, 2)?"), `expected _parse_expr__inner(p, 2)? for inner / trailing self-refs:\n{helper}`;
+    assert !str_contains(&helper, &"_parse_expr__inner(p)?");
+    assert str_contains(&helper, &"_parse_expr__inner(p, 2)?");
     let scan_helper = extract_fn_body(&output, &"fn scan_expr_lr_1");
-    assert !str_contains(&scan_helper, &"scan_expr(tokens, pos, 0)"), `bare scan_expr(_, _, 0) leaks default min_prec=0:\n{scan_helper}`;
-    assert str_contains(&scan_helper, &"scan_expr(tokens, pos, 2)"), `expected scan_expr(tokens, pos, 2):\n{scan_helper}`;
+    assert !str_contains(&scan_helper, &"scan_expr(tokens, pos, 0)");
+    assert str_contains(&scan_helper, &"scan_expr(tokens, pos, 2)");
 }
 
 test "SimpleCst group emit threads min_prec_arg on a self-ref alt inside an LR suffix" {
@@ -891,8 +891,8 @@ WS : [ \\t\\n]+ -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let helper = extract_fn_body(&output, &"fn _parse_expr__inner_lr_");
-    assert helper.len() > 0, "expected an LR suffix helper for expr";
-    assert !str_contains(&helper, &"_parse_expr__inner(p)?"), `SimpleCst self-ref alt must thread min_prec:\n{helper}`;
+    assert helper.len() > 0;
+    assert !str_contains(&helper, &"_parse_expr__inner(p)?");
 }
 
 test "LR parse loop predicts via scan when suffix's first token is shared with the atom" {
@@ -909,7 +909,7 @@ letterA : 'a' ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let parse_body = extract_fn_body(&output, &"fn _parse_statement__inner(");
-    assert str_contains(&parse_body, &"scan_statement_lr_1(") || str_contains(&parse_body, &"scan_statement_lr_1 ("), `_parse_statement must consult scan_statement_lr_1 before parsing the LR suffix:\n{parse_body}`;
+    assert str_contains(&parse_body, &"scan_statement_lr_1(") || str_contains(&parse_body, &"scan_statement_lr_1 (");
 }
 
 test "generate emits pub fn parse_<rule>(input) per parser rule" {
@@ -925,11 +925,11 @@ b : 'y' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"pub fn parse_a(input: &String)"), `parse_a public entry missing from output:\n{output}`;
-    assert str_contains(&output, &"pub fn parse_b(input: &String)"), `parse_b public entry missing from output:\n{output}`;
-    assert str_contains(&output, &"return _parse_a(&mut parser);"), `parse_a body must delegate to _parse_a:\n{output}`;
-    assert str_contains(&output, &"return _parse_b(&mut parser);"), `parse_b body must delegate to _parse_b:\n{output}`;
-    assert str_contains(&output, &"return parse_a(input);"), "parse(input) alias must call the first rule's input entry";
+    assert str_contains(&output, &"pub fn parse_a(input: &String)");
+    assert str_contains(&output, &"pub fn parse_b(input: &String)");
+    assert str_contains(&output, &"return _parse_a(&mut parser);");
+    assert str_contains(&output, &"return _parse_b(&mut parser);");
+    assert str_contains(&output, &"return parse_a(input);");
 }
 
 test "generate emits pub fn parse_<rule>(input) for LR rule with min_prec=0" {
@@ -944,8 +944,8 @@ WS : [ \\t\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"pub fn parse_expr(input: &String)"), `parse_expr public entry missing from output:\n{output}`;
-    assert str_contains(&output, &"return _parse_expr(&mut parser, 0);"), `LR rule input entry must pin min_prec to 0:\n{output}`;
+    assert str_contains(&output, &"pub fn parse_expr(input: &String)");
+    assert str_contains(&output, &"return _parse_expr(&mut parser, 0);");
 }
 
 test "token-only group `(K_A | K_B)` gates p.advance() on a kind-check" {
@@ -963,8 +963,8 @@ a : 'a' ('b' | 'c') 'd' ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let body = extract_fn_body(&output, &"fn _parse_a__inner(");
-    assert str_contains(&body, &"p.match_set(["), `_parse_a body must gate the token-only group through p.match_set([...]):\n{body}`;
-    assert !str_contains(&body, &"let lit_b_or_lit_c = p.advance();"), `_parse_a body must not emit a kind-check-less p.advance() for the token-only group:\n{body}`;
+    assert str_contains(&body, &"p.match_set([");
+    assert !str_contains(&body, &"let lit_b_or_lit_c = p.advance();");
 }
 
 fn extract_fn_body(output: &String, header: &String) -> String {
@@ -1013,8 +1013,8 @@ WS : [ \\t]+ -> skip ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     // A case-insensitive 'i' must use the branchless CI comparison helper.
-    assert str_contains(&output, &"!chars[pos].eq_ignore_ascii_case(&'i')"), `ci literal should fold 'i' → [iI]:\n{output}`;
-    assert str_contains(&output, &"!chars[pos].eq_ignore_ascii_case(&'f')"), `ci literal should fold 'f' → [fF]:\n{output}`;
+    assert str_contains(&output, &"!chars[pos].eq_ignore_ascii_case(&'i')");
+    assert str_contains(&output, &"!chars[pos].eq_ignore_ascii_case(&'f')");
 }
 
 test "caseInsensitive grammar option makes char-range match CI" {
@@ -1024,7 +1024,7 @@ ID : [a-z]+ ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     // A case-insensitive [a-z] must also accept [A-Z].
-    assert str_contains(&output, &"'A' <= chars[pos] <= 'Z'"), `ci char range should fold [a-z] → [a-zA-Z]:\n{output}`;
+    assert str_contains(&output, &"'A' <= chars[pos] <= 'Z'");
 }
 
 test "lexer rule caseInsensitive=false overrides grammar-level true" {
@@ -1036,11 +1036,11 @@ WS : [ \\t]+ -> skip ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     // IF still CI: the literal 'i' must use the branchless CI helper.
-    assert str_contains(&output, &"!chars[pos].eq_ignore_ascii_case(&'i')"), `IF must remain CI (grammar-level):\n{output}`;
+    assert str_contains(&output, &"!chars[pos].eq_ignore_ascii_case(&'i')");
     // STRICT: rule-level caseInsensitive=false means 'x' must NOT be folded,
     // regardless of which match path the optimisation chose for the rule
     // (keyword classifier, regular dispatch, or shared literal).
-    assert !str_contains(&output, &"eq_ignore_ascii_case(&'x')"), `STRICT must not fold 'x' to [xX]:\n{output}`;
+    assert !str_contains(&output, &"eq_ignore_ascii_case(&'x')");
 }
 
 test "lexer rule caseInsensitive=true enables CI when grammar-level absent" {
@@ -1049,9 +1049,9 @@ KW options { caseInsensitive = true; } : 'go' ;
 ID : [a-z]+ ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"!chars[pos].eq_ignore_ascii_case(&'g')"), `rule-level caseInsensitive=true should fold 'g' → [gG]:\n{output}`;
+    assert str_contains(&output, &"!chars[pos].eq_ignore_ascii_case(&'g')");
     // ID is not CI; its range must stay [a-z] without a mirrored [A-Z].
-    assert !str_contains(&output, &"'A' <= chars[pos] <= 'Z'"), `ID has no CI; [a-z] must not be mirrored to [A-Z]:\n{output}`;
+    assert !str_contains(&output, &"'A' <= chars[pos] <= 'Z'");
 }
 
 test "virtual tokens are marked and not match-generated" {
@@ -1068,10 +1068,10 @@ ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"    VIRTUAL_TOK,  // virtual"), `TokenKind member must be marked virtual:\n{output}`;
-    assert str_contains(&output, &"global TK_VIRTUAL_TOK: i32 = ") && str_contains(&output, &";  // virtual"), `TK_VIRTUAL_TOK constant must be marked virtual:\n{output}`;
-    assert str_contains(&output, &"TK_VIRTUAL_TOK => \"VIRTUAL_TOK\",  // virtual"), `token_kind_name arm must be marked virtual:\n{output}`;
-    assert !str_contains(&output, &"fn try_virtual_tok("), `virtual token must not get a matcher fn:\n{output}`;
+    assert str_contains(&output, &"    VIRTUAL_TOK,  // virtual");
+    assert str_contains(&output, &"global TK_VIRTUAL_TOK: i32 = ") && str_contains(&output, &";  // virtual");
+    assert str_contains(&output, &"TK_VIRTUAL_TOK => \"VIRTUAL_TOK\",  // virtual");
+    assert !str_contains(&output, &"fn try_virtual_tok(");
 }
 
 test "caseInsensitive does not fold non-letters" {
@@ -1107,11 +1107,11 @@ test "metadata comment lists grammar-level options" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"// Grammar metadata from source .g4 prequels:"), `missing metadata header:\n{output}`;
-    assert str_contains(&output, &"//   option language = Python"), `missing language option:\n{output}`;
-    assert str_contains(&output, &"//   option superClass = my.pkg.BaseParser"), `missing superClass option:\n{output}`;
-    assert str_contains(&output, &"//   option tokenVocab = TestLexer"), `missing tokenVocab option:\n{output}`;
-    assert str_contains(&output, &"//   option caseInsensitive = true"), `missing caseInsensitive option:\n{output}`;
+    assert str_contains(&output, &"// Grammar metadata from source .g4 prequels:");
+    assert str_contains(&output, &"//   option language = Python");
+    assert str_contains(&output, &"//   option superClass = my.pkg.BaseParser");
+    assert str_contains(&output, &"//   option tokenVocab = TestLexer");
+    assert str_contains(&output, &"//   option caseInsensitive = true");
 }
 
 test "metadata comment formats string and int option values" {
@@ -1132,9 +1132,9 @@ test "metadata comment formats string and int option values" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"//   option tokenVocab = \"foo.g4\""), `missing quoted string option:\n{output}`;
-    assert str_contains(&output, &"//   option k = 3"), `missing int option:\n{output}`;
-    assert str_contains(&output, &"//   option init = { ... }"), `action body should be elided:\n{output}`;
+    assert str_contains(&output, &"//   option tokenVocab = \"foo.g4\"");
+    assert str_contains(&output, &"//   option k = 3");
+    assert str_contains(&output, &"//   option init = { ... }");
 }
 
 test "metadata comment lists named actions" {
@@ -1155,10 +1155,10 @@ test "metadata comment lists named actions" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"// Grammar metadata from source .g4 prequels:"), `missing metadata header:\n{output}`;
-    assert str_contains(&output, &"//   @header"), `missing @header action marker:\n{output}`;
-    assert str_contains(&output, &"//   @parser::members"), `missing @parser::members action marker:\n{output}`;
-    assert str_contains(&output, &"//   @lexer::members"), `missing @lexer::members action marker:\n{output}`;
+    assert str_contains(&output, &"// Grammar metadata from source .g4 prequels:");
+    assert str_contains(&output, &"//   @header");
+    assert str_contains(&output, &"//   @parser::members");
+    assert str_contains(&output, &"//   @lexer::members");
 }
 
 test "metadata block omitted when no options and no named actions" {
@@ -1175,7 +1175,7 @@ test "metadata block omitted when no options and no named actions" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert !str_contains(&output, &"// Grammar metadata from source .g4 prequels:"), `metadata header should be omitted when empty:\n{output}`;
+    assert !str_contains(&output, &"// Grammar metadata from source .g4 prequels:");
 }
 
 test "visibility comment emitted on non-default parser rule" {
@@ -1217,9 +1217,9 @@ test "visibility comment emitted on non-default parser rule" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"// rule visibility: public (ignored by codegen, matches ANTLR4)"), `expected visibility comment for Public rule:\n{output}`;
+    assert str_contains(&output, &"// rule visibility: public (ignored by codegen, matches ANTLR4)");
     // Default visibility must not add any comment.
-    assert !str_contains(&output, &"// rule visibility: default"), `Default visibility must not emit a comment:\n{output}`;
+    assert !str_contains(&output, &"// rule visibility: default");
 }
 
 test "visibility comment emitted on non-default lexer rule" {
@@ -1238,7 +1238,7 @@ test "visibility comment emitted on non-default lexer rule" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"// rule visibility: protected (ignored by codegen, matches ANTLR4)"), `expected visibility comment for Protected lexer rule:\n{output}`;
+    assert str_contains(&output, &"// rule visibility: protected (ignored by codegen, matches ANTLR4)");
 }
 
 test "single-char literal lexer rule without an identifier carrier emits its own try_ matcher" {
@@ -1256,10 +1256,10 @@ WS : [ \\t\\n\\r]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"fn try_a("), `try_a should be generated when no keyword carrier exists:\n{output}`;
-    assert str_contains(&output, &"fn try_b("), `try_b should be generated when no keyword carrier exists:\n{output}`;
-    assert str_contains(&output, &"first_char == 'A'"), `tokenize dispatch must include 'A':\n{output}`;
-    assert str_contains(&output, &"first_char == 'B'"), `tokenize dispatch must include 'B':\n{output}`;
+    assert str_contains(&output, &"fn try_a(");
+    assert str_contains(&output, &"fn try_b(");
+    assert str_contains(&output, &"first_char == 'A'");
+    assert str_contains(&output, &"first_char == 'B'");
 }
 
 test "set list-label `name+=(A | B)*` emits Array<Token> + match_set" {
@@ -1273,9 +1273,9 @@ WS : (' '|'\\n') -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     let body = extract_fn_body(&output, &"fn _parse_b__inner(");
-    assert str_contains(&body, &"let mut val: Array<Token>"), body;
-    assert str_contains(&body, &"p.match_set([TK_INT, TK_FLOAT])"), body;
-    assert str_contains(&body, &"val.push("), body;
+    assert str_contains(&body, &"let mut val: Array<Token>");
+    assert str_contains(&body, &"p.match_set([TK_INT, TK_FLOAT])");
+    assert str_contains(&body, &"val.push(");
 }
 
 test "non-greedy optional (??) emits Option<T> + single if" {
@@ -1286,11 +1286,11 @@ ifStmt : 'if' 'y' statement ('else' statement)?? ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"lit_else_statement: Option<"), `?? must emit an Option<T> field:\n{output}`;
-    assert !str_contains(&output, &"lit_else_statement: Array<"), `?? must NOT emit an Array<T> field:\n{output}`;
+    assert str_contains(&output, &"lit_else_statement: Option<");
+    assert !str_contains(&output, &"lit_else_statement: Array<");
     let body = extract_fn_body(&output, &"fn _parse_if_stmt__inner(");
-    assert str_contains(&body, &"if p.peek_kind() == TK_LIT_ELSE"), `?? emit must use a single if-check, not a while loop:\n{body}`;
-    assert !str_contains(&body, &"while p.peek_kind() == TK_LIT_ELSE"), `?? emit must not use a while loop:\n{body}`;
+    assert str_contains(&body, &"if p.peek_kind() == TK_LIT_ELSE");
+    assert !str_contains(&body, &"while p.peek_kind() == TK_LIT_ELSE");
 }
 
 test "single-char literal with an ID carrier stays a keyword (no try_ matcher)" {
@@ -1305,8 +1305,8 @@ WS : [ \\t\\n\\r]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert !str_contains(&output, &"fn try_a("), `try_a must not be generated when an ID carrier exists:\n{output}`;
-    assert str_contains(&output, &"classify_keyword"), `keyword classifier must still be emitted:\n{output}`;
+    assert !str_contains(&output, &"fn try_a(");
+    assert str_contains(&output, &"classify_keyword");
 }
 
 test "keyword candidate declared after a colliding carrier falls back to its own matcher" {
@@ -1325,7 +1325,7 @@ C : 'c' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"fn try_b("), `B must fall back to its own matcher when its only carrier precedes it:\n{output}`;
+    assert str_contains(&output, &"fn try_b(");
 }
 
 fn str_contains(haystack: &String, needle: &String) -> bool {

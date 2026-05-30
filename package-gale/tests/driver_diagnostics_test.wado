@@ -18,55 +18,35 @@ use json from "./grammars/JSON.g4"
 test "parse error carries a 1-based line and 0-based column" {
     // `{"a": }` — after the colon a value is required but `}` appears at
     // column 6 on line 1.
-    let result = json::parse(&"{\"a\": }");
-    let e = if let Err(err) = result {
-        err;
-    } else {
-        panic("expected a parse error");
-    };
-    assert e.line == 1, `expected line 1, got {e.line} ({e})`;
-    assert e.col == 6, `expected col 6, got {e.col} ({e})`;
+    let e = json::parse(&"{\"a\": }").unwrap_err();
+    assert e.line == 1;
+    assert e.col == 6;
 }
 
 test "parse error reports the active rule chain" {
-    let result = json::parse(&"{\"a\": }");
-    let e = if let Err(err) = result {
-        err;
-    } else {
-        panic("expected a parse error");
-    };
-    assert !e.rule_stack.is_empty(), "rule stack must not be empty";
-    // The start rule sits at the outer end of the path.
-    assert e.rule_path().starts_with("json"), `expected path to start at json, got "{e.rule_path()}"`;
-    // The failing token sits inside a `value`.
-    assert e.rule_path().ends_with("value"), `expected path to end at value, got "{e.rule_path()}"`;
+    let e = json::parse(&"{\"a\": }").unwrap_err();
+    assert !e.rule_stack.is_empty();
+    // The start rule sits at the outer end of the path, the failing token's
+    // rule at the inner end.
+    assert e.rule_path().starts_with("json");
+    assert e.rule_path().ends_with("value");
 }
 
 test "parse error Display includes position, message, and rule path" {
-    let result = json::parse(&"{\"a\": }");
-    let e = if let Err(err) = result {
-        err;
-    } else {
-        panic("expected a parse error");
-    };
+    let e = json::parse(&"{\"a\": }").unwrap_err();
     let text = `{e}`;
-    assert text.starts_with("parse error at 1:6:"), `unexpected diagnostic:\n{text}`;
-    assert text.contains("in rule: json"), `diagnostic missing rule path:\n{text}`;
+    assert text.starts_with("parse error at 1:6:");
+    assert text.contains("in rule: json");
 }
 
 test "line and column advance across newlines" {
     // The unexpected `}` is on line 3, column 0.
-    let result = json::parse(&"{\n  \"a\":\n}");
-    let e = if let Err(err) = result {
-        err;
-    } else {
-        panic("expected a parse error");
-    };
-    assert e.line == 3, `expected line 3, got {e.line} ({e})`;
-    assert e.col == 0, `expected col 0, got {e.col} ({e})`;
+    let e = json::parse(&"{\n  \"a\":\n}").unwrap_err();
+    assert e.line == 3;
+    assert e.col == 0;
 }
 
 test "a valid parse still succeeds" {
     let result = json::parse(&"{\"a\": 1}");
-    assert result matches { Ok(_) }, "valid JSON must parse";
+    assert result matches { Ok(_) };
 }
