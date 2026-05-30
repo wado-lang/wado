@@ -991,15 +991,27 @@ modules no longer collide.
 ##### Remaining singles (5, fail O0+O2)
 
 - `effect_handler_with_do` — a struct field typed by a **re-exported**
-  newtype reifies as `unknown`. `Mark = u64` lives in
-  `wasi:clocks/monotonic_clock.wado` and reaches the test through two
-  `pub use` hops; `reify_struct` reads field types from
-  `tysys.all_struct_fields` (decl-resolved during annotate), and there
-  `FixedClock.mark` is `unknown` (vs production's `u64`) — so the TIR dump
-  shows `mark: unknown` and dispatches `unknown^Eq::eq` / `unknown^Ord::cmp`,
-  and codegen fails `expected i32, found i64`. The gap is annotate's decl
-  field-type resolution not following the multi-hop `pub use` re-export chain
-  for newtypes; fix it where `all_struct_fields` is populated, not in reify.
+  newtype reifies as `unknown` (root cause pinned by instrumenting the field
+  pass). `Mark = u64` is defined in `wasi:clocks/monotonic_clock.wado` and the
+  test `use`s it from `wasi:clocks` (one `pub use` re-export hop). The
+  decl-field pass (orchestration.rs:431) resolves field types through the
+  **static** resolver (`resolve_type_static[_with_params]` → `TypeLookup`),
+  whose newtype lookup keys on `imported_type_sources["Mark"] = Wasi("clocks")`
+  and finds nothing there — `Mark`'s newtype entry is absent from
+  `all_newtypes` entirely (`modules_with_Mark=[]`), so the field lands
+  `unknown` in `all_struct_fields`. Production has the _same_ `unknown` there
+  but masks it: `resolve_struct` (item.rs) re-resolves every field via the
+  **instance** resolver `resolve_named_type` (type_resolution.rs:254), which
+  follows the `pub use` chain through `find_decl_type_in_module` /
+  `loaded_modules` and yields `u64`. reify's `reify_struct` (reify.rs:723)
+  trusts `all_struct_fields` and has no re-export-following resolver, so it
+  keeps `unknown`, dispatches `unknown^Eq::eq` / `unknown^Ord::cmp`, and
+  codegen fails `expected i32, found i64`. Fix: give reify a
+  re-export-following type resolution for struct field types (port/share
+  `find_decl_type_in_module`) and re-resolve in `reify_struct` when the
+  snapshot type is `UNKNOWN` — mirroring production's emission-time override.
+  (A static-resolver-only fallback is insufficient: `TypeLookup` has no
+  `loaded_modules` to chase the re-export.)
 - `opt_sroa_variant_return_if_descent` — a `wir_expect:O2` test: the
   `wir/sroa_variant_returns` pass must SROA `leaf`'s `Result` return through a
   `Return(If(...))` wrapper. reify's pre-pass WIR diverges from production
