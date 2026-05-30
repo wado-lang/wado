@@ -7324,31 +7324,34 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::{TirExprKind, TypeTable};
         let kind = match &lit.value {
             ast::Literal::Number(repr) => {
-                // The recorded type tells us whether to emit an Int or
-                // a Float TIR literal. Parsing the digits is done here
-                // (same logic as `Elaborator::resolve_numeric_literal`
-                // at expr.rs ≈648–765, sans the type-defaulting tree).
-                if recorded_type == TypeTable::F32 || recorded_type == TypeTable::F64 {
-                    let value: f64 = repr.parse().unwrap_or(0.0);
+                // Parse the literal value with the shared `util` helpers
+                // (which handle digit separators, scientific notation, and
+                // hex/oct/bin radix) rather than a hand-rolled decoder.
+                // The *recorded type* decides whether to emit an Int or a
+                // Float TIR literal; the literal's *syntactic form*
+                // (`is_float_only_literal`) decides how to read its value.
+                // A radix/scientific int literal coerced to a float target
+                // (`let x: f64 = 0xFF` / `1e2`) reads as an integer then
+                // converts; a float literal to an int target never occurs
+                // (the elaborator rejects it). Mirrors
+                // `Elaborator::resolve_numeric_literal` (expr.rs:337) plus
+                // the numeric coercion.
+                let is_float_target =
+                    recorded_type == TypeTable::F32 || recorded_type == TypeTable::F64;
+                if is_float_target {
+                    let value: f64 = if super::util::is_float_only_literal(repr) {
+                        super::util::parse_float_literal(repr).unwrap_or(0.0)
+                    } else {
+                        super::util::parse_u128_literal(repr)
+                            .map(|v| v as f64)
+                            .unwrap_or(0.0)
+                    };
                     TirExprKind::FloatLiteral {
                         value,
                         repr: repr.clone(),
                     }
                 } else {
-                    // Strip digit separators (`0x1234_5678` → `0x12345678`)
-                    // before parsing, matching the elaborator
-                    // (expr.rs:4368). Without this, `from_str_radix` /
-                    // `parse` reject the `_` and fall to 0.
-                    let digits = repr.replace('_', "");
-                    let value: u64 = if let Some(stripped) = digits.strip_prefix("0x") {
-                        u64::from_str_radix(stripped, 16).unwrap_or(0)
-                    } else if let Some(stripped) = digits.strip_prefix("0o") {
-                        u64::from_str_radix(stripped, 8).unwrap_or(0)
-                    } else if let Some(stripped) = digits.strip_prefix("0b") {
-                        u64::from_str_radix(stripped, 2).unwrap_or(0)
-                    } else {
-                        digits.parse::<u64>().unwrap_or(0)
-                    };
+                    let value = super::util::parse_u128_literal(repr).unwrap_or(0) as u64;
                     TirExprKind::IntLiteral {
                         value,
                         repr: repr.clone(),
