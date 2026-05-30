@@ -26,7 +26,7 @@ item
     ;
 
 useDecl
-    : 'use' importGroup 'from' StringLiteral ';'
+    : 'use' importGroup 'from' STRING_LITERAL ';'
     ;
 
 importGroup
@@ -38,11 +38,11 @@ importList
     ;
 
 importItem
-    : Identifier
+    : IDENTIFIER
     ;
 
 functionDecl
-    : 'export'? 'fn' Identifier '(' paramList? ')' withClause? block
+    : 'export'? 'fn' IDENTIFIER '(' paramList? ')' withClause? block
     ;
 
 paramList
@@ -50,15 +50,15 @@ paramList
     ;
 
 param
-    : Identifier ':' typeRef
+    : IDENTIFIER ':' typeRef
     ;
 
 typeRef
-    : Identifier
+    : IDENTIFIER
     ;
 
 withClause
-    : 'with' Identifier (',' Identifier)*
+    : 'with' IDENTIFIER (',' IDENTIFIER)*
     ;
 
 block
@@ -75,7 +75,7 @@ expression
     ;
 
 callExpression
-    : Identifier '(' argumentList? ')'
+    : IDENTIFIER '(' argumentList? ')'
     ;
 
 argumentList
@@ -83,23 +83,23 @@ argumentList
     ;
 
 primary
-    : Identifier
-    | StringLiteral
+    : IDENTIFIER
+    | STRING_LITERAL
     ;
 
 // ---------------------------------------------------------------------------
 // Lexer rules
 // ---------------------------------------------------------------------------
 
-Identifier
+IDENTIFIER
     : [a-zA-Z_] [a-zA-Z0-9_]*
     ;
 
-StringLiteral
+STRING_LITERAL
     : '"' (~["\\\r\n] | '\\' .)* '"'
     ;
 
-LineComment
+LINE_COMMENT
     : '//' ~[\r\n]* -> channel(HIDDEN)
     ;
 
