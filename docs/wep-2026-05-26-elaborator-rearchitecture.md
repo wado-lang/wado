@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2648 / 2678 fixtures passing under
+      suite reaches **2656 / 2678 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2678/2678,
-      so the 15 remaining unique failures are all reify-specific;
+      so the 11 remaining unique failures are all reify-specific;
       count as of the 2026-05-30 `origin/main` merge). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
@@ -889,23 +889,51 @@ Landed:
     cross_module_same_name_fn / infer_lhs_overrides_literal / return_merged /
     wasm_name_conflict_generic_fn sites that shared the same structural-tuple
     interning gap); production unaffected (the arm is reify-only).
+43. **Handle spread elements in reify tuple literals (2648 → 2649).** reify's
+    `TupleLiteral` arm walked elements with `reify_expr`, which panics on a
+    `Spread` (`bare Spread is invalid outside TupleLiteral`) — so any
+    `[..rest, b]` / `[a, ..middle, b]` in a variadic function crashed reify
+    before WIR build. Ported `resolve_tuple_literal`'s spread handling
+    (expr.rs:3797) into a new `reify_tuple_literal`: a direct `TypePack`
+    operand → `TypePackExpansion`, a tuple containing a pack → `TupleSpread`
+    (monomorphize expands), a concrete tuple → inline `FieldAccess` per
+    element (binding a non-trivial operand to a `__spread_N` temporary). Adds
+    `type_contains_pack` mirroring expr.rs:3752. Clears variadic_3 and removes
+    the spread panic for the rest of the cluster; production unaffected.
+44. **Resolve variadic type-pack spreads in the static resolver (2649 →
+    2656).** `resolve_type_static_with_params` (the host-agnostic resolver
+    reify routes through) had no `Type::TypePackSpread` arm, so a `..T` spread
+    fell to `_ => UNKNOWN`. A `[..T]` parameter therefore resolved its element
+    to `unknown`, and a generic tuple method (`Tuple<..T>^Eq::eq`)
+    monomorphized against `Tuple<unknown>` — never registering at WIR build.
+    Added a `TypePackSpread` arm that resolves the pack to a `TypePack` keyed
+    by the param's positional index (mirroring the instance resolver's
+    `trait_ctx.type_params` lookup, type_resolution.rs:103); the now-exhaustive
+    match drops the dead `_ => UNKNOWN` catch-all. Clears variadic_1,
+    variadic_2, variadic_trait_bound. Production unaffected (full e2e stays
+    2678/2678 — production resolves these spreads through its instance
+    resolver, which already handled them).
 
 #### Re-triaged remaining clusters
 
-Largest first, grouped by cluster. **2648 / 2678** passing under
+Largest first, grouped by cluster. **2656 / 2678** passing under
 `WADO_REIFY=1` (fresh full-suite scan on 2026-05-30, after merging
-`origin/main`; every fixture `main` added passes under reify). **15 unique
+`origin/main`; every fixture `main` added passes under reify). **11 unique
 fixtures fail**, all at `-O0` and `-O2`. The localized "missing annotation
 channel" gaps are gone, and the `-O2`-only `TypeId`-identity cluster is now
 cleared too (landings #41 / #42); each remaining cluster is feature-level
 work, not a one-line replay fix.
 
-##### Variadic type-pack machinery (6, fail O0+O2)
+##### Variadic type-pack machinery (2, fail O0+O2)
 
-`variadic_1` / `variadic_2` / `variadic_3`,
-`variadic_for_of_generic_method`, `variadic_impl_method_type_param`,
-`variadic_trait_bound`. Need the type-pack expansion pipeline reproduced in
-reify (see `wep-2026-03-14-variadic-type-parameters.md`).
+`variadic_for_of_generic_method`, `variadic_impl_method_type_param`. Both use
+an `impl<..T> Trait for [..T]` whose monomorphized tuple-method instance
+(`Tuple<i32,bool>^Trait::method`) is not queued at WIR build. The remaining
+gap is reproducing the monomorphizer's variadic-tuple-impl instantiation
+collection in reify (`monomorphize/func_inst.rs:857`), which keys on the
+impl's `TirTypeParam` pack shape. Landings #43 / #44 cleared the other four
+variadic fixtures (spread literals + type-pack signature resolution); see
+`wep-2026-03-14-variadic-type-parameters.md`.
 
 ##### Compile-time tuple enumeration (2, fail O0+O2)
 
@@ -933,21 +961,21 @@ reify (see `wep-2026-03-14-variadic-type-parameters.md`).
 
 ##### Where to start next
 
-The remaining 15 are all feature-level, not `TypeId`-identity replay fixes.
-Highest leverage: the **variadic type-pack cluster** (6 fixtures, one shared
-mechanism — the type-pack expansion pipeline must be reproduced in reify; see
-`wep-2026-03-14-variadic-type-parameters.md`). After that, the **compile-time
-tuple enumeration** pair (`tuple_zip` / `tuple_for_of`) and the remaining
-singles. The `#### Recipe for adding a new reify gap`,
-`#### Gotchas`, and `#### Endgame` below still apply unchanged.
+The remaining 11 are all feature-level, not `TypeId`-identity replay fixes.
+The two variadic fixtures and the `tuple_zip` / `tuple_for_of` pair all need
+monomorphizer-side expansion machinery reproduced in reify (variadic-tuple
+impl-method instantiation collection; `TupleZip` / heterogeneous-tuple for-of
+enumeration). The remaining singles are independent feature-level gaps. The
+`#### Recipe for adding a new reify gap`, `#### Gotchas`, and `#### Endgame`
+below still apply unchanged.
 
 ### Stage 5 handover
 
 The recording half is complete: every landed gap has an annotation channel
 on `sem.types` and reify consumes it. What remains is per-shape parity for
-the 15 fixtures above (variadic type-pack expansion, compile-time tuple
-enumeration, and the remaining feature-level singles — the `-O2`
-`TypeId`-identity cluster is cleared), then the final orchestration cut
+the 11 fixtures above (variadic-tuple impl-method monomorphization,
+compile-time tuple enumeration, and the remaining feature-level singles — the
+`-O2` `TypeId`-identity cluster is cleared), then the final orchestration cut
 (`#### Endgame`).
 
 #### Gotchas seen in this session — read before continuing
