@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780128086610,
+  "lastUpdate": 1780129019340,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27733,6 +27733,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/690c9e3b12861f498e65cb8b9570065ecff71e76"
         },
         "date": 1780128086323,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16963,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 458952,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b12fb886bc3c47c2d8cc66bcfdf5119bc820d9fd",
+          "message": "Merge pull request #1242 from wado-lang/claude/gale-stage-a-bugs-OnO6e\n\nfix(gale): two Stage A lexer bugs (EOF-suffix rule priority, channel tokens)",
+          "timestamp": "2026-05-30T17:05:57+09:00",
+          "tree_id": "40ec97312d5d7415a92ac1c204e8658f2990de5a",
+          "url": "https://github.com/wado-lang/wado/commit/b12fb886bc3c47c2d8cc66bcfdf5119bc820d9fd"
+        },
+        "date": 1780129018851,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
