@@ -305,9 +305,10 @@ impl Parser {
     }
 
     /// Parse the token stream into a [`Module`]. Always succeeds: syntax
-    /// errors are recovered (see [`Parser::recover_item`]) and collected into
-    /// `self.errors`, drained by [`Parser::take_errors`]. The returned module
-    /// covers the whole input — broken regions become [`Item::Error`] nodes.
+    /// errors are recovered and collected into `self.errors`, drained by
+    /// [`Parser::take_errors`]. An unparsable item becomes an [`Item::Error`]
+    /// node (see [`Parser::recover_item`]); a broken statement inside a block
+    /// is skipped without a node.
     pub fn parse(&mut self) -> Module {
         // `parse_inner_attributes` records each attribute as it parses, so a
         // malformed one only loses itself; the rest stay in the module.
@@ -383,9 +384,8 @@ impl Parser {
 
     /// Skip the unparsable token run starting at `before` up to (but not
     /// including) the next item-start token or EOF, and return an
-    /// [`Item::Error`] covering it. Guarantees forward progress: if no token
-    /// was consumed before the failure, consume one here so the caller's loop
-    /// cannot spin.
+    /// [`Item::Error`] covering it. Guarantees forward progress: if still at
+    /// `before`, consume one token so the caller's loop cannot spin.
     fn recover_item(&mut self, before: usize) -> Item {
         let id = self.alloc_ast_id();
         let start = self.tokens[before].span;
@@ -1652,14 +1652,12 @@ impl Parser {
 
         let mut stmts = Vec::new();
 
-        // Stop at a hard item keyword too: a missing `}` should close the block
-        // here rather than letting the body swallow the next item. Only hard
-        // keywords qualify — `flags`/`type` as identifiers, `test(...)`, and
-        // `#include_str(...)` are all valid statements, so `at_hard_item_keyword`
-        // (not `at_item_start`) is correct. The trade-off: a brace-less block
-        // immediately before a `#[attr]`-prefixed item still over-reads (the `#`
-        // parses as a compile-time literal and fails), so that one case yields a
-        // less precise diagnostic. The following item itself still recovers.
+        // Stop at a hard item keyword too, so a missing `}` closes the block
+        // instead of swallowing the next item. Must be `at_hard_item_keyword`,
+        // not `at_item_start`: see its doc for why `#`/`test`/`flags`/`type` are
+        // excluded. Trade-off: a brace-less block right before a `#[attr]` item
+        // still over-reads `#` as a compile-time literal, blurring that one
+        // diagnostic — the following item still recovers.
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() && !self.at_hard_item_keyword() {
             let before = self.pos;
             match self.parse_stmt_in_block() {
