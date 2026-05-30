@@ -790,6 +790,36 @@ impl TypeTable {
         None
     }
 
+    /// Find an interned decl type (enum / resource / flags / variant /
+    /// newtype) by name across *all* modules, returning its `TypeId` only
+    /// when the name resolves unambiguously to a single decl. Used as a
+    /// last-resort recovery when the defining module is not known — e.g. a
+    /// field typed by a `pub use`-re-exported newtype, whose entry the
+    /// decl-field pass failed to place in `all_newtypes`. Returns `None`
+    /// when the name is absent or names more than one distinct decl `TypeId`,
+    /// so a genuine cross-module collision never silently picks the wrong one.
+    pub fn find_unique_decl_type_by_name(&self, name: &str) -> Option<TypeId> {
+        let mut found: Option<TypeId> = None;
+        for (&type_id, resolved) in &self.types {
+            let matches = matches!(
+                resolved,
+                ResolvedType::Enum { name: n, .. }
+                    | ResolvedType::Resource { name: n, .. }
+                    | ResolvedType::Flags { name: n, .. }
+                    | ResolvedType::Variant { name: n, .. }
+                    | ResolvedType::Newtype { name: n, .. }
+                if n == name
+            );
+            if matches {
+                match found {
+                    Some(prev) if prev != type_id => return None,
+                    _ => found = Some(type_id),
+                }
+            }
+        }
+        found
+    }
+
     /// Find the `module_source` where a type with the given name is defined.
     /// Searches `struct_name_index` first, then falls back to scanning for
     /// `GenericInstance` types (for generic struct base names like "`IterFilter`").
