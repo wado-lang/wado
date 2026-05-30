@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2579 / 2664 fixtures passing under
+      suite reaches **2589 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 85 remaining failures are all reify-specific). The
+      so the 75 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -724,11 +724,25 @@ Landed:
     saw first — `remote.y` read the wrong field. Now keys on the
     receiver's `(module_source, name)` via `tysys.all_struct_fields`.
     Clears struct_name_conflict.
+30. **Realise fn-bound type params to their function type (2579 → 2589).**
+    A `<F: fn(...)>` bound is realised eagerly to the bound's function
+    type (item.rs:1569), not a `TypeParam` slot. reify treated `F` as a
+    regular type param, so a param `f: F` reified to `TypeParam(F)` and
+    reached codegen unsubstituted ("unsubstituted TypeParam F"); including
+    fn-bound params in the positional scope also shifted the _real_
+    params' indices, mis-substituting them. reify_function and
+    reify_method now build the type-param scope from real params only
+    (dense indices matching the emitted `type_params`) and resolve a
+    param/return naming a fn-bound param to the bound's resolved function
+    type (`resolve_type_with_fn_bounds`; method bounds resolve with Self /
+    assoc bindings in scope). Clears closure_fn_bound_with_{effect_param,
+    regular_type_param}, closure_bound_with_multi_effect,
+    closure_generic_bound_fn, closure_method_fn_bound.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2579
-/ 2664** under `WADO_REIFY=1`; 85 reify-specific failures across 50
+Largest first, by fixture-name prefix (after the landings above). **2589
+/ 2664** under `WADO_REIFY=1`; 75 reify-specific failures across 45
 unique fixtures remain:
 
 - **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
