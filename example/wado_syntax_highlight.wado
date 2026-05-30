@@ -67,3 +67,113 @@ fn read_all(file: &Descriptor) -> Array<u8> {
     read_stream.drop();
     return result;
 }
+
+// Each test highlights one bundled example and asserts the grammar
+// accepts it. `highlight` falls back to token-only output on a parse
+// error, so the `parse` check is what surfaces a grammar gap.
+fn assert_highlights(src: &String) {
+    let _ = wado::highlight(src);
+    assert wado::parse(src) matches { Ok(_) }, "parse failed";
+}
+
+#[TODO]
+test "highlight cat.wado" {
+    assert_highlights(&#include_str("./cat.wado"));
+}
+
+test "highlight fizzbuzz.wado" {
+    assert_highlights(&#include_str("./fizzbuzz.wado"));
+}
+
+test "highlight hello.wado" {
+    assert_highlights(&#include_str("./hello.wado"));
+}
+
+#[TODO]
+test "highlight hello_tls.wado" {
+    assert_highlights(&#include_str("./hello_tls.wado"));
+}
+
+#[TODO]
+test "highlight http_bin.wado" {
+    assert_highlights(&#include_str("./http_bin.wado"));
+}
+
+#[TODO]
+test "highlight http_get.wado" {
+    assert_highlights(&#include_str("./http_get.wado"));
+}
+
+#[TODO]
+test "highlight http_server.wado" {
+    assert_highlights(&#include_str("./http_server.wado"));
+}
+
+#[TODO]
+test "highlight iso8601.wado" {
+    assert_highlights(&#include_str("./iso8601.wado"));
+}
+
+#[TODO]
+test "highlight json.wado" {
+    assert_highlights(&#include_str("./json.wado"));
+}
+
+#[TODO]
+test "highlight llm.wado" {
+    assert_highlights(&#include_str("./llm.wado"));
+}
+
+#[TODO]
+test "highlight mustache.wado" {
+    assert_highlights(&#include_str("./mustache.wado"));
+}
+
+test "highlight romu.wado" {
+    assert_highlights(&#include_str("./romu.wado"));
+}
+
+#[TODO]
+test "highlight router_bench.wado" {
+    assert_highlights(&#include_str("./router_bench.wado"));
+}
+
+#[TODO]
+test "highlight router_common.wado" {
+    assert_highlights(&#include_str("./router_common.wado"));
+}
+
+#[TODO]
+test "highlight router_dfa.wado" {
+    assert_highlights(&#include_str("./router_dfa.wado"));
+}
+
+#[TODO]
+test "highlight router_linear.wado" {
+    assert_highlights(&#include_str("./router_linear.wado"));
+}
+
+#[TODO]
+test "highlight router_radix.wado" {
+    assert_highlights(&#include_str("./router_radix.wado"));
+}
+
+test "highlight simd_ascii.wado" {
+    assert_highlights(&#include_str("./simd_ascii.wado"));
+}
+
+test "highlight simd_color.wado" {
+    assert_highlights(&#include_str("./simd_color.wado"));
+}
+
+test "highlight simd_stats.wado" {
+    assert_highlights(&#include_str("./simd_stats.wado"));
+}
+
+test "highlight simd_vec2d.wado" {
+    assert_highlights(&#include_str("./simd_vec2d.wado"));
+}
+
+test "highlight tree.wado" {
+    assert_highlights(&#include_str("./tree.wado"));
+}
