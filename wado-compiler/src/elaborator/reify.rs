@@ -1274,6 +1274,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 func.name.clone(),
             );
             info.is_ref_impl = facts.is_ref_impl;
+            // Carry the impl's trait type args (`impl Future<i32> for …`
+            // → `[i32]`). The effect-dispatch synthesis keys its handler
+            // index on `(struct, effect_module, base_trait, trait_type_args)`
+            // (effect_dispatch.rs:2984); without the args a generic-effect
+            // handler is keyed `Future<>` and the `Future<i32>` binding
+            // finds no `DispatchPlan`.
+            info.trait_type_args = facts.trait_type_args.clone();
             if let Some((module, base)) = facts.trait_canonical.clone() {
                 info.base_trait_module = Some(module);
                 info.base_trait_name = Some(base);

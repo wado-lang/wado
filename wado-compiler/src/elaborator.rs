@@ -1428,12 +1428,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 })
                             })
                             .collect();
+                        // Concrete type args of the impl's trait reference
+                        // (`impl Future<i32>` → `[i32]`), resolved in the
+                        // impl's type-param scope so generic impls
+                        // round-trip their `TypeParam` ids. Mirrors
+                        // `item.rs:1621`.
+                        let trait_type_args: Vec<crate::tir::TypeId> = match &impl_block.trait_type
+                        {
+                            Some(ast::Type::Generic(generic)) => generic
+                                .args
+                                .iter()
+                                .map(|arg| self.resolve_type(arg))
+                                .collect(),
+                            _ => Vec::new(),
+                        };
                         self.record_impl_facts(
                             impl_block.id,
                             sem::types::ImplFacts {
                                 self_type,
                                 trait_name_mangled: trait_name.clone(),
                                 trait_canonical,
+                                trait_type_args,
                                 impl_type_params: impl_type_params_tir,
                                 assoc_type_bindings: self.trait_ctx.assoc_type_bindings.clone(),
                                 is_handler_method,

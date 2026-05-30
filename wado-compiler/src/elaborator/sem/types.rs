@@ -546,6 +546,14 @@ pub(crate) struct ImplFacts {
     /// and disambiguates two modules' same-named traits in the
     /// `trait_env` dispatch indices.
     pub(crate) trait_canonical: Option<(crate::module_source::ModuleSource, String)>,
+    /// Concrete `TypeId`s of the trait/resource type arguments at the
+    /// impl site (`impl Future<i32> for …` → `[i32]`; `impl<T> Stream<T>`
+    /// → the impl's `TypeParam` id). Written onto each method's
+    /// `LocalMethodName::trait_type_args`; the effect-dispatch synthesis
+    /// keys its handler index on `(struct, effect_module, base_trait,
+    /// trait_type_args)`, so a generic-effect handler needs the args to
+    /// match the binding's instantiation.
+    pub(crate) trait_type_args: Vec<crate::tir::TypeId>,
     /// `TirTypeParam` projection of the impl's generic params, in
     /// declaration order, with concrete-typed positions skipped
     /// (e.g. `impl<i32, T>` projects only `T`). Written into
