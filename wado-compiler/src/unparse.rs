@@ -32,6 +32,51 @@ fn is_unit_type(ty: &Type) -> bool {
     matches!(ty, Type::Named(n) if n.name == "()")
 }
 
+/// The namespace name of a `use name from "..."` import, if this declaration is
+/// one (a single `Namespace` item).
+fn use_namespace_name(u: &UseDecl) -> Option<&str> {
+    match u.items.as_slice() {
+        [UseItem::Namespace { name }] => Some(name.as_str()),
+        _ => None,
+    }
+}
+
+/// Whether this is a wildcard import: `use _ from "..."`.
+fn use_is_wildcard(u: &UseDecl) -> bool {
+    matches!(u.items.as_slice(), [UseItem::Wildcard])
+}
+
+/// Whether this declaration carries a non-empty `with { ... }` clause.
+fn has_with(u: &UseDecl) -> bool {
+    u.attributes
+        .as_ref()
+        .is_some_and(|attrs| !attrs.entries.is_empty())
+}
+
+/// Structural nesting depth of an attribute value: scalars (and empty
+/// containers) are 0, a container of scalars is 1, a container holding another
+/// container is 2, and so on.
+fn attr_value_depth(v: &crate::ast::AttrValue) -> usize {
+    use crate::ast::AttrValue;
+    match v {
+        AttrValue::Array(items) if !items.is_empty() => {
+            1 + items.iter().map(attr_value_depth).max().unwrap_or(0)
+        }
+        AttrValue::Object(obj) if !obj.is_empty() => {
+            1 + obj.values().map(attr_value_depth).max().unwrap_or(0)
+        }
+        _ => 0,
+    }
+}
+
+/// Whether the `with { ... }` attribute object must be expanded multi-line by
+/// the depth rule — i.e. it holds at least one nested container.
+fn attrs_force_multiline(u: &UseDecl) -> bool {
+    u.attributes
+        .as_ref()
+        .is_some_and(|attrs| attrs.entries.values().any(|v| attr_value_depth(v) >= 1))
+}
+
 /// Append each item separated by `", "` via `emit`.
 fn comma_sep_into<I, F>(items: I, output: &mut String, emit: F)
 where
@@ -104,6 +149,17 @@ fn contains_call(expr: &Expr) -> bool {
         Expr::FieldAccess(e) => contains_call(&e.expr),
         Expr::TryOp(e) => contains_call(&e.expr),
         Expr::Spread(e, _) => contains_call(e),
+        _ => false,
+    }
+}
+
+/// Whether an expression is a non-empty kv/seq literal (array/tuple or struct
+/// literal). Such an element is treated as a nested container by the depth
+/// rule: it forces the surrounding literal multi-line and sits on its own line.
+fn expr_is_container(expr: &Expr) -> bool {
+    match expr {
+        Expr::TupleLiteral(t) => !t.elements.is_empty(),
+        Expr::StructLiteral(s) => !s.fields.is_empty(),
         _ => false,
     }
 }
@@ -296,50 +352,106 @@ impl<'a> Unparser<'a> {
             self.output.push_str("pub ");
         }
 
-        let is_wildcard = u.items.len() == 1 && matches!(u.items.first(), Some(UseItem::Wildcard));
-        let namespace_name = if u.items.len() == 1 {
-            match u.items.first() {
-                Some(UseItem::Namespace { name }) => Some(name.as_str()),
-                _ => None,
-            }
+        // The line is rendered as a `(imports_wrapped, with_multiline)` choice.
+        // We try candidates in preference order and keep the first whose every
+        // line fits in `MAX_LINE_WIDTH`. The import-item list wraps purely by
+        // width (items are flat names), while the `with` clause additionally
+        // wraps when its attribute object is nested (the depth rule): a `with`
+        // whose value contains another container is always expanded, matching
+        // how struct/array literals break.
+        let snap = self.snapshot();
+
+        let candidates: &[(bool, bool)] = if !has_with(u) {
+            &[(false, false), (true, false)]
+        } else if attrs_force_multiline(u) {
+            &[(false, true), (true, true)]
         } else {
-            None
+            &[(false, false), (true, false), (false, true), (true, true)]
         };
 
-        if let Some(name) = namespace_name {
+        for (i, &(wrap_imports, with_multiline)) in candidates.iter().enumerate() {
+            self.rollback(snap);
+            if wrap_imports {
+                self.emit_use_imports_wrapped(u);
+            } else {
+                self.emit_use_imports_inline(u);
+            }
+            self.emit_use_from(u);
+            if with_multiline {
+                self.emit_use_with_multiline(u);
+            } else {
+                self.emit_use_with_inline(u);
+            }
+            self.output.push_str(";\n");
+
+            if i + 1 == candidates.len() || !self.exceeds_width_since(snap) {
+                return;
+            }
+        }
+    }
+
+    /// Emit the `use <imports>` portion on a single line (no from/with clause).
+    fn emit_use_imports_inline(&mut self, u: &UseDecl) {
+        if let Some(name) = use_namespace_name(u) {
             self.output.push_str("use ");
             self.output.push_str(name);
-        } else if is_wildcard {
+        } else if use_is_wildcard(u) {
             self.output.push_str("use _");
         } else {
-            let snap = self.snapshot();
             self.output.push_str("use { ");
             self.comma_sep(&u.items, Unparser::unparse_use_item);
             self.output.push_str(" }");
-
-            if self.exceeds_width_since(snap) {
-                self.rollback(snap);
-                self.output.push_str("use {\n");
-                self.indent_level += 1;
-                for item in &u.items {
-                    self.write_indent();
-                    self.unparse_use_item(item);
-                    self.output.push_str(",\n");
-                }
-                self.indent_level -= 1;
-                self.write_indent();
-                self.output.push('}');
-            }
         }
+    }
+
+    /// Emit the `use <imports>` portion, wrapping a multi-item list one item
+    /// per line. Namespace and wildcard forms have nothing to wrap, so they
+    /// stay inline.
+    fn emit_use_imports_wrapped(&mut self, u: &UseDecl) {
+        if use_namespace_name(u).is_some() || use_is_wildcard(u) {
+            self.emit_use_imports_inline(u);
+            return;
+        }
+        self.output.push_str("use {\n");
+        self.indent_level += 1;
+        for item in &u.items {
+            self.write_indent();
+            self.unparse_use_item(item);
+            self.output.push_str(",\n");
+        }
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push('}');
+    }
+
+    /// Emit the ` from "..."` source clause.
+    fn emit_use_from(&mut self, u: &UseDecl) {
         self.output.push_str(" from \"");
         self.output.push_str(&u.source);
         self.output.push('"');
+    }
 
+    /// Emit the ` with { ... }` attribute clause on the same line (or nothing
+    /// when there are no attributes).
+    fn emit_use_with_inline(&mut self, u: &UseDecl) {
         if let Some(attrs) = &u.attributes {
             self.unparse_import_attributes(attrs);
         }
+    }
 
-        self.output.push_str(";\n");
+    /// Emit the `with { ... }` attribute clause wrapped across multiple lines,
+    /// with the `with` keyword on its own indented line.
+    fn emit_use_with_multiline(&mut self, u: &UseDecl) {
+        let Some(attrs) = &u.attributes else { return };
+        if attrs.entries.is_empty() {
+            return;
+        }
+        self.output.push('\n');
+        self.indent_level += 1;
+        self.write_indent();
+        self.output.push_str("with ");
+        self.unparse_attr_object_multiline(&attrs.entries);
+        self.indent_level -= 1;
     }
 
     fn unparse_use_item(&mut self, item: &UseItem) {
@@ -423,6 +535,81 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(" }");
             }
         }
+    }
+
+    /// Emit an attribute value. A container nested inside another container
+    /// (depth ≥ 2) is always expanded multi-line; a leaf container (depth 1,
+    /// only scalar members) is inline-first and falls back to multi-line only
+    /// when it overflows. Scalars are always inline.
+    fn unparse_attr_value_wrapped(&mut self, v: &crate::ast::AttrValue) {
+        match v {
+            crate::ast::AttrValue::Object(obj) if !obj.is_empty() => {
+                self.emit_container_value(attr_value_depth(v), |s| s.unparse_attr_value(v), |s| {
+                    s.unparse_attr_object_multiline(obj);
+                });
+            }
+            crate::ast::AttrValue::Array(items) if !items.is_empty() => {
+                self.emit_container_value(attr_value_depth(v), |s| s.unparse_attr_value(v), |s| {
+                    s.unparse_attr_array_multiline(items);
+                });
+            }
+            _ => self.unparse_attr_value(v),
+        }
+    }
+
+    /// Shared container-rendering policy: force multi-line at depth ≥ 2,
+    /// otherwise try `inline` and roll back to `multiline` only on overflow.
+    fn emit_container_value(
+        &mut self,
+        depth: usize,
+        inline: impl Fn(&mut Self),
+        multiline: impl Fn(&mut Self),
+    ) {
+        if depth >= 2 {
+            multiline(self);
+            return;
+        }
+        let snap = self.snapshot();
+        inline(self);
+        if self.exceeds_width_since(snap) {
+            self.rollback(snap);
+            multiline(self);
+        }
+    }
+
+    /// Emit `{` then one `key: value,` per line (recursively wrapping each
+    /// value as needed), then a closing `}` on its own indented line.
+    fn unparse_attr_object_multiline(
+        &mut self,
+        obj: &crate::hashmap::IndexMap<String, crate::ast::AttrValue>,
+    ) {
+        self.output.push_str("{\n");
+        self.indent_level += 1;
+        for (k, v) in obj {
+            self.write_indent();
+            self.output.push_str(k);
+            self.output.push_str(": ");
+            self.unparse_attr_value_wrapped(v);
+            self.output.push_str(",\n");
+        }
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push('}');
+    }
+
+    /// Emit `[` then one element per line (recursively wrapping each as needed),
+    /// then a closing `]` on its own indented line.
+    fn unparse_attr_array_multiline(&mut self, items: &[crate::ast::AttrValue]) {
+        self.output.push_str("[\n");
+        self.indent_level += 1;
+        for item in items {
+            self.write_indent();
+            self.unparse_attr_value_wrapped(item);
+            self.output.push_str(",\n");
+        }
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push(']');
     }
 
     fn unparse_function(&mut self, f: &Function) {
@@ -952,23 +1139,7 @@ impl<'a> Unparser<'a> {
     /// re-parses as a single bound (a bare comma would otherwise be eaten by
     /// the surrounding trait-bound or generic-param list).
     fn unparse_fn_signature_in_bound(&mut self, sig: &FunctionType) {
-        self.output
-            .push_str(if sig.is_mut { "fn mut" } else { "fn" });
-        delimited_into("(", ")", &sig.params, &mut self.output, unparse_type_into);
-        self.output.push_str(" -> ");
-        unparse_type_into(&sig.return_type, &mut self.output);
-        match sig.effects.len() {
-            0 => {}
-            1 => {
-                self.output.push_str(" with ");
-                self.output.push_str(&sig.effects[0]);
-            }
-            _ => {
-                self.output.push_str(" with (");
-                self.output.push_str(&sig.effects.join(", "));
-                self.output.push(')');
-            }
-        }
+        unparse_fn_signature_in_bound_into(sig, &mut self.output);
     }
 
     fn unparse_block(&mut self, block: &Block) {
@@ -1407,75 +1578,74 @@ impl<'a> Unparser<'a> {
             return;
         }
 
-        // KV-list heuristic: an array of 2-tuples (Wasm CM associative-array
-        // pattern) is always rendered one entry per line, so the keys and
-        // values stay visually grouped. This bypasses the single-line attempt.
-        let is_kv_list = elements.len() >= 2
-            && elements
-                .iter()
-                .all(|e| matches!(e, Expr::TupleLiteral(t) if t.elements.len() == 2));
-        if is_kv_list {
-            self.emit_one_per_line_bracketed(elements, |s, elem| {
-                // Force the inner [k, v] pair onto a single line so the pair
-                // does not get re-broken by `unparse_expr`.
-                if let Expr::TupleLiteral(inner) = elem {
-                    s.delimited("[", "]", &inner.elements, Unparser::unparse_expr);
-                } else {
-                    s.unparse_expr(elem);
-                }
-            });
-            return;
-        }
-
-        let snap = self.snapshot();
-        self.delimited("[", "]", elements, Unparser::unparse_expr);
-
-        if !self.output[snap..].contains('\n') && !self.exceeds_width_since(snap) {
-            return;
-        }
-        self.rollback(snap);
-
-        // If any element contains a call, force one-element-per-line so
-        // complex expressions stay readable. Otherwise, pack elements onto
-        // lines up to MAX_LINE_WIDTH.
-        if elements.iter().any(contains_call) {
-            self.emit_one_per_line_bracketed(elements, Unparser::unparse_expr);
-            return;
-        }
-
-        self.output.push('[');
-        self.indent_level += 1;
-        for (i, elem) in elements.iter().enumerate() {
-            let elem_snap = self.snapshot();
-            if i > 0 {
-                self.output.push_str(", ");
+        // Inline `[a, b, c]` only when the array is flat (no nested container),
+        // holds at most one call-bearing element, and fits the width. A nested
+        // container (depth rule) or a second call forces the multi-line form so
+        // complex / deeply-structured arrays stay readable.
+        let has_container = elements.iter().any(expr_is_container);
+        let call_elems = elements.iter().filter(|e| contains_call(e)).count();
+        if !has_container && call_elems <= 1 {
+            let snap = self.snapshot();
+            self.delimited("[", "]", elements, Unparser::unparse_expr);
+            if !self.output[snap..].contains('\n') && !self.exceeds_width_since(snap) {
+                return;
             }
-            self.unparse_expr(elem);
-            if self.exceeds_width_since(elem_snap) && i > 0 {
-                self.rollback(elem_snap);
+            self.rollback(snap);
+        }
+
+        self.emit_fill_bracketed(elements);
+    }
+
+    /// Emit elements in `[\n … \n]` block form, packing as many per line as fit
+    /// within `MAX_LINE_WIDTH`, while keeping at most one call-bearing element
+    /// per line and placing each nested container on its own line. The last
+    /// element carries a trailing comma.
+    fn emit_fill_bracketed(&mut self, elements: &[Expr]) {
+        self.output.push_str("[\n");
+        self.indent_level += 1;
+        self.write_indent();
+
+        let mut line_has_call = false;
+        let mut prev_container = false;
+        for (i, elem) in elements.iter().enumerate() {
+            let is_container = expr_is_container(elem);
+            let elem_call = contains_call(elem);
+
+            if i == 0 {
+                self.unparse_expr(elem);
+                line_has_call = elem_call;
+                prev_container = is_container;
+                continue;
+            }
+
+            // Containers sit alone on their own line, and a line carries at most
+            // one call-bearing element.
+            if is_container || prev_container || (elem_call && line_has_call) {
                 self.output.push_str(",\n");
                 self.write_indent();
                 self.unparse_expr(elem);
+                line_has_call = elem_call;
+                prev_container = is_container;
+                continue;
             }
-        }
-        self.output.push(']');
-        self.indent_level -= 1;
-    }
 
-    /// Emit `[\n  e1,\n  e2,\n  ...,\n]` at the current indent.
-    fn emit_one_per_line_bracketed<T, F>(&mut self, items: &[T], mut emit: F)
-    where
-        F: FnMut(&mut Self, &T),
-    {
-        self.output.push('[');
-        self.indent_level += 1;
-        for elem in items {
-            self.output.push('\n');
-            self.write_indent();
-            emit(self, elem);
-            self.output.push(',');
+            // Pack onto the current line; fall back to a new line on overflow.
+            let snap = self.snapshot();
+            self.output.push_str(", ");
+            self.unparse_expr(elem);
+            if self.exceeds_width_since(snap) {
+                self.rollback(snap);
+                self.output.push_str(",\n");
+                self.write_indent();
+                self.unparse_expr(elem);
+                line_has_call = elem_call;
+            } else {
+                line_has_call |= elem_call;
+            }
+            prev_container = is_container;
         }
-        self.output.push('\n');
+
+        self.output.push_str(",\n");
         self.indent_level -= 1;
         self.write_indent();
         self.output.push(']');
@@ -2086,9 +2256,14 @@ impl<'a> Unparser<'a> {
             return;
         }
 
-        // Try single-line unless the source explicitly asked for multi-line
-        // via a trailing comma.
-        if !s.has_trailing_comma {
+        // A struct literal breaks one field per line — never fills — when the
+        // source asked for it (trailing comma), when a field value is a nested
+        // container (depth rule), or when more than one field bears a call. A
+        // flat, single-call-at-most struct is inline-first and only wraps on
+        // width.
+        let has_container = s.fields.iter().any(|f| expr_is_container(&f.value));
+        let call_fields = s.fields.iter().filter(|f| contains_call(&f.value)).count();
+        if !s.has_trailing_comma && !has_container && call_fields <= 1 {
             let snap = self.snapshot();
             self.output.push_str("{ ");
             self.comma_sep(&s.fields, Unparser::emit_struct_literal_field);
@@ -2465,6 +2640,7 @@ fn get_item_first_line(item: &Item) -> usize {
             .and_then(|a| a.first().map(|a| a.span.line)),
         Item::Trait(t) => first_attr_line(&t.attrs),
         Item::TupleTypeDecl(d) => first_attr_line(&d.attrs),
+        Item::Test(t) => first_attr_line(&t.attributes),
         _ => None,
     };
     attr_line.unwrap_or(item_line).min(item_line)
@@ -3186,8 +3362,7 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
         Type::Function(f) => {
             output.push_str(if f.is_mut { "fn mut" } else { "fn" });
             delimited_into("(", ")", &f.params, output, unparse_type_into);
-            output.push_str(" -> ");
-            unparse_type_into(&f.return_type, output);
+            unparse_fn_return_into(&f.return_type, output);
             unparse_fn_type_with_clause_into(&f.effects, &f.stores, output);
         }
         Type::Tuple(types) => {
@@ -3436,11 +3611,20 @@ pub fn unparse_with_clause_into(effects: &[String], stores: &[String], output: &
 /// Bound-context variant of `fn(...)` printing. Multi-effect `with` clauses
 /// are parens-grouped because comma at this level separates trait bounds
 /// (and `stores[...]` never appears in bound position).
+/// Emit ` -> <ret>` for a function type, omitting it entirely when the return
+/// is the unit type — same rule as function declarations, so `fn mut(T)` and
+/// `fn mut(T) -> ()` round-trip to the canonical arrowless form.
+fn unparse_fn_return_into(return_type: &Type, output: &mut String) {
+    if !is_unit_type(return_type) {
+        output.push_str(" -> ");
+        unparse_type_into(return_type, output);
+    }
+}
+
 fn unparse_fn_signature_in_bound_into(sig: &FunctionType, output: &mut String) {
     output.push_str(if sig.is_mut { "fn mut" } else { "fn" });
     delimited_into("(", ")", &sig.params, output, unparse_type_into);
-    output.push_str(" -> ");
-    unparse_type_into(&sig.return_type, output);
+    unparse_fn_return_into(&sig.return_type, output);
     match sig.effects.len() {
         0 => {}
         1 => {
