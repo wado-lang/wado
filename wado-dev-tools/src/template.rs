@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub struct Template {
     prefix: String,
@@ -31,9 +31,5 @@ impl Template {
         }
         results.sort_by(|a, b| a.0.cmp(&b.0));
         results
-    }
-
-    pub fn output_path(&self, name: &str) -> PathBuf {
-        Path::new(&format!("{}{name}{}", self.prefix, self.suffix)).to_path_buf()
     }
 }

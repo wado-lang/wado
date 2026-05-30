@@ -246,12 +246,15 @@ description = "Regenerate WIR golden fixtures"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
+# golden-dump overwrites each golden file in place and, only after every file
+# has been regenerated, prunes the stale ones (no matching fixture). There is
+# no point at which the golden files are all deleted, so `git status` never
+# shows a scary mass deletion mid-run.
 mkdir -p wado-compiler/tests/generated/fixtures
-rm -rf wado-compiler/tests/generated/fixtures/*.*
 ./target/debug/wado-dev-tools golden-dump \
     --in 'wado-compiler/tests/fixtures/{name}.wado' \
-    --out 'wado-compiler/tests/generated/fixtures/{name}.wir.wado' \
-    --phase wir -O2
+    --emit wir:'wado-compiler/tests/generated/fixtures/{name}.wir.wado' \
+    -O2
 """
 
 [tasks.update-golden-format-fixtures]
