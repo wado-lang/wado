@@ -1152,6 +1152,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let mut reify = super::reify::Reify::new(
                         state.tysys.clone(),
                         sem_ref,
+                        &state.module_semantics,
                         symbols,
                         modules,
                         logger,

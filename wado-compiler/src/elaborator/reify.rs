@@ -122,6 +122,11 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// Per-module semantic facts produced by `annotate_bodies`. Read
     /// only — reify never mutates the recorded decisions.
     pub(crate) sem: &'a ModuleSemantics,
+    /// All modules' semantics, keyed by source. Used to swap `sem` to a
+    /// callee module when reifying a default-argument expression that
+    /// resolves in the callee's lexical scope (it may reference items
+    /// private to the callee module).
+    pub(crate) all_module_semantics: &'a IndexMap<ModuleSource, ModuleSemantics>,
     /// Symbol table from analyzer (cross-module).
     #[allow(dead_code)]
     pub(crate) symbols: &'a SymbolTable,
@@ -183,6 +188,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     pub(crate) fn new(
         tysys: TypeSystem,
         sem: &'a ModuleSemantics,
+        all_module_semantics: &'a IndexMap<ModuleSource, ModuleSemantics>,
         symbols: &'a SymbolTable,
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
@@ -193,6 +199,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Self {
             tysys,
             sem,
+            all_module_semantics,
             symbols,
             loaded_modules,
             logger,
@@ -6200,6 +6207,36 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 subs.insert(name.clone(), arg_ast.clone());
             }
         }
+        // A default expression resolves in the *callee's* lexical scope:
+        // it may reference items private to the callee module that the
+        // caller cannot see (`paint(c = DEFAULT_VALUE)` where
+        // `DEFAULT_VALUE` is a callee-module-private global). Production
+        // routes this through `default_scope_module`, consulted during
+        // ident resolution (expr.rs:914). Reify's `reify_ident` reads
+        // globals from `self.sem.decls.current_module_globals` keyed to the
+        // module-context triple, so swap that triple to the callee module
+        // around the default walk when the callee is a different, loaded
+        // module. The caller's `ctx` (locals) stays — earlier positional
+        // args were already AST-substituted into `subs`.
+        let loaded = self.loaded_modules;
+        let all_sem = self.all_module_semantics;
+        let callee_ctx: Option<(&[Item], &ModuleSemantics)> =
+            if callee_module != &self.current_module_source {
+                match (loaded.get(callee_module), all_sem.get(callee_module)) {
+                    (Some(m), Some(callee_sem)) => Some((m.items.as_slice(), callee_sem)),
+                    _ => None,
+                }
+            } else {
+                None
+            };
+        let saved = callee_ctx.map(|(items, callee_sem)| {
+            (
+                std::mem::replace(&mut self.current_module_source, callee_module.clone()),
+                std::mem::replace(&mut self.current_module_items, items),
+                std::mem::replace(&mut self.sem, callee_sem),
+            )
+        });
+
         for i in args.len()..func_params.len() {
             let (name, default_ast) = match func_params.get(i) {
                 Some((n, Some(d))) => (n.clone(), d.clone()),
@@ -6210,6 +6247,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let resolved = self.reify_expr(&default_expr, ctx, None);
             args.push(crate::tir::CallArg::new(resolved, false));
             subs.insert(name, default_expr);
+        }
+
+        if let Some((src, items, sem)) = saved {
+            self.current_module_source = src;
+            self.current_module_items = items;
+            self.sem = sem;
         }
     }
 
