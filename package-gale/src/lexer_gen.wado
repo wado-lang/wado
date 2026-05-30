@@ -903,33 +903,37 @@ fn try_extract_keyword_info(rule: &LexerRule, all_rules: &Array<LexerRule>, gram
 ///
 /// The keyword path is an optimisation: instead of dispatching keyword-shaped
 /// rules through their own first-character branch, the tokenize loop runs
-/// `classify_keyword` after a longer non-keyword rule has already matched the
-/// same characters (the gate is `best_end > start`). The optimisation is
-/// only sound when some non-keyword rule could match the keyword's first
-/// character — otherwise the classifier never runs and the rule is
-/// unreachable. ANTLR4 has no such precondition (every lexer rule is its own
-/// dispatch path); to stay compatible Gale must not classify a rule as a
-/// keyword unless that precondition holds. Candidates that fail the check
-/// fall back to the regular dispatch path (`gen_lexer_match_fn`).
+/// `classify_keyword` after a carrier rule has matched the same characters
+/// (the gate is `best_end > start`). ANTLR4 has no such precondition (every
+/// lexer rule is its own dispatch path), so a candidate is admitted only when
+/// `keyword_carrier_admits` confirms the shortcut stays ANTLR4-faithful;
+/// the rest fall back to the regular dispatch path (`gen_lexer_match_fn`).
 pub fn collect_keyword_rules(lexer_rules: &Array<LexerRule>, grammar_opts: &Array<GrammarOption>) -> Array<KeywordInfo> {
     let mut candidates: Array<KeywordInfo> = [];
-    for let rule of lexer_rules {
+    let mut candidate_indices: Array<i32> = [];
+    for let mut i = 0; i < lexer_rules.len(); i += 1 {
+        let rule = &lexer_rules[i];
         if rule.is_fragment || rule.is_virtual {
             continue;
         }
         let info = try_extract_keyword_info(rule, lexer_rules, grammar_opts);
         if let Some(kw) = info {
             candidates.push(kw);
+            candidate_indices.push(i);
         }
     }
-    // Precompute the first-char set of each potential carrier rule once, so
-    // the per-candidate filter below is O(carriers + candidates) rather than
-    // O(carriers × candidates) `compute_first_chars` calls. A single
-    // wildcard carrier (e.g. `UNEXPECTED : .;`) covers every candidate, so
-    // we short-circuit and skip the filter entirely.
+    // Precompute the first-char set (and declaration index) of each potential
+    // carrier rule. A carrier is any non-keyword token rule the classifier can
+    // run behind; the keyword classifier only fires once a carrier has matched
+    // the same characters (the `best_end > start` gate). Indices are needed
+    // because ANTLR4 awards a same-length match to the earliest rule, so a
+    // keyword may only shortcut through carriers that follow it (see
+    // `keyword_carrier_admits`).
+    let mut carrier_indices: Array<i32> = [];
     let mut carrier_first_chars: Array<Array<[char, char]>> = [];
-    let mut any_wildcard_carrier = false;
-    for let rule of lexer_rules {
+    let mut carrier_is_wildcard: Array<bool> = [];
+    for let mut i = 0; i < lexer_rules.len(); i += 1 {
+        let rule = &lexer_rules[i];
         if rule.is_fragment || rule.is_virtual {
             continue;
         }
@@ -937,37 +941,64 @@ pub fn collect_keyword_rules(lexer_rules: &Array<LexerRule>, grammar_opts: &Arra
             continue;
         }
         let try_call = compute_first_chars(rule, lexer_rules, false, false, false, false, grammar_opts);
-        if try_call.is_wildcard {
-            any_wildcard_carrier = true;
-            break;
-        }
+        carrier_indices.push(i);
         carrier_first_chars.push(try_call.first_chars);
+        carrier_is_wildcard.push(try_call.is_wildcard);
     }
     let mut result: Array<KeywordInfo> = [];
-    for let kw of &candidates {
-        if any_wildcard_carrier || keyword_has_carrier(kw, &carrier_first_chars) {
+    for let mut c = 0; c < candidates.len(); c += 1 {
+        let kw = &candidates[c];
+        if keyword_carrier_admits(kw, candidate_indices[c], &carrier_indices, &carrier_first_chars, &carrier_is_wildcard) {
             result.push(*kw);
         }
     }
     return result;
 }
 
-/// Returns true if some precomputed carrier first-char set covers `kw`'s
-/// first character (folded to either case when `kw`'s first character is
-/// case-insensitive).
-fn keyword_has_carrier(kw: &KeywordInfo, carrier_first_chars: &Array<Array<[char, char]>>) -> bool {
+/// Decides whether a keyword candidate may use the classifier shortcut.
+///
+/// A carrier and the keyword tie on the keyword's own text length whenever the
+/// carrier matches exactly the keyword text, so ANTLR4 awards that match to
+/// whichever rule is declared first. The shortcut rewrites a carrier match into
+/// the keyword unconditionally, so it is only sound when:
+///
+/// - some carrier declared *after* the keyword can match its first character
+///   (reachability — otherwise the classifier never runs and the rule would be
+///   unreachable), and
+/// - no carrier declared *before* the keyword can match its first character
+///   (priority — that earlier carrier wins the tie under ANTLR4 rules, so
+///   reclassifying its match into the keyword would mis-tag it; the canonical
+///   case is `A : 'a' EOF; B : 'a';`, where carrier A precedes keyword B).
+///
+/// Using the first character as the collision proxy is conservative: a rejected
+/// candidate simply falls back to regular first-character dispatch, where the
+/// strict `>` longest-match comparison already honours declaration order.
+fn keyword_carrier_admits(
+    kw: &KeywordInfo,
+    kw_index: i32,
+    carrier_indices: &Array<i32>,
+    carrier_first_chars: &Array<Array<[char, char]>>,
+    carrier_is_wildcard: &Array<bool>,
+) -> bool {
     let first_char = kw.lowercase_text.chars().next().unwrap();
     let first_ci = kw.char_ci[0];
     let upper = if first_ci { first_char.to_ascii_uppercase() } else { first_char };
-    for let ranges of carrier_first_chars {
-        if char_matches_ranges(first_char, ranges) {
-            return true;
+    let mut has_later_carrier = false;
+    for let mut i = 0; i < carrier_indices.len(); i += 1 {
+        let covers = carrier_is_wildcard[i]
+            || char_matches_ranges(first_char, &carrier_first_chars[i])
+            || (first_ci && upper != first_char && char_matches_ranges(upper, &carrier_first_chars[i]));
+        if !covers {
+            continue;
         }
-        if first_ci && upper != first_char && char_matches_ranges(upper, ranges) {
-            return true;
+        if carrier_indices[i] < kw_index {
+            // An earlier carrier ties with the keyword and wins under ANTLR4
+            // priority — the shortcut would mis-reclassify its match.
+            return false;
         }
+        has_later_carrier = true;
     }
-    return false;
+    return has_later_carrier;
 }
 
 fn is_keyword_rule_name(name: &String, keywords: &Array<KeywordInfo>) -> bool {

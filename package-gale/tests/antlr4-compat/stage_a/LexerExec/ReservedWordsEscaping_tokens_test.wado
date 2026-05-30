@@ -17,9 +17,6 @@ use t from "../../grammars/LexerExec/ReservedWordsEscaping.g4"
     };
 use { TK_EOF } from "../../grammars/LexerExec/ReservedWordsEscaping.g4";
 
-
-// triage: tokens-equivalence: expected output includes a `channel=N` token but Gale's lexer codegen routes non-default-channel tokens to `Token.leading_trivia` rather than the main stream, so `to_lexer_string` does not emit them. Gap: either land non-default-channel tokens in the main stream with a channel attribute (have the parser filter), or extend `to_lexer_string` to walk trivia in source order.
-#[TODO]
 test "stage_a_tokens: LexerExec/ReservedWordsEscaping" {
     let input = "ab";
     let expected = "[@0,0:0='a',<1>,1:0]

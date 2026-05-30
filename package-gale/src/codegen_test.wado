@@ -1308,6 +1308,25 @@ WS : [ \\t\\n\\r]+ -> skip ;
     assert str_contains(&output, &"classify_keyword"), `keyword classifier must still be emitted:\n{output}`;
 }
 
+test "keyword candidate declared after a colliding carrier falls back to its own matcher" {
+    // `A : 'a' EOF ;` is a carrier for the single-char literal `B : 'a' ;`,
+    // but B is declared *after* A. Under ANTLR4 longest-match-then-first-rule
+    // both match `a` (A also consumes the trailing EOF), so A wins. The keyword
+    // classifier reclassifies a carrier match into the keyword unconditionally,
+    // so admitting B as a keyword would mis-tag A's match as B (the
+    // `LexerExec/EOFSuffixInFirstRule_2` descriptor regression). B must instead
+    // fall back to regular first-character dispatch, where the strict `>`
+    // longest-match tiebreak keeps the earlier rule A.
+    let input = "lexer grammar L;
+A : 'a' EOF ;
+B : 'a' ;
+C : 'c' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, &"fn try_b("), `B must fall back to its own matcher when its only carrier precedes it:\n{output}`;
+}
+
 fn str_contains(haystack: &String, needle: &String) -> bool {
     let h_len = haystack.len();
     let n_len = needle.len();
