@@ -15,7 +15,7 @@ C compiler (`cc`) and Rust (`cargo`) are expected from the system.
 ```sh
 mise run count-prime   # integer arithmetic (count primes to 10M)
 mise run mandelbrot    # float arithmetic (1024x768 fractal)
-mise run sieve         # array operations (sieve of Eratosthenes to 100M)
+mise run sieve         # array operations (sieve of Eratosthenes to 10M, x10)
 mise run zlib          # compression (zlib-rs native vs Wado)
 mise run fts           # float-to-string conversion
 mise run json-twitter  # JSON deserialization (twitter.json)
