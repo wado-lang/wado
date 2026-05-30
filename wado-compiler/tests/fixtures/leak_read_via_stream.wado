@@ -1,0 +1,22 @@
+// Minimal reproduction for wasmtime concurrent-state (waitable) leak — the
+// host-producer side (symmetric to write_via_stream's consumer side).
+//
+// `wasi:cli/stdin.read-via-stream() -> tuple<stream<u8>, future<result>>`:
+// the host produces both the stream (writable end held by host) and the
+// future (writable end held by host). The guest owns the readable ends.
+//
+// The guest drops both readable ends without reading. After `run` returns,
+// 6 entries remain: the host stream producer (WriteState::HostReady) and the
+// host future producer (WriteState::HostReady) are never finalized when the
+// guest drops the readable end (host_drop_reader's HostReady write arm is a
+// no-op).
+use { Stdin } from "wasi:cli";
+
+export fn run() with Stdin {
+    let [rx, fut] = Stdin::read_via_stream();
+    rx.drop();
+    fut.drop();
+}
+
+__DATA__
+{"stdout": ""}

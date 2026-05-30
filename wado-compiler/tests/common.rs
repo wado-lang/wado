@@ -886,6 +886,7 @@ pub fn run_wasm_with_full_options(
     let rt = runtime();
     let engine = engine();
 
+    init_trace_logger();
     rt.block_on(async {
         let component = Component::new(engine, &wasm)?;
         let linker = linker(engine)?;
@@ -961,6 +962,24 @@ pub fn run_wasm_with_full_options(
 /// keys" (issue #1230 — `core:cli::println` and friends). This check is
 /// world-agnostic: every runner (cli/command, test, http/service) calls it
 /// after the guest finishes a clean run.
+struct StderrLogger;
+impl log::Log for StderrLogger {
+    fn enabled(&self, _: &log::Metadata) -> bool {
+        true
+    }
+    fn log(&self, record: &log::Record) {
+        eprintln!("[{}] {}", record.target(), record.args());
+    }
+    fn flush(&self) {}
+}
+static LOGGER: StderrLogger = StderrLogger;
+pub fn init_trace_logger() {
+    if std::env::var("WADO_TRACE_CM").is_ok() {
+        let _ = log::set_logger(&LOGGER);
+        log::set_max_level(log::LevelFilter::Trace);
+    }
+}
+
 pub fn assert_no_resource_leak(store: &mut Store<WasiState>, ctx: &str) {
     let leaked = store.concurrent_state_table_size();
     assert_eq!(
