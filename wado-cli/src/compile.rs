@@ -433,6 +433,7 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
         build_dependencies: indexmap::IndexMap::new(),
         workspace: None,
         test: wado_manifest::TestSettings::default(),
+        format: wado_manifest::FormatSettings::default(),
     }
 }
 

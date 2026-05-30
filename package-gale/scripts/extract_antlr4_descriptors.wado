@@ -1303,7 +1303,14 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 }
             } else if err_eligible {
                 let is_lexer = parsed.descriptor_type == "Lexer";
-                let src = emit_stage_a_err_test_file(category, &base, &parsed.input, &parsed.start, is_lexer, &stage_a_triage);
+                let src = emit_stage_a_err_test_file(
+                    category,
+                    &base,
+                    &parsed.input,
+                    &parsed.start,
+                    is_lexer,
+                    &stage_a_triage,
+                );
                 if let Err(_) = write_file_string(&stage_a_cat_dir, &err_filename, &src) {
                     eprintln(`extract: cannot write stage_a/{*category}/{err_filename}`);
                 } else {
@@ -1321,7 +1328,8 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                     TokensTarget::Clean(_) => stage_a_triage,
                     TokensTarget::StageCBlocked(_) => match stage_a_triage {
                         Triage::Pass => Triage::Todo(
-                            "Stage C: descriptor [output] is prefixed by action-print text (<writeln(...)> echoes inside { ... } action bodies); claim (d) actual lacks the prefix."),
+                            "Stage C: descriptor [output] is prefixed by action-print text (<writeln(...)> echoes inside { ... } action bodies); claim (d) actual lacks the prefix.",
+                        ),
                         explicit => explicit,
                     },
                 };
@@ -1449,7 +1457,9 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         let test_filename = `{category_to_snake(category)}_test.wado`;
         if entries.is_empty() {
             if category_errors > 0 {
-                eprintln(`extract: {*category} had {category_errors} descriptor failure(s); leaving antlr4-compat/{test_filename} untouched`);
+                eprintln(
+                    `extract: {*category} had {category_errors} descriptor failure(s); leaving antlr4-compat/{test_filename} untouched`,
+                );
                 continue;
             }
             if let Err(_) = remove_file(&compat_dir, &test_filename) {
@@ -1467,15 +1477,22 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     }
 
     println("");
-    println(`extract: stage A claim (a) — .g4 parses cleanly: emitted {total_emitted} descriptor(s) across {categories.len()} categor(ies)`);
+    println(
+        `extract: stage A claim (a) — .g4 parses cleanly: emitted {total_emitted} descriptor(s) across {categories.len(
+        )} categor(ies)`,
+    );
     println(`extract:           {total_todo} marked #[TODO]`);
     println(`extract:           {total_skip} skipped`);
     let stage_a_emitted = stage_a_parse_emitted + stage_a_err_emitted + stage_a_tokens_emitted;
-    println(`extract: stage A claims (b/c/d) — generated parser/lexer behaviour: emitted {stage_a_emitted} per-descriptor driver(s)`);
+    println(
+        `extract: stage A claims (b/c/d) — generated parser/lexer behaviour: emitted {stage_a_emitted} per-descriptor driver(s)`,
+    );
     println(`extract:           {stage_a_parse_emitted} parse-accepts-input (_parse_test.wado)`);
     println(`extract:           {stage_a_err_emitted} parse-must-error    (_err_test.wado)`);
     println(`extract:           {stage_a_tokens_emitted} tokens-equivalence  (_tokens_test.wado)`);
-    println(`extract:             of which {stage_a_tokens_stage_c_blocked} auto-#[TODO] (Stage C: action-print prefix)`);
+    println(
+        `extract:             of which {stage_a_tokens_stage_c_blocked} auto-#[TODO] (Stage C: action-print prefix)`,
+    );
     println(`extract:           {stage_a_todo} marked #[TODO] total (status.toml + auto)`);
     println(`extract:           {stage_a_skip} explicit skip`);
     println(`extract:           {stage_a_auto_skip} auto-skip (no eligible variant)`);
@@ -1484,7 +1501,9 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     println(`extract:           {stage_b_skip} explicit skip`);
     println(`extract:           {stage_b_auto_skip} auto-skip (output is not a parse tree)`);
     println(`extract: deferred — gaps blocked on missing infrastructure:`);
-    println(`extract:           {deferred_composite} composite descriptors — need Kiln multi-grammar \`use\` support to resolve \`import S;\` against sibling \`<Name>.slaveN.g4\``);
+    println(
+        `extract:           {deferred_composite} composite descriptors — need Kiln multi-grammar \`use\` support to resolve \`import S;\` against sibling \`<Name>.slaveN.g4\``,
+    );
 }
 
 // ===== Stage B: descriptor [output] normaliser =====
@@ -1562,7 +1581,7 @@ fn is_tree_node_name_start(c: char) -> bool {
 }
 
 fn is_tree_node_name_continue(c: char) -> bool {
-    return is_tree_node_name_start(c) || ('0' <= c && c <= '9');
+    return is_tree_node_name_start(c) || '0' <= c && c <= '9';
 }
 
 /// Extract the root rule name from a normalised `[output]` tree of the form
@@ -1847,7 +1866,12 @@ test "triage: stage_a entry applies to whichever variant (parse / err / tokens) 
 ",
     );
     let maps = load_triage_maps(&toml);
-    assert_triage_todo(&maps, &"a", &"ParserErrors/Foo", &"variant: parse must error — Gale's set-element dispatch elides the kind-check");
+    assert_triage_todo(
+        &maps,
+        &"a",
+        &"ParserErrors/Foo",
+        &"variant: parse must error — Gale's set-element dispatch elides the kind-check",
+    );
     assert_triage_pass(&maps, &"cat", &"ParserErrors/Foo");
     assert_triage_pass(&maps, &"b", &"ParserErrors/Foo");
 }

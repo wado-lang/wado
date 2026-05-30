@@ -93,10 +93,12 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     // `use { X } from "./path/to/grammar.g4"` redirect that the Kiln
     // pipeline installs.
     let entry_name = to_snake_case(&grammar.name);
-    let files: Array<OutputFile> = [OutputFile {
+    let files: Array<OutputFile> = [
+        OutputFile {
             path: `{entry_name}.wado`,
             content: wado_source,
             is_entry: true,
-        }];
+        },
+    ];
     return Result::Ok(Response { files });
 }

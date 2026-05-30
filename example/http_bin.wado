@@ -202,7 +202,10 @@ fn json_error(msg: String) -> String {
 
 fn json_response(status: StatusCode, body: String) -> RouteResponse {
     return RouteResponse {
-        status, content_type: "application/json", body, allow: null,
+        status,
+        content_type: "application/json",
+        body,
+        allow: null,
     };
 }
 
@@ -210,11 +213,7 @@ fn echo(request: Request, read_body: bool) -> RouteResponse {
     let url = parse_url(&request);
     let method = request.get_method();
     let h = request.get_headers();
-    let body = if read_body {
-        Option::Some(read_body_from_request(request))
-    } else {
-        null
-    };
+    let body = if read_body { Option::Some(read_body_from_request(request)) } else { null };
     return json_response(200, build_request_json(method, &url, &h, body));
 }
 
@@ -279,11 +278,7 @@ fn respond_anything(request: Request) -> RouteResponse {
     let url = parse_url(&request);
     let method = request.get_method();
     let h = request.get_headers();
-    let body = if method matches { Post | Put | Patch } {
-        Option::Some(read_body_from_request(request))
-    } else {
-        null
-    };
+    let body = if method matches { Post | Put | Patch } { Option::Some(read_body_from_request(request)) } else { null };
     return json_response(200, build_request_json(method, &url, &h, body));
 }
 
@@ -294,19 +289,19 @@ fn format_allow(methods: &Array<Method>) -> String {
 
 fn build_router() -> Router<Handler> {
     let mut r = Router::<Handler>::new();
-    r.get("/",               |_req, _p| respond_home());
-    r.get("/get",            |req,  _p| echo(req, false));
-    r.post("/post",          |req,  _p| echo(req, true));
-    r.put("/put",            |req,  _p| echo(req, true));
-    r.patch("/patch",        |req,  _p| echo(req, true));
-    r.delete("/delete",      |req,  _p| echo(req, false));
-    r.get("/headers",        |req,  _p| respond_headers(req));
-    r.get("/ip",             |req,  _p| respond_ip(req));
-    r.get("/user-agent",     |req,  _p| respond_user_agent(req));
-    r.get("/status/:code",   |_req, p|  respond_status(p["code"]));
-    r.get("/base64/:val",    |_req, p|  respond_base64(p["val"]));
-    r.any("/anything",       |req,  _p| respond_anything(req));
-    r.any("/anything/*rest", |req,  _p| respond_anything(req));
+    r.get("/", |_req, _p| respond_home());
+    r.get("/get", |req, _p| echo(req, false));
+    r.post("/post", |req, _p| echo(req, true));
+    r.put("/put", |req, _p| echo(req, true));
+    r.patch("/patch", |req, _p| echo(req, true));
+    r.delete("/delete", |req, _p| echo(req, false));
+    r.get("/headers", |req, _p| respond_headers(req));
+    r.get("/ip", |req, _p| respond_ip(req));
+    r.get("/user-agent", |req, _p| respond_user_agent(req));
+    r.get("/status/:code", |_req, p| respond_status(p["code"]));
+    r.get("/base64/:val", |_req, p| respond_base64(p["val"]));
+    r.any("/anything", |req, _p| respond_anything(req));
+    r.any("/anything/*rest", |req, _p| respond_anything(req));
     return r;
 }
 
@@ -321,7 +316,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     let user_agent = get_header(&h, "user-agent");
 
     let resp = if let Some(m) = ROUTER.match_request(&request) {
-        (m.handler)(request, m.params)
+        (m.handler)(request, m.params);
     } else {
         let allowed = ROUTER.allowed_methods(&url.path);
         if !allowed.is_empty() {
@@ -330,14 +325,14 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
                 content_type: "application/json",
                 body: json_error("Method Not Allowed"),
                 allow: Option::Some(format_allow(&allowed)),
-            }
+            };
         } else {
             RouteResponse {
                 status: 404,
                 content_type: "application/json",
                 body: json_error("Not Found"),
                 allow: null,
-            }
+            };
         }
     };
 

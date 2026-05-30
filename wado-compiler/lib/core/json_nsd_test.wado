@@ -100,7 +100,10 @@ impl Serialize for Line;
 impl Deserialize for Line;
 
 test "serialize nested struct" {
-    let l = Line { start: Point { x: 1, y: 2 }, end: Point { x: 3, y: 4 } };
+    let l = Line {
+        start: Point { x: 1, y: 2 },
+        end: Point { x: 3, y: 4 },
+    };
     let r = to_string(&l);
     assert r matches { Ok(s) && s == "[[1,2],[3,4]]" };
 }
@@ -186,7 +189,10 @@ test "serialize Array" {
 }
 
 test "serialize Array of structs" {
-    let v: Array<Point> = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
+    let v: Array<Point> = [
+        Point { x: 1, y: 2 },
+        Point { x: 3, y: 4 },
+    ];
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "[[1,2],[3,4]]" };
 }

@@ -14,8 +14,11 @@ use ts from "./grammars/TypeScriptLexer.g4"
     };
 use { normalize_tree } from "./grammars/TypeScriptLexer.g4";
 use {
-    TK_BackTick, TK_BackTickInside, TK_TemplateStringAtom,
-    TK_WhiteSpaces, TK_Let,
+    TK_BackTick,
+    TK_BackTickInside,
+    TK_TemplateStringAtom,
+    TK_WhiteSpaces,
+    TK_Let,
 } from "./grammars/TypeScriptLexer.g4";
 
 fn assert_tree(input: &String, expected: &String) {
@@ -417,14 +420,12 @@ test "type override: BackTickInside rewrites kind to BackTick" {
     let tokens = ts::tokenize(&"`hi`");
     let mut backtick_count = 0;
     for let t of &tokens {
-        assert t.kind != TK_BackTickInside,
-            "BackTickInside leaked into stream — type(BackTick) override dropped";
+        assert t.kind != TK_BackTickInside, "BackTickInside leaked into stream — type(BackTick) override dropped";
         if t.kind == TK_BackTick {
             backtick_count += 1;
         }
     }
-    assert backtick_count == 2,
-        `expected 2 BackTick tokens (open + close), got {backtick_count}`;
+    assert backtick_count == 2, `expected 2 BackTick tokens (open + close), got {backtick_count}`;
 }
 
 test "HIDDEN channel: TypeScript WhiteSpaces routed to trivia" {
@@ -435,22 +436,18 @@ test "HIDDEN channel: TypeScript WhiteSpaces routed to trivia" {
     // non-EOF main-channel token).
     let tokens = ts::tokenize(&"let x");
     for let t of &tokens {
-        assert t.kind != TK_WhiteSpaces,
-            "WhiteSpaces leaked into main stream — HIDDEN routing dropped";
+        assert t.kind != TK_WhiteSpaces, "WhiteSpaces leaked into main stream — HIDDEN routing dropped";
     }
     // `let` must be the first main-channel token.
-    assert tokens[0].kind == TK_Let,
-        `expected first token = Let, got kind {tokens[0].kind}`;
+    assert tokens[0].kind == TK_Let, `expected first token = Let, got kind {tokens[0].kind}`;
     // The second token (the `x` identifier) must carry the HIDDEN
     // whitespace as leading trivia on channel 1.
     let mut found_hidden = false;
     for let trivia of &tokens[1].leading_trivia {
         if trivia.kind == TK_WhiteSpaces {
-            assert trivia.channel == 1,
-                `expected HIDDEN channel 1, got {trivia.channel}`;
+            assert trivia.channel == 1, `expected HIDDEN channel 1, got {trivia.channel}`;
             found_hidden = true;
         }
     }
-    assert found_hidden,
-        "WhiteSpaces trivia missing from token following `let`";
+    assert found_hidden, "WhiteSpaces trivia missing from token following `let`";
 }

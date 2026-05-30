@@ -2946,9 +2946,9 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
     // naming pipeline. The Repeat case is handled in `lower_repeat_op`
     // by pre-seeding `inner_counts`.
     let leaf = if op_field(&ll.inner) == ll.field {
-        rebind_op_field(*(&ll.inner), &`{ll.field}_item`, &op_leaf_dedup_base(&ll.inner))
+        rebind_op_field(*&ll.inner, &`{ll.field}_item`, &op_leaf_dedup_base(&ll.inner));
     } else {
-        *(&ll.inner)
+        *&ll.inner;
     };
     let inner_field = op_field(&leaf);
     gen_op_leaf(w, &leaf, ctx, name_counts);

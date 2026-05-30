@@ -50,7 +50,10 @@ impl Vec2 {
     // 2D cross product (z-component of 3D cross): x1*y2 - y1*x2
     fn cross(&self, other: &Vec2) -> f64 {
         // Multiply [x1, y1] * [y2, x2], then subtract lanes
-        let other_swapped: f64x2 = [other.y(), other.x()];
+        let other_swapped: f64x2 = [
+            other.y(),
+            other.x(),
+        ];
         let prod = self.v * other_swapped;
         return prod.extract_lane(0) - prod.extract_lane(1);
     }

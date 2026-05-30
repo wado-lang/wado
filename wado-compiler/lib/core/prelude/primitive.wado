@@ -1,3 +1,5 @@
+#![no_prelude]
+#![stdlib("core:prelude/primitive.wado")]
 // Primitive Type Methods
 //
 // This module provides methods for primitive types (i32, i64, f32, f64, etc.)
@@ -5,8 +7,7 @@
 //
 // This module intentionally does NOT depend on core:internal to keep the
 // dependency structure simple.
-#![no_prelude]
-#![stdlib("core:prelude/primitive.wado")]
+
 
 use {
     check_special,
@@ -33,26 +34,54 @@ use {
 // Wado-side identifiers used by the impl blocks below
 // (`libm_log` → `f64_ln`, etc.).
 use {
-    libm_sin as f64_sin, libm_cos as f64_cos, libm_tan as f64_tan,
-    libm_asin as f64_asin, libm_acos as f64_acos, libm_atan as f64_atan,
+    libm_sin as f64_sin,
+    libm_cos as f64_cos,
+    libm_tan as f64_tan,
+    libm_asin as f64_asin,
+    libm_acos as f64_acos,
+    libm_atan as f64_atan,
     libm_atan2 as f64_atan2,
-    libm_sinh as f64_sinh, libm_cosh as f64_cosh, libm_tanh as f64_tanh,
-    libm_asinh as f64_asinh, libm_acosh as f64_acosh, libm_atanh as f64_atanh,
-    libm_exp as f64_exp, libm_exp2 as f64_exp2, libm_expm1 as f64_expm1,
-    libm_log as f64_ln, libm_log2 as f64_log2, libm_log10 as f64_log10,
+    libm_sinh as f64_sinh,
+    libm_cosh as f64_cosh,
+    libm_tanh as f64_tanh,
+    libm_asinh as f64_asinh,
+    libm_acosh as f64_acosh,
+    libm_atanh as f64_atanh,
+    libm_exp as f64_exp,
+    libm_exp2 as f64_exp2,
+    libm_expm1 as f64_expm1,
+    libm_log as f64_ln,
+    libm_log2 as f64_log2,
+    libm_log10 as f64_log10,
     libm_log1p as f64_ln1p,
-    libm_pow as f64_pow, libm_cbrt as f64_cbrt,
-    libm_hypot as f64_hypot, libm_fmod as f64_fmod,
-    libm_sinf as f32_sin, libm_cosf as f32_cos, libm_tanf as f32_tan,
-    libm_asinf as f32_asin, libm_acosf as f32_acos, libm_atanf as f32_atan,
+    libm_pow as f64_pow,
+    libm_cbrt as f64_cbrt,
+    libm_hypot as f64_hypot,
+    libm_fmod as f64_fmod,
+    libm_sinf as f32_sin,
+    libm_cosf as f32_cos,
+    libm_tanf as f32_tan,
+    libm_asinf as f32_asin,
+    libm_acosf as f32_acos,
+    libm_atanf as f32_atan,
     libm_atan2f as f32_atan2,
-    libm_sinhf as f32_sinh, libm_coshf as f32_cosh, libm_tanhf as f32_tanh,
-    libm_asinhf as f32_asinh, libm_acoshf as f32_acosh, libm_atanhf as f32_atanh,
-    libm_expf as f32_exp, libm_exp2f as f32_exp2, libm_expm1f as f32_expm1,
-    libm_logf as f32_ln, libm_log2f as f32_log2, libm_log10f as f32_log10,
+    libm_sinhf as f32_sinh,
+    libm_coshf as f32_cosh,
+    libm_tanhf as f32_tanh,
+    libm_asinhf as f32_asinh,
+    libm_acoshf as f32_acosh,
+    libm_atanhf as f32_atanh,
+    libm_expf as f32_exp,
+    libm_exp2f as f32_exp2,
+    libm_expm1f as f32_expm1,
+    libm_logf as f32_ln,
+    libm_log2f as f32_log2,
+    libm_log10f as f32_log10,
     libm_log1pf as f32_ln1p,
-    libm_powf as f32_pow, libm_cbrtf as f32_cbrt,
-    libm_hypotf as f32_hypot, libm_fmodf as f32_fmod
+    libm_powf as f32_pow,
+    libm_cbrtf as f32_cbrt,
+    libm_hypotf as f32_hypot,
+    libm_fmodf as f32_fmod,
 } from "../libm.wat" with { type: "wat" };
 
 use {
@@ -440,6 +469,7 @@ impl i8 {
 
 impl FromStr for i8 {
     type Err = ParseIntError;
+
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<i8, ParseIntError> {
         return match parse_i64_radix_range(s, start, end, 10, 127, 128) {
             Ok(v) => Result::Ok(v as i8),
@@ -485,6 +515,7 @@ impl u8 {
 
 impl FromStr for u8 {
     type Err = ParseIntError;
+
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<u8, ParseIntError> {
         return match parse_u64_radix_range(s, start, end, 10, 255) {
             Ok(v) => Result::Ok(v as u8),
@@ -530,6 +561,7 @@ impl i16 {
 
 impl FromStr for i16 {
     type Err = ParseIntError;
+
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<i16, ParseIntError> {
         return match parse_i64_radix_range(s, start, end, 10, 32767, 32768) {
             Ok(v) => Result::Ok(v as i16),
@@ -575,6 +607,7 @@ impl u16 {
 
 impl FromStr for u16 {
     type Err = ParseIntError;
+
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<u16, ParseIntError> {
         return match parse_u64_radix_range(s, start, end, 10, 65535) {
             Ok(v) => Result::Ok(v as u16),
@@ -643,6 +676,7 @@ impl i32 {
 
 impl FromStr for i32 {
     type Err = ParseIntError;
+
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<i32, ParseIntError> {
         return match parse_i64_radix_range(s, start, end, 10, 2147483647, 2147483648) {
             Ok(v) => Result::Ok(v as i32),
@@ -696,6 +730,7 @@ impl u32 {
 
 impl FromStr for u32 {
     type Err = ParseIntError;
+
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<u32, ParseIntError> {
         return match parse_u64_radix_range(s, start, end, 10, 4294967295) {
             Ok(v) => Result::Ok(v as u32),
@@ -781,6 +816,7 @@ impl i64 {
 
 impl FromStr for i64 {
     type Err = ParseIntError;
+
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<i64, ParseIntError> {
         return parse_i64_radix_range(s, start, end, 10, 9223372036854775807, 9223372036854775808);
     }
@@ -895,6 +931,7 @@ impl u64 {
 
 impl FromStr for u64 {
     type Err = ParseIntError;
+
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<u64, ParseIntError> {
         return parse_u64_radix_range(s, start, end, 10, u64::MAX);
     }
@@ -1192,6 +1229,7 @@ impl f32 {
 
 impl FromStr for f32 {
     type Err = ParseFloatError;
+
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<f32, ParseFloatError> {
         return match parse_f64_from_str_range(s, start, end) {
             Ok(v) => Result::Ok(v as f32),
@@ -1538,6 +1576,7 @@ impl f64 {
 
 impl FromStr for f64 {
     type Err = ParseFloatError;
+
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<f64, ParseFloatError> {
         return parse_f64_from_str_range(s, start, end);
     }

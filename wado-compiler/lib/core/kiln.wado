@@ -1,3 +1,4 @@
+#![stdlib("core:kiln")]
 //! Kiln stdlib entry point.
 //!
 //! Import the user-facing Kiln types and the `KilnHost` effect via
@@ -7,7 +8,7 @@
 //! against.
 //!
 //! See WEP 2026-04-12 (Kiln) §"The `kiln` world" and §"M6.5 stage 2".
-#![stdlib("core:kiln")]
+
 
 use { from_string } from "core:json";
 use { Deserialize } from "core:serde";
@@ -53,7 +54,9 @@ pub struct Request<T> {
 pub fn bind_request<T: Deserialize>(raw: RawRequest) -> Result<Request<T>, Error> {
     let opts = match from_string::<T>(raw.options) {
         Ok(v) => v,
-        Err(_) => return Result::Err(Error::Other("kiln: failed to decode options JSON")),
+        Err(_) => {
+            return Result::Err(Error::Other("kiln: failed to decode options JSON"));
+        },
     };
     return Result::Ok(Request {
         primary: raw.primary,

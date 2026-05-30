@@ -1,3 +1,4 @@
+#![stdlib("core:json_nsd")]
 //! JSON NSD (Non-Self-Describing) serialization and deserialization.
 //!
 //! Structs are encoded as positional arrays (field names omitted).
@@ -13,7 +14,7 @@
 //!
 //!   let json = to_string(&Point { x: 1, y: 2 });  // "[1,2]"
 //!   let val: Result<Point, DeserializeError> = from_string("[1,2]");  // Ok(Point { x: 1, y: 2 })
-#![stdlib("core:json_nsd")]
+
 
 use {
     Serialize,
@@ -231,12 +232,12 @@ impl Serializer for NsdSerializer {
 
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
         let s = `{v}`;
-        write_escaped_string(self.buf,&s);
+        write_escaped_string(self.buf, &s);
         return Result::Ok(());
     }
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        write_escaped_string(self.buf,v);
+        write_escaped_string(self.buf, v);
         return Result::Ok(());
     }
 

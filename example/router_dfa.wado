@@ -13,10 +13,7 @@
 //! `TreeMap<String, i32>`-based design would force.
 
 use { TreeMap } from "core:collections";
-use {
-    Method, MatchResult, RoutePattern, Segment,
-    no_match, parse_pattern,
-} from "./router_common.wado";
+use { Method, MatchResult, RoutePattern, Segment, no_match, parse_pattern } from "./router_common.wado";
 
 struct DfaLiteralEdge {
     label: String,
@@ -24,13 +21,13 @@ struct DfaLiteralEdge {
 }
 
 struct DfaState {
-    literals: Array<DfaLiteralEdge>,  // sorted by label byte-wise
-    param_target: i32,                 // -1 if no param child
+    literals: Array<DfaLiteralEdge>,
+    param_target: i32,  // -1 if no param child
     param_name: String,
-    wildcard_handler: i32,             // -1 if no wildcard route at this state
+    wildcard_handler: i32,  // -1 if no wildcard route at this state
     wildcard_method: Method,
     wildcard_name: String,
-    handler_id: i32,                   // -1 if not terminal
+    handler_id: i32,  // -1 if not terminal
     method: Method,
 }
 
@@ -48,7 +45,7 @@ fn new_state() -> DfaState {
 }
 
 pub struct DfaRouter {
-    states: Array<DfaState>,   // state 0 is the start state
+    states: Array<DfaState>,
 }
 
 impl DfaRouter {
@@ -128,9 +125,7 @@ impl DfaRouter {
                 let pname = self.states[state].param_name;
                 params[pname] = path.substr_bytes(pos, end);
                 state = self.states[state].param_target;
-            } else if self.states[state].wildcard_handler >= 0
-                && self.states[state].wildcard_method == method
-            {
+            } else if self.states[state].wildcard_handler >= 0 && self.states[state].wildcard_method == method {
                 params[self.states[state].wildcard_name] = path.substr_bytes(pos, plen);
                 return MatchResult { handler_id: self.states[state].wildcard_handler, params };
             } else {
@@ -154,9 +149,7 @@ impl DfaRouter {
             }
             // Trailing '/' after a segment: only a wildcard route at this
             // state matches, with empty captured remainder.
-            if self.states[state].wildcard_handler >= 0
-                && self.states[state].wildcard_method == method
-            {
+            if self.states[state].wildcard_handler >= 0 && self.states[state].wildcard_method == method {
                 params[self.states[state].wildcard_name] = "";
                 return MatchResult { handler_id: self.states[state].wildcard_handler, params };
             }
@@ -174,9 +167,15 @@ fn bsearch_label(edges: &Array<DfaLiteralEdge>, key: &String) -> [i32, bool] {
     while lo < hi {
         let mid = (lo + hi) / 2;
         match edges[mid].label.cmp(key) {
-            Less => { lo = mid + 1; },
-            Greater => { hi = mid; },
-            Equal => { return [mid, true]; },
+            Less => {
+                lo = mid + 1;
+            },
+            Greater => {
+                hi = mid;
+            },
+            Equal => {
+                return [mid, true];
+            },
         }
     }
     return [lo, false];
@@ -191,9 +190,15 @@ fn bsearch_target_by_bytes(edges: &Array<DfaLiteralEdge>, path: &String, start: 
     while lo < hi {
         let mid = (lo + hi) / 2;
         match cmp_string_to_byte_range(&edges[mid].label, path, start, end) {
-            Less => { lo = mid + 1; },
-            Greater => { hi = mid; },
-            Equal => { return edges[mid].target; },
+            Less => {
+                lo = mid + 1;
+            },
+            Greater => {
+                hi = mid;
+            },
+            Equal => {
+                return edges[mid].target;
+            },
         }
     }
     return -1;

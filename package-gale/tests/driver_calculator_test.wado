@@ -120,7 +120,9 @@ test "tree: parenthesized expression" {
 }
 
 test "tree: function call sin" {
-    assert_tree(&"sin(0) = 0", &"
+    assert_tree(
+        &"sin(0) = 0",
+        &"
         (equation
           (expression
             (multiplyingExpression
@@ -130,7 +132,8 @@ test "tree: function call sin" {
           (relop =)
           (expression
             (multiplyingExpression (powExpression (signedAtom (atom (scientific 0)))))))
-    ");
+    ",
+    );
 }
 
 test "tree: function call with multiple args" {

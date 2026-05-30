@@ -662,13 +662,19 @@ pub fn element_field_info(elem: &Element) -> [String, String] {
     }
     if let Group(g) = elem {
         if is_simple_cst_group(&g.alternatives) {
-            return [group_field_base_name(&g.alternatives), group_variant_type_name(&g.alternatives)];
+            return [
+                group_field_base_name(&g.alternatives),
+                group_variant_type_name(&g.alternatives),
+            ];
         }
         if is_token_only_group(&g.alternatives) {
             return [token_group_field_name(&g.alternatives), "Token"];
         }
         if is_single_alt_group(&g.alternatives) {
-            return [single_alt_group_field_name(&g.alternatives[0]), single_alt_group_type_name(&g.alternatives[0])];
+            return [
+                single_alt_group_field_name(&g.alternatives[0]),
+                single_alt_group_type_name(&g.alternatives[0]),
+            ];
         }
         if is_general_group(&g.alternatives) {
             // Post Phase 2-G every general-group reference flows through
