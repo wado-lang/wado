@@ -1850,7 +1850,43 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // `expr as Ty` — emit `Cast` with the recorded target
                 // type. Numeric vs newtype-cast handling is downstream;
                 // reify just produces the shape.
-                let inner = self.reify_expr(&cast.expr, ctx, None);
+                //
+                // Re-type a numeric-literal operand (possibly negated) to
+                // the cast's target width. annotate propagates the target
+                // type to a *direct* literal cast operand (`9e15 as i64`
+                // types the literal `i64`) but not through a `Neg`
+                // (`-9e15 as i64` leaves the inner literal `i32`), so at
+                // codegen an `i32.const` truncates a value > `i32::MAX`
+                // (`2^53 mod 2^32 == 0`) before the cast widens it. Mirror
+                // the production resolver, which types the operand at the
+                // target width in this position.
+                let target_is_int = self.tysys.type_table.borrow().is_integer(target_type);
+                let is_number_lit = |e: &ast::Expr| matches!(e, ast::Expr::Literal(l) if matches!(l.value, ast::Literal::Number(_)));
+                let inner = if target_is_int && is_number_lit(&cast.expr) {
+                    let ast::Expr::Literal(lit) = &cast.expr else {
+                        unreachable!()
+                    };
+                    self.reify_literal(lit, target_type, ctx)
+                } else if target_is_int
+                    && let ast::Expr::Unary(u) = &cast.expr
+                    && u.op == ast::UnaryOp::Neg
+                    && is_number_lit(&u.expr)
+                {
+                    let ast::Expr::Literal(lit) = &u.expr else {
+                        unreachable!()
+                    };
+                    let lit_tir = self.reify_literal(lit, target_type, ctx);
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: crate::tir::TirUnaryOp::Neg,
+                            expr: Box::new(lit_tir),
+                        },
+                        target_type,
+                        span,
+                    )
+                } else {
+                    self.reify_expr(&cast.expr, ctx, None)
+                };
                 TirExpr::new(
                     TirExprKind::Cast {
                         expr: Box::new(inner),
