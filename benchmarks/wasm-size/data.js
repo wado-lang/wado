@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780142733040,
+  "lastUpdate": 1780143511174,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27885,6 +27885,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 458952,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "123d23008211374adff363135bff9a5f54e02b69",
+          "message": "Merge pull request #1245 from wado-lang/claude/wado-syntax-highlight-6OcbM\n\nexample: Wado.g4 grammar + syntax-highlight driver (and two Gale LL fixes)",
+          "timestamp": "2026-05-30T21:03:36+09:00",
+          "tree_id": "b3184ffd6fca96a07d0f92d156d5ebe7cba1b048",
+          "url": "https://github.com/wado-lang/wado/commit/123d23008211374adff363135bff9a5f54e02b69"
+        },
+        "date": 1780143510860,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16963,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 447987,
             "unit": "bytes"
           }
         ]
