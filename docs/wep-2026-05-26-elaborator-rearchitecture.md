@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2495 / 2664 fixtures passing under
+      suite reaches **2523 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 169 remaining failures are all reify-specific). The
+      so the 141 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -621,11 +621,18 @@ Landed:
     unresolved. reify now rebuilds generic / tuple types from
     self-substituted argument ids when an argument mentions `Self`
     (self-free types keep the proven static path).
+20. **String-literal escape decoding (2495 → 2523).** reify emitted
+    `StringLiteral` from the raw AST source text, so a literal containing
+    an escape (`\"`, `\n`, `\\`, …) reached codegen with the backslash
+    intact — `"{\""` serialized as `{\"` instead of `{"`. Decodes via
+    `util::unescape_string`, matching the elaborator (expr.rs:403). A
+    single broad fix worth +28 fixtures (every reify'd escaped string
+    literal across the suite).
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2495
-/ 2664** under `WADO_REIFY=1`; 169 reify-specific failures across 93
+Largest first, by fixture-name prefix (after the landings above). **2523
+/ 2664** under `WADO_REIFY=1`; 141 reify-specific failures across 79
 unique fixtures remain:
 
 - **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
@@ -640,11 +647,21 @@ unique fixtures remain:
   reify interns a structurally-identical type with a different `TypeId`
   (or a null-vs-non-null ref) than production, surfacing only at Wasm
   validation.
-- **serde (~6).** `serde_json_*` (large_int, scientific_notation,
-  string_escape) and `serde_serialize_variant` are runtime
-  value/format mismatches (e.g. double-escaped `\"` in the serialized
-  string), not compile failures — narrow numeric/string-formatting edge
-  cases.
+- **namespace_import (2).** `use ns from "…"; ns::Type::Case(payload)`.
+  annotate records `unknown` for the namespace-qualified variant ctor /
+  struct method (`shapes::Shape::Circle(3.14)`, `Point::sum`), so reify
+  reading `expression_types` propagates the unknown into the binding and
+  any downstream `Display` dispatch (`unknown^Display::fmt`). A reify
+  `VariantConstruct` arm constructs the value correctly, but the fix is
+  annotate-side: the ctor's `expression_types` / dispatch must be
+  recorded so reify's `reify_ident` does not read `unknown`.
+- **serde (~6).** `serde_json_*` (large_int, scientific_notation) are
+  runtime value mismatches: a numeric literal `> i32::MAX` under
+  `-x as i64` is i32-typed by `expression_types`, so reify's
+  `reify_literal` emits an `i32.const` that truncates (2^53 mod 2^32 = 0)
+  before the cast widens — production re-types the cast operand to i64.
+  Needs reify to re-type a numeric-literal cast operand to the target
+  width (or apply the recorded coercion through `Neg`).
 - Smaller tails: **wasi_clocks (2), tuple_name (2), namespace_import (2),
   match_or (2), httpbin_server (2), cross_module (2), closure_fn (2)**,
   and assorted single fixtures (variant_qualified, variadic_*,
