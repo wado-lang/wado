@@ -925,7 +925,11 @@ pub fn run_wasm_with_full_options(
         let run_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, "run")?;
 
         let (trapped, trap_msg) = match run_func.call_async(&mut store, ()).await {
-            Ok((result,)) => (result.is_err(), String::new()),
+            Ok((result,)) => {
+                // A clean CLI run must leave no leaked Component Model resources.
+                assert_no_resource_leak(&mut store, "wasi:cli/command `run`");
+                (result.is_err(), String::new())
+            }
             Err(e) => (true, format!("{e:#}")),
         };
 
@@ -944,4 +948,25 @@ pub fn run_wasm_with_full_options(
             trapped,
         })
     })
+}
+
+/// Assert that the guest released every Component Model `future`/`stream` it
+/// created. These waitables live in wasmtime's per-instance concurrent-state
+/// table, NOT in the host `ResourceTable` stored in `WasiState`. A leak there
+/// is therefore invisible to a `store.data().table.is_empty()` check (which
+/// only covers host resources such as wasi-http `Request`/`Response`/streams).
+///
+/// A surviving entry means the guest leaked a `future`/`stream` handle; in a
+/// long-running process this eventually traps with "resource table has no free
+/// keys" (issue #1230 — `core:cli::println` and friends). This check is
+/// world-agnostic: every runner (cli/command, test, http/service) calls it
+/// after the guest finishes a clean run.
+pub fn assert_no_resource_leak(store: &mut Store<WasiState>, ctx: &str) {
+    let leaked = store.concurrent_state_table_size();
+    assert_eq!(
+        leaked, 0,
+        "[resource leak] {ctx}: the guest left {leaked} entries in the component \
+         concurrent-state table (Component Model futures/streams). Every future/stream \
+         the guest creates must be dropped before it finishes."
+    );
 }

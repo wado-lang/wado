@@ -310,6 +310,19 @@ async fn run_cli_component(
 
     let (result,) = run_func.call_async(&mut store, ()).await?;
 
+    // A clean `run` must release every Component Model `future`/`stream` the
+    // guest created. These waitables live in wasmtime's per-instance
+    // concurrent-state table; a surviving entry is a resource leak that, in a
+    // long-running process, eventually traps with "resource table has no free
+    // keys" (issue #1230 — `core:cli::println` and friends).
+    let leaked = store.concurrent_state_table_size();
+    assert_eq!(
+        leaked, 0,
+        "[resource leak] `wado run`: the guest left {leaked} entries in the component \
+         concurrent-state table (Component Model futures/streams). Every future/stream \
+         the guest creates must be dropped before `run` returns."
+    );
+
     if let Some((profiler_arc, stop)) = profiler {
         stop.store(true, Ordering::Relaxed);
 
