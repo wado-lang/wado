@@ -849,7 +849,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file("json_catalog/citm_catalog.json");
     let mut b = Benchmark::new("json-catalog-v3");
     b.input_size = Option::Some(json_data.len());
-    b.iterations = 5;
+    b.iterations = 10;
 
     let counts = b.run("", || parse_counts_v3(json_data));
     assert counts.events == 184;

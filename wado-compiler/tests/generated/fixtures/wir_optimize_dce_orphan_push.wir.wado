@@ -121,7 +121,7 @@ fn "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/run"() with S
     let self_17: i32;
     w = struct.new "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado//Widget" { id: 7 };
     __b_1 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/Widget>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado//Widget">(w), used: 1 };
-    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; self_17 = if 0 >= __b_1.used {
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; self_17 = if builtin::unlikely(0 >= __b_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado//Widget">(__b_1.repr, 0).id; "core:prelude/primitive.wado/i32::fmt_decimal"(self_17, __local_4); __local_3);

@@ -211,11 +211,13 @@ condition: o2.mid.inner.len() == 2
     }
     __b_14 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(struct.new "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner" { boxed: ref.as_non_null(__b_15 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(100), used: 1 }; __b_15) }), used: 1 };
     __sroa_h2_cells = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(/*via $value_copy$T20*/ __b_14.repr)), used: 1 };
-    "core:prelude/array.wado/Array<i32>::push"(if 0 >= __sroa_h2_cells.used {
+    "core:prelude/array.wado/Array<i32>::push"(if builtin::unlikely(0 >= __sroa_h2_cells.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(__sroa_h2_cells.repr, 0).boxed, 200);
-    self_107 = block {
+    self_107 = if builtin::unlikely(0) {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(__b_14.repr, 0).boxed;
     __v0_18 = self_107.used;
     __cond_19 = __v0_18 == 1;
@@ -225,7 +227,7 @@ condition: h.cells[0].boxed.len() == 1
 "), used: 40 }); "core:prelude/string.wado/String::push_str"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("h.cells[0].boxed.len(): "), used: 24 }); __local_31 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_30 }; f_118 = __local_31; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_18, f_118); "core:prelude/string.wado/String::push"(__local_30, 10); __local_30);
         unreachable;
     }
-    self_121 = if 0 >= __sroa_h2_cells.used {
+    self_121 = if builtin::unlikely(0 >= __sroa_h2_cells.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(__sroa_h2_cells.repr, 0).boxed;

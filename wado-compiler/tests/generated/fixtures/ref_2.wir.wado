@@ -217,7 +217,7 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/process"(arr, input, count) {
             if i >= count {
                 break b8;
             }
-            if i >= _licm_used_14 {
+            if builtin::unlikely(i >= _licm_used_14) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
@@ -227,11 +227,11 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/process"(arr, input, count) {
             } else {
                 dist = (val - 128) & 255;
                 src = arr.used - dist;
-                "core:prelude/array.wado/Array<u8>::push"(arr, if src >= arr.used {
+                "core:prelude/array.wado/Array<u8>::push"(arr, if builtin::unlikely(src >= arr.used) {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<u8>(arr.repr, src));
-                "core:prelude/array.wado/Array<u8>::push"(arr, index_13 = src + 1; if index_13 >= arr.used {
+                "core:prelude/array.wado/Array<u8>::push"(arr, index_13 = src + 1; if builtin::unlikely(index_13 >= arr.used) {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<u8>(arr.repr, index_13));

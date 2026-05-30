@@ -176,7 +176,7 @@ fn "wado-compiler/tests/fixtures/allocator_freelist_churn_mixed.wado/run"() with
             if i_6 >= _licm_used_89 {
                 break b3;
             }
-            drop("mem/realloc"(if i_6 >= _licm_used_90 {
+            drop("mem/realloc"(if builtin::unlikely(i_6 >= _licm_used_90) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<i32>(_licm_repr_91, i_6), builtin::array_get<i32>(_licm_repr_92, i_6), 8, 0));
@@ -217,10 +217,10 @@ fn "wado-compiler/tests/fixtures/allocator_freelist_churn_mixed.wado/run"() with
                     if k < 0 {
                         break b13;
                     }
-                    drop("mem/realloc"(if k >= _licm_used_95 {
+                    drop("mem/realloc"(if builtin::unlikely(k >= _licm_used_95) {
                         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    }; builtin::array_get<i32>(_licm_repr_96, k), if k >= _licm_used_94 {
+                    }; builtin::array_get<i32>(_licm_repr_96, k), if builtin::unlikely(k >= _licm_used_94) {
                         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     }; builtin::array_get<i32>(_licm_repr_93, k), 8, 0));

@@ -109,11 +109,15 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_after_mutation.wado/run"(
     let f_25: ref "core:prelude/format.wado//Formatter";
     let f_30: ref "core:prelude/format.wado//Formatter";
     __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
-    block {
-    };
+    if builtin::unlikely(0) {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    }
     builtin::array_set<i32>(__b_0.repr, 0, 999);
-    block {
-    };
+    if builtin::unlikely(0) {
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+        unreachable;
+    }
     __v0 = builtin::array_get<i32>(__b_0.repr, 0);
     __cond = __v0 == 999;
     if __cond == 0 {
@@ -122,10 +126,10 @@ condition: arr[0] == 999
 "), used: 26 }); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 114); "core:prelude/string.wado/String::push"(__local_4, 114); "core:prelude/string.wado/String::push"(__local_4, 91); "core:prelude/string.wado/String::push"(__local_4, 48); "core:prelude/string.wado/String::push"(__local_4, 93); "core:prelude/string.wado/String::push"(__local_4, 58); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_30 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, f_30); "core:prelude/string.wado/String::push"(__local_4, 10); __local_4);
         unreachable;
     }
-    block {
+    if builtin::unlikely(1) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    };
+    }
     drop(builtin::array_get<i32>(__b_0.repr, 3));
 }
 

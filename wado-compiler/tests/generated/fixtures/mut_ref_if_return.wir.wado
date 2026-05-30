@@ -166,7 +166,7 @@ fn "wado-compiler/tests/fixtures/mut_ref_if_return.wado/parse_item"(p) {
     let __qm_v_9: ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token";
     let __qm_e_10: ref "core:prelude/string.wado//String";
     let tok: ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token";
-    kind = index = p.pos; if index >= p.tokens.used {
+    kind = index = p.pos; if builtin::unlikely(index >= p.tokens.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(p.tokens.repr, index).kind;
@@ -211,7 +211,7 @@ fn "wado-compiler/tests/fixtures/mut_ref_if_return.wado/parse_root"(p) {
     let index: i32;
     b4: block {
         l5: loop {
-            if index = p.pos; if index >= p.tokens.used {
+            if index = p.pos; if builtin::unlikely(index >= p.tokens.used) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(p.tokens.repr, index).kind != 1 {
@@ -479,7 +479,7 @@ fn "wado-compiler/tests/fixtures/mut_ref_if_return.wado/Parser::advance"(self) {
     let tok: ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token";
     let index: i32;
     index = self.pos;
-    if index >= self.tokens.used {
+    if builtin::unlikely(index >= self.tokens.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -492,7 +492,7 @@ fn "wado-compiler/tests/fixtures/mut_ref_if_return.wado/Parser::expect"(self, ki
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let index: i32;
-    if index = self.pos; if index >= self.tokens.used {
+    if index = self.pos; if builtin::unlikely(index >= self.tokens.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(self.tokens.repr, index).kind == kind {

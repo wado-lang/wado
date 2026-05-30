@@ -126,7 +126,7 @@ fn "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado/process"(st
             if __hfs_counter_7 >= _licm_limit_3 {
                 break b0;
             }
-            state.total = state.total + index = __hfs_counter_7; if index >= _licm_used_5 {
+            state.total = state.total + index = __hfs_counter_7; if builtin::unlikely(index >= _licm_used_5) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<i32>(_licm_repr_6, index);

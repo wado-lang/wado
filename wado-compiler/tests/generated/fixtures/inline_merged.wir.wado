@@ -299,12 +299,12 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_method_minimal"() with 
     "core:prelude/array.wado/Array<i32>::push"(__b_0, 1);
     "core:prelude/array.wado/Array<i32>::push"(__b_0, 2);
     "core:prelude/array.wado/Array<i32>::push"(__b_2, 3);
-    if 0 >= __b_0.used {
+    if builtin::unlikely(0 >= __b_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     a = builtin::array_get<i32>(__b_0.repr, 0);
-    if 0 >= __b_2.used {
+    if builtin::unlikely(0 >= __b_2.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }

@@ -173,7 +173,7 @@ impl Array<T> {
     /// Reserves capacity for at least `additional` more elements.
     pub fn reserve(&mut self, additional: i32) {
         let required = self.used + additional;
-        if required > builtin::array_len(self.repr) {
+        if builtin::unlikely(required > builtin::array_len(self.repr)) {
             self.grow_to(required);
         }
     }
@@ -195,7 +195,7 @@ impl Array<T> {
             return;
         }
         let new_used = self.used + other_len;
-        if new_used > builtin::array_len(self.repr) {
+        if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
             self.grow_to(new_used);
         }
         builtin::array_copy(self.repr, self.used, other.repr, 0, other_len);
@@ -267,7 +267,7 @@ impl IndexValue<i32> for Array<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
-        if index >= self.used {
+        if builtin::unlikely(index >= self.used) {
             panic("index out of bounds");
         }
         return builtin::array_get(self.repr, index);
@@ -278,7 +278,7 @@ impl IndexAssign<i32> for Array<T> {
     type Input = T;
 
     fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value] {
-        if index >= self.used {
+        if builtin::unlikely(index >= self.used) {
             panic("index out of bounds");
         }
         builtin::array_set(self.repr, index, value);
@@ -376,7 +376,7 @@ impl IndexValue<i32> for ArraySlice<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
-        if index < 0 || index >= self.end - self.start {
+        if builtin::unlikely(index < 0 || index >= self.end - self.start) {
             panic("index out of bounds");
         }
         return builtin::array_get(self.repr, self.start + index);

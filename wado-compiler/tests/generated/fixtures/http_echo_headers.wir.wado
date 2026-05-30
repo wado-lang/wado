@@ -493,7 +493,7 @@ fn "wado-compiler/tests/fixtures/http_echo_headers.wado/handle"(request) {
     if "wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_has"(req_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-echo"), used: 6 }) {
         values = "wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_get"(req_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-echo"), used: 6 });
         if values.used > 0 {
-            drop("wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_append"(resp_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-echoed"), used: 8 }, if 0 >= values.used {
+            drop("wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_append"(resp_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-echoed"), used: 8 }, if builtin::unlikely(0 >= values.used) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<ref "core:prelude//Array<u8>">(values.repr, 0)));

@@ -266,7 +266,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/run"() with S
     if dirs.used == 0 {
         return;
     }
-    dir = if 0 >= dirs.used {
+    dir = if builtin::unlikely(0 >= dirs.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).0;
