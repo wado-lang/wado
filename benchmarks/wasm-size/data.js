@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780149315501,
+  "lastUpdate": 1780161936458,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -27997,6 +27997,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f29021ec873f6c91ed4451ea9561de5a7d490b5f"
         },
         "date": 1780149315018,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16997,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 447987,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "037ada6bd9216776f7fe3672a2b8b1c1e26769a3",
+          "message": "Merge pull request #1250 from wado-lang/claude/flaky-wasi-filesystem-test-kVHIJ\n\ntest: make WASI filesystem fixtures hermetic to fix flaky dir_ops",
+          "timestamp": "2026-05-31T02:17:21+09:00",
+          "tree_id": "9f1038027199a17f44e7c6ae1a6e2b610acd6b22",
+          "url": "https://github.com/wado-lang/wado/commit/037ada6bd9216776f7fe3672a2b8b1c1e26769a3"
+        },
+        "date": 1780161935999,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
