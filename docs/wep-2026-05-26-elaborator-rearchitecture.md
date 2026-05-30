@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2523 / 2664 fixtures passing under
+      suite reaches **2530 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 141 remaining failures are all reify-specific). The
+      so the 134 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -628,11 +628,24 @@ Landed:
     `util::unescape_string`, matching the elaborator (expr.rs:403). A
     single broad fix worth +28 fixtures (every reify'd escaped string
     literal across the suite).
+21. **Namespace-imported variant ctor + struct static method (2523 →
+    2530).** `use ns from "…"; ns::Type::Case(payload)` and
+    `ns::Type::method(args)` parse as a `Call` whose ident has two `::`.
+    `reify_call`'s top variant-ctor arm only handled the single-`::`
+    shape, so the namespaced forms reached the recovery `ERROR`: the
+    `let` binding lost its type and — for the static-method case — the
+    call established no reachable edge into the namespace module, so
+    monomorphization pruned the whole module (`Point::sum` unresolved at
+    WIR). Added two arms: a `VariantConstruct` (case from
+    `tysys.all_variant_cases[ns_source]`, instance type from the recorded
+    expression type) and a static-method `Call` (gated on the type being
+    a struct in `ns_source`). Earlier analysis blamed annotate; the real
+    fix was reify reaching these `Call` shapes. namespace_import 8/8.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2523
-/ 2664** under `WADO_REIFY=1`; 141 reify-specific failures across 79
+Largest first, by fixture-name prefix (after the landings above). **2530
+/ 2664** under `WADO_REIFY=1`; 134 reify-specific failures across 76
 unique fixtures remain:
 
 - **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
@@ -647,14 +660,6 @@ unique fixtures remain:
   reify interns a structurally-identical type with a different `TypeId`
   (or a null-vs-non-null ref) than production, surfacing only at Wasm
   validation.
-- **namespace_import (2).** `use ns from "…"; ns::Type::Case(payload)`.
-  annotate records `unknown` for the namespace-qualified variant ctor /
-  struct method (`shapes::Shape::Circle(3.14)`, `Point::sum`), so reify
-  reading `expression_types` propagates the unknown into the binding and
-  any downstream `Display` dispatch (`unknown^Display::fmt`). A reify
-  `VariantConstruct` arm constructs the value correctly, but the fix is
-  annotate-side: the ctor's `expression_types` / dispatch must be
-  recorded so reify's `reify_ident` does not read `unknown`.
 - **serde (~6).** `serde_json_*` (large_int, scientific_notation) are
   runtime value mismatches: a numeric literal `> i32::MAX` under
   `-x as i64` is i32-typed by `expression_types`, so reify's
