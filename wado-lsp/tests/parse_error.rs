@@ -1,28 +1,27 @@
-//! Behavior of LSP queries when the entry source fails to lex/parse.
+//! Behavior of LSP queries when the entry source has a syntax error.
 //!
-//! The Wado parser is currently fail-fast (no error-recovery), so a
-//! single syntax error in the entry kills the entry's AST. This file
-//! pins the **current** behavior so we notice when it changes:
+//! The Wado parser is error-recovering: a syntax error no longer discards
+//! the whole module. A single broken item (or a missing brace) is recovered,
+//! and the surrounding well-formed regions still analyze. This file pins that
+//! recovery behavior:
 //!
-//! - `Engine::diagnostics` returns exactly one diagnostic: the
-//!   lex/parse error with span attribution to the entry filename.
-//! - Every position-bearing semantic query (`definition`, `hover`,
-//!   `references`, `document_highlight`) returns `None` / empty
-//!   because the snapshot's `Semantics` is empty.
-//! - `semantic_tokens` still produces lexer-level tokens: highlighting
-//!   degrades gracefully and does not blank out on a typo.
+//! - `Engine::diagnostics` reports at least one parse/lex error, each with
+//!   span attribution to the entry filename.
+//! - Position-bearing semantic queries resolve in the healthy regions on
+//!   either side of the error.
+//! - `semantic_tokens` keeps producing lexer-level tokens.
 //!
-//! See the module doc comment for the planned upgrade path.
+//! A lexer error (not a parse error) is still fail-fast; that path is
+//! exercised elsewhere.
 
 use wado_lsp::test_support::MapHost;
 use wado_lsp::{Diagnostic, Engine, Position, Severity};
 
 const PATH: &str = "/test.wado";
 
-/// Source with a deliberate syntax error: missing `}` after the body
-/// of `f`. Everything around it is well-formed, which (under a
-/// future error-recovery parser) would let semantic queries still
-/// resolve in the surrounding regions.
+/// Source with a deliberate syntax error: `f` is missing its closing `}`
+/// before `g`. Error recovery closes `f`'s body at `fn g` so that `g` parses
+/// as a complete item and `f`'s prefix (`let x`, `return x`) survives.
 const BROKEN_SOURCE: &str = "\
 fn f() -> i32 {
     let x: i32 = 1;
@@ -51,70 +50,63 @@ fn errors(diags: &[Diagnostic]) -> Vec<&Diagnostic> {
         .collect()
 }
 
-/// A lex/parse error on the entry surfaces as exactly one
-/// `Severity::Error` diagnostic, attributed to the entry filename.
+/// A syntax error surfaces as at least one `Severity::Error` diagnostic,
+/// attributed to the entry filename and using the `parse error: …` /
+/// `lexer error: …` wire format the loader emits.
 #[test]
-fn parse_error_emits_one_diagnostic_attributed_to_entry() {
+fn parse_error_emits_diagnostics_attributed_to_entry() {
     futures::executor::block_on(async {
         let (engine, host) = engine_with_broken_source();
         let diags = engine.diagnostics(&uri(), &host).await;
         let errs = errors(&diags);
-        assert_eq!(
-            errs.len(),
-            1,
-            "expected exactly one parse error, got {}: {:#?}",
-            errs.len(),
-            errs
-        );
-        // Diagnostic message uses the "parse error: …" / "lexer error: …"
-        // wire format that the loader emits, so editor pane labels match
-        // what `wado compile` shows for the same input.
         assert!(
-            errs[0].message.starts_with("parse error:")
-                || errs[0].message.starts_with("lexer error:"),
-            "unexpected diagnostic message: {}",
-            errs[0].message,
+            !errs.is_empty(),
+            "expected at least one parse error, got none",
         );
+        for e in &errs {
+            assert!(
+                e.message.starts_with("parse error:") || e.message.starts_with("lexer error:"),
+                "unexpected diagnostic message: {}",
+                e.message,
+            );
+        }
     });
 }
 
-/// With no parse, the snapshot has no AST → every position-bearing
-/// query returns the empty answer. This is the current LSP-as-fail-fast
-/// behavior; a future error-recovery parser should let these resolve
-/// in the surviving regions (see module doc).
+/// With error recovery, semantic queries resolve in the well-formed regions
+/// around the syntax error: both `g` (after the broken brace) and `x` (in
+/// `f`'s surviving prefix) hover/resolve.
 #[test]
-fn position_queries_return_empty_on_parse_error() {
+fn position_queries_resolve_in_healthy_regions() {
     futures::executor::block_on(async {
         let (engine, host) = engine_with_broken_source();
-        let pos = Position {
+
+        // `x` in `let x: i32 = 1;` (line 1, col 8) — inside the recovered
+        // prefix of the brace-less `f`.
+        let x_pos = Position {
             line: 1,
             character: 8,
         };
         assert!(
-            engine.definition(&uri(), pos, &host).await.is_none(),
-            "definition should be None when the entry failed to parse",
+            engine.hover(&uri(), x_pos, &host).await.is_some(),
+            "hover on `x` should resolve in f's surviving prefix",
         );
+
+        // `g` in `fn g() -> i32` (line 4, col 3) — a complete item recovered
+        // after the missing brace.
+        let g_pos = Position {
+            line: 4,
+            character: 3,
+        };
         assert!(
-            engine.hover(&uri(), pos, &host).await.is_none(),
-            "hover should be None when the entry failed to parse",
-        );
-        assert!(
-            engine.references(&uri(), pos, true, &host).await.is_empty(),
-            "references should be empty when the entry failed to parse",
-        );
-        assert!(
-            engine
-                .document_highlight(&uri(), pos, &host)
-                .await
-                .is_empty(),
-            "document_highlight should be empty when the entry failed to parse",
+            engine.hover(&uri(), g_pos, &host).await.is_some(),
+            "hover on `g` should resolve after the recovered brace",
         );
     });
 }
 
 /// Semantic tokens degrade gracefully to lexer-level classification.
-/// Highlighting must keep working even when the parser bails, so users
-/// editing toward a missing brace don't see their colours disappear.
+/// Highlighting must keep working even with a syntax error present.
 #[test]
 fn semantic_tokens_survive_parse_error() {
     let mut engine = Engine::new();
@@ -132,15 +124,15 @@ fn semantic_tokens_survive_parse_error() {
     );
 }
 
-/// Re-opening with a fix recovers all semantic features. Sanity check
-/// that the empty-Semantics path doesn't poison the cache.
+/// Re-opening with a fix recovers all semantic features. Sanity check that
+/// the partial-Semantics path doesn't poison the cache.
 #[test]
 fn fixing_the_parse_error_recovers_semantics() {
     futures::executor::block_on(async {
         let host = MapHost::single(PATH, BROKEN_SOURCE);
         let mut engine = Engine::new();
         engine.open_document(&uri(), BROKEN_SOURCE.to_string());
-        // First query: broken.
+        // First query on the broken source still resolves `x`.
         assert!(
             engine
                 .hover(
@@ -152,7 +144,7 @@ fn fixing_the_parse_error_recovers_semantics() {
                     &host,
                 )
                 .await
-                .is_none(),
+                .is_some(),
         );
 
         // Edit to fix the missing brace.

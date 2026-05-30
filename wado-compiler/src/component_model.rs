@@ -902,7 +902,7 @@ impl CmInterfaceRegistry {
             let mut lexer = Lexer::new(source);
             let tokens = lexer.tokenize().expect("lexer error in stdlib");
             let mut parser = Parser::new(tokens);
-            parser.parse().expect("parser error in stdlib")
+            parser.parse_strict().expect("parser error in stdlib")
         }
 
         // Two-pass bootstrap so every stdlib `Type::Named` reference carries

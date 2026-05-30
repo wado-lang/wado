@@ -678,10 +678,20 @@ pub async fn semantics<H: CompilerHost>(
     let parsed = match crate::parse(source) {
         Ok(p) => p,
         Err(e) => {
+            // Lexer failure: no usable AST.
             host.emit_diagnostic(parse_failure_diagnostic(&e, filename));
             return Semantics::empty();
         }
     };
+    // Surface every recovered syntax error, then analyze the partial AST so
+    // queries still resolve in the regions outside the error. If load/bind
+    // then fails on the partial AST, the result still collapses to
+    // `Semantics::empty()` below — recovery helps only when binding succeeds,
+    // which holds for the common cases (missing brace, garbage item) where
+    // scopes stay separate.
+    for e in &parsed.errors {
+        host.emit_diagnostic(parse_error_diagnostic(e, filename));
+    }
     match crate::load(
         parsed,
         filename,
@@ -740,6 +750,30 @@ pub fn parse_failure_diagnostic(
             column,
             end_line: None,
             end_column: None,
+        }),
+    }
+}
+
+/// Convert a single recovered [`crate::ParseError`] into a `parse error: …`
+/// [`crate::Diagnostic`], attributing the span to `filename`. The
+/// error-recovering parser surfaces one of these per syntax error, so the
+/// LSP can report them all while still analyzing the partial AST.
+#[must_use]
+pub fn parse_error_diagnostic(
+    err: &crate::ParseError,
+    filename: Option<&str>,
+) -> crate::Diagnostic {
+    use crate::{Code, Diagnostic, DiagnosticSpan, Severity};
+    Diagnostic {
+        severity: Severity::Error,
+        code: Code::InvalidSyntax,
+        message: format!("parse error: {}", err.message),
+        span: filename.map(|f| DiagnosticSpan {
+            file: f.to_string(),
+            line: err.span.line,
+            column: err.span.column,
+            end_line: Some(err.span.end_line),
+            end_column: Some(err.span.end_column),
         }),
     }
 }
@@ -991,6 +1025,11 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         );
     }
 
+    // A recovered syntax error anywhere in the loaded set means the parse was
+    // partial (covers block-internal errors that leave no `Item::Error` node),
+    // so the result is never "complete" even if later phases ran clean.
+    let no_syntax_errors = load_result.modules.values().all(|m| !m.has_syntax_errors());
+
     Semantics {
         entry_module_source: load_result.entry_module_source,
         modules: load_result.modules,
@@ -1007,6 +1046,6 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         coercions,
         desugars,
         tir_modules,
-        is_complete: lower_ok,
+        is_complete: lower_ok && no_syntax_errors,
     }
 }

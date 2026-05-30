@@ -18,7 +18,7 @@ fn parse_expr(source: &str) -> Result<wado_compiler::ast::Module, String> {
     let tokens = lexer.tokenize().map_err(|e| e.message)?;
 
     let mut parser = Parser::new(tokens);
-    parser.parse().map_err(|e| e.message)
+    parser.parse_strict().map_err(|e| e.message)
 }
 
 /// Extract the literal value from a parsed let statement

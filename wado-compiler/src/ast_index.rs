@@ -307,6 +307,9 @@ fn record_item_name_spans(index: &mut AstIndex, item: &Item) {
         }
         Item::Impl(imp) => record_impl_name_spans(index, imp),
         Item::Use(_) | Item::World(_) | Item::Test(_) | Item::TupleTypeDecl(_) => {}
+        // Error-recovery placeholder; its own span is the only fact to record,
+        // handled by the generic item-span pass, not here.
+        Item::Error(_) => {}
     }
 }
 
@@ -371,7 +374,7 @@ mod tests {
     fn parse(source: &str) -> Module {
         let tokens = Lexer::new(source).tokenize().expect("lex");
         let mut parser = Parser::new(tokens);
-        parser.parse().expect("parse")
+        parser.parse_strict().expect("parse")
     }
 
     #[test]

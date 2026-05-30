@@ -723,7 +723,10 @@ fn parse_bind_stdlib(label: &str, source: &str) -> Module {
     });
     let (data_section, _comments, shebang) = lexer.into_parts();
     let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-    let ast = parser.parse().unwrap_or_else(|e| {
+    let ast = parser.parse();
+    if let Some(e) = parser.take_errors().first() {
+        // Bundled stdlib must always parse cleanly; a syntax error here is a
+        // compiler bug, so fail loudly rather than degrade.
         panic!(
             "{}",
             format_stdlib_error(
@@ -735,8 +738,8 @@ fn parse_bind_stdlib(label: &str, source: &str) -> Module {
                 Some(e.span.end_column),
                 &e.message,
             )
-        )
-    });
+        );
+    }
     {
         let bind_host = crate::compiler_host::InMemoryCompilerHost::new();
         let bind_logger = Logger::new(&bind_host, LogLevel::Off);
@@ -807,7 +810,7 @@ mod tests {
         let tokens = lexer.tokenize().expect("test source must lex");
         let (data_section, _comments, shebang) = lexer.into_parts();
         let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-        parser.parse().expect("test source must parse")
+        parser.parse_strict().expect("test source must parse")
     }
 
     #[test]
@@ -1532,12 +1535,18 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let (data_section, _comments, shebang) = lexer.into_parts();
 
         let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-        parser.parse().map_err(|e| LoadError::ParseError {
-            module_source: module_source.clone(),
-            message: e.message,
-            line: e.span.line,
-            column: e.span.column,
-        })
+        // Batch loading is fail-fast: report the first recovered syntax error
+        // as a load error so compilation never proceeds on a partial AST.
+        let ast = parser.parse();
+        if let Some(e) = parser.take_errors().first() {
+            return Err(LoadError::ParseError {
+                module_source: module_source.clone(),
+                message: e.message.clone(),
+                line: e.span.line,
+                column: e.span.column,
+            });
+        }
+        Ok(ast)
     }
 
     /// Bind a module (local name resolution and scope checking)

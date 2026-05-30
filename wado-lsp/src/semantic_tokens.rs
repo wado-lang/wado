@@ -263,6 +263,8 @@ fn visit_item(spans: &mut TypeSpans, item: &Item) {
         | Item::World(_)
         | Item::Test(_)
         | Item::TupleTypeDecl(_) => {}
+        // Error-recovery placeholder; lexer-level highlighting covers it.
+        Item::Error(_) => {}
     }
 }
 

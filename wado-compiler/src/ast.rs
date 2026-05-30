@@ -99,6 +99,11 @@ pub struct Module {
     /// Total number of [`AstId`]s allocated for this module during parsing.
     /// Ids occupy the range `0..ast_id_count`.
     ast_id_count: u32,
+    /// True if error recovery ran during parsing (any syntax error, including
+    /// block-internal ones that leave no `Item::Error`). Travels with the AST
+    /// so `Semantics::is_complete` can refuse to treat a partial parse as
+    /// complete.
+    has_syntax_errors: bool,
 }
 
 /// Inner attribute like `#![no_prelude]`, `#![wasm_module("mem")]`, or
@@ -155,6 +160,7 @@ impl Module {
             data_section: None,
             include_paths: IndexSet::default(),
             ast_id_count: 0,
+            has_syntax_errors: false,
         }
     }
 
@@ -166,6 +172,7 @@ impl Module {
         data_section: Option<String>,
         include_paths: IndexSet<String>,
         ast_id_count: u32,
+        has_syntax_errors: bool,
     ) -> Self {
         Self {
             items,
@@ -174,7 +181,13 @@ impl Module {
             data_section,
             include_paths,
             ast_id_count,
+            has_syntax_errors,
         }
+    }
+
+    /// True if parsing recovered from one or more syntax errors.
+    pub fn has_syntax_errors(&self) -> bool {
+        self.has_syntax_errors
     }
 
     /// Returns the total number of [`AstId`]s allocated for this module.
@@ -458,6 +471,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             v.visit_type(&g.ty);
             v.visit_expr(&g.initializer);
         }
+        Item::Error(e) => v.visit_id(e.id, e.span),
     }
 }
 
@@ -904,6 +918,16 @@ pub enum Item {
     World(WorldDecl),
     Test(TestDecl),
     Global(GlobalDecl),
+    /// Unparsable token run, emitted by error recovery so one syntax error
+    /// doesn't discard the rest of the module.
+    Error(ErrorItem),
+}
+
+/// Placeholder for a token run that failed to parse as an item. See [`Item::Error`].
+#[derive(Debug, Clone)]
+pub struct ErrorItem {
+    pub id: AstId,
+    pub span: Span,
 }
 
 /// Test declaration: `test "name" { ... }` or `test { ... }`
@@ -2964,7 +2988,7 @@ mod ast_id_tests {
     fn parse(source: &str) -> Module {
         let tokens = Lexer::new(source).tokenize().expect("lex");
         let mut parser = Parser::new(tokens);
-        parser.parse().expect("parse")
+        parser.parse_strict().expect("parse")
     }
 
     /// Collect every `(AstId, Span)` emitted while walking `items` using the

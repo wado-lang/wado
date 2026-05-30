@@ -66,7 +66,7 @@ impl BuiltinRegistry {
             let mut lexer = Lexer::new(source);
             let tokens = lexer.tokenize().expect("lexer error in core:builtin");
             let mut parser = Parser::new(tokens);
-            parser.parse().expect("parser error in core:builtin")
+            parser.parse_strict().expect("parser error in core:builtin")
         });
 
         let mut registry = Self::new();
@@ -447,7 +447,7 @@ mod tests {
         let mut lexer = Lexer::new(CORE_BUILTIN);
         let tokens = lexer.tokenize().expect("lexer error");
         let mut parser = Parser::new(tokens);
-        let module = parser.parse().expect("parser error");
+        let module = parser.parse_strict().expect("parser error");
 
         // Build registry with type table
         let type_table = make_type_table();
