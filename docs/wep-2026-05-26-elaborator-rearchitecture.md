@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2660 / 2678 fixtures passing under
+      suite reaches **2664 / 2678 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2678/2678,
-      so the 9 remaining unique failures are all reify-specific;
+      so the 7 remaining unique failures are all reify-specific;
       count as of the 2026-05-30 `origin/main` merge). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
@@ -934,12 +934,34 @@ Landed:
     reify-only). A companion `monomorphize.rs` change keys `generic_functions`
     on `(module_source, name)` so same-named generic tuple methods across
     modules coexist.
+46. **Resolve call defaults in the callee module scope in reify (2660 →
+    2661).** `reify_pad_args_with_defaults` reified a synthesized
+    default-argument expression against the caller's module context, so a
+    default referencing a callee-module-private item
+    (`paint(c = DEFAULT_VALUE)` with `DEFAULT_VALUE` private to the callee
+    module) failed to resolve and reached WIR as "nothing on stack". Mirror
+    production's `default_scope_module` (expr.rs:914) by swapping the
+    module-context triple (`current_module_source` / `current_module_items` /
+    `sem`) to the callee module around the default walk; threads the full
+    per-module semantics map onto `Reify` as `all_module_semantics`. Clears
+    default_arg_private_item.
+47. **Record Index-vs-IndexValue deref explicitly for reify (2661 → 2663).**
+    `reify_index` chose whether to wrap an index in an outer `Deref` by
+    testing whether `OperatorDispatch.return_type` was a reference — `Index`
+    returns `&Output`, `IndexValue` returns `Output`. That misfires when an
+    `IndexValue`'s `Output` is itself a reference (`Array<&i32>::index_value`
+    → `&i32`): reify saw a `Ref` return and double-dereffed, lowering `*arr[0]`
+    to `**arr.index_value(0)` and tripping WIR validation
+    (`expected (ref null $type), found i32`). `OperatorDispatch` gains an
+    explicit `needs_deref` flag (true only at the `Index` site); reify reads
+    it. Clears trait_bound_1. Production unaffected (only reify consumes the
+    flag).
 
 #### Re-triaged remaining clusters
 
-Largest first, grouped by cluster. **2660 / 2678** passing under
+Largest first, grouped by cluster. **2664 / 2678** passing under
 `WADO_REIFY=1` (fresh full-suite scan on 2026-05-30, after merging
-`origin/main`; every fixture `main` added passes under reify). **9 unique
+`origin/main`; every fixture `main` added passes under reify). **7 unique
 fixtures fail**, all at `-O0` and `-O2`. The localized "missing annotation
 channel" gaps are gone; the `-O2`-only `TypeId`-identity cluster (landings
 #41 / #42) and the entire variadic type-pack cluster (landings #43–#45) are
@@ -966,17 +988,9 @@ modules no longer collide.
 - `tuple_for_of` — for-of over a heterogeneous tuple emits invalid Wasm in
   the **test world** only (clean as a CLI program).
 
-##### Remaining singles (7, fail O0+O2)
+##### Remaining singles (5, fail O0+O2)
 
-- `default_arg_private_item` — a default expr that references a
-  callee-module-private global (`paint(c = DEFAULT_VALUE)`) can't resolve:
-  reify inlines and resolves the default in the _caller_ scope, where the
-  global isn't visible (`"nothing on stack"` at validation). Needs
-  callee-scope ident resolution (reify already holds `loaded_modules`) or a
-  recorded-resolved-default channel keyed by the call `AstId`.
 - `effect_handler_with_do` — codegen-level effect-handler residual.
-- `trait_bound_1` — codegen type-identity (`expected (ref null $type),
-  found i32`).
 - `opt_sroa_variant_return_if_descent` — optimizer pass divergence.
 - `if_merged` / `for_merged` / `loop_nested` — large multi-feature files;
   `if_merged` traps at runtime, the other two fail test-world assertions.
@@ -995,7 +1009,7 @@ below still apply unchanged.
 
 The recording half is complete: every landed gap has an annotation channel
 on `sem.types` and reify consumes it. What remains is per-shape parity for
-the 9 fixtures above (compile-time tuple enumeration and the remaining
+the 7 fixtures above (compile-time tuple enumeration and the remaining
 feature-level singles — the `-O2` `TypeId`-identity and variadic type-pack
 clusters are cleared), then the final orchestration cut
 (`#### Endgame`).
