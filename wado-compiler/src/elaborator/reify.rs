@@ -154,6 +154,15 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// an enclosing type param (`v.serialize::<S>(s)` inside a generic
     /// method) resolves to its `TypeParam` slot instead of `unknown`.
     pub(crate) current_type_param_names: Vec<String>,
+    /// Names of the effect parameters (`<effect E>`) in scope for the
+    /// function / method currently being reified. `reify_effects` and
+    /// `apply_function_type_effects` consult this so an effect name that is a
+    /// param resolves to [`crate::tir::EffectRef::Param`] rather than a
+    /// `Concrete` effect — matching `Elaborator::resolve_effects`. Without
+    /// it a `fn(...) with E` parameter type would carry `Concrete { E }`,
+    /// which fails to unify with the enclosing function's recorded
+    /// `Param { E }` declared effect at indirect-call effect checks.
+    pub(crate) current_effect_param_names: Vec<String>,
 }
 
 #[allow(dead_code)]
@@ -193,6 +202,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             invocations,
             entry_module_source,
             current_type_param_names: Vec::new(),
+            current_effect_param_names: Vec::new(),
         }
     }
 
@@ -234,7 +244,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         effects
             .iter()
             .map(|name| {
-                if let Some(source) = self.sem.imports.effect_sources.get(name).cloned() {
+                // Effect params in scope (`<effect E>`) become `Param`, matching
+                // `Elaborator::resolve_effects`; otherwise they would resolve to
+                // a `Concrete` effect and fail to unify with the recorded
+                // `Param` declared effect at effect checks.
+                if self.current_effect_param_names.iter().any(|p| p == name) {
+                    crate::tir::EffectRef::Param { name: name.clone() }
+                } else if let Some(source) = self.sem.imports.effect_sources.get(name).cloned() {
                     let canonical = self
                         .symbols
                         .lookup_in_module(&source, name)
@@ -273,12 +289,72 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // turbofish argument that names an enclosing type param resolves
         // to its `TypeParam` slot. Outside a body walk the scope is empty,
         // so this is identical to the scope-free path.
-        super::Elaborator::<H>::resolve_type_static_with_params(
+        let resolved = super::Elaborator::<H>::resolve_type_static_with_params(
             ty,
             &mut self.tysys.type_table.borrow_mut(),
             &lookup,
             &self.current_type_param_names,
-        )
+        );
+        self.apply_function_type_effects(ty, resolved)
+    }
+
+    /// Re-intern a resolved `fn(...) with E` type carrying its effects: the
+    /// shared static resolver has no effect-resolution context and leaves
+    /// `effects` empty, so a `fn`-typed parameter loses its `with` clause.
+    /// `check_effects` then can't see that, e.g., `f: fn() with Stdout`
+    /// requires `Stdout` at an indirect call site. Resolves effects through
+    /// the same [`Self::reify_effects`] used for declared effects (so the
+    /// `EffectRef`s stay canonically consistent across the module). Handles a
+    /// bare `Function` and one behind `&` / `&mut`.
+    fn apply_function_type_effects(&self, ty: &ast::Type, resolved: TypeId) -> TypeId {
+        use crate::tir::ResolvedType;
+        match ty {
+            ast::Type::Reference(inner) => {
+                let pointee = match self.tysys.type_table.borrow().get(resolved) {
+                    ResolvedType::Ref(p) => *p,
+                    _ => return resolved,
+                };
+                let fixed = self.apply_function_type_effects(inner, pointee);
+                if fixed == pointee {
+                    resolved
+                } else {
+                    self.tysys.type_table.borrow_mut().make_ref(fixed)
+                }
+            }
+            ast::Type::MutReference(inner) => {
+                let pointee = match self.tysys.type_table.borrow().get(resolved) {
+                    ResolvedType::MutRef(p) => *p,
+                    _ => return resolved,
+                };
+                let fixed = self.apply_function_type_effects(inner, pointee);
+                if fixed == pointee {
+                    resolved
+                } else {
+                    self.tysys.type_table.borrow_mut().make_mut_ref(fixed)
+                }
+            }
+            ast::Type::Function(ft) if !ft.effects.is_empty() => {
+                let effects = self.reify_effects(&ft.effects);
+                let rebuilt = match self.tysys.type_table.borrow().get(resolved) {
+                    ResolvedType::Function {
+                        is_mut,
+                        params,
+                        return_type,
+                        stores,
+                        ..
+                    } => ResolvedType::Function {
+                        is_mut: *is_mut,
+                        params: params.clone(),
+                        return_type: *return_type,
+                        effects,
+                        stores: stores.clone(),
+                    },
+                    _ => return resolved,
+                };
+                self.tysys.type_table.borrow_mut().intern(rebuilt)
+            }
+            _ => resolved,
+        }
     }
 
     /// Resolve a parameter / return type where some type-param names are
@@ -315,12 +391,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `reify_variant_decl` for the (unused-here) payload path.
     fn resolve_type_in_scope(&mut self, ty: &ast::Type, type_params: &[String]) -> TypeId {
         let lookup = self.type_lookup();
-        super::Elaborator::<H>::resolve_type_static_with_params(
+        let resolved = super::Elaborator::<H>::resolve_type_static_with_params(
             ty,
             &mut self.tysys.type_table.borrow_mut(),
             &lookup,
             type_params,
-        )
+        );
+        self.apply_function_type_effects(ty, resolved)
     }
 
     /// Like [`Self::resolve_type_in_scope`] but resolves bare `Self`
@@ -956,6 +1033,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|p| p.name.clone())
             .collect();
 
+        // Effect params (`<effect E>`) drive `Param` effect resolution in
+        // function-type params; publish them for the body walk.
+        let effect_param_names: Vec<String> = func
+            .type_params
+            .iter()
+            .filter(|p| p.is_effect)
+            .map(|p| p.name.clone())
+            .collect();
+        let saved_effect_param_names =
+            std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
+
         // `<F: fn(...)>` bounds → the bound's resolved function type,
         // realised eagerly (item.rs:1569). The signature references the
         // real type params, so resolve it in their scope.
@@ -999,6 +1087,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|b| self.reify_block(b, &mut ctx, None));
 
         self.current_type_param_names = saved_type_param_names;
+        self.current_effect_param_names = saved_effect_param_names;
 
         let mut non_effect_non_fn_idx: u32 = 0;
         let type_params: Vec<crate::tir::TirTypeParam> = func
@@ -1233,6 +1322,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             next_idx += 1;
         }
 
+        // Method-level effect params (`<effect E>`) drive `Param` effect
+        // resolution in function-type params; publish them for the method
+        // body walk.
+        let effect_param_names: Vec<String> = func
+            .type_params
+            .iter()
+            .filter(|p| p.is_effect)
+            .map(|p| p.name.clone())
+            .collect();
+        let saved_effect_param_names =
+            std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
+
         // `<F: fn(...)>` method-level bounds → their resolved function
         // type (resolved with `Self` / assoc bindings in scope).
         let fn_bound_map: crate::hashmap::IndexMap<String, TypeId> = func
@@ -1365,6 +1466,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|b| self.reify_block(b, &mut ctx, None));
 
         self.current_type_param_names = saved_type_param_names;
+        self.current_effect_param_names = saved_effect_param_names;
 
         // Method-level type-param projection: same filter as
         // `reify_function`'s (skip effect params and `<F: fn(...)>`

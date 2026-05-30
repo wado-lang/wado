@@ -825,14 +825,31 @@ Landed:
     matching item.rs). Fixes test_unicode_names; production unaffected (it
     already used the helper). ice_array_iter_into_iterator also dropped off
     the failing list (cleared by an earlier landing).
+39. **Resolve `fn(...) with E` effects on reified type annotations (2612 →
+    2613).** The shared static type resolver has no effect context and
+    interned every `fn`-typed annotation with `effects: []`, so a
+    `fn`-typed parameter lost its `with` clause and `check_effects` could
+    not see that `f: fn() with Stdout` requires `Stdout` at an indirect
+    call (`effect_indirect_call_error` compiled instead of reporting
+    `missing effect 'Stdout'`). Reify now re-interns function-type
+    annotations with their effects (`apply_function_type_effects`,
+    covering bare and `&`/`&mut`-wrapped fn types), resolved through
+    `reify_effects`. `reify_effects` and reify gained an effect-param scope
+    (`current_effect_param_names`, set from `<effect E>` params in
+    `reify_function`/`reify_method`) so a param effect resolves to
+    `EffectRef::Param`, not a `Concrete` effect — without it effect-generic
+    `fn(...) with E` params (closure_effect_generic, effect_1, …) would
+    carry `Concrete { E }` and fail to unify with the recorded `Param { E }`
+    declared effect. Fixes effect_indirect_call_error; production unaffected.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2612
+Largest first, by fixture-name prefix (after the landings above). **2613
 / 2664** under `WADO_REIFY=1`. A full-suite scan after landing #35 found 34
-unique reify-only failing fixtures; landings #36–#38 then cleared
+unique reify-only failing fixtures; landings #36–#39 then cleared
 infer_static_method_from_lhs, labeled_block_break_null_coercion,
-test_unicode_names, and ice_array_iter_into_iterator. The prior
+test_unicode_names, ice_array_iter_into_iterator, and
+effect_indirect_call_error. The prior
 effect_handler_resource_* cluster is resolved (compiles clean — likely a
 side effect of landing #31).
 The remaining set is: variadic_* (6), tuple_* (tuple_zip, tuple_for_of,
