@@ -2606,14 +2606,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
             };
 
+            let func_ref = FunctionRef {
+                module_source: self.current_module_source.clone(),
+                name: mangled_name,
+                monomorph_info,
+                method_info: Some(method_info),
+            };
+
+            // Record the resolved abstract `T::method(...)` dispatch so
+            // reify can replay the same `Call` without re-running
+            // trait-bound method lookup (reify has no `trait_ctx`). Keyed
+            // by the `CallExpr`'s AstId — distinct from any
+            // `StaticMethodCallExpr` id, so reusing `static_method_dispatch`
+            // is collision-free. Args here carry no `is_mut` (the
+            // production builder below uses all-false `CallArg`s).
+            self.sem.types.static_method_dispatch.insert(
+                call.id,
+                super::sem::types::StaticMethodDispatch {
+                    function_ref: func_ref.clone(),
+                    param_is_mut: vec![false; args.len()],
+                },
+            );
+
             return TirExpr::new(
                 TirExprKind::Call {
-                    func: FunctionRef {
-                        module_source: self.current_module_source.clone(),
-                        name: mangled_name,
-                        monomorph_info,
-                        method_info: Some(method_info),
-                    },
+                    func: func_ref,
                     type_args: vec![],
                     args: args
                         .iter()
