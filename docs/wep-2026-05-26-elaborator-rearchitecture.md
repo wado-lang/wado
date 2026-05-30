@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2605 / 2664 fixtures passing under
+      suite reaches **2607 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 59 remaining failures are all reify-specific). The
+      so the 57 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -757,11 +757,21 @@ Landed:
     expected. Peel to the ultimate base type before the check. Clears
     newtype_basic, newtype_float_types, newtype_impl,
     newtype_option_pattern (float cluster now clean).
+33. **Resolve generic newtypes in the static resolver (2605 → 2607).**
+    `resolve_type_static_with_params`'s `Type::Generic` arm did not handle
+    a generic newtype (`type MyArray<T> = Array<T>`), so `MyArray<i32>`
+    resolved to `UNKNOWN`; reify uses this resolver for let / param types,
+    so the newtype's inherited base methods (`arr.len()` →
+    `Array<i32>::len`) never resolved and monomorphization couldn't reach
+    them. The arm now substitutes the generic newtype's base AST with the
+    instantiation's args and builds a `Newtype` over the resolved base
+    (mirroring type_resolution.rs:418). Fixes newtype_generic; production
+    unaffected.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2605
-/ 2664** under `WADO_REIFY=1`; 59 reify-specific failures across 37
+Largest first, by fixture-name prefix (after the landings above). **2607
+/ 2664** under `WADO_REIFY=1`; 57 reify-specific failures across 36
 unique fixtures remain. Most are now **O2-only optimizer interactions**
 (pass at -O0, fail at -O2: newtype method values, tuple field access,
 cross_module same-name generics, `opt_*`), **codegen type-identity** GC
