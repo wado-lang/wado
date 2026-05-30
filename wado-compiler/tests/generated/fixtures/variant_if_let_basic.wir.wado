@@ -171,14 +171,14 @@ fn "wado-compiler/tests/fixtures/variant_if_let_basic.wado/run"() with Stdout {
     c = struct.new "wado-compiler/tests/fixtures/variant_if_let_basic.wado//Shape::Circle" { discriminant: 0, payload_0: 5 };
     if ref.test "wado-compiler/tests/fixtures/variant_if_let_basic.wado//Shape::Circle"(c) {
         r_1 = ref.cast "wado-compiler/tests/fixtures/variant_if_let_basic.wado//Shape::Circle"(c).payload_0;
-        "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Circle with radius "), used: 19 }); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/f64::fmt_into"(r_1, __local_5); __local_4);
+        "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Circle with radius "), used: 19 }); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/f64::fmt_into"(r_1, __local_5); __local_4);
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Not a circle"), used: 12 });
     }
     p = struct.new "wado-compiler/tests/fixtures/variant_if_let_basic.wado//Shape" { 1 };
     if ref.test "wado-compiler/tests/fixtures/variant_if_let_basic.wado//Shape::Circle"(p) {
         r_3 = ref.cast "wado-compiler/tests/fixtures/variant_if_let_basic.wado//Shape::Circle"(p).payload_0;
-        "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Circle with radius "), used: 19 }); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 }; "core:prelude/primitive.wado/f64::fmt_into"(r_3, __local_7); __local_6);
+        "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Circle with radius "), used: 19 }); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; "core:prelude/primitive.wado/f64::fmt_into"(r_3, __local_7); __local_6);
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Not a circle"), used: 12 });
     }
@@ -680,7 +680,7 @@ fn "core:prelude/fpfmt.wado/fixed_width_for_prec"(f, precision) {
     s = 0 - ((unpack_mv_exponent + lp) + 3);
     u_19 = "core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm_mv_hi, pm_mv_lo, s);
     d = ((u_19 + 1_i64) + ((u_19 >>u 2_i64) & 1_i64)) >>u 2_i64;
-    if d >=u self = global:core::prelude/fpfmt.wado::POW10; if n_14 >= self.used {
+    if d >=u self = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(n_14 >= self.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<u64>(self.repr, n_14) {
@@ -1062,7 +1062,7 @@ fn "core:prelude/primitive.wado/f64::fmt_into"(self, f) {
     multivalue_bind [result_mv_digits, result_mv_exponent] = "core:prelude/fpfmt.wado/short"(abs_f);
     x_15 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(result_mv_digits));
     nd_14 = (x_15 * 78913) >> 18;
-    nd_10 = nd_14 + (result_mv_digits >=u self_22 = global:core::prelude/fpfmt.wado::POW10; if nd_14 >= self_22.used {
+    nd_10 = nd_14 + (result_mv_digits >=u self_22 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(nd_14 >= self_22.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<u64>(self_22.repr, nd_14));
@@ -1121,7 +1121,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
     multivalue_bind [result_mv_digits, result_mv_exponent] = "core:prelude/fpfmt.wado/fixed_width_for_prec"(abs_f, precision);
     x_21 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(result_mv_digits));
     nd_20 = (x_21 * 78913) >> 18;
-    nd_12 = nd_20 + (result_mv_digits >=u self_28 = global:core::prelude/fpfmt.wado::POW10; if nd_20 >= self_28.used {
+    nd_12 = nd_20 + (result_mv_digits >=u self_28 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(nd_20 >= self_28.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<u64>(self_28.repr, nd_20));
