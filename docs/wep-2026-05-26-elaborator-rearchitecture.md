@@ -767,12 +767,23 @@ Landed:
     instantiation's args and builds a `Newtype` over the resolved base
     (mirroring type_resolution.rs:418). Fixes newtype_generic; production
     unaffected.
+34. **Replay unary operator-trait dispatch in reify (2607 → 2608).**
+    `resolve_unary`'s `Neg` / `BitNot` trait-dispatch path recorded no
+    `operator_dispatch` entry, so reify re-emitted a bare `Unary` on a
+    struct operand (`-p1` where `p1: Vec2`), which codegen rejects
+    (`expected i32, found (ref $T)`). `resolve_unary` now sets
+    `pending_operator_ast_id` before `build_trait_op_method_call_on_resolved`
+    (mirroring the binary path), and reify's `Unary` arm replays the
+    recorded `Neg::neg` / `BitNot::bitnot` method call. Fixes
+    newtype_operator_trait; production unaffected.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above). **2607
-/ 2664** under `WADO_REIFY=1`; 57 reify-specific failures across 36
-unique fixtures remain. Most are now **O2-only optimizer interactions**
+Largest first, by fixture-name prefix (after the landings above). **2608
+/ 2664** under `WADO_REIFY=1`. Note: the effect_handler_resource_* cluster
+listed below is now stale — those fixtures compile clean again (likely a
+side effect of landing #31). A fresh full-suite scan is in flight to
+re-triage. Most remaining failures are **O2-only optimizer interactions**
 (pass at -O0, fail at -O2: newtype method values, tuple field access,
 cross_module same-name generics, `opt_*`), **codegen type-identity** GC
 collisions, **variadic pack machinery**, and specific deep cases
