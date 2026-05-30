@@ -425,9 +425,9 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2371 / 2664 fixtures passing under
+      suite reaches **2458 / 2664 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2664/2664,
-      so the 293 remaining failures are all reify-specific). The
+      so the 206 remaining failures are all reify-specific). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -550,22 +550,67 @@ Landed:
       to its box type and mutation through a `&mut fn` out-param
       (`*slot = other_fn`) writes back to the slot instead of a throwaway
       box.
+14. **Generic variant / enum types in the static type resolver (P0).**
+    `resolve_type_static_with_params` resolved a generic application
+    `Name<args…>` only when `Name` was `Option` or a struct; a generic
+    variant (`Result<T, E>`) or generic enum fell through to `UNKNOWN`.
+    The `Type::Named` arm already checked struct / variant / enum, so the
+    generic arm now does too (`make_generic_instance` is name-based).
+    This bit reify because `reify_method` re-resolves an impl method's
+    declared return type from the AST (unlike `reify_function`, which
+    reads the recorded `function_return_types`): a
+    `-> Result<(), SerializeError>` signature resolved to `unknown`, so
+    the monomorphized instance "still contained a type param" and
+    `wir_build::register_methods` silently skipped it, leaving the call
+    unresolved at WIR build. Clears serde_serialize_struct / enum / trait.
+15. **Type-param scope for body turbofish + match-ergonomics ref
+    bindings (serde 28→12, match 27→17, variant 29→13, if_let 6→0).**
+    Two coupled gaps in generic trait methods that match on `&self`:
+    - Turbofish args in a body (`v.serialize::<S>(s)`) were resolved with
+      no type-param scope, so an enclosing param `S` became `unknown` and
+      the call read `i32^Serialize::serialize<unknown>`. reify now
+      publishes the body's scope (`current_type_param_names`, set in
+      `reify_method` / `reify_function`) and `resolve_type` consults it.
+    - Variant-pattern payload bindings ignored match ergonomics: matching
+      `Some(v)` on `&Option<T>` must bind `v: &T` (forwarding directly to
+      a `&self` method), with the `enum_type` / `payload_type` carrying
+      the _peeled_ variant. reify previously bound `v: T` (boxing a
+      throwaway copy → wrong value) and kept the `&Option<T>` ref as
+      `enum_type` (extraction through a ref → null-reference trap). Now
+      peels the scrutinee for decl / enum_type / payload and re-wraps only
+      the binding in the scrutinee's reference kind, mirroring
+      `resolve_if_pattern`'s `RefBinding`. Also fixed result_match /
+      result_match_payload / result_if_let_mismatch /
+      default_field_variant_payload_ref_match.
+16. **Enum-case / nullary-variant ref-peeling (2452 → 2458).** Extends
+    the match-ergonomics ref handling to `match &c { Red => … }` (enum
+    case on `&Color`) and `if let None = rn` (nullary on `&Option<T>`):
+    `scrutinee_enum_case_index`, `scrutinee_has_variant_case`,
+    `reify_nullary_variant_case`, and both `TirPattern::Enum`
+    constructions now peel references and store the peeled `enum_type`.
 
 #### Re-triaged remaining clusters
 
-Largest first, by fixture-name prefix (after the landings above; the
-CM / HTTP / stream and fn_ref clusters are now resolved). 293 reify-
-specific failures across 158 unique fixtures remain:
+Largest first, by fixture-name prefix (after the landings above). **2458
+/ 2664** under `WADO_REIFY=1`; 206 reify-specific failures across 113
+unique fixtures remain:
 
-- **serde (~19).** `serde_json` (8) + `serde_serialize` (6) + tails:
-  method-level generic monomorphization (`serialize<S: Serializer>`) +
-  derive-synthesized impls.
-- **cross_module (~6), effect_propagation / effect_handler (~9),
-  match_literal / match_ergonomics / match_or (~9), type_param /
-  trait_default / trait_generic / trait_bound (~10), result_if /
-  result_match (~5), iterator_generic (~3)** and smaller tails
-  (variant, tuple, namespace_import, default_field, closure_fn,
-  wasi_clocks, …).
+- **effect_handler / effect_propagation (~9).** `effect_handler_resource_*`
+  panic in `synthesis/effect_dispatch.rs` with `no DispatchPlan for
+  instantiation Future<…>` (`identify_active_effects` and
+  `synthesize_dispatch_infrastructure` out of sync) — reify is not
+  forwarding some effect-dispatch annotation the synthesis needs. Others
+  (`effect_propagation_*`, `effect_handler_with_do`) are codegen-level.
+- **Codegen type-identity mismatches (`match_literal`, `match_ergonomics`,
+  `nested_variant_match_ref`, ~8).** `WIR pipeline generated invalid core
+  Wasm: type mismatch: expected (ref [null] $type), found (ref $type)` —
+  reify interns a structurally-identical type with a different `TypeId`
+  (or a null-vs-non-null ref) than production, surfacing only at Wasm
+  validation.
+- **serde_json (~4), type_param / trait_default / trait_generic (~8),
+  iterator_generic (~3), match_or (~2), cross_module (~2)** and smaller
+  tails (variadic, tuple_name, namespace_import, wasi_clocks,
+  closure_fn, …).
 
 <!-- superseded: the CM binding cluster below is resolved by landings
 11-12; kept for the original diagnosis trail. -->
