@@ -146,15 +146,67 @@ impl Token {
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
 /// ParseError represents a parse failure with location and expected tokens.
+///
+/// `message` is the local "expected X, got Y" description, kept free of
+/// position and rule context so it stays composable. `line`/`col` are a
+/// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
+/// from `span.start` against the source at error-construction time;
+/// `Parser::error` fills them in. `rule_stack` records the chain of parser
+/// rules that were active when the error was raised, innermost first — each
+/// rule entry wrapper pushes its own name as the `Err` propagates outward,
+/// so the last element is the start rule and the first is the rule the
+/// failing token sat in. The `Display` impl renders all of this into a
+/// human-readable diagnostic.
 pub struct ParseError {
     pub message: String,
     pub span: Span,
     pub expected: Array<String>,
+    pub line: i32 = 1,
+    pub col: i32 = 0,
+    pub rule_stack: Array<String> = [],
 }
 
 impl ParseError {
     pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
         return ParseError { message, span, expected };
+    }
+
+    /// Construct a ParseError whose position is already resolved. Used by
+    /// `Parser::error`, which has the source on hand to compute line/col.
+    pub fn at(message: String, span: Span, expected: Array<String>, line: i32, col: i32) -> ParseError {
+        return ParseError { message, span, expected, line, col, rule_stack: [] };
+    }
+
+    /// Render the rule chain as `outer > ... > inner` (start rule first).
+    /// `rule_stack` is stored innermost-first, so iterate it in reverse.
+    /// Consecutive duplicates are collapsed: a left-recursive rule re-enters
+    /// itself once per precedence level, which would otherwise print
+    /// `expr > expr > expr` for a deep expression.
+    pub fn rule_path(&self) -> String {
+        let mut out = String::with_capacity(self.rule_stack.len() * 8);
+        let n = self.rule_stack.len();
+        let mut written = 0;
+        for let mut i = 0; i < n; i += 1 {
+            let name = &self.rule_stack[n - 1 - i];
+            if written > 0 && *name == self.rule_stack[n - i] {
+                continue;
+            }
+            if written > 0 {
+                out.push_str(&" > ");
+            }
+            out.push_str(name);
+            written += 1;
+        }
+        return out;
+    }
+}
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&`parse error at {self.line}:{self.col}: {self.message}`);
+        if !self.rule_stack.is_empty() {
+            f.write_str(&`\n  in rule: {self.rule_path()}`);
+        }
     }
 }
 
@@ -721,11 +773,17 @@ pub fn token_kind_name(kind: i32) -> String {
 struct Parser {
     tokens: Array<Token>,
     pos: i32,
+    chars: Array<char>,
 }
 
 impl Parser {
-    fn new(tokens: Array<Token>) -> Parser {
-        return Parser { tokens, pos: 0 };
+    fn new(tokens: Array<Token>, chars: Array<char>) -> Parser {
+        return Parser { tokens, pos: 0, chars };
+    }
+
+    fn error(&self, message: String, span: Span, expected: Array<String>) -> ParseError {
+        let lc = line_col_at(&self.chars, span.start);
+        return ParseError::at(message, span, expected, lc.0, lc.1);
     }
 
     fn peek(&self) -> &Token {
@@ -762,7 +820,7 @@ impl Parser {
         }
         let tok = &self.tokens[self.pos];
         let name = token_kind_name(kind);
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -771,7 +829,7 @@ impl Parser {
 
     fn fail(&self, name: String) -> Result<Token, ParseError> {
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -783,7 +841,7 @@ impl Parser {
             return Result::<Token, ParseError>::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected any token, got "{tok.text}"`,
             tok.span,
             ["any token"],
@@ -805,7 +863,7 @@ impl Parser {
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["set complement"],
@@ -823,7 +881,7 @@ impl Parser {
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["token set"],

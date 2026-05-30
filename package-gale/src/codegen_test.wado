@@ -784,7 +784,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"_parse_expr(p, 2)"), "left-assoc '**' alt should recurse with own_prec+1 (=2)";
+    assert str_contains(&output, &"_parse_expr__inner(p, 2)"), "left-assoc '**' alt should recurse with own_prec+1 (=2)";
 }
 
 test "generate right-associative LR alt passes own_prec on right operand" {
@@ -797,7 +797,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    assert str_contains(&output, &"_parse_expr(p, 1)"), "right-assoc '**' alt should recurse with own_prec (=1)";
+    assert str_contains(&output, &"_parse_expr__inner(p, 1)"), "right-assoc '**' alt should recurse with own_prec (=1)";
     // And the scan-side mirror must be kept in sync.
     assert str_contains(&output, &"scan_expr(tokens, pos, 1)"), "scan-side must mirror the right-assoc precedence";
 }
@@ -846,7 +846,7 @@ WS : [ \\t\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    let helper = extract_fn_body(&output, &"fn _parse_expr_lr_");
+    let helper = extract_fn_body(&output, &"fn _parse_expr__inner_lr_");
     assert str_contains(&helper, &"b: [left] as Array<ExprNode>,"), `LR helper must wrap a list-label \`left\` in an Array<T>-typed array literal:\n{helper}`;
 }
 
@@ -867,10 +867,10 @@ WS : [ \\t\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    let helper = extract_fn_body(&output, &"fn _parse_expr_lr_1");
+    let helper = extract_fn_body(&output, &"fn _parse_expr__inner_lr_1");
     // Send is the second LR alt of two left-assoc: own_prec=1, conflict_min=2.
-    assert !str_contains(&helper, &"_parse_expr(p)?"), `bare _parse_expr(p)? leaks default min_prec=0:\n{helper}`;
-    assert str_contains(&helper, &"_parse_expr(p, 2)?"), `expected _parse_expr(p, 2)? for inner / trailing self-refs:\n{helper}`;
+    assert !str_contains(&helper, &"_parse_expr__inner(p)?"), `bare _parse_expr__inner(p)? leaks default min_prec=0:\n{helper}`;
+    assert str_contains(&helper, &"_parse_expr__inner(p, 2)?"), `expected _parse_expr__inner(p, 2)? for inner / trailing self-refs:\n{helper}`;
     let scan_helper = extract_fn_body(&output, &"fn scan_expr_lr_1");
     assert !str_contains(&scan_helper, &"scan_expr(tokens, pos, 0)"), `bare scan_expr(_, _, 0) leaks default min_prec=0:\n{scan_helper}`;
     assert str_contains(&scan_helper, &"scan_expr(tokens, pos, 2)"), `expected scan_expr(tokens, pos, 2):\n{scan_helper}`;
@@ -890,8 +890,9 @@ WS : [ \\t\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    let helper = extract_fn_body(&output, &"fn _parse_expr_lr_");
-    assert !str_contains(&helper, &"_parse_expr(p)?"), `SimpleCst self-ref alt must thread min_prec:\n{helper}`;
+    let helper = extract_fn_body(&output, &"fn _parse_expr__inner_lr_");
+    assert helper.len() > 0, "expected an LR suffix helper for expr";
+    assert !str_contains(&helper, &"_parse_expr__inner(p)?"), `SimpleCst self-ref alt must thread min_prec:\n{helper}`;
 }
 
 test "LR parse loop predicts via scan when suffix's first token is shared with the atom" {
@@ -907,7 +908,7 @@ letterA : 'a' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    let parse_body = extract_fn_body(&output, &"fn _parse_statement(");
+    let parse_body = extract_fn_body(&output, &"fn _parse_statement__inner(");
     assert str_contains(&parse_body, &"scan_statement_lr_1(") || str_contains(&parse_body, &"scan_statement_lr_1 ("), `_parse_statement must consult scan_statement_lr_1 before parsing the LR suffix:\n{parse_body}`;
 }
 
@@ -961,7 +962,7 @@ a : 'a' ('b' | 'c') 'd' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    let body = extract_fn_body(&output, &"fn _parse_a(");
+    let body = extract_fn_body(&output, &"fn _parse_a__inner(");
     assert str_contains(&body, &"p.match_set(["), `_parse_a body must gate the token-only group through p.match_set([...]):\n{body}`;
     assert !str_contains(&body, &"let lit_b_or_lit_c = p.advance();"), `_parse_a body must not emit a kind-check-less p.advance() for the token-only group:\n{body}`;
 }
@@ -1271,7 +1272,7 @@ WS : (' '|'\\n') -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
-    let body = extract_fn_body(&output, &"fn _parse_b(");
+    let body = extract_fn_body(&output, &"fn _parse_b__inner(");
     assert str_contains(&body, &"let mut val: Array<Token>"), body;
     assert str_contains(&body, &"p.match_set([TK_INT, TK_FLOAT])"), body;
     assert str_contains(&body, &"val.push("), body;
@@ -1287,7 +1288,7 @@ ifStmt : 'if' 'y' statement ('else' statement)?? ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, &"lit_else_statement: Option<"), `?? must emit an Option<T> field:\n{output}`;
     assert !str_contains(&output, &"lit_else_statement: Array<"), `?? must NOT emit an Array<T> field:\n{output}`;
-    let body = extract_fn_body(&output, &"fn _parse_if_stmt(");
+    let body = extract_fn_body(&output, &"fn _parse_if_stmt__inner(");
     assert str_contains(&body, &"if p.peek_kind() == TK_LIT_ELSE"), `?? emit must use a single if-check, not a while loop:\n{body}`;
     assert !str_contains(&body, &"while p.peek_kind() == TK_LIT_ELSE"), `?? emit must not use a while loop:\n{body}`;
 }

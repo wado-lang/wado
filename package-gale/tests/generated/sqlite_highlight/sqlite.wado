@@ -146,15 +146,67 @@ impl Token {
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
 /// ParseError represents a parse failure with location and expected tokens.
+///
+/// `message` is the local "expected X, got Y" description, kept free of
+/// position and rule context so it stays composable. `line`/`col` are a
+/// 1-based line and 0-based column (ANTLR4 `Token` convention) resolved
+/// from `span.start` against the source at error-construction time;
+/// `Parser::error` fills them in. `rule_stack` records the chain of parser
+/// rules that were active when the error was raised, innermost first — each
+/// rule entry wrapper pushes its own name as the `Err` propagates outward,
+/// so the last element is the start rule and the first is the rule the
+/// failing token sat in. The `Display` impl renders all of this into a
+/// human-readable diagnostic.
 pub struct ParseError {
     pub message: String,
     pub span: Span,
     pub expected: Array<String>,
+    pub line: i32 = 1,
+    pub col: i32 = 0,
+    pub rule_stack: Array<String> = [],
 }
 
 impl ParseError {
     pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
         return ParseError { message, span, expected };
+    }
+
+    /// Construct a ParseError whose position is already resolved. Used by
+    /// `Parser::error`, which has the source on hand to compute line/col.
+    pub fn at(message: String, span: Span, expected: Array<String>, line: i32, col: i32) -> ParseError {
+        return ParseError { message, span, expected, line, col, rule_stack: [] };
+    }
+
+    /// Render the rule chain as `outer > ... > inner` (start rule first).
+    /// `rule_stack` is stored innermost-first, so iterate it in reverse.
+    /// Consecutive duplicates are collapsed: a left-recursive rule re-enters
+    /// itself once per precedence level, which would otherwise print
+    /// `expr > expr > expr` for a deep expression.
+    pub fn rule_path(&self) -> String {
+        let mut out = String::with_capacity(self.rule_stack.len() * 8);
+        let n = self.rule_stack.len();
+        let mut written = 0;
+        for let mut i = 0; i < n; i += 1 {
+            let name = &self.rule_stack[n - 1 - i];
+            if written > 0 && *name == self.rule_stack[n - i] {
+                continue;
+            }
+            if written > 0 {
+                out.push_str(&" > ");
+            }
+            out.push_str(name);
+            written += 1;
+        }
+        return out;
+    }
+}
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&`parse error at {self.line}:{self.col}: {self.message}`);
+        if !self.rule_stack.is_empty() {
+            f.write_str(&`\n  in rule: {self.rule_path()}`);
+        }
     }
 }
 
@@ -4941,11 +4993,17 @@ pub fn token_kind_name(kind: i32) -> String {
 struct Parser {
     tokens: Array<Token>,
     pos: i32,
+    chars: Array<char>,
 }
 
 impl Parser {
-    fn new(tokens: Array<Token>) -> Parser {
-        return Parser { tokens, pos: 0 };
+    fn new(tokens: Array<Token>, chars: Array<char>) -> Parser {
+        return Parser { tokens, pos: 0, chars };
+    }
+
+    fn error(&self, message: String, span: Span, expected: Array<String>) -> ParseError {
+        let lc = line_col_at(&self.chars, span.start);
+        return ParseError::at(message, span, expected, lc.0, lc.1);
     }
 
     fn peek(&self) -> &Token {
@@ -4982,7 +5040,7 @@ impl Parser {
         }
         let tok = &self.tokens[self.pos];
         let name = token_kind_name(kind);
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -4991,7 +5049,7 @@ impl Parser {
 
     fn fail(&self, name: String) -> Result<Token, ParseError> {
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
@@ -5003,7 +5061,7 @@ impl Parser {
             return Result::<Token, ParseError>::Ok(self.advance());
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `expected any token, got "{tok.text}"`,
             tok.span,
             ["any token"],
@@ -5025,7 +5083,7 @@ impl Parser {
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["set complement"],
@@ -5043,7 +5101,7 @@ impl Parser {
             }
         }
         let tok = &self.tokens[self.pos];
-        return Result::<Token, ParseError>::Err(ParseError::new(
+        return Result::<Token, ParseError>::Err(self.error(
             `unexpected token "{tok.text}"`,
             tok.span,
             ["token set"],
@@ -11231,7 +11289,7 @@ fn scan_any_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_parse(p: &mut Parser) -> Result<ParseNode, ParseError> {
+fn _parse_parse__inner(p: &mut Parser) -> Result<ParseNode, ParseError> {
     let start = p.peek().span.start;
     let mut sql_stmt_list_or_error_list: Array<SqlStmtListOrErrorGroup> = [];
     loop {
@@ -11279,7 +11337,16 @@ fn _parse_parse(p: &mut Parser) -> Result<ParseNode, ParseError> {
     });
 }
 
-fn _parse_error(p: &mut Parser) -> Result<ErrorNode, ParseError> {
+fn _parse_parse(p: &mut Parser) -> Result<ParseNode, ParseError> {
+    let r = _parse_parse__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("parse");
+        return Result::<ParseNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_error__inner(p: &mut Parser) -> Result<ErrorNode, ParseError> {
     let start = p.peek().span.start;
     let unexpected_char = p.expect(TK_UNEXPECTED_CHAR)?;
     return Result::<ErrorNode, ParseError>::Ok(ErrorNode {
@@ -11288,7 +11355,16 @@ fn _parse_error(p: &mut Parser) -> Result<ErrorNode, ParseError> {
     });
 }
 
-fn _parse_sql_stmt_list(p: &mut Parser) -> Result<SqlStmtListNode, ParseError> {
+fn _parse_error(p: &mut Parser) -> Result<ErrorNode, ParseError> {
+    let r = _parse_error__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("error");
+        return Result::<ErrorNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_sql_stmt_list__inner(p: &mut Parser) -> Result<SqlStmtListNode, ParseError> {
     let start = p.peek().span.start;
     let mut semicolon_list: Array<Token> = [];
     loop {
@@ -11382,7 +11458,16 @@ fn _parse_sql_stmt_list(p: &mut Parser) -> Result<SqlStmtListNode, ParseError> {
     });
 }
 
-fn _parse_sql_stmt(p: &mut Parser) -> Result<SqlStmtNode, ParseError> {
+fn _parse_sql_stmt_list(p: &mut Parser) -> Result<SqlStmtListNode, ParseError> {
+    let r = _parse_sql_stmt_list__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("sql_stmt_list");
+        return Result::<SqlStmtListNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_sql_stmt__inner(p: &mut Parser) -> Result<SqlStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_explain_item: Option<KExplainItemOptItem> = if p.peek_kind() == TK_K_EXPLAIN {
         let k_explain = p.expect(TK_K_EXPLAIN)?;
@@ -11641,7 +11726,16 @@ fn _parse_sql_stmt(p: &mut Parser) -> Result<SqlStmtNode, ParseError> {
     });
 }
 
-fn _parse_alter_table_stmt(p: &mut Parser) -> Result<AlterTableStmtNode, ParseError> {
+fn _parse_sql_stmt(p: &mut Parser) -> Result<SqlStmtNode, ParseError> {
+    let r = _parse_sql_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("sql_stmt");
+        return Result::<SqlStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_alter_table_stmt__inner(p: &mut Parser) -> Result<AlterTableStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_alter = p.expect(TK_K_ALTER)?;
     let k_table = p.expect(TK_K_TABLE)?;
@@ -11704,7 +11798,16 @@ fn _parse_alter_table_stmt(p: &mut Parser) -> Result<AlterTableStmtNode, ParseEr
     });
 }
 
-fn _parse_analyze_stmt(p: &mut Parser) -> Result<AnalyzeStmtNode, ParseError> {
+fn _parse_alter_table_stmt(p: &mut Parser) -> Result<AlterTableStmtNode, ParseError> {
+    let r = _parse_alter_table_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("alter_table_stmt");
+        return Result::<AlterTableStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_analyze_stmt__inner(p: &mut Parser) -> Result<AnalyzeStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_analyze = p.expect(TK_K_ANALYZE)?;
     let mut opt_scan_pos: i32 = -1;
@@ -11804,7 +11907,16 @@ fn _parse_analyze_stmt(p: &mut Parser) -> Result<AnalyzeStmtNode, ParseError> {
     });
 }
 
-fn _parse_attach_stmt(p: &mut Parser) -> Result<AttachStmtNode, ParseError> {
+fn _parse_analyze_stmt(p: &mut Parser) -> Result<AnalyzeStmtNode, ParseError> {
+    let r = _parse_analyze_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("analyze_stmt");
+        return Result::<AnalyzeStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_attach_stmt__inner(p: &mut Parser) -> Result<AttachStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_attach = p.expect(TK_K_ATTACH)?;
     let k_database: Option<Token> = if p.peek_kind() == TK_K_DATABASE {
@@ -11826,7 +11938,16 @@ fn _parse_attach_stmt(p: &mut Parser) -> Result<AttachStmtNode, ParseError> {
     });
 }
 
-fn _parse_begin_stmt(p: &mut Parser) -> Result<BeginStmtNode, ParseError> {
+fn _parse_attach_stmt(p: &mut Parser) -> Result<AttachStmtNode, ParseError> {
+    let r = _parse_attach_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("attach_stmt");
+        return Result::<AttachStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_begin_stmt__inner(p: &mut Parser) -> Result<BeginStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_begin = p.expect(TK_K_BEGIN)?;
     let mut opt_scan_pos: i32 = -1;
@@ -11887,7 +12008,16 @@ fn _parse_begin_stmt(p: &mut Parser) -> Result<BeginStmtNode, ParseError> {
     });
 }
 
-fn _parse_commit_stmt(p: &mut Parser) -> Result<CommitStmtNode, ParseError> {
+fn _parse_begin_stmt(p: &mut Parser) -> Result<BeginStmtNode, ParseError> {
+    let r = _parse_begin_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("begin_stmt");
+        return Result::<BeginStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_commit_stmt__inner(p: &mut Parser) -> Result<CommitStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_commit_or_k_end = p.match_set([TK_K_COMMIT, TK_K_END])?;
     let k_transaction_transaction_name: Option<KTransactionTransactionNameOptItem> = if p.peek_kind() == TK_K_TRANSACTION {
@@ -11913,7 +12043,16 @@ fn _parse_commit_stmt(p: &mut Parser) -> Result<CommitStmtNode, ParseError> {
     });
 }
 
-fn _parse_compound_select_stmt(p: &mut Parser) -> Result<CompoundSelectStmtNode, ParseError> {
+fn _parse_commit_stmt(p: &mut Parser) -> Result<CommitStmtNode, ParseError> {
+    let r = _parse_commit_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("commit_stmt");
+        return Result::<CommitStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_compound_select_stmt__inner(p: &mut Parser) -> Result<CompoundSelectStmtNode, ParseError> {
     let start = p.peek().span.start;
     let with_clause: Option<WithClauseNode> = if p.peek_kind() == TK_K_WITH {
         let with_clause = _parse_with_clause(p)?;
@@ -12106,7 +12245,16 @@ fn _parse_compound_select_stmt(p: &mut Parser) -> Result<CompoundSelectStmtNode,
     });
 }
 
-fn _parse_create_index_stmt(p: &mut Parser) -> Result<CreateIndexStmtNode, ParseError> {
+fn _parse_compound_select_stmt(p: &mut Parser) -> Result<CompoundSelectStmtNode, ParseError> {
+    let r = _parse_compound_select_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("compound_select_stmt");
+        return Result::<CompoundSelectStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_create_index_stmt__inner(p: &mut Parser) -> Result<CreateIndexStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_create = p.expect(TK_K_CREATE)?;
     let k_unique: Option<Token> = if p.peek_kind() == TK_K_UNIQUE {
@@ -12213,7 +12361,16 @@ fn _parse_create_index_stmt(p: &mut Parser) -> Result<CreateIndexStmtNode, Parse
     });
 }
 
-fn _parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, ParseError> {
+fn _parse_create_index_stmt(p: &mut Parser) -> Result<CreateIndexStmtNode, ParseError> {
+    let r = _parse_create_index_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("create_index_stmt");
+        return Result::<CreateIndexStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_create_table_stmt__inner(p: &mut Parser) -> Result<CreateTableStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_create = p.expect(TK_K_CREATE)?;
     let mut opt_scan_pos: i32 = -1;
@@ -12364,7 +12521,16 @@ fn _parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, Parse
     });
 }
 
-fn _parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, ParseError> {
+fn _parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, ParseError> {
+    let r = _parse_create_table_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("create_table_stmt");
+        return Result::<CreateTableStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_create_trigger_stmt__inner(p: &mut Parser) -> Result<CreateTriggerStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_create = p.expect(TK_K_CREATE)?;
     let mut opt_scan_pos: i32 = -1;
@@ -12721,7 +12887,16 @@ fn _parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, P
     });
 }
 
-fn _parse_create_view_stmt(p: &mut Parser) -> Result<CreateViewStmtNode, ParseError> {
+fn _parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, ParseError> {
+    let r = _parse_create_trigger_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("create_trigger_stmt");
+        return Result::<CreateTriggerStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_create_view_stmt__inner(p: &mut Parser) -> Result<CreateViewStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_create = p.expect(TK_K_CREATE)?;
     let mut opt_scan_pos: i32 = -1;
@@ -12803,7 +12978,16 @@ fn _parse_create_view_stmt(p: &mut Parser) -> Result<CreateViewStmtNode, ParseEr
     });
 }
 
-fn _parse_create_virtual_table_stmt(p: &mut Parser) -> Result<CreateVirtualTableStmtNode, ParseError> {
+fn _parse_create_view_stmt(p: &mut Parser) -> Result<CreateViewStmtNode, ParseError> {
+    let r = _parse_create_view_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("create_view_stmt");
+        return Result::<CreateViewStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_create_virtual_table_stmt__inner(p: &mut Parser) -> Result<CreateVirtualTableStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_create = p.expect(TK_K_CREATE)?;
     let k_virtual = p.expect(TK_K_VIRTUAL)?;
@@ -12901,7 +13085,16 @@ fn _parse_create_virtual_table_stmt(p: &mut Parser) -> Result<CreateVirtualTable
     });
 }
 
-fn _parse_delete_stmt(p: &mut Parser) -> Result<DeleteStmtNode, ParseError> {
+fn _parse_create_virtual_table_stmt(p: &mut Parser) -> Result<CreateVirtualTableStmtNode, ParseError> {
+    let r = _parse_create_virtual_table_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("create_virtual_table_stmt");
+        return Result::<CreateVirtualTableStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_delete_stmt__inner(p: &mut Parser) -> Result<DeleteStmtNode, ParseError> {
     let start = p.peek().span.start;
     let with_clause: Option<WithClauseNode> = if p.peek_kind() == TK_K_WITH {
         let with_clause = _parse_with_clause(p)?;
@@ -12933,7 +13126,16 @@ fn _parse_delete_stmt(p: &mut Parser) -> Result<DeleteStmtNode, ParseError> {
     });
 }
 
-fn _parse_delete_stmt_limited(p: &mut Parser) -> Result<DeleteStmtLimitedNode, ParseError> {
+fn _parse_delete_stmt(p: &mut Parser) -> Result<DeleteStmtNode, ParseError> {
+    let r = _parse_delete_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("delete_stmt");
+        return Result::<DeleteStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_delete_stmt_limited__inner(p: &mut Parser) -> Result<DeleteStmtLimitedNode, ParseError> {
     let start = p.peek().span.start;
     let with_clause: Option<WithClauseNode> = if p.peek_kind() == TK_K_WITH {
         let with_clause = _parse_with_clause(p)?;
@@ -13125,7 +13327,16 @@ fn _parse_delete_stmt_limited(p: &mut Parser) -> Result<DeleteStmtLimitedNode, P
     });
 }
 
-fn _parse_detach_stmt(p: &mut Parser) -> Result<DetachStmtNode, ParseError> {
+fn _parse_delete_stmt_limited(p: &mut Parser) -> Result<DeleteStmtLimitedNode, ParseError> {
+    let r = _parse_delete_stmt_limited__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("delete_stmt_limited");
+        return Result::<DeleteStmtLimitedNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_detach_stmt__inner(p: &mut Parser) -> Result<DetachStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_detach = p.expect(TK_K_DETACH)?;
     let k_database: Option<Token> = if p.peek_kind() == TK_K_DATABASE {
@@ -13143,7 +13354,16 @@ fn _parse_detach_stmt(p: &mut Parser) -> Result<DetachStmtNode, ParseError> {
     });
 }
 
-fn _parse_drop_index_stmt(p: &mut Parser) -> Result<DropIndexStmtNode, ParseError> {
+fn _parse_detach_stmt(p: &mut Parser) -> Result<DetachStmtNode, ParseError> {
+    let r = _parse_detach_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("detach_stmt");
+        return Result::<DetachStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_drop_index_stmt__inner(p: &mut Parser) -> Result<DropIndexStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_drop = p.expect(TK_K_DROP)?;
     let k_index = p.expect(TK_K_INDEX)?;
@@ -13190,7 +13410,16 @@ fn _parse_drop_index_stmt(p: &mut Parser) -> Result<DropIndexStmtNode, ParseErro
     });
 }
 
-fn _parse_drop_table_stmt(p: &mut Parser) -> Result<DropTableStmtNode, ParseError> {
+fn _parse_drop_index_stmt(p: &mut Parser) -> Result<DropIndexStmtNode, ParseError> {
+    let r = _parse_drop_index_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("drop_index_stmt");
+        return Result::<DropIndexStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_drop_table_stmt__inner(p: &mut Parser) -> Result<DropTableStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_drop = p.expect(TK_K_DROP)?;
     let k_table = p.expect(TK_K_TABLE)?;
@@ -13237,7 +13466,16 @@ fn _parse_drop_table_stmt(p: &mut Parser) -> Result<DropTableStmtNode, ParseErro
     });
 }
 
-fn _parse_drop_trigger_stmt(p: &mut Parser) -> Result<DropTriggerStmtNode, ParseError> {
+fn _parse_drop_table_stmt(p: &mut Parser) -> Result<DropTableStmtNode, ParseError> {
+    let r = _parse_drop_table_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("drop_table_stmt");
+        return Result::<DropTableStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_drop_trigger_stmt__inner(p: &mut Parser) -> Result<DropTriggerStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_drop = p.expect(TK_K_DROP)?;
     let k_trigger = p.expect(TK_K_TRIGGER)?;
@@ -13284,7 +13522,16 @@ fn _parse_drop_trigger_stmt(p: &mut Parser) -> Result<DropTriggerStmtNode, Parse
     });
 }
 
-fn _parse_drop_view_stmt(p: &mut Parser) -> Result<DropViewStmtNode, ParseError> {
+fn _parse_drop_trigger_stmt(p: &mut Parser) -> Result<DropTriggerStmtNode, ParseError> {
+    let r = _parse_drop_trigger_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("drop_trigger_stmt");
+        return Result::<DropTriggerStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_drop_view_stmt__inner(p: &mut Parser) -> Result<DropViewStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_drop = p.expect(TK_K_DROP)?;
     let k_view = p.expect(TK_K_VIEW)?;
@@ -13331,7 +13578,16 @@ fn _parse_drop_view_stmt(p: &mut Parser) -> Result<DropViewStmtNode, ParseError>
     });
 }
 
-fn _parse_factored_select_stmt(p: &mut Parser) -> Result<FactoredSelectStmtNode, ParseError> {
+fn _parse_drop_view_stmt(p: &mut Parser) -> Result<DropViewStmtNode, ParseError> {
+    let r = _parse_drop_view_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("drop_view_stmt");
+        return Result::<DropViewStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_factored_select_stmt__inner(p: &mut Parser) -> Result<FactoredSelectStmtNode, ParseError> {
     let start = p.peek().span.start;
     let with_clause: Option<WithClauseNode> = if p.peek_kind() == TK_K_WITH {
         let with_clause = _parse_with_clause(p)?;
@@ -13467,7 +13723,16 @@ fn _parse_factored_select_stmt(p: &mut Parser) -> Result<FactoredSelectStmtNode,
     });
 }
 
-fn _parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
+fn _parse_factored_select_stmt(p: &mut Parser) -> Result<FactoredSelectStmtNode, ParseError> {
+    let r = _parse_factored_select_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("factored_select_stmt");
+        return Result::<FactoredSelectStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_insert_stmt__inner(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
     let start = p.peek().span.start;
     let with_clause: Option<WithClauseNode> = if p.peek_kind() == TK_K_WITH {
         let with_clause = _parse_with_clause(p)?;
@@ -13881,7 +14146,16 @@ fn _parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
     });
 }
 
-fn _parse_pragma_stmt(p: &mut Parser) -> Result<PragmaStmtNode, ParseError> {
+fn _parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
+    let r = _parse_insert_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("insert_stmt");
+        return Result::<InsertStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_pragma_stmt__inner(p: &mut Parser) -> Result<PragmaStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_pragma = p.expect(TK_K_PRAGMA)?;
     let mut opt_scan_pos: i32 = -1;
@@ -13965,7 +14239,16 @@ fn _parse_pragma_stmt(p: &mut Parser) -> Result<PragmaStmtNode, ParseError> {
     });
 }
 
-fn _parse_reindex_stmt(p: &mut Parser) -> Result<ReindexStmtNode, ParseError> {
+fn _parse_pragma_stmt(p: &mut Parser) -> Result<PragmaStmtNode, ParseError> {
+    let r = _parse_pragma_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("pragma_stmt");
+        return Result::<PragmaStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_reindex_stmt__inner(p: &mut Parser) -> Result<ReindexStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_reindex = p.expect(TK_K_REINDEX)?;
     let mut opt_scan_pos: i32 = -1;
@@ -14111,7 +14394,16 @@ fn _parse_reindex_stmt(p: &mut Parser) -> Result<ReindexStmtNode, ParseError> {
     });
 }
 
-fn _parse_release_stmt(p: &mut Parser) -> Result<ReleaseStmtNode, ParseError> {
+fn _parse_reindex_stmt(p: &mut Parser) -> Result<ReindexStmtNode, ParseError> {
+    let r = _parse_reindex_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("reindex_stmt");
+        return Result::<ReindexStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_release_stmt__inner(p: &mut Parser) -> Result<ReleaseStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_release = p.expect(TK_K_RELEASE)?;
     let k_savepoint: Option<Token> = if p.peek_kind() == TK_K_SAVEPOINT {
@@ -14129,7 +14421,16 @@ fn _parse_release_stmt(p: &mut Parser) -> Result<ReleaseStmtNode, ParseError> {
     });
 }
 
-fn _parse_rollback_stmt(p: &mut Parser) -> Result<RollbackStmtNode, ParseError> {
+fn _parse_release_stmt(p: &mut Parser) -> Result<ReleaseStmtNode, ParseError> {
+    let r = _parse_release_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("release_stmt");
+        return Result::<ReleaseStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_rollback_stmt__inner(p: &mut Parser) -> Result<RollbackStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_rollback = p.expect(TK_K_ROLLBACK)?;
     let k_transaction_transaction_name: Option<KTransactionTransactionNameOptItem> = if p.peek_kind() == TK_K_TRANSACTION {
@@ -14174,7 +14475,16 @@ fn _parse_rollback_stmt(p: &mut Parser) -> Result<RollbackStmtNode, ParseError> 
     });
 }
 
-fn _parse_savepoint_stmt(p: &mut Parser) -> Result<SavepointStmtNode, ParseError> {
+fn _parse_rollback_stmt(p: &mut Parser) -> Result<RollbackStmtNode, ParseError> {
+    let r = _parse_rollback_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("rollback_stmt");
+        return Result::<RollbackStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_savepoint_stmt__inner(p: &mut Parser) -> Result<SavepointStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_savepoint = p.expect(TK_K_SAVEPOINT)?;
     let savepoint_name = _parse_savepoint_name(p)?;
@@ -14185,7 +14495,16 @@ fn _parse_savepoint_stmt(p: &mut Parser) -> Result<SavepointStmtNode, ParseError
     });
 }
 
-fn _parse_simple_select_stmt(p: &mut Parser) -> Result<SimpleSelectStmtNode, ParseError> {
+fn _parse_savepoint_stmt(p: &mut Parser) -> Result<SavepointStmtNode, ParseError> {
+    let r = _parse_savepoint_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("savepoint_stmt");
+        return Result::<SavepointStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_simple_select_stmt__inner(p: &mut Parser) -> Result<SimpleSelectStmtNode, ParseError> {
     let start = p.peek().span.start;
     let with_clause: Option<WithClauseNode> = if p.peek_kind() == TK_K_WITH {
         let with_clause = _parse_with_clause(p)?;
@@ -14292,7 +14611,16 @@ fn _parse_simple_select_stmt(p: &mut Parser) -> Result<SimpleSelectStmtNode, Par
     });
 }
 
-fn _parse_select_stmt(p: &mut Parser) -> Result<SelectStmtNode, ParseError> {
+fn _parse_simple_select_stmt(p: &mut Parser) -> Result<SimpleSelectStmtNode, ParseError> {
+    let r = _parse_simple_select_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("simple_select_stmt");
+        return Result::<SimpleSelectStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_select_stmt__inner(p: &mut Parser) -> Result<SelectStmtNode, ParseError> {
     let start = p.peek().span.start;
     let with_clause: Option<WithClauseNode> = if p.peek_kind() == TK_K_WITH {
         let with_clause = _parse_with_clause(p)?;
@@ -14428,7 +14756,16 @@ fn _parse_select_stmt(p: &mut Parser) -> Result<SelectStmtNode, ParseError> {
     });
 }
 
-fn _parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseError> {
+fn _parse_select_stmt(p: &mut Parser) -> Result<SelectStmtNode, ParseError> {
+    let r = _parse_select_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("select_stmt");
+        return Result::<SelectStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_select_or_values__inner(p: &mut Parser) -> Result<SelectOrValuesNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_K_SELECT {
@@ -14755,14 +15092,23 @@ fn _parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseEr
             comma_lparen_expr_item_rparen_list,
         }));
     }
-    return Result::<SelectOrValuesNode, ParseError>::Err(ParseError::new(
+    return Result::<SelectOrValuesNode, ParseError>::Err(p.error(
         "expected select_or_values",
         p.peek().span,
         ["TK_K_SELECT", "TK_K_VALUES"],
     ));
 }
 
-fn _parse_update_stmt(p: &mut Parser) -> Result<UpdateStmtNode, ParseError> {
+fn _parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseError> {
+    let r = _parse_select_or_values__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("select_or_values");
+        return Result::<SelectOrValuesNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_update_stmt__inner(p: &mut Parser) -> Result<UpdateStmtNode, ParseError> {
     let start = p.peek().span.start;
     let with_clause: Option<WithClauseNode> = if p.peek_kind() == TK_K_WITH {
         let with_clause = _parse_with_clause(p)?;
@@ -14982,7 +15328,16 @@ fn _parse_update_stmt(p: &mut Parser) -> Result<UpdateStmtNode, ParseError> {
     });
 }
 
-fn _parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, ParseError> {
+fn _parse_update_stmt(p: &mut Parser) -> Result<UpdateStmtNode, ParseError> {
+    let r = _parse_update_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("update_stmt");
+        return Result::<UpdateStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_update_stmt_limited__inner(p: &mut Parser) -> Result<UpdateStmtLimitedNode, ParseError> {
     let start = p.peek().span.start;
     let with_clause: Option<WithClauseNode> = if p.peek_kind() == TK_K_WITH {
         let with_clause = _parse_with_clause(p)?;
@@ -15362,7 +15717,16 @@ fn _parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, P
     });
 }
 
-fn _parse_vacuum_stmt(p: &mut Parser) -> Result<VacuumStmtNode, ParseError> {
+fn _parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, ParseError> {
+    let r = _parse_update_stmt_limited__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("update_stmt_limited");
+        return Result::<UpdateStmtLimitedNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_vacuum_stmt__inner(p: &mut Parser) -> Result<VacuumStmtNode, ParseError> {
     let start = p.peek().span.start;
     let k_vacuum = p.expect(TK_K_VACUUM)?;
     return Result::<VacuumStmtNode, ParseError>::Ok(VacuumStmtNode {
@@ -15371,7 +15735,16 @@ fn _parse_vacuum_stmt(p: &mut Parser) -> Result<VacuumStmtNode, ParseError> {
     });
 }
 
-fn _parse_column_def(p: &mut Parser) -> Result<ColumnDefNode, ParseError> {
+fn _parse_vacuum_stmt(p: &mut Parser) -> Result<VacuumStmtNode, ParseError> {
+    let r = _parse_vacuum_stmt__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("vacuum_stmt");
+        return Result::<VacuumStmtNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_column_def__inner(p: &mut Parser) -> Result<ColumnDefNode, ParseError> {
     let start = p.peek().span.start;
     let column_name = _parse_column_name(p)?;
     let type_name: Option<TypeNameNode> = if _gale_kind_set_24(p.peek_kind()) {
@@ -15403,7 +15776,16 @@ fn _parse_column_def(p: &mut Parser) -> Result<ColumnDefNode, ParseError> {
     });
 }
 
-fn _parse_type_name(p: &mut Parser) -> Result<TypeNameNode, ParseError> {
+fn _parse_column_def(p: &mut Parser) -> Result<ColumnDefNode, ParseError> {
+    let r = _parse_column_def__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("column_def");
+        return Result::<ColumnDefNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_type_name__inner(p: &mut Parser) -> Result<TypeNameNode, ParseError> {
     let start = p.peek().span.start;
     let name = _parse_name(p)?;
     let mut name_list: Array<NameNode> = [name];
@@ -15505,7 +15887,16 @@ fn _parse_type_name(p: &mut Parser) -> Result<TypeNameNode, ParseError> {
     });
 }
 
-fn _parse_column_constraint(p: &mut Parser) -> Result<ColumnConstraintNode, ParseError> {
+fn _parse_type_name(p: &mut Parser) -> Result<TypeNameNode, ParseError> {
+    let r = _parse_type_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("type_name");
+        return Result::<TypeNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_column_constraint__inner(p: &mut Parser) -> Result<ColumnConstraintNode, ParseError> {
     let start = p.peek().span.start;
     let k_constraint_name: Option<KConstraintNameItem> = if p.peek_kind() == TK_K_CONSTRAINT {
         let k_constraint = p.expect(TK_K_CONSTRAINT)?;
@@ -15660,7 +16051,16 @@ fn _parse_column_constraint(p: &mut Parser) -> Result<ColumnConstraintNode, Pars
     });
 }
 
-fn _parse_conflict_clause(p: &mut Parser) -> Result<ConflictClauseNode, ParseError> {
+fn _parse_column_constraint(p: &mut Parser) -> Result<ColumnConstraintNode, ParseError> {
+    let r = _parse_column_constraint__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("column_constraint");
+        return Result::<ColumnConstraintNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_conflict_clause__inner(p: &mut Parser) -> Result<ConflictClauseNode, ParseError> {
     let start = p.peek().span.start;
     let k_on_k_conflict_item: Option<KOnKConflictItemItem> = if p.peek_kind() == TK_K_ON && p.peek_at(1) == TK_K_CONFLICT {
         let k_on = p.expect(TK_K_ON)?;
@@ -15681,7 +16081,16 @@ fn _parse_conflict_clause(p: &mut Parser) -> Result<ConflictClauseNode, ParseErr
     });
 }
 
-fn _parse_expr_bt_15(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_conflict_clause(p: &mut Parser) -> Result<ConflictClauseNode, ParseError> {
+    let r = _parse_conflict_clause__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("conflict_clause");
+        return Result::<ConflictClauseNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_expr__inner_bt_15(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let k_cast = p.expect(TK_K_CAST)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
@@ -15700,7 +16109,7 @@ fn _parse_expr_bt_15(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr_scan_15(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_15(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_CAST { return -1; }
     pos += 1;
@@ -15717,7 +16126,7 @@ fn _parse_expr_scan_15(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let k_case = p.expect(TK_K_CASE)?;
     let expr: Option<ExprNode> = if _gale_kind_set_33(p.peek_kind()) {
@@ -15788,7 +16197,7 @@ fn _parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr_scan_22(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_22(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_CASE { return -1; }
     pos += 1;
@@ -15849,7 +16258,7 @@ fn _parse_expr_scan_22(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_expr_bt_21(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_bt_21(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let item_k_exists: Option<ItemOptKExistsItem> = if p.peek_kind() == TK_K_NOT && p.peek_at(1) == TK_K_EXISTS {
         if p.peek_kind() == TK_K_NOT {
@@ -15881,7 +16290,7 @@ fn _parse_expr_bt_21(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr_scan_21(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_21(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_NOT && pos + 1 < tokens.len() && tokens[pos + 1].kind == TK_K_EXISTS {
         sol_325: {
@@ -15905,7 +16314,7 @@ fn _parse_expr_scan_21(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_expr_bt_14(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_bt_14(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let expr = _parse_expr(p)?;
@@ -15918,7 +16327,7 @@ fn _parse_expr_bt_14(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr_scan_14(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_14(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -15929,7 +16338,7 @@ fn _parse_expr_scan_14(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_expr_bt_23(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_bt_23(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let raise_function = _parse_raise_function(p)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt23(ExprAlt23 {
@@ -15938,14 +16347,14 @@ fn _parse_expr_bt_23(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr_scan_23(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_23(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_raise_function(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn _parse_expr_bt_0(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_bt_0(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let literal_value = _parse_literal_value(p)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt0(ExprAlt0 {
@@ -15954,14 +16363,14 @@ fn _parse_expr_bt_0(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_literal_value(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn _parse_expr_bt_13(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_bt_13(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let function_name = _parse_function_name(p)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
@@ -16069,7 +16478,7 @@ fn _parse_expr_bt_13(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr_scan_13(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_13(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_function_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -16120,7 +16529,7 @@ fn _parse_expr_scan_13(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_expr_bt_3(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_bt_3(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let unary_operator = _parse_unary_operator(p)?;
     let expr = _parse_expr(p, 15)?;
@@ -16131,7 +16540,7 @@ fn _parse_expr_bt_3(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_unary_operator(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -16140,7 +16549,7 @@ fn _parse_expr_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_expr_bt_2(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_bt_2(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let item_table_name_dot: Option<ItemOptTableNameDotItem> = if _gale_kind_set_8(p.peek_kind()) && p.peek_at(1) == TK_LIT_DOT && _gale_kind_set_8(p.peek_at(2)) && p.peek_at(3) == TK_LIT_DOT {
         let mut opt_scan_pos: i32 = -1;
@@ -16193,7 +16602,7 @@ fn _parse_expr_bt_2(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) && pos + 1 < tokens.len() && tokens[pos + 1].kind == TK_LIT_DOT && pos + 2 < tokens.len() && _gale_kind_set_8(tokens[pos + 2].kind) && pos + 3 < tokens.len() && tokens[pos + 3].kind == TK_LIT_DOT {
         sol_332: {
@@ -16219,17 +16628,17 @@ fn _parse_expr_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_66(kind) {
         if p.peek_kind() == TK_LIT_LPAREN {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_21 = _parse_expr_scan_21(_sd_tokens, _sd_pos);
-            let _sd_p_14 = _parse_expr_scan_14(_sd_tokens, _sd_pos);
-            let _sd_p_13 = _parse_expr_scan_13(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_expr_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_21 = _parse_expr__inner_scan_21(_sd_tokens, _sd_pos);
+            let _sd_p_14 = _parse_expr__inner_scan_14(_sd_tokens, _sd_pos);
+            let _sd_p_13 = _parse_expr__inner_scan_13(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_expr__inner_scan_2(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_21 > _sd_best_p {
@@ -16249,24 +16658,24 @@ fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
                 _sd_best_i = 2;
             }
             if _sd_best_i == 21 {
-                return _parse_expr_bt_21(p);
+                return _parse_expr__inner_bt_21(p);
             }
             if _sd_best_i == 14 {
-                return _parse_expr_bt_14(p);
+                return _parse_expr__inner_bt_14(p);
             }
             if _sd_best_i == 13 {
-                return _parse_expr_bt_13(p);
+                return _parse_expr__inner_bt_13(p);
             }
             if _sd_best_i == 2 {
-                return _parse_expr_bt_2(p);
+                return _parse_expr__inner_bt_2(p);
             }
-            return _parse_expr_bt_2(p);
+            return _parse_expr__inner_bt_2(p);
         } else if p.peek_kind() == TK_K_CAST {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_15 = _parse_expr_scan_15(_sd_tokens, _sd_pos);
-            let _sd_p_13 = _parse_expr_scan_13(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_expr_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_15 = _parse_expr__inner_scan_15(_sd_tokens, _sd_pos);
+            let _sd_p_13 = _parse_expr__inner_scan_13(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_expr__inner_scan_2(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_15 > _sd_best_p {
@@ -16282,21 +16691,21 @@ fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
                 _sd_best_i = 2;
             }
             if _sd_best_i == 15 {
-                return _parse_expr_bt_15(p);
+                return _parse_expr__inner_bt_15(p);
             }
             if _sd_best_i == 13 {
-                return _parse_expr_bt_13(p);
+                return _parse_expr__inner_bt_13(p);
             }
             if _sd_best_i == 2 {
-                return _parse_expr_bt_2(p);
+                return _parse_expr__inner_bt_2(p);
             }
-            return _parse_expr_bt_2(p);
+            return _parse_expr__inner_bt_2(p);
         } else if p.peek_kind() == TK_K_CASE {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_22 = _parse_expr_scan_22(_sd_tokens, _sd_pos);
-            let _sd_p_13 = _parse_expr_scan_13(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_expr_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_22 = _parse_expr__inner_scan_22(_sd_tokens, _sd_pos);
+            let _sd_p_13 = _parse_expr__inner_scan_13(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_expr__inner_scan_2(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_22 > _sd_best_p {
@@ -16312,21 +16721,21 @@ fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
                 _sd_best_i = 2;
             }
             if _sd_best_i == 22 {
-                return _parse_expr_bt_22(p);
+                return _parse_expr__inner_bt_22(p);
             }
             if _sd_best_i == 13 {
-                return _parse_expr_bt_13(p);
+                return _parse_expr__inner_bt_13(p);
             }
             if _sd_best_i == 2 {
-                return _parse_expr_bt_2(p);
+                return _parse_expr__inner_bt_2(p);
             }
-            return _parse_expr_bt_2(p);
+            return _parse_expr__inner_bt_2(p);
         } else if p.peek_kind() == TK_K_RAISE {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_23 = _parse_expr_scan_23(_sd_tokens, _sd_pos);
-            let _sd_p_13 = _parse_expr_scan_13(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_expr_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_23 = _parse_expr__inner_scan_23(_sd_tokens, _sd_pos);
+            let _sd_p_13 = _parse_expr__inner_scan_13(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_expr__inner_scan_2(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_23 > _sd_best_p {
@@ -16342,22 +16751,22 @@ fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
                 _sd_best_i = 2;
             }
             if _sd_best_i == 23 {
-                return _parse_expr_bt_23(p);
+                return _parse_expr__inner_bt_23(p);
             }
             if _sd_best_i == 13 {
-                return _parse_expr_bt_13(p);
+                return _parse_expr__inner_bt_13(p);
             }
             if _sd_best_i == 2 {
-                return _parse_expr_bt_2(p);
+                return _parse_expr__inner_bt_2(p);
             }
-            return _parse_expr_bt_2(p);
+            return _parse_expr__inner_bt_2(p);
         } else if p.peek_kind() == TK_K_NOT {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_21 = _parse_expr_scan_21(_sd_tokens, _sd_pos);
-            let _sd_p_13 = _parse_expr_scan_13(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_expr_scan_2(_sd_tokens, _sd_pos);
-            let _sd_p_3 = _parse_expr_scan_3(_sd_tokens, _sd_pos);
+            let _sd_p_21 = _parse_expr__inner_scan_21(_sd_tokens, _sd_pos);
+            let _sd_p_13 = _parse_expr__inner_scan_13(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_expr__inner_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_3 = _parse_expr__inner_scan_3(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_21 > _sd_best_p {
@@ -16377,24 +16786,24 @@ fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
                 _sd_best_i = 3;
             }
             if _sd_best_i == 21 {
-                return _parse_expr_bt_21(p);
+                return _parse_expr__inner_bt_21(p);
             }
             if _sd_best_i == 13 {
-                return _parse_expr_bt_13(p);
+                return _parse_expr__inner_bt_13(p);
             }
             if _sd_best_i == 2 {
-                return _parse_expr_bt_2(p);
+                return _parse_expr__inner_bt_2(p);
             }
             if _sd_best_i == 3 {
-                return _parse_expr_bt_3(p);
+                return _parse_expr__inner_bt_3(p);
             }
-            return _parse_expr_bt_3(p);
+            return _parse_expr__inner_bt_3(p);
         } else if p.peek_kind() == TK_K_EXISTS {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_21 = _parse_expr_scan_21(_sd_tokens, _sd_pos);
-            let _sd_p_13 = _parse_expr_scan_13(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_expr_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_21 = _parse_expr__inner_scan_21(_sd_tokens, _sd_pos);
+            let _sd_p_13 = _parse_expr__inner_scan_13(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_expr__inner_scan_2(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_21 > _sd_best_p {
@@ -16410,25 +16819,25 @@ fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
                 _sd_best_i = 2;
             }
             if _sd_best_i == 21 {
-                return _parse_expr_bt_21(p);
+                return _parse_expr__inner_bt_21(p);
             }
             if _sd_best_i == 13 {
-                return _parse_expr_bt_13(p);
+                return _parse_expr__inner_bt_13(p);
             }
             if _sd_best_i == 2 {
-                return _parse_expr_bt_2(p);
+                return _parse_expr__inner_bt_2(p);
             }
-            return _parse_expr_bt_2(p);
+            return _parse_expr__inner_bt_2(p);
         } else if _gale_kind_set_53(p.peek_kind()) {
-            return _parse_expr_bt_3(p);
+            return _parse_expr__inner_bt_3(p);
         } else if _gale_kind_set_50(p.peek_kind()) {
-            return _parse_expr_bt_0(p);
+            return _parse_expr__inner_bt_0(p);
         } else if _gale_kind_set_51(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_expr_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_13 = _parse_expr_scan_13(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_expr_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_expr__inner_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_13 = _parse_expr__inner_scan_13(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_expr__inner_scan_2(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -16444,20 +16853,20 @@ fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
                 _sd_best_i = 2;
             }
             if _sd_best_i == 0 {
-                return _parse_expr_bt_0(p);
+                return _parse_expr__inner_bt_0(p);
             }
             if _sd_best_i == 13 {
-                return _parse_expr_bt_13(p);
+                return _parse_expr__inner_bt_13(p);
             }
             if _sd_best_i == 2 {
-                return _parse_expr_bt_2(p);
+                return _parse_expr__inner_bt_2(p);
             }
-            return _parse_expr_bt_2(p);
+            return _parse_expr__inner_bt_2(p);
         } else if _gale_kind_set_52(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_13 = _parse_expr_scan_13(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_expr_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_13 = _parse_expr__inner_scan_13(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_expr__inner_scan_2(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_13 > _sd_best_p {
@@ -16469,12 +16878,12 @@ fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
                 _sd_best_i = 2;
             }
             if _sd_best_i == 13 {
-                return _parse_expr_bt_13(p);
+                return _parse_expr__inner_bt_13(p);
             }
             if _sd_best_i == 2 {
-                return _parse_expr_bt_2(p);
+                return _parse_expr__inner_bt_2(p);
             }
-            return _parse_expr_bt_2(p);
+            return _parse_expr__inner_bt_2(p);
         }
     }
     if kind == TK_BIND_PARAMETER {
@@ -16484,16 +16893,16 @@ fn _parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
             bind_parameter,
         }));
     }
-    return Result::<ExprNode, ParseError>::Err(ParseError::new(
+    return Result::<ExprNode, ParseError>::Err(p.error(
         "expected expr",
         p.peek().span,
         ["TK_NUMERIC_LITERAL", "TK_STRING_LITERAL", "TK_BLOB_LITERAL", "TK_K_NULL", "TK_K_CURRENT_TIME", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIMESTAMP", "TK_BIND_PARAMETER", "TK_IDENTIFIER", "TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT", "TK_LIT_LPAREN", "TK_LIT_MINUS", "TK_LIT_PLUS", "TK_LIT_TILDE"],
     ));
 }
 
-fn _parse_expr_lr_4(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_4(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let lit_pipepipe = p.expect(TK_LIT_PIPEPIPE)?;
-    let expr_2 = _parse_expr(p, 15)?;
+    let expr_2 = _parse_expr__inner(p, 15)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt4(ExprAlt4 {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -16502,9 +16911,9 @@ fn _parse_expr_lr_4(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
     }));
 }
 
-fn _parse_expr_lr_5(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_5(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let star_or_slash_or_percent = p.match_set([TK_LIT_STAR, TK_LIT_SLASH, TK_LIT_PERCENT])?;
-    let expr_2 = _parse_expr(p, 14)?;
+    let expr_2 = _parse_expr__inner(p, 14)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt5(ExprAlt5 {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -16513,9 +16922,9 @@ fn _parse_expr_lr_5(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
     }));
 }
 
-fn _parse_expr_lr_6(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_6(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let plus_or_minus = p.match_set([TK_LIT_PLUS, TK_LIT_MINUS])?;
-    let expr_2 = _parse_expr(p, 13)?;
+    let expr_2 = _parse_expr__inner(p, 13)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt6(ExprAlt6 {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -16524,9 +16933,9 @@ fn _parse_expr_lr_6(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
     }));
 }
 
-fn _parse_expr_lr_7(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_7(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let lit_ltlt_or_lit_gtgt_or_amp_or_pipe = p.match_set([TK_LIT_LTLT, TK_LIT_GTGT, TK_LIT_AMP, TK_LIT_PIPE])?;
-    let expr_2 = _parse_expr(p, 12)?;
+    let expr_2 = _parse_expr__inner(p, 12)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt7(ExprAlt7 {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -16535,9 +16944,9 @@ fn _parse_expr_lr_7(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
     }));
 }
 
-fn _parse_expr_lr_8(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_8(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let lt_or_lit_lteq_or_gt_or_lit_gteq = p.match_set([TK_LIT_LT, TK_LIT_LTEQ, TK_LIT_GT, TK_LIT_GTEQ])?;
-    let expr_2 = _parse_expr(p, 11)?;
+    let expr_2 = _parse_expr__inner(p, 11)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt8(ExprAlt8 {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -16546,9 +16955,9 @@ fn _parse_expr_lr_8(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
     }));
 }
 
-fn _parse_expr_lr_9(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_9(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let eq_or_lit_eqeq_or_lit_bangeq_or_lit_ltgt = p.match_set([TK_LIT_EQ, TK_LIT_EQEQ, TK_LIT_BANGEQ, TK_LIT_LTGT])?;
-    let expr_2 = _parse_expr(p, 10)?;
+    let expr_2 = _parse_expr__inner(p, 10)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt9(ExprAlt9 {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -16557,7 +16966,7 @@ fn _parse_expr_lr_9(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
     }));
 }
 
-fn _parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let k_not: Option<Token> = if p.peek_kind() == TK_K_NOT {
         let k_not = p.expect(TK_K_NOT)?;
         Option::<Token>::Some(k_not)
@@ -16768,9 +17177,9 @@ fn _parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
     }));
 }
 
-fn _parse_expr_lr_11(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_11(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let k_and = p.expect(TK_K_AND)?;
-    let expr_2 = _parse_expr(p, 8)?;
+    let expr_2 = _parse_expr__inner(p, 8)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt11(ExprAlt11 {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -16779,9 +17188,9 @@ fn _parse_expr_lr_11(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
     }));
 }
 
-fn _parse_expr_lr_12(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_12(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let k_or = p.expect(TK_K_OR)?;
-    let expr_2 = _parse_expr(p, 7)?;
+    let expr_2 = _parse_expr__inner(p, 7)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt12(ExprAlt12 {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -16790,7 +17199,7 @@ fn _parse_expr_lr_12(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
     }));
 }
 
-fn _parse_expr_lr_16(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_16(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let k_collate = p.expect(TK_K_COLLATE)?;
     let collation_name = _parse_collation_name(p)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt16(ExprAlt16 {
@@ -16801,7 +17210,7 @@ fn _parse_expr_lr_16(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
     }));
 }
 
-fn _parse_expr_lr_17(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_17(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let k_not: Option<Token> = if p.peek_kind() == TK_K_NOT {
         let k_not = p.expect(TK_K_NOT)?;
         Option::<Token>::Some(k_not)
@@ -16809,7 +17218,7 @@ fn _parse_expr_lr_17(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
         null
     };
     let k_like_or_k_glob_or_k_regexp_or_k_match = p.match_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH])?;
-    let expr_2 = _parse_expr(p, 5)?;
+    let expr_2 = _parse_expr__inner(p, 5)?;
     let k_escape_expr: Option<KEscapeExprItem> = if p.peek_kind() == TK_K_ESCAPE {
         let k_escape = p.expect(TK_K_ESCAPE)?;
         let expr = _parse_expr(p, 5)?;
@@ -16831,7 +17240,7 @@ fn _parse_expr_lr_17(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
     }));
 }
 
-fn _parse_expr_lr_18(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_18(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let mut group_3_inner: Option<ExprGroup3> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_ISNULL {
@@ -16860,7 +17269,7 @@ fn _parse_expr_lr_18(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
     }));
 }
 
-fn _parse_expr_lr_19(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_19(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let k_is = p.expect(TK_K_IS)?;
     let k_not: Option<Token> = if p.peek_kind() == TK_K_NOT {
         let k_not = p.expect(TK_K_NOT)?;
@@ -16868,7 +17277,7 @@ fn _parse_expr_lr_19(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
     } else {
         null
     };
-    let expr_2 = _parse_expr(p, 3)?;
+    let expr_2 = _parse_expr__inner(p, 3)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt19(ExprAlt19 {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -16878,7 +17287,7 @@ fn _parse_expr_lr_19(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
     }));
 }
 
-fn _parse_expr_lr_20(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner_lr_20(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
     let k_not: Option<Token> = if p.peek_kind() == TK_K_NOT {
         let k_not = p.expect(TK_K_NOT)?;
         Option::<Token>::Some(k_not)
@@ -16886,9 +17295,9 @@ fn _parse_expr_lr_20(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
         null
     };
     let k_between = p.expect(TK_K_BETWEEN)?;
-    let expr_2 = _parse_expr(p, 8)?;
+    let expr_2 = _parse_expr__inner(p, 8)?;
     let k_and = p.expect(TK_K_AND)?;
-    let expr_3 = _parse_expr(p, 8)?;
+    let expr_3 = _parse_expr__inner(p, 8)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt20(ExprAlt20 {
         span: Span::new(start, i32::max(start, p.last_end())),
         expr: left,
@@ -16900,9 +17309,9 @@ fn _parse_expr_lr_20(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprN
     }));
 }
 
-fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
+fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = _parse_expr_atom(p)?;
+    let mut result = _parse_expr__inner_atom(p)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_LIT_PIPEPIPE {
@@ -16910,7 +17319,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                 if scan_expr_lr_4(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_expr_lr_4(p, result, start)?;
+                result = _parse_expr__inner_lr_4(p, result, start)?;
             } else {
                 break;
             }
@@ -16919,7 +17328,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                 if scan_expr_lr_5(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_expr_lr_5(p, result, start)?;
+                result = _parse_expr__inner_lr_5(p, result, start)?;
             } else {
                 break;
             }
@@ -16928,7 +17337,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                 if scan_expr_lr_6(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_expr_lr_6(p, result, start)?;
+                result = _parse_expr__inner_lr_6(p, result, start)?;
             } else {
                 break;
             }
@@ -16937,7 +17346,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                 if scan_expr_lr_7(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_expr_lr_7(p, result, start)?;
+                result = _parse_expr__inner_lr_7(p, result, start)?;
             } else {
                 break;
             }
@@ -16946,7 +17355,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                 if scan_expr_lr_8(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_expr_lr_8(p, result, start)?;
+                result = _parse_expr__inner_lr_8(p, result, start)?;
             } else {
                 break;
             }
@@ -16955,7 +17364,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                 if scan_expr_lr_9(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_expr_lr_9(p, result, start)?;
+                result = _parse_expr__inner_lr_9(p, result, start)?;
             } else {
                 break;
             }
@@ -16965,7 +17374,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                     if scan_expr_lr_10(&p.tokens, p.pos) < 0 {
                         break;
                     }
-                    result = _parse_expr_lr_10(p, result, start)?;
+                    result = _parse_expr__inner_lr_10(p, result, start)?;
                 } else {
                     break;
                 }
@@ -16974,7 +17383,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                     if scan_expr_lr_17(&p.tokens, p.pos) < 0 {
                         break;
                     }
-                    result = _parse_expr_lr_17(p, result, start)?;
+                    result = _parse_expr__inner_lr_17(p, result, start)?;
                 } else {
                     break;
                 }
@@ -16983,7 +17392,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                     if scan_expr_lr_17(&p.tokens, p.pos) < 0 {
                         break;
                     }
-                    result = _parse_expr_lr_17(p, result, start)?;
+                    result = _parse_expr__inner_lr_17(p, result, start)?;
                 } else {
                     break;
                 }
@@ -16992,7 +17401,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                     if scan_expr_lr_17(&p.tokens, p.pos) < 0 {
                         break;
                     }
-                    result = _parse_expr_lr_17(p, result, start)?;
+                    result = _parse_expr__inner_lr_17(p, result, start)?;
                 } else {
                     break;
                 }
@@ -17001,7 +17410,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                     if scan_expr_lr_17(&p.tokens, p.pos) < 0 {
                         break;
                     }
-                    result = _parse_expr_lr_17(p, result, start)?;
+                    result = _parse_expr__inner_lr_17(p, result, start)?;
                 } else {
                     break;
                 }
@@ -17010,7 +17419,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                     if scan_expr_lr_18(&p.tokens, p.pos) < 0 {
                         break;
                     }
-                    result = _parse_expr_lr_18(p, result, start)?;
+                    result = _parse_expr__inner_lr_18(p, result, start)?;
                 } else {
                     break;
                 }
@@ -17019,7 +17428,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                     if scan_expr_lr_18(&p.tokens, p.pos) < 0 {
                         break;
                     }
-                    result = _parse_expr_lr_18(p, result, start)?;
+                    result = _parse_expr__inner_lr_18(p, result, start)?;
                 } else {
                     break;
                 }
@@ -17028,7 +17437,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                     if scan_expr_lr_20(&p.tokens, p.pos) < 0 {
                         break;
                     }
-                    result = _parse_expr_lr_20(p, result, start)?;
+                    result = _parse_expr__inner_lr_20(p, result, start)?;
                 } else {
                     break;
                 }
@@ -17038,7 +17447,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                         if scan_expr_lr_10(&p.tokens, p.pos) < 0 {
                             break;
                         }
-                        result = _parse_expr_lr_10(p, result, start)?;
+                        result = _parse_expr__inner_lr_10(p, result, start)?;
                     } else {
                         break;
                     }
@@ -17047,7 +17456,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                         if scan_expr_lr_17(&p.tokens, p.pos) < 0 {
                             break;
                         }
-                        result = _parse_expr_lr_17(p, result, start)?;
+                        result = _parse_expr__inner_lr_17(p, result, start)?;
                     } else {
                         break;
                     }
@@ -17056,7 +17465,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                         if scan_expr_lr_18(&p.tokens, p.pos) < 0 {
                             break;
                         }
-                        result = _parse_expr_lr_18(p, result, start)?;
+                        result = _parse_expr__inner_lr_18(p, result, start)?;
                     } else {
                         break;
                     }
@@ -17065,7 +17474,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                         if scan_expr_lr_20(&p.tokens, p.pos) < 0 {
                             break;
                         }
-                        result = _parse_expr_lr_20(p, result, start)?;
+                        result = _parse_expr__inner_lr_20(p, result, start)?;
                     } else {
                         break;
                     }
@@ -17076,7 +17485,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                 if scan_expr_lr_11(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_expr_lr_11(p, result, start)?;
+                result = _parse_expr__inner_lr_11(p, result, start)?;
             } else {
                 break;
             }
@@ -17085,7 +17494,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                 if scan_expr_lr_12(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_expr_lr_12(p, result, start)?;
+                result = _parse_expr__inner_lr_12(p, result, start)?;
             } else {
                 break;
             }
@@ -17094,7 +17503,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                 if scan_expr_lr_16(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_expr_lr_16(p, result, start)?;
+                result = _parse_expr__inner_lr_16(p, result, start)?;
             } else {
                 break;
             }
@@ -17103,7 +17512,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
                 if scan_expr_lr_19(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_expr_lr_19(p, result, start)?;
+                result = _parse_expr__inner_lr_19(p, result, start)?;
             } else {
                 break;
             }
@@ -17114,7 +17523,16 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError
     return Result::<ExprNode, ParseError>::Ok(result);
 }
 
-fn _parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, ParseError> {
+fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, ParseError> {
+    let r = _parse_expr__inner(p, min_prec);
+    if let Err(mut e) = r {
+        e.rule_stack.push("expr");
+        return Result::<ExprNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_foreign_key_clause__inner(p: &mut Parser) -> Result<ForeignKeyClauseNode, ParseError> {
     let start = p.peek().span.start;
     let k_references = p.expect(TK_K_REFERENCES)?;
     let foreign_table = _parse_foreign_table(p)?;
@@ -17519,7 +17937,16 @@ fn _parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Par
     });
 }
 
-fn _parse_raise_function(p: &mut Parser) -> Result<RaiseFunctionNode, ParseError> {
+fn _parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, ParseError> {
+    let r = _parse_foreign_key_clause__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("foreign_key_clause");
+        return Result::<ForeignKeyClauseNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_raise_function__inner(p: &mut Parser) -> Result<RaiseFunctionNode, ParseError> {
     let start = p.peek().span.start;
     let k_raise = p.expect(TK_K_RAISE)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
@@ -17551,7 +17978,16 @@ fn _parse_raise_function(p: &mut Parser) -> Result<RaiseFunctionNode, ParseError
     });
 }
 
-fn _parse_indexed_column(p: &mut Parser) -> Result<IndexedColumnNode, ParseError> {
+fn _parse_raise_function(p: &mut Parser) -> Result<RaiseFunctionNode, ParseError> {
+    let r = _parse_raise_function__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("raise_function");
+        return Result::<RaiseFunctionNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_indexed_column__inner(p: &mut Parser) -> Result<IndexedColumnNode, ParseError> {
     let start = p.peek().span.start;
     let column_name = _parse_column_name(p)?;
     let k_collate_collation_name: Option<KCollateCollationNameItem> = if p.peek_kind() == TK_K_COLLATE {
@@ -17601,7 +18037,16 @@ fn _parse_indexed_column(p: &mut Parser) -> Result<IndexedColumnNode, ParseError
     });
 }
 
-fn _parse_table_constraint(p: &mut Parser) -> Result<TableConstraintNode, ParseError> {
+fn _parse_indexed_column(p: &mut Parser) -> Result<IndexedColumnNode, ParseError> {
+    let r = _parse_indexed_column__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("indexed_column");
+        return Result::<IndexedColumnNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_table_constraint__inner(p: &mut Parser) -> Result<TableConstraintNode, ParseError> {
     let start = p.peek().span.start;
     let k_constraint_name: Option<KConstraintNameItem> = if p.peek_kind() == TK_K_CONSTRAINT {
         let k_constraint = p.expect(TK_K_CONSTRAINT)?;
@@ -17737,7 +18182,16 @@ fn _parse_table_constraint(p: &mut Parser) -> Result<TableConstraintNode, ParseE
     });
 }
 
-fn _parse_with_clause(p: &mut Parser) -> Result<WithClauseNode, ParseError> {
+fn _parse_table_constraint(p: &mut Parser) -> Result<TableConstraintNode, ParseError> {
+    let r = _parse_table_constraint__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("table_constraint");
+        return Result::<TableConstraintNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_with_clause__inner(p: &mut Parser) -> Result<WithClauseNode, ParseError> {
     let start = p.peek().span.start;
     let k_with = p.expect(TK_K_WITH)?;
     let k_recursive: Option<Token> = if p.peek_kind() == TK_K_RECURSIVE {
@@ -17784,7 +18238,16 @@ fn _parse_with_clause(p: &mut Parser) -> Result<WithClauseNode, ParseError> {
     });
 }
 
-fn _parse_qualified_table_name(p: &mut Parser) -> Result<QualifiedTableNameNode, ParseError> {
+fn _parse_with_clause(p: &mut Parser) -> Result<WithClauseNode, ParseError> {
+    let r = _parse_with_clause__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("with_clause");
+        return Result::<WithClauseNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_qualified_table_name__inner(p: &mut Parser) -> Result<QualifiedTableNameNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -17866,7 +18329,16 @@ fn _parse_qualified_table_name(p: &mut Parser) -> Result<QualifiedTableNameNode,
     });
 }
 
-fn _parse_ordering_term(p: &mut Parser) -> Result<OrderingTermNode, ParseError> {
+fn _parse_qualified_table_name(p: &mut Parser) -> Result<QualifiedTableNameNode, ParseError> {
+    let r = _parse_qualified_table_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("qualified_table_name");
+        return Result::<QualifiedTableNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_ordering_term__inner(p: &mut Parser) -> Result<OrderingTermNode, ParseError> {
     let start = p.peek().span.start;
     let expr = _parse_expr(p)?;
     let k_collate_collation_name: Option<KCollateCollationNameItem> = if p.peek_kind() == TK_K_COLLATE {
@@ -17916,7 +18388,16 @@ fn _parse_ordering_term(p: &mut Parser) -> Result<OrderingTermNode, ParseError> 
     });
 }
 
-fn _parse_pragma_value_bt_1(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
+fn _parse_ordering_term(p: &mut Parser) -> Result<OrderingTermNode, ParseError> {
+    let r = _parse_ordering_term__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("ordering_term");
+        return Result::<OrderingTermNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_pragma_value__inner_bt_1(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
     let start = p.peek().span.start;
     let name = _parse_name(p)?;
     return Result::<PragmaValueNode, ParseError>::Ok(PragmaValueNode::Alt1(PragmaValueAlt1 {
@@ -17925,14 +18406,14 @@ fn _parse_pragma_value_bt_1(p: &mut Parser) -> Result<PragmaValueNode, ParseErro
     }));
 }
 
-fn _parse_pragma_value_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_pragma_value__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn _parse_pragma_value_bt_2(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
+fn _parse_pragma_value__inner_bt_2(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
     let start = p.peek().span.start;
     let string_literal = p.expect(TK_STRING_LITERAL)?;
     return Result::<PragmaValueNode, ParseError>::Ok(PragmaValueNode::Alt2(PragmaValueAlt2 {
@@ -17941,14 +18422,14 @@ fn _parse_pragma_value_bt_2(p: &mut Parser) -> Result<PragmaValueNode, ParseErro
     }));
 }
 
-fn _parse_pragma_value_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_pragma_value__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_pragma_value(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
+fn _parse_pragma_value__inner(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_29(kind) {
@@ -17962,8 +18443,8 @@ fn _parse_pragma_value(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
         if p.peek_kind() == TK_STRING_LITERAL {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_1 = _parse_pragma_value_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_pragma_value_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_pragma_value__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_pragma_value__inner_scan_2(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -17975,24 +18456,33 @@ fn _parse_pragma_value(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
                 _sd_best_i = 2;
             }
             if _sd_best_i == 1 {
-                return _parse_pragma_value_bt_1(p);
+                return _parse_pragma_value__inner_bt_1(p);
             }
             if _sd_best_i == 2 {
-                return _parse_pragma_value_bt_2(p);
+                return _parse_pragma_value__inner_bt_2(p);
             }
-            return _parse_pragma_value_bt_2(p);
+            return _parse_pragma_value__inner_bt_2(p);
         } else if _gale_kind_set_60(p.peek_kind()) {
-            return _parse_pragma_value_bt_1(p);
+            return _parse_pragma_value__inner_bt_1(p);
         }
     }
-    return Result::<PragmaValueNode, ParseError>::Err(ParseError::new(
+    return Result::<PragmaValueNode, ParseError>::Err(p.error(
         "expected pragma_value",
         p.peek().span,
         ["TK_LIT_PLUS", "TK_LIT_MINUS", "TK_NUMERIC_LITERAL", "TK_IDENTIFIER", "TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIME", "TK_K_CURRENT_TIMESTAMP", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_NULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT", "TK_STRING_LITERAL", "TK_LIT_LPAREN"],
     ));
 }
 
-fn _parse_common_table_expression(p: &mut Parser) -> Result<CommonTableExpressionNode, ParseError> {
+fn _parse_pragma_value(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
+    let r = _parse_pragma_value__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("pragma_value");
+        return Result::<PragmaValueNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_common_table_expression__inner(p: &mut Parser) -> Result<CommonTableExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let table_name = _parse_table_name(p)?;
     let lparen_column_name_item_rparen: Option<LparenColumnNameItemListRparenItem> = if p.peek_kind() == TK_LIT_LPAREN {
@@ -18052,7 +18542,16 @@ fn _parse_common_table_expression(p: &mut Parser) -> Result<CommonTableExpressio
     });
 }
 
-fn _parse_result_column_bt_1(p: &mut Parser) -> Result<ResultColumnNode, ParseError> {
+fn _parse_common_table_expression(p: &mut Parser) -> Result<CommonTableExpressionNode, ParseError> {
+    let r = _parse_common_table_expression__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("common_table_expression");
+        return Result::<CommonTableExpressionNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_result_column__inner_bt_1(p: &mut Parser) -> Result<ResultColumnNode, ParseError> {
     let start = p.peek().span.start;
     let table_name = _parse_table_name(p)?;
     let dot = p.expect(TK_LIT_DOT)?;
@@ -18065,7 +18564,7 @@ fn _parse_result_column_bt_1(p: &mut Parser) -> Result<ResultColumnNode, ParseEr
     }));
 }
 
-fn _parse_result_column_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_result_column__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_table_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -18076,7 +18575,7 @@ fn _parse_result_column_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_result_column_bt_2(p: &mut Parser) -> Result<ResultColumnNode, ParseError> {
+fn _parse_result_column__inner_bt_2(p: &mut Parser) -> Result<ResultColumnNode, ParseError> {
     let start = p.peek().span.start;
     let expr = _parse_expr(p)?;
     let k_as_column_alias: Option<KAsOptColumnAliasItem> = if p.peek_kind() == TK_K_AS && _gale_kind_set_42(p.peek_at(1)) {
@@ -18110,7 +18609,7 @@ fn _parse_result_column_bt_2(p: &mut Parser) -> Result<ResultColumnNode, ParseEr
     }));
 }
 
-fn _parse_result_column_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_result_column__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -18130,7 +18629,7 @@ fn _parse_result_column_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_result_column(p: &mut Parser) -> Result<ResultColumnNode, ParseError> {
+fn _parse_result_column__inner(p: &mut Parser) -> Result<ResultColumnNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_STAR {
@@ -18144,8 +18643,8 @@ fn _parse_result_column(p: &mut Parser) -> Result<ResultColumnNode, ParseError> 
         if _gale_kind_set_8(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_1 = _parse_result_column_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_result_column_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_result_column__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_result_column__inner_scan_2(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -18157,24 +18656,33 @@ fn _parse_result_column(p: &mut Parser) -> Result<ResultColumnNode, ParseError> 
                 _sd_best_i = 2;
             }
             if _sd_best_i == 1 {
-                return _parse_result_column_bt_1(p);
+                return _parse_result_column__inner_bt_1(p);
             }
             if _sd_best_i == 2 {
-                return _parse_result_column_bt_2(p);
+                return _parse_result_column__inner_bt_2(p);
             }
-            return _parse_result_column_bt_2(p);
+            return _parse_result_column__inner_bt_2(p);
         } else if _gale_kind_set_61(p.peek_kind()) {
-            return _parse_result_column_bt_2(p);
+            return _parse_result_column__inner_bt_2(p);
         }
     }
-    return Result::<ResultColumnNode, ParseError>::Err(ParseError::new(
+    return Result::<ResultColumnNode, ParseError>::Err(p.error(
         "expected result_column",
         p.peek().span,
         ["TK_LIT_STAR", "TK_IDENTIFIER", "TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIME", "TK_K_CURRENT_TIMESTAMP", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_NULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT", "TK_STRING_LITERAL", "TK_LIT_LPAREN", "TK_NUMERIC_LITERAL", "TK_BLOB_LITERAL", "TK_BIND_PARAMETER", "TK_LIT_MINUS", "TK_LIT_PLUS", "TK_LIT_TILDE"],
     ));
 }
 
-fn _parse_table_or_subquery_bt_3(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
+fn _parse_result_column(p: &mut Parser) -> Result<ResultColumnNode, ParseError> {
+    let r = _parse_result_column__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("result_column");
+        return Result::<ResultColumnNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_table_or_subquery__inner_bt_3(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let select_stmt = _parse_select_stmt(p)?;
@@ -18212,7 +18720,7 @@ fn _parse_table_or_subquery_bt_3(p: &mut Parser) -> Result<TableOrSubqueryNode, 
     }));
 }
 
-fn _parse_table_or_subquery_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_table_or_subquery__inner_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -18236,7 +18744,7 @@ fn _parse_table_or_subquery_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_table_or_subquery_bt_2(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
+fn _parse_table_or_subquery__inner_bt_2(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let mut group_1_inner: Option<TableOrSubqueryGroup1> = null;
@@ -18304,7 +18812,7 @@ fn _parse_table_or_subquery_bt_2(p: &mut Parser) -> Result<TableOrSubqueryNode, 
     }));
 }
 
-fn _parse_table_or_subquery_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_table_or_subquery__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -18349,7 +18857,7 @@ fn _parse_table_or_subquery_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_table_or_subquery_bt_1(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
+fn _parse_table_or_subquery__inner_bt_1(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -18471,7 +18979,7 @@ fn _parse_table_or_subquery_bt_1(p: &mut Parser) -> Result<TableOrSubqueryNode, 
     }));
 }
 
-fn _parse_table_or_subquery_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_table_or_subquery__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) {
         let sp = pos;
@@ -18536,7 +19044,7 @@ fn _parse_table_or_subquery_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_table_or_subquery_bt_0(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
+fn _parse_table_or_subquery__inner_bt_0(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -18643,7 +19151,7 @@ fn _parse_table_or_subquery_bt_0(p: &mut Parser) -> Result<TableOrSubqueryNode, 
     }));
 }
 
-fn _parse_table_or_subquery_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_table_or_subquery__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) {
         let sp = pos;
@@ -18703,17 +19211,17 @@ fn _parse_table_or_subquery_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_table_or_subquery(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
+fn _parse_table_or_subquery__inner(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_8(kind) {
         if p.peek_kind() == TK_LIT_LPAREN {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_3 = _parse_table_or_subquery_scan_3(_sd_tokens, _sd_pos);
-            let _sd_p_2 = _parse_table_or_subquery_scan_2(_sd_tokens, _sd_pos);
-            let _sd_p_1 = _parse_table_or_subquery_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_0 = _parse_table_or_subquery_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_3 = _parse_table_or_subquery__inner_scan_3(_sd_tokens, _sd_pos);
+            let _sd_p_2 = _parse_table_or_subquery__inner_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_table_or_subquery__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_table_or_subquery__inner_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_3 > _sd_best_p {
@@ -18733,23 +19241,23 @@ fn _parse_table_or_subquery(p: &mut Parser) -> Result<TableOrSubqueryNode, Parse
                 _sd_best_i = 0;
             }
             if _sd_best_i == 3 {
-                return _parse_table_or_subquery_bt_3(p);
+                return _parse_table_or_subquery__inner_bt_3(p);
             }
             if _sd_best_i == 2 {
-                return _parse_table_or_subquery_bt_2(p);
+                return _parse_table_or_subquery__inner_bt_2(p);
             }
             if _sd_best_i == 1 {
-                return _parse_table_or_subquery_bt_1(p);
+                return _parse_table_or_subquery__inner_bt_1(p);
             }
             if _sd_best_i == 0 {
-                return _parse_table_or_subquery_bt_0(p);
+                return _parse_table_or_subquery__inner_bt_0(p);
             }
-            return _parse_table_or_subquery_bt_0(p);
+            return _parse_table_or_subquery__inner_bt_0(p);
         } else if _gale_kind_set_62(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_1 = _parse_table_or_subquery_scan_1(_sd_tokens, _sd_pos);
-            let _sd_p_0 = _parse_table_or_subquery_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_table_or_subquery__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_table_or_subquery__inner_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -18761,22 +19269,31 @@ fn _parse_table_or_subquery(p: &mut Parser) -> Result<TableOrSubqueryNode, Parse
                 _sd_best_i = 0;
             }
             if _sd_best_i == 1 {
-                return _parse_table_or_subquery_bt_1(p);
+                return _parse_table_or_subquery__inner_bt_1(p);
             }
             if _sd_best_i == 0 {
-                return _parse_table_or_subquery_bt_0(p);
+                return _parse_table_or_subquery__inner_bt_0(p);
             }
-            return _parse_table_or_subquery_bt_0(p);
+            return _parse_table_or_subquery__inner_bt_0(p);
         }
     }
-    return Result::<TableOrSubqueryNode, ParseError>::Err(ParseError::new(
+    return Result::<TableOrSubqueryNode, ParseError>::Err(p.error(
         "expected table_or_subquery",
         p.peek().span,
         ["TK_IDENTIFIER", "TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIME", "TK_K_CURRENT_TIMESTAMP", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_NULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT", "TK_STRING_LITERAL", "TK_LIT_LPAREN"],
     ));
 }
 
-fn _parse_join_clause(p: &mut Parser) -> Result<JoinClauseNode, ParseError> {
+fn _parse_table_or_subquery(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
+    let r = _parse_table_or_subquery__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("table_or_subquery");
+        return Result::<TableOrSubqueryNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_join_clause__inner(p: &mut Parser) -> Result<JoinClauseNode, ParseError> {
     let start = p.peek().span.start;
     let table_or_subquery = _parse_table_or_subquery(p)?;
     let mut join_operator_table_or_subquery_join_constraint_list: Array<JoinOperatorTableOrSubqueryJoinConstraintItem> = [];
@@ -18818,7 +19335,16 @@ fn _parse_join_clause(p: &mut Parser) -> Result<JoinClauseNode, ParseError> {
     });
 }
 
-fn _parse_join_operator(p: &mut Parser) -> Result<JoinOperatorNode, ParseError> {
+fn _parse_join_clause(p: &mut Parser) -> Result<JoinClauseNode, ParseError> {
+    let r = _parse_join_clause__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("join_clause");
+        return Result::<JoinClauseNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_join_operator__inner(p: &mut Parser) -> Result<JoinOperatorNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_COMMA {
@@ -18904,14 +19430,23 @@ fn _parse_join_operator(p: &mut Parser) -> Result<JoinOperatorNode, ParseError> 
             k_join,
         }));
     }
-    return Result::<JoinOperatorNode, ParseError>::Err(ParseError::new(
+    return Result::<JoinOperatorNode, ParseError>::Err(p.error(
         "expected join_operator",
         p.peek().span,
         ["TK_LIT_COMMA", "TK_K_NATURAL", "TK_K_LEFT", "TK_K_INNER", "TK_K_CROSS", "TK_K_JOIN"],
     ));
 }
 
-fn _parse_join_constraint(p: &mut Parser) -> Result<JoinConstraintNode, ParseError> {
+fn _parse_join_operator(p: &mut Parser) -> Result<JoinOperatorNode, ParseError> {
+    let r = _parse_join_operator__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("join_operator");
+        return Result::<JoinOperatorNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_join_constraint__inner(p: &mut Parser) -> Result<JoinConstraintNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -19017,7 +19552,16 @@ fn _parse_join_constraint(p: &mut Parser) -> Result<JoinConstraintNode, ParseErr
     });
 }
 
-fn _parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
+fn _parse_join_constraint(p: &mut Parser) -> Result<JoinConstraintNode, ParseError> {
+    let r = _parse_join_constraint__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("join_constraint");
+        return Result::<JoinConstraintNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_select_core__inner(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_K_SELECT {
@@ -19344,14 +19888,23 @@ fn _parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
             comma_lparen_expr_item_rparen_list,
         }));
     }
-    return Result::<SelectCoreNode, ParseError>::Err(ParseError::new(
+    return Result::<SelectCoreNode, ParseError>::Err(p.error(
         "expected select_core",
         p.peek().span,
         ["TK_K_SELECT", "TK_K_VALUES"],
     ));
 }
 
-fn _parse_compound_operator_bt_1(p: &mut Parser) -> Result<CompoundOperatorNode, ParseError> {
+fn _parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
+    let r = _parse_select_core__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("select_core");
+        return Result::<SelectCoreNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_compound_operator__inner_bt_1(p: &mut Parser) -> Result<CompoundOperatorNode, ParseError> {
     let start = p.peek().span.start;
     let k_union = p.expect(TK_K_UNION)?;
     let k_all = p.expect(TK_K_ALL)?;
@@ -19362,7 +19915,7 @@ fn _parse_compound_operator_bt_1(p: &mut Parser) -> Result<CompoundOperatorNode,
     }));
 }
 
-fn _parse_compound_operator_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_compound_operator__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_UNION { return -1; }
     pos += 1;
@@ -19371,7 +19924,7 @@ fn _parse_compound_operator_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_compound_operator_bt_0(p: &mut Parser) -> Result<CompoundOperatorNode, ParseError> {
+fn _parse_compound_operator__inner_bt_0(p: &mut Parser) -> Result<CompoundOperatorNode, ParseError> {
     let start = p.peek().span.start;
     let k_union = p.expect(TK_K_UNION)?;
     return Result::<CompoundOperatorNode, ParseError>::Ok(CompoundOperatorNode::Alt0(CompoundOperatorAlt0 {
@@ -19380,21 +19933,21 @@ fn _parse_compound_operator_bt_0(p: &mut Parser) -> Result<CompoundOperatorNode,
     }));
 }
 
-fn _parse_compound_operator_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_compound_operator__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_UNION { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_compound_operator(p: &mut Parser) -> Result<CompoundOperatorNode, ParseError> {
+fn _parse_compound_operator__inner(p: &mut Parser) -> Result<CompoundOperatorNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_K_UNION {
         let _sd_tokens = &p.tokens;
         let _sd_pos = p.pos;
-        let _sd_p_1 = _parse_compound_operator_scan_1(_sd_tokens, _sd_pos);
-        let _sd_p_0 = _parse_compound_operator_scan_0(_sd_tokens, _sd_pos);
+        let _sd_p_1 = _parse_compound_operator__inner_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_0 = _parse_compound_operator__inner_scan_0(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_1 > _sd_best_p {
@@ -19406,12 +19959,12 @@ fn _parse_compound_operator(p: &mut Parser) -> Result<CompoundOperatorNode, Pars
             _sd_best_i = 0;
         }
         if _sd_best_i == 1 {
-            return _parse_compound_operator_bt_1(p);
+            return _parse_compound_operator__inner_bt_1(p);
         }
         if _sd_best_i == 0 {
-            return _parse_compound_operator_bt_0(p);
+            return _parse_compound_operator__inner_bt_0(p);
         }
-        return _parse_compound_operator_bt_0(p);
+        return _parse_compound_operator__inner_bt_0(p);
     }
     if kind == TK_K_INTERSECT {
         let k_intersect = p.expect(TK_K_INTERSECT)?;
@@ -19427,14 +19980,23 @@ fn _parse_compound_operator(p: &mut Parser) -> Result<CompoundOperatorNode, Pars
             k_except,
         }));
     }
-    return Result::<CompoundOperatorNode, ParseError>::Err(ParseError::new(
+    return Result::<CompoundOperatorNode, ParseError>::Err(p.error(
         "expected compound_operator",
         p.peek().span,
         ["TK_K_UNION", "TK_K_INTERSECT", "TK_K_EXCEPT"],
     ));
 }
 
-fn _parse_signed_number(p: &mut Parser) -> Result<SignedNumberNode, ParseError> {
+fn _parse_compound_operator(p: &mut Parser) -> Result<CompoundOperatorNode, ParseError> {
+    let r = _parse_compound_operator__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("compound_operator");
+        return Result::<CompoundOperatorNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_signed_number__inner(p: &mut Parser) -> Result<SignedNumberNode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -19472,7 +20034,16 @@ fn _parse_signed_number(p: &mut Parser) -> Result<SignedNumberNode, ParseError> 
     });
 }
 
-fn _parse_literal_value(p: &mut Parser) -> Result<LiteralValueNode, ParseError> {
+fn _parse_signed_number(p: &mut Parser) -> Result<SignedNumberNode, ParseError> {
+    let r = _parse_signed_number__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("signed_number");
+        return Result::<SignedNumberNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_literal_value__inner(p: &mut Parser) -> Result<LiteralValueNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_NUMERIC_LITERAL {
@@ -19524,14 +20095,23 @@ fn _parse_literal_value(p: &mut Parser) -> Result<LiteralValueNode, ParseError> 
             k_current_timestamp,
         }));
     }
-    return Result::<LiteralValueNode, ParseError>::Err(ParseError::new(
+    return Result::<LiteralValueNode, ParseError>::Err(p.error(
         "expected literal_value",
         p.peek().span,
         ["TK_NUMERIC_LITERAL", "TK_STRING_LITERAL", "TK_BLOB_LITERAL", "TK_K_NULL", "TK_K_CURRENT_TIME", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIMESTAMP"],
     ));
 }
 
-fn _parse_unary_operator(p: &mut Parser) -> Result<UnaryOperatorNode, ParseError> {
+fn _parse_literal_value(p: &mut Parser) -> Result<LiteralValueNode, ParseError> {
+    let r = _parse_literal_value__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("literal_value");
+        return Result::<LiteralValueNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_unary_operator__inner(p: &mut Parser) -> Result<UnaryOperatorNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_MINUS {
@@ -19562,14 +20142,23 @@ fn _parse_unary_operator(p: &mut Parser) -> Result<UnaryOperatorNode, ParseError
             k_not,
         }));
     }
-    return Result::<UnaryOperatorNode, ParseError>::Err(ParseError::new(
+    return Result::<UnaryOperatorNode, ParseError>::Err(p.error(
         "expected unary_operator",
         p.peek().span,
         ["TK_LIT_MINUS", "TK_LIT_PLUS", "TK_LIT_TILDE", "TK_K_NOT"],
     ));
 }
 
-fn _parse_error_message(p: &mut Parser) -> Result<ErrorMessageNode, ParseError> {
+fn _parse_unary_operator(p: &mut Parser) -> Result<UnaryOperatorNode, ParseError> {
+    let r = _parse_unary_operator__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("unary_operator");
+        return Result::<UnaryOperatorNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_error_message__inner(p: &mut Parser) -> Result<ErrorMessageNode, ParseError> {
     let start = p.peek().span.start;
     let string_literal = p.expect(TK_STRING_LITERAL)?;
     return Result::<ErrorMessageNode, ParseError>::Ok(ErrorMessageNode {
@@ -19578,7 +20167,16 @@ fn _parse_error_message(p: &mut Parser) -> Result<ErrorMessageNode, ParseError> 
     });
 }
 
-fn _parse_module_argument_bt_1(p: &mut Parser) -> Result<ModuleArgumentNode, ParseError> {
+fn _parse_error_message(p: &mut Parser) -> Result<ErrorMessageNode, ParseError> {
+    let r = _parse_error_message__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("error_message");
+        return Result::<ErrorMessageNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_module_argument__inner_bt_1(p: &mut Parser) -> Result<ModuleArgumentNode, ParseError> {
     let start = p.peek().span.start;
     let column_def = _parse_column_def(p)?;
     return Result::<ModuleArgumentNode, ParseError>::Ok(ModuleArgumentNode::Alt1(ModuleArgumentAlt1 {
@@ -19587,14 +20185,14 @@ fn _parse_module_argument_bt_1(p: &mut Parser) -> Result<ModuleArgumentNode, Par
     }));
 }
 
-fn _parse_module_argument_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_module_argument__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_column_def(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn _parse_module_argument_bt_0(p: &mut Parser) -> Result<ModuleArgumentNode, ParseError> {
+fn _parse_module_argument__inner_bt_0(p: &mut Parser) -> Result<ModuleArgumentNode, ParseError> {
     let start = p.peek().span.start;
     let expr = _parse_expr(p)?;
     return Result::<ModuleArgumentNode, ParseError>::Ok(ModuleArgumentNode::Alt0(ModuleArgumentAlt0 {
@@ -19603,22 +20201,22 @@ fn _parse_module_argument_bt_0(p: &mut Parser) -> Result<ModuleArgumentNode, Par
     }));
 }
 
-fn _parse_module_argument_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_module_argument__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn _parse_module_argument(p: &mut Parser) -> Result<ModuleArgumentNode, ParseError> {
+fn _parse_module_argument__inner(p: &mut Parser) -> Result<ModuleArgumentNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_12(kind) {
         if _gale_kind_set_8(p.peek_kind()) {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_module_argument_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = _parse_module_argument_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = _parse_module_argument__inner_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_module_argument__inner_scan_1(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19630,24 +20228,33 @@ fn _parse_module_argument(p: &mut Parser) -> Result<ModuleArgumentNode, ParseErr
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_module_argument_bt_0(p);
+                return _parse_module_argument__inner_bt_0(p);
             }
             if _sd_best_i == 1 {
-                return _parse_module_argument_bt_1(p);
+                return _parse_module_argument__inner_bt_1(p);
             }
-            return _parse_module_argument_bt_1(p);
+            return _parse_module_argument__inner_bt_1(p);
         } else if _gale_kind_set_61(p.peek_kind()) {
-            return _parse_module_argument_bt_0(p);
+            return _parse_module_argument__inner_bt_0(p);
         }
     }
-    return Result::<ModuleArgumentNode, ParseError>::Err(ParseError::new(
+    return Result::<ModuleArgumentNode, ParseError>::Err(p.error(
         "expected module_argument",
         p.peek().span,
         ["TK_NUMERIC_LITERAL", "TK_STRING_LITERAL", "TK_BLOB_LITERAL", "TK_K_NULL", "TK_K_CURRENT_TIME", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIMESTAMP", "TK_BIND_PARAMETER", "TK_IDENTIFIER", "TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT", "TK_LIT_LPAREN", "TK_LIT_MINUS", "TK_LIT_PLUS", "TK_LIT_TILDE"],
     ));
 }
 
-fn _parse_column_alias(p: &mut Parser) -> Result<ColumnAliasNode, ParseError> {
+fn _parse_module_argument(p: &mut Parser) -> Result<ModuleArgumentNode, ParseError> {
+    let r = _parse_module_argument__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("module_argument");
+        return Result::<ModuleArgumentNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_column_alias__inner(p: &mut Parser) -> Result<ColumnAliasNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_IDENTIFIER {
@@ -19664,14 +20271,23 @@ fn _parse_column_alias(p: &mut Parser) -> Result<ColumnAliasNode, ParseError> {
             string_literal,
         }));
     }
-    return Result::<ColumnAliasNode, ParseError>::Err(ParseError::new(
+    return Result::<ColumnAliasNode, ParseError>::Err(p.error(
         "expected column_alias",
         p.peek().span,
         ["TK_IDENTIFIER", "TK_STRING_LITERAL"],
     ));
 }
 
-fn _parse_keyword(p: &mut Parser) -> Result<KeywordNode, ParseError> {
+fn _parse_column_alias(p: &mut Parser) -> Result<ColumnAliasNode, ParseError> {
+    let r = _parse_column_alias__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("column_alias");
+        return Result::<ColumnAliasNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_keyword__inner(p: &mut Parser) -> Result<KeywordNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_K_ABORT {
@@ -20542,14 +21158,23 @@ fn _parse_keyword(p: &mut Parser) -> Result<KeywordNode, ParseError> {
             k_without,
         }));
     }
-    return Result::<KeywordNode, ParseError>::Err(ParseError::new(
+    return Result::<KeywordNode, ParseError>::Err(p.error(
         "expected keyword",
         p.peek().span,
         ["TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIME", "TK_K_CURRENT_TIMESTAMP", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_NULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT"],
     ));
 }
 
-fn _parse_name(p: &mut Parser) -> Result<NameNode, ParseError> {
+fn _parse_keyword(p: &mut Parser) -> Result<KeywordNode, ParseError> {
+    let r = _parse_keyword__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("keyword");
+        return Result::<KeywordNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_name__inner(p: &mut Parser) -> Result<NameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<NameNode, ParseError>::Ok(NameNode {
@@ -20558,7 +21183,16 @@ fn _parse_name(p: &mut Parser) -> Result<NameNode, ParseError> {
     });
 }
 
-fn _parse_function_name(p: &mut Parser) -> Result<FunctionNameNode, ParseError> {
+fn _parse_name(p: &mut Parser) -> Result<NameNode, ParseError> {
+    let r = _parse_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("name");
+        return Result::<NameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_function_name__inner(p: &mut Parser) -> Result<FunctionNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<FunctionNameNode, ParseError>::Ok(FunctionNameNode {
@@ -20567,7 +21201,16 @@ fn _parse_function_name(p: &mut Parser) -> Result<FunctionNameNode, ParseError> 
     });
 }
 
-fn _parse_database_name(p: &mut Parser) -> Result<DatabaseNameNode, ParseError> {
+fn _parse_function_name(p: &mut Parser) -> Result<FunctionNameNode, ParseError> {
+    let r = _parse_function_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("function_name");
+        return Result::<FunctionNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_database_name__inner(p: &mut Parser) -> Result<DatabaseNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<DatabaseNameNode, ParseError>::Ok(DatabaseNameNode {
@@ -20576,7 +21219,16 @@ fn _parse_database_name(p: &mut Parser) -> Result<DatabaseNameNode, ParseError> 
     });
 }
 
-fn _parse_schema_name(p: &mut Parser) -> Result<SchemaNameNode, ParseError> {
+fn _parse_database_name(p: &mut Parser) -> Result<DatabaseNameNode, ParseError> {
+    let r = _parse_database_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("database_name");
+        return Result::<DatabaseNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_schema_name__inner(p: &mut Parser) -> Result<SchemaNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<SchemaNameNode, ParseError>::Ok(SchemaNameNode {
@@ -20585,7 +21237,16 @@ fn _parse_schema_name(p: &mut Parser) -> Result<SchemaNameNode, ParseError> {
     });
 }
 
-fn _parse_table_function_name(p: &mut Parser) -> Result<TableFunctionNameNode, ParseError> {
+fn _parse_schema_name(p: &mut Parser) -> Result<SchemaNameNode, ParseError> {
+    let r = _parse_schema_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("schema_name");
+        return Result::<SchemaNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_table_function_name__inner(p: &mut Parser) -> Result<TableFunctionNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<TableFunctionNameNode, ParseError>::Ok(TableFunctionNameNode {
@@ -20594,7 +21255,16 @@ fn _parse_table_function_name(p: &mut Parser) -> Result<TableFunctionNameNode, P
     });
 }
 
-fn _parse_table_name(p: &mut Parser) -> Result<TableNameNode, ParseError> {
+fn _parse_table_function_name(p: &mut Parser) -> Result<TableFunctionNameNode, ParseError> {
+    let r = _parse_table_function_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("table_function_name");
+        return Result::<TableFunctionNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_table_name__inner(p: &mut Parser) -> Result<TableNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<TableNameNode, ParseError>::Ok(TableNameNode {
@@ -20603,7 +21273,16 @@ fn _parse_table_name(p: &mut Parser) -> Result<TableNameNode, ParseError> {
     });
 }
 
-fn _parse_table_or_index_name(p: &mut Parser) -> Result<TableOrIndexNameNode, ParseError> {
+fn _parse_table_name(p: &mut Parser) -> Result<TableNameNode, ParseError> {
+    let r = _parse_table_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("table_name");
+        return Result::<TableNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_table_or_index_name__inner(p: &mut Parser) -> Result<TableOrIndexNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<TableOrIndexNameNode, ParseError>::Ok(TableOrIndexNameNode {
@@ -20612,7 +21291,16 @@ fn _parse_table_or_index_name(p: &mut Parser) -> Result<TableOrIndexNameNode, Pa
     });
 }
 
-fn _parse_new_table_name(p: &mut Parser) -> Result<NewTableNameNode, ParseError> {
+fn _parse_table_or_index_name(p: &mut Parser) -> Result<TableOrIndexNameNode, ParseError> {
+    let r = _parse_table_or_index_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("table_or_index_name");
+        return Result::<TableOrIndexNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_new_table_name__inner(p: &mut Parser) -> Result<NewTableNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<NewTableNameNode, ParseError>::Ok(NewTableNameNode {
@@ -20621,7 +21309,16 @@ fn _parse_new_table_name(p: &mut Parser) -> Result<NewTableNameNode, ParseError>
     });
 }
 
-fn _parse_column_name(p: &mut Parser) -> Result<ColumnNameNode, ParseError> {
+fn _parse_new_table_name(p: &mut Parser) -> Result<NewTableNameNode, ParseError> {
+    let r = _parse_new_table_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("new_table_name");
+        return Result::<NewTableNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_column_name__inner(p: &mut Parser) -> Result<ColumnNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<ColumnNameNode, ParseError>::Ok(ColumnNameNode {
@@ -20630,7 +21327,16 @@ fn _parse_column_name(p: &mut Parser) -> Result<ColumnNameNode, ParseError> {
     });
 }
 
-fn _parse_collation_name(p: &mut Parser) -> Result<CollationNameNode, ParseError> {
+fn _parse_column_name(p: &mut Parser) -> Result<ColumnNameNode, ParseError> {
+    let r = _parse_column_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("column_name");
+        return Result::<ColumnNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_collation_name__inner(p: &mut Parser) -> Result<CollationNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<CollationNameNode, ParseError>::Ok(CollationNameNode {
@@ -20639,7 +21345,16 @@ fn _parse_collation_name(p: &mut Parser) -> Result<CollationNameNode, ParseError
     });
 }
 
-fn _parse_foreign_table(p: &mut Parser) -> Result<ForeignTableNode, ParseError> {
+fn _parse_collation_name(p: &mut Parser) -> Result<CollationNameNode, ParseError> {
+    let r = _parse_collation_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("collation_name");
+        return Result::<CollationNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_foreign_table__inner(p: &mut Parser) -> Result<ForeignTableNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<ForeignTableNode, ParseError>::Ok(ForeignTableNode {
@@ -20648,7 +21363,16 @@ fn _parse_foreign_table(p: &mut Parser) -> Result<ForeignTableNode, ParseError> 
     });
 }
 
-fn _parse_index_name(p: &mut Parser) -> Result<IndexNameNode, ParseError> {
+fn _parse_foreign_table(p: &mut Parser) -> Result<ForeignTableNode, ParseError> {
+    let r = _parse_foreign_table__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("foreign_table");
+        return Result::<ForeignTableNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_index_name__inner(p: &mut Parser) -> Result<IndexNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<IndexNameNode, ParseError>::Ok(IndexNameNode {
@@ -20657,7 +21381,16 @@ fn _parse_index_name(p: &mut Parser) -> Result<IndexNameNode, ParseError> {
     });
 }
 
-fn _parse_trigger_name(p: &mut Parser) -> Result<TriggerNameNode, ParseError> {
+fn _parse_index_name(p: &mut Parser) -> Result<IndexNameNode, ParseError> {
+    let r = _parse_index_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("index_name");
+        return Result::<IndexNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_trigger_name__inner(p: &mut Parser) -> Result<TriggerNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<TriggerNameNode, ParseError>::Ok(TriggerNameNode {
@@ -20666,7 +21399,16 @@ fn _parse_trigger_name(p: &mut Parser) -> Result<TriggerNameNode, ParseError> {
     });
 }
 
-fn _parse_view_name(p: &mut Parser) -> Result<ViewNameNode, ParseError> {
+fn _parse_trigger_name(p: &mut Parser) -> Result<TriggerNameNode, ParseError> {
+    let r = _parse_trigger_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("trigger_name");
+        return Result::<TriggerNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_view_name__inner(p: &mut Parser) -> Result<ViewNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<ViewNameNode, ParseError>::Ok(ViewNameNode {
@@ -20675,7 +21417,16 @@ fn _parse_view_name(p: &mut Parser) -> Result<ViewNameNode, ParseError> {
     });
 }
 
-fn _parse_module_name(p: &mut Parser) -> Result<ModuleNameNode, ParseError> {
+fn _parse_view_name(p: &mut Parser) -> Result<ViewNameNode, ParseError> {
+    let r = _parse_view_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("view_name");
+        return Result::<ViewNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_module_name__inner(p: &mut Parser) -> Result<ModuleNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<ModuleNameNode, ParseError>::Ok(ModuleNameNode {
@@ -20684,7 +21435,16 @@ fn _parse_module_name(p: &mut Parser) -> Result<ModuleNameNode, ParseError> {
     });
 }
 
-fn _parse_pragma_name(p: &mut Parser) -> Result<PragmaNameNode, ParseError> {
+fn _parse_module_name(p: &mut Parser) -> Result<ModuleNameNode, ParseError> {
+    let r = _parse_module_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("module_name");
+        return Result::<ModuleNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_pragma_name__inner(p: &mut Parser) -> Result<PragmaNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<PragmaNameNode, ParseError>::Ok(PragmaNameNode {
@@ -20693,7 +21453,16 @@ fn _parse_pragma_name(p: &mut Parser) -> Result<PragmaNameNode, ParseError> {
     });
 }
 
-fn _parse_savepoint_name(p: &mut Parser) -> Result<SavepointNameNode, ParseError> {
+fn _parse_pragma_name(p: &mut Parser) -> Result<PragmaNameNode, ParseError> {
+    let r = _parse_pragma_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("pragma_name");
+        return Result::<PragmaNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_savepoint_name__inner(p: &mut Parser) -> Result<SavepointNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<SavepointNameNode, ParseError>::Ok(SavepointNameNode {
@@ -20702,7 +21471,16 @@ fn _parse_savepoint_name(p: &mut Parser) -> Result<SavepointNameNode, ParseError
     });
 }
 
-fn _parse_table_alias(p: &mut Parser) -> Result<TableAliasNode, ParseError> {
+fn _parse_savepoint_name(p: &mut Parser) -> Result<SavepointNameNode, ParseError> {
+    let r = _parse_savepoint_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("savepoint_name");
+        return Result::<SavepointNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_table_alias__inner(p: &mut Parser) -> Result<TableAliasNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_IDENTIFIER {
@@ -20730,14 +21508,23 @@ fn _parse_table_alias(p: &mut Parser) -> Result<TableAliasNode, ParseError> {
             rparen,
         }));
     }
-    return Result::<TableAliasNode, ParseError>::Err(ParseError::new(
+    return Result::<TableAliasNode, ParseError>::Err(p.error(
         "expected table_alias",
         p.peek().span,
         ["TK_IDENTIFIER", "TK_STRING_LITERAL", "TK_LIT_LPAREN"],
     ));
 }
 
-fn _parse_transaction_name(p: &mut Parser) -> Result<TransactionNameNode, ParseError> {
+fn _parse_table_alias(p: &mut Parser) -> Result<TableAliasNode, ParseError> {
+    let r = _parse_table_alias__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("table_alias");
+        return Result::<TableAliasNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_transaction_name__inner(p: &mut Parser) -> Result<TransactionNameNode, ParseError> {
     let start = p.peek().span.start;
     let any_name = _parse_any_name(p)?;
     return Result::<TransactionNameNode, ParseError>::Ok(TransactionNameNode {
@@ -20746,7 +21533,16 @@ fn _parse_transaction_name(p: &mut Parser) -> Result<TransactionNameNode, ParseE
     });
 }
 
-fn _parse_any_name(p: &mut Parser) -> Result<AnyNameNode, ParseError> {
+fn _parse_transaction_name(p: &mut Parser) -> Result<TransactionNameNode, ParseError> {
+    let r = _parse_transaction_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("transaction_name");
+        return Result::<TransactionNameNode, ParseError>::Err(e);
+    }
+    return r;
+}
+
+fn _parse_any_name__inner(p: &mut Parser) -> Result<AnyNameNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_IDENTIFIER {
@@ -20781,11 +21577,20 @@ fn _parse_any_name(p: &mut Parser) -> Result<AnyNameNode, ParseError> {
             rparen,
         }));
     }
-    return Result::<AnyNameNode, ParseError>::Err(ParseError::new(
+    return Result::<AnyNameNode, ParseError>::Err(p.error(
         "expected any_name",
         p.peek().span,
         ["TK_IDENTIFIER", "TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIME", "TK_K_CURRENT_TIMESTAMP", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_NULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT", "TK_STRING_LITERAL", "TK_LIT_LPAREN"],
     ));
+}
+
+fn _parse_any_name(p: &mut Parser) -> Result<AnyNameNode, ParseError> {
+    let r = _parse_any_name__inner(p);
+    if let Err(mut e) = r {
+        e.rule_stack.push("any_name");
+        return Result::<AnyNameNode, ParseError>::Err(e);
+    }
+    return r;
 }
 
 fn scan_sql_stmt_list__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -20797,499 +21602,582 @@ fn scan_sql_stmt_list__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 =
 
 pub fn parse_parse(input: &String) -> Result<ParseNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_parse(&mut parser);
 }
 
 pub fn parse_error(input: &String) -> Result<ErrorNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_error(&mut parser);
 }
 
 pub fn parse_sql_stmt_list(input: &String) -> Result<SqlStmtListNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_sql_stmt_list(&mut parser);
 }
 
 pub fn parse_sql_stmt(input: &String) -> Result<SqlStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_sql_stmt(&mut parser);
 }
 
 pub fn parse_alter_table_stmt(input: &String) -> Result<AlterTableStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_alter_table_stmt(&mut parser);
 }
 
 pub fn parse_analyze_stmt(input: &String) -> Result<AnalyzeStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_analyze_stmt(&mut parser);
 }
 
 pub fn parse_attach_stmt(input: &String) -> Result<AttachStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_attach_stmt(&mut parser);
 }
 
 pub fn parse_begin_stmt(input: &String) -> Result<BeginStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_begin_stmt(&mut parser);
 }
 
 pub fn parse_commit_stmt(input: &String) -> Result<CommitStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_commit_stmt(&mut parser);
 }
 
 pub fn parse_compound_select_stmt(input: &String) -> Result<CompoundSelectStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_compound_select_stmt(&mut parser);
 }
 
 pub fn parse_create_index_stmt(input: &String) -> Result<CreateIndexStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_create_index_stmt(&mut parser);
 }
 
 pub fn parse_create_table_stmt(input: &String) -> Result<CreateTableStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_create_table_stmt(&mut parser);
 }
 
 pub fn parse_create_trigger_stmt(input: &String) -> Result<CreateTriggerStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_create_trigger_stmt(&mut parser);
 }
 
 pub fn parse_create_view_stmt(input: &String) -> Result<CreateViewStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_create_view_stmt(&mut parser);
 }
 
 pub fn parse_create_virtual_table_stmt(input: &String) -> Result<CreateVirtualTableStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_create_virtual_table_stmt(&mut parser);
 }
 
 pub fn parse_delete_stmt(input: &String) -> Result<DeleteStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_delete_stmt(&mut parser);
 }
 
 pub fn parse_delete_stmt_limited(input: &String) -> Result<DeleteStmtLimitedNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_delete_stmt_limited(&mut parser);
 }
 
 pub fn parse_detach_stmt(input: &String) -> Result<DetachStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_detach_stmt(&mut parser);
 }
 
 pub fn parse_drop_index_stmt(input: &String) -> Result<DropIndexStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_drop_index_stmt(&mut parser);
 }
 
 pub fn parse_drop_table_stmt(input: &String) -> Result<DropTableStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_drop_table_stmt(&mut parser);
 }
 
 pub fn parse_drop_trigger_stmt(input: &String) -> Result<DropTriggerStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_drop_trigger_stmt(&mut parser);
 }
 
 pub fn parse_drop_view_stmt(input: &String) -> Result<DropViewStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_drop_view_stmt(&mut parser);
 }
 
 pub fn parse_factored_select_stmt(input: &String) -> Result<FactoredSelectStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_factored_select_stmt(&mut parser);
 }
 
 pub fn parse_insert_stmt(input: &String) -> Result<InsertStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_insert_stmt(&mut parser);
 }
 
 pub fn parse_pragma_stmt(input: &String) -> Result<PragmaStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_pragma_stmt(&mut parser);
 }
 
 pub fn parse_reindex_stmt(input: &String) -> Result<ReindexStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_reindex_stmt(&mut parser);
 }
 
 pub fn parse_release_stmt(input: &String) -> Result<ReleaseStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_release_stmt(&mut parser);
 }
 
 pub fn parse_rollback_stmt(input: &String) -> Result<RollbackStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_rollback_stmt(&mut parser);
 }
 
 pub fn parse_savepoint_stmt(input: &String) -> Result<SavepointStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_savepoint_stmt(&mut parser);
 }
 
 pub fn parse_simple_select_stmt(input: &String) -> Result<SimpleSelectStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_simple_select_stmt(&mut parser);
 }
 
 pub fn parse_select_stmt(input: &String) -> Result<SelectStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_select_stmt(&mut parser);
 }
 
 pub fn parse_select_or_values(input: &String) -> Result<SelectOrValuesNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_select_or_values(&mut parser);
 }
 
 pub fn parse_update_stmt(input: &String) -> Result<UpdateStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_update_stmt(&mut parser);
 }
 
 pub fn parse_update_stmt_limited(input: &String) -> Result<UpdateStmtLimitedNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_update_stmt_limited(&mut parser);
 }
 
 pub fn parse_vacuum_stmt(input: &String) -> Result<VacuumStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_vacuum_stmt(&mut parser);
 }
 
 pub fn parse_column_def(input: &String) -> Result<ColumnDefNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_column_def(&mut parser);
 }
 
 pub fn parse_type_name(input: &String) -> Result<TypeNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_type_name(&mut parser);
 }
 
 pub fn parse_column_constraint(input: &String) -> Result<ColumnConstraintNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_column_constraint(&mut parser);
 }
 
 pub fn parse_conflict_clause(input: &String) -> Result<ConflictClauseNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_conflict_clause(&mut parser);
 }
 
 pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_expr(&mut parser, 0);
 }
 
 pub fn parse_foreign_key_clause(input: &String) -> Result<ForeignKeyClauseNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_foreign_key_clause(&mut parser);
 }
 
 pub fn parse_raise_function(input: &String) -> Result<RaiseFunctionNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_raise_function(&mut parser);
 }
 
 pub fn parse_indexed_column(input: &String) -> Result<IndexedColumnNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_indexed_column(&mut parser);
 }
 
 pub fn parse_table_constraint(input: &String) -> Result<TableConstraintNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_table_constraint(&mut parser);
 }
 
 pub fn parse_with_clause(input: &String) -> Result<WithClauseNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_with_clause(&mut parser);
 }
 
 pub fn parse_qualified_table_name(input: &String) -> Result<QualifiedTableNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_qualified_table_name(&mut parser);
 }
 
 pub fn parse_ordering_term(input: &String) -> Result<OrderingTermNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_ordering_term(&mut parser);
 }
 
 pub fn parse_pragma_value(input: &String) -> Result<PragmaValueNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_pragma_value(&mut parser);
 }
 
 pub fn parse_common_table_expression(input: &String) -> Result<CommonTableExpressionNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_common_table_expression(&mut parser);
 }
 
 pub fn parse_result_column(input: &String) -> Result<ResultColumnNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_result_column(&mut parser);
 }
 
 pub fn parse_table_or_subquery(input: &String) -> Result<TableOrSubqueryNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_table_or_subquery(&mut parser);
 }
 
 pub fn parse_join_clause(input: &String) -> Result<JoinClauseNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_join_clause(&mut parser);
 }
 
 pub fn parse_join_operator(input: &String) -> Result<JoinOperatorNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_join_operator(&mut parser);
 }
 
 pub fn parse_join_constraint(input: &String) -> Result<JoinConstraintNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_join_constraint(&mut parser);
 }
 
 pub fn parse_select_core(input: &String) -> Result<SelectCoreNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_select_core(&mut parser);
 }
 
 pub fn parse_compound_operator(input: &String) -> Result<CompoundOperatorNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_compound_operator(&mut parser);
 }
 
 pub fn parse_signed_number(input: &String) -> Result<SignedNumberNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_signed_number(&mut parser);
 }
 
 pub fn parse_literal_value(input: &String) -> Result<LiteralValueNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_literal_value(&mut parser);
 }
 
 pub fn parse_unary_operator(input: &String) -> Result<UnaryOperatorNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_unary_operator(&mut parser);
 }
 
 pub fn parse_error_message(input: &String) -> Result<ErrorMessageNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_error_message(&mut parser);
 }
 
 pub fn parse_module_argument(input: &String) -> Result<ModuleArgumentNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_module_argument(&mut parser);
 }
 
 pub fn parse_column_alias(input: &String) -> Result<ColumnAliasNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_column_alias(&mut parser);
 }
 
 pub fn parse_keyword(input: &String) -> Result<KeywordNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_keyword(&mut parser);
 }
 
 pub fn parse_name(input: &String) -> Result<NameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_name(&mut parser);
 }
 
 pub fn parse_function_name(input: &String) -> Result<FunctionNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_function_name(&mut parser);
 }
 
 pub fn parse_database_name(input: &String) -> Result<DatabaseNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_database_name(&mut parser);
 }
 
 pub fn parse_schema_name(input: &String) -> Result<SchemaNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_schema_name(&mut parser);
 }
 
 pub fn parse_table_function_name(input: &String) -> Result<TableFunctionNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_table_function_name(&mut parser);
 }
 
 pub fn parse_table_name(input: &String) -> Result<TableNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_table_name(&mut parser);
 }
 
 pub fn parse_table_or_index_name(input: &String) -> Result<TableOrIndexNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_table_or_index_name(&mut parser);
 }
 
 pub fn parse_new_table_name(input: &String) -> Result<NewTableNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_new_table_name(&mut parser);
 }
 
 pub fn parse_column_name(input: &String) -> Result<ColumnNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_column_name(&mut parser);
 }
 
 pub fn parse_collation_name(input: &String) -> Result<CollationNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_collation_name(&mut parser);
 }
 
 pub fn parse_foreign_table(input: &String) -> Result<ForeignTableNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_foreign_table(&mut parser);
 }
 
 pub fn parse_index_name(input: &String) -> Result<IndexNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_index_name(&mut parser);
 }
 
 pub fn parse_trigger_name(input: &String) -> Result<TriggerNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_trigger_name(&mut parser);
 }
 
 pub fn parse_view_name(input: &String) -> Result<ViewNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_view_name(&mut parser);
 }
 
 pub fn parse_module_name(input: &String) -> Result<ModuleNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_module_name(&mut parser);
 }
 
 pub fn parse_pragma_name(input: &String) -> Result<PragmaNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_pragma_name(&mut parser);
 }
 
 pub fn parse_savepoint_name(input: &String) -> Result<SavepointNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_savepoint_name(&mut parser);
 }
 
 pub fn parse_table_alias(input: &String) -> Result<TableAliasNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_table_alias(&mut parser);
 }
 
 pub fn parse_transaction_name(input: &String) -> Result<TransactionNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_transaction_name(&mut parser);
 }
 
 pub fn parse_any_name(input: &String) -> Result<AnyNameNode, ParseError> {
     let tokens = tokenize(input);
-    let mut parser = Parser::new(tokens);
+    let chars: Array<char> = input.chars().collect();
+    let mut parser = Parser::new(tokens, chars);
     return _parse_any_name(&mut parser);
 }
 

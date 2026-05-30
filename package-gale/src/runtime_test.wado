@@ -59,6 +59,30 @@ test "Span::new creates span" {
     assert s.end == 5;
 }
 
+test "ParseError::new leaves position at defaults" {
+    let e = ParseError::new("oops", Span::new(0, 1), ["A"]);
+    assert e.line == 1;
+    assert e.col == 0;
+    assert e.rule_stack.is_empty();
+}
+
+test "ParseError::at carries resolved position" {
+    let e = ParseError::at(`expected '}', got "for"`, Span::new(40, 43), ["TK_RBRACE"], 12, 5);
+    assert e.line == 12;
+    assert e.col == 5;
+    assert `{e}` == `parse error at 12:5: expected '}', got "for"`;
+}
+
+test "ParseError Display renders rule stack outermost-first" {
+    let mut e = ParseError::at("unexpected token", Span::new(3, 4), ["TK_X"], 2, 7);
+    // rule_stack is stored innermost-first, as the wrappers push it.
+    e.rule_stack.push("statement");
+    e.rule_stack.push("block");
+    e.rule_stack.push("program");
+    assert e.rule_path() == "program > block > statement";
+    assert `{e}` == "parse error at 2:7: unexpected token\n  in rule: program > block > statement";
+}
+
 test "Span::len returns length" {
     let s = Span::new(3, 10);
     assert s.len() == 7;
