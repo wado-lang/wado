@@ -812,6 +812,48 @@ mod tests {
         assert_eq!(expr.type_id, TypeTable::BOOL);
     }
 
+    /// Signed `i8`/`i16` lift through a sign-extending load so a foreign CM
+    /// `s8`/`s16` of `-1` (`0xFF`/`0xFFFF`) lifts to `-1`, not `255`/`65535`.
+    /// Unsigned `u8`/`u16` keep the zero-extending load. Regression for the
+    /// sign-extension bug in `synthesize_lift_inner`.
+    #[test]
+    fn lift_small_int_signedness() {
+        fn lifted_builtin(name: &str) -> (String, TypeId) {
+            let fix = LiftCtxFixture::new();
+            let mut stmts = Vec::new();
+            let mut locals = Vec::new();
+            let expr = synthesize_lift(
+                &named_type(name),
+                i32_const(100),
+                &mut 0,
+                &mut stmts,
+                &mut locals,
+                &fix.ctx(),
+            );
+            match expr.kind {
+                TirExprKind::Call { func, .. } => (func.name, expr.type_id),
+                other => panic!("expected Call for {name}, got {other:?}"),
+            }
+        }
+
+        assert_eq!(
+            lifted_builtin("i8"),
+            ("i32_load8_s".to_string(), TypeTable::I8)
+        );
+        assert_eq!(
+            lifted_builtin("u8"),
+            ("i32_load8_u".to_string(), TypeTable::U8)
+        );
+        assert_eq!(
+            lifted_builtin("i16"),
+            ("i32_load16_s".to_string(), TypeTable::I16)
+        );
+        assert_eq!(
+            lifted_builtin("u16"),
+            ("i32_load16_u".to_string(), TypeTable::U16)
+        );
+    }
+
     #[test]
     fn lift_string() {
         let fix = LiftCtxFixture::new();

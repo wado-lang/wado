@@ -67,8 +67,12 @@ const MAX_FLAT_RESULTS: usize = 1;
 
 /// Synthesize lifting of a flat Result discriminant into a GC variant struct.
 ///
-/// For `Result<(), ()>`: disc==0 → Ok, disc==1 → Err (no payloads)
-/// For `Result<(), ErrorCode>`: disc==0 → Ok, disc!=0 → `Err(lift_error)`
+/// Only reached for a Result that flattens to a bare discriminant (one flat
+/// slot) — i.e. `Result<(), ()>`: disc==0 → Ok, disc==1 → Err, neither
+/// carrying a payload. Any payload-bearing Result flattens to >1 slot and is
+/// lifted through the outptr return path instead, so it never arrives here.
+/// (The non-unit Err branch below therefore stays defensive — see the
+/// `debug_assert!` on `ok_is_unit`.)
 ///
 /// `result_type_id` is the resolved `Result<T, E>` `TypeId` shared with
 /// the caller's `result_local`; the emitted `VariantConstruct` exprs use
@@ -105,31 +109,26 @@ fn synthesize_lift_flat_result(
             (ok_n.to_string(), ok_i, err_n.to_string(), err_i)
         };
 
-        let ok_construct = if ok_is_unit {
-            TirExpr::new(
-                TirExprKind::VariantConstruct {
-                    variant_type: result_type_id,
-                    case_index: ok_index,
-                    case_name: ok_name,
-                    payload: None,
-                },
-                result_type_id,
-                synth_span(),
-            )
-        } else {
-            // Ok with payload — flat result should use outptr instead
-            // This shouldn't happen, but handle gracefully
-            TirExpr::new(
-                TirExprKind::VariantConstruct {
-                    variant_type: result_type_id,
-                    case_index: ok_index,
-                    case_name: ok_name,
-                    payload: None,
-                },
-                result_type_id,
-                synth_span(),
-            )
-        };
+        // A flat (non-outptr) Result reaches here only when it flattens to a
+        // bare discriminant, i.e. the Ok payload carries no flat slots (the
+        // unit case). A non-unit Ok payload is routed through the outptr path
+        // instead, so it must not appear here — guard the invariant rather
+        // than silently dropping the payload.
+        debug_assert!(
+            ok_is_unit,
+            "flat Result lift reached with a non-unit Ok payload; \
+             expected the outptr return path to handle it"
+        );
+        let ok_construct = TirExpr::new(
+            TirExprKind::VariantConstruct {
+                variant_type: result_type_id,
+                case_index: ok_index,
+                case_name: ok_name,
+                payload: None,
+            },
+            result_type_id,
+            synth_span(),
+        );
 
         let err_construct = if err_is_unit {
             TirExpr::new(
