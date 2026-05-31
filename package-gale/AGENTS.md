@@ -190,13 +190,21 @@ The upstream `runtime-testsuite/` is extracted into per-category Wado tests as a
   save-and-rewind pattern as a structural fallback when scan helpers are
   unavailable; no committed grammar exercises it, but the code is kept
   for malformed-grammar diagnostics.)
-- **Stage C dispatch sites use scan-side first-success-wins** on
-  `sort_group_by_element_count` (longest-first) order. `gen_scan_multi_alt`
-  partitions atom alts by their depth-0 first token before applying
-  first-success-wins inside each partition — that combination is
-  correctness-equivalent to the longest-match tournament for the cases
-  that actually arise (e.g. `expr`'s `column_ref` IDENT vs `function_call`
-  IDENT '(' … ')').
+- **Stage C dispatch sites run a scan-side longest-match tournament.**
+  `gen_scan_multi_alt` partitions atom alts by their depth-0 first token,
+  sorting each partition longest-first via `sort_group_by_element_count`.
+  Inside a partition `emit_scan_partition_body` then: commits on success
+  when the partition holds a single alt, and runs a real longest-match
+  tournament when it holds two or more — trying every candidate from the
+  same start and committing to the greatest successful end. First-success-
+  wins (commit to the first alt that scans, relying on the longest-first
+  sort) is **not** used for the multi-alt case: it is unsound when two
+  alts share a prefix and tie on static length — e.g. `'mut'? IDENT` vs
+  `path '(' … ')'`, where for `N(n)` the bare-IDENT alt scans (consuming
+  just `N`) but leaves `(n)` for the caller, and the longer `path '(' … ')'`
+  alt is the correct match. That bug (fixed in #1245) lived under a comment
+  optimistically claiming the two were "correctness-equivalent"; they are
+  not, so the tournament keeps the longest end rather than the first hit.
 
 ## Generated Lexer Rules
 

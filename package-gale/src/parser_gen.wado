@@ -1039,22 +1039,24 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, scan_alts: 
     w.line(&"return pos;");
 }
 
-/// Emit the body of a single partition branch: try `guarded_alts` then
-/// `unguarded_alts` in the order they were sorted (longest-first via
-/// `sort_group_by_element_count` in `gen_scan_multi_alt`), committing to
-/// the first alt whose scan succeeds via `break scan_alts`. On no match,
-/// `return -1` so the caller falls through to the next partition (or the
-/// rule-level fallback).
+/// Emit the body of a single partition branch. The partition's alts were
+/// sorted longest-first via `sort_group_by_element_count` in
+/// `gen_scan_multi_alt`. On no match the branch `return -1`s so the caller
+/// falls through to the next partition (or the rule-level fallback).
 ///
-/// First-success-wins is correctness-equivalent to a longest-match
-/// tournament given the longest-first sort: the highest-priority and
-/// most-element candidate is tried first, so when two alts share a prefix
-/// (e.g. `expr`'s `column_ref` matches `IDENT` and `function_call` matches
-/// `IDENT '(' ... ')'`), the longer one is attempted first and only the
-/// strictly-shorter alternative is reached when the longer scan fails.
-/// Compared to the previous tournament, committing on first success skips
-/// running the remaining candidates' full scans — a meaningful saving when
-/// any alt's scan recurses through an LR rule.
+/// A single-alt partition commits on success (`break scan_alts`) — there is
+/// no other candidate to compare against. A multi-alt partition runs a real
+/// longest-match tournament: it tries every candidate from the same `start`
+/// and commits to the greatest successful end.
+///
+/// First-success-wins (commit to the first alt that scans, trusting the
+/// longest-first sort) is NOT used for the multi-alt case. It is unsound
+/// when two alts share a prefix and tie on static length: `'mut'? IDENT`
+/// vs `path '(' ... ')'` on input `N(n)` — the bare-IDENT alt scans
+/// (consuming just `N`) but leaves `(n)` for the caller, while the correct
+/// match is the longer `path '(' ... ')'`. The two are not
+/// correctness-equivalent (the bug fixed in #1245), so the tournament
+/// keeps the longest end rather than the first hit.
 fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, unguarded_alts: &Array<i32>, scan_alts: &Array<ScanBody>, ctx: &mut GenContext) {
     let total = guarded_alts.len() + unguarded_alts.len();
     if total == 1 {
@@ -1069,10 +1071,8 @@ fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, ungua
         w.line(&"return -1;");
         return;
     }
-    // Longest-match tournament. First-success-wins is unsound when alts
-    // share a prefix and tie on static length (`'mut'? IDENT` vs
-    // `path '(' ... ')'` on `N(n)`): try each from `start`, keep the
-    // greatest successful end.
+    // Longest-match tournament (see the function doc): try each from
+    // `start`, keep the greatest successful end.
     w.line(&"let mut best: i32 = -1;");
     let mut all_idx: Array<i32> = [];
     for let i of guarded_alts {
