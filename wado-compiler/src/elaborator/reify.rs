@@ -3483,24 +3483,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 );
                 let inner_block = TirBlock::new(inner_stmts, span);
-                let then_type = match inner_block.stmts.last() {
-                    Some(s) => match &s.kind {
-                        TirStmtKind::Expr(e) => e.type_id,
-                        _ => TypeTable::UNIT,
-                    },
-                    None => TypeTable::UNIT,
-                };
+                // Use the shared `block_result_type` (mirroring
+                // `resolve_let_chain_stmts` stmt.rs:1140) so a then/else
+                // block ending in a value `If` / `Match` / nested chain
+                // contributes its real result type. A hand-rolled
+                // "last stmt is Expr" check would mis-classify those
+                // trailing forms as `Unit`, collapsing the Match's
+                // `match_type` to `Unit` and dropping the branch values.
+                let then_type = crate::tir::block_result_type(&inner_block);
                 let else_tir = else_block.cloned();
-                let else_type = match else_tir.as_ref() {
-                    Some(b) => match b.stmts.last() {
-                        Some(s) => match &s.kind {
-                            TirStmtKind::Expr(e) => e.type_id,
-                            _ => TypeTable::UNIT,
-                        },
-                        None => TypeTable::UNIT,
-                    },
-                    None => TypeTable::UNIT,
-                };
+                let else_type = else_tir
+                    .as_ref()
+                    .map_or(TypeTable::UNIT, crate::tir::block_result_type);
                 let else_arm_span = else_tir.as_ref().map_or(span, |b| b.span);
                 let match_type =
                     crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
