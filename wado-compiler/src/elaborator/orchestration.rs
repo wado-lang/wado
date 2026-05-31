@@ -477,14 +477,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .iter()
                             .map(|p| p.name.clone())
                             .collect();
-                        all_generic_newtypes.entry(module_source.clone()).or_default().insert(
-                            newtype_decl.name.clone(),
-                            GenericNewtypeInfo {
-                                module_source: module_source.clone(),
-                                type_params,
-                                base_type_ast: newtype_decl.ty.clone(),
-                            },
-                        );
+                        all_generic_newtypes
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(
+                                newtype_decl.name.clone(),
+                                GenericNewtypeInfo {
+                                    module_source: module_source.clone(),
+                                    type_params,
+                                    base_type_ast: newtype_decl.ty.clone(),
+                                },
+                            );
                         newly_resolved = true;
                     }
                 }

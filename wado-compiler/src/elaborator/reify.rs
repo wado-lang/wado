@@ -3204,7 +3204,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let instantiation: Vec<super::sem::types::ElementOverlay> = {
             let for_of_key =
                 crate::symbol::SymbolKey::new(self.current_module_source.clone(), for_of.id);
-            let visit = self.tuple_overlay_visits.entry(for_of_key.clone()).or_insert(0);
+            let visit = self
+                .tuple_overlay_visits
+                .entry(for_of_key.clone())
+                .or_insert(0);
             let k = *visit;
             *visit += 1;
             self.sem
@@ -6512,13 +6515,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let loaded = self.loaded_modules;
         let all_sem = self.all_module_semantics;
         let callee_ctx: Option<(&[Item], &ModuleSemantics)> =
-            if callee_module != &self.current_module_source {
+            if callee_module == &self.current_module_source {
+                None
+            } else {
                 match (loaded.get(callee_module), all_sem.get(callee_module)) {
                     (Some(m), Some(callee_sem)) => Some((m.items.as_slice(), callee_sem)),
                     _ => None,
                 }
-            } else {
-                None
             };
         let saved = callee_ctx.map(|(items, callee_sem)| {
             (
@@ -7974,10 +7977,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //     `resolve_ident_in_fallback_module` (expr.rs:936). Without this
         //     a callee-module global default (e.g. `Z_DEFAULT_COMPRESSION`)
         //     resolves to `()` and the call lowers to an invalid module.
-        if let Some(global_decl) = self.current_module_items.iter().find_map(|item| match item {
-            ast::Item::Global(g) if g.name == ident.name => Some(g),
-            _ => None,
-        }) {
+        if let Some(global_decl) = self
+            .current_module_items
+            .iter()
+            .find_map(|item| match item {
+                ast::Item::Global(g) if g.name == ident.name => Some(g),
+                _ => None,
+            })
+        {
             let ty = self.resolve_type(&global_decl.ty);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
@@ -8653,10 +8660,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_id = self.resolve_type(&const_ty);
         // Reify the body under its defining module so colliding cross-module
         // `AstId`s can't mis-type the inlined constant (see `reify_ident`).
-        let resolved = self
-            .with_const_module_perspective(&const_module, |this| {
-                this.reify_expr(&const_expr, ctx, Some(type_id))
-            });
+        let resolved = self.with_const_module_perspective(&const_module, |this| {
+            this.reify_expr(&const_expr, ctx, Some(type_id))
+        });
         match &resolved.kind {
             TirExprKind::IntLiteral { repr, .. } => {
                 let is_unsigned = matches!(
