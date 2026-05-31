@@ -283,32 +283,39 @@ fn reference_param_struct_key(
 }
 
 /// True when SROA-ing reference parameter `pi` of `func` would be unsound
-/// because another reference parameter of the same function points at the same
+/// because another `&mut` parameter of the same function points at the same
 /// single-field struct and may be caller-aliased.
 ///
 /// Wado has no borrow checker and references alias (spec: "references alias,
 /// every read and write lands on the same location"), so `f(&mut n, &mut n)`
 /// is legal and the two parameters must observe each other's writes. SROA
-/// rewrites a reference parameter to a by-value scalar read at the call site
+/// rewrites the read-only parameter to a by-value scalar read at the call site
 /// (`f(n.value)`), snapshotting it — a write to the shared object through the
-/// other parameter during the call would then be lost. By-value struct params
-/// are independent copies, so only reference params count as aliases.
+/// aliasing parameter during the call would then be lost.
+///
+/// The hazard requires a sibling that can *mutate* the shared object, i.e. a
+/// `&mut` (MutRef) parameter: an immutable `&S` sibling cannot write the field,
+/// so two `&S` parameters (e.g. `add_amounts(a: &Amount, b: &Amount)`) stay
+/// SROA-able even when aliased. By-value struct params are independent copies.
 fn param_may_alias_sibling(
     func: &NirFunction,
     pi: usize,
     struct_key: &(String, ModuleSource),
     type_table: &TypeTable,
 ) -> bool {
-    let pointee = func
+    // The candidate itself must be a reference to `struct_key` for aliasing to
+    // matter (a by-value struct param is an independent copy).
+    let candidate_is_ref = func
         .params
         .get(pi)
-        .map(|p| reference_param_struct_key(p.type_id, type_table));
-    // The candidate itself must be a reference for the aliasing to matter.
-    if pointee != Some(Some(struct_key.clone())) {
+        .map(|p| reference_param_struct_key(p.type_id, type_table))
+        == Some(Some(struct_key.clone()));
+    if !candidate_is_ref {
         return false;
     }
     func.params.iter().enumerate().any(|(pj, other)| {
         pj != pi
+            && matches!(type_table.get(other.type_id), ResolvedType::MutRef(_))
             && reference_param_struct_key(other.type_id, type_table).as_ref() == Some(struct_key)
     })
 }
