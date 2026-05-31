@@ -1552,6 +1552,31 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             })
                             .collect();
 
+                        // A default method's body is *foreign* AST: its nodes
+                        // belong to the trait's module, not this impl's. The
+                        // combined walk has only the impl module's `sem`, so it
+                        // resolves the body under the impl module's perspective
+                        // to build the TIR — but the per-`AstId` annotations the
+                        // body walk records would then be keyed under the impl
+                        // module (`ann_key` uses `current_module_source`). A
+                        // trait-body node and an impl-module node share the same
+                        // dense `AstId` whenever their ids coincide, so those
+                        // writes overwrite the impl module's own facts (e.g. a
+                        // unit `builtin::array_copy(...)` call mistyped as the
+                        // trait body's `Option<T>`, which makes reify emit a
+                        // spurious `drop` of a value-less call → Wasm stack
+                        // underflow). Reify never consumes a default body's
+                        // annotations — it emits default methods from the
+                        // pre-synthesised `ModuleDecls::pending_default_methods`
+                        // TIR — so the per-`AstId` stores are the wrong home for
+                        // them. Swap `sem.types` / `sem.bindings` out for a
+                        // scratch pair around the synthesis and drop it
+                        // afterwards; `sem.imports` / `sem.decls` stay in place
+                        // so name resolution and the `pending_default_methods`
+                        // recording below are unaffected.
+                        let saved_types = std::mem::take(&mut self.sem.types);
+                        let saved_bindings = std::mem::take(&mut self.sem.bindings);
+
                         for default_method in &default_methods {
                             if let Some(mut tir_func) = self.resolve_method(
                                 default_method,
@@ -1581,6 +1606,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 tir_module.add_function(tir_func);
                             }
                         }
+
+                        self.sem.types = saved_types;
+                        self.sem.bindings = saved_bindings;
                     }
 
                     // Restore trait context
