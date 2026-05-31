@@ -1245,6 +1245,38 @@ fn test_format_float_negative_exponent_preserved() {
 }
 
 #[test]
+fn test_format_nested_comparison_preserves_parens() {
+    // Comparisons chain in Wado: `a == b == c` parses as `a == b && b == c`,
+    // not `(a == b) == c`. So a comparison nested as an operand of another
+    // comparison must keep its parens or the formatter silently rewrites the
+    // meaning. Same for `<` chains and mixed groups that would become invalid
+    // chains (`a < b < c == d`).
+    let source = r"fn run() {
+    let x = (a == 0) == b;
+    let y = (a < b) == c;
+    let z = (a < b < c) == d;
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("(a == 0) == b"),
+        "nested == must keep parens: {formatted}"
+    );
+    assert!(
+        formatted.contains("(a < b) == c"),
+        "nested comparison must keep parens: {formatted}"
+    );
+    assert!(
+        formatted.contains("(a < b < c) == d"),
+        "nested comparison chain must keep parens: {formatted}"
+    );
+    // The AST round-trip is the real invariant.
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
 fn test_format_deref_index_preserves_parens() {
     // (*p)[i] must keep parens — *p[i] means *(p[i])
     let source = r"fn foo(data: &Array<i32>) -> i32 {

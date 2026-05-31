@@ -2789,12 +2789,27 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
             if inner_prec < parent_prec {
                 return true;
             }
+            // Comparison operators chain instead of associating: `a == b == c`
+            // parses as the 3-way chain `a == b && b == c`, and mixing groups
+            // (`a < b < c == d`) is a parse error. A comparison nested as
+            // either operand of another comparison must keep its parens, or the
+            // round-trip silently rewrites the meaning. The same-precedence arm
+            // below would otherwise drop them for the left operand.
+            if is_comparison_op(inner.op) && is_comparison_op(parent_op) {
+                return true;
+            }
             if inner_prec == parent_prec && !is_left {
                 // Right-associative check for same precedence
                 return true;
             }
             false
         }
+        // A comparison chain (`a < b < c`) behaves like a comparison operand:
+        // it must stay parenthesized inside any operator binding at least as
+        // tightly as comparison, and inside another comparison (which would
+        // extend or invalidate the chain). Only the looser-binding logical
+        // `&&` / `||` can hold a bare chain.
+        Expr::ComparisonChain(_) => !matches!(parent_op, BinaryOp::And | BinaryOp::Or),
         // Range expressions have lower precedence than all binary operators,
         // so they always need parentheses when nested inside a binary expression.
         Expr::Range(_) => true,
@@ -2803,6 +2818,20 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
         Expr::Cast(_) if is_left && parent_op == BinaryOp::Lt => true,
         _ => false,
     }
+}
+
+/// Comparison operators chain (`a < b < c`) rather than associate, so they
+/// need parenthesization rules distinct from ordinary same-precedence binaries.
+fn is_comparison_op(op: BinaryOp) -> bool {
+    matches!(
+        op,
+        BinaryOp::Eq
+            | BinaryOp::NotEq
+            | BinaryOp::Lt
+            | BinaryOp::LtEq
+            | BinaryOp::Gt
+            | BinaryOp::GtEq
+    )
 }
 
 /// Returns true if `name` can be emitted as a bare identifier or keyword in a
