@@ -19,6 +19,8 @@ use {
     DirectDispatch,
     DispatchBranch,
     TournamentDispatch,
+    Diagnostic,
+    DiagnosticKind,
     AltBody,
     Op,
     TokenOp,
@@ -100,12 +102,34 @@ test "LoweredGrammar empty construction" {
         parser_rules: [],
         variant_rules: [],
         kind_sets: [],
+        diagnostics: [],
     };
     assert g.name == "Empty";
     assert g.parser_rules.is_empty();
     assert g.variant_rules.is_empty();
     assert g.kind_sets.is_empty();
     assert g.mode_names.len() == 1;
+    assert g.diagnostics.is_empty();
+}
+
+test "Diagnostic round-trips through its kind" {
+    let d = Diagnostic {
+        rule: "expr",
+        kind: DiagnosticKind::OverlapTournament,
+        message: "alts 0, 1 share first {IDENT}",
+    };
+    assert d.rule == "expr";
+    assert d.message == "alts 0, 1 share first {IDENT}";
+    if let OverlapTournament = &d.kind {
+    } else {
+        panic("expected OverlapTournament");
+    }
+
+    let guard = DiagnosticKind::OptionalScanGuardFallback;
+    if let OptionalScanGuardFallback = &guard {
+    } else {
+        panic("expected OptionalScanGuardFallback");
+    }
 }
 
 test "Rule::Simple round-trip" {

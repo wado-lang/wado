@@ -74,6 +74,7 @@ use {
     general_group_field_name,
     general_group_alt_struct_name,
     is_storable_group,
+    first_contains,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { GenContext, is_nullable, union_kind_arrays, FOLLOW_VARIANT_MAX_K } from "./gen_context.wado";
@@ -128,6 +129,7 @@ use {
     FieldKind,
     KindSet,
     FollowVariant,
+    DiagnosticKind,
 } from "./gir.wado";
 
 /// Lower a `Grammar` to `LoweredGrammar`. The returned value is the
@@ -190,6 +192,7 @@ pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &Array<LitToken>, ctx: &mut
         parser_rules,
         variant_rules,
         kind_sets,
+        diagnostics: ctx.take_diagnostics(),
     };
 }
 
@@ -1571,12 +1574,84 @@ fn build_overlap_dispatch(ctx_name: &String, alts: &Array<Alternative>, indices:
         assert ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting), `{*ctx_name}: alt {*idx} is not fully scannable; Tournament dispatch needs all alts scannable`;
     }
 
+    // Surface the overlap as an advisory diagnostic. The scan-side
+    // dispatch lowers the same alts through this function with a
+    // "(scan)" ctx label; warn only on the parse-side pass so each
+    // overlap is reported once.
+    if !ends_with_scan(ctx_name) {
+        let shared = shared_overlap_tokens(first_sets);
+        ctx.warn(
+            ctx_name,
+            DiagnosticKind::OverlapTournament,
+            `alts {join_kind_list(indices)} share lookahead {join_kind_set(&shared)}; resolved by longest-match scan tournament, not a token-led branch`,
+        );
+    }
+
     let mut sorted: Array<i32> = [];
     for let idx of indices {
         sorted.push(*idx);
     }
     sort_alts_by_element_count(&mut sorted, alts);
     return MultiAltDispatch::Tournament(TournamentDispatch { alts: sorted });
+}
+
+/// True when a `build_overlap_dispatch` `ctx_name` marks a scan-side
+/// pass (suffix " (scan)"). Used to report each overlap once, on the
+/// parse-side pass only. `strip_suffix` returns the input unchanged
+/// when the suffix is absent, so a shortened result means it matched.
+fn ends_with_scan(label: &String) -> bool {
+    return strip_suffix(label, &" (scan)") != *label;
+}
+
+/// Collect the token kinds that appear in more than one alt's first
+/// set — the lookahead that made the alts overlap. Order follows first
+/// appearance so the message is stable across runs.
+fn shared_overlap_tokens(first_sets: &Array<Array<String>>) -> Array<String> {
+    let mut shared: Array<String> = [];
+    for let mut i = 0; i < first_sets.len(); i += 1 {
+        for let tok of &first_sets[i] {
+            if first_contains(&shared, tok) {
+                continue;
+            }
+            let mut seen_elsewhere = false;
+            for let mut j = 0; j < first_sets.len(); j += 1 {
+                if j != i && first_contains(&first_sets[j], tok) {
+                    seen_elsewhere = true;
+                    break;
+                }
+            }
+            if seen_elsewhere {
+                shared.push(*tok);
+            }
+        }
+    }
+    return shared;
+}
+
+/// Render alt indices as `0, 1, 2` for a diagnostic message.
+fn join_kind_list(indices: &Array<i32>) -> String {
+    let mut out = String::with_capacity(indices.len() * 3);
+    for let mut i = 0; i < indices.len(); i += 1 {
+        if i > 0 {
+            out.push_str(&", ");
+        }
+        out.push_str(&`{indices[i]}`);
+    }
+    return out;
+}
+
+/// Render a token-kind set as `{A, B}` for a diagnostic message.
+fn join_kind_set(kinds: &Array<String>) -> String {
+    let mut out = String::with_capacity(kinds.len() * 8 + 2);
+    out.push('{');
+    for let mut i = 0; i < kinds.len(); i += 1 {
+        if i > 0 {
+            out.push_str(&", ");
+        }
+        out.push_str(&kinds[i]);
+    }
+    out.push('}');
+    return out;
 }
 
 /// True iff any pair of first-sets shares at least one token.

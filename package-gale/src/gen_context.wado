@@ -7,6 +7,7 @@ use {
     single_alt_group_type_name,
     count_general_groups,
 } from "./gen_util.wado";
+use { Diagnostic, DiagnosticKind } from "./gir.wado";
 use { TreeMap } from "core:collections";
 
 /// A token-kind set interned during parser codegen. Multi-element
@@ -99,6 +100,11 @@ pub struct GenContext {
     /// across runs. Each key directly indexes
     /// `follow_variant_registry`, giving an O(n) walk.
     follow_variant_order: Array<String>,
+    /// Prediction-strategy diagnostics raised during lowering, in the
+    /// order lowering walked the rules. Drained into
+    /// `LoweredGrammar.diagnostics` by `lower_with_ctx`. See
+    /// `Diagnostic` in `gir.wado`.
+    diagnostics: Array<Diagnostic>,
 }
 
 impl GenContext {
@@ -122,7 +128,21 @@ impl GenContext {
             tail_greedy_k_prefix_cache: [],
             follow_variant_registry: TreeMap::<String, FollowVariantEntry>::new(),
             follow_variant_order: [],
+            diagnostics: [],
         };
+    }
+
+    /// Record a prediction-strategy diagnostic for `rule`. Called from
+    /// lowering's strategy-decision sites; idempotency is not required
+    /// (each decision site fires at most once per rule/position).
+    pub fn warn(&mut self, rule: &String, kind: DiagnosticKind, message: String) {
+        self.diagnostics.push(Diagnostic { rule: *rule, kind, message });
+    }
+
+    /// Hand off the collected diagnostics. Consumed once by
+    /// `lower_with_ctx` to populate `LoweredGrammar.diagnostics`.
+    pub fn take_diagnostics(&self) -> Array<Diagnostic> {
+        return self.diagnostics;
     }
 
     pub fn find_rule(&self, name: &String) -> Option<&ParserRule> {
