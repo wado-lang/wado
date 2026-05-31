@@ -2637,16 +2637,79 @@ impl<'a> WirEmitter<'a> {
     }
 
     fn emit_const_expr(&self, instr: &WirInstr) -> ConstExpr {
+        let mut instrs = Vec::new();
+        self.push_const_instrs(instr, &mut instrs);
+        ConstExpr::extended(instrs)
+    }
+
+    /// Recursively lower a constant-expressible `WirInstr` tree into the
+    /// instruction sequence of a Wasm constant init expression. Mirrors the
+    /// aggregate-construction arms of [`Self::emit_instr`]; only instructions
+    /// valid in a Wasm 3.0 GC constant expression are accepted (scalar consts,
+    /// `ref.null` / `ref.i31` / `ref.func`, and `struct.new` / `array.new_fixed`
+    /// / `array.new_default` / `array.new_data`). Anything else reaching an init
+    /// slot is an optimizer bug — a non-const initializer should never be placed
+    /// here — so it ICEs rather than silently miscompiling to `i32.const 0`.
+    fn push_const_instrs<'i>(&'i self, instr: &'i WirInstr, out: &mut Vec<Instruction<'i>>) {
         match instr {
-            WirInstr::I32Const(v) => ConstExpr::i32_const(*v),
-            WirInstr::I64Const(v) => ConstExpr::i64_const(*v),
-            WirInstr::F32Const(v) => ConstExpr::f32_const((*v).into()),
-            WirInstr::F64Const(v) => ConstExpr::f64_const((*v).into()),
-            WirInstr::RefNull { .. } => ConstExpr::ref_null(HeapType::Abstract {
-                shared: false,
-                ty: AbstractHeapType::None,
-            }),
-            _ => ConstExpr::i32_const(0), // fallback
+            WirInstr::I32Const(v) => out.push(Instruction::I32Const(*v)),
+            WirInstr::I64Const(v) => out.push(Instruction::I64Const(*v)),
+            WirInstr::F32Const(v) => out.push(Instruction::F32Const((*v).into())),
+            WirInstr::F64Const(v) => out.push(Instruction::F64Const((*v).into())),
+            WirInstr::RefNull { heap_type } => {
+                out.push(Instruction::RefNull(
+                    self.wir_abstract_heap_to_wasm(heap_type),
+                ));
+            }
+            WirInstr::RefI31(inner) => {
+                self.push_const_instrs(inner, out);
+                out.push(Instruction::RefI31);
+            }
+            WirInstr::RefFunc { func_id } => {
+                out.push(Instruction::RefFunc(
+                    self.resolve_func_index(func_id.index()),
+                ));
+            }
+            WirInstr::StructNew { type_id, fields } => {
+                for field in fields {
+                    self.push_const_instrs(field, out);
+                }
+                out.push(Instruction::StructNew(
+                    self.resolve_type_index(type_id.index()),
+                ));
+            }
+            WirInstr::ArrayNewFixed { type_id, elements } => {
+                for elem in elements {
+                    self.push_const_instrs(elem, out);
+                }
+                out.push(Instruction::ArrayNewFixed {
+                    array_type_index: self.resolve_type_index(type_id.index()),
+                    array_size: u32::try_from(elements.len()).unwrap(),
+                });
+            }
+            WirInstr::ArrayNewDefault { type_id, len } => {
+                self.push_const_instrs(len, out);
+                out.push(Instruction::ArrayNewDefault(
+                    self.resolve_type_index(type_id.index()),
+                ));
+            }
+            WirInstr::ArrayNewData {
+                type_id,
+                data_index,
+                offset,
+                len,
+            } => {
+                self.push_const_instrs(offset, out);
+                self.push_const_instrs(len, out);
+                out.push(Instruction::ArrayNewData {
+                    array_type_index: self.resolve_type_index(type_id.index()),
+                    array_data_index: *data_index,
+                });
+            }
+            other => panic!(
+                "non-const instruction in global initializer: {other:?}; \
+                 a non-const init is an optimizer bug"
+            ),
         }
     }
 
@@ -2871,5 +2934,94 @@ impl<'a> WirEmitter<'a> {
         instr.for_each_child(&mut |child| {
             self.scan_ref_func_instr(child, indices);
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::emit_core_module;
+    use crate::hashmap::{IndexMap, IndexSet};
+    use crate::wir::{
+        WirComponent, WirField, WirGlobal, WirInstr, WirMeta, WirName, WirNames, WirPackage,
+        WirStructType, WirType, WirTypeDef, WirTypeId,
+    };
+    use std::rc::Rc;
+
+    fn empty_package() -> WirPackage {
+        WirPackage {
+            types: Vec::new(),
+            imports: Vec::new(),
+            functions: Vec::new(),
+            globals: Vec::new(),
+            exports: Vec::new(),
+            elements: Vec::new(),
+            memories: Vec::new(),
+            data: Vec::new(),
+            names: WirNames::default(),
+            component: WirComponent::default(),
+            variant_case_info: IndexMap::default(),
+            wasm_modules: IndexMap::default(),
+            dead_type_indices: IndexSet::default(),
+            dead_func_indices: IndexSet::default(),
+            dead_global_indices: IndexSet::default(),
+            needed_canonicals: IndexSet::default(),
+            defined_func_base: 0,
+        }
+    }
+
+    fn validate(bytes: &[u8]) -> Result<(), String> {
+        let mut v = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
+        v.validate_all(bytes).map(|_| ()).map_err(|e| e.to_string())
+    }
+
+    /// A global whose initializer is a constant `struct.new` must be emitted as
+    /// a Wasm GC constant init expression — not the scalar `i32.const 0`
+    /// fallback, which leaves the `(ref $P)` global's init ill-typed.
+    #[test]
+    fn const_struct_global_init_validates() {
+        let tid = WirTypeId::new(0, Rc::from("test//P"));
+        let struct_ty = WirStructType {
+            name: WirName {
+                fq: "test//P".to_string(),
+            },
+            fields: vec![
+                WirField {
+                    name: "x".to_string(),
+                    ty: WirType::I32,
+                    mutable: false,
+                },
+                WirField {
+                    name: "y".to_string(),
+                    ty: WirType::I32,
+                    mutable: false,
+                },
+            ],
+            meta: WirMeta::default(),
+            generic_origin: None,
+            newtype_origin: None,
+            supertype: None,
+        };
+        let global = WirGlobal {
+            name: WirName {
+                fq: "global:ORIGIN".to_string(),
+            },
+            ty: WirType::Ref {
+                type_id: tid.clone(),
+                nullable: false,
+            },
+            mutable: false,
+            init: WirInstr::StructNew {
+                type_id: tid,
+                fields: vec![WirInstr::I32Const(3), WirInstr::I32Const(4)],
+            },
+            lazy_init: false,
+            meta: WirMeta::default(),
+        };
+        let mut pkg = empty_package();
+        pkg.types.push(WirTypeDef::Struct(struct_ty));
+        pkg.globals.push(global);
+
+        let bytes = emit_core_module(&pkg, false);
+        validate(&bytes).expect("const struct global init should validate as Wasm");
     }
 }
