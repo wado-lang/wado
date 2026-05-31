@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780189334900,
+  "lastUpdate": 1780192081732,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -28173,6 +28173,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e73402c00cefbccd71a9766398e9e85b439691cc"
         },
         "date": 1780189334715,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16997,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8683983ae610612210cec734fe265f23dbcebeb3",
+          "message": "Merge pull request #1255 from wado-lang/alert-autofix-3\n\nPotential fix for code scanning alert no. 3: Workflow does not contain permissions",
+          "timestamp": "2026-05-31T10:39:38+09:00",
+          "tree_id": "f4841276094032583ddb365860de3d19753f3006",
+          "url": "https://github.com/wado-lang/wado/commit/8683983ae610612210cec734fe265f23dbcebeb3"
+        },
+        "date": 1780192081240,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
