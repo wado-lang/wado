@@ -363,6 +363,12 @@ to their final homes. The pipeline diagram in `CLAUDE.md` and
 `docs/compiler.md` is updated. The `elaborator/` directory's
 file layout matches the module layout in this WEP.
 
+Stages 6 and 7 are independent: Stage 7 is _not_ gated on Stage 6.
+The combined walk can be removed as soon as nothing routes through
+it — i.e. once every module (stdlib + snapshot included) is reified.
+That is purely a Stage 5 (reify parity) question; liveness is
+orthogonal. Either stage may land first.
+
 Each stage keeps `mise run test`, the WIR golden fixtures, and
 the LSP query tests green. Performance is not tracked during
 migration; see Trade-offs.
@@ -404,726 +410,102 @@ migration; see Trade-offs.
       `coercion_view`, `desugar_view`) for tests and the future LSP
       hover path. The stdlib snapshot seeds every map back into
       per-module storage so cached stdlib modules stay consistent.
-- [ ] **Stage 5 — `annotate_bodies` / `reify` split.** _In progress
-      (user modules done; stdlib parity remaining)._
-      Recording half complete: every Gap (1–6, 9, 11, 12, 13)
-      is wired end-to-end. Orchestration landed —
-      `build_tir_from_state` routes user modules through
-      `Reify::reify_module` after the `resolve_module` walk
-      populates `ModuleSemantics`. Reify body walk covers every decl, every
-      `Stmt`/`Pattern`/`Literal`/`Ident` variant, every `Expr`
-      variant (full Call dispatch, Index, Closure with Gap 4
-      capture replay, TryOp, ComparisonChain, CompoundAssign,
-      Range, TemplateString, StructLiteral named + anonymous,
-      Matches, Resume, LabeledBlock, Spread, impl-block via
-      Gap 12, WithHandler via Gap 13, power-assert template
-      reconstruction via `ReifyAssertCaptureContext`,
-      default-argument padding for free + method calls,
-      variant-ctor before `static_method_dispatch`,
-      closure-block return inference, `ComparisonChain`
-      operator-trait dispatch with Ord wrap, `Self`
-      substitution in impl methods). Reify is now the **default**
-      path for user modules (the `WADO_REIFY` env-var gate was
-      removed); the E2E suite is **2678 / 2678 fixtures passing**
-      at `-O0` + `-O2` with no env var set — full parity with the
-      production walk for user-module code, verified by full e2e
-      runs on the 2026-05-31 session. The second-half session lifted
-      the count from 1765 via the landings below — see
-      `### Stage 5 second-half progress` for what changed.
-      **Remaining for Stage 5: stdlib parity.** `module_uses_reify`
-      still bypasses reify for `Core` / `Wasi` / `Wasm` modules and
-      stdlib-snapshot construction, because reify does not yet reach
-      parity on stdlib-shaped constructs — forcing reify on for all
-      modules panics at WIR with e.g. `unresolved MethodCall
-      "builtin::array<u8>^Eq::eq"`. Putting stdlib (and the snapshot)
-      on reify and clearing those gaps is the remainder of Stage 5,
-      tracked in a separate PR; it is the prerequisite for Stage 7's
-      combined-walk removal. See `### Stage 5 handover` below.
-- [ ] **Stage 6 — Liveness and DCE.** Tracked in a separate PR.
-- [ ] **Stage 7 — Cleanup.** The `WADO_REIFY` env-var gate is
-      already removed (reify is the default for user modules;
-      `module_uses_reify` keys only on stdlib / snapshot status).
-      The rest — removing the old `Elaborator` / `AnnotateState`
-      and the combined walk's TIR emission half — is gated on Stage 5
-      stdlib parity (so nothing still needs the combined walk) and
-      Stage 6's liveness pass.
+- [ ] **Stage 5 — `annotate_bodies` / `reify` split.** _User modules
+      done; stdlib parity remaining._ Reify covers every decl / `Stmt`
+      / `Pattern` / `Expr` shape, all Gaps (1–6, 9, 11, 12, 13) wired
+      end-to-end. It is the **default** path for user modules (the
+      `WADO_REIFY` gate is gone); the E2E suite is **2692 / 2692**
+      with no env var, full parity with the production walk for
+      user-module code. The annotation maps are canonically keyed by
+      `SymbolKey` (`(ModuleSource, AstId)`) so cross-module inlined
+      AST (assoc-const bodies, callee-module default args) reads the
+      right module's facts. See `### Stage 5 progress (user-module
+      parity — DONE)` for the landing log.
 
-### Stage 5 second-half progress
+      **Remaining: stdlib parity.** `module_uses_reify` still bypasses
+      reify for `Core` / `Wasi` / `Wasm` modules and snapshot
+      construction. Forcing reify on for *all* modules currently fails
+      **1610 / 2692** E2E fixtures (allocator / anon-struct / array /
+      … clusters) — reify does not yet reach parity on stdlib-shaped
+      constructs. (Individual gaps are closing: `builtin::array^Eq::eq`,
+      which used to panic, now compiles.) Clearing the 1610-failure set
+      is the rest of Stage 5 and the sole prerequisite for the Stage 7
+      combined-walk removal. Tracked in a separate PR.
+- [ ] **Stage 6 — Liveness and DCE.** Not started. Independent of
+      Stage 7 — see the roadmap note above.
+- [ ] **Stage 7 — Cleanup.** The `WADO_REIFY` gate is already removed
+      (reify is the user-module default). The remaining work — deleting
+      the old `Elaborator` / `AnnotateState` and the combined walk's
+      TIR-emission half — is gated **only** on Stage 5 stdlib parity
+      (so nothing still routes through the combined walk), _not_ on
+      Stage 6.
 
-Second-half session, starting from the 1765/2664 baseline. All
-landings keep production at 2664/2664 (verified by full e2e runs);
-every remaining failure is reify-specific.
+### Stage 5 progress (user-module parity — DONE)
 
-Landed:
+Reify reached full parity with the production walk for user modules
+(2678→2692 E2E as fixtures were added), starting from a 1765 baseline.
+The work fell into a few recurring shapes, all now cleared:
 
-1. **i128/u128 literal coercion + cast replay.** reify never
-   consumed the per-`AstId` `coercions` map, so 128-bit literals
-   (prelude structs built via `from_u64` / `from_i64` /
-   `from_pair`) reached codegen as bare literals and ICE'd. The
-   construction is extracted into pure helpers in `coercion.rs`
-   (`build_int128_literal_call`, `build_int128_from_pair`,
-   `build_int128_from_intermediate`) shared by the elaborator and
-   reify; reify replays the recorded `NumericLiteral` coercion and
-   the `expr as i128/u128` cast.
-2. **FieldAccess type from the struct decl.** reify now types a
-   field access from the receiver's struct decl (with generic
-   type-arg substitution) rather than `expression_types[field.id]`,
-   which collides across template sub-parsers (gotcha #1).
-3. **Template interpolation `AstId` collision (parser, root fix).**
-   Interpolation sub-expressions were parsed with a fresh `Parser`
-   restarting at `AstId(0)`, so multiple interpolations clobbered
-   each other's entries in every per-`AstId` map. The sub-parser
-   now continues the parent's dense `AstId` space. This single
-   change was the largest lift (~+100 fixtures) — it fixes
-   mis-typed field accesses and mis-dispatched calls in any
-   multi-interpolation template.
-4. **Comparison operator-trait wrapping.** reify reproduced only
-   the inner `Eq::eq` / `Ord::cmp` dispatch; the source operator's
-   wrapping (`!=` → `!eq`, `<` / `>` / `<=` / `>=` → `cmp == Ordering::X`)
-   was missing. `ord_bool_from_cmp` is extracted into a shared free
-   function and the op-driven wrap applied in `reify_binary`.
-   `RefEq` / `RefNotEq` for reference-operand equality is also
-   reproduced from operand types.
-5. **`Self::AssocType` in impl-method signatures.** reify resolved
-   bare `Self` but not the associated-type projection `Self::Output`,
-   so `&Self::Output` reified as `&unknown`, breaking the
-   call→definition link at WIR build (`[WIR] unresolved`
-   `ReadOnlyBox^Index<i32>::index`). reify now resolves
-   `Self::AssocType` against the impl's recorded
-   `ImplFacts.assoc_type_bindings`. Fixes all `index_trait` fixtures.
-6. **Associated-constant patterns and const range bounds.** A nullary
-   qualified pattern (`TokenKind::FOO`, `i32::MIN`) was lowered as a
-   variant case; it now resolves to the constant's value — user consts
-   via `sem.decls.associated_constants`, builtin primitive consts
-   (`i32::MIN`/`u8::MAX`/…) via the shared `primitive_assoc_const_to_i128`
-   (extracted from `stmt.rs`). Range endpoints resolve const bounds too.
-7. **Bare-ident / enum-case pattern disambiguation.** reify_pattern's
-   `Ident` arm always produced a binding, so a bare nullary case
-   (`None`, `Red`) became a catch-all and an immutable-global pattern
-   bound instead of comparing; the `Variant` arm never produced
-   `TirPattern::Enum`. Now mirrors `resolve_if_pattern_inner`: known
-   enum case → `Enum`, known variant case → nullary `Variant`,
-   immutable global → `ConstantValue`, else binding. Largest pattern
-   lift (match cluster 166 → 218 passing).
-8. **Variant constructor in turbofish form.** `Option::<String>::Some(x)`
-   parses as a `StaticMethodCall` whose target is a variant; reify
-   emitted an unresolved static call. `reify_static_method_call` now
-   detects the variant-case target and emits `VariantConstruct`.
-9. **Omitted struct-literal field defaults.** `Config { host }` with
-   `port: i32 = 8080` left defaulted fields unset (invalid wasm). reify
-   now synthesizes each omitted field's default (generic-substituted
-   type) and sorts fields by declaration index, mirroring
-   `resolve_struct_literal`.
-10. **Impl type params rebuilt from the AST self type.** Generic impls
-    whose type params are implicit in the self type
-    (`impl … for TagMap<Tag, V>`) reified methods with the param
-    resolved to `unknown`. `reify_method` now rebuilds `impl_type_params`
-    from the self type, mirroring the elaborator's method emission
-    (`item.rs:1370-1462`): each `Named` self-type arg is a positional
-    impl type param so monomorph's positional substitution against the
-    recorded `type_arg_ids` lines up. Cleared the `from_literal`,
-    `index_value`, `sequence_literal`, and `template_string_generic`
-    builder fixtures (zero net regressions on a full run).
-11. **Async task-return type carried for store inference.** An async
-    function's wasm return type is erased to `()`; the recorded
-    `function_return_types` held that erased unit, so reify's
-    `task_return_type` was unit and the resource-store inference in
-    `effect_check` could not see resources in the declared return
-    (`missing resource 'Response' required by '__cm_binding__Response_new'`
-    on the `wasi:http/service` fixtures). annotate now records the
-    declared return on `function_task_returns`; reify reads it.
-12. **Static-method dispatch reuse + recorded-type variant ctors.**
-    reify rebuilt every `StaticMethodCallExpr` from scratch, losing the
-    mangled name / `cm_name` / monomorph info and collapsing turbofish
-    targets (`Future::<T>::new`, `Result::<…>::Ok`) to an empty struct
-    name (`::new` / `::Ok` unresolved). annotate now records the
-    resolved `FunctionRef` on `static_method_dispatch` keyed by the
-    static-call AstId and reify reuses it; turbofish variant ctors take
-    their variant name + instance type from the call's recorded
-    expression type. This was the largest single lift of the session
-    (**2038 → 2334**): it cleared the entire CM / HTTP / stream cluster
-    and every `Result` / `Option` / `Future` turbofish ctor and static
-    call across the suite. Zero net regressions on a full run.
-13. **fn_ref: `&fn` callees, generic FuncRef args, address-taken locals.**
-    Three reify gaps in the fn-reference cluster (**2334 → 2371**, fn_ref
-    e2e 26/34 → 34/34, zero net regressions):
-    - A bare-ident or non-ident callee whose type is `&fn` / `&mut fn`
-      now auto-derefs to the function value before `IndirectCall`,
-      mirroring `build_indirect_call`'s final `deref_to_value`. Detection
-      peels refs and the ultimate base type as `as_fn_signature` does.
-    - Generic function references (`id::<i32>`,
-      `let f: fn(bool)->bool = id`) reified as `FuncRef { type_args: [] }`,
-      leaving the name unmangled after monomorphization and tripping the
-      `lower::closure` "FuncRef should be wrapped in a Closure" invariant.
-      `resolve_func_ref_ident` now records the inferred / turbofish args
-      into `generic_instantiations` (which reify already reads).
-    - `&x` / `&mut x` now mark the borrowed local address-taken in reify
-      (`ctx.address_taken_locals`), so the boxing pass retags the local
-      to its box type and mutation through a `&mut fn` out-param
-      (`*slot = other_fn`) writes back to the slot instead of a throwaway
-      box.
-14. **Generic variant / enum types in the static type resolver (P0).**
-    `resolve_type_static_with_params` resolved a generic application
-    `Name<args…>` only when `Name` was `Option` or a struct; a generic
-    variant (`Result<T, E>`) or generic enum fell through to `UNKNOWN`.
-    The `Type::Named` arm already checked struct / variant / enum, so the
-    generic arm now does too (`make_generic_instance` is name-based).
-    This bit reify because `reify_method` re-resolves an impl method's
-    declared return type from the AST (unlike `reify_function`, which
-    reads the recorded `function_return_types`): a
-    `-> Result<(), SerializeError>` signature resolved to `unknown`, so
-    the monomorphized instance "still contained a type param" and
-    `wir_build::register_methods` silently skipped it, leaving the call
-    unresolved at WIR build. Clears serde_serialize_struct / enum / trait.
-15. **Type-param scope for body turbofish + match-ergonomics ref
-    bindings (serde 28→12, match 27→17, variant 29→13, if_let 6→0).**
-    Two coupled gaps in generic trait methods that match on `&self`:
-    - Turbofish args in a body (`v.serialize::<S>(s)`) were resolved with
-      no type-param scope, so an enclosing param `S` became `unknown` and
-      the call read `i32^Serialize::serialize<unknown>`. reify now
-      publishes the body's scope (`current_type_param_names`, set in
-      `reify_method` / `reify_function`) and `resolve_type` consults it.
-    - Variant-pattern payload bindings ignored match ergonomics: matching
-      `Some(v)` on `&Option<T>` must bind `v: &T` (forwarding directly to
-      a `&self` method), with the `enum_type` / `payload_type` carrying
-      the _peeled_ variant. reify previously bound `v: T` (boxing a
-      throwaway copy → wrong value) and kept the `&Option<T>` ref as
-      `enum_type` (extraction through a ref → null-reference trap). Now
-      peels the scrutinee for decl / enum_type / payload and re-wraps only
-      the binding in the scrutinee's reference kind, mirroring
-      `resolve_if_pattern`'s `RefBinding`. Also fixed result_match /
-      result_match_payload / result_if_let_mismatch /
-      default_field_variant_payload_ref_match.
-16. **Enum-case / nullary-variant ref-peeling (2452 → 2458).** Extends
-    the match-ergonomics ref handling to `match &c { Red => … }` (enum
-    case on `&Color`) and `if let None = rn` (nullary on `&Option<T>`):
-    `scrutinee_enum_case_index`, `scrutinee_has_variant_case`,
-    `reify_nullary_variant_case`, and both `TirPattern::Enum`
-    constructions now peel references and store the peeled `enum_type`.
-17. **Abstract `T::method()` static-call dispatch replay.** A call
-    through an abstract type parameter (`T::read()`,
-    `T::from_str_range()` inside `fn f<T: Bound>()`) is resolved by
-    `resolve_type_param_static_call` into a `Call` whose `method_info`
-    carries `is_type_param_receiver = true`, so monomorphization rewrites
-    `T` to the concrete type at each instantiation. reify had no
-    trait-bound context to reconstruct this and emitted a bare
-    `name="T::read"` call that never resolved at WIR build. annotate now
-    records the resolved `FunctionRef` on `static_method_dispatch` keyed
-    by the CallExpr id (collision-free with StaticMethodCall ids), and
-    reify's existing `static_method_dispatch` replay arm picks it up.
-18. **Inferred method-level type args on MethodCall nodes.** The
-    monomorphizer's instantiation-site collector keys off a `MethodCall`
-    node's `type_args` to queue `Struct^Trait::method<Args>` instances.
-    reify populated that field only from the syntactic turbofish, so a
-    call whose method type params are inferred from argument types
-    (`c.transform(42)` infers `T = i32`) reached WIR with empty
-    `type_args`, no instance was generated, and the call was unresolved.
-    reify now falls back to the inferred args the elaborator baked into
-    the recorded `FunctionRef.monomorph_info.method_type_args`.
-19. **`Self` / `Self::Assoc` nested in generic / tuple types.**
-    `resolve_type_with_self` substituted bare `Self` and a top-level
-    `Self::Assoc` projection (and through references), but a projection
-    nested inside a generic application or tuple — `Option<Self::Item>`,
-    `Result<T, Self::Error>`, `[Self::Item, bool]` — fell to the static
-    resolver, which has no self/assoc context and produced `unknown`. An
-    impl method `fn get(&self) -> Option<Self::Item>` therefore reified
-    its return as `Option<unknown>`; the monomorphized instance "still
-    contained a type param" and `wir_build::register_methods` skipped it,
-    leaving `Box_<i32>^Container::get` (and `GenericMapIter<…>^Iterator::next`)
-    unresolved. reify now rebuilds generic / tuple types from
-    self-substituted argument ids when an argument mentions `Self`
-    (self-free types keep the proven static path).
-20. **String-literal escape decoding (2495 → 2523).** reify emitted
-    `StringLiteral` from the raw AST source text, so a literal containing
-    an escape (`\"`, `\n`, `\\`, …) reached codegen with the backslash
-    intact — `"{\""` serialized as `{\"` instead of `{"`. Decodes via
-    `util::unescape_string`, matching the elaborator (expr.rs:403). A
-    single broad fix worth +28 fixtures (every reify'd escaped string
-    literal across the suite).
-21. **Namespace-imported variant ctor + struct static method (2523 →
-    2530).** `use ns from "…"; ns::Type::Case(payload)` and
-    `ns::Type::method(args)` parse as a `Call` whose ident has two `::`.
-    `reify_call`'s top variant-ctor arm only handled the single-`::`
-    shape, so the namespaced forms reached the recovery `ERROR`: the
-    `let` binding lost its type and — for the static-method case — the
-    call established no reachable edge into the namespace module, so
-    monomorphization pruned the whole module (`Point::sum` unresolved at
-    WIR). Added two arms: a `VariantConstruct` (case from
-    `tysys.all_variant_cases[ns_source]`, instance type from the recorded
-    expression type) and a static-method `Call` (gated on the type being
-    a struct in `ns_source`). Earlier analysis blamed annotate; the real
-    fix was reify reaching these `Call` shapes. namespace_import 8/8.
-22. **Numeric-literal cast operand re-typed to target width (2530 →
-    2539).** A numeric literal under `as Ty` adopts the target's width in
-    production (`9007199254740992 as i64` types the literal i64). annotate
-    propagates the target to a _direct_ literal cast operand but not
-    through a unary `Neg`, so `-9007199254740992 as i64` reified the inner
-    literal i32 — codegen's `i32.const` truncated the value
-    (`2^53 mod 2^32 == 0`) to 0 before the cast widened. reify's Cast arm
-    now reifies a `Number` literal operand (bare or under `Neg`) at the
-    target type when the target is an integer. +9 fixtures
-    (serde_json_large_int / scientific_notation and other wide-cast
-    sites).
-23. **Literal-pattern decoding (u128 signedness, char/string escapes,
-    null→None).** reify's literal-pattern arm went through
-    `ast_literal_to_pattern`, which ignored the scrutinee and always
-    emitted `I128` for numerics, read `chars().next()` for chars (so
-    `'\n'` → `'\'`), cloned the raw string, and never mapped `null` to a
-    `None` case. A `u128` scrutinee compared via `i128::*` — codegen
-    emitted the `(ref $u128)` vs `(ref $i128)` mismatch (which had been
-    mis-triaged as a deep interning bug) and `parse::<i128>` of a value
-    > i128::MAX truncated to 0. The arm now mirrors
-    > `resolve_if_pattern_inner` (stmt.rs:1344); the char _expression_
-    > literal (`reify_literal`) is fixed the same way (it shared the broken
-    > decode). Clears match_literal, match_literal_i128_{guarded,large,
-    > side_effect}.
-24. **Or-pattern alternative bindings remapped to shared locals.**
-    `Num(n) | Neg(n)` gave each alternative its own local for `n` — the
-    matched alternative extracted the payload into one slot while the arm
-    body read the other. reify now mirrors `resolve_if_pattern_inner`
-    (stmt.rs:1798): remap later alternatives' binding locals onto the
-    first's and point the arm scope at the first's locals (reusing the
-    now-`pub(super)` `collect_pattern_bindings_with_index` /
-    `remap_pattern_local`). Clears match_or_pattern_5 / _iflet_1.
-25. **Match ergonomics for struct / tuple let-destructure through a ref.**
-    `let { x, y } = &p` / `let [a, b] = &t` bind `&field` / `&elem`.
-    reify's struct- and tuple-pattern arms read the decl / elements off
-    the _unpeeled_ `&Point` / `&[…]` scrutinee, so they resolved nothing
-    and the bindings typed `unknown`. Both arms now peel references for
-    the lookup and wrap each binding in the scrutinee's reference kind
-    via `apply_scrutinee_ref_kind`. Clears match_ergonomics_let_destructure
-    (the match cluster is now clean).
-26. **Generic resource types in the static resolver (2558 → 2566).**
-    `resolve_type_static_with_params`'s `Type::Generic` arm checked
-    struct / variant / enum but not resources, so a generic resource
-    (`Stream<u8>`, `Future<T>`) resolved to `UNKNOWN`. reify uses this
-    resolver for parameter / field types, so `fn consume(rx: Stream<u8>)`
-    lost the resource — the effect-check resource-store inference
-    (`signature_resources`) saw no `Stream`, and the body's
-    `Stream::<u8>::new()` failed with `missing resource 'Stream'`. The arm
-    now resolves a generic resource to
-    `GenericResource { name, module_source, type_args }` via
-    `lookup.resource_type`. +8 fixtures (effect_propagation_signature_*,
-    variant_payload, and other generic-resource signature sites). The
-    struct-field / nested members (`effect_propagation_struct_field`,
-    `_signature_nested`) needed the resolver unification in #27.
-27. **Unify `resolve_type_static` onto the type-param-aware resolver
-    (2566 → 2570).** `resolve_type_static` and
-    `resolve_type_static_with_params` had drifted: the former's
-    `Type::Generic` arm handled only `Option` / generic structs, so a
-    struct field or effect-op signature typed `Stream<u8>` /
-    `Result<T, E>` resolved to `UNKNOWN` (landings #14/#26 fixed only the
-    `_with_params` arm). A `Holder { stream: Stream<u8> }` field lost the
-    resource, so `build_propagation_closure` did not admit `Stream`
-    through an interface op returning `Holder`, and `with MyIO` callers
-    failed with `missing resource 'Stream'`. `resolve_type_static` now
-    delegates to `resolve_type_static_with_params(…, &[])`. Clears
-    effect_propagation_struct_field / _signature_nested; production
-    unaffected.
-28. **Numeric-literal parsing via shared `util` helpers (2570 → 2578).**
-    reify hand-decoded numeric literals keyed on the _target_ type: a
-    float target ran `parse::<f64>()` (failing on `0xFF` / `0b1010` →
-    0.0), an int target parsed digits directly (failing on scientific
-    `1e2` → 0), and neither stripped digit separators (`0x1234_5678` →
-    0). Now uses `util::parse_u128_literal` / `util::parse_float_literal`
-    keyed on `is_float_only_literal`, converting an integer-form literal
-    to f64 for a float target — also applied to the pattern / range-bound
-    decoders. Clears coerce_struct_field, number_literal.
-29. **Struct field access resolved against the receiver's module.**
-    `lookup_struct_field_index` looked the struct up by name only, so two
-    same-named structs in different modules (local `Pair` vs imported
-    `helper::Pair`) resolved fields against whichever the current module
-    saw first — `remote.y` read the wrong field. Now keys on the
-    receiver's `(module_source, name)` via `tysys.all_struct_fields`.
-    Clears struct_name_conflict.
-30. **Realise fn-bound type params to their function type (2579 → 2589).**
-    A `<F: fn(...)>` bound is realised eagerly to the bound's function
-    type (item.rs:1569), not a `TypeParam` slot. reify treated `F` as a
-    regular type param, so a param `f: F` reified to `TypeParam(F)` and
-    reached codegen unsubstituted ("unsubstituted TypeParam F"); including
-    fn-bound params in the positional scope also shifted the _real_
-    params' indices, mis-substituting them. reify_function and
-    reify_method now build the type-param scope from real params only
-    (dense indices matching the emitted `type_params`) and resolve a
-    param/return naming a fn-bound param to the bound's resolved function
-    type (`resolve_type_with_fn_bounds`; method bounds resolve with Self /
-    assoc bindings in scope). Clears closure_fn_bound_with_{effect_param,
-    regular_type_param}, closure_bound_with_multi_effect,
-    closure_generic_bound_fn, closure_method_fn_bound.
-31. **Carry the impl's trait type args onto `method_info` (2589 → 2595).**
-    The effect-dispatch synthesis keys its handler index on
-    `(struct, effect_module, base_trait, trait_type_args)` read off each
-    method function's `method_info`. reify left `trait_type_args` empty,
-    so a generic-effect handler (`impl Future<i32> for MockFuture`) was
-    keyed `Future<>` while the `with &mut f do` binding referenced
-    `Future<i32>` — no `DispatchPlan` matched and synthesis panicked.
-    annotate now records the resolved trait type args on
-    `ImplFacts.trait_type_args` (mirroring item.rs:1621) and reify_method
-    writes them onto `LocalMethodName.trait_type_args`. Clears
-    effect_handler_resource_{future,stream,stream_self_delegation}.
-32. **Peel newtypes for the float-literal decision (2595 → 2605).**
-    reify_literal chose float vs integer by comparing the recorded type
-    to F32/F64 exactly, so a float literal bound to a float _newtype_
-    target (`type Meters = f64; let m: Meters = 1000.0`) failed the check,
-    took the integer path, and reached codegen as `i32` where `f64` was
-    expected. Peel to the ultimate base type before the check. Clears
-    newtype_basic, newtype_float_types, newtype_impl,
-    newtype_option_pattern (float cluster now clean).
-33. **Resolve generic newtypes in the static resolver (2605 → 2607).**
-    `resolve_type_static_with_params`'s `Type::Generic` arm did not handle
-    a generic newtype (`type MyArray<T> = Array<T>`), so `MyArray<i32>`
-    resolved to `UNKNOWN`; reify uses this resolver for let / param types,
-    so the newtype's inherited base methods (`arr.len()` →
-    `Array<i32>::len`) never resolved and monomorphization couldn't reach
-    them. The arm now substitutes the generic newtype's base AST with the
-    instantiation's args and builds a `Newtype` over the resolved base
-    (mirroring type_resolution.rs:418). Fixes newtype_generic; production
-    unaffected.
-34. **Replay unary operator-trait dispatch in reify (2607 → 2608).**
-    `resolve_unary`'s `Neg` / `BitNot` trait-dispatch path recorded no
-    `operator_dispatch` entry, so reify re-emitted a bare `Unary` on a
-    struct operand (`-p1` where `p1: Vec2`), which codegen rejects
-    (`expected i32, found (ref $T)`). `resolve_unary` now sets
-    `pending_operator_ast_id` before `build_trait_op_method_call_on_resolved`
-    (mirroring the binary path), and reify's `Unary` arm replays the
-    recorded `Neg::neg` / `BitNot::bitnot` method call. Fixes
-    newtype_operator_trait; production unaffected.
-35. **Forward per-argument expected types for unannotated-param closure
-    args (2608 → 2609).** Reify resolved every call argument with
-    `expected = None`, so a closure literal passed where the param is a
-    `fn`-newtype (`type Reducer = fn(i32, i32) -> i32`) never saw the
-    function signature: its unannotated params (`|a, b| ...`) stayed
-    UNKNOWN, its functor `__call` lowered with `unknown` param types, and
-    the method was dropped before codegen (`fold$__Closure_4` referenced a
-    `__Closure_4::__call` that no longer existed). The elaborator now
-    records the resolved (type-arg-substituted) param types per call site
-    (`sem.types.call_param_types`, keyed by the call `AstId`); reify reads
-    them and forwards the matching param type as the expected type, but
-    only for closure args that have an unannotated param
-    (`arg_is_unannotated_closure`). The restriction keeps effect-
-    polymorphic closures (`each(items, |x: i32| { println(...) })` against
-    `fn mut(i32) with E`) inferring their effects from the body instead of
-    pinning `declared_effects` to the generic effect param. reify_closure
-    also peels newtypes before reading the expected fn signature. Fixes
-    newtype_closure_coercion; production unaffected.
-36. **Replay the production `Call`'s exact type args for static dispatch
-    (2609 → 2610).** Reify rebuilt a static / free call's `type_args` from
-    `generic_instantiations`, the flat impl+method type-arg list. For a
-    static method on a generic struct (`Container::make()` with `let c:
-    Container<i32> = …`) the impl arg `i32` rides in
-    `function_ref.monomorph_info`, so feeding it back as a method-level
-    `type_arg` mangled the call as `Container::make<i32>` while monomorphize
-    emitted `Container<i32>::make` — the instance was never found
-    (`unresolved Call: Container::make<i32>`). `StaticMethodDispatch` now
-    carries the exact `type_args` the production builder put on the `Call`
-    (recorded at all four dispatch sites); reify replays it verbatim. Fixes
-    infer_static_method_from_lhs; production unaffected.
-37. **Coerce `break label: value` against the block's result type in reify
-    (2610 → 2611).** Reify resolved every `break label: value` with
-    `expected = None`, so a `break label: null` whose `Option<T>` is only
-    pinned by a sibling break (`break label: Option::Some(5)`) reached WIR
-    as a nullref and failed validation (`expected (ref $type), found
-    nullref`). The labeled-block frame now falls back to the block's
-    unified result type (`recorded_type`) when the use site supplies no
-    expected type, and the `break` stmt resolves its value against the
-    matching frame's expected type. Fixes labeled_block_break_null_coercion;
-    production unaffected.
-38. **ASCII-only test export-name mangling in reify (2611 → 2612).** Reify
-    built a test's internal function name with a Unicode-aware
-    `is_alphanumeric`, letting multibyte letters (`日`, `é`) survive into the
-    Component Model kebab-case export name and crash Wasm validation
-    (`export name test-0-日本語のテスト-ok is not a valid extern name`).
-    Reify now uses the shared `name::test_name_to_snake` (ASCII-only,
-    matching item.rs). Fixes test_unicode_names; production unaffected (it
-    already used the helper). ice_array_iter_into_iterator also dropped off
-    the failing list (cleared by an earlier landing).
-39. **Resolve `fn(...) with E` effects on reified type annotations (2612 →
-    2613).** The shared static type resolver has no effect context and
-    interned every `fn`-typed annotation with `effects: []`, so a
-    `fn`-typed parameter lost its `with` clause and `check_effects` could
-    not see that `f: fn() with Stdout` requires `Stdout` at an indirect
-    call (`effect_indirect_call_error` compiled instead of reporting
-    `missing effect 'Stdout'`). Reify now re-interns function-type
-    annotations with their effects (`apply_function_type_effects`,
-    covering bare and `&`/`&mut`-wrapped fn types), resolved through
-    `reify_effects`. `reify_effects` and reify gained an effect-param scope
-    (`current_effect_param_names`, set from `<effect E>` params in
-    `reify_function`/`reify_method`) so a param effect resolves to
-    `EffectRef::Param`, not a `Concrete` effect — without it effect-generic
-    `fn(...) with E` params (closure_effect_generic, effect_1, …) would
-    carry `Concrete { E }` and fail to unify with the recorded `Param { E }`
-    declared effect. Fixes effect_indirect_call_error; production unaffected.
-40. **Mark primitive `&mut self` method receivers address-taken in reify
-    (2613 → 2614).** A mutating trait method on a primitive local
-    (`x.bump()` where `fn bump(&mut self)` on `i32`) left `x` unchanged
-    under reify: the value-copied primitive was never marked address-taken,
-    so the boxing pass didn't box it and the mutation through `&mut self`
-    was lost. Reify now mirrors `Elaborator::resolve_method_call_with`
-    (method_call.rs:517) — when the dispatch is `&mut self` (non-ref-impl)
-    on a non-reference primitive local, the receiver local is inserted into
-    `address_taken_locals`. Fixes bug_store_load_forward_mut_method_receiver;
-    production unaffected.
-41. **Peel references and newtypes in reify's field-index lookup (2635 →
-    2638).** `lookup_struct_field_index` (reify's field-access index resolver,
-    reify.rs:7006) matched only `Struct` / `GenericInstance` / `Ref` / `MutRef`
-    receivers and fell to a `(0, field_name, None)` fallback for everything
-    else. A field access on a newtype receiver (`loc.y` where
-    `loc: Location` and `type Location = Point`) hit the fallback and reified
-    every field with `field_index = 0`. The text dumps stayed identical
-    (`nir_unparse` prints `FieldAccess` by name and drops the index) and
-    `-O0` masked it, but `nir/sroa` keys per-field scalar locals on
-    `(local, field_index)` (sroa.rs:1163), so `.y` aliased onto the `.x`
-    scalar local — `clone: (10, 20)` became `clone: (10, 10)` at `-O2`.
-    `lookup_struct_field_index` now recurses through `Ref` / `MutRef` and a new
-    `Newtype` arm (peeling to `base_type`), mirroring the elaborator's
-    `lookup_field_type` newtype arm (expr.rs:1500); this also covers chained
-    newtypes and `&Location`. Clears the newtype `-O2` cluster
-    (newtype_return_type, newtype_chained_method, newtype_method_inheritance);
-    production unaffected (the helper is reify-only).
-42. **Build reify's tuple-literal type bottom-up from its elements (2638 →
-    2648).** reify's `TupleLiteral` arm (reify.rs:2040) stamped the literal
-    with the recorded outer `TypeId` while each element carried its own
-    independently recorded type. The elaborator's `resolve_tuple_literal`
-    instead builds the tuple type bottom-up via `make_tuple(elem_types)`
-    (expr.rs:3896), so an outer tuple's element type is, by construction, the
-    identical interned id as the inner element's own type. For a nested tuple
-    (`nested: [Wrapper, [i32, i32]]`) the two ids print equal but interned
-    distinctly, so `nir/sroa` decomposed `nested` into a field-1 scalar local
-    typed with one tuple `TypeId` while the inner `nested.1.1` index read the
-    other — tripping WIR validation at `-O2` (`expected (ref null $type),
-    found i32`). The NIR text was byte-identical, so the divergence was
-    invisible in dumps and masked at `-O0`. reify now builds the tuple's
-    `TypeId` from its reified element types via `make_tuple`, mirroring
-    production. Clears the entire `-O2` `TypeId`-identity cluster (tuple_1,
-    tuple_literal_expected_type_in_branch, opt_container_sroa_tuple,
-    tuple_name_collision, tuple_name_collision_2 — and the
-    cross_module_same_name_fn / infer_lhs_overrides_literal / return_merged /
-    wasm_name_conflict_generic_fn sites that shared the same structural-tuple
-    interning gap); production unaffected (the arm is reify-only).
-43. **Handle spread elements in reify tuple literals (2648 → 2649).** reify's
-    `TupleLiteral` arm walked elements with `reify_expr`, which panics on a
-    `Spread` (`bare Spread is invalid outside TupleLiteral`) — so any
-    `[..rest, b]` / `[a, ..middle, b]` in a variadic function crashed reify
-    before WIR build. Ported `resolve_tuple_literal`'s spread handling
-    (expr.rs:3797) into a new `reify_tuple_literal`: a direct `TypePack`
-    operand → `TypePackExpansion`, a tuple containing a pack → `TupleSpread`
-    (monomorphize expands), a concrete tuple → inline `FieldAccess` per
-    element (binding a non-trivial operand to a `__spread_N` temporary). Adds
-    `type_contains_pack` mirroring expr.rs:3752. Clears variadic_3 and removes
-    the spread panic for the rest of the cluster; production unaffected.
-44. **Resolve variadic type-pack spreads in the static resolver (2649 →
-    2656).** `resolve_type_static_with_params` (the host-agnostic resolver
-    reify routes through) had no `Type::TypePackSpread` arm, so a `..T` spread
-    fell to `_ => UNKNOWN`. A `[..T]` parameter therefore resolved its element
-    to `unknown`, and a generic tuple method (`Tuple<..T>^Eq::eq`)
-    monomorphized against `Tuple<unknown>` — never registering at WIR build.
-    Added a `TypePackSpread` arm that resolves the pack to a `TypePack` keyed
-    by the param's positional index (mirroring the instance resolver's
-    `trait_ctx.type_params` lookup, type_resolution.rs:103); the now-exhaustive
-    match drops the dead `_ => UNKNOWN` catch-all. Clears variadic_1,
-    variadic_2, variadic_trait_bound. Production unaffected (full e2e stays
-    2678/2678 — production resolves these spreads through its instance
-    resolver, which already handled them).
+- **Per-`AstId` collisions.** The root lift was making the template
+  interpolation sub-parser continue the parent's dense `AstId` space
+  (it used to restart at `AstId(0)`, clobbering every per-`AstId` map);
+  later generalised by keying the annotation maps on `SymbolKey`
+  (`(ModuleSource, AstId)`) so cross-module inlined AST (assoc-const
+  bodies, callee-module default args, primitive-const bodies) reads the
+  right module's facts instead of a colliding id's.
+- **Reading recorded facts reify ignored.** i128/u128 literal coercions
+  and casts, `coercions`, comparison operator-trait wrapping
+  (`!=`→`!eq`, `<`/`>`/`…`→`cmp == Ordering::X`, `RefEq`/`RefNotEq`),
+  `Self::AssocType` projection via `ImplFacts`, generic instantiation
+  type args, closure capture replay, IndexMut desugar, with-handler /
+  effect bindings.
+- **Pattern & dispatch disambiguation.** Bare-ident vs enum-case vs
+  immutable-global patterns; associated-constant patterns and const
+  range bounds; variant constructors in turbofish form; static-method
+  vs variant-ctor ordering.
+- **Compile-time unrolling.** Tuple `for-of` per-element annotation
+  overlays (`ElementOverlay` + a visit-counter instantiation log) so an
+  unrolled body dispatches each element to _its_ method, not the last;
+  concrete tuple `.zip()` transposed inline; variadic type-pack
+  machinery.
+- **Trailing-value & control flow.** Trailing value-producing
+  `if`/`match`/labeled-block in block-tail position; naked `continue`
+  breaking to the for-body label; let-chain arm types via
+  `block_result_type`.
+- **Method-call result typing.** A method call's `type_id` comes from
+  the resolved method's return type recorded on `MethodDispatch`, not a
+  per-`AstId` `expression_types` entry (a unit call mistyped as another
+  type emitted a spurious `drop` of a value-less call → Wasm stack
+  underflow).
 
-45. **Mangle variadic-tuple impl methods as `Tuple` in reify (2656 → 2660).**
-    `reify_method` derived a method's base struct name from
-    `type_name(facts.self_type)` truncated at `<`. For an
-    `impl<..T> Trait for [..T]` the self type renders in bracket notation
-    (`[..T]`, no `<`), so the method registered as `[..T]^Trait::method`
-    instead of the generic `Tuple^Trait::method` production emits (confirmed
-    by instrumenting `monomorphize.rs`: reify registered
-    `[..T]^Countable::count` vs production's `Tuple^Countable::count`). The
-    call site replays annotate's production `FunctionRef`, whose
-    `monomorph_info.generic_name` is `Tuple^…`, and the monomorphizer's
-    tuple-variadic instantiation path is gated on
-    `struct_name == TUPLE_TYPE_NAME` (func_inst.rs:888) — so neither found the
-    `[..T]^…` template and WIR build panicked (`unresolved MethodCall:
-    Tuple<i32,bool>^Trait::method`). reify_method now uses `TUPLE_TYPE_NAME`
-    when the impl self type is a builtin tuple, matching production
-    (item.rs:660). Clears variadic_for_of_generic_method and
-    variadic_impl_method_type_param; production unaffected (reify_method is
-    reify-only). A companion `monomorphize.rs` change keys `generic_functions`
-    on `(module_source, name)` so same-named generic tuple methods across
-    modules coexist.
-46. **Resolve call defaults in the callee module scope in reify (2660 →
-    2661).** `reify_pad_args_with_defaults` reified a synthesized
-    default-argument expression against the caller's module context, so a
-    default referencing a callee-module-private item
-    (`paint(c = DEFAULT_VALUE)` with `DEFAULT_VALUE` private to the callee
-    module) failed to resolve and reached WIR as "nothing on stack". Mirror
-    production's `default_scope_module` (expr.rs:914) by swapping the
-    module-context triple (`current_module_source` / `current_module_items` /
-    `sem`) to the callee module around the default walk; threads the full
-    per-module semantics map onto `Reify` as `all_module_semantics`. Clears
-    default_arg_private_item.
-47. **Record Index-vs-IndexValue deref explicitly for reify (2661 → 2663).**
-    `reify_index` chose whether to wrap an index in an outer `Deref` by
-    testing whether `OperatorDispatch.return_type` was a reference — `Index`
-    returns `&Output`, `IndexValue` returns `Output`. That misfires when an
-    `IndexValue`'s `Output` is itself a reference (`Array<&i32>::index_value`
-    → `&i32`): reify saw a `Ref` return and double-dereffed, lowering `*arr[0]`
-    to `**arr.index_value(0)` and tripping WIR validation
-    (`expected (ref null $type), found i32`). `OperatorDispatch` gains an
-    explicit `needs_deref` flag (true only at the `Index` site); reify reads
-    it. Clears trait_bound_1. Production unaffected (only reify consumes the
-    flag).
-48. **Recover re-exported decl field types in reify_struct (2664 → 2666).** A
-    struct field typed by a `pub use`-re-exported decl reified as `unknown`.
-    `reify_struct` reads field types from `all_struct_fields`, populated by the
-    static decl-field resolver (`resolve_type_static` → `TypeLookup`), which
-    cannot follow `pub use` chains (`TypeLookup` has no `loaded_modules`).
-    `Mark = u64` is defined in `wasi:clocks/monotonic_clock.wado` and `use`d
-    from `wasi:clocks` (one re-export hop), so `FixedClock.mark` landed
-    `unknown`; codegen then failed `expected i32, found i64`. Production has the
-    same `unknown` in `all_struct_fields` but masks it by re-resolving each
-    field via the instance resolver `resolve_named_type` (type_resolution.rs:254)
-    at emission. Added `TypeTable::find_unique_decl_type_by_name` (scans
-    interned enum / resource / flags / variant / newtype decls by name, returns
-    the id only when unambiguous so a cross-module collision never picks wrong)
-    and call it in `reify_struct` for a bare imported `Named` field whose
-    snapshot type is `UNKNOWN`. Clears effect_handler_with_do; production
-    unaffected.
-49. **Transpose concrete tuple `.zip()` inline in reify (2666 → 2668).**
-    The reify tuple-receiver shortcut emitted `TupleZip` unconditionally,
-    deferring expansion to the monomorphizer. But non-generic bodies never
-    reach the monomorphizer, so a concrete `[a, b].zip()` reached
-    `lower::translate` as an un-expanded `TupleZip` and hit its `unreachable!`.
-    Mirror the elaborator (`method_call.rs:369`): defer to `TupleZip` only when
-    the receiver type contains a type pack; otherwise transpose the
-    tuple-of-tuples inline via nested `FieldAccess` into `TupleLiteral` columns.
-    Clears tuple_zip; byte-for-byte WIR parity at O0/O2.
-50. **Keep trailing if/match/labeled-block value-producing in reify
-    (2668 → 2669).** `reify_block` only special-cased a trailing `Stmt::Expr`
-    when an expected type flowed in; a block ending in an `if` / `match` /
-    labeled-block expression fell through to statement lowering, dropping the
-    branch values. Mirror `Elaborator::resolve_block` (stmt.rs:40–66): route a
-    trailing `If` through a new `reify_if_stmt_with_expected`, reify a trailing
-    `Match` at the expected type, and reify a trailing labeled block with the
-    expected type threaded in. Also make stmt-position `reify_if_stmt` emit a
-    value `If` expression (mirroring `resolve_if_stmt`) so a tail `if` in a
-    block produces its value even without an `expected_type`.
-51. **Lower naked `continue` to the for-body break label; use
-    `block_result_type` for let-chain arm types (2669 → 2675).** Two fixes:
-    (a) inside a C-style `for`, `continue` must break to the synthetic body
-    label so the `update` runs before the next iteration — `reify_stmt` emitted
-    a bare `Continue`, looping forever (epoch-interrupt trap). Mirror
-    `resolve_continue` (stmt.rs:2906) via `ctx.for_continue_labels`. Clears
-    for_merged, loop_nested. (b) `reify_let_chain_stmts` computed then/else arm
-    types with a hand-rolled "last stmt is Expr" check returning `Unit` for a
-    block ending in a value `If` / `Match` / nested chain, collapsing the
-    two-arm `Match`'s result type to `Unit` and dropping the branch values
-    (`unreachable` trap in `classify_opt`). Use the shared
-    `crate::tir::block_result_type`, as `resolve_let_chain_stmts` (stmt.rs:1140)
-    does. Clears if_merged.
-52. **(rolled into #50/#51).** `opt_sroa_variant_return_if_descent` clears as a
-    by-product of the trailing-value-block handling in #50: the SROA pass now
-    sees the same value-`If`-wrapped `Return` shape production emits.
-53. **Per-element annotation overlays for tuple `for-of`.** Clears
-    `tuple_for_of` — the last reify-specific failure, taking the suite to
-    **2678 / 2678**. A compile-time-unrolled tuple `for-of` elaborates one
-    source body sub-tree (fixed `AstId`s) once per element in N different type
-    contexts. Production's `resolve_tuple_for_of` builds TIR inline per element,
-    so it never re-reads annotations; but every `AstId`-keyed annotation map is
-    overwritten in place, leaving only the _last_ element's facts. Reify, which
-    reads those maps, therefore dispatched every unrolled element to the last
-    element's methods (e.g. `for let v of [42,"x",true] { v.describe() }` called
-    `bool::describe` for all three, passing an i32/String receiver to bool's
-    method → invalid module). Fix: when reify will consume the result
-    (`Elaborator::capture_tuple_overlays`, gated identically to the reify
-    switch via `module_uses_reify`), `resolve_tuple_for_of` captures each
-    element's freshly recorded body facts into a `sem::types::ElementOverlay`
-    and _truncates_ the per-element maps back to their pre-loop length, so each
-    element starts clean and stale entries can't linger
-    (`TypeAnnotations::split_off_overlay`, using `IndexMap::split_off`). The
-    overlays land in `tuple_overlays: IndexMap<AstId, Vec<Vec<ElementOverlay>>>`
-    (for-of id → per-instantiation → per-element; a nested inner for-of is
-    instantiated once per outer element, hence the per-instantiation level).
-    Reify's `reify_tuple_for_of` consumes them with a per-`AstId` visit counter
-    (`tuple_overlay_visits`) selecting the instantiation and a
-    `tuple_overlay_stack` holding the active element overlays innermost-last;
-    all 14 body-level annotation reads in reify go through `ann_*` accessors
-    (generated by the `reify_annotation_accessors!` macro) that consult the
-    stack top-down before falling back to `sem.types`. Verified: test-world WAT
-    is byte-identical reify-vs-production for `tuple_for_of`, and both full e2e
-    suites are 2678/2678.
+Codegen / type-resolution fixes that surfaced once reify became the
+default (these are walk-independent, but reify-default exercises the
+paths CI compiles):
 
-#### Re-triaged remaining clusters
-
-Largest first, grouped by cluster. **2678 / 2678** passing under
-reify (2026-05-31 session) — full parity with production. The
-localized "missing annotation
-channel" gaps are gone; the `-O2`-only `TypeId`-identity cluster (landings
-#41 / #42) and the entire variadic type-pack cluster (landings #43–#45) are
-cleared; the 2026-05-31 session cleared `tuple_zip`, `if_merged`,
-`for_merged`, `loop_nested`, and `opt_sroa_variant_return_if_descent`
-(landings #49–#52), and finally `tuple_for_of` (landing #53) — reaching full
-parity. No reify-specific failures remain.
-
-##### Variadic type-pack machinery — CLEARED (landings #43–#45)
-
-The six variadic fixtures all pass under reify now. Three coupled gaps were
-closed: spread elements in reify tuple literals (#43), `Type::TypePackSpread`
-resolution in the static type resolver (#44), and — for the
-`impl<..T> Trait for [..T]` shape — mangling the method's base struct name as
-`Tuple` rather than the bracket-rendered `[..T]` (#45). The last bit landed
-alongside a `monomorphize.rs` change that keys `generic_functions` on
-`(module_source, name)` so same-named generic tuple methods from different
-modules no longer collide.
-
-##### Compile-time tuple enumeration — CLEARED (landings #49, #53)
-
-- `tuple_zip` — CLEARED (landing #49). Concrete tuple `.zip()` now
-  transposes inline in reify instead of emitting `TupleZip` (which only the
-  monomorphizer expands, never reached by non-generic bodies).
-- `tuple_for_of` — CLEARED (landing #53). The real cause was not
-  ref-exactness (an earlier mis-diagnosis from a corrupted investigation): a
-  compile-time-unrolled tuple for-of elaborates one source body in N type
-  contexts, so the `AstId`-keyed annotation maps were overwritten down to the
-  last element's facts, and reify dispatched every element to the last
-  element's methods. Fixed with per-element annotation overlays (see landing
-  #53 for the mechanism). Test-world WAT is now byte-identical
-  reify-vs-production.
-
-##### Remaining singles — CLEARED this session
-
-- `effect_handler_with_do` — CLEARED (landing #48).
-- `opt_sroa_variant_return_if_descent` — CLEARED (landing #52). A trailing
-  value-producing `if` / `match` / labeled-block in block-tail position now
-  reifies as a value expression, matching production's `resolve_block`
-  trailing-statement handling.
-- `if_merged` — CLEARED (landings #50, #51). Two bugs: a trailing
-  `if let … { … } else { … }` expression dropped its branch values
-  (`reify_let_chain_stmts` computed arm types with a hand-rolled "last stmt is
-  Expr" check instead of `block_result_type`), and trailing value-producing
-  blocks were lowered as statements.
-- `for_merged` / `loop_nested` — CLEARED (landing #51). Naked `continue`
-  inside a C-style `for` emitted a bare `Continue` instead of breaking to the
-  synthetic body label, so the loop `update` never ran (infinite loop /
-  epoch-interrupt trap).
-
-##### Where to start next
-
-Reify parity for **user modules** is complete: 2678/2678 under reify (the
-default now that the `WADO_REIFY` gate is removed), matching the production
-walk, with no reify-specific failures. The remaining Stage 5 work is **stdlib
-parity**: `module_uses_reify` still routes `Core` / `Wasi` / `Wasm` modules and
-stdlib-snapshot construction through the production walk. Forcing reify on for
-all modules surfaces the first gap immediately — a WIR panic
-`unresolved MethodCall "builtin::array<u8>^Eq::eq"` — so the next track is to
-put stdlib (and the snapshot) on reify and clear those gaps one at a time, using
-the recipe below. That unblocks Stage 7's combined-walk removal. Stage 6
-(liveness/DCE) is tracked in a separate PR. The
-`#### Recipe for adding a new reify gap`, `#### Gotchas`, and `#### Endgame`
-below still apply.
+- **Newtype dependency order.** Newtypes were resolved inline during
+  struct-field resolution in module order, so a user `struct Color {
+  v: f32x4 }` resolved before `core:simd`'s `pub type f32x4 = v128` →
+  `Color.v` became `unknown` (→ i32 at WIR, `expected i32, found v128`).
+  A fixpoint newtype pre-pass now resolves all newtypes before any
+  struct field. Fixes the SIMD examples.
+- **DCE reachability after newtype erasure.** `record_method_call`
+  derived the callee struct name from the (erased) receiver type, so
+  `self.f32x4_field.max()` recorded `v128::max` and dropped the real
+  `f32x4::max`. It now also marks the resolved target from
+  `func.method_info` (captured pre-erasure). Additive — DCE only adds
+  callees.
+- **CLI thread stack.** Raised the tokio thread stack to 64 MiB; the
+  recursive-descent compiler overflowed the default 2 MiB stack on
+  large generated sources (package-gale's css3 / sexpression parsers).
 
 ### Stage 5 handover
 
-The recording half is complete: every landed gap has an annotation channel
-on `sem.types` and reify consumes it. What remains is per-shape parity for
-the 7 fixtures above (compile-time tuple enumeration and the remaining
-feature-level singles — the `-O2` `TypeId`-identity and variadic type-pack
-clusters are cleared), then the final orchestration cut
-(`#### Endgame`).
+User-module parity is done. What remains is **stdlib parity**: routing
+`Core` / `Wasi` / `Wasm` modules and the snapshot through reify. Forcing
+reify on for _all_ modules currently fails **1610 / 2692** E2E fixtures
+(allocator / anon-struct / array / … clusters), so stdlib-shaped
+constructs still hit reify gaps. Clear them one cluster at a time with the
+recipe below; the `#### Gotchas` and `#### Endgame` notes still apply.
 
 #### Gotchas seen in this session — read before continuing
 
@@ -1246,12 +628,14 @@ The shape that has worked consistently:
 
 Flipping reify default-on for user modules is **done**: the
 `WADO_REIFY` gate was removed and `module_uses_reify` now keys only
-on stdlib / snapshot status. Two things remain before the combined
-walk can be deleted: (1) **stdlib parity** — put `Core` / `Wasi` /
-`Wasm` modules and the snapshot on reify and clear the gaps (the
-remainder of Stage 5); and (2) Stage 6's liveness pass. Only once
-nothing routes through the production walk can its TIR-emission half
-(and the old `Elaborator` / `AnnotateState`) be removed.
+on stdlib / snapshot status. The single thing left before the combined
+walk can be deleted (Stage 7) is **stdlib parity** — put `Core` /
+`Wasi` / `Wasm` modules and the snapshot on reify and clear the
+remaining 1610-fixture gap set (the remainder of Stage 5). Once
+nothing routes through the production walk, its TIR-emission half and
+the old `Elaborator` / `AnnotateState` can be removed. This does **not**
+depend on Stage 6 (liveness); the two are independent and either may
+land first.
 
 ### Design notes (Stages 1–3)
 
