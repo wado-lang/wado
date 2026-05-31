@@ -1,0 +1,38 @@
+// Soundness regression: LICM must not hoist a field read on a reference when
+// another reference of the same type writes that field in the loop.
+//
+// Wado has no borrow checker and references alias (spec: "every read and write
+// lands on the same location"). Here `a` and `b` are two `&mut Node` that point
+// at the SAME node. The loop writes `a.value` and reads `b.value`; because they
+// alias, every read must observe the running increment. LICM's per-local /
+// alias-copy tracking does not connect `a` and `b` (the caller created the
+// alias), so without type-keyed write tracking it would hoist `b.value` into a
+// loop-invariant snapshot and compute 0 instead of 15.
+
+use { println } from "core:cli";
+
+// Two fields so single-field-parameter SROA does not flatten `&mut Node` into a
+// by-value `i32`; this keeps the test focused on LICM's field-read hoisting.
+struct Node { value: i32, tag: i32 }
+
+#[inline("never")]
+fn run_loop(a: &mut Node, b: &mut Node) -> i32 {
+    let mut sum = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        a.value = a.value + 1;   // write through a
+        sum = sum + b.value;     // read through b (aliases *a)
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let mut n = Node { value: 0, tag: 0 };
+    let result = run_loop(&mut n, &mut n);  // a and b alias the same node
+    // value: 0->1->2->3->4->5; sum = 1+2+3+4+5 = 15
+    println(`{result}`);
+}
+
+__DATA__
+{
+    "stdout": "15\n"
+}

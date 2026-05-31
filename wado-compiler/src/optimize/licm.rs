@@ -30,6 +30,18 @@ struct ModifiedVars {
     fields: IndexSet<(u32, u32)>,
     /// GC alias pairs: if `(a, b)` is present, `a` and `b` may point to the same object.
     aliases: Vec<(u32, u32)>,
+    /// `(pointee_type, field_index)` for every field written in the loop,
+    /// regardless of which handle performed the write.
+    ///
+    /// Wado has no borrow checker and references explicitly alias (a write
+    /// through one `&mut T` is observable through any other `&T`/`&mut T` to the
+    /// same object — spec: "references alias, every read and write lands on the
+    /// same location"). The `(local, field)` and alias tracking above only sees
+    /// writes through `x` itself or its `let a = b` copies, so it cannot prove a
+    /// reference-typed `x.f` invariant: another reference of the same type may
+    /// write `f`. This type-keyed set lets `is_reference_field_aliasing_written`
+    /// block such hoists without a full heap alias analysis.
+    written_field_types: IndexSet<(TypeId, u32)>,
 }
 
 impl ModifiedVars {
@@ -39,6 +51,33 @@ impl ModifiedVars {
 
     fn insert_field(&mut self, local_idx: u32, field_idx: u32) {
         self.fields.insert((local_idx, field_idx));
+    }
+
+    /// Record that `field_idx` of an object of type `pointee` is written in the
+    /// loop (through some handle). `pointee` is the type the written-through
+    /// reference points at, with `Ref`/`MutRef` wrappers stripped.
+    fn insert_written_field_type(&mut self, pointee: TypeId, field_idx: u32) {
+        self.written_field_types.insert((pointee, field_idx));
+    }
+
+    /// True when hoisting `x.field_idx` is unsound because `x` is a reference
+    /// whose pointee's `field_idx` is written elsewhere in the loop (possibly
+    /// through an aliasing reference). Non-reference roots are unaffected: a
+    /// by-value struct can only be aliased via a tracked `let`/`&`, which the
+    /// `fully`/`fields`/alias machinery already covers.
+    fn is_reference_field_aliasing_written(
+        &self,
+        root_type: TypeId,
+        field_idx: u32,
+        type_table: &TypeTable,
+    ) -> bool {
+        match type_table.get(root_type) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                let pointee = strip_references(*inner, type_table);
+                self.written_field_types.contains(&(pointee, field_idx))
+            }
+            _ => false,
+        }
     }
 
     fn extend_full(&mut self, other: &IndexSet<u32>) {
@@ -245,8 +284,33 @@ fn licm_loop(
             &mut next_local,
         );
 
+        // Step 3.5: Drop candidates whose root is a reference whose pointee's
+        // field is written elsewhere in the loop. Such a `x.f` is not provably
+        // loop-invariant: another reference of the same type may alias `*x` and
+        // write `f` (Wado references alias; LICM has no heap alias analysis).
+        // This is what makes the nested-chain relaxation sound and also fixes
+        // the pre-existing single-level case of two `&mut` aliasing the same
+        // object. `seen` already recorded these, but each iteration rebuilds it.
+        candidates.retain(|c| {
+            let root_ty = if (c.local_index as usize) < locals.len() {
+                locals[c.local_index as usize].type_id
+            } else {
+                c.type_id
+            };
+            !modified_vars.is_reference_field_aliasing_written(root_ty, c.field_index, type_table)
+        });
+
         if candidates.is_empty() {
             break;
+        }
+
+        // Renumber the surviving hoist locals contiguously from `*local_count`:
+        // dropped candidates left gaps in the indices `find_hoist_candidates`
+        // provisionally assigned, and `locals.push` below appends densely.
+        next_local = *local_count;
+        for candidate in &mut candidates {
+            candidate.new_local_index = next_local;
+            next_local += 1;
         }
 
         // Step 4: Create hoisting statements
@@ -462,12 +526,53 @@ fn is_pure_field_chain(expr: &NirExpr) -> bool {
     }
 }
 
+/// Strip any number of `Ref`/`MutRef` wrappers, returning the underlying
+/// pointee type. References to the same pointee alias each other, so the
+/// pointee type is the key for type-based aliasing-write tracking.
+fn strip_references(type_id: TypeId, type_table: &TypeTable) -> TypeId {
+    match type_table.get(type_id) {
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+            strip_references(*inner, type_table)
+        }
+        _ => type_id,
+    }
+}
+
+/// Record into `written_field_types` that `target` writes a field, keyed by the
+/// pointee type of the object whose field is assigned. Handles the field-access
+/// assignment shapes (`a.f`, `a.b.c`, `arr[i].c`, `(*p).c`); the inner object's
+/// static type carries the type identity that an aliasing reference would share.
+fn record_written_field_type(
+    target: &NirExpr,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
+    if let NirExprKind::FieldAccess {
+        expr: inner,
+        field_index,
+        ..
+    } = &target.kind
+    {
+        let pointee = strip_references(inner.type_id, type_table);
+        modified.insert_written_field_type(pointee, *field_index);
+    }
+}
+
 /// Mark what is modified by an assignment target expression.
 ///
 /// Distinguishes between field assignments (`buf.len = x` marks only the `len` field
 /// of `buf` as modified) and direct/deeper assignments (marks the root local as fully
 /// modified). This enables LICM to hoist `buf.repr` even when `buf.len` is assigned.
-fn mark_assignment_target_as_modified(expr: &NirExpr, modified: &mut ModifiedVars) {
+///
+/// Every field-access write also records its pointee-type key via
+/// `record_written_field_type`, so a reference-typed hoist candidate that may
+/// alias the written object is blocked even when the write goes through a
+/// different handle (see `is_reference_field_aliasing_written`).
+fn mark_assignment_target_as_modified(
+    expr: &NirExpr,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
     match &expr.kind {
         NirExprKind::Local { index, .. } => {
             // Direct assignment: `buf = x` — fully modified
@@ -478,6 +583,10 @@ fn mark_assignment_target_as_modified(expr: &NirExpr, modified: &mut ModifiedVar
             field_index,
             ..
         } => {
+            // Record the type-keyed write regardless of chain shape, so any
+            // reference of the same pointee type is blocked from hoisting this
+            // field (Wado references alias and LICM has no heap alias analysis).
+            record_written_field_type(expr, modified, type_table);
             if let NirExprKind::Local { index, .. } = &inner.kind {
                 // Single-level field assignment: `buf.field = x` — only that field is modified
                 modified.insert_field(*index, *field_index);
@@ -488,12 +597,11 @@ fn mark_assignment_target_as_modified(expr: &NirExpr, modified: &mut ModifiedVar
                 // reassign the `b` reference held in the root local `a`, nor any
                 // other field of `*a`, so the root must not be marked fully
                 // modified — that would defeat hoisting of sibling chains such as
-                // `a.b.d`. Marking nothing here is sound for the single-level hoist
-                // candidates LICM considers: a write to `*a.b.c` cannot change any
-                // field of any local in scope. LICM peels one reference level per
-                // fixpoint iteration, so once `a.b` is hoisted into a local the
-                // write becomes single-level (`_h.c = x`) and is recorded precisely
-                // on the next pass (the aliasing of `_h` is then tracked too).
+                // `a.b.d`. LICM peels one reference level per fixpoint iteration;
+                // once `a.b` is hoisted into a local the write becomes
+                // single-level (`_h.c = x`) and is recorded precisely on the next
+                // pass. Aliasing through a *different* reference to `*a.b` is
+                // handled by the type-keyed write recorded above, not here.
             } else {
                 // Non-field-chain nesting (`a[i].c = x`, `(*p).c = x`):
                 // conservatively mark the root local as fully modified.
@@ -620,7 +728,7 @@ fn collect_modified_vars_in_expr(
             // Mark the assignment target appropriately.
             // Field assignment (buf.field = x) only marks that specific field as modified,
             // enabling LICM to still hoist other fields of the same object.
-            mark_assignment_target_as_modified(target, modified);
+            mark_assignment_target_as_modified(target, modified, type_table);
             collect_modified_vars_in_expr(target, modified, type_table);
             collect_modified_vars_in_expr(value, modified, type_table);
         }

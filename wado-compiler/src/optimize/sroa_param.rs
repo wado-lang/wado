@@ -277,9 +277,7 @@ fn reference_param_struct_key(
     type_table: &TypeTable,
 ) -> Option<(String, ModuleSource)> {
     match type_table.get(type_id) {
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            struct_key_of(*inner, type_table)
-        }
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => struct_key_of(*inner, type_table),
         _ => None,
     }
 }
