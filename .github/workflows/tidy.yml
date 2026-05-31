@@ -166,12 +166,15 @@ jobs:
   # - Otherwise apply both upstream patches. If the result differs from
   #   HEAD:
   #     * On an internal PR (head repo == this repo), push a `chore: tidy`
-  #       commit. The push retriggers this workflow; the next run hits the
-  #       short-circuit and goes green.
-  #     * On a fork PR (no write access, secrets unavailable), skip the
-  #       push and emit guidance for the fork author.
-  #   Either way, the job exits non-zero so the check is red until tidy
-  #   is satisfied.
+  #       commit and exit green. The push retriggers this workflow; the next
+  #       run hits the short-circuit and stays green. We deliberately do NOT
+  #       fail here: the push itself starts a fresh CI round, so the PR is
+  #       never momentarily all-green and auto-merge cannot fire prematurely.
+  #       A red check on the (now superseded) run only confuses tooling and
+  #       coding agents into thinking tidy is broken.
+  #     * On a fork PR (no write access, secrets unavailable), skip the push,
+  #       emit guidance for the fork author, and exit non-zero so the check
+  #       stays red until tidy is satisfied.
   tidy:
     name: Tidy
     needs: [precheck, tidy-rust, tidy-wado]
@@ -283,14 +286,19 @@ jobs:
           git commit -m "chore: tidy"
           git push
 
-      - name: Fail if changes were needed
+      - name: Report tidy result
         if: >-
           needs.precheck.outputs.should-run == 'true' &&
           steps.changes.outputs.changed == 'true'
         run: |
           if [ "${{ steps.cap.outputs.can-push }}" = "true" ]; then
-            echo "::error::Tidy produced changes and pushed a 'chore: tidy' commit. Pull the latest before continuing."
+            # Exit green: the `chore: tidy` push above already retriggered this
+            # workflow, so a fresh CI round is in flight and the PR is never
+            # momentarily all-green — auto-merge cannot fire prematurely. A red
+            # check on this superseded run only misleads tooling and coding
+            # agents.
+            echo "::notice::Tidy produced changes and pushed a 'chore: tidy' commit. Pull the latest before continuing."
           else
             echo "::error::Tidy produced changes. Fork PRs cannot be auto-pushed; run 'mise run clippy-fix && cargo fmt --all && mise run update-golden-fixtures && mise run update-golden-format-fixtures && mise run doc-stdlib && cargo run -p wado-dev-tools -- format-md' locally and push the result."
+            exit 1
           fi
-          exit 1
