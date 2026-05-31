@@ -498,6 +498,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         None
     }
 
+    /// Build the canonical [`SymbolKey`] for an `AstId` in the module
+    /// currently being walked. The body-level annotation maps
+    /// ([`sem::types::TypeAnnotations`]) are keyed by `SymbolKey`
+    /// (`(ModuleSource, AstId)`) because `AstId`s are only unique within a
+    /// module: reify inlines cross-module AST (associated-const bodies,
+    /// callee-module default arguments) and would otherwise read a
+    /// colliding `AstId`'s record from the wrong module. Recording under
+    /// `(current_module_source, ast_id)` and reading under the same pair
+    /// (reify swaps `current_module_source` while walking foreign AST)
+    /// makes the lookup unambiguous.
+    pub(super) fn ann_key(&self, ast_id: crate::ast::AstId) -> SymbolKey {
+        SymbolKey::new(self.current_module_source.clone(), ast_id)
+    }
+
     /// Record the resolved [`TypeId`] for the expression at `ast_id` —
     /// the per-`AstId` annotation the future `reify` pass (Stage 5 of WEP
     /// 2026-05-26) reads to set `TirExpr::type_id` without re-running
@@ -518,7 +532,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if self.tysys.type_table.borrow().contains_unknown(type_id) {
             return;
         }
-        self.sem.types.expression_types.insert(ast_id, type_id);
+        self.sem
+            .types
+            .expression_types
+            .insert(self.ann_key(ast_id), type_id);
     }
 
     /// Record a method-dispatch decision for the [`crate::ast::MethodCallExpr`]
@@ -547,8 +564,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         param_defaults: Vec<Option<ast::Expr>>,
     ) {
         let Some(ast_id) = ast_id else { return };
+        let key = self.ann_key(ast_id);
         self.sem.types.method_dispatch.insert(
-            ast_id,
+            key,
             sem::types::MethodDispatch {
                 function_ref: function_ref.clone(),
                 self_kind,
@@ -583,8 +601,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if type_args.is_empty() {
             return;
         }
+        let key = self.ann_key(ast_id);
         self.sem.types.generic_instantiations.insert(
-            ast_id,
+            key,
             sem::types::GenericInstantiation {
                 type_args,
                 instance_type,
@@ -599,7 +618,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         param_types: Vec<TypeId>,
     ) {
-        self.sem.types.call_param_types.insert(ast_id, param_types);
+        let key = self.ann_key(ast_id);
+        self.sem.types.call_param_types.insert(key, param_types);
     }
 
     /// Record the capture-analysis result for the closure expression at
@@ -609,7 +629,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::ClosureCaptureInfo,
     ) {
-        self.sem.types.closure_captures.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.closure_captures.insert(key, info);
     }
 
     /// Record the power-assert capture-slot table for the assert
@@ -620,7 +641,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::AssertCaptureInfo,
     ) {
-        self.sem.types.assert_captures.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.assert_captures.insert(key, info);
     }
 
     /// Record the iterator-path dispatch decision for the for-of
@@ -632,7 +654,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::ForOfIteratorInfo,
     ) {
-        self.sem.types.for_of_iterator.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.for_of_iterator.insert(key, info);
     }
 
     /// Record the operator-dispatch decision for a binary / index
@@ -646,7 +669,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::OperatorDispatch,
     ) {
-        self.sem.types.operator_dispatch.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.operator_dispatch.insert(key, info);
     }
 
     /// Record the resolved `IndexAssign` trait dispatch keyed by the
@@ -661,7 +685,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::OperatorDispatch,
     ) {
-        self.sem.types.index_assign_dispatch.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.index_assign_dispatch.insert(key, info);
     }
 
     /// Record the handler-binding resolution facts (Gap 13 of
@@ -681,7 +706,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::HandlerBindingFacts,
     ) {
-        self.sem.types.handler_bindings.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.handler_bindings.insert(key, info);
     }
 
     /// Record the impl-block resolution facts (Gap 12 of Stage 5)
@@ -700,7 +726,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::ImplFacts,
     ) {
-        self.sem.types.impl_facts.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.impl_facts.insert(key, info);
     }
 
     /// Record an `impl Trait for Type;` synthesis request (Gap 12 /
@@ -744,10 +771,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         kind: sem::types::CoercionKind,
         target_type: TypeId,
     ) {
+        let key = self.ann_key(ast_id);
         self.sem
             .types
             .coercions
-            .insert(ast_id, sem::types::CoercionChoice { kind, target_type });
+            .insert(key, sem::types::CoercionChoice { kind, target_type });
     }
 
     /// Record a TIR-direct desugar tag for the AST node at `ast_id`.
@@ -760,7 +788,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         kind: sem::types::DesugarKind,
     ) {
-        self.sem.types.desugars.insert(ast_id, kind);
+        let key = self.ann_key(ast_id);
+        self.sem.types.desugars.insert(key, kind);
     }
 
     /// Record a local binding's [`Symbol`] and resolved [`TypeId`] so that

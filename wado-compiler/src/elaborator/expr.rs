@@ -1246,8 +1246,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if type_args.is_empty() {
             return;
         }
+        let key = self.ann_key(ident_id);
         self.sem.types.generic_instantiations.insert(
-            ident_id,
+            key,
             super::sem::types::GenericInstantiation {
                 type_args: type_args.to_vec(),
                 instance_type,

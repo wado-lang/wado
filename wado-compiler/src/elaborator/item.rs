@@ -1188,21 +1188,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cannot reconstruct effect-param canonicalisation without
         // `current_effect_param_decls`, so the annotate phase records
         // the already-resolved list here keyed by the function's `AstId`.
+        let func_key = scope.ann_key(func.id);
         scope
             .sem
             .types
             .function_effects
-            .insert(func.id, effects.clone());
+            .insert(func_key, effects.clone());
 
         // Stage 5: an async function's wasm return type is erased to
         // `()`; record the declared (pre-erasure) return type so reify
         // can set `task_return_type` for resource-store inference.
         if func.is_async {
+            let task_key = scope.ann_key(func.id);
             scope
                 .sem
                 .types
                 .function_task_returns
-                .insert(func.id, declared_return_type);
+                .insert(task_key, declared_return_type);
         }
 
         // Restore effect params scope
@@ -1791,11 +1793,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cannot reconstruct effect-param canonicalisation without
         // `current_effect_param_decls`, so the annotate phase records
         // the already-resolved list here keyed by the method's `AstId`.
+        let method_key = scope.ann_key(func.id);
         scope
             .sem
             .types
             .function_effects
-            .insert(func.id, effects.clone());
+            .insert(method_key, effects.clone());
 
         // Restore effect params and Self type. `trait_ctx` is auto-restored on
         // `drop(scope)`, which replaces everything set up above.

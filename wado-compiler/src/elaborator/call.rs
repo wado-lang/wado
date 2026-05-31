@@ -620,8 +620,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let func_ref = func.clone();
                     let param_is_mut: Vec<bool> = tir_args.iter().map(|a| a.is_mut).collect();
+                    let key = self.ann_key(call.id);
                     self.sem.types.static_method_dispatch.insert(
-                        call.id,
+                        key,
                         super::sem::types::StaticMethodDispatch {
                             function_ref: func_ref,
                             param_is_mut,
@@ -1165,8 +1166,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the `is_static_method` arm; this covers the remaining
         // shapes (`println(x)`, `builtin::array_new(n)`,
         // `ns::foo(x)` for use-namespaced imports).
+        let key = self.ann_key(call.id);
         self.sem.types.static_method_dispatch.insert(
-            call.id,
+            key,
             super::sem::types::StaticMethodDispatch {
                 function_ref: func_ref.clone(),
                 param_is_mut,
@@ -2798,8 +2800,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `StaticMethodCallExpr` id, so reusing `static_method_dispatch`
             // is collision-free. Args here carry no `is_mut` (the
             // production builder below uses all-false `CallArg`s).
+            let key = self.ann_key(call.id);
             self.sem.types.static_method_dispatch.insert(
-                call.id,
+                key,
                 super::sem::types::StaticMethodDispatch {
                     function_ref: func_ref.clone(),
                     param_is_mut: vec![false; args.len()],

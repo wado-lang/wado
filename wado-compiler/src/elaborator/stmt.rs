@@ -2537,10 +2537,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // once per outer element, appending one entry per outer element;
         // reify's visit counter pairs them up in the same order.
         if overlay_base.is_some() {
+            let for_of_key = self.ann_key(for_of.id);
             self.sem
                 .types
                 .tuple_overlays
-                .entry(for_of.id)
+                .entry(for_of_key)
                 .or_default()
                 .push(element_overlays);
         }

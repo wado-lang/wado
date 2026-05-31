@@ -1506,8 +1506,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Result::<…>::Ok`), yielding an empty struct name. Keyed on the
         // `StaticMethodCallExpr`'s own `AstId`; variant-ctor turbofish
         // shapes are handled by reify before this fact is consulted.
+        let key = self.ann_key(static_call.id);
         self.sem.types.static_method_dispatch.insert(
-            static_call.id,
+            key,
             super::sem::types::StaticMethodDispatch {
                 function_ref: func_ref.clone(),
                 param_is_mut: param_is_mut.clone(),

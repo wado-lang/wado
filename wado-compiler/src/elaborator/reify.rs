@@ -87,12 +87,20 @@ macro_rules! reify_annotation_accessors {
     ($($name:ident => $map:ident : $val:ty),+ $(,)?) => {
         $(
             fn $name(&self, id: crate::ast::AstId) -> Option<$val> {
+                // Annotation maps are keyed by the canonical `SymbolKey`
+                // (`(ModuleSource, AstId)`); reify swaps
+                // `current_module_source` while walking foreign AST so the
+                // key always names the module the node actually came from.
+                let key = crate::symbol::SymbolKey::new(
+                    self.current_module_source.clone(),
+                    id,
+                );
                 for overlay in self.tuple_overlay_stack.iter().rev() {
-                    if let Some(v) = overlay.$map.get(&id) {
+                    if let Some(v) = overlay.$map.get(&key) {
                         return Some(v.clone());
                     }
                 }
-                self.sem.types.$map.get(&id).cloned()
+                self.sem.types.$map.get(&key).cloned()
             }
         )+
     };
@@ -202,7 +210,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// this each time it reifies the same `for_of.id` so it consumes the
     /// matching instantiation (a nested inner for-of is instantiated once
     /// per outer element). See [`Self::reify_tuple_for_of`].
-    pub(crate) tuple_overlay_visits: IndexMap<crate::ast::AstId, usize>,
+    pub(crate) tuple_overlay_visits: IndexMap<crate::symbol::SymbolKey, usize>,
 }
 
 #[allow(dead_code)]
@@ -1224,7 +1232,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     self.sem
                         .types
                         .function_task_returns
-                        .get(&func.id)
+                        .get(&crate::symbol::SymbolKey::new(
+                            self.current_module_source.clone(),
+                            func.id,
+                        ))
                         .copied()
                         .unwrap_or(return_type),
                 )
@@ -1235,7 +1246,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .sem
                 .types
                 .function_effects
-                .get(&func.id)
+                .get(&crate::symbol::SymbolKey::new(
+                    self.current_module_source.clone(),
+                    func.id,
+                ))
                 .cloned()
                 .unwrap_or_else(|| self.reify_effects(&func.effects)),
             stores: func.stores.clone(),
@@ -1282,7 +1296,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if impl_block.is_synthesize_request {
             return Vec::new();
         }
-        let Some(facts) = self.sem.types.impl_facts.get(&impl_block.id).cloned() else {
+        let impl_key =
+            crate::symbol::SymbolKey::new(self.current_module_source.clone(), impl_block.id);
+        let Some(facts) = self.sem.types.impl_facts.get(&impl_key).cloned() else {
             // Annotate did not record facts — the impl block was
             // diagnosed by annotate (e.g. unknown trait reference)
             // and skipped. Reify follows by emitting no methods.
@@ -1620,7 +1636,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     self.sem
                         .types
                         .function_task_returns
-                        .get(&func.id)
+                        .get(&crate::symbol::SymbolKey::new(
+                            self.current_module_source.clone(),
+                            func.id,
+                        ))
                         .copied()
                         .unwrap_or(return_type),
                 )
@@ -1631,7 +1650,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .sem
                 .types
                 .function_effects
-                .get(&func.id)
+                .get(&crate::symbol::SymbolKey::new(
+                    self.current_module_source.clone(),
+                    func.id,
+                ))
                 .cloned()
                 .unwrap_or_else(|| self.reify_effects(&func.effects)),
             stores: func.stores.clone(),
@@ -3167,13 +3189,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // binding and body are reified so the `ann_*` accessors see the
         // right per-element facts instead of the truncated base maps.
         let instantiation: Vec<super::sem::types::ElementOverlay> = {
-            let visit = self.tuple_overlay_visits.entry(for_of.id).or_insert(0);
+            let for_of_key =
+                crate::symbol::SymbolKey::new(self.current_module_source.clone(), for_of.id);
+            let visit = self.tuple_overlay_visits.entry(for_of_key.clone()).or_insert(0);
             let k = *visit;
             *visit += 1;
             self.sem
                 .types
                 .tuple_overlays
-                .get(&for_of.id)
+                .get(&for_of_key)
                 .and_then(|insts| insts.get(k))
                 .cloned()
                 .unwrap_or_default()
@@ -5957,7 +5981,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // enumeration on `sem.types.handler_bindings`. Reify
             // reifies the handler expression and stitches one
             // `TirHandlerBinding` per recorded effect entry.
-            let Some(facts) = self.sem.types.handler_bindings.get(&binding.id).cloned() else {
+            let binding_key =
+                crate::symbol::SymbolKey::new(self.current_module_source.clone(), binding.id);
+            let Some(facts) = self.sem.types.handler_bindings.get(&binding_key).cloned() else {
                 // Annotate didn't record this binding — either it
                 // bailed (diagnosed type) or the binding shape is
                 // unsupported; skip to mirror the elaborator's
