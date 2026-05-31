@@ -2252,6 +2252,62 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         span,
                     );
                 }
+                // Constant-fold `-literal` into a negative literal, exactly
+                // as `Elaborator::resolve_unary` (operators.rs:949-1004).
+                // Without this reify emits `Unary { Neg, <pos literal> }`,
+                // which lowers to `i32.sub (const 0) …` / `f64.neg …` and
+                // can produce invalid modules (e.g. a negated literal that
+                // only fits as the already-negative value, or a type
+                // mismatch when the operand's literal type differs).
+                if matches!(op, crate::tir::TirUnaryOp::Neg) {
+                    match &inner.kind {
+                        TirExprKind::IntLiteral { value, repr } => {
+                            return TirExpr::new(
+                                TirExprKind::IntLiteral {
+                                    value: (*value as i64).wrapping_neg().cast_unsigned(),
+                                    repr: format!("-{repr}"),
+                                },
+                                inner.type_id,
+                                span,
+                            );
+                        }
+                        TirExprKind::FloatLiteral { value, repr } => {
+                            return TirExpr::new(
+                                TirExprKind::FloatLiteral {
+                                    value: -value,
+                                    repr: format!("-{repr}"),
+                                },
+                                inner.type_id,
+                                span,
+                            );
+                        }
+                        TirExprKind::Cast {
+                            expr: cast_inner,
+                            target_type,
+                        } if matches!(&cast_inner.kind, TirExprKind::IntLiteral { .. }) => {
+                            if let TirExprKind::IntLiteral { value, repr } = &cast_inner.kind {
+                                let neg_literal = TirExpr::new(
+                                    TirExprKind::IntLiteral {
+                                        value: (*value as i64).wrapping_neg().cast_unsigned(),
+                                        repr: format!("-{repr}"),
+                                    },
+                                    cast_inner.type_id,
+                                    span,
+                                );
+                                return TirExpr::new(
+                                    TirExprKind::Cast {
+                                        expr: Box::new(neg_literal),
+                                        target_type: *target_type,
+                                    },
+                                    *target_type,
+                                    span,
+                                );
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
                 // Track address-taken locals for `&x` / `&mut x`, mirroring
                 // `Elaborator::resolve_unary` (operators.rs:834). The
                 // boxing pass (`lower::plan::boxing`) reads
