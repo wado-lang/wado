@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780213991380,
+  "lastUpdate": 1780221906666,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -28393,6 +28393,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/800784b95da875c3efb41acc3f3a10b0199dd609"
         },
         "date": 1780213990991,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17104,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e9c2c29c19cb42ec25527fa9ca92afc9c15db8fe",
+          "message": "Merge pull request #1253 from wado-lang/gfx/wasmtime-sync\n\nchore: wasmtime upstream sync; build the CLI from vendor",
+          "timestamp": "2026-05-31T18:56:51+09:00",
+          "tree_id": "88f67a9f149d74ee3214adfdef428132336f008a",
+          "url": "https://github.com/wado-lang/wado/commit/e9c2c29c19cb42ec25527fa9ca92afc9c15db8fe"
+        },
+        "date": 1780221906168,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
