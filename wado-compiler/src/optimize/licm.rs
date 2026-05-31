@@ -30,6 +30,14 @@ struct ModifiedVars {
     fields: IndexSet<(u32, u32)>,
     /// GC alias pairs: if `(a, b)` is present, `a` and `b` may point to the same object.
     aliases: Vec<(u32, u32)>,
+    /// `(pointee_type, field_index)` for every field written in the loop. Wado
+    /// references alias, so a write through one `&T` is seen through any other;
+    /// the `(local, field)` tracking above misses writes via a different alias.
+    /// Used by `is_reference_field_aliasing_written`.
+    written_field_types: IndexSet<(TypeId, u32)>,
+    /// Pointee struct types passed by `&mut` to a call/method in the loop: the
+    /// callee may write *any* field, so no field of that type is invariant.
+    clobbered_pointee_types: IndexSet<TypeId>,
 }
 
 impl ModifiedVars {
@@ -39,6 +47,34 @@ impl ModifiedVars {
 
     fn insert_field(&mut self, local_idx: u32, field_idx: u32) {
         self.fields.insert((local_idx, field_idx));
+    }
+
+    fn insert_written_field_type(&mut self, pointee: TypeId, field_idx: u32) {
+        self.written_field_types.insert((pointee, field_idx));
+    }
+
+    fn insert_clobbered_pointee_type(&mut self, pointee: TypeId) {
+        self.clobbered_pointee_types.insert(pointee);
+    }
+
+    /// True when hoisting `x.field_idx` is unsound: `x` is a reference whose
+    /// pointee's `field_idx` is written in the loop — directly via an alias, or
+    /// opaquely by a call that received the pointee by `&mut`. By-value roots
+    /// are covered by the `fully`/`fields`/alias machinery.
+    fn is_reference_field_aliasing_written(
+        &self,
+        root_type: TypeId,
+        field_idx: u32,
+        type_table: &TypeTable,
+    ) -> bool {
+        match type_table.get(root_type) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                let pointee = strip_references(*inner, type_table);
+                self.clobbered_pointee_types.contains(&pointee)
+                    || self.written_field_types.contains(&(pointee, field_idx))
+            }
+            _ => false,
+        }
     }
 
     fn extend_full(&mut self, other: &IndexSet<u32>) {
@@ -245,8 +281,30 @@ fn licm_loop(
             &mut next_local,
         );
 
+        // Step 3.5: Drop `x.f` candidates where `x` is a reference and that
+        // pointee field is written elsewhere in the loop — an aliasing reference
+        // may write it. Makes the nested-chain relaxation sound and fixes the
+        // pre-existing two-aliased-`&mut` case.
+        candidates.retain(|c| {
+            let root_ty = if (c.local_index as usize) < locals.len() {
+                locals[c.local_index as usize].type_id
+            } else {
+                c.type_id
+            };
+            !modified_vars.is_reference_field_aliasing_written(root_ty, c.field_index, type_table)
+        });
+
         if candidates.is_empty() {
             break;
+        }
+
+        // Renumber the surviving hoist locals contiguously from `*local_count`:
+        // dropped candidates left gaps in the indices `find_hoist_candidates`
+        // provisionally assigned, and `locals.push` below appends densely.
+        next_local = *local_count;
+        for candidate in &mut candidates {
+            candidate.new_local_index = next_local;
+            next_local += 1;
         }
 
         // Step 4: Create hoisting statements
@@ -449,12 +507,80 @@ fn mark_local_as_fully_modified(expr: &NirExpr, modified: &mut ModifiedVars) {
     }
 }
 
-/// Mark what is modified by an assignment target expression.
-///
-/// Distinguishes between field assignments (`buf.len = x` marks only the `len` field
-/// of `buf` as modified) and direct/deeper assignments (marks the root local as fully
-/// modified). This enables LICM to hoist `buf.repr` even when `buf.len` is assigned.
-fn mark_assignment_target_as_modified(expr: &NirExpr, modified: &mut ModifiedVars) {
+/// A chain of field accesses bottoming out at a `Local` (`a`, `a.b`, `a.b.c`),
+/// with no `Index`, deref, or call. A write through such a chain mutates an
+/// inner object rather than reassigning a field of the root local.
+fn is_pure_field_chain(expr: &NirExpr) -> bool {
+    match &expr.kind {
+        NirExprKind::Local { .. } => true,
+        NirExprKind::FieldAccess { expr: inner, .. } => is_pure_field_chain(inner),
+        _ => false,
+    }
+}
+
+/// Strip all `Ref`/`MutRef` wrappers, returning the pointee type — the key for
+/// type-based aliasing-write tracking (references to one pointee alias).
+fn strip_references(type_id: TypeId, type_table: &TypeTable) -> TypeId {
+    match type_table.get(type_id) {
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+            strip_references(*inner, type_table)
+        }
+        _ => type_id,
+    }
+}
+
+/// If `expr` is a `&mut`-reference to a struct passed to a call, record its
+/// pointee as clobbered: the callee may write any field of it, so no field of
+/// that struct type is loop-invariant. Immutable `&T` args cannot mutate, and
+/// by-value struct args are independent copies, so neither is recorded.
+fn record_mut_ref_clobber(expr: &NirExpr, modified: &mut ModifiedVars, type_table: &TypeTable) {
+    let mut ty = expr.type_id;
+    // Peel `Ref(MutRef(..))` etc.; a `&mut` anywhere in the wrapper chain means
+    // the callee can reach a mutable handle to the inner struct.
+    let mut saw_mut = false;
+    loop {
+        match type_table.get(ty) {
+            ResolvedType::MutRef(inner) => {
+                saw_mut = true;
+                ty = *inner;
+            }
+            ResolvedType::Ref(inner) => ty = *inner,
+            _ => break,
+        }
+    }
+    if saw_mut && matches!(type_table.get(ty), ResolvedType::Struct { .. }) {
+        modified.insert_clobbered_pointee_type(ty);
+    }
+}
+
+/// Record a field-access write into `written_field_types`, keyed by the pointee
+/// type of the assigned object (`a.f`, `a.b.c`, `arr[i].c`, `(*p).c`).
+fn record_written_field_type(
+    target: &NirExpr,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
+    if let NirExprKind::FieldAccess {
+        expr: inner,
+        field_index,
+        ..
+    } = &target.kind
+    {
+        let pointee = strip_references(inner.type_id, type_table);
+        modified.insert_written_field_type(pointee, *field_index);
+    }
+}
+
+/// Mark what is modified by an assignment target. Field assignments (`buf.len =
+/// x`) mark only that `(local, field)`, so LICM can still hoist `buf.repr`;
+/// deeper/direct assignments mark the root fully. Every field-access write also
+/// records its pointee-type key (`record_written_field_type`) so an aliasing
+/// reference hoist is blocked (see `is_reference_field_aliasing_written`).
+fn mark_assignment_target_as_modified(
+    expr: &NirExpr,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
     match &expr.kind {
         NirExprKind::Local { index, .. } => {
             // Direct assignment: `buf = x` — fully modified
@@ -465,16 +591,19 @@ fn mark_assignment_target_as_modified(expr: &NirExpr, modified: &mut ModifiedVar
             field_index,
             ..
         } => {
+            // Type-keyed write for aliasing reference hoists, any chain shape.
+            record_written_field_type(expr, modified, type_table);
             if let NirExprKind::Local { index, .. } = &inner.kind {
-                // Single-level field assignment: `buf.field = x` — only that field is modified
+                // `buf.field = x` — only that field is modified.
                 modified.insert_field(*index, *field_index);
+            } else if is_pure_field_chain(inner) {
+                // `a.b.c = x` mutates `*a.b`, not any field of the root `a`, so
+                // don't mark `a` fully (keeps sibling chains `a.b.d` hoistable).
+                // LICM peels one level per iteration; once `a.b` is a local the
+                // write becomes single-level. Cross-reference aliasing of `*a.b`
+                // is handled by the type-keyed write recorded above.
             } else {
-                // Deeper nesting: `a.b.c = x` — conservatively mark root as fully modified.
-                //
-                // TODO(optimizer): track field paths (e.g. `(b, c)`)
-                // rather than collapsing to "fully modified" so that a
-                // hoist of `self.repr.len` survives a sibling write
-                // like `self.other.flag = true`.
+                // `a[i].c = x`, `(*p).c = x`: conservatively mark root fully.
                 mark_local_as_fully_modified(inner, modified);
             }
         }
@@ -598,7 +727,7 @@ fn collect_modified_vars_in_expr(
             // Mark the assignment target appropriately.
             // Field assignment (buf.field = x) only marks that specific field as modified,
             // enabling LICM to still hoist other fields of the same object.
-            mark_assignment_target_as_modified(target, modified);
+            mark_assignment_target_as_modified(target, modified, type_table);
             collect_modified_vars_in_expr(target, modified, type_table);
             collect_modified_vars_in_expr(value, modified, type_table);
         }
@@ -622,14 +751,17 @@ fn collect_modified_vars_in_expr(
         NirExprKind::Call { args, .. } => {
             for arg in args {
                 mark_gc_local_as_fully_modified(&arg.expr, modified, type_table);
+                record_mut_ref_clobber(&arg.expr, modified, type_table);
                 collect_modified_vars_in_expr(&arg.expr, modified, type_table);
             }
         }
         NirExprKind::MethodCall { receiver, args, .. } => {
             mark_gc_local_as_fully_modified(receiver, modified, type_table);
+            record_mut_ref_clobber(receiver, modified, type_table);
             collect_modified_vars_in_expr(receiver, modified, type_table);
             for arg in args {
                 mark_gc_local_as_fully_modified(&arg.expr, modified, type_table);
+                record_mut_ref_clobber(&arg.expr, modified, type_table);
                 collect_modified_vars_in_expr(&arg.expr, modified, type_table);
             }
         }

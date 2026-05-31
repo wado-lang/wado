@@ -149,6 +149,11 @@ fn collect_and_validate(project: &NirPackage) -> IndexMap<(FnKey, usize), SroaIn
             let Some(info) = candidate_info_for(param.type_id, &type_table, &single_field) else {
                 continue;
             };
+            // Skip a param that may be caller-aliased with a `&mut` sibling of
+            // the same struct (see `param_may_alias_sibling`).
+            if param_may_alias_sibling(&func, pi, &info.struct_key, &type_table) {
+                continue;
+            }
             candidates.insert((key.clone(), pi), info);
         }
     }
@@ -258,6 +263,50 @@ fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, Mod
         } => Some((name.clone(), module_source.clone())),
         _ => None,
     }
+}
+
+/// The struct a *reference* parameter points at, or `None` for a by-value
+/// struct param (an independent copy) or non-struct. Only reference params can
+/// alias another reference.
+fn reference_param_struct_key(
+    type_id: TypeId,
+    type_table: &TypeTable,
+) -> Option<(String, ModuleSource)> {
+    match type_table.get(type_id) {
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => struct_key_of(*inner, type_table),
+        _ => None,
+    }
+}
+
+/// True when SROA-ing reference parameter `pi` is unsound because a `&mut`
+/// sibling points at the same single-field struct and may be caller-aliased.
+///
+/// Wado references alias, so `f(&mut n, &mut n)` is legal. SROA snapshots the
+/// read-only param to a by-value scalar at the call site (`f(n.value)`), losing
+/// writes made through the aliasing param. The hazard needs a sibling that can
+/// *mutate* — a `&mut`; two `&S` params (`add_amounts(a: &Amount, b: &Amount)`)
+/// stay SROA-able even aliased.
+fn param_may_alias_sibling(
+    func: &NirFunction,
+    pi: usize,
+    struct_key: &(String, ModuleSource),
+    type_table: &TypeTable,
+) -> bool {
+    // The candidate itself must be a reference to `struct_key` for aliasing to
+    // matter (a by-value struct param is an independent copy).
+    let candidate_is_ref = func
+        .params
+        .get(pi)
+        .map(|p| reference_param_struct_key(p.type_id, type_table))
+        == Some(Some(struct_key.clone()));
+    if !candidate_is_ref {
+        return false;
+    }
+    func.params.iter().enumerate().any(|(pj, other)| {
+        pj != pi
+            && matches!(type_table.get(other.type_id), ResolvedType::MutRef(_))
+            && reference_param_struct_key(other.type_id, type_table).as_ref() == Some(struct_key)
+    })
 }
 
 /// Walk `body` once and confirm every use of `local_index` is either

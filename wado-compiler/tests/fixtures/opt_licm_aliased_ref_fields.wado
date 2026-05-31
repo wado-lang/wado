@@ -1,0 +1,39 @@
+// Soundness regression (nested reference-field chains): two reference FIELDS of
+// one struct alias the same object. The loop writes `g.a.value` and reads
+// `g.b.value` through the two-level chains. The nested-chain LICM relaxation
+// hoists the invariant references `g.a`/`g.b`, but must NOT hoist the
+// dereferenced `*.value` reads — `a` and `b` point at the same Node, so the
+// read must observe the write each iteration. Type-keyed write tracking blocks
+// the unsound second-level hoist; the result is 15, not 0.
+
+use { println } from "core:cli";
+
+struct Node { value: i32 }
+
+struct Graph {
+    a: &mut Node,
+    b: &mut Node,
+}
+
+#[inline("never")]
+fn run_loop(g: &mut Graph) -> i32 {
+    let mut sum = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        g.a.value = g.a.value + 1;   // write through g.a
+        sum = sum + g.b.value;       // read through g.b (aliases *g.a)
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let mut n = Node { value: 0 };
+    let mut g = Graph { a: &mut n, b: &mut n };  // a and b alias the same node
+    let result = run_loop(&mut g);
+    // value: 0->1->2->3->4->5; sum = 1+2+3+4+5 = 15
+    println(`{result}`);
+}
+
+__DATA__
+{
+    "stdout": "15\n"
+}
