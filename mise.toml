@@ -149,7 +149,7 @@ RUSTFLAGS= cargo build --release -p wasmtime-cli --manifest-path vendor/wasmtime
 [tasks.hello-run-wasmtime]
 description = "Compile and run hello.wado directly with wasmtime"
 depends = ["hello", "build-wasmtime"]
-run = "wasmtime run -S p3=y -W component-model=y -W component-model-gc=y -W component-model-async=y -W component-model-more-async-builtins=y -W component-model-async-stackful=y -W gc=y -W function-references=y -W simd=y -W wide-arithmetic=y -W threads=y --invoke 'run()' example/hello.wasm"
+run = "wasmtime run -S p3=y -W component-model-gc=y -W component-model-async=y -W component-model-more-async-builtins=y -W component-model-async-stackful=y -W gc=y -W function-references=y -W wide-arithmetic=y -W branch-hinting=y --invoke 'run()' example/hello.wasm"
 
 [tasks.test]
 description = "Run Rust crate tests"
