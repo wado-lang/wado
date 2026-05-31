@@ -131,8 +131,21 @@ fn collect_lits_from_element(elem: &Element, seen: &mut Array<String>, result: &
 
 pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>) {
     let mut idx = 0;
-    for let rule of lexer_rules {
-        if !rule.is_fragment {
+    // Mirror ANTLR4's SemanticPipeline.assignLexerTokenTypes: non-fragment
+    // rules WITHOUT a `more` / `type(...)` command get the low token types in
+    // declaration order, then the `more` / `type` rules are numbered. A rule
+    // that always `more`s never produces a parser-visible token, so ANTLR4
+    // pushes its type to the back; matching that order keeps the `<N>` ids in
+    // `to_lexer_string` output identical to the reference tool.
+    for let want_deferred of [false, true] {
+        for let rule of lexer_rules {
+            if rule.is_fragment {
+                continue;
+            }
+            let deferred = rule.more || rule.type_override matches { Some(_) };
+            if deferred != want_deferred {
+                continue;
+            }
             let name = `TK_{rule.name}`;
             let init = `{idx}`;
             let mut g = GlobalSpec::new(&name, "i32", &init);
@@ -1846,7 +1859,25 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
         w.end();
     }
 
-    w.begin(&"if best_end <= start");
+    // A zero-length match (`best_end == start`) is legitimate when a rule
+    // matches the empty string and switches mode — ANTLR4 issue #688 ("Lexer
+    // cannot match zero-length tokens"). Such a match makes forward progress
+    // only through the mode change, so accept it just when one is pending;
+    // otherwise treating `best_end == start` as a match would spin the `while`
+    // loop forever. With no modes a zero-length match can never progress, so
+    // the strict `<= start` guard is kept.
+    let no_match_guard = if use_modes {
+        // `best_push_mode` / `best_pop_mode` always exist under `use_modes`;
+        // `best_set_mode` only when the grammar has a `mode(X)` rule.
+        let mut stalled = String::from("best_push_mode < 0 && !best_pop_mode");
+        if has_set_mode_rules {
+            stalled.push_str(&" && best_set_mode < 0");
+        }
+        `best_end < start || (best_end == start && {stalled})`;
+    } else {
+        String::from("best_end <= start");
+    };
+    w.begin(&`if {no_match_guard}`);
     w.line(
         &"let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);",
     );
