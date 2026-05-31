@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780209647068,
+  "lastUpdate": 1780213991380,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -28349,6 +28349,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/82ba01dd95032ada323651260f034ce31465fa4f"
         },
         "date": 1780209646583,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17104,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "800784b95da875c3efb41acc3f3a10b0199dd609",
+          "message": "Merge pull request #1258 from wado-lang/claude/package-gale-antlr4-setup-5BgRo\n\ngale: zero-length lexer tokens + ANTLR4 token numbering; formatter signature wrapping",
+          "timestamp": "2026-05-31T16:46:05+09:00",
+          "tree_id": "fa33899056ef1475c383ceffc0b160edc64346c9",
+          "url": "https://github.com/wado-lang/wado/commit/800784b95da875c3efb41acc3f3a10b0199dd609"
+        },
+        "date": 1780213990991,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
