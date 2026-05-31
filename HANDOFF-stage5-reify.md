@@ -357,3 +357,74 @@ codegen type-interning-order fix that needs sustained byte/WAT forensics on a
 stable shell channel (this session's channel cancelled multi-call turns and
 replayed garbled output, which already caused one wrong diagnosis — corrected
 above). All findings here are re-verified with the correct `--world test` flag.
+
+## ✅ ROOT CAUSE FOUND (verified from WAT, consistent) — tuple_for_of
+
+In the "basic heterogeneous" body `for let v of [42,"wado",true] { results.push(v.describe()) }`:
+- **Production** emits three distinct calls: `i32^Describe::describe`,
+  `String^Describe::describe`, `bool^Describe::describe` (p.wat lines 2051/2062/2073).
+- **Reify** emits `bool^Describe::describe` for ALL THREE elements
+  (r.wat lines 2050/2061/2072). The i32 and String receivers are passed to
+  bool's method → invalid module; and `i32^Describe::describe` is never called,
+  so it's never emitted (the missing `(ref 2)->(ref 5)` = `(boxed i32)->String`
+  signature / the only symbol unique to prod = `$/tmp/tfo.wado/i32^Describe::describe`).
+
+Mechanism: the tuple for-of body is compile-time-unrolled once per element. The
+body has a SINGLE `v.describe()` source node = one `AstId`. But dispatch is
+recorded in `method_dispatch: IndexMap<AstId, MethodDispatch>`
+(sem/types.rs:159) — one entry per AstId. Annotate runs
+`resolve_tuple_for_of` (stmt.rs:2333) which re-resolves the body N times
+(stmt.rs:2501 `resolve_block(&for_of.body, …)` inside the per-element loop);
+each resolution overwrites `method_dispatch[mc.id]`, so only the LAST element's
+dispatch (bool) survives in the map. Production never reads the map back — it
+builds TIR inline as it resolves each element — so it's correct. Reify
+(`reify_tuple_for_of`, reify.rs:3016) unrolls N times calling `reify_block`
+per element, and every `reify_method_call` reads the single surviving
+`method_dispatch[mc.id]` (bool). Hence all-bool.
+
+This is the SAME class of "one source AstId elaborated in N type contexts"
+problem the assert-slot / local-frame walk-order invariants (Gap 5/7) solve
+with a per-FunctionContext counter. tuple_for_of dispatch needs the analogous
+treatment.
+
+### Fix options (pick one)
+1. **Per-unroll dispatch list (preferred, mirrors Gap 7).** Change annotate to
+   record, for nodes inside a tuple-for-of body, a *sequence* of dispatches in
+   unroll order, and have reify consume them in lockstep via an unroll counter
+   on `FunctionContext` (like `next_assert_id`). Cleanest conceptually but
+   touches the map shape and every per-element-varying annotation (not just
+   method_dispatch — also expression_types, operator_dispatch, coercions, etc.,
+   all of which are AstId-keyed and would be overwritten the same way for ANY
+   body whose per-element types differ).
+2. **Reify re-derives dispatch from the receiver type.** In
+   `reify_tuple_for_of`, for each element, the binding local `v` has the correct
+   concrete `elem_type`. If reify could re-resolve `v.describe()` against
+   `elem_type` (method lookup by receiver base type + trait + method name) it
+   would get the right FunctionRef. But reify is meant to be mechanical (no
+   method lookup) — this re-introduces dispatch logic into reify.
+3. **Annotate resolves the tuple-for-of body ONCE per element but reify also
+   resolves once per element AND annotate stores per-element facts under
+   synthetic AstIds.** Too invasive.
+
+NOTE option 1's scope concern is real: it's not only `describe()`. ANY
+AstId-keyed fact recorded while walking the unrolled body differs per element
+when the element types differ (expression_types of `v`, the `.push()` receiver
+generic args, string-template format dispatch, etc.). The all-bool symptom is
+just the most visible. A correct fix must make reify see the right *per-element*
+facts for the whole body, not just method_dispatch. That strongly favors a
+structural approach: have annotate record the tuple-for-of body's facts keyed by
+(AstId, element_index), or have reify re-run annotate's body walk per element
+with the element type bound (i.e. reify the body the same N-context way
+production resolves it). The latter — reify drives a per-element re-annotation
+of the body — is likely the real fix and matches production's structure most
+closely.
+
+### Key code refs for the fix
+- `method_dispatch` map: `sem/types.rs:159` (IndexMap<AstId, MethodDispatch>).
+- record: `elaborator.rs:531 record_method_dispatch` → `.insert` at :542.
+- production unroll (the oracle): `stmt.rs:2333 resolve_tuple_for_of`, body
+  re-resolved per element at `stmt.rs:2501`.
+- reify unroll: `reify.rs:3016 reify_tuple_for_of`, body re-reified per element
+  at `reify.rs:3152 reify_block(&for_of.body, …)`.
+- reify dispatch consumer: `reify.rs:7246` (reads method_dispatch[method_call.id]).
+- precedent for per-instance counter: `FunctionContext.next_assert_id` (Gap 7).
