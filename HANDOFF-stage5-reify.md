@@ -597,3 +597,32 @@ Writing a large refactor against corrupted reads cannot meet the "only correct
 code on a correct design" bar, so the implementation is staged for a stable
 channel. The design above is complete and verified-correct on paper, including
 the nested case; an implementer can execute the checklist directly.
+
+## FINAL MECHANISM CORRECTION (implementing now) — truncate-between-elements
+
+The `skip(len_before)` capture in the design above is SUBTLY WRONG: for a
+conditionally-recorded map (e.g. `coercions`), if element 0 records node A but
+element 1 does not, the `skip` slice after element 1 still contains A holding
+element 0's stale value. Correct mechanism:
+
+- Capture flag on `Elaborator` (`capture_tuple_overlays: bool`), true iff this
+  compile will use reify (same gate as `use_reify`). Production/LSP keep flag
+  false → annotate maps untouched → byte-for-byte unchanged.
+- In `resolve_tuple_for_of`, when the flag is set: snapshot `base_len[map]`
+  before the element loop. After resolving element i's body:
+  `overlay_i[map] = map.iter().skip(base_len[map]).clone-collect`, then
+  `map.truncate(base_len[map])`. Truncation makes element i+1 start clean
+  (no stale tail) AND leaves the base maps with NO body nodes at the end.
+- Because base maps end up clean of body nodes (in reify mode), the reify
+  accessor is simply: walk overlay stack top-down, return first hit; if none,
+  fall back to base sem (which legitimately lacks body nodes). No body-AstId
+  set needed. A body node legitimately absent for element i → not in overlay_i,
+  not in base → returns None (correct "absent").
+- Nested: inner for-of truncates only ITS body nodes (its base_len is taken
+  after outer-before-inner nodes exist), so outer's capture = outer body minus
+  inner body; reify reads inner-body nodes from the inner overlay (pushed while
+  descending) and outer-body nodes from the outer overlay. Proven correct above.
+
+Capture stores into `tuple_overlays: IndexMap<AstId, Vec<Vec<ElementOverlay>>>`
+(for_of.id → per-instantiation → per-element). Reify consumes with a
+`tuple_visit: IndexMap<AstId,usize>` counter + `tuple_overlay_stack`.
