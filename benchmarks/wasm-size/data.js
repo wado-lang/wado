@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780192081732,
+  "lastUpdate": 1780194083050,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -28217,6 +28217,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8683983ae610612210cec734fe265f23dbcebeb3"
         },
         "date": 1780192081240,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16997,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c50287aa610c3be511a1d7a1c40536879cd77344",
+          "message": "Merge pull request #1254 from wado-lang/claude/serde-json-closure-redesign-d5Pim\n\nperf(serde): static FieldSchema dispatch + identity field naming",
+          "timestamp": "2026-05-31T11:15:01+09:00",
+          "tree_id": "b9527701f05f95b1d0a677ac290ebfd874d6b2bf",
+          "url": "https://github.com/wado-lang/wado/commit/c50287aa610c3be511a1d7a1c40536879cd77344"
+        },
+        "date": 1780194082717,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
