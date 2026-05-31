@@ -47,14 +47,31 @@ capability and a single optimizer policy pass.
   existing lazy-init path and are promoted by this pass. The constant-shape
   recognizer then lives once, over `WirInstr`.
 
-Why WIR, not TIR/NIR. `emit_const_expr` produces `wasm-encoder::ConstExpr`
-bytes — a codegen concern that cannot move up. The transformation cannot live at
-TIR/NIR either: array literals only acquire a hoistable const form
-(`array.new_fixed` / `array.new_data`) after the WIR array passes; at NIR they
-are still `SequenceLiteralBuilder` push sequences. WIR is the first layer where
-struct, array, and string constants share a uniform const-expressible shape, and
-where value-copy elision has already settled which uses are read-only (a
-surviving copy is an explicit `struct.new` reconstruction by WIR time).
+Layer choice. The capability (`emit_const_expr`) is a codegen concern and stays
+there. The policy's natural layer is not absolute — it differs by data kind and
+by which judgment is needed:
+
+- Struct / tuple / variant / enum constants are first-class at TIR, and the
+  eager/lazy decision for user globals already lives at TIR
+  (`is_constant_initializer`). This subset can be recognized and globalized from
+  TIR onward.
+- Array and string constants are desugared into `SequenceLiteralBuilder` push
+  sequences during elaboration, so they carry no const-recognizable shape at
+  TIR/NIR; a hoistable const form (`array.new_fixed` / `array.new_data`)
+  re-materializes only after the WIR array passes. Recognizing them earlier
+  would mean re-implementing that collapse.
+- Part 2 read-only / escape precision rises toward WIR: `address_taken_locals`
+  is known at TIR, but `stores_aliased_locals` is populated only during
+  lowering, and value-copies become explicit `struct.new` reconstructions
+  (rather than `$value_copy$T` calls) only after NIR optimization.
+
+WIR is therefore chosen as the single home for the policy: it is the first layer
+where struct, array, and string constants share a uniform const-expressible
+shape and where escape facts are fully materialized. A TIR-rooted variant is
+possible for the struct/tuple/enum subset (by widening `is_constant_initializer`)
+but would not cover arrays/strings and would carry weaker escape precision;
+unifying at WIR via the lazy-init → const-demotion path keeps one recognizer for
+all data kinds.
 
 ### Constant-aggregate predicate
 
