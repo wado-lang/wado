@@ -6686,6 +6686,68 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
+        // `Type::from(x)` with no explicit `From` impl — reflexive and
+        // newtype conversions. Production's `resolve_call` handles these
+        // inline (call.rs:514-569) and records no `static_method_dispatch`,
+        // tagging the reflexive case with `NewtypeFromCollapse`; reify must
+        // reproduce the same three shapes (otherwise it falls through to an
+        // unresolvable `Type::from` `Call`). Only reached when a user `From`
+        // impl coexists, since that routes `from` through the static-call
+        // path while the builtin reflexive/newtype conversion stays implicit.
+        if let ast::Expr::Ident(ident) = &call.callee
+            && let Some(pos) = ident.name.find("::")
+            && &ident.name[pos + 2..] == "from"
+            && !ident.name[pos + 2..].contains("::")
+            && call.args.len() == 1
+        {
+            let prefix = ident.name[..pos].to_string();
+            let arg = self.reify_expr(&call.args[0], ctx, None);
+            let arg_type = arg.type_id;
+            let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
+
+            // Reflexive: `T::from(T_val)` — identity, return the argument
+            // (the `NewtypeFromCollapse` desugar, call.rs:526).
+            if arg_type_name == prefix {
+                return arg;
+            }
+
+            // Newtype→Base: `Base::from(Newtype_val)` where the arg is a
+            // newtype over `Base` — lower to a `Cast` (call.rs:534).
+            let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
+            if let Some(base_id) = base_of_arg
+                && self.tysys.type_table.borrow().type_name(base_id) == prefix
+            {
+                return TirExpr::new(
+                    TirExprKind::Cast {
+                        expr: Box::new(arg),
+                        target_type: base_id,
+                    },
+                    base_id,
+                    span,
+                );
+            }
+
+            // Base→Newtype: `Newtype::from(Base_val)` where `Newtype` is a
+            // newtype over the arg's type — lower to a `Cast` (call.rs:549).
+            if let Some(newtype_id) = self.type_lookup().newtype(&prefix)
+                && let Some(base_id) = self.tysys.type_table.borrow().get_newtype_base(newtype_id)
+                && self.tysys.type_table.borrow().type_name(base_id) == arg_type_name
+            {
+                return TirExpr::new(
+                    TirExprKind::Cast {
+                        expr: Box::new(arg),
+                        target_type: newtype_id,
+                    },
+                    newtype_id,
+                    span,
+                );
+            }
+
+            // Not a reflexive/newtype `from` — fall through to the generic
+            // call handling below, which reifies args itself; `arg` here is
+            // dropped (no side effects: `reify_expr` is pure TIR shaping).
+        }
+
         // Closure-call shape: bare-ident callee that resolves to a
         // local with `fn(...)` type. Annotate decides this by
         // probing `ctx.lookup`; reify reproduces by checking the
