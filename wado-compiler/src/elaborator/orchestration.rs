@@ -111,21 +111,19 @@ pub(crate) struct AnnotateState {
 }
 
 /// Whether reify (Stage 5) produces the final TIR for `module_source`.
-/// True only when `WADO_REIFY` is set, we are not building the stdlib
-/// snapshot, and the module is a user module (stdlib modules stay on the
-/// production path until reify reaches parity). Drives both the
-/// orchestration switch and the annotate-time `capture_tuple_overlays`
-/// flag so the two never disagree.
+/// Reify is the default for user modules now that it has full parity with
+/// the production walk (2678/2678 e2e). Stdlib modules
+/// (`Core` / `Wasi` / `Wasm`) and stdlib-snapshot construction still take
+/// the production path: the combined walk survives only for them and is
+/// removed in Stage 7's final cleanup, gated on Stage 6's liveness pass.
+/// Drives both the orchestration switch and the annotate-time
+/// `capture_tuple_overlays` flag so the two never disagree.
 fn module_uses_reify(module_source: &ModuleSource) -> bool {
     let is_stdlib = matches!(
         module_source,
         ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
     );
-    !crate::stdlib_snapshot::is_building()
-        && !is_stdlib
-        && std::env::var("WADO_REIFY")
-            .map(|v| v == "1" || v == "true")
-            .unwrap_or(false)
+    !crate::stdlib_snapshot::is_building() && !is_stdlib
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -1120,18 +1118,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // carry the correct module filename (not the entry module).
             logger.set_file(module_source.diagnostic_filename());
 
-            // Phase 1 — `annotate_bodies`: run the existing body
-            // walk to populate `ModuleSemantics`. The TIR it
-            // produces is discarded; reify produces the final
-            // TIR from the recorded annotations.
-            //
-            // Stage 5 / WEP 2026-05-26: the `WADO_REIFY` env var
-            // gates the orchestration switch — when unset, the
-            // annotate-half's TIR is used directly (preserving
-            // the pre-Stage-5 behaviour for the residual cases
-            // reify's body-walk has not yet ported). When set,
-            // reify is the source of truth and any reach into a
-            // `todo!` panics loudly so the gap surfaces.
+            // Phase 1 — `annotate_bodies`: run the body walk to
+            // populate `ModuleSemantics`. For reify modules the TIR it
+            // produces is discarded and reify produces the final TIR
+            // from the recorded annotations; for stdlib / snapshot
+            // modules (see `module_uses_reify`) the annotate-half's TIR
+            // is used directly until Stage 6/7 removes the combined walk.
             let resolve_result = elaborator.resolve_module(module, module_source.clone());
             let saved_sem = elaborator.sem;
             // Re-install the (now-populated) `ModuleSemantics` even on bail
@@ -1141,16 +1133,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .module_semantics
                 .insert(module_source.clone(), saved_sem);
 
-            // Stage 5 / WEP 2026-05-26: WADO_REIFY enables reify for
-            // user-module compilation only. Stdlib modules
-            // (`Core` / `Wasi` / `Wasm`) — whether in the snapshot
-            // cache or live-loaded — go through the production path
-            // until reify reaches feature parity for every
-            // stdlib-shaped construct. See the Stage 5 follow-up list
-            // in `docs/wep-2026-05-26-elaborator-rearchitecture.md`.
-            // The snapshot bypass also applies during snapshot
-            // construction (`is_building == true`) so the snapshot's
-            // foundation TIR never depends on reify.
+            // Reify is the default for user modules; stdlib modules and
+            // snapshot construction stay on the production path (see
+            // `module_uses_reify`).
             let use_reify = module_uses_reify(module_source);
 
             if let Ok(tir_module) = resolve_result {

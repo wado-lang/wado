@@ -404,13 +404,12 @@ migration; see Trade-offs.
       `coercion_view`, `desugar_view`) for tests and the future LSP
       hover path. The stdlib snapshot seeds every map back into
       per-module storage so cached stdlib modules stay consistent.
-- [ ] **Stage 5 — `annotate_bodies` / `reify` split.** _In progress._
+- [x] **Stage 5 — `annotate_bodies` / `reify` split.** Complete.
       Recording half complete: every Gap (1–6, 9, 11, 12, 13)
-      is wired end-to-end. Orchestration scaffold landed —
-      `WADO_REIFY=1` env-var opt-in routes
-      `build_tir_from_state` through `Reify::reify_module` after
-      the existing `resolve_module` walk populates
-      `ModuleSemantics`. Reify body walk covers every decl, every
+      is wired end-to-end. Orchestration landed —
+      `build_tir_from_state` routes user modules through
+      `Reify::reify_module` after the `resolve_module` walk
+      populates `ModuleSemantics`. Reify body walk covers every decl, every
       `Stmt`/`Pattern`/`Literal`/`Ident` variant, every `Expr`
       variant (full Call dispatch, Index, Closure with Gap 4
       capture replay, TryOp, ComparisonChain, CompoundAssign,
@@ -424,18 +423,27 @@ migration; see Trade-offs.
       operator-trait dispatch with Ord wrap, `Self`
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
-      on the production path. Under these annotations the E2E
-      suite reaches **2678 / 2678 fixtures passing under
-      `WADO_REIFY=1`** at `-O0` + `-O2` — full parity with
-      production (2678/2678), verified by full e2e runs on the
-      2026-05-31 session. The
+      on the production path. The E2E suite reaches **2678 / 2678
+      fixtures passing** at `-O0` + `-O2` — full parity with the
+      production walk, verified by full e2e runs on the 2026-05-31
+      session. Reify is now the **default** path for user modules
+      (the `WADO_REIFY` env-var gate was removed in Stage 7); only
+      stdlib modules and snapshot construction still take the
+      production walk. The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
       See `### Stage 5 handover` below for the original remaining
       work and the gotchas encountered to date.
-- [ ] **Stage 6 — Liveness and DCE.**
-- [ ] **Stage 7 — Cleanup.**
+- [ ] **Stage 6 — Liveness and DCE.** Tracked in a separate PR.
+- [ ] **Stage 7 — Cleanup.** _In progress._ The `WADO_REIFY`
+      env-var gate is removed: reify is the default for user
+      modules (`module_uses_reify` keys only on stdlib / snapshot
+      status). The remaining cleanup — removing the old
+      `Elaborator` / `AnnotateState` and the combined walk's TIR
+      emission half — stays gated on Stage 6's liveness pass, as
+      the combined walk is still the production path for stdlib and
+      snapshot modules.
 
 ### Stage 5 second-half progress
 
@@ -1039,7 +1047,7 @@ Landed:
 #### Re-triaged remaining clusters
 
 Largest first, grouped by cluster. **2678 / 2678** passing under
-`WADO_REIFY=1` (2026-05-31 session) — full parity with production. The
+reify (2026-05-31 session) — full parity with production. The
 localized "missing annotation
 channel" gaps are gone; the `-O2`-only `TypeId`-identity cluster (landings
 #41 / #42) and the entire variadic type-pack cluster (landings #43–#45) are
@@ -1092,10 +1100,12 @@ modules no longer collide.
 
 ##### Where to start next
 
-Stage 5 reify parity is **complete**: 2678/2678 under `WADO_REIFY=1`, matching
-production, with no reify-specific failures. The next track is Stage 6
-(liveness/DCE) and Stage 7 (cleanup) — including removing the `WADO_REIFY` gate
-and making reify the default once the architecture is signed off. The
+Stage 5 reify parity is **complete**: 2678/2678 under reify, matching
+production, with no reify-specific failures. Stage 7 has made reify the
+default for user modules (the `WADO_REIFY` gate is removed). The next track
+is Stage 6 (liveness/DCE), tracked in a separate PR, after which Stage 7's
+remaining cleanup (removing the combined walk and the old `Elaborator` /
+`AnnotateState`) can land. The
 `#### Recipe for adding a new reify gap`, `#### Gotchas`, and `#### Endgame`
 below still apply for any future divergence.
 
@@ -1203,10 +1213,12 @@ underlying issue); reify's two-phase split exposes them.
 The shape that has worked consistently:
 
 1. Pick the smallest failing fixture in the category.
-2. `WADO_REIFY=1 ./target/release/wado dump
-   --tir-monomorphized fixture.wado` and the same without
-   `WADO_REIFY=1`. Diff the two. The first divergent line is
-   the cut point.
+2. Diff reify's output against the expected output (the
+   fixture's golden WIR / WAT, or a known-good build).
+   The first divergent line is the cut point. Reify is the
+   default now that the `WADO_REIFY` gate is gone; to compare
+   against the production walk directly, temporarily force
+   `module_uses_reify` to `false` for a one-off A/B dump.
 3. Find production's emitting site (the `elaborator/`
    helper that produced the production line). Read what
    state it consults — `trait_ctx`, `pending_*`, scoped
@@ -1225,12 +1237,12 @@ The shape that has worked consistently:
 
 #### Endgame
 
-The dead-code removal (drop the production walk's TIR
-emission half + flip `WADO_REIFY` default-on) is the final
-cleanup once the residual gaps land and E2E confirms
-equivalence. The orchestration scaffold is already in
-place — `build_tir_from_state`'s reify branch (orchestration.rs:1136+)
-is the single flip site.
+Flipping reify default-on is **done** (Stage 7): the `WADO_REIFY`
+gate was removed and `module_uses_reify` now keys only on stdlib /
+snapshot status. The remaining dead-code removal — dropping the
+production walk's TIR emission half once stdlib and snapshot
+modules no longer need it — stays gated on Stage 6's liveness
+pass.
 
 ### Design notes (Stages 1–3)
 

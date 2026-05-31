@@ -1648,7 +1648,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         // Anonymous structs created during expression resolution.
-        // Clone (not drain) so reify still sees them under WADO_REIFY=1.
+        // Clone (not drain) so reify still sees them on its pass.
         for anon_struct in &self.sem.decls.pending_anonymous_structs {
             tir_module.add_struct(anon_struct.clone());
         }
