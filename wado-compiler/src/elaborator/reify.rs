@@ -7057,21 +7057,76 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         )
                     }
                     "zip" => {
-                        // Emit `TupleZip { expr }` unconditionally.
-                        // The monomorphiser expands both
-                        // type-pack and concrete-tuple cases.
-                        // Concrete-tuple inline expansion the
-                        // elaborator performs is an optimisation
-                        // (matches MethodCall::TupleZip's design
-                        // contract on `tir.rs`), not required for
-                        // correctness.
-                        TirExpr::new(
-                            TirExprKind::TupleZip {
-                                expr: Box::new(receiver),
-                            },
-                            recorded_type,
-                            method_call.span,
-                        )
+                        // Mirror the elaborator (`method_call.rs`): a
+                        // concrete tuple-of-tuples transposes inline now;
+                        // only a type-pack receiver defers expansion to the
+                        // monomorphiser via `TupleZip`. Non-generic bodies
+                        // never reach the monomorphiser, so emitting
+                        // `TupleZip` here would hit `lower::translate`'s
+                        // `unreachable!`.
+                        let base_type_id = receiver.type_id;
+                        if self.type_contains_pack(base_type_id) {
+                            TirExpr::new(
+                                TirExprKind::TupleZip {
+                                    expr: Box::new(receiver),
+                                },
+                                recorded_type,
+                                method_call.span,
+                            )
+                        } else {
+                            // [[A0, A1], [B0, B1]].zip() → [[A0, B0], [A1, B1]]
+                            let outer_elems = self
+                                .tysys
+                                .type_table
+                                .borrow()
+                                .as_tuple(base_type_id)
+                                .unwrap();
+                            let inner_arities: Vec<Vec<TypeId>> = outer_elems
+                                .iter()
+                                .map(|e| self.tysys.type_table.borrow().as_tuple(*e).unwrap())
+                                .collect();
+                            let arity = inner_arities[0].len();
+                            let num_rows = outer_elems.len();
+                            let mut col_exprs = Vec::with_capacity(arity);
+                            for col in 0..arity {
+                                let mut row_exprs = Vec::with_capacity(num_rows);
+                                for (row, row_types) in inner_arities.iter().enumerate() {
+                                    let row_access = TirExpr::new(
+                                        TirExprKind::FieldAccess {
+                                            expr: Box::new(receiver.clone()),
+                                            field_index: row as u32,
+                                            field_name: row.to_string(),
+                                        },
+                                        outer_elems[row],
+                                        method_call.span,
+                                    );
+                                    let cell = TirExpr::new(
+                                        TirExprKind::FieldAccess {
+                                            expr: Box::new(row_access),
+                                            field_index: col as u32,
+                                            field_name: col.to_string(),
+                                        },
+                                        row_types[col],
+                                        method_call.span,
+                                    );
+                                    row_exprs.push(cell);
+                                }
+                                let col_types: Vec<TypeId> =
+                                    inner_arities.iter().map(|row| row[col]).collect();
+                                let col_tuple_type =
+                                    self.tysys.type_table.borrow_mut().make_tuple(col_types);
+                                col_exprs.push(TirExpr::new(
+                                    TirExprKind::TupleLiteral { elements: row_exprs },
+                                    col_tuple_type,
+                                    method_call.span,
+                                ));
+                            }
+                            TirExpr::new(
+                                TirExprKind::TupleLiteral { elements: col_exprs },
+                                recorded_type,
+                                method_call.span,
+                            )
+                        }
                     }
                     _ => unreachable!(),
                 };
