@@ -695,11 +695,11 @@ pub struct TextNode {
 }
 
 global TK_PLAIN: i32 = 0;
-global TK_QUOTE: i32 = 1;
-global TK_WS: i32 = 2;
-global TK_STR_ESC_BEGIN: i32 = 3;
-global TK_STR_CHAR: i32 = 4;
-global TK_STRING: i32 = 5;
+global TK_WS: i32 = 1;
+global TK_STRING: i32 = 2;
+global TK_QUOTE: i32 = 3;
+global TK_STR_ESC_BEGIN: i32 = 4;
+global TK_STR_CHAR: i32 = 5;
 global TK_ESC_CHAR: i32 = 6;
 global TK_EOF: i32 = 7;
 global TK_ERROR: i32 = 8;
@@ -832,7 +832,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_esc_char(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ESC_CHAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = 1; best_more = true; }
         }
-        if best_end <= start {
+        if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode && best_set_mode < 0) {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
             tokens.push(tok);
             trivia = [];

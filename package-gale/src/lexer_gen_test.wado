@@ -121,6 +121,17 @@ fn count_occurrences(haystack: &String, needle: String) -> i32 {
     return count;
 }
 
+test "gen_token_constants: more rules numbered after non-more rules (ANTLR4 order)" {
+    // ANTLR4's SemanticPipeline.assignLexerTokenTypes assigns token types to
+    // non-fragment rules WITHOUT a `more` / `type(...)` command first, in
+    // declaration order, then numbers the remaining `more` / `type` rules.
+    // A `more` rule declared first must therefore receive the highest type.
+    let out = token_globals_for("lexer grammar L; A: 'a' -> more; B: 'b'; C: 'c';");
+    assert out.contains("global TK_B: i32 = 0"), out;
+    assert out.contains("global TK_C: i32 = 1"), out;
+    assert out.contains("global TK_A: i32 = 2"), out;
+}
+
 test "gen_token_constants: numeric type(N) override emits TK_<N> = N - 1" {
     let out = token_globals_for("lexer grammar L; T_FFFF: 'FFFF' -> type(65535);");
     assert out.contains("global TK_T_FFFF: i32 = 0"), out;

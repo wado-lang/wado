@@ -623,6 +623,34 @@ impl<'a> Unparser<'a> {
         self.output.push(']');
     }
 
+    /// Emit `(params)` followed by `emit_after` (the rest of the signature line
+    /// — return type, `with` clause, etc.), breaking the parameters one-per-line
+    /// when the whole signature line would overflow the width budget. The width
+    /// check spans `emit_after` too, since a short parameter list can still push
+    /// the line over once the return type is appended. On overflow the inline
+    /// attempt is rolled back and re-emitted wrapped, the same width-aware
+    /// rollback the import list uses.
+    fn delimited_params<F: Fn(&mut Self)>(&mut self, params: &[Param], emit_after: F) {
+        let snap = self.snapshot();
+        self.delimited("(", ")", params, Unparser::unparse_param);
+        emit_after(self);
+        if params.is_empty() || !self.exceeds_width_since(snap) {
+            return;
+        }
+        self.rollback(snap);
+        self.output.push_str("(\n");
+        self.indent_level += 1;
+        for param in params {
+            self.write_indent();
+            self.unparse_param(param);
+            self.output.push_str(",\n");
+        }
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push(')');
+        emit_after(self);
+    }
+
     fn unparse_function(&mut self, f: &Function) {
         self.emit_outer_attrs(&f.attrs);
         self.emit_kw_if(f.is_pub, "pub ");
@@ -632,16 +660,15 @@ impl<'a> Unparser<'a> {
         self.output.push_str("fn ");
         self.output.push_str(&f.name);
         self.unparse_generic_params(&f.type_params);
-        self.delimited("(", ")", &f.params, Unparser::unparse_param);
-
-        if let Some(ret) = &f.return_type
-            && !is_unit_type(ret)
-        {
-            self.output.push_str(" -> ");
-            self.unparse_type(ret);
-        }
-
-        self.unparse_with_clause(&f.effects, &f.stores);
+        self.delimited_params(&f.params, |s| {
+            if let Some(ret) = &f.return_type
+                && !is_unit_type(ret)
+            {
+                s.output.push_str(" -> ");
+                s.unparse_type(ret);
+            }
+            s.unparse_with_clause(&f.effects, &f.stores);
+        });
 
         if let Some(body) = &f.body {
             self.output.push_str(" {\n");
@@ -1030,14 +1057,14 @@ impl<'a> Unparser<'a> {
 
         self.output.push_str("fn ");
         self.output.push_str(&m.name);
-        self.delimited("(", ")", &m.params, Unparser::unparse_param);
-
-        if let Some(ret) = &m.return_type
-            && !is_unit_type(ret)
-        {
-            self.output.push_str(" -> ");
-            self.unparse_type(ret);
-        }
+        self.delimited_params(&m.params, |s| {
+            if let Some(ret) = &m.return_type
+                && !is_unit_type(ret)
+            {
+                s.output.push_str(" -> ");
+                s.unparse_type(ret);
+            }
+        });
 
         self.output.push_str(";\n");
     }
@@ -1098,17 +1125,14 @@ impl<'a> Unparser<'a> {
                         this.emit_kw_if(func.is_async, "async ");
                         this.output.push_str("fn ");
                         this.output.push_str(&func.name);
-                        this.delimited("(", ")", &func.params, |this, param| {
-                            this.output.push_str(&param.name);
-                            this.output.push_str(": ");
-                            this.unparse_type(&param.ty);
+                        this.delimited_params(&func.params, |s| {
+                            if let Some(ret) = &func.return_type
+                                && !is_unit_type(ret)
+                            {
+                                s.output.push_str(" -> ");
+                                s.unparse_type(ret);
+                            }
                         });
-                        if let Some(ret) = &func.return_type
-                            && !is_unit_type(ret)
-                        {
-                            this.output.push_str(" -> ");
-                            this.unparse_type(ret);
-                        }
                         this.output.push_str(";\n");
                     }
                 }
@@ -2789,12 +2813,27 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
             if inner_prec < parent_prec {
                 return true;
             }
+            // Comparison operators chain instead of associating: `a == b == c`
+            // parses as the 3-way chain `a == b && b == c`, and mixing groups
+            // (`a < b < c == d`) is a parse error. A comparison nested as
+            // either operand of another comparison must keep its parens, or the
+            // round-trip silently rewrites the meaning. The same-precedence arm
+            // below would otherwise drop them for the left operand.
+            if is_comparison_op(inner.op) && is_comparison_op(parent_op) {
+                return true;
+            }
             if inner_prec == parent_prec && !is_left {
                 // Right-associative check for same precedence
                 return true;
             }
             false
         }
+        // A comparison chain (`a < b < c`) behaves like a comparison operand:
+        // it must stay parenthesized inside any operator binding at least as
+        // tightly as comparison, and inside another comparison (which would
+        // extend or invalidate the chain). Only the looser-binding logical
+        // `&&` / `||` can hold a bare chain.
+        Expr::ComparisonChain(_) => !matches!(parent_op, BinaryOp::And | BinaryOp::Or),
         // Range expressions have lower precedence than all binary operators,
         // so they always need parentheses when nested inside a binary expression.
         Expr::Range(_) => true,
@@ -2803,6 +2842,20 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
         Expr::Cast(_) if is_left && parent_op == BinaryOp::Lt => true,
         _ => false,
     }
+}
+
+/// Comparison operators chain (`a < b < c`) rather than associate, so they
+/// need parenthesization rules distinct from ordinary same-precedence binaries.
+fn is_comparison_op(op: BinaryOp) -> bool {
+    matches!(
+        op,
+        BinaryOp::Eq
+            | BinaryOp::NotEq
+            | BinaryOp::Lt
+            | BinaryOp::LtEq
+            | BinaryOp::Gt
+            | BinaryOp::GtEq
+    )
 }
 
 /// Returns true if `name` can be emitted as a bare identifier or keyword in a

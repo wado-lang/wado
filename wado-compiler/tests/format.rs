@@ -1245,6 +1245,102 @@ fn test_format_float_negative_exponent_preserved() {
 }
 
 #[test]
+fn test_format_nested_comparison_preserves_parens() {
+    // Comparisons chain in Wado: `a == b == c` parses as `a == b && b == c`,
+    // not `(a == b) == c`. So a comparison nested as an operand of another
+    // comparison must keep its parens or the formatter silently rewrites the
+    // meaning. Same for `<` chains and mixed groups that would become invalid
+    // chains (`a < b < c == d`).
+    let source = r"fn run() {
+    let x = (a == 0) == b;
+    let y = (a < b) == c;
+    let z = (a < b < c) == d;
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("(a == 0) == b"),
+        "nested == must keep parens: {formatted}"
+    );
+    assert!(
+        formatted.contains("(a < b) == c"),
+        "nested comparison must keep parens: {formatted}"
+    );
+    assert!(
+        formatted.contains("(a < b < c) == d"),
+        "nested comparison chain must keep parens: {formatted}"
+    );
+    // The AST round-trip is the real invariant.
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_long_signature_wraps_params() {
+    // A function signature whose inline form exceeds the 120-col width must
+    // wrap its parameters one-per-line, like every other comma list, instead
+    // of emitting a single over-width line.
+    let source = "fn keyword_carrier_admits(kw: KeywordInfo, kw_index: i32, carrier_indices: Array<i32>, carrier_first_chars: Array<Array<char>>, carrier_is_wildcard: Array<bool>) -> bool {\n    return true;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    for line in formatted.lines() {
+        assert!(
+            line.chars().count() <= 120,
+            "line exceeds 120 cols: {line:?}\n\nformatted:\n{formatted}"
+        );
+    }
+    assert!(
+        formatted.contains("fn keyword_carrier_admits(\n"),
+        "long signature params should wrap one-per-line: {formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_long_interface_method_wraps_params() {
+    // An interface method whose inline signature overflows must wrap its
+    // parameters one-per-line, like a free function.
+    let source = "interface Service {\n    fn handle_request(alpha: i32, beta: i32, gamma: i32, delta: i32, epsilon: i32, zeta: i32, eta: i32, theta: i32) -> bool;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    for line in formatted.lines() {
+        assert!(
+            line.chars().count() <= 120,
+            "line exceeds 120 cols: {line:?}\n\nformatted:\n{formatted}"
+        );
+    }
+    assert!(
+        formatted.contains("fn handle_request(\n"),
+        "long interface method params should wrap one-per-line: {formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_long_world_export_fn_wraps_params() {
+    // A world's `export fn` whose inline signature overflows must wrap its
+    // parameters one-per-line too.
+    let source = "world app {\n    export fn run(alpha: i32, beta: i32, gamma: i32, delta: i32, epsilon: i32, zeta: i32, eta: i32, theta: i32, iota: i32) -> bool;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    for line in formatted.lines() {
+        assert!(
+            line.chars().count() <= 120,
+            "line exceeds 120 cols: {line:?}\n\nformatted:\n{formatted}"
+        );
+    }
+    assert!(
+        formatted.contains("fn run(\n"),
+        "long world export fn params should wrap one-per-line: {formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
 fn test_format_deref_index_preserves_parens() {
     // (*p)[i] must keep parens — *p[i] means *(p[i])
     let source = r"fn foo(data: &Array<i32>) -> i32 {
