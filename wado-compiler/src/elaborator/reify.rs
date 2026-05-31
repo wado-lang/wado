@@ -1845,7 +1845,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )]
             }
             ast::Stmt::Continue(continue_stmt) => {
-                vec![TirStmt::new(TirStmtKind::Continue, continue_stmt.span)]
+                // Inside a C-style `for`, `continue` must break to the
+                // body label so the `update` expression runs before the
+                // next iteration; only while/loop bodies use a plain
+                // `Continue`. Mirror `Elaborator::resolve_continue`
+                // (stmt.rs:251), keyed off `ctx.for_continue_labels`.
+                let stmt_kind = if let Some(body_label) = ctx.for_continue_labels.last() {
+                    TirStmtKind::Break {
+                        label: Some(body_label.clone()),
+                        value: None,
+                    }
+                } else {
+                    TirStmtKind::Continue
+                };
+                vec![TirStmt::new(stmt_kind, continue_stmt.span)]
             }
             ast::Stmt::Let(let_stmt) => vec![self.reify_let(let_stmt, ctx)],
             ast::Stmt::If(if_stmt) => self.reify_if_stmt(if_stmt, ctx),
