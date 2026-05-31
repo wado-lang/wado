@@ -55,13 +55,14 @@ codegen capability and one `niri` keystone extension).
 
 ### Enabler: first-class constant arrays at NIR
 
-Add `NirExprKind::ArrayLiteral` and collapse `SequenceLiteralBuilder` push
-sequences into it during NIR optimization (porting WIR's
-`collapse_array_push_sequences` earlier in the pipeline). Without this, arrays and
-strings carry no const-recognizable shape until WIR. The collapse runs early in
-the fixed-point loop (alongside `container_sroa`) so later passes see the literal
-form. This pays off beyond this feature: CSE of arrays, constant-index folding,
-and bounds-check elimination all benefit from a first-class constant array.
+Constant arrays and strings reach NIR as `SequenceLiteralBuilder` push
+sequences, so they carry no const-recognizable shape until WIR. Recognizing
+them needs a first-class `NirExprKind::ArrayLiteral` and a collapse of the const
+push-sequence into it, early in the loop. That addition is shared
+infrastructure, not specific to this feature, and is specified in the
+[NIR Layer WEP](./wep-2026-05-11-nir.md) (Normalization Additions). This pass
+depends on it for the array/string cases; struct/tuple/variant/enum constants
+need no enabler (they are already first-class in NIR).
 
 ### Constant-aggregate predicate
 
@@ -123,17 +124,16 @@ Synthetic globals are named via the `name.rs` mangling utilities, internal
 
 ### Keystone — fold aggregate-global access in `niri`
 
-Extend `niri`'s `GlobalEnv` beyond scalar `Lattice` to carry a structural
-snapshot of immutable aggregate globals, and fold
-`FieldAccess(GlobalVarGet(G), f)` and `Index(GlobalVarGet(G), const)` to the
-field/element constant — mirroring `field_env`'s local folding. This converts
-globalization into a cross-function constant-propagation source: globalize → fold
-field/element reads to scalars module-wide → feed `const_global_promotion` /
-`const_fold` / `branch_prune` → the global often becomes dead and DCE removes it,
-leaving pure scalar propagation that SROA (intra-function) could never achieve
-across function boundaries. Without this keystone, NIR globalization still yields
-cross-function dedup and loop-invariant-construction hoisting, but not the
-compounding cascade.
+What turns globalization from "allocate once" into a cross-function
+constant-propagation source is `niri` folding `FieldAccess(GlobalVarGet(G), f)`
+and `Index(GlobalVarGet(G), const)` on immutable aggregate globals: globalize →
+fold field/element reads to scalars module-wide → feed `const_global_promotion` /
+`const_fold` / `const_branch_prune` → the now-unread global is removed by DCE,
+leaving propagation that intra-function SROA could never reach. This is a `niri`
+capability, specified as Stage 6 in the
+[niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md). Without it, this pass
+still yields cross-function dedup and loop-invariant-construction hoisting, but
+not the compounding cascade.
 
 ### Interaction summary
 
@@ -169,22 +169,27 @@ flag and no hotness heuristic is needed.
 - Slightly larger global section and a marginal instantiation-time cost for
   constants a given execution may never reach — acceptable given the per-use
   savings and the absence of any access-time overhead.
-- The NIR collapse duplicates logic currently in WIR
-  (`collapse_array_push_sequences`); the two should share a helper or the WIR pass
-  should be retired once the NIR `ArrayLiteral` subsumes it.
 - Requires confirming the pinned `wasmparser` / `wasmtime` generation accepts GC
   aggregate constant init expressions; enforced by E2E `wir_expect` fixtures.
 
 ## TODO
 
+This feature (constant-globalization-specific):
+
 - [ ] `emit_const_expr`: recursive structural emitter; fallback → ICE.
 - [ ] `translate_global_init`: recursive aggregate translation (NIR→WIR).
-- [ ] `NirExprKind::ArrayLiteral` + NIR push-sequence collapse (early in the loop).
 - [ ] Shared const-aggregate predicate over `NirExpr`.
 - [ ] Part 1: generalize `const_global_promotion` to aggregates.
 - [ ] Part 2: `const_object_globalization` pass — read-only / escape gating,
       cross-function dedup, placed after SROA / `const_fold` in the loop.
-- [ ] Keystone: `niri` `GlobalEnv` aggregate snapshots; fold `G.field` / `G[const]`.
 - [ ] E2E `wir_expect` / `wir_not_expect` fixtures for structs, arrays, and
       strings at each `-Ox`; assert const globals (not `__initialize_module`), and
       that field-fold + DCE removes the global where every use is a field read.
+
+Cross-cutting infrastructure (owned by other WEPs, blocking the array/string and
+cascade cases here):
+
+- [ ] `NirExprKind::ArrayLiteral` + NIR push-sequence collapse — see
+      [NIR Layer WEP](./wep-2026-05-11-nir.md) (Normalization Additions).
+- [ ] `niri` aggregate `GlobalEnv` + `G.field` / `G[const]` projection — see
+      [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) (Stage 6).
