@@ -113,3 +113,4 @@ It may include TODOs on WIP.
 - [Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md)
 - [Resource Ownership and a Resource-Scoped Borrow Checker](./wep-2026-05-21-resource-ownership.md)
 - [Elaborator Re-architecture — TypeSystem / Annotate / Reify](./wep-2026-05-26-elaborator-rearchitecture.md)
+- [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md)
