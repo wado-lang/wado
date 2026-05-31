@@ -30,3 +30,47 @@ test "Result::is_ok" {
     assert err.is_err();
     assert !err.is_ok();
 }
+
+test "Option::expect on Some" {
+    let x: Option<i32> = Option::Some(42);
+    assert x.expect("must be present") == 42;
+}
+
+#[expect_trap]
+test "Option::expect on None traps" {
+    let x: Option<i32> = null;
+    x.expect("must be present");
+}
+
+test "Result::expect on Ok" {
+    let x: Result<i32, String> = Result::Ok(42);
+    assert x.expect("must be ok") == 42;
+}
+
+#[expect_trap]
+test "Result::expect on Err traps" {
+    let x: Result<i32, String> = Result::Err("error");
+    x.expect("must be ok");
+}
+
+test "Result::unwrap_err on Err" {
+    let x: Result<i32, String> = Result::Err("boom");
+    assert x.unwrap_err() == "boom";
+}
+
+#[expect_trap]
+test "Result::unwrap_err on Ok traps" {
+    let x: Result<i32, String> = Result::Ok(7);
+    x.unwrap_err();
+}
+
+test "Result::expect_err on Err" {
+    let x: Result<i32, String> = Result::Err("boom");
+    assert x.expect_err("must be err") == "boom";
+}
+
+#[expect_trap]
+test "Result::expect_err on Ok traps" {
+    let x: Result<i32, String> = Result::Ok(7);
+    x.expect_err("must be err");
+}

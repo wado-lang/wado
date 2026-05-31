@@ -44,12 +44,20 @@ The target world is indicated by the top-level key in the JSON:
 | `trapped`             | `bool`               | Whether the program should trap                             |
 | `compile_error`       | `string`             | Expected compile error (substring match)                    |
 | `skip_os`             | `bool`               | Skip this test under `-Os` (e.g. tests relying on names)    |
-| `preopened_dirs`      | `[string, string][]` | Preopened directories `[host_path, guest_path]`             |
+| `preopened_dirs`      | `[string, string][]` | Preopened dirs `[template, guest_path]` (see note below)    |
 | `allocator`           | `string`             | Override allocator: `"bump"` (default) or `"debug"`         |
 | `wir_expect:Ox`       | `string[]`           | Patterns that must appear in WIR at `-Ox` (substring match) |
 | `wir_not_expect:Ox`   | `string[]`           | Patterns that must NOT appear in WIR at `-Ox`               |
 | `outgoing_mocks`      | `object`             | Mock responses for outgoing HTTP requests (see below)       |
 | `tls_mocks`           | `object`             | Mock responses for `wasi:tls` handshakes (see below)        |
+
+Every `preopened_dirs` entry is backed by a fresh temp directory (deleted when
+the test finishes), keeping filesystem tests hermetic across the parallel
+per-optimization-level runs. The first element is a `template` seeding it:
+
+- `""` — empty scratch directory.
+- a workspace-relative path — copied in as a seed corpus (e.g. binary fixtures
+  that cannot be expressed inline, such as `tests/fixtures/testdata`).
 
 HTTP sub-fields (inside `"wasi:http/service": {...}`):
 

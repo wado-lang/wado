@@ -1,20 +1,30 @@
 // Sieve of Eratosthenes benchmark for Wado
 // Counts primes up to LIMIT using the sieve algorithm
-// Reference: π(100,000,000) = 5,761,455
+// Reference: π(10,000,000) = 664,579
+//
+// The sieve buffer is allocated once, outside the timed region, and reset to
+// `true` at the start of each iteration. This keeps allocation and first-touch
+// page faults out of the measurement so the timed loop reflects steady-state
+// array traffic only, which is what makes the result stable across runs.
 //
 // How to run:
 //   mise run benchmark-sieve
 //
 // Or manually:
-//   cargo run --bin wado -- run benchmark/sieve.wado
+//   cargo run --bin wado -- run benchmark/sieve/sieve.wado
 
 use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Benchmark } from "core:benchmark";
 
-fn sieve_count(limit: i32) -> i32 {
-    // Pre-allocate sieve array filled with true
-    let mut is_prime = Array::<bool>::filled(limit + 1, true);
+// Sieve over a caller-owned buffer. Resets `is_prime` to all-true, then marks
+// composites and counts primes. The buffer is reused across iterations so no
+// allocation happens in the timed region.
+fn sieve_count(is_prime: &mut Array<bool>, limit: i32) -> i32 {
+    // Reset the reused buffer to all-true.
+    for let mut i = 0; i <= limit; i += 1 {
+        is_prime[i] = true;
+    }
 
     // 0 and 1 are not prime
     is_prime[0] = false;
@@ -45,12 +55,16 @@ fn sieve_count(limit: i32) -> i32 {
 
 test "smoke" {
     // π(100) = 25
-    assert sieve_count(100) == 25;
+    let mut is_prime = Array::<bool>::filled(101, true);
+    assert sieve_count(&mut is_prime, 100) == 25;
 }
 
 export fn run() with Stdout, MonotonicClock {
-    let limit = 100000000;
+    let limit = 10000000;
+    // Allocate the sieve buffer once, outside the timed region.
+    let mut is_prime = Array::<bool>::filled(limit + 1, true);
     let mut b = Benchmark::new(`sieve up to {limit}`);
-    let count = b.run("", || sieve_count(limit));
+    b.iterations = 10;
+    let count = b.run("", || sieve_count(&mut is_prime, limit));
     b.println(`count = {count}`);
 }

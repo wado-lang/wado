@@ -27,7 +27,7 @@ use {
 } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
-use { Rule, Op, ScanElement, MultiAltDispatch, GroupShape, FieldDecl, FieldKind } from "./gir.wado";
+use { Rule, Op, ScanElement, MultiAltDispatch, GroupShape, FieldDecl, FieldKind, Diagnostic, DiagnosticKind } from "./gir.wado";
 
 fn empty_grammar(name: &String) -> Grammar {
     return Grammar {
@@ -46,6 +46,27 @@ fn empty_grammar(name: &String) -> Grammar {
 
 fn no_lit_tokens() -> Array<LitToken> {
     return [];
+}
+
+fn str_contains(haystack: &String, needle: &String) -> bool {
+    let h_len = haystack.len();
+    let n_len = needle.len();
+    if n_len > h_len {
+        return false;
+    }
+    for let mut i = 0; i <= h_len - n_len; i += 1 {
+        let mut found = true;
+        for let mut j = 0; j < n_len; j += 1 {
+            if haystack.get_byte_unchecked(i + j) != needle.get_byte_unchecked(j) {
+                found = false;
+                break;
+            }
+        }
+        if found {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn alt_of(elements: Array<Element>) -> Alternative {
@@ -2423,6 +2444,66 @@ test "lower multi-alt rule with overlapping first sets emits Tournament dispatch
     } else {
         panic("expected Rule::MultiAlt");
     }
+}
+
+test "lower warns once when overlapping alts fall back to a tournament" {
+    // Same `r : ID INT | ID STRING ;` shape: both alts start with ID,
+    // so lowering picks a scan tournament and should raise exactly one
+    // OverlapTournament diagnostic naming the rule and the shared token.
+    // The scan-side dispatch lowers the same alts but must not duplicate
+    // the warning.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [
+                alt_of([
+                    Element::TokenRef(TokenRefElement::new("ID")),
+                    Element::TokenRef(TokenRefElement::new("INT")),
+                ]),
+                alt_of([
+                    Element::TokenRef(TokenRefElement::new("ID")),
+                    Element::TokenRef(TokenRefElement::new("STRING")),
+                ]),
+            ],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.diagnostics.len() == 1, `expected 1 diagnostic, got {lowered.diagnostics.len()}`;
+    let d = &lowered.diagnostics[0];
+    // `rule` carries the human-readable owner label lowering used at
+    // the decision site — for a top-level rule that is `rule '<name>'`.
+    assert str_contains(&d.rule, &"r"), `expected rule label to mention "r", got "{d.rule}"`;
+    if let OverlapTournament = &d.kind {
+    } else {
+        panic("expected DiagnosticKind::OverlapTournament");
+    }
+    // The message should name the shared lookahead token so a grammar
+    // author can see why the alts overlapped.
+    assert str_contains(&d.message, &"TK_ID"), `message lacks shared token: {d.message}`;
+}
+
+test "lower raises no diagnostics for disjoint alts" {
+    // `r : ID | INT ;` — disjoint first sets dispatch directly with no
+    // tournament, so there is nothing to warn about.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::TokenRef(TokenRefElement::new("ID"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+            ],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    assert lowered.diagnostics.is_empty(), `expected no diagnostics, got {lowered.diagnostics.len()}`;
 }
 
 test "lower Tournament sorts longer alt first" {

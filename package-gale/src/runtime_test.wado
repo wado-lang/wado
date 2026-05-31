@@ -35,7 +35,7 @@ test "to_lexer_string interleaves non-default-channel trivia in source order" {
 [@1,1:1='b',<2>,channel=2,1:1]
 [@2,2:1='<EOF>',<-1>,1:2]
 ";
-    assert actual == expected, `actual:\n{actual}\nexpected:\n{expected}`;
+    assert actual == expected;
 }
 
 test "to_lexer_string skips default-channel (skip) trivia without consuming an index" {
@@ -50,13 +50,37 @@ test "to_lexer_string skips default-channel (skip) trivia without consuming an i
     let expected = "[@0,0:0='a',<1>,1:0]
 [@1,2:2='c',<1>,1:2]
 ";
-    assert actual == expected, `actual:\n{actual}\nexpected:\n{expected}`;
+    assert actual == expected;
 }
 
 test "Span::new creates span" {
     let s = Span::new(0, 5);
     assert s.start == 0;
     assert s.end == 5;
+}
+
+test "ParseError::new leaves position at defaults" {
+    let e = ParseError::new("oops", Span::new(0, 1), ["A"]);
+    assert e.line == 1;
+    assert e.col == 0;
+    assert e.rule_stack.is_empty();
+}
+
+test "ParseError::at carries resolved position" {
+    let e = ParseError::at(`expected '}', got "for"`, Span::new(40, 43), ["TK_RBRACE"], 12, 5);
+    assert e.line == 12;
+    assert e.col == 5;
+    assert `{e}` == `parse error at 12:5: expected '}', got "for"`;
+}
+
+test "ParseError Display renders rule stack outermost-first" {
+    let mut e = ParseError::at("unexpected token", Span::new(3, 4), ["TK_X"], 2, 7);
+    // rule_stack is stored innermost-first, as the wrappers push it.
+    e.rule_stack.push("statement");
+    e.rule_stack.push("block");
+    e.rule_stack.push("program");
+    assert e.rule_path() == "program > block > statement";
+    assert `{e}` == "parse error at 2:7: unexpected token\n  in rule: program > block > statement";
 }
 
 test "Span::len returns length" {
@@ -205,7 +229,7 @@ test "to_string_tree leaf token" {
     rec.visit_token(&Token::new(1, ls("42"), Span::new(0, 2)));
     rec.exit_rule(0, &"root", &Span::new(0, 2));
     let tree = rec.build();
-    assert tree.to_string_tree() == "(root 42)", `got: {tree.to_string_tree()}`;
+    assert tree.to_string_tree() == "(root 42)";
 }
 
 test "to_string_tree nested" {
@@ -220,7 +244,7 @@ test "to_string_tree nested" {
     rec.exit_rule(1, &"b", &Span::new(5, 7));
     rec.exit_rule(0, &"a", &Span::new(0, 10));
     let tree = rec.build();
-    assert tree.to_string_tree() == "(a (b x) + (b y))", `got: {tree.to_string_tree()}`;
+    assert tree.to_string_tree() == "(a (b x) + (b y))";
 }
 
 test "to_string_tree skips empty text tokens" {
@@ -230,7 +254,7 @@ test "to_string_tree skips empty text tokens" {
     rec.visit_token(&Token::new(0, ls(""), Span::new(1, 1)));
     rec.exit_rule(0, &"root", &Span::new(0, 5));
     let tree = rec.build();
-    assert tree.to_string_tree() == "(root x)", `got: {tree.to_string_tree()}`;
+    assert tree.to_string_tree() == "(root x)";
 }
 
 test "normalize_tree collapses whitespace" {
@@ -259,7 +283,7 @@ test "highlight_html escapes HTML and wraps captures" {
         HighlightCapture { capture: "tag", start: 0, end: 5 },
     ];
     let html = highlight_html(&source, &captures);
-    assert html == `<span class="tag">&lt;div&gt;</span>`, `got: {html}`;
+    assert html == `<span class="tag">&lt;div&gt;</span>`;
 }
 
 test "highlight_html emits plain text for gaps" {
@@ -268,7 +292,7 @@ test "highlight_html emits plain text for gaps" {
         HighlightCapture { capture: "operator", start: 2, end: 3 },
     ];
     let html = highlight_html(&source, &captures);
-    assert html == `a <span class="operator">+</span> b`, `got: {html}`;
+    assert html == `a <span class="operator">+</span> b`;
 }
 
 test "highlight_html converts dot-separated captures to CSS classes" {
@@ -277,7 +301,7 @@ test "highlight_html converts dot-separated captures to CSS classes" {
         HighlightCapture { capture: "punctuation.bracket", start: 0, end: 1 },
     ];
     let html = highlight_html(&source, &captures);
-    assert html == `<span class="punctuation bracket">\{</span>`, `got: {html}`;
+    assert html == `<span class="punctuation bracket">\{</span>`;
 }
 
 test "HighlightVisitor collects captures from tokens" {
@@ -292,7 +316,7 @@ test "HighlightVisitor collects captures from tokens" {
     visitor.visit_token(&Token::new(1, ls("42"), Span::new(5, 7)));
     visitor.visit_token(&Token::new(2, ls(" "), Span::new(7, 8)));
     visitor.exit_rule(0, &"root", &Span::new(0, 10));
-    assert visitor.captures.len() == 2, `expected 2, got {visitor.captures.len()}`;
+    assert visitor.captures.len() == 2;
     assert visitor.captures[0].capture == "string";
     assert visitor.captures[0].start == 0;
     assert visitor.captures[0].end == 4;
@@ -316,8 +340,8 @@ test "HighlightVisitor applies context overrides" {
     visitor.exit_rule(1, &"pair", &Span::new(0, 10));
     visitor.visit_token(&Token::new(0, ls("\"val\""), Span::new(11, 16)));
     visitor.exit_rule(0, &"root", &Span::new(0, 20));
-    assert visitor.captures[0].capture == "string.special.key", `got: {visitor.captures[0].capture}`;
-    assert visitor.captures[1].capture == "string", `got: {visitor.captures[1].capture}`;
+    assert visitor.captures[0].capture == "string.special.key";
+    assert visitor.captures[1].capture == "string";
 }
 
 test "HighlightVisitor handles trivia" {

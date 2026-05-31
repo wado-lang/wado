@@ -121,6 +121,11 @@ pub enum CompilerItem {
     /// `core:serde::DeserializeVariant` — associated-type bound used when
     /// the synthesised variant deserializer projects `D::VariantAccess`.
     DeserializeVariant,
+    /// `core:serde::FieldSchema` — bound on `DeserializeStruct::next_field`'s
+    /// type parameter. The struct-deserialize synthesiser implements it for
+    /// each deserializable struct, providing the static, allocation-free
+    /// field-name → index `lookup` that self-describing formats invoke.
+    FieldSchema,
     /// `core:prelude/traits::Display` — anchor for `{x}` template-string
     /// dispatch and the auto-derive Display→Inspect fallback.
     Display,
@@ -279,6 +284,7 @@ impl CompilerItem {
         Self::DeserializeStruct,
         Self::DeserializeSeq,
         Self::DeserializeVariant,
+        Self::FieldSchema,
         Self::Display,
         Self::DisplayAlt,
         Self::Inspect,
@@ -360,6 +366,7 @@ impl CompilerItem {
             Self::DeserializeStruct => "deserialize_struct",
             Self::DeserializeSeq => "deserialize_seq",
             Self::DeserializeVariant => "deserialize_variant",
+            Self::FieldSchema => "field_schema",
             Self::Display => "display",
             Self::DisplayAlt => "display_alt",
             Self::Inspect => "inspect",
@@ -506,6 +513,7 @@ impl CompilerItem {
             | Self::DeserializeStruct
             | Self::DeserializeSeq
             | Self::DeserializeVariant
+            | Self::FieldSchema
             | Self::SerializeError
             | Self::SerializeErrorKind
             | Self::DeserializeError
@@ -549,6 +557,7 @@ impl CompilerItem {
             | Self::DeserializeStruct
             | Self::DeserializeSeq
             | Self::DeserializeVariant
+            | Self::FieldSchema
             | Self::Display
             | Self::DisplayAlt
             | Self::Inspect

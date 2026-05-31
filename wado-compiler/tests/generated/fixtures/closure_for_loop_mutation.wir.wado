@@ -604,13 +604,15 @@ fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
 
 fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_2::__call"(self) {
     let i: i32;
+    let _licm___capture_0_2: ref "core:prelude/types.wado//Box<i32>";
     i = 0;
+    _licm___capture_0_2 = self.__capture_0;
     b46: block {
         l47: loop {
             if i >= 3 {
                 break b46;
             }
-            self.__capture_0.value = self.__capture_0.value + 1;
+            _licm___capture_0_2.value = _licm___capture_0_2.value + 1;
             i = i + 1;
             continue l47;
         };
@@ -619,13 +621,15 @@ fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_2::__c
 
 fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_3::__call"(self, limit) {
     let n: i32;
+    let _licm___capture_0_3: ref "core:prelude/types.wado//Box<i32>";
     n = 0;
+    _licm___capture_0_3 = self.__capture_0;
     b49: block {
         l50: loop {
             if n >= limit {
                 break b49;
             }
-            self.__capture_0.value = self.__capture_0.value + n;
+            _licm___capture_0_3.value = _licm___capture_0_3.value + n;
             n = n + 1;
             continue l50;
         };
@@ -634,14 +638,16 @@ fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_3::__c
 
 fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_4::__call"(self) {
     let __iter_0: ref "core:prelude/array.wado//ArrayIter<i32>";
+    let _licm___capture_1_5: ref "core:prelude/types.wado//Box<i32>";
     __iter_0 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: self.__capture_0.repr, used: self.__capture_0.used, index: 0 };
+    _licm___capture_1_5 = self.__capture_1;
     b52: block {
         l53: loop {
             let __sroa___match_3_discriminant: i32;
             let __sroa___match_3_payload_0: i32;
             multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_0);
             if __sroa___match_3_discriminant == 0 {
-                self.__capture_1.value = self.__capture_1.value + __sroa___match_3_payload_0;
+                _licm___capture_1_5.value = _licm___capture_1_5.value + __sroa___match_3_payload_0;
             } else {
                 break b52;
             }

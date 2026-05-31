@@ -44,6 +44,7 @@ pub(super) struct SerdeStdlibNames {
     pub deserialize_struct: String,
     pub deserialize_seq: String,
     pub deserialize_variant: String,
+    pub field_schema: String,
     pub serialize_error: String,
     pub serialize_error_kind: String,
     pub deserialize_error: String,
@@ -121,6 +122,7 @@ impl SerdeStdlibNames {
             deserialize_variant: items
                 .trait_name(CompilerItem::DeserializeVariant)
                 .to_string(),
+            field_schema: items.trait_name(CompilerItem::FieldSchema).to_string(),
             serialize_error: items.struct_name(CompilerItem::SerializeError).to_string(),
             serialize_error_kind: items
                 .enum_name(CompilerItem::SerializeErrorKind)
@@ -232,6 +234,24 @@ use super::common::{
     return_stmt, string_lit, synth_span,
 };
 
+/// Wire-form name for a struct field.
+///
+/// Single source of truth for the serialized key: an explicit
+/// `#[serde(rename = "...")]` wins; otherwise `#[serde(rename_all = "...")]`
+/// applies its case strategy; otherwise the Wado source field name is used
+/// verbatim (identity — `user_id` stays `"user_id"`, `userId` stays
+/// `"userId"`). Used by both the serialize and deserialize synthesisers so the
+/// two never disagree.
+fn serialized_field_name(f: &crate::tir::TirField, struct_def: &crate::tir::TirStruct) -> String {
+    f.serde_rename.clone().unwrap_or_else(|| {
+        if let Some(strategy) = &struct_def.serde_rename_all {
+            apply_rename_all(&f.name, strategy)
+        } else {
+            f.name.clone()
+        }
+    })
+}
+
 fn apply_rename_all(s: &str, strategy: &str) -> String {
     match strategy {
         "camelCase" => snake_to_camel(s),
@@ -256,7 +276,9 @@ fn apply_rename_all(s: &str, strategy: &str) -> String {
         "SCREAMING_SNAKE_CASE" => s.to_uppercase(),
         "kebab-case" => s.replace('_', "-"),
         "SCREAMING-KEBAB-CASE" => s.replace('_', "-").to_uppercase(),
-        _ => snake_to_camel(s), // default to camelCase
+        // Unrecognized strategy string: fall back to identity (the name as
+        // written), matching the no-attribute default.
+        _ => s.to_string(),
     }
 }
 
@@ -789,13 +811,7 @@ fn generate_struct_serialize(
         .fields
         .iter()
         .map(|f| {
-            let serialized_name = f.serde_rename.clone().unwrap_or_else(|| {
-                if let Some(strategy) = &struct_def.serde_rename_all {
-                    apply_rename_all(&f.name, strategy)
-                } else {
-                    snake_to_camel(&f.name)
-                }
-            });
+            let serialized_name = serialized_field_name(f, struct_def);
             (f.name.clone(), serialized_name, f.type_id, f.index)
         })
         .collect();
@@ -848,7 +864,7 @@ fn generate_struct_serialize(
     ));
 
     let mut then_stmts = Vec::new();
-    for (i, (field_name, camel_name, field_type, field_index)) in fields.iter().enumerate() {
+    for (i, (field_name, wire_name, field_type, field_index)) in fields.iter().enumerate() {
         let self_ref = local_ref(0, "self", ref_self_type);
         let self_deref = deref_expr(self_ref, struct_type, span);
         let field_val = field_access(self_deref, *field_index, field_name, *field_type, span);
@@ -864,7 +880,7 @@ fn generate_struct_serialize(
             vec![*field_type],
             vec![
                 ref_expr(
-                    string_lit(camel_name, string_type, span),
+                    string_lit(wire_name, string_type, span),
                     ref_string_type,
                     span,
                 ),
@@ -986,7 +1002,6 @@ fn generate_struct_deserialize(
 ) -> Option<(TirFunction, TirFunction)> {
     let struct_def = find_struct(module, &req.target_type_name)?;
     let span = synth_span();
-    let module_source = module.module_source.clone();
     let serde_module = ModuleSource::serde();
 
     let mut tt = module.type_table.borrow_mut();
@@ -1000,12 +1015,6 @@ fn generate_struct_deserialize(
         .find_enum_type(&names.deserialize_error_kind, &serde_module)
         .unwrap_or(TypeTable::I32);
     let result_struct_err = tt.make_result(struct_type, deser_error_type);
-    let lookup_fn_type = tt.make_function(
-        vec![ref_string_type, TypeTable::I32, TypeTable::I32],
-        option_i32,
-        vec![],
-        vec![],
-    );
     let d_type_param = tt.make_type_param("D".to_string(), 0);
     let mut_ref_d = tt.make_mut_ref(d_type_param);
     let struct_access_type = tt.make_assoc_type_projection(
@@ -1023,13 +1032,7 @@ fn generate_struct_deserialize(
         .fields
         .iter()
         .map(|f| {
-            let serialized_name = f.serde_rename.clone().unwrap_or_else(|| {
-                if let Some(strategy) = &struct_def.serde_rename_all {
-                    apply_rename_all(&f.name, strategy)
-                } else {
-                    snake_to_camel(&f.name)
-                }
-            });
+            let serialized_name = serialized_field_name(f, struct_def);
             (f.name.clone(), serialized_name, f.type_id, f.index)
         })
         .collect();
@@ -1042,12 +1045,20 @@ fn generate_struct_deserialize(
         .iter()
         .map(|(_, _, type_id, _)| tt.type_name(*type_id))
         .collect();
+    // The struct type spelling drives the `next_field::<StructType>()` type
+    // argument that selects this struct's `FieldSchema::lookup` at
+    // monomorphization.
+    let struct_type_name = tt.type_name(struct_type);
 
     let compiler_items = tt.compiler_items().clone();
     drop(tt);
 
+    // `impl FieldSchema for <Type> { fn lookup(...) }` — the static, per-type
+    // field-name → index matcher. `next_field::<Type>()` resolves it directly
+    // at monomorphization, so no closure value is constructed or allocated.
     let lookup_func = generate_lookup_function(
         &req.target_type_name,
+        &names.field_schema,
         &fields,
         string_type,
         ref_string_type,
@@ -1055,8 +1066,6 @@ fn generate_struct_deserialize(
         span,
         &compiler_items,
     );
-
-    let lookup_fn_name = format!("_{}_field_lookup", req.target_type_name.to_lowercase());
 
     let mut locals = vec![param_local("d", mut_ref_d, false)];
     let mut next_local: u32 = 1;
@@ -1070,42 +1079,6 @@ fn generate_struct_deserialize(
 
     let mut stmts = Vec::new();
 
-    let lookup_closure = TirExpr::new(
-        TirExprKind::Closure {
-            params: vec![
-                ("__input".to_string(), ref_string_type),
-                ("__start".to_string(), TypeTable::I32),
-                ("__end".to_string(), TypeTable::I32),
-            ],
-            body: Box::new(TirExpr::new(
-                TirExprKind::Call {
-                    func: FunctionRef {
-                        module_source,
-                        name: lookup_fn_name,
-                        monomorph_info: None,
-                        method_info: None,
-                    },
-                    type_args: vec![],
-                    args: vec![
-                        CallArg::new(local_ref(0, "__input", ref_string_type), false),
-                        CallArg::new(local_ref(1, "__start", TypeTable::I32), false),
-                        CallArg::new(local_ref(2, "__end", TypeTable::I32), false),
-                    ],
-                },
-                option_i32,
-                span,
-            )),
-            captures: vec![],
-            functor_id: None,
-            address_taken_locals: crate::hashmap::IndexSet::default(),
-            // Synthetic deserialiser-lookup stub; the body is a single
-            // `Call` expression with no let-bindings of its own.
-            body_locals: Vec::new(),
-            declared_effects: None,
-        },
-        lookup_fn_type,
-        span,
-    );
     let begin_call = type_param_method_call(
         local_ref(0, "d", mut_ref_d),
         "D",
@@ -1121,7 +1094,6 @@ fn generate_struct_deserialize(
                 span,
             ),
             i32_const(field_count as i32),
-            lookup_closure,
         ],
         result_sa_err,
         span,
@@ -1183,8 +1155,8 @@ fn generate_struct_deserialize(
         &names.deserialize_struct,
         "next_field",
         serde_module.clone(),
-        vec![],
-        vec![],
+        vec![struct_type_name],
+        vec![struct_type],
         vec![],
         result_opt_i32_err,
         span,
@@ -1603,6 +1575,7 @@ fn i32_eq(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
 
 fn generate_lookup_function(
     type_name: &str,
+    field_schema_trait: &str,
     fields: &[(String, String, TypeId, u32)],
     _string_type: TypeId,
     ref_string_type: TypeId,
@@ -1610,7 +1583,10 @@ fn generate_lookup_function(
     span: Span,
     compiler_items: &crate::compiler_item::CompilerItems,
 ) -> TirFunction {
-    let fn_name = format!("_{}_field_lookup", type_name.to_lowercase());
+    // `impl FieldSchema for <Type> { fn lookup(input, start, end) }` — a static
+    // trait method (no `self`). `next_field::<Type>()` resolves it directly at
+    // monomorphization, replacing the former runtime `lookup` closure.
+    let fn_name = MethodName::format_local(type_name, Some(field_schema_trait), "lookup");
     // Parameters: input: &String (0), start: i32 (1), end: i32 (2)
     let mut locals = vec![
         param_local("__input", ref_string_type, false),
@@ -1636,8 +1612,8 @@ fn generate_lookup_function(
 
     // For each field, generate:
     //   if __len == N && input.get_byte(start + 0) as i32 == B0 && ... { return Some(i); }
-    for (i, (_, camel_name, _, _)) in fields.iter().enumerate() {
-        let name_bytes = camel_name.as_bytes();
+    for (i, (_, wire_name, _, _)) in fields.iter().enumerate() {
+        let name_bytes = wire_name.as_bytes();
         let name_len = name_bytes.len() as i32;
 
         // Start with: __len == name_len
@@ -1687,7 +1663,7 @@ fn generate_lookup_function(
     TirFunction {
         module_source: ModuleSource::default(),
         name: fn_name,
-        is_pub: false,
+        is_pub: true,
         is_export: false,
         is_cm_export: false,
         is_ambient: false,
@@ -1695,7 +1671,11 @@ fn generate_lookup_function(
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
         monomorph_info: None,
-        method_info: None,
+        method_info: Some(LocalMethodName::new(
+            type_name.to_string(),
+            Some(field_schema_trait.to_string()),
+            "lookup".to_string(),
+        )),
         params: vec![
             TirParam {
                 name: "__input".to_string(),

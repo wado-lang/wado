@@ -632,6 +632,148 @@ test "inflate_gzip error on invalid data" {
     assert inflate_gzip(&bad) matches { Err(_) };
 }
 
+// Returns a reference gzip member for "hello world", produced by a standard
+// zlib and used by the gzip rejection tests below.
+fn gzip_hello_world() -> Array<u8> {
+    return [
+        31, 139, 8, 0, 0, 0, 0, 0, 2, 255, 203, 72, 205, 201, 201, 87, 40, 207, 47, 202, 73, 1, 0, 133, 17, 74, 13, 11,
+        0, 0, 0,
+    ];
+}
+
+// ---------------------------------------------------------------------------
+// RFC-anchored decode vectors.
+//
+// RFC 1950/1951/1952 specify only the bitstream formats and ship no
+// conformance vectors. The tests below are hand-built streams, each
+// independently verified against a reference zlib, that exercise format
+// corners the random round-trip tests above rarely reach. Each case cites the
+// relevant RFC section (texts kept under wado-compiler/ref/).
+// ---------------------------------------------------------------------------
+
+// RFC 1951 section 3.2.4: one final stored block (BFINAL=1, BTYPE=00), then
+// LEN=5 and NLEN=~5, then the five literal bytes of "Hello".
+test "inflate raw stored block (RFC 1951 3.2.4)" {
+    let stream: Array<u8> = [0x01, 0x05, 0x00, 0xFA, 0xFF, 72, 101, 108, 108, 111];
+    assert bytes_equal(&inflate_raw(&stream), &string_to_bytes("Hello"));
+}
+
+// RFC 1951 section 3.2.4: an empty final stored block (LEN=0, NLEN=0xFFFF).
+test "inflate raw empty stored block (RFC 1951 3.2.4)" {
+    let stream: Array<u8> = [0x01, 0x00, 0x00, 0xFF, 0xFF];
+    assert inflate_raw(&stream).len() == 0;
+}
+
+// RFC 1951 section 3.2.3: an overlapping back-reference. After the literals
+// "AB", a <length=5, distance=2> copy overlaps the current position and adds
+// A,B,A,B,A, producing "ABABABA" (the X,Y overlap example in the RFC).
+// Encoded with fixed Huffman codes (BTYPE=01).
+test "inflate raw overlapping match (RFC 1951 3.2.3)" {
+    let stream: Array<u8> = [0x73, 0x74, 0x02, 0x43, 0x00];
+    let expected: Array<u8> = [65, 66, 65, 66, 65, 66, 65];  // "ABABABA"
+    assert bytes_equal(&inflate_raw(&stream), &expected);
+}
+
+// RFC 1951 section 3.2.5: the maximum match length, 258, encoded with length
+// code 285. Here a run of 259 identical bytes under fixed Huffman.
+test "inflate raw max-length match (RFC 1951 3.2.5)" {
+    let stream: Array<u8> = [139, 138, 26, 241, 0, 0];
+    let out = inflate_raw(&stream);
+    assert out.len() == 259;
+    for let mut i = 0; i < 259; i += 1 {
+        assert out[i] == 90;  // 'Z'
+    }
+}
+
+// RFC 1951 section 3.2.7: a dynamic Huffman block (BTYPE=10). Exercises the
+// code-length code alphabet and the literal/length and distance tables built
+// from it, which the stored/fixed cases above never touch.
+test "inflate raw dynamic Huffman block (RFC 1951 3.2.7)" {
+    let stream: Array<u8> = [
+        77, 141, 193, 13, 195, 48, 12, 3, 87, 225, 4, 222, 163, 143, 252, 218, 1, 148, 136, 117, 4, 56, 114, 96, 27, 14,
+        178, 125, 133, 188, 250, 33, 64, 145, 212, 189, 28, 99, 39, 86, 102, 115, 55, 207, 143, 251, 184, 77, 182, 78,
+        92, 210, 177, 53, 202, 160, 38, 188, 119, 235, 216, 227, 114, 136, 18, 130, 82, 7, 234, 23, 39, 235, 89, 136, 24,
+        220, 16, 207, 143, 106, 60, 164, 227, 50, 101, 185, 209, 152, 165, 41, 21, 177, 21, 172, 162, 56, 234, 100, 194,
+        34, 30, 161, 108, 236, 81, 47, 198, 201, 160, 203, 128, 141, 127, 48, 214, 27, 189, 30, 12, 105, 15, 48, 87, 77,
+        63,
+    ];
+    let text = "In the beginning the Universe was created. This has made a lot of people very angry and been widely regarded as a bad move. Many races believe that it was created by some sort of god.";
+    let out = inflate_raw(&stream);
+    assert out.len() == 183;
+    assert bytes_equal(&out, &string_to_bytes(text));
+}
+
+// RFC 1950 section 2.2: FCHECK requires CMF*256+FLG to be a multiple of 31.
+test "inflate zlib rejects bad FCHECK (RFC 1950 2.2)" {
+    let bad: Array<u8> = [0x78, 0x00, 0, 0, 0, 0];
+    assert inflate_zlib(&bad) matches { Err(ZlibError::InvalidHeader) };
+}
+
+// RFC 1950 section 2.2: CM must be 8 (deflate). Here CM=9 with a valid FCHECK.
+test "inflate zlib rejects bad CM (RFC 1950 2.2)" {
+    let bad: Array<u8> = [0x79, 0x18, 0, 0, 0, 0];
+    assert inflate_zlib(&bad) matches { Err(ZlibError::UnsupportedCompressionMethod) };
+}
+
+// RFC 1950 section 2.2: FDICT set requests a preset dictionary (unsupported).
+test "inflate zlib rejects preset dictionary (RFC 1950 2.2)" {
+    let bad: Array<u8> = [0x78, 0x20, 0, 0, 0, 0];
+    assert inflate_zlib(&bad) matches { Err(ZlibError::PresetDictionaryNotSupported) };
+}
+
+// A zlib stream shorter than header(2) + trailer(4) cannot be valid.
+test "inflate zlib rejects truncated stream (RFC 1950 2.2)" {
+    let bad: Array<u8> = [0x78, 0x9C];
+    assert inflate_zlib(&bad) matches { Err(ZlibError::DataTooShort) };
+}
+
+// RFC 1951 section 3.2.3: BTYPE=11 is reserved. The DEFLATE body here is the
+// single byte 0x07 = BFINAL=1, BTYPE=11. The stream must be rejected as
+// malformed, not silently decoded as empty even though the trailer holds the
+// Adler-32 of empty output (1).
+test "inflate zlib rejects reserved block type (RFC 1951 3.2.3)" {
+    let bad: Array<u8> = [0x78, 0x01, 0x07, 0, 0, 0, 1];
+    assert inflate_zlib(&bad) matches { Err(ZlibError::InvalidDeflateData) };
+}
+
+// A zlib stream whose DEFLATE body ends before its final block's end-of-block
+// code is malformed. 0x63 opens a fixed-Huffman block (BFINAL=1, BTYPE=01)
+// with no room left to encode an end-of-block.
+test "inflate zlib rejects truncated deflate body (RFC 1951 3.2.3)" {
+    let bad: Array<u8> = [0x78, 0x01, 0x63, 0, 0, 0, 1];
+    assert inflate_zlib(&bad) matches { Err(ZlibError::InvalidDeflateData) };
+}
+
+// RFC 1952: a complete reference gzip member decodes to its original bytes.
+test "inflate gzip reference member (RFC 1952)" {
+    let gz = gzip_hello_world();
+    assert bytes_equal(&inflate_gzip(&gz).unwrap(), &string_to_bytes("hello world"));
+}
+
+// RFC 1952 section 2.3.1: the CRC32 trailer must match the uncompressed data.
+test "inflate gzip rejects CRC mismatch (RFC 1952 2.3.1)" {
+    let mut gz = gzip_hello_world();
+    gz[23] = gz[23] ^ 0xFF;  // corrupt the first CRC32 byte
+    assert inflate_gzip(&gz) matches { Err(ZlibError::Crc32Mismatch) };
+}
+
+// RFC 1952 section 2.3.1: the ISIZE trailer must equal the output length.
+test "inflate gzip rejects ISIZE mismatch (RFC 1952 2.3.1)" {
+    let mut gz = gzip_hello_world();
+    gz[27] = 12;  // claim 12 output bytes instead of 11; CRC32 still valid
+    assert inflate_gzip(&gz) matches { Err(ZlibError::IsizeMismatch) };
+}
+
+// A gzip stream cut off inside its 8-byte trailer is truncated.
+test "inflate gzip rejects truncated trailer (RFC 1952 2.3.1)" {
+    let gz = gzip_hello_world();
+    let mut cut: Array<u8> = Array::with_capacity(gz.len() - 4);
+    for let mut i = 0; i < gz.len() - 4; i += 1 {
+        cut.push(gz[i]);
+    }
+    assert inflate_gzip(&cut) matches { Err(ZlibError::TruncatedTrailer) };
+}
+
 test "gzip header preserves UTF-8 name and comment" {
     let mut header = GzipHeader::new();
     header.set_name("café_日本語.txt");

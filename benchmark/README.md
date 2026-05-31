@@ -6,8 +6,8 @@ Environment: Wado 2026-05-29, wasmtime 44.0.0, gcc 13.3.0, rustc 1.95.0, Zig 0.1
 
 All figures are the **best of three runs** per implementation. To keep
 every result in whole milliseconds, the lightest workloads are scaled up:
-sieve to 100M, float-to-string to 5M conversions, the JSON parsers ×10,
-and zlib ×100. JSON/zlib figures are totals over those iterations (warm
+float-to-string to 5M conversions, sieve ×10, the JSON parsers ×10, and
+zlib ×100. Sieve/JSON/zlib figures are totals over those iterations (warm
 steady-state, not a single cold parse).
 
 ## Prime Counting
@@ -32,13 +32,16 @@ Count primes up to 10M (integer arithmetic).
 
 ## Sieve
 
-Sieve of Eratosthenes up to 100M (array operations).
+Sieve of Eratosthenes up to 10M (array operations), ×10. The sieve buffer
+is allocated once and reset each iteration, so allocation and first-touch
+page faults stay out of the timed region — the loop measures steady-state
+array traffic, which keeps run-to-run spread within ~1-2%.
 
-| Implementation    |     Time | vs best |
-| ----------------- | -------: | ------: |
-| C (gcc -O3)       | 1,423 ms |   1.00x |
-| JavaScript (Node) | 1,541 ms |   1.08x |
-| **Wado**          | 1,864 ms |   1.31x |
+| Implementation    |   Time | vs best |
+| ----------------- | -----: | ------: |
+| C (gcc -O3)       | 382 ms |   1.00x |
+| JavaScript (Node) | 505 ms |   1.32x |
+| **Wado**          | 941 ms |   2.46x |
 
 ## Float-to-String
 
@@ -66,9 +69,9 @@ Deserialize twitter.json (631 KB), ×10.
 
 | Implementation           |  Time | vs best |
 | ------------------------ | ----: | ------: |
-| serde_json (Rust native) |  9 ms |   1.00x |
-| JSON.parse (Node)        | 24 ms |   2.66x |
-| **Wado** core:json       | 57 ms |   6.20x |
+| serde_json (Rust native) |  7 ms |   1.00x |
+| JSON.parse (Node)        | 18 ms |   2.57x |
+| **Wado** core:json       | 34 ms |   4.86x |
 
 ## JSON: canada
 
@@ -76,9 +79,9 @@ Deserialize canada.json (2.3 MB, geographic coordinates), ×10.
 
 | Implementation           |   Time | vs best |
 | ------------------------ | -----: | ------: |
-| serde_json (Rust native) | 111 ms |   1.00x |
-| JSON.parse (Node)        | 138 ms |   1.24x |
-| **Wado** core:json       | 426 ms |   3.84x |
+| serde_json (Rust native) |  77 ms |   1.00x |
+| JSON.parse (Node)        | 106 ms |   1.38x |
+| **Wado** core:json       | 314 ms |   4.08x |
 
 ## JSON: catalog
 
@@ -86,10 +89,10 @@ Deserialize citm_catalog.json (1.7 MB, event catalog), ×10.
 
 | Implementation             |   Time | vs best |
 | -------------------------- | -----: | ------: |
-| serde_json (Rust native)   |  27 ms |   1.00x |
-| JSON.parse (Node)          |  49 ms |   1.80x |
-| **Wado** v2 (hand-rolled¹) | 107 ms |   3.98x |
-| **Wado** core:json         | 224 ms |   8.30x |
+| serde_json (Rust native)   |  22 ms |   1.00x |
+| JSON.parse (Node)          |  37 ms |   1.68x |
+| **Wado** v2 (hand-rolled¹) |  67 ms |   3.05x |
+| **Wado** core:json         | 131 ms |   5.95x |
 
 ¹ `json_catalog/json_catalog_v2.wado` is a hand-rolled CitmCatalog parser
 PoC (no `core:json` / `core:serde`). Kept as a marker of the upper bound

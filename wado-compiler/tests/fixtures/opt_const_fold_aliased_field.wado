@@ -1,0 +1,46 @@
+// Soundness regression: const-fold's field-knowledge forwarding must not treat
+// two same-type references as non-aliasing. `a` and `b` point at the same Node
+// (Wado references alias), so a write through one invalidates the known value
+// of that field for the other — both by a direct field write and across a call
+// boundary (a `&mut self` method may mutate any field through the alias).
+
+use { println } from "core:cli";
+
+struct Node { value: i32 }
+
+impl Node {
+    #[inline("never")]
+    fn set(&mut self, v: i32) {
+        self.value = v;
+    }
+}
+
+// Direct aliasing write: `a.value` must re-read 20, not the stored 10.
+#[inline("never")]
+fn direct(a: &mut Node, b: &mut Node) -> i32 {
+    a.value = 10;
+    b.value = 20;
+    return a.value;
+}
+
+// Aliasing write through a call: the `b.set(20)` boundary must invalidate the
+// known `a.value = 10`.
+#[inline("never")]
+fn via_call(a: &mut Node, b: &mut Node) -> i32 {
+    a.value = 10;
+    b.set(20);
+    return a.value;
+}
+
+export fn run() with Stdout {
+    let mut n = Node { value: 0 };
+    assert direct(&mut n, &mut n) == 20;
+    let mut m = Node { value: 0 };
+    assert via_call(&mut m, &mut m) == 20;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

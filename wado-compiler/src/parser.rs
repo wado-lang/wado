@@ -1380,18 +1380,29 @@ impl Parser {
 
         let (effects, effect_ids, stores) = self.parse_with_clause()?;
 
-        // Check for bodyless function declaration (compiler built-in)
-        // e.g., `pub fn stream_new() -> i64;`
+        // Check for bodyless function declaration (compiler built-in /
+        // trait-method signature) e.g., `pub fn stream_new() -> i64;`
+        let mut decl_end_span = None;
         let body = if self.check(&TokenKind::Semicolon) {
             self.advance();
+            // Span must cover through the terminating `;`, not just the `fn`
+            // keyword line. The formatter's blank-line accounting keys off
+            // `span.end_line()`; a single-line span would drift once the
+            // signature is reflowed across multiple lines, manufacturing
+            // blank lines between members on the next pass (idempotency
+            // break). A function with a body already covers the full extent
+            // via the block span below.
+            decl_end_span = Some(self.tokens[self.pos.saturating_sub(1)].span);
             None
         } else {
             Some(self.parse_block()?)
         };
 
-        let span = body
-            .as_ref()
-            .map_or(start_span, |b| start_span.merge(&b.span));
+        let span = match (&body, decl_end_span) {
+            (Some(b), _) => start_span.merge(&b.span),
+            (None, Some(end)) => start_span.merge(&end),
+            (None, None) => start_span,
+        };
 
         Ok(Function {
             id,
@@ -4231,6 +4242,13 @@ impl Parser {
 
         self.expect(&TokenKind::Semicolon)?;
 
+        // Span must cover through the terminating `;`, not just the `fn`
+        // keyword line. The formatter's blank-line accounting keys off
+        // `span.end_line()`; a single-line span would drift once the
+        // signature is reflowed across multiple lines, manufacturing blank
+        // lines between members on the next format pass (idempotency break).
+        let end_span = self.tokens[self.pos.saturating_sub(1)].span;
+
         Ok(InterfaceMethod {
             id,
             name,
@@ -4239,7 +4257,7 @@ impl Parser {
             attrs,
             params,
             return_type,
-            span: start_span,
+            span: start_span.merge(&end_span),
         })
     }
 

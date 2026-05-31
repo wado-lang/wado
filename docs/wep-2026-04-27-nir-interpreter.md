@@ -404,6 +404,31 @@ heap-aware return values stay deferred (call them Stage 3.5+).
       compile time without re-implementing every NIR construct, and
       without breaking wasm32 compatibility of `wado-compiler`.
 
+### Stage 6 — aggregate global & field/element projection
+
+Status: planned. Independent of Stages 4-5; builds on Phase C's
+heap-aware [`Value`]. Motivated by
+[Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md),
+which turns read-only constant aggregates into immutable module-scope
+globals and needs `niri` to see through them so the fold cascades.
+
+- [ ] Extend `GlobalEnv` beyond scalar `Lattice`: record immutable
+      aggregate globals (`StructLiteral` / `TupleLiteral` / `ArrayLiteral`
+      / `VariantConstruct` initializers) as a structural snapshot keyed by
+      `(ModuleSource, name)`.
+- [ ] Fold `FieldAccess(GlobalVarGet(G), f)` and
+      `Index(GlobalVarGet(G), const)` to the field/element constant — the
+      global analog of the local `field_env` projection, sharing the same
+      `value_to_expr_kind` leaf-rewrite.
+- [ ] Generalize the local `field_env` to project nested aggregate fields
+      (today scalar `Value` only), reusing Phase C's heap-aware
+      `Value::{Struct, Array, Variant}`.
+- [ ] Loop effect: a globalized constant's field/element reads fold to
+      scalars module-wide → `const_global_promotion` / `const_fold` /
+      `const_branch_prune` reduce further → the now-unread global is removed
+      by DCE. This is the cross-function constant propagation that
+      intra-function SROA cannot reach.
+
 ## Cost model
 
 The in-process engine stays sub-quadratic by following the patterns
@@ -449,8 +474,9 @@ incurs one codegen.
 
 - `const_folding.rs` shrinks to a thin glue file, and stays that way.
 - `niri` covers immutable-global folding through Stage 1's
-  `GlobalEnv`. May further absorb parts of `const_branch_prune` and
-  `inline` — to be evaluated as later stages land.
+  `GlobalEnv` (scalars); Stage 6 extends it to aggregate globals and
+  field/element projection. May further absorb parts of
+  `const_branch_prune` and `inline` — to be evaluated as later stages land.
 - Stage 2.5's match-fold is observable in the NIR optimize phase even
   though `lower_patterns` runs before `optimize`: not every match is
   desugared by `lower_patterns` (some shapes survive to optimize

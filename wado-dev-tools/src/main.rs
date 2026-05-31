@@ -29,8 +29,7 @@ fn main() {
 
 fn golden_dump(mut parser: lexopt::Parser) {
     let mut in_template: Option<String> = None;
-    let mut out_template: Option<String> = None;
-    let mut phase = pipeline::Phase::Wir;
+    let mut emits: Vec<pipeline::Emit> = Vec::new();
     let mut opt_level = OptLevel::O2;
     let mut skip_empty = false;
 
@@ -39,18 +38,19 @@ fn golden_dump(mut parser: lexopt::Parser) {
             Long("in") => {
                 in_template = Some(parser.value().unwrap().to_string_lossy().into_owned());
             }
-            Long("out") => {
-                out_template = Some(parser.value().unwrap().to_string_lossy().into_owned());
-            }
-            Long("phase") => {
+            // One output per `--emit <phase>:<out-template>`. A single invocation
+            // can render every phase for each fixture, which keeps the golden set
+            // consistent and lets the tool prune stale files itself.
+            Long("emit") => {
                 let val = parser.value().unwrap().to_string_lossy().into_owned();
-                phase = match val.as_str() {
-                    "wir" => pipeline::Phase::Wir,
-                    "nir" => pipeline::Phase::Nir,
-                    "nir-lowered" => pipeline::Phase::NirLowered,
-                    "wat" => pipeline::Phase::Wat,
-                    _ => panic!("unknown phase: {val} (expected wir, nir, nir-lowered, or wat)"),
+                let (phase_str, out_template) = match val.split_once(':') {
+                    Some(parts) => parts,
+                    None => panic!("--emit expects <phase>:<out-template>, got {val:?}"),
                 };
+                emits.push(pipeline::Emit {
+                    phase: parse_phase(phase_str),
+                    out_template: out_template.to_string(),
+                });
             }
             Short('O') => {
                 let val = parser.value().unwrap().to_string_lossy().into_owned();
@@ -71,8 +71,21 @@ fn golden_dump(mut parser: lexopt::Parser) {
     }
 
     let in_template = in_template.expect("--in is required");
-    let out_template = out_template.expect("--out is required");
-    pipeline::run_pipeline(&in_template, &out_template, phase, opt_level, skip_empty);
+    assert!(
+        !emits.is_empty(),
+        "at least one --emit <phase>:<out-template> is required"
+    );
+    pipeline::run_pipeline(&in_template, &emits, opt_level, skip_empty);
+}
+
+fn parse_phase(val: &str) -> pipeline::Phase {
+    match val {
+        "wir" => pipeline::Phase::Wir,
+        "nir" => pipeline::Phase::Nir,
+        "nir-lowered" => pipeline::Phase::NirLowered,
+        "wat" => pipeline::Phase::Wat,
+        _ => panic!("unknown phase: {val} (expected wir, nir, nir-lowered, or wat)"),
+    }
 }
 
 fn wasm2wat(mut parser: lexopt::Parser) {

@@ -7,6 +7,39 @@ Open work towards full ANTLR4 compatibility and the performance budget it implie
 
 This file lists what is **not yet done**. Closed work belongs in commit history.
 
+## Diagnostics & introspection ([#1246](https://github.com/wado-lang/wado/issues/1246))
+
+Grammar-authoring DX gaps surfaced while writing a new `.g4` against Gale.
+Parts 1–4 have landed; the items below are follow-ups left on the table.
+
+- **More prediction-strategy warnings (part 3 follow-up).** Lowering raises
+  `OverlapTournament` today. The obvious next kind is an
+  `OptionalScanGuardFallback` — warn when an `e?` resolves to
+  `OptionalScanGuard` (a live case: `attribute` in `example/Wado.g4`). It
+  needs the enclosing rule name threaded through `pick_optional_specialised`
+  (lower.wado), which is why it was deferred; add the `DiagnosticKind`
+  variant back together with the warn site and a fixture.
+- **Structured diagnostic-to-rule identity (part 3/4 follow-up).** A
+  `Diagnostic.rule` is the human label `build_overlap_dispatch` was called
+  with (`rule 'r'`, `LR rule 'expr' atom`, `General group exprGroup0`,
+  `SimpleCst group`). `dump.wado`'s `render_rule_diagnostics` re-associates a
+  diagnostic with its rule by substring-matching `'<name>'`, so group-scoped
+  warnings (no quoted rule name) never inline under their owning rule — they
+  appear only in the summary with a label that can't be mapped back to a .g4
+  rule. Carry a structured owner (rule name/index) on `Diagnostic`, set it at
+  the warn site, and compare by equality; keep the label display-only. The
+  same change lets `build_overlap_dispatch` take an explicit `is_scan_pass`
+  flag instead of recovering the pass from the `" (scan)"` suffix via
+  `ends_with_scan` (today the warn-once invariant is backstopped by the
+  `(rule, message)` dedup in `GenContext::warn`, but the suffix heuristic is
+  fragile on its own).
+- **Single lowering on `gale gen` (part 3 follow-up).** `cmd_gen` lowers once
+  to read diagnostics for stderr, then `generate` lowers again internally and
+  discards its `LoweredGrammar.diagnostics`. Have `generate` return (or expose)
+  the diagnostics so `gale gen` lowers once. Same site should run
+  `normalize_caches` before the diagnostic lower to match `generate` /
+  `cmd_dump` (benign for parser-built IR today, but inconsistent).
+
 ## LL prediction — remaining gaps
 
 ### Iter-body K-prefix for `Repeat` inner `RuleRef`s
@@ -66,8 +99,7 @@ Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Rou
 
 ### Lexer codegen
 
-- **Recursive lexer rule with `.+?` / `.*?` wildcard.** `LexerExec/RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`: nested `/* /*...*/ */` comments mistokenize because the recursive call doesn't re-enter under the non-greedy bound.
-- **`-> more, mode(...)` chain across modes.** `LexerExec/ZeroLengthToken`: a token built via `-> more, pushMode(...)` followed by `-> more, mode(...)` should merge into a single token spanning all the `more`'d chars, but Gale emits the final piece only.
+- **Recursive lexer rule with `.+?` / `.*?` wildcard.** `LexerExec/RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`: nested `/* /*...*/ */` comments mistokenize because the recursive call doesn't re-enter under the non-greedy bound. This is ATN-class: matching ANTLR4's NFA→DFA result requires bounding the recursive call against the non-greedy suffix without backtracking; the static single-pass emitter over-consumes (the recursive `try_<rule>` greedily eats a whole sibling comment, so the outer rule can no longer find its closing delimiter). See the **ATN-class grammars** section above.
 
 ## Stage C — action / predicate execution
 

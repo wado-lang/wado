@@ -273,14 +273,11 @@ pub fn parse_collector(s: &str) -> Result<Collector, String> {
 #[must_use]
 pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, collector: Collector) -> Config {
     let mut config = Config::new();
-    config.wasm_component_model(true);
     config.wasm_component_model_gc(true);
     config.wasm_component_model_async(true);
     config.wasm_component_model_more_async_builtins(true);
     config.wasm_component_model_async_stackful(true);
-    config.wasm_simd(true);
     config.wasm_wide_arithmetic(true);
-    config.wasm_threads(true);
     // config.wasm_stack_switching(true); // Not supported on macOS
     config.wasm_gc(true);
     config.wasm_function_references(true);

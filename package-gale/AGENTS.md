@@ -84,19 +84,18 @@ For everything else, browse `vendor/antlr4/doc/` directly.
 
 ## Debugging Grammars with `gale dump`
 
-`gale dump` pretty-prints the parsed `Grammar` IR so you can inspect what the
-g4 frontend actually produced, without going through code generation. Use it
-to check whether a construct was parsed into the IR as expected before
-blaming the code generator.
+`gale dump` lowers the grammar to GIR and prints a readable, per-rule
+report of the actual prediction decisions — rule shape (Simple /
+MultiAlt: Direct / MultiAlt: Tournament / LeftRecursive), per-alt first
+sets, repeat strategies, follow-variants, and inlined prediction
+warnings — followed by a summary of every warning. It reflects what the
+emitter sees, not the raw surface IR. There are no options; multiple
+files are merged the same as `gale gen`.
 
 (note: each `wado` command is actually `cargo run --bin wado`)
 
 ```sh
-# Dump the full IR (multiple files are merged, same as `gale gen`).
 wado run package-gale -- dump path/to/Grammar.g4
-
-# Dump a single rule — searches parser rules first, then lexer rules.
-wado run package-gale -- dump --rule expr path/to/Grammar.g4
 ```
 
 ## Running Tests
@@ -181,22 +180,17 @@ The upstream `runtime-testsuite/` is extracted into per-category Wado tests as a
 
 ## Generated Parser Rules
 
-- **No backtracking in new code.** Use static k-token lookahead prediction
-  to disambiguate alternatives. If prediction cannot resolve within depth 5,
-  file an issue rather than adding backtracking. The Stage C codegen no
-  longer emits `bt_try` or `opt_bt` blocks — an alt whose suffix is
-  unscannable at a tournament site is a codegen-time `panic!`. (The
-  rule-level LR-atom path in `gen_prediction_code_inner` retains a
-  save-and-rewind pattern as a structural fallback when scan helpers are
-  unavailable; no committed grammar exercises it, but the code is kept
-  for malformed-grammar diagnostics.)
-- **Stage C dispatch sites use scan-side first-success-wins** on
-  `sort_group_by_element_count` (longest-first) order. `gen_scan_multi_alt`
-  partitions atom alts by their depth-0 first token before applying
-  first-success-wins inside each partition — that combination is
-  correctness-equivalent to the longest-match tournament for the cases
-  that actually arise (e.g. `expr`'s `column_ref` IDENT vs `function_call`
-  IDENT '(' … ')').
+- **No backtracking.** Disambiguate alternatives with static k-token
+  lookahead prediction; if it cannot resolve within depth 5, file an issue
+  rather than adding backtracking. An alt whose suffix is unscannable at a
+  tournament site is a codegen-time `panic!`.
+- **Multi-alt dispatch is a scan-side longest-match tournament.**
+  `gen_scan_multi_alt` partitions atom alts by their depth-0 first token.
+  Within a partition, `emit_scan_partition_body` commits on success for a
+  lone alt, and for two or more tries every candidate from the same start
+  and keeps the greatest successful end. Do not switch this to
+  first-success-wins: it is unsound when alts share a prefix and tie on
+  static length (`'mut'? IDENT` vs `path '(' ... ')'` on `N(n)`).
 
 ## Generated Lexer Rules
 

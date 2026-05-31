@@ -9,9 +9,6 @@
 # embeds the dprint markdown plugin as a Cargo dependency. No external
 # dprint CLI is required.
 
-# WebAssembly runtime with WASI P3 support (synced by sync-vendor.sh)
-wasmtime = "44"
-
 # Node.js - required for VS Code extension development
 node = "24"
 
@@ -22,6 +19,7 @@ verbose = false
 
 [env]
 RUSTFLAGS = {value = "-D warnings", default = true}
+_.path = ["vendor/wasmtime/target/release"]
 
 [tasks.on-task-started]
 description = "Install project development tools"
@@ -138,10 +136,20 @@ cargo run -p wado-cli -- compile -O2 -o example/hello.wasm example/hello.wado
 description = "Run example/hello.wado"
 run = "cargo run -p wado-cli -- run example/hello.wado"
 
+[tasks.build-wasmtime]
+description = "Build the wasmtime CLI from vendor/wasmtime (matches the embedded crate version)"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+# vendor/wasmtime is a separate workspace tracking upstream dev; its source is
+# not warning-clean, so drop the repo-wide `-D warnings` for this build.
+RUSTFLAGS= cargo build --release -p wasmtime-cli --manifest-path vendor/wasmtime/Cargo.toml
+"""
+
 [tasks.hello-run-wasmtime]
 description = "Compile and run hello.wado directly with wasmtime"
-depends = ["hello"]
-run = "wasmtime run -S p3=y -W component-model=y -W component-model-gc=y -W component-model-async=y -W component-model-async-builtins=y -W component-model-async-stackful=y -W gc=y -W function-references=y -W simd=y -W wide-arithmetic=y -W threads=y --invoke 'run()' example/hello.wasm"
+depends = ["hello", "build-wasmtime"]
+run = "wasmtime run -S p3=y -W component-model-gc=y -W component-model-async=y -W component-model-more-async-builtins=y -W component-model-async-stackful=y -W gc=y -W function-references=y -W wide-arithmetic=y -W branch-hinting=y --invoke 'run()' example/hello.wasm"
 
 [tasks.test]
 description = "Run Rust crate tests"
@@ -246,12 +254,15 @@ description = "Regenerate WIR golden fixtures"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
+# golden-dump overwrites each golden file in place and, only after every file
+# has been regenerated, prunes the stale ones (no matching fixture). There is
+# no point at which the golden files are all deleted, so `git status` never
+# shows a scary mass deletion mid-run.
 mkdir -p wado-compiler/tests/generated/fixtures
-rm -rf wado-compiler/tests/generated/fixtures/*.*
 ./target/debug/wado-dev-tools golden-dump \
     --in 'wado-compiler/tests/fixtures/{name}.wado' \
-    --out 'wado-compiler/tests/generated/fixtures/{name}.wir.wado' \
-    --phase wir -O2
+    --emit wir:'wado-compiler/tests/generated/fixtures/{name}.wir.wado' \
+    -O2
 """
 
 [tasks.update-golden-format-fixtures]

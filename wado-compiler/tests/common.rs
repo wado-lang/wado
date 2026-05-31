@@ -222,17 +222,18 @@ const EPOCH_INTERVAL_MS: u64 = 1000;
 pub fn engine() -> &'static Engine {
     ENGINE.get_or_init(|| {
         let mut config = Config::new();
-        config.wasm_component_model(true);
         config.wasm_component_model_gc(true);
         config.wasm_component_model_async(true);
         config.wasm_component_model_more_async_builtins(true);
         config.wasm_component_model_async_stackful(true);
         config.wasm_component_model_error_context(true);
-        config.wasm_simd(true);
         config.wasm_wide_arithmetic(true);
-        config.wasm_threads(true);
         config.wasm_gc(true);
         config.wasm_function_references(true);
+        // Honor the `metadata.code.branch_hint` custom section the compiler
+        // emits for `builtin::likely`/`builtin::unlikely`, matching the wado
+        // CLI runtime so the e2e suite validates the hints it produces.
+        config.wasm_branch_hinting(true);
         // Match the wado CLI's default collector so the e2e suite exercises
         // the collector users actually get (see `runtime::DEFAULT_COLLECTOR`).
         config.collector(wasmtime::Collector::Copying);

@@ -96,7 +96,7 @@ Rules:
 
 ## Adding New Formatting Rules
 
-1. Write a failing test: add a dirty fixture to `wado-compiler/tests/format.fixtures/all.dirty.wado` with the messy form, and add the expected clean form to `wado-compiler/tests/generated/format.fixtures/all.clean.wado`.
+1. Write a failing test: add a dirty fixture to `wado-compiler/tests/format.fixtures/all-dirty.wado` with the messy form, and add the expected clean form to `wado-compiler/tests/generated/format.fixtures/all.clean.wado`.
 2. Run `cargo test -p wado-compiler -- format` to confirm failure.
 3. Implement the rule in `unparse.rs`.
 4. Run `mise run update-golden-format-fixtures` to regenerate golden files.

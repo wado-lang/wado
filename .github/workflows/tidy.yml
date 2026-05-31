@@ -43,15 +43,17 @@ jobs:
             echo "should-run=true" >> "$GITHUB_OUTPUT"
           fi
 
-  # Tasks that don't need the `wado` binary built first. Runs in parallel
-  # with `tidy-wado`. Uploads its diff as an artifact for the aggregator
-  # to apply.
+  # Rust-only lint/format. Needs no built `wado` / `wado-dev-tools` binary, so
+  # it compiles the workspace exactly once (via clippy) and never pays a second
+  # `cargo build`. Runs in parallel with `tidy-wado`; uploads its diff as an
+  # artifact for the aggregator to apply.
   #
-  # `format-md` lives here (rather than in `tidy-wado`) to balance wall-clock
-  # time between the two parallel jobs. The boundary is no longer strictly
-  # "does this step need the wado binary?" — `format-md` does need
-  # wado-dev-tools, but `cargo run -p wado-dev-tools` builds it on demand and
-  # the cost is dwarfed by tidy-wado's `cargo build` + golden regeneration.
+  # Every binary-dependent step — including `format-md` — lives in `tidy-wado`,
+  # not here. Invoking `format-md` from this job would mean
+  # `cargo run -p wado-dev-tools`, which forces a second, non-clippy compile of
+  # the whole workspace on top of clippy's (clippy and `cargo build` produce
+  # separate artifacts). Keeping every binary step on the job that already runs
+  # `cargo build` avoids that redundant compile and frees this runner sooner.
   tidy-rust:
     name: Tidy (Rust)
     needs: precheck
@@ -80,7 +82,6 @@ jobs:
 
       - run: mise run clippy-fix
       - run: cargo fmt --all
-      - run: cargo run -p wado-dev-tools --quiet -- format-md
 
       - name: Capture diff
         run: |
@@ -95,12 +96,21 @@ jobs:
           retention-days: 1
           include-hidden-files: false
 
-  # Tasks that require `wado` / `wado-dev-tools` binaries to be built.
-  # `wado doc -f markdown` is itself dprint-stable (see wado-cli/src/doc.rs),
-  # so the regenerated `docs/stdlib-*.md` files do not need a follow-up
-  # format pass from tidy-rust. Where the two parallel jobs do touch the
-  # same file (e.g. `Cargo.lock`), the aggregator's `--3way` apply merges
-  # the overlapping patches — see the "Apply patches" step.
+  # Everything that needs a built `wado` / `wado-dev-tools` binary. A single
+  # `cargo build` serves all of these steps, so they share one compile. This is
+  # the workflow's critical path (build + golden regeneration + gale test
+  # compile); `format-md` and `doc-stdlib` are nearly free on top.
+  #
+  # `format-md` runs here (after `doc-stdlib`) so the regenerated
+  # `docs/stdlib-*.md` are formatted within the same job rather than relying on
+  # a follow-up pass from a parallel job. `wado doc -f markdown` is already
+  # dprint-stable (see wado-cli/src/doc.rs), so this is belt-and-braces. It is
+  # invoked as `./target/debug/wado-dev-tools format-md` to reuse the `cargo
+  # build` artifacts instead of triggering a fresh `cargo run` rebuild.
+  #
+  # Where the two parallel jobs do touch the same file (e.g. `Cargo.lock`), the
+  # aggregator's `--3way` apply merges the overlapping patches — see the
+  # "Apply patches" step.
   tidy-wado:
     name: Tidy (Wado)
     needs: precheck
@@ -131,6 +141,7 @@ jobs:
       - run: mise run update-golden-fixtures
       - run: mise run update-golden-format-fixtures
       - run: mise run doc-stdlib
+      - run: ./target/debug/wado-dev-tools format-md
       # See tidy.yml history for the rationale of refreshing Gale kiln caches
       # (package-gale/tests/generated/**/*.kiln.json) on every tidy run.
       - run: ./target/debug/wado test --no-run package-gale
