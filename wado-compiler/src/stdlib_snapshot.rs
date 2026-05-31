@@ -124,10 +124,11 @@ pub fn prewarm() {
 ///
 /// Reify is the default for user-module compilation, but snapshot
 /// building stays on the production path: the snapshot is the
-/// rehydration target the per-compile pipeline depends on, and its
-/// stdlib-shaped foundation TIR must not depend on reify until Stage 6/7
-/// removes the combined walk entirely. `module_uses_reify` consults this
-/// predicate to bypass reify while a snapshot is under construction.
+/// rehydration target the per-compile pipeline depends on, and reify does
+/// not yet reach parity on the stdlib-shaped constructs the snapshot's
+/// foundation TIR is built from (putting stdlib on reify is the remainder
+/// of Stage 5). `module_uses_reify` consults this predicate to bypass
+/// reify while a snapshot is under construction.
 pub(crate) fn is_building() -> bool {
     BUILDING.with(Cell::get)
 }

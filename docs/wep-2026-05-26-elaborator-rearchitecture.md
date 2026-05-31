@@ -404,7 +404,8 @@ migration; see Trade-offs.
       `coercion_view`, `desugar_view`) for tests and the future LSP
       hover path. The stdlib snapshot seeds every map back into
       per-module storage so cached stdlib modules stay consistent.
-- [x] **Stage 5 — `annotate_bodies` / `reify` split.** Complete.
+- [ ] **Stage 5 — `annotate_bodies` / `reify` split.** _In progress
+      (user modules done; stdlib parity remaining)._
       Recording half complete: every Gap (1–6, 9, 11, 12, 13)
       is wired end-to-end. Orchestration landed —
       `build_tir_from_state` routes user modules through
@@ -421,29 +422,31 @@ migration; see Trade-offs.
       variant-ctor before `static_method_dispatch`,
       closure-block return inference, `ComparisonChain`
       operator-trait dispatch with Ord wrap, `Self`
-      substitution in impl methods). Stdlib bypass keeps
-      `Core` / `Wasi` / `Wasm` modules and snapshot construction
-      on the production path. The E2E suite reaches **2678 / 2678
-      fixtures passing** at `-O0` + `-O2` — full parity with the
-      production walk, verified by full e2e runs on the 2026-05-31
-      session. Reify is now the **default** path for user modules
-      (the `WADO_REIFY` env-var gate was removed in Stage 7); only
-      stdlib modules and snapshot construction still take the
-      production walk. The
-      second-half session lifted the count from 1765 via the
-      landings below — see `### Stage 5 second-half progress` for
-      what changed and the re-triaged remaining clusters.
-      See `### Stage 5 handover` below for the original remaining
-      work and the gotchas encountered to date.
+      substitution in impl methods). Reify is now the **default**
+      path for user modules (the `WADO_REIFY` env-var gate was
+      removed); the E2E suite is **2678 / 2678 fixtures passing**
+      at `-O0` + `-O2` with no env var set — full parity with the
+      production walk for user-module code, verified by full e2e
+      runs on the 2026-05-31 session. The second-half session lifted
+      the count from 1765 via the landings below — see
+      `### Stage 5 second-half progress` for what changed.
+      **Remaining for Stage 5: stdlib parity.** `module_uses_reify`
+      still bypasses reify for `Core` / `Wasi` / `Wasm` modules and
+      stdlib-snapshot construction, because reify does not yet reach
+      parity on stdlib-shaped constructs — forcing reify on for all
+      modules panics at WIR with e.g. `unresolved MethodCall
+      "builtin::array<u8>^Eq::eq"`. Putting stdlib (and the snapshot)
+      on reify and clearing those gaps is the remainder of Stage 5,
+      tracked in a separate PR; it is the prerequisite for Stage 7's
+      combined-walk removal. See `### Stage 5 handover` below.
 - [ ] **Stage 6 — Liveness and DCE.** Tracked in a separate PR.
-- [ ] **Stage 7 — Cleanup.** _In progress._ The `WADO_REIFY`
-      env-var gate is removed: reify is the default for user
-      modules (`module_uses_reify` keys only on stdlib / snapshot
-      status). The remaining cleanup — removing the old
-      `Elaborator` / `AnnotateState` and the combined walk's TIR
-      emission half — stays gated on Stage 6's liveness pass, as
-      the combined walk is still the production path for stdlib and
-      snapshot modules.
+- [ ] **Stage 7 — Cleanup.** The `WADO_REIFY` env-var gate is
+      already removed (reify is the default for user modules;
+      `module_uses_reify` keys only on stdlib / snapshot status).
+      The rest — removing the old `Elaborator` / `AnnotateState`
+      and the combined walk's TIR emission half — is gated on Stage 5
+      stdlib parity (so nothing still needs the combined walk) and
+      Stage 6's liveness pass.
 
 ### Stage 5 second-half progress
 
@@ -1100,14 +1103,18 @@ modules no longer collide.
 
 ##### Where to start next
 
-Stage 5 reify parity is **complete**: 2678/2678 under reify, matching
-production, with no reify-specific failures. Stage 7 has made reify the
-default for user modules (the `WADO_REIFY` gate is removed). The next track
-is Stage 6 (liveness/DCE), tracked in a separate PR, after which Stage 7's
-remaining cleanup (removing the combined walk and the old `Elaborator` /
-`AnnotateState`) can land. The
+Reify parity for **user modules** is complete: 2678/2678 under reify (the
+default now that the `WADO_REIFY` gate is removed), matching the production
+walk, with no reify-specific failures. The remaining Stage 5 work is **stdlib
+parity**: `module_uses_reify` still routes `Core` / `Wasi` / `Wasm` modules and
+stdlib-snapshot construction through the production walk. Forcing reify on for
+all modules surfaces the first gap immediately — a WIR panic
+`unresolved MethodCall "builtin::array<u8>^Eq::eq"` — so the next track is to
+put stdlib (and the snapshot) on reify and clear those gaps one at a time, using
+the recipe below. That unblocks Stage 7's combined-walk removal. Stage 6
+(liveness/DCE) is tracked in a separate PR. The
 `#### Recipe for adding a new reify gap`, `#### Gotchas`, and `#### Endgame`
-below still apply for any future divergence.
+below still apply.
 
 ### Stage 5 handover
 
@@ -1237,12 +1244,14 @@ The shape that has worked consistently:
 
 #### Endgame
 
-Flipping reify default-on is **done** (Stage 7): the `WADO_REIFY`
-gate was removed and `module_uses_reify` now keys only on stdlib /
-snapshot status. The remaining dead-code removal — dropping the
-production walk's TIR emission half once stdlib and snapshot
-modules no longer need it — stays gated on Stage 6's liveness
-pass.
+Flipping reify default-on for user modules is **done**: the
+`WADO_REIFY` gate was removed and `module_uses_reify` now keys only
+on stdlib / snapshot status. Two things remain before the combined
+walk can be deleted: (1) **stdlib parity** — put `Core` / `Wasi` /
+`Wasm` modules and the snapshot on reify and clear the gaps (the
+remainder of Stage 5); and (2) Stage 6's liveness pass. Only once
+nothing routes through the production walk can its TIR-emission half
+(and the old `Elaborator` / `AnnotateState`) be removed.
 
 ### Design notes (Stages 1–3)
 

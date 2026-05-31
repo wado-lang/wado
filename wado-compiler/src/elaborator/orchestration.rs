@@ -114,8 +114,11 @@ pub(crate) struct AnnotateState {
 /// Reify is the default for user modules now that it has full parity with
 /// the production walk (2678/2678 e2e). Stdlib modules
 /// (`Core` / `Wasi` / `Wasm`) and stdlib-snapshot construction still take
-/// the production path: the combined walk survives only for them and is
-/// removed in Stage 7's final cleanup, gated on Stage 6's liveness pass.
+/// the production path: reify does not yet reach parity on stdlib-shaped
+/// constructs (forcing it on panics at WIR, e.g. an unresolved
+/// `builtin::array<u8>^Eq::eq`), so closing that gap is the remainder of
+/// Stage 5. The combined walk survives only for stdlib/snapshot until then;
+/// removing it is Stage 7's cleanup, also gated on Stage 6's liveness pass.
 /// Drives both the orchestration switch and the annotate-time
 /// `capture_tuple_overlays` flag so the two never disagree.
 fn module_uses_reify(module_source: &ModuleSource) -> bool {
