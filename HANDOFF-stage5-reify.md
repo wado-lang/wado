@@ -308,3 +308,52 @@ Do the byte/WAT forensics loop ONE command per turn, write results to files,
 and re-verify any surprising number before building a theory on it. Confirm the
 exact CLI flags from `--help` first (the `-w` vs `--world test` mistake cost a
 whole investigation pass).
+
+### FURTHER REFINEMENT (same session, deeper) — the divergence is in the FUNC-TYPE INTERNING POOL
+
+After re-running with the correct `--world test` flag, narrowed further:
+
+- **Named function symbols are IDENTICAL** between prod and reify: extract with
+  `grep -oE "\\\$[a-zA-Z0-9_:/.^]+" /tmp/X.wat | sort -u` → 86 symbols each,
+  `comm` shows zero difference. So reify is NOT missing or adding any *function*.
+  The function COUNT is also identical (11 core funcs).
+- The one signature present in prod and absent in reify —
+  `(func (param (ref 2)) (result (ref 5)))` (= `(boxed-i32) -> String`; struct
+  #2 = `(struct (field (mut i32)))`, struct #5 = `(struct (field (mut (ref 3)))
+  (field (mut i32)))` = the String struct, `(ref 3)` = `(array (mut i8))`) — is
+  declared at type index 108 in prod but **referenced nowhere** (`grep -c "type
+  108" /tmp/p.wat` = 1, the definition line only). It is an *unused* interned
+  function signature.
+- So: production's function-type interning pool contains one extra (unused)
+  signature that reify's does not. This shifts every subsequent func-type index
+  by one between the two builds and co-occurs with a different data-segment
+  (string-pool) ordering (prod data[0]="int(", reify data[0]="str(").
+
+Why this makes reify INVALID (working theory): the validator error
+`expected (ref null $type), found (ref null $type)` is an internal
+inconsistency *within reify's own module* — two sites compute a struct/func
+type index via different routes and, because reify's interning order differs,
+they disagree. The extra unused type-108 in prod is a *symptom* of the ordering
+difference, not the cause; the cause is that reify interns the function
+signatures / referenced GC types in a different ORDER than production (driven by
+walking the impl methods / per-element-type helpers in a different order across
+the accumulated test bodies), and somewhere a type index is captured before vs
+after a particular signature is interned.
+
+This is squarely **codegen/monomorphization type-interning order**, confirmed
+not to be a missing-function or wrong-TIR-shape bug. It is the hardest class
+(needs the instrument→rebuild→diff loop on a stable channel). Concrete next
+move: instrument the function-type interner (where `(func (param..) (result..))`
+signatures are added to the module's type section — likely in `codegen/emit.rs`
+or `wir_build/` / the Package type registry) to log each signature in insertion
+order for both builds, diff to find the FIRST divergent insertion, and trace
+which codegen walk produced it in a different order under reify. Then make that
+walk order-independent (canonical sort) so codegen no longer depends on the
+front-end's interning order — consistent with the WEP `codegen.rs` principle.
+
+### Honest status
+tuple_for_of is THOROUGHLY characterized but NOT fixed. The remaining work is a
+codegen type-interning-order fix that needs sustained byte/WAT forensics on a
+stable shell channel (this session's channel cancelled multi-call turns and
+replayed garbled output, which already caused one wrong diagnosis — corrected
+above). All findings here are re-verified with the correct `--world test` flag.
