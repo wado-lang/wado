@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780258686587,
+  "lastUpdate": 1780266347001,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -28481,6 +28481,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/93ef4162652047a6c08d5b0cc7a26f686e9f7455"
         },
         "date": 1780258686096,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17104,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0612355d24352fab3a6ddde2db8e38193ffc39de",
+          "message": "Merge pull request #1259 from wado-lang/claude/elaborator-refactoring-stage-5-PVIL0\n\nelaborator: complete reify parity for user modules; make reify the default",
+          "timestamp": "2026-06-01T07:16:57+09:00",
+          "tree_id": "f5009d18d139b73630902c47e8681060645d82bb",
+          "url": "https://github.com/wado-lang/wado/commit/0612355d24352fab3a6ddde2db8e38193ffc39de"
+        },
+        "date": 1780266346505,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
