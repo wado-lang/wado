@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780221906666,
+  "lastUpdate": 1780258686587,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -28437,6 +28437,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e9c2c29c19cb42ec25527fa9ca92afc9c15db8fe"
         },
         "date": 1780221906168,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17104,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "93ef4162652047a6c08d5b0cc7a26f686e9f7455",
+          "message": "Merge pull request #1260 from wado-lang/claude/const-object-globalization-OCE5J\n\nConstant object globalization: WEP + recursive emit_const_expr",
+          "timestamp": "2026-06-01T05:09:43+09:00",
+          "tree_id": "29741b1cc740f7b4704bfca074bc6390ab3d4f99",
+          "url": "https://github.com/wado-lang/wado/commit/93ef4162652047a6c08d5b0cc7a26f686e9f7455"
+        },
+        "date": 1780258686096,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
