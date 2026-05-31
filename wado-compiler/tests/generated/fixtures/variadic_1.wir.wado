@@ -132,7 +132,7 @@ type "functype//wado-compiler/tests/fixtures/variadic_1.wado/__cm_export____test
 
 type "functype//wado-compiler/tests/fixtures/variadic_1.wado/collect_for_of<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool>>" = fn(ref "tuple//[i32, String, bool]");  // TypeId(45)
 
-type "functype//wado-compiler/tests/fixtures/variadic_1.wado/$value_copy$T25$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(46)
+type "functype//wado-compiler/tests/fixtures/variadic_1.wado/$value_copy$T26$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(46)
 
 type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(47)
 
@@ -887,7 +887,7 @@ condition: result[2] == \"true\"
     return;
 }
 
-fn "wado-compiler/tests/fixtures/variadic_1.wado/$value_copy$T25$shallow"(v) {
+fn "wado-compiler/tests/fixtures/variadic_1.wado/$value_copy$T26$shallow"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
 }
 
@@ -1328,7 +1328,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/format.wado/String^Display::fmt"(self, f) {
     let capped: ref "core:prelude/string.wado//String";
     if f.precision >= 0 {
-        capped = "wado-compiler/tests/fixtures/variadic_1.wado/$value_copy$T25$shallow"(self);
+        capped = "wado-compiler/tests/fixtures/variadic_1.wado/$value_copy$T26$shallow"(self);
         "core:prelude/string.wado/String::truncate_chars"(capped, f.precision);
         "core:prelude/format.wado/Formatter::pad"(f, capped);
     } else {

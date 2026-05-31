@@ -1176,6 +1176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 self_kind: trait_info.self_kind,
                                 arg_ref_wraps: vec![false, false],
                                 return_type: TypeTable::UNIT,
+                                needs_deref: false,
                             },
                         );
 
@@ -1613,6 +1614,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self_kind: resolved.self_kind,
                     arg_ref_wraps: wrap_flags,
                     return_type: resolved.return_type,
+                    needs_deref: false,
                 },
             );
         }

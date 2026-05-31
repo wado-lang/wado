@@ -634,8 +634,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 5 (WEP 2026-05-26): record the resolved
         // `KeyValueLiteralBuilder` impl data so reify can rebuild the
         // same `__kv_lit:` desugar block deterministically.
+        let key = self.ann_key(expr.id());
         self.sem.types.key_value_coercions.insert(
-            expr.id(),
+            key,
             super::sem::types::KeyValueCoercionFacts {
                 builder_type,
                 value_type,
@@ -967,8 +968,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // trait-impl lookup chain (newtype peel + sequence-trait
         // search) and the type-arg mangling are not reproducible from
         // the AST alone.
+        let key = self.ann_key(expr.id());
         self.sem.types.sequence_coercions.insert(
-            expr.id(),
+            key,
             super::sem::types::SequenceCoercionFacts {
                 builder_type,
                 element_type,

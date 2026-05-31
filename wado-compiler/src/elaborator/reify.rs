@@ -78,6 +78,34 @@ use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
 
+/// Generate the `ann_*` annotation accessors on [`Reify`]. Each expands to
+/// a method that builds the canonical `SymbolKey` for `id` in the current
+/// module, walks `self.tuple_overlay_stack` innermost-first looking for that
+/// key, then falls back to `self.sem.types.<map>`, returning a clone. See
+/// the accessor doc comment on the `impl` block for why this exists.
+macro_rules! reify_annotation_accessors {
+    ($($name:ident => $map:ident : $val:ty),+ $(,)?) => {
+        $(
+            fn $name(&self, id: crate::ast::AstId) -> Option<$val> {
+                // Annotation maps are keyed by the canonical `SymbolKey`
+                // (`(ModuleSource, AstId)`); reify swaps
+                // `current_module_source` while walking foreign AST so the
+                // key always names the module the node actually came from.
+                let key = crate::symbol::SymbolKey::new(
+                    self.current_module_source.clone(),
+                    id,
+                );
+                for overlay in self.tuple_overlay_stack.iter().rev() {
+                    if let Some(v) = overlay.$map.get(&key) {
+                        return Some(v.clone());
+                    }
+                }
+                self.sem.types.$map.get(&key).cloned()
+            }
+        )+
+    };
+}
+
 /// Per-module reify pass. One instance per loaded module the batch driver
 /// emits TIR for.
 ///
@@ -122,6 +150,11 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// Per-module semantic facts produced by `annotate_bodies`. Read
     /// only — reify never mutates the recorded decisions.
     pub(crate) sem: &'a ModuleSemantics,
+    /// All modules' semantics, keyed by source. Used to swap `sem` to a
+    /// callee module when reifying a default-argument expression that
+    /// resolves in the callee's lexical scope (it may reference items
+    /// private to the callee module).
+    pub(crate) all_module_semantics: &'a IndexMap<ModuleSource, ModuleSemantics>,
     /// Symbol table from analyzer (cross-module).
     #[allow(dead_code)]
     pub(crate) symbols: &'a SymbolTable,
@@ -163,6 +196,21 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// which fails to unify with the enclosing function's recorded
     /// `Param { E }` declared effect at indirect-call effect checks.
     pub(crate) current_effect_param_names: Vec<String>,
+    /// Active per-element annotation overlays for the tuple `for-of`(s)
+    /// currently being unrolled, innermost last. While reifying element
+    /// `i` of a tuple for-of, that element's [`ElementOverlay`] sits on
+    /// top; the annotation accessors (`ann_*`) consult the stack from the
+    /// top down before falling back to `sem.types`. A nested inner for-of
+    /// pushes its own overlay above the outer one, so inner-body nodes
+    /// shadow correctly while outer-body nodes fall through to the outer
+    /// overlay. See [`Self::reify_tuple_for_of`].
+    pub(crate) tuple_overlay_stack: Vec<super::sem::types::ElementOverlay>,
+    /// Per-`ForOfStmt` visit counter. Annotate records one overlay set per
+    /// *instantiation* of a tuple for-of in walk order; reify increments
+    /// this each time it reifies the same `for_of.id` so it consumes the
+    /// matching instantiation (a nested inner for-of is instantiated once
+    /// per outer element). See [`Self::reify_tuple_for_of`].
+    pub(crate) tuple_overlay_visits: IndexMap<crate::symbol::SymbolKey, usize>,
 }
 
 #[allow(dead_code)]
@@ -183,6 +231,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     pub(crate) fn new(
         tysys: TypeSystem,
         sem: &'a ModuleSemantics,
+        all_module_semantics: &'a IndexMap<ModuleSource, ModuleSemantics>,
         symbols: &'a SymbolTable,
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
@@ -193,6 +242,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Self {
             tysys,
             sem,
+            all_module_semantics,
             symbols,
             loaded_modules,
             logger,
@@ -203,7 +253,39 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             entry_module_source,
             current_type_param_names: Vec::new(),
             current_effect_param_names: Vec::new(),
+            tuple_overlay_stack: Vec::new(),
+            tuple_overlay_visits: IndexMap::default(),
         }
+    }
+
+    // Per-element annotation accessors (`ann_*`) that honour active tuple
+    // `for-of` overlays.
+    //
+    // A tuple for-of's body is a single source sub-tree resolved once per
+    // element by annotate; to keep each element's distinct facts, annotate
+    // moved them out of the base `sem.types` maps into per-element
+    // `ElementOverlay`s (and *truncated* the base maps — so for body
+    // `AstId`s the fact lives ONLY in the overlay). Every reify read of one
+    // of those maps must therefore go through the matching `ann_*`
+    // accessor, which walks `tuple_overlay_stack` innermost-first and falls
+    // back to `sem.types`. Outside a tuple for-of the stack is empty and
+    // the accessor is just the base-map lookup. The macro keeps the 14-map
+    // list in one place, mirroring `TypeAnnotations::split_off_overlay`.
+    reify_annotation_accessors! {
+        ann_expression_types => expression_types: crate::tir::TypeId,
+        ann_method_dispatch => method_dispatch: super::sem::types::MethodDispatch,
+        ann_coercions => coercions: super::sem::types::CoercionChoice,
+        ann_desugars => desugars: super::sem::types::DesugarKind,
+        ann_generic_instantiations => generic_instantiations: super::sem::types::GenericInstantiation,
+        ann_closure_captures => closure_captures: super::sem::types::ClosureCaptureInfo,
+        ann_call_param_types => call_param_types: Vec<crate::tir::TypeId>,
+        ann_assert_captures => assert_captures: super::sem::types::AssertCaptureInfo,
+        ann_for_of_iterator => for_of_iterator: super::sem::types::ForOfIteratorInfo,
+        ann_operator_dispatch => operator_dispatch: super::sem::types::OperatorDispatch,
+        ann_static_method_dispatch => static_method_dispatch: super::sem::types::StaticMethodDispatch,
+        ann_sequence_coercions => sequence_coercions: super::sem::types::SequenceCoercionFacts,
+        ann_key_value_coercions => key_value_coercions: super::sem::types::KeyValueCoercionFacts,
+        ann_index_assign_dispatch => index_assign_dispatch: super::sem::types::OperatorDispatch,
     }
 
     /// Build a [`TypeLookup`] view over the current module's import
@@ -713,7 +795,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `tysys.all_struct_fields`. Snapshot the per-field types into
         // an owned `Vec` so the borrow on `self.tysys` ends here —
         // the field-default reify below mutably borrows `self`.
-        let field_types: Vec<TypeId> = {
+        let mut field_types: Vec<TypeId> = {
             let field_info = self
                 .tysys
                 .all_struct_fields
@@ -727,6 +809,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 })
                 .collect()
         };
+
+        // The static decl-field pass (`resolve_type_static` → `TypeLookup`
+        // without `loaded_modules`) cannot follow `pub use` re-export chains,
+        // so a field typed by a re-exported decl (e.g. `Mark = u64` re-exported
+        // from `wasi:clocks`) lands `UNKNOWN`. Reify's own [`Self::resolve_type`]
+        // carries `loaded_modules`, so re-resolving the field's AST annotation
+        // recovers the real type. Production masks the same `UNKNOWN` by
+        // re-resolving through the instance resolver at emission time.
+        for (index, field) in struct_decl.fields.iter().enumerate() {
+            if field_types[index] == crate::tir::TypeTable::UNKNOWN {
+                field_types[index] = self.resolve_type(&field.ty);
+            }
+        }
 
         // Field-default expressions resolve in a per-struct
         // `FunctionContext` keyed `struct:<name>` (no self, no other
@@ -1137,7 +1232,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     self.sem
                         .types
                         .function_task_returns
-                        .get(&func.id)
+                        .get(&crate::symbol::SymbolKey::new(
+                            self.current_module_source.clone(),
+                            func.id,
+                        ))
                         .copied()
                         .unwrap_or(return_type),
                 )
@@ -1148,7 +1246,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .sem
                 .types
                 .function_effects
-                .get(&func.id)
+                .get(&crate::symbol::SymbolKey::new(
+                    self.current_module_source.clone(),
+                    func.id,
+                ))
                 .cloned()
                 .unwrap_or_else(|| self.reify_effects(&func.effects)),
             stores: func.stores.clone(),
@@ -1195,7 +1296,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if impl_block.is_synthesize_request {
             return Vec::new();
         }
-        let Some(facts) = self.sem.types.impl_facts.get(&impl_block.id).cloned() else {
+        let impl_key =
+            crate::symbol::SymbolKey::new(self.current_module_source.clone(), impl_block.id);
+        let Some(facts) = self.sem.types.impl_facts.get(&impl_key).cloned() else {
             // Annotate did not record facts — the impl block was
             // diagnosed by annotate (e.g. unknown trait reference)
             // and skipped. Reify follows by emitting no methods.
@@ -1356,13 +1459,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (`Box`, not `Box<T>`); the type table's
         // `type_name(self_type)` returns the mangled form, so
         // truncate at the first `<`.
-        let struct_name_for_mangle: String =
-            self.tysys.type_table.borrow().type_name(facts.self_type);
-        let base_struct_name = struct_name_for_mangle
-            .split('<')
-            .next()
-            .unwrap_or(&struct_name_for_mangle)
-            .to_string();
+        //
+        // A variadic tuple impl (`impl<..T> Trait for [..T]`) is the
+        // exception: `type_name` renders the tuple self type in bracket
+        // notation (`[..T]`, no `<`), so the truncation would mangle the
+        // method as `[..T]^Trait::method`. Production instead uses the
+        // builtin tuple's `name` field — `Tuple` — for both the method
+        // name and `method_info` (item.rs:660 / method_call.rs:724), so
+        // the call site's `monomorph_info.generic_name` (`Tuple^…`) and
+        // the monomorphizer's tuple-variadic instantiation path
+        // (func_inst.rs:888, gated on `struct_name == TUPLE_TYPE_NAME`)
+        // both find the template. Match that here.
+        let base_struct_name = if self.tysys.type_table.borrow().is_tuple(facts.self_type) {
+            TypeTable::TUPLE_TYPE_NAME.to_string()
+        } else {
+            let struct_name_for_mangle: String =
+                self.tysys.type_table.borrow().type_name(facts.self_type);
+            struct_name_for_mangle
+                .split('<')
+                .next()
+                .unwrap_or(&struct_name_for_mangle)
+                .to_string()
+        };
         let mangled_name = MethodName::format_local(
             &base_struct_name,
             facts.trait_name_mangled.as_deref(),
@@ -1518,7 +1636,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     self.sem
                         .types
                         .function_task_returns
-                        .get(&func.id)
+                        .get(&crate::symbol::SymbolKey::new(
+                            self.current_module_source.clone(),
+                            func.id,
+                        ))
                         .copied()
                         .unwrap_or(return_type),
                 )
@@ -1529,7 +1650,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .sem
                 .types
                 .function_effects
-                .get(&func.id)
+                .get(&crate::symbol::SymbolKey::new(
+                    self.current_module_source.clone(),
+                    func.id,
+                ))
                 .cloned()
                 .unwrap_or_else(|| self.reify_effects(&func.effects)),
             stores: func.stores.clone(),
@@ -1702,19 +1826,50 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let len = block.stmts.len();
         let mut stmts = Vec::new();
         for (i, s) in block.stmts.iter().enumerate() {
-            // Propagate expected type to the last expression-form
-            // statement for coercion, mirroring
-            // `Elaborator::resolve_block` (stmt.rs:31–69).
-            if expected_type.is_some()
-                && i == len - 1
-                && let ast::Stmt::Expr(expr_stmt) = s
-            {
-                let expr = self.reify_expr(&expr_stmt.expr, ctx, expected_type);
-                stmts.push(TirStmt::new(
-                    crate::tir::TirStmtKind::Expr(expr),
-                    expr_stmt.span,
-                ));
-                continue;
+            // Propagate expected type to the last expression/statement
+            // for coercion, mirroring `Elaborator::resolve_block`
+            // (stmt.rs:40–66): a trailing `Expr` / `If` / `Match` /
+            // `LabeledBlock` in value position keeps its result flowing
+            // out as the block's value rather than being dropped at
+            // statement position.
+            if expected_type.is_some() && i == len - 1 {
+                if let ast::Stmt::Expr(expr_stmt) = s {
+                    let expr = self.reify_expr(&expr_stmt.expr, ctx, expected_type);
+                    stmts.push(TirStmt::new(
+                        crate::tir::TirStmtKind::Expr(expr),
+                        expr_stmt.span,
+                    ));
+                    continue;
+                }
+                if let ast::Stmt::If(if_stmt) = s {
+                    stmts.extend(self.reify_if_stmt_with_expected(if_stmt, ctx, expected_type));
+                    continue;
+                }
+                if let ast::Stmt::Match(match_expr) = s {
+                    let recorded = self
+                        .ann_expression_types(match_expr.id)
+                        .or(expected_type)
+                        .unwrap_or(crate::tir::TypeTable::UNKNOWN);
+                    let tir = self.reify_match_expr(match_expr, ctx, expected_type, recorded);
+                    stmts.push(TirStmt::new(
+                        crate::tir::TirStmtKind::Expr(tir),
+                        match_expr.span,
+                    ));
+                    continue;
+                }
+                if let ast::Stmt::LabeledBlock(labeled_block) = s {
+                    ctx.active_labels.push(labeled_block.label.clone());
+                    let block = self.reify_block(&labeled_block.block, ctx, expected_type);
+                    ctx.active_labels.pop();
+                    stmts.push(TirStmt::new(
+                        crate::tir::TirStmtKind::LabeledBlock {
+                            label: labeled_block.label.clone(),
+                            block,
+                        },
+                        labeled_block.span,
+                    ));
+                    continue;
+                }
             }
             stmts.extend(self.reify_stmt(s, ctx));
         }
@@ -1775,7 +1930,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )]
             }
             ast::Stmt::Continue(continue_stmt) => {
-                vec![TirStmt::new(TirStmtKind::Continue, continue_stmt.span)]
+                // Inside a C-style `for`, `continue` must break to the
+                // body label so the `update` expression runs before the
+                // next iteration; only while/loop bodies use a plain
+                // `Continue`. Mirror `Elaborator::resolve_continue`
+                // (stmt.rs:251), keyed off `ctx.for_continue_labels`.
+                let stmt_kind = if let Some(body_label) = ctx.for_continue_labels.last() {
+                    TirStmtKind::Break {
+                        label: Some(body_label.clone()),
+                        value: None,
+                    }
+                } else {
+                    TirStmtKind::Continue
+                };
+                vec![TirStmt::new(stmt_kind, continue_stmt.span)]
             }
             ast::Stmt::Let(let_stmt) => vec![self.reify_let(let_stmt, ctx)],
             ast::Stmt::If(if_stmt) => self.reify_if_stmt(if_stmt, ctx),
@@ -1989,11 +2157,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // evaporated during annotate (e.g. a stmt-position match
         // whose recorder fires only at the stmt level).
         let recorded_type = self
-            .sem
-            .types
-            .expression_types
-            .get(&expr.id())
-            .copied()
+            .ann_expression_types(expr.id())
             .or(expected_type)
             .unwrap_or(TypeTable::UNKNOWN);
         let span = expr.span();
@@ -2021,23 +2185,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // replays the same desugar deterministically — the
                 // `__b` local lands at the same `FunctionContext`
                 // index reify reserves for it.
-                if let Some(facts) = self
-                    .sem
-                    .types
-                    .sequence_coercions
-                    .get(&tuple_lit.id)
-                    .cloned()
-                {
+                if let Some(facts) = self.ann_sequence_coercions(tuple_lit.id) {
                     return self.reify_sequence_coercion(tuple_lit, facts, ctx, span);
                 }
-                // Element-by-element walk; the recorded type is the
-                // tuple `TypeId` annotate produced.
-                let elements: Vec<TirExpr> = tuple_lit
-                    .elements
-                    .iter()
-                    .map(|e| self.reify_expr(e, ctx, None))
-                    .collect();
-                TirExpr::new(TirExprKind::TupleLiteral { elements }, recorded_type, span)
+                self.reify_tuple_literal(tuple_lit, ctx, span)
             }
             ast::Expr::Cast(cast) => {
                 let target_type = self.resolve_type(&cast.target_type);
@@ -2099,8 +2250,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Unary(unary) => {
                 let op = ast_unary_op_to_tir(unary.op);
-                let inner = self.reify_expr(&unary.expr, ctx, None);
-                if let Some(dispatch) = self.sem.types.operator_dispatch.get(&unary.id).cloned() {
+                // A `-<numeric literal>` operand shares the unary's type:
+                // propagate the expected/recorded type so the inner literal
+                // takes the right width (e.g. `-1.0` in an `f32` const body
+                // must be `f32`, not the default `f64`). Other unary operands
+                // are typed on their own.
+                let inner_expected = if unary.op == ast::UnaryOp::Neg
+                    && self.tysys.is_numeric_literal(&unary.expr)
+                    && recorded_type != crate::tir::TypeTable::UNKNOWN
+                {
+                    Some(recorded_type)
+                } else {
+                    None
+                };
+                let inner = self.reify_expr(&unary.expr, ctx, inner_expected);
+                if let Some(dispatch) = self.ann_operator_dispatch(unary.id) {
                     // Operator-trait dispatch path for `-x` / `~x` on a
                     // user type (`Neg::neg` / `BitNot::bitnot`). Mirrors the
                     // binary path: a bare `Unary` on a struct operand would
@@ -2123,6 +2287,62 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         span,
                     );
                 }
+                // Constant-fold `-literal` into a negative literal, exactly
+                // as `Elaborator::resolve_unary` (operators.rs:949-1004).
+                // Without this reify emits `Unary { Neg, <pos literal> }`,
+                // which lowers to `i32.sub (const 0) …` / `f64.neg …` and
+                // can produce invalid modules (e.g. a negated literal that
+                // only fits as the already-negative value, or a type
+                // mismatch when the operand's literal type differs).
+                if matches!(op, crate::tir::TirUnaryOp::Neg) {
+                    match &inner.kind {
+                        TirExprKind::IntLiteral { value, repr } => {
+                            return TirExpr::new(
+                                TirExprKind::IntLiteral {
+                                    value: (*value as i64).wrapping_neg().cast_unsigned(),
+                                    repr: format!("-{repr}"),
+                                },
+                                inner.type_id,
+                                span,
+                            );
+                        }
+                        TirExprKind::FloatLiteral { value, repr } => {
+                            return TirExpr::new(
+                                TirExprKind::FloatLiteral {
+                                    value: -value,
+                                    repr: format!("-{repr}"),
+                                },
+                                inner.type_id,
+                                span,
+                            );
+                        }
+                        TirExprKind::Cast {
+                            expr: cast_inner,
+                            target_type,
+                        } if matches!(&cast_inner.kind, TirExprKind::IntLiteral { .. }) => {
+                            if let TirExprKind::IntLiteral { value, repr } = &cast_inner.kind {
+                                let neg_literal = TirExpr::new(
+                                    TirExprKind::IntLiteral {
+                                        value: (*value as i64).wrapping_neg().cast_unsigned(),
+                                        repr: format!("-{repr}"),
+                                    },
+                                    cast_inner.type_id,
+                                    span,
+                                );
+                                return TirExpr::new(
+                                    TirExprKind::Cast {
+                                        expr: Box::new(neg_literal),
+                                        target_type: *target_type,
+                                    },
+                                    *target_type,
+                                    span,
+                                );
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
                 // Track address-taken locals for `&x` / `&mut x`, mirroring
                 // `Elaborator::resolve_unary` (operators.rs:834). The
                 // boxing pass (`lower::plan::boxing`) reads
@@ -2243,12 +2463,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // `FunctionRef` on `index_assign_dispatch[index.id]`;
                 // reify replays the same `MethodCall` shape.
                 if let ast::Expr::Index(index_expr) = &assign.target
-                    && let Some(dispatch) = self
-                        .sem
-                        .types
-                        .index_assign_dispatch
-                        .get(&index_expr.id)
-                        .cloned()
+                    && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
                 {
                     let receiver = self.reify_expr(&index_expr.expr, ctx, None);
                     let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
@@ -2505,9 +2720,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Always install the context: an empty `ast_id_to_slot` map
         // intercepts nothing, and the hook is a single Option check.
-        let info = self.sem.types.assert_captures.get(&assert_stmt.id);
+        let info = self.ann_assert_captures(assert_stmt.id);
         let (slot_meta, ast_id_to_slot): (Vec<(AstId, String)>, IndexMap<AstId, usize>) =
-            if let Some(info) = info {
+            if let Some(info) = info.as_ref() {
                 let mut meta: Vec<(AstId, String)> = Vec::with_capacity(info.slots.len());
                 let mut map: IndexMap<AstId, usize> = IndexMap::default();
                 for (i, s) in info.slots.iter().enumerate() {
@@ -2736,7 +2951,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_for_of(&mut self, for_of: &ast::ForOfStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
 
-        match self.sem.types.desugars.get(&for_of.id).copied() {
+        match self.ann_desugars(for_of.id) {
             Some(super::sem::types::DesugarKind::ForOfTuple) => {
                 self.reify_tuple_for_of(for_of, ctx)
             }
@@ -2744,7 +2959,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_variadic_for_of(for_of, ctx)
             }
             Some(super::sem::types::DesugarKind::ForOfIterator) | None => {
-                let Some(info) = self.sem.types.for_of_iterator.get(&for_of.id).cloned() else {
+                let Some(info) = self.ann_for_of_iterator(for_of.id) else {
                     return vec![TirStmt::new(
                         TirStmtKind::Expr(TirExpr::new(
                             TirExprKind::Unit,
@@ -2979,8 +3194,36 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let mut outer_stmts = vec![temp_let];
 
+        // Consume this for-of's overlays for the current instantiation.
+        // Annotate pushed one per-element overlay set per instantiation in
+        // walk order; the visit counter selects the matching one (a nested
+        // inner for-of is instantiated once per outer element). Each
+        // element's overlay is pushed onto `tuple_overlay_stack` while its
+        // binding and body are reified so the `ann_*` accessors see the
+        // right per-element facts instead of the truncated base maps.
+        let instantiation: Vec<super::sem::types::ElementOverlay> = {
+            let for_of_key =
+                crate::symbol::SymbolKey::new(self.current_module_source.clone(), for_of.id);
+            let visit = self
+                .tuple_overlay_visits
+                .entry(for_of_key.clone())
+                .or_insert(0);
+            let k = *visit;
+            *visit += 1;
+            self.sem
+                .types
+                .tuple_overlays
+                .get(&for_of_key)
+                .and_then(|insts| insts.get(k))
+                .cloned()
+                .unwrap_or_default()
+        };
+
         for (i, &elem_type) in elems.iter().enumerate() {
             ctx.enter_scope();
+            if let Some(overlay) = instantiation.get(i) {
+                self.tuple_overlay_stack.push(overlay.clone());
+            }
 
             let temp_ref = TirExpr::new(
                 TirExprKind::Local {
@@ -3076,6 +3319,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let body = self.reify_block(&for_of.body, ctx, None);
             block_stmts.extend(body.stmts);
 
+            if instantiation.get(i).is_some() {
+                self.tuple_overlay_stack.pop();
+            }
             ctx.exit_scope();
 
             outer_stmts.push(TirStmt::new(
@@ -3407,24 +3653,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 );
                 let inner_block = TirBlock::new(inner_stmts, span);
-                let then_type = match inner_block.stmts.last() {
-                    Some(s) => match &s.kind {
-                        TirStmtKind::Expr(e) => e.type_id,
-                        _ => TypeTable::UNIT,
-                    },
-                    None => TypeTable::UNIT,
-                };
+                // Use the shared `block_result_type` (mirroring
+                // `resolve_let_chain_stmts` stmt.rs:1140) so a then/else
+                // block ending in a value `If` / `Match` / nested chain
+                // contributes its real result type. A hand-rolled
+                // "last stmt is Expr" check would mis-classify those
+                // trailing forms as `Unit`, collapsing the Match's
+                // `match_type` to `Unit` and dropping the branch values.
+                let then_type = crate::tir::block_result_type(&inner_block);
                 let else_tir = else_block.cloned();
-                let else_type = match else_tir.as_ref() {
-                    Some(b) => match b.stmts.last() {
-                        Some(s) => match &s.kind {
-                            TirStmtKind::Expr(e) => e.type_id,
-                            _ => TypeTable::UNIT,
-                        },
-                        None => TypeTable::UNIT,
-                    },
-                    None => TypeTable::UNIT,
-                };
+                let else_type = else_tir
+                    .as_ref()
+                    .map_or(TypeTable::UNIT, crate::tir::block_result_type);
                 let else_arm_span = else_tir.as_ref().map_or(span, |b| b.span);
                 let match_type =
                     crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
@@ -3481,6 +3721,66 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     },
                     span,
                 )]
+            }
+        }
+    }
+
+    /// Reify a trailing stmt-position `if` whose value flows out as the
+    /// enclosing block's result. Mirrors
+    /// `Elaborator::resolve_if_stmt_with_expected` (stmt.rs:1042): the
+    /// `LetChain` arm reuses the let-chain lowering with `expected_type`
+    /// threaded through so the chain's then/else blocks stay
+    /// value-producing; the `Expr` arm emits an `If` *expression*
+    /// statement (not a value-dropping stmt `If`) so the branch values
+    /// become the block result.
+    fn reify_if_stmt_with_expected(
+        &mut self,
+        if_stmt: &ast::IfStmt,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> Vec<TirStmt> {
+        use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
+        match &if_stmt.condition {
+            ast::Condition::LetChain { elements, .. } => {
+                let else_block = if_stmt
+                    .else_block
+                    .as_ref()
+                    .map(|b| self.reify_block(b, ctx, expected_type));
+                ctx.enter_scope();
+                let stmts = self.reify_let_chain_stmts(
+                    elements,
+                    &if_stmt.then_block,
+                    else_block.as_ref(),
+                    ctx,
+                    expected_type,
+                    if_stmt.span,
+                );
+                ctx.exit_scope();
+                stmts
+            }
+            ast::Condition::Expr(cond_expr) => {
+                let condition = self.reify_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                let then_branch = self.reify_block(&if_stmt.then_block, ctx, expected_type);
+                let else_branch = if_stmt
+                    .else_block
+                    .as_ref()
+                    .map(|b| self.reify_block(b, ctx, expected_type));
+                let then_type = crate::tir::block_result_type(&then_branch);
+                let else_type = else_branch
+                    .as_ref()
+                    .map_or(TypeTable::UNIT, crate::tir::block_result_type);
+                let result_type =
+                    crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
+                let if_expr = TirExpr::new(
+                    TirExprKind::If {
+                        condition: Box::new(condition),
+                        then_branch,
+                        else_branch,
+                    },
+                    result_type,
+                    if_stmt.span,
+                );
+                vec![TirStmt::new(TirStmtKind::Expr(if_expr), if_stmt.span)]
             }
         }
     }
@@ -3616,8 +3916,49 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::{CallArg, ResolvedType, TirBinaryOp, TirExprKind, TirUnaryOp, TypeTable};
 
-        let left = self.reify_expr(&binary.left, ctx, None);
-        let right = self.reify_expr(&binary.right, ctx, None);
+        // Mirror `resolve_binary_operands_with_coercion` (operators.rs:80):
+        // a numeric-literal operand is typed from the *other* operand (or,
+        // when both are literals, from the expression's recorded type). This
+        // matters for inlined associated-const bodies like
+        // `f32::INFINITY = 1.0 / 0.0`, whose literals carry no recorded type
+        // of their own — without the hint they default to `f64` and the
+        // surrounding arithmetic lowers to the wrong width / an integer op.
+        let left_is_lit = self.tysys.is_numeric_literal(&binary.left);
+        let right_is_lit = self.tysys.is_numeric_literal(&binary.right);
+        let (left, right) = if left_is_lit && !right_is_lit {
+            let right = self.reify_expr(&binary.right, ctx, None);
+            let coerce = if self.tysys.type_table.borrow().is_numeric(right.type_id) {
+                Some(right.type_id)
+            } else {
+                None
+            };
+            let left = self.reify_expr(&binary.left, ctx, coerce);
+            (left, right)
+        } else if right_is_lit && !left_is_lit {
+            let left = self.reify_expr(&binary.left, ctx, None);
+            let coerce = if self.tysys.type_table.borrow().is_numeric(left.type_id) {
+                Some(left.type_id)
+            } else {
+                None
+            };
+            let right = self.reify_expr(&binary.right, ctx, coerce);
+            (left, right)
+        } else if left_is_lit && right_is_lit {
+            // Both literals: use the expression's recorded type as the hint
+            // (e.g. the `const_ty` flowing in from a reified const body).
+            let hint = if recorded_type == TypeTable::UNKNOWN {
+                None
+            } else {
+                Some(recorded_type)
+            };
+            let left = self.reify_expr(&binary.left, ctx, hint);
+            let right = self.reify_expr(&binary.right, ctx, hint);
+            (left, right)
+        } else {
+            let left = self.reify_expr(&binary.left, ctx, None);
+            let right = self.reify_expr(&binary.right, ctx, None);
+            (left, right)
+        };
 
         // Reference equality: when both operands are references, the
         // elaborator emits `RefEq` / `RefNotEq` (identity comparison)
@@ -3651,7 +3992,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
 
-        if let Some(dispatch) = self.sem.types.operator_dispatch.get(&binary.id).cloned() {
+        if let Some(dispatch) = self.ann_operator_dispatch(binary.id) {
             // Operator-trait dispatch path. Reuse the shared receiver
             // adjuster (statically; no Elaborator needed) and the
             // shared arg-wrap helper to produce TIR identical to what
@@ -3939,13 +4280,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // was lowered through `Builder::new_literal` /
         // `Builder::insert_literal` / `Builder::build`. Reify replays
         // the same `__kv_lit:` desugar block deterministically.
-        if let Some(facts) = self
-            .sem
-            .types
-            .key_value_coercions
-            .get(&struct_lit.id)
-            .cloned()
-        {
+        if let Some(facts) = self.ann_key_value_coercions(struct_lit.id) {
             return self.reify_key_value_coercion(struct_lit, facts, ctx, struct_lit.span);
         }
 
@@ -3987,11 +4322,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // non-generic structs Gap 1's recording is skipped and we use
         // the bare struct type from `recorded_type`.
         let (struct_type, generic_args): (TypeId, Vec<TypeId>) = self
-            .sem
-            .types
-            .generic_instantiations
-            .get(&struct_lit.id)
-            .map(|gi| (gi.instance_type, gi.type_args.clone()))
+            .ann_generic_instantiations(struct_lit.id)
+            .map(|gi| (gi.instance_type, gi.type_args))
             .unwrap_or((recorded_type, Vec::new()));
 
         let mangled_struct_name = if generic_args.is_empty() {
@@ -4126,12 +4458,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // production's `assign_to_target` builds), not a plain
         // `Assign` whose target is an `Index` expression.
         if let ast::Expr::Index(index_expr) = &compound.target
-            && let Some(dispatch) = self
-                .sem
-                .types
-                .index_assign_dispatch
-                .get(&index_expr.id)
-                .cloned()
+            && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
         {
             let receiver = self.reify_expr(&index_expr.expr, ctx, None);
             let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
@@ -4501,7 +4828,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Non-primitive comparison dispatches through `Eq::eq` /
             // `Ord::cmp`; the recording fires on `chain.id` at
             // operators.rs:1346.
-            if let Some(dispatch) = self.sem.types.operator_dispatch.get(&chain.id).cloned() {
+            if let Some(dispatch) = self.ann_operator_dispatch(chain.id) {
                 let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
                     left,
                     dispatch.self_kind,
@@ -4566,11 +4893,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
 
             let recorded_type = self
-                .sem
-                .types
-                .expression_types
-                .get(&chain.id)
-                .copied()
+                .ann_expression_types(chain.id)
                 .unwrap_or(TypeTable::BOOL);
             return TirExpr::new(
                 TirExprKind::Binary {
@@ -4746,7 +5069,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `return_type` on the record signals whether the outer
         // `Deref` wrap applies (Index returns `&Output`; IndexValue
         // returns `Output`).
-        if let Some(dispatch) = self.sem.types.operator_dispatch.get(&index.id).cloned() {
+        if let Some(dispatch) = self.ann_operator_dispatch(index.id) {
             let adjusted_receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
                 receiver,
                 dispatch.self_kind,
@@ -4763,15 +5086,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 dispatch.return_type,
                 index.span,
             );
-            // `Index` trait returns `&Output`, so the outer wrap is
-            // a `Deref`. Detect via the recorded `return_type`'s
-            // `Ref` shape — IndexValue's record has the raw output
-            // type and skips the wrap.
-            let needs_deref = matches!(
-                self.tysys.type_table.borrow().get(dispatch.return_type),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_),
-            );
-            if needs_deref {
+            // `Index` trait returns `&Output`, so the outer wrap is a
+            // `Deref` (`expr[i]` → `*expr.index(i)`). Annotate records
+            // this explicitly: a return-type-shape check would misfire
+            // for an `IndexValue` whose `Output` is itself a reference
+            // (`Array<&i32>::index_value` → `&i32`) and double-deref.
+            if dispatch.needs_deref {
                 return TirExpr::new(
                     TirExprKind::Unary {
                         op: TirUnaryOp::Deref,
@@ -4819,17 +5139,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let span = closure.span;
 
-        let cap_info = self
-            .sem
-            .types
-            .closure_captures
-            .get(&closure.id)
-            .cloned()
-            .unwrap_or_else(|| super::sem::types::ClosureCaptureInfo {
+        let cap_info = self.ann_closure_captures(closure.id).unwrap_or_else(|| {
+            super::sem::types::ClosureCaptureInfo {
                 mut_captures: Vec::new(),
                 captures: Vec::new(),
                 is_mutating: false,
-            });
+            }
+        });
 
         // Step 1 (replay): materialise outer-scope `__ref_v` locals
         // for each mut-capture in the recorded order; emit the
@@ -5007,6 +5323,167 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// The Stage-5 walk-order invariant (Gap 7) keeps the `__b`
     /// local at the same `FunctionContext` index reify reserves for
     /// it, so the resulting TIR is byte-identical to production's.
+    /// True when `type_id` is a `TypePack` or a tuple whose elements
+    /// transitively contain a `TypePack`. Mirrors
+    /// `Elaborator::type_contains_pack` (expr.rs:3752).
+    fn type_contains_pack(&self, type_id: TypeId) -> bool {
+        use crate::tir::{ResolvedType, TypeTable};
+        let ty = self.tysys.type_table.borrow().get(type_id).clone();
+        match ty {
+            ResolvedType::TypePack { .. } => true,
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } if TypeTable::is_tuple_type(&name, &module_source) => {
+                type_args.iter().any(|e| self.type_contains_pack(*e))
+            }
+            _ => false,
+        }
+    }
+
+    /// Reify a tuple literal, handling spread elements (`[..rest, b]`,
+    /// `[a, ..middle, b]`). Mirrors `Elaborator::resolve_tuple_literal`
+    /// (expr.rs:3768): the tuple `TypeId` is built bottom-up from the
+    /// resolved element types via `make_tuple` so a nested tuple's element
+    /// type is the identical interned id as the inner literal's own type
+    /// (avoiding the `nir/sroa` `TypeId`-identity divergence at `-O2`).
+    /// Spread elements expand per `type_contains_pack`:
+    /// - a direct `TypePack` → `TypePackExpansion`,
+    /// - a tuple containing a pack → `TupleSpread` (monomorphize expands),
+    /// - a concrete tuple → inline `FieldAccess` per element (binding
+    ///   non-trivial spread operands to a `__spread_N` temporary).
+    fn reify_tuple_literal(
+        &mut self,
+        tuple_lit: &ast::TupleLiteralExpr,
+        ctx: &mut FunctionContext,
+        span: crate::token::Span,
+    ) -> TirExpr {
+        use crate::tir::{
+            ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeTable,
+        };
+
+        let mut elements: Vec<TirExpr> = Vec::new();
+        let mut elem_types: Vec<TypeId> = Vec::new();
+        // (local_idx, name, expr, span) for non-trivial spread operands.
+        let mut spread_bindings: Vec<(u32, String, TirExpr, crate::token::Span)> = Vec::new();
+
+        for elem in &tuple_lit.elements {
+            if let ast::Expr::Spread(inner, _span) = elem {
+                let spread_expr = self.reify_expr(inner, ctx, None);
+                let contains_pack = self.type_contains_pack(spread_expr.type_id);
+                let spread_type = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .get(spread_expr.type_id)
+                    .clone();
+                if contains_pack {
+                    let is_direct_pack = matches!(
+                        self.tysys.type_table.borrow().get(spread_expr.type_id),
+                        ResolvedType::TypePack { .. }
+                    );
+                    if is_direct_pack {
+                        let pack_type_id = spread_expr.type_id;
+                        elem_types.push(spread_expr.type_id);
+                        elements.push(TirExpr::new(
+                            TirExprKind::TypePackExpansion {
+                                call_expr: Box::new(spread_expr),
+                                pack_type_id,
+                            },
+                            *elem_types.last().unwrap(),
+                            elem.span(),
+                        ));
+                    } else {
+                        elem_types.push(spread_expr.type_id);
+                        elements.push(TirExpr::new(
+                            TirExprKind::TupleSpread {
+                                expr: Box::new(spread_expr),
+                            },
+                            *elem_types.last().unwrap(),
+                            elem.span(),
+                        ));
+                    }
+                } else if let ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    type_args: inner_elems,
+                } = spread_type
+                    && TypeTable::is_tuple_type(&name, &module_source)
+                {
+                    // Concrete tuple: expand inline via FieldAccess. Bind a
+                    // non-trivial operand to a temporary for single evaluation.
+                    let spread_ref = if matches!(spread_expr.kind, TirExprKind::Local { .. }) {
+                        spread_expr
+                    } else {
+                        let spread_type_id = spread_expr.type_id;
+                        let tmp_name = format!("__spread_{}", ctx.next_local);
+                        let tmp_idx = ctx.add_local(tmp_name.clone(), spread_type_id, false, None);
+                        spread_bindings.push((tmp_idx, tmp_name.clone(), spread_expr, elem.span()));
+                        TirExpr::new(
+                            TirExprKind::Local {
+                                index: tmp_idx,
+                                name: tmp_name,
+                            },
+                            spread_type_id,
+                            elem.span(),
+                        )
+                    };
+                    for (i, &et) in inner_elems.iter().enumerate() {
+                        elements.push(TirExpr::new(
+                            TirExprKind::FieldAccess {
+                                expr: Box::new(spread_ref.clone()),
+                                field_index: i as u32,
+                                field_name: i.to_string(),
+                            },
+                            et,
+                            elem.span(),
+                        ));
+                        elem_types.push(et);
+                    }
+                } else {
+                    // A stray spread of a non-tuple — annotate already
+                    // diagnosed it; pass the operand through unchanged.
+                    elem_types.push(spread_expr.type_id);
+                    elements.push(spread_expr);
+                }
+            } else {
+                let resolved = self.reify_expr(elem, ctx, None);
+                elem_types.push(resolved.type_id);
+                elements.push(resolved);
+            }
+        }
+
+        let tuple_type = self.tysys.type_table.borrow_mut().make_tuple(elem_types);
+        let tuple_expr = TirExpr::new(TirExprKind::TupleLiteral { elements }, tuple_type, span);
+
+        if spread_bindings.is_empty() {
+            tuple_expr
+        } else {
+            let mut stmts: Vec<TirStmt> = spread_bindings
+                .into_iter()
+                .map(|(idx, name, value, span)| {
+                    let type_id = value.type_id;
+                    TirStmt::new(
+                        TirStmtKind::Let {
+                            name,
+                            local_index: idx,
+                            value,
+                            is_mut: false,
+                            is_reactive: false,
+                            type_id,
+                            skip_value_copy: false,
+                        },
+                        span,
+                    )
+                })
+                .collect();
+            stmts.push(TirStmt::new(TirStmtKind::Expr(tuple_expr), span));
+            let block = TirBlock::new(stmts, span);
+            TirExpr::new(TirExprKind::Block(block), tuple_type, span)
+        }
+    }
+
     fn reify_sequence_coercion(
         &mut self,
         tuple_lit: &ast::TupleLiteralExpr,
@@ -5561,7 +6038,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // enumeration on `sem.types.handler_bindings`. Reify
             // reifies the handler expression and stitches one
             // `TirHandlerBinding` per recorded effect entry.
-            let Some(facts) = self.sem.types.handler_bindings.get(&binding.id).cloned() else {
+            let binding_key =
+                crate::symbol::SymbolKey::new(self.current_module_source.clone(), binding.id);
+            let Some(facts) = self.sem.types.handler_bindings.get(&binding_key).cloned() else {
                 // Annotate didn't record this binding — either it
                 // bailed (diagnosed type) or the binding shape is
                 // unsupported; skip to mirror the elaborator's
@@ -5797,13 +6276,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // unresolvable `::new` call. Variant-constructor turbofish shapes
         // are not recorded here (annotate returns before the static-call
         // path), so they fall through to the variant detection below.
-        if let Some(dispatch) = self
-            .sem
-            .types
-            .static_method_dispatch
-            .get(&static_call.id)
-            .cloned()
-        {
+        if let Some(dispatch) = self.ann_static_method_dispatch(static_call.id) {
             let args: Vec<CallArg> = static_call
                 .args
                 .iter()
@@ -5939,11 +6412,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|ty| self.resolve_type(ty))
             .collect();
         let type_args: Vec<TypeId> = if explicit_method_type_args.is_empty() {
-            self.sem
-                .types
-                .generic_instantiations
-                .get(&static_call.id)
-                .map(|gi| gi.type_args.clone())
+            self.ann_generic_instantiations(static_call.id)
+                .map(|gi| gi.type_args)
                 .unwrap_or_default()
         } else {
             explicit_method_type_args
@@ -6031,6 +6501,36 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 subs.insert(name.clone(), arg_ast.clone());
             }
         }
+        // A default expression resolves in the *callee's* lexical scope:
+        // it may reference items private to the callee module that the
+        // caller cannot see (`paint(c = DEFAULT_VALUE)` where
+        // `DEFAULT_VALUE` is a callee-module-private global). Production
+        // routes this through `default_scope_module`, consulted during
+        // ident resolution (expr.rs:914). Reify's `reify_ident` reads
+        // globals from `self.sem.decls.current_module_globals` keyed to the
+        // module-context triple, so swap that triple to the callee module
+        // around the default walk when the callee is a different, loaded
+        // module. The caller's `ctx` (locals) stays — earlier positional
+        // args were already AST-substituted into `subs`.
+        let loaded = self.loaded_modules;
+        let all_sem = self.all_module_semantics;
+        let callee_ctx: Option<(&[Item], &ModuleSemantics)> =
+            if callee_module == &self.current_module_source {
+                None
+            } else {
+                match (loaded.get(callee_module), all_sem.get(callee_module)) {
+                    (Some(m), Some(callee_sem)) => Some((m.items.as_slice(), callee_sem)),
+                    _ => None,
+                }
+            };
+        let saved = callee_ctx.map(|(items, callee_sem)| {
+            (
+                std::mem::replace(&mut self.current_module_source, callee_module.clone()),
+                std::mem::replace(&mut self.current_module_items, items),
+                std::mem::replace(&mut self.sem, callee_sem),
+            )
+        });
+
         for i in args.len()..func_params.len() {
             let (name, default_ast) = match func_params.get(i) {
                 Some((n, Some(d))) => (n.clone(), d.clone()),
@@ -6041,6 +6541,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let resolved = self.reify_expr(&default_expr, ctx, None);
             args.push(crate::tir::CallArg::new(resolved, false));
             subs.insert(name, default_expr);
+        }
+
+        if let Some((src, items, sem)) = saved {
+            self.current_module_source = src;
+            self.current_module_items = items;
+            self.sem = sem;
         }
     }
 
@@ -6110,6 +6616,80 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// and qualified-flags shapes route through `todo!` until each
     /// branch is ported — `Elaborator::resolve_call` (call.rs:200+)
     /// is the source they mirror.
+    /// AST-only full type name (generic args, refs included), matching
+    /// `Elaborator::get_type_name_full` without needing `&self`. Used to
+    /// compare a `From<Arg>` marker impl's type argument against a resolved
+    /// `type_name`.
+    fn ast_type_name_full(ty: &ast::Type) -> String {
+        match ty {
+            ast::Type::Named(named) => named.name.clone(),
+            ast::Type::Generic(generic) => {
+                let args: Vec<String> = generic.args.iter().map(Self::ast_type_name_full).collect();
+                format!("{}<{}>", generic.name, args.join(", "))
+            }
+            ast::Type::Reference(inner) => format!("&{}", Self::ast_type_name_full(inner)),
+            ast::Type::MutReference(inner) => format!("&mut {}", Self::ast_type_name_full(inner)),
+            _ => super::Elaborator::<H>::get_type_name_static(ty),
+        }
+    }
+
+    /// Locate the module providing a bodyless `impl From<arg_type> for
+    /// target;` synthesis-request marker impl, scanning the current module
+    /// then loaded modules. Returns `None` when no such marker impl exists
+    /// (so the caller falls back to reflexive / newtype / regular handling).
+    /// Mirrors `has_from_synthesis_request` + `find_from_impl_module`
+    /// (in `method_call.rs` / `expr.rs`) but reads only the AST tables
+    /// reify holds.
+    fn find_from_synthesis_module(
+        &self,
+        target_name: &str,
+        arg_type_name: &str,
+    ) -> Option<crate::module_source::ModuleSource> {
+        let from_trait_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_name(crate::compiler_item::CompilerItem::From)
+            .to_string();
+        let matches = |impl_block: &ast::ImplBlock| -> bool {
+            if !impl_block.is_synthesize_request {
+                return false;
+            }
+            let Some(trait_type) = &impl_block.trait_type else {
+                return false;
+            };
+            if super::Elaborator::<H>::get_type_name_static(&impl_block.ty) != target_name
+                || super::Elaborator::<H>::get_type_name_static(trait_type) != from_trait_name
+            {
+                return false;
+            }
+            // Match the `From<Arg>` type argument by its full name (with
+            // generic args, `&`, etc.) so `From<Vec<i32>>` etc. compare
+            // correctly — mirroring `has_from_synthesis_request`'s use of
+            // `get_type_name_full` rather than the base-name-only static form.
+            matches!(trait_type, ast::Type::Generic(g) if g.args.len() == 1
+                && Self::ast_type_name_full(&g.args[0]) == arg_type_name)
+        };
+        for item in self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && matches(impl_block)
+            {
+                return Some(self.current_module_source.clone());
+            }
+        }
+        for (source, module) in self.loaded_modules {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && matches(impl_block)
+                {
+                    return Some(source.clone());
+                }
+            }
+        }
+        None
+    }
+
     fn reify_call(
         &mut self,
         call: &ast::CallExpr,
@@ -6140,10 +6720,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .map(|(i, c)| (i, c.clone()))
                 {
                     let variant_type = self
-                        .sem
-                        .types
-                        .generic_instantiations
-                        .get(&call.id)
+                        .ann_generic_instantiations(call.id)
                         .map(|gi| gi.instance_type)
                         .unwrap_or(recorded_type);
                     let payload = call.args.first().map(|arg_expr| {
@@ -6185,10 +6762,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .map(|(i, c)| (i, c.clone()))
                 {
                     let variant_type = self
-                        .sem
-                        .types
-                        .generic_instantiations
-                        .get(&call.id)
+                        .ann_generic_instantiations(call.id)
                         .map(|gi| gi.instance_type)
                         .unwrap_or(recorded_type);
                     let payload = call.args.first().map(|arg_expr| {
@@ -6221,11 +6795,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 {
                     let mangled = crate::name::MethodName::format_local(type_name, None, case_name);
                     let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                        self.sem
-                            .types
-                            .generic_instantiations
-                            .get(&call.id)
-                            .map(|gi| gi.type_args.clone())
+                        self.ann_generic_instantiations(call.id)
+                            .map(|gi| gi.type_args)
                             .unwrap_or_default()
                     } else {
                         call.type_args
@@ -6267,7 +6838,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // can reproduce the same TIR `Call` shape without re-running
         // impl lookup, mangled-name construction, or monomorph-info
         // shaping (none of which are tractable from the AST alone).
-        if let Some(dispatch) = self.sem.types.static_method_dispatch.get(&call.id).cloned() {
+        if let Some(dispatch) = self.ann_static_method_dispatch(call.id) {
             // Forward per-argument expected types for closure args that have
             // an unannotated param, so `|a, b| ...` coerced to a `fn`-typed
             // (or `fn`-newtype) param infers its params; otherwise the
@@ -6278,7 +6849,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // expected `fn() with E` whose `E` is a generic effect param would
             // otherwise pin `declared_effects` to the param instead of the
             // closure's actual effects).
-            let call_param_types = self.sem.types.call_param_types.get(&call.id).cloned();
+            let call_param_types = self.ann_call_param_types(call.id);
             let mut arg_exprs: Vec<CallArg> = call
                 .args
                 .iter()
@@ -6326,6 +6897,113 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 recorded_type,
                 span,
             );
+        }
+
+        // `Type::from(x)` with no explicit `From` impl — reflexive and
+        // newtype conversions. Production's `resolve_call` handles these
+        // inline (call.rs:514-569) and records no `static_method_dispatch`,
+        // tagging the reflexive case with `NewtypeFromCollapse`; reify must
+        // reproduce the same three shapes (otherwise it falls through to an
+        // unresolvable `Type::from` `Call`). Only reached when a user `From`
+        // impl coexists, since that routes `from` through the static-call
+        // path while the builtin reflexive/newtype conversion stays implicit.
+        if let ast::Expr::Ident(ident) = &call.callee
+            && let Some(pos) = ident.name.find("::")
+            && &ident.name[pos + 2..] == "from"
+            && !ident.name[pos + 2..].contains("::")
+            && call.args.len() == 1
+        {
+            let prefix = ident.name[..pos].to_string();
+            let arg = self.reify_expr(&call.args[0], ctx, None);
+            let arg_type = arg.type_id;
+            let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
+
+            // Bodyless `impl From<X> for Type;` marker impl — production
+            // synthesizes a `From::from` call inline (method_call.rs:1189 →
+            // expr.rs:resolve_from_call) and records no dispatch. Reify
+            // rebuilds the same trait-qualified `Call` so monomorphization
+            // emits the synthesized conversion. Checked before reflexive /
+            // newtype, matching production's order.
+            if let Some(module_source) = self.find_from_synthesis_module(&prefix, &arg_type_name) {
+                let from_trait_name = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .compiler_items()
+                    .trait_name(crate::compiler_item::CompilerItem::From)
+                    .to_string();
+                let from_trait = format!("{from_trait_name}<{arg_type_name}>");
+                let name =
+                    crate::name::MethodName::format_local(&prefix, Some(&from_trait), "from");
+                return TirExpr::new(
+                    TirExprKind::Call {
+                        func: crate::tir::FunctionRef {
+                            module_source,
+                            name,
+                            monomorph_info: None,
+                            method_info: Some(crate::name::LocalMethodName {
+                                struct_name: prefix.clone(),
+                                base_struct_name: prefix.clone(),
+                                trait_name: Some(from_trait),
+                                base_trait_name: Some(from_trait_name),
+                                base_trait_module: None,
+                                trait_type_args: vec![],
+                                method_name: "from".to_string(),
+                                method_type_args: vec![],
+                                is_type_param_receiver: false,
+                                is_ref_impl: false,
+                                cm_name: None,
+                            }),
+                        },
+                        type_args: vec![],
+                        args: vec![CallArg::new(arg, false)],
+                    },
+                    recorded_type,
+                    span,
+                );
+            }
+
+            // Reflexive: `T::from(T_val)` — identity, return the argument
+            // (the `NewtypeFromCollapse` desugar, call.rs:526).
+            if arg_type_name == prefix {
+                return arg;
+            }
+
+            // Newtype→Base: `Base::from(Newtype_val)` where the arg is a
+            // newtype over `Base` — lower to a `Cast` (call.rs:534).
+            let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
+            if let Some(base_id) = base_of_arg
+                && self.tysys.type_table.borrow().type_name(base_id) == prefix
+            {
+                return TirExpr::new(
+                    TirExprKind::Cast {
+                        expr: Box::new(arg),
+                        target_type: base_id,
+                    },
+                    base_id,
+                    span,
+                );
+            }
+
+            // Base→Newtype: `Newtype::from(Base_val)` where `Newtype` is a
+            // newtype over the arg's type — lower to a `Cast` (call.rs:549).
+            if let Some(newtype_id) = self.type_lookup().newtype(&prefix)
+                && let Some(base_id) = self.tysys.type_table.borrow().get_newtype_base(newtype_id)
+                && self.tysys.type_table.borrow().type_name(base_id) == arg_type_name
+            {
+                return TirExpr::new(
+                    TirExprKind::Cast {
+                        expr: Box::new(arg),
+                        target_type: newtype_id,
+                    },
+                    newtype_id,
+                    span,
+                );
+            }
+
+            // Not a reflexive/newtype `from` — fall through to the generic
+            // call handling below, which reifies args itself; `arg` here is
+            // dropped (no side effects: `reify_expr` is pure TIR shaping).
         }
 
         // Closure-call shape: bare-ident callee that resolves to a
@@ -6464,11 +7142,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         && !rest.contains("::")
                     {
                         let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                            self.sem
-                                .types
-                                .generic_instantiations
-                                .get(&call.id)
-                                .map(|gi| gi.type_args.clone())
+                            self.ann_generic_instantiations(call.id)
+                                .map(|gi| gi.type_args)
                                 .unwrap_or_default()
                         } else {
                             call.type_args
@@ -6505,11 +7180,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Type args: explicit turbofish on the call expression,
             // else the inference recorded by Gap 1.
             let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                self.sem
-                    .types
-                    .generic_instantiations
-                    .get(&call.id)
-                    .map(|gi| gi.type_args.clone())
+                self.ann_generic_instantiations(call.id)
+                    .map(|gi| gi.type_args)
                     .unwrap_or_default()
             } else {
                 call.type_args
@@ -6525,14 +7197,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // specialization the call site needs. Literal re-coercion and
             // `is_mut` per-arg are still handled elsewhere (`coercions`); see
             // `arg_is_unannotated_closure` for why the forward is restricted.
-            let call_param_types = self.sem.types.call_param_types.get(&call.id);
+            let call_param_types = self.ann_call_param_types(call.id);
             let args: Vec<CallArg> = call
                 .args
                 .iter()
                 .enumerate()
                 .map(|(i, a)| {
                     let expected = if arg_is_unannotated_closure(a) {
-                        call_param_types.and_then(|pts| pts.get(i).copied())
+                        call_param_types
+                            .as_ref()
+                            .and_then(|pts| pts.get(i).copied())
                     } else {
                         None
                     };
@@ -6620,11 +7294,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let mangled_method_name = crate::name::MethodName::format_local(prefix, None, suffix);
 
             let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                self.sem
-                    .types
-                    .generic_instantiations
-                    .get(&call.id)
-                    .map(|gi| gi.type_args.clone())
+                self.ann_generic_instantiations(call.id)
+                    .map(|gi| gi.type_args)
                     .unwrap_or_default()
             } else {
                 call.type_args
@@ -6698,21 +7369,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         let inner_dispatch = self
-            .sem
-            .types
-            .operator_dispatch
-            .get(&index_expr.id)
-            .cloned()
+            .ann_operator_dispatch(index_expr.id)
             .expect(
                 "reify_index_mut_method_call: inner IndexMut dispatch missing — annotate should have recorded it alongside the IndexMutMethodCall desugar tag",
             );
 
         let outer_dispatch = self
-            .sem
-            .types
-            .method_dispatch
-            .get(&method_call.id)
-            .cloned()
+            .ann_method_dispatch(method_call.id)
             .expect(
                 "reify_index_mut_method_call: outer method dispatch missing — annotate should have recorded it via record_method_dispatch",
             );
@@ -6757,12 +7420,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
             .collect();
 
+        let result_type = if outer_dispatch.return_type == crate::tir::TypeTable::UNKNOWN {
+            recorded_type
+        } else {
+            outer_dispatch.return_type
+        };
         super::Elaborator::<H>::build_tir_method_call(
             receiver_for_method,
             outer_dispatch.function_ref,
             type_args,
             args,
-            recorded_type,
+            result_type,
             method_call.span,
         )
     }
@@ -6794,7 +7462,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // tagged this call as `IndexMutMethodCall`, the receiver is an
         // index expression that needs `__index_mut_val` synthesis.
         if matches!(
-            self.sem.types.desugars.get(&method_call.id),
+            self.ann_desugars(method_call.id),
             Some(super::sem::types::DesugarKind::IndexMutMethodCall)
         ) {
             return self.reify_index_mut_method_call(method_call, ctx, recorded_type);
@@ -6835,21 +7503,80 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         )
                     }
                     "zip" => {
-                        // Emit `TupleZip { expr }` unconditionally.
-                        // The monomorphiser expands both
-                        // type-pack and concrete-tuple cases.
-                        // Concrete-tuple inline expansion the
-                        // elaborator performs is an optimisation
-                        // (matches MethodCall::TupleZip's design
-                        // contract on `tir.rs`), not required for
-                        // correctness.
-                        TirExpr::new(
-                            TirExprKind::TupleZip {
-                                expr: Box::new(receiver),
-                            },
-                            recorded_type,
-                            method_call.span,
-                        )
+                        // Mirror the elaborator (`method_call.rs`): a
+                        // concrete tuple-of-tuples transposes inline now;
+                        // only a type-pack receiver defers expansion to the
+                        // monomorphiser via `TupleZip`. Non-generic bodies
+                        // never reach the monomorphiser, so emitting
+                        // `TupleZip` here would hit `lower::translate`'s
+                        // `unreachable!`.
+                        let base_type_id = receiver.type_id;
+                        if self.type_contains_pack(base_type_id) {
+                            TirExpr::new(
+                                TirExprKind::TupleZip {
+                                    expr: Box::new(receiver),
+                                },
+                                recorded_type,
+                                method_call.span,
+                            )
+                        } else {
+                            // [[A0, A1], [B0, B1]].zip() → [[A0, B0], [A1, B1]]
+                            let outer_elems = self
+                                .tysys
+                                .type_table
+                                .borrow()
+                                .as_tuple(base_type_id)
+                                .unwrap();
+                            let inner_arities: Vec<Vec<TypeId>> = outer_elems
+                                .iter()
+                                .map(|e| self.tysys.type_table.borrow().as_tuple(*e).unwrap())
+                                .collect();
+                            let arity = inner_arities[0].len();
+                            let num_rows = outer_elems.len();
+                            let mut col_exprs = Vec::with_capacity(arity);
+                            for col in 0..arity {
+                                let mut row_exprs = Vec::with_capacity(num_rows);
+                                for (row, row_types) in inner_arities.iter().enumerate() {
+                                    let row_access = TirExpr::new(
+                                        TirExprKind::FieldAccess {
+                                            expr: Box::new(receiver.clone()),
+                                            field_index: row as u32,
+                                            field_name: row.to_string(),
+                                        },
+                                        outer_elems[row],
+                                        method_call.span,
+                                    );
+                                    let cell = TirExpr::new(
+                                        TirExprKind::FieldAccess {
+                                            expr: Box::new(row_access),
+                                            field_index: col as u32,
+                                            field_name: col.to_string(),
+                                        },
+                                        row_types[col],
+                                        method_call.span,
+                                    );
+                                    row_exprs.push(cell);
+                                }
+                                let col_types: Vec<TypeId> =
+                                    inner_arities.iter().map(|row| row[col]).collect();
+                                let col_tuple_type =
+                                    self.tysys.type_table.borrow_mut().make_tuple(col_types);
+                                col_exprs.push(TirExpr::new(
+                                    TirExprKind::TupleLiteral {
+                                        elements: row_exprs,
+                                    },
+                                    col_tuple_type,
+                                    method_call.span,
+                                ));
+                            }
+                            TirExpr::new(
+                                TirExprKind::TupleLiteral {
+                                    elements: col_exprs,
+                                },
+                                recorded_type,
+                                method_call.span,
+                            )
+                        }
                     }
                     _ => unreachable!(),
                 };
@@ -6857,24 +7584,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         // Dispatch decision (Stage 4 + Gap 2 record).
-        let dispatch = self
-            .sem
-            .types
-            .method_dispatch
-            .get(&method_call.id)
-            .cloned()
-            .unwrap_or_else(|| {
-                // Method lookup failed during annotate (error-recovery
-                // path). Reify produces a placeholder `Unit` of `ERROR`
-                // type so downstream phases see the same shape annotate
-                // would have built; the actual diagnostic was already
-                // emitted by the elaborator.
-                panic!(
-                    "reify_method_call: dispatch annotation missing for `{}` — \
+        let dispatch = self.ann_method_dispatch(method_call.id).unwrap_or_else(|| {
+            // Method lookup failed during annotate (error-recovery
+            // path). Reify produces a placeholder `Unit` of `ERROR`
+            // type so downstream phases see the same shape annotate
+            // would have built; the actual diagnostic was already
+            // emitted by the elaborator.
+            panic!(
+                "reify_method_call: dispatch annotation missing for `{}` — \
                      annotate should have recorded or short-circuited via desugar",
-                    method_call.method
-                )
-            });
+                method_call.method
+            )
+        });
 
         // Reify receiver and adjust per the dispatch contract. Stage 5
         // shares the adjuster with the elaborator so the same TIR shape
@@ -6979,12 +7700,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
 
+        // The call's result type is the resolved method's return type
+        // (recorded on the dispatch), not the per-`AstId` `expression_types`
+        // entry: that entry can carry a wrong type for the call site, which
+        // would make a unit-returning call look value-producing and emit a
+        // spurious `drop` of a value-less call (Wasm stack underflow). Fall
+        // back to `recorded_type` only if the dispatch somehow lacks it.
+        let result_type = if dispatch.return_type == TypeTable::UNKNOWN {
+            recorded_type
+        } else {
+            dispatch.return_type
+        };
         super::Elaborator::<H>::build_tir_method_call(
             adjusted_receiver,
             dispatch.function_ref,
             type_args,
             args,
-            recorded_type,
+            result_type,
             method_call.span,
         )
     }
@@ -7026,21 +7758,35 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name,
                     module_source,
                     type_args,
-                } => (name, Some(module_source), type_args),
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    match self.tysys.type_table.borrow().get(inner).clone() {
-                        ResolvedType::Struct {
-                            name,
-                            module_source,
-                            ..
-                        } => (name, Some(module_source), vec![]),
-                        ResolvedType::GenericInstance {
-                            name,
-                            module_source,
-                            type_args,
-                        } => (name, Some(module_source), type_args),
-                        _ => return (0, field_name.to_string(), None),
+                } => {
+                    // Tuple projection (`t.0`): a tuple is a `GenericInstance`
+                    // named "Tuple" with no struct decl, so the struct-fields
+                    // lookup below would miss and fall to the `(0, …)`
+                    // fallback — collapsing every `t.N` onto field 0, which
+                    // SROA then keys on. Resolve the numeric field name into
+                    // the element index directly, mirroring the elaborator's
+                    // `lookup_field_type` tuple branch (expr.rs:1513).
+                    if crate::tir::TypeTable::is_tuple_type(&name, &module_source)
+                        && let Ok(index) = field_name.parse::<usize>()
+                        && index < type_args.len()
+                    {
+                        return (index as u32, field_name.to_string(), Some(type_args[index]));
                     }
+                    (name, Some(module_source), type_args)
+                }
+                // Peel references and newtypes and recurse, mirroring the
+                // elaborator's `lookup_field_type` (expr.rs:1500): `&Point`,
+                // `&mut Point`, a newtype `Location = Point`, and chained
+                // newtypes / `&Location` all resolve their fields against the
+                // ultimate underlying struct. Without the `Newtype` arm a
+                // `loc: Location` receiver fell to the fallback and every field
+                // reified with `field_index = 0`, which `nir/sroa` later keys
+                // on to alias `.y` onto the `.x` scalar local.
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    return self.lookup_struct_field_index(inner, field_name);
+                }
+                ResolvedType::Newtype { base_type, .. } => {
+                    return self.lookup_struct_field_index(base_type, field_name);
                 }
                 _ => return (0, field_name.to_string(), None),
             };
@@ -7079,6 +7825,48 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .substitute_type_params(raw_field_type, &substitution)
         };
         (idx, canonical, Some(field_type))
+    }
+
+    /// Run `body` with reify's module perspective (`current_module_source`
+    /// / `current_module_items` / `sem`) swapped to `module` when it is a
+    /// different, loaded module, restoring the originals afterward. Used to
+    /// reify an AST fragment that belongs to another module (e.g. an
+    /// associated constant's body): the `ann_*` accessors key on
+    /// `current_module_source`, so swapping it makes their `SymbolKey`
+    /// lookups hit that module's `ModuleSemantics` rather than the use
+    /// site's. Same mechanism the default-argument path uses inline
+    /// (cross-module AST reify). A no-op when `module` is the current module
+    /// or is not loaded.
+    fn with_const_module_perspective<R>(
+        &mut self,
+        module: &ModuleSource,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let swap = if module == &self.current_module_source {
+            None
+        } else {
+            match (
+                self.loaded_modules.get(module),
+                self.all_module_semantics.get(module),
+            ) {
+                (Some(m), Some(sem)) => Some((m.items.as_slice(), sem)),
+                _ => None,
+            }
+        };
+        let saved = swap.map(|(items, sem)| {
+            (
+                std::mem::replace(&mut self.current_module_source, module.clone()),
+                std::mem::replace(&mut self.current_module_items, items),
+                std::mem::replace(&mut self.sem, sem),
+            )
+        });
+        let result = body(self);
+        if let Some((src, items, sem)) = saved {
+            self.current_module_source = src;
+            self.current_module_items = items;
+            self.sem = sem;
+        }
+        result
     }
 
     /// Reify a bare identifier reference. Local lookup goes through
@@ -7179,6 +7967,36 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
+        // 3b. Current-module global declared in the module AST but absent
+        //     from `current_module_globals`. This happens when reify is
+        //     walking a *swapped-in* callee module (a default-argument
+        //     expression resolved in the callee's scope) whose
+        //     `ModuleSemantics` came from the stdlib snapshot, which does
+        //     not rehydrate `current_module_globals`. The module's AST
+        //     items are available (the swap sets `current_module_items`),
+        //     so resolve the global from there — mirroring production's
+        //     `resolve_ident_in_fallback_module` (expr.rs:936). Without this
+        //     a callee-module global default (e.g. `Z_DEFAULT_COMPRESSION`)
+        //     resolves to `()` and the call lowers to an invalid module.
+        if let Some(global_decl) = self
+            .current_module_items
+            .iter()
+            .find_map(|item| match item {
+                ast::Item::Global(g) if g.name == ident.name => Some(g),
+                _ => None,
+            })
+        {
+            let ty = self.resolve_type(&global_decl.ty);
+            return TirExpr::new(
+                TirExprKind::GlobalVarGet {
+                    module_source: self.current_module_source.clone(),
+                    name: ident.name.clone(),
+                },
+                ty,
+                ident.span,
+            );
+        }
+
         // 4. Associated constant (e.g. `f64::PI`, `i32::MAX`). The
         //    elaborator inlines these to the resolved expression at
         //    every use site; reify reproduces the same inlining by
@@ -7188,7 +8006,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    static expression in practice), so reify uses the
         //    surrounding `ctx` directly — matches the elaborator's
         //    `resolve_expr(&const_expr, ctx, …)` (expr.rs:594–605).
-        if let Some((const_ty, const_expr)) = self
+        if let Some((const_module, const_ty, const_expr)) = self
             .sem
             .decls
             .associated_constants
@@ -7196,8 +8014,41 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .cloned()
         {
             let type_id = self.resolve_type(&const_ty);
-            let resolved = self.reify_expr(&const_expr, ctx, Some(type_id));
+            // The constant's body lives in its *defining* module (e.g.
+            // `pub const MAX: i32 = 2147483647;` in primitive.wado). Its
+            // `AstId`s index that module's `ModuleSemantics`, not the use
+            // site's, and `AstId`s are only unique within a module — so
+            // reifying the body under `self.sem` (the current module) can
+            // pick up a colliding `AstId`'s recorded type and mis-type the
+            // literal (e.g. `i32::MAX`'s `2147483647` as an f64). Reify the
+            // body under the defining module's perspective so every
+            // annotation lookup hits the right module's records.
+            let resolved = self.with_const_module_perspective(&const_module, |this| {
+                this.reify_expr(&const_expr, ctx, Some(type_id))
+            });
             return TirExpr::new(resolved.kind, type_id, ident.span);
+        }
+
+        // 4b. Primitive associated constant (`i32::MAX`, `u8::MIN`, …) that
+        //     is not in `associated_constants`. This happens when reify is
+        //     walking a swapped-in callee module (a default-argument
+        //     expression — e.g. `max_output: i32 = i32::MAX`) whose
+        //     `ModuleSemantics` came from the stdlib snapshot, which does
+        //     not rehydrate `associated_constants`. The value is a compile
+        //     -time constant of the named primitive type, so emit it as a
+        //     typed integer literal directly.
+        if let Some((prefix, suffix)) = ident.name.split_once("::")
+            && !suffix.contains("::")
+            && let Some((value, prim_type)) = primitive_int_assoc_const(prefix, suffix)
+        {
+            return TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: value as u64,
+                    repr: value.to_string(),
+                },
+                prim_type,
+                ident.span,
+            );
         }
 
         // 5. Free function reference — the ident names a function in
@@ -7211,11 +8062,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .contains_key(&ident.name)
         {
             let type_args = self
-                .sem
-                .types
-                .generic_instantiations
-                .get(&ident.id)
-                .map(|gi| gi.type_args.clone())
+                .ann_generic_instantiations(ident.id)
+                .map(|gi| gi.type_args)
                 .unwrap_or_default();
             return TirExpr::new(
                 TirExprKind::FuncRef {
@@ -7247,11 +8095,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // above and would have returned. Anything left here is a
             // function import.
             let type_args = self
-                .sem
-                .types
-                .generic_instantiations
-                .get(&ident.id)
-                .map(|gi| gi.type_args.clone())
+                .ann_generic_instantiations(ident.id)
+                .map(|gi| gi.type_args)
                 .unwrap_or_default();
             return TirExpr::new(
                 TirExprKind::FuncRef {
@@ -7296,10 +8141,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // `recorded_type` already names the right
                     // `Variant` TypeId.
                     let variant_type = self
-                        .sem
-                        .types
-                        .generic_instantiations
-                        .get(&ident.id)
+                        .ann_generic_instantiations(ident.id)
                         .map(|gi| gi.instance_type)
                         .unwrap_or(recorded_type);
                     return TirExpr::new(
@@ -7384,10 +8226,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .map(|(i, c)| (i, c.clone()))
                 {
                     let variant_type = self
-                        .sem
-                        .types
-                        .generic_instantiations
-                        .get(&ident.id)
+                        .ann_generic_instantiations(ident.id)
                         .map(|gi| gi.instance_type)
                         .unwrap_or_else(|| {
                             self.tysys.type_table.borrow_mut().make_variant(
@@ -7454,7 +8293,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// rather than a bare literal; all other `NumericLiteral` coercions
     /// are free (the literal already carries the coerced type).
     fn try_reify_int128_coercion(&self, expr: &ast::Expr) -> Option<TirExpr> {
-        let choice = self.sem.types.coercions.get(&expr.id())?;
+        let choice = self.ann_coercions(expr.id())?;
         if choice.kind != super::sem::types::CoercionKind::NumericLiteral {
             return None;
         }
@@ -7636,8 +8475,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .type_table
                     .borrow()
                     .get_ultimate_base_type(recorded_type);
-                let is_float_target =
-                    base_target == TypeTable::F32 || base_target == TypeTable::F64;
+                // A float-only literal (`1.0`, `0.0`, `1e2`) is a float
+                // regardless of the recorded type: when the recorded type is
+                // missing/UNKNOWN (e.g. a stdlib const body whose
+                // `expression_types` entry is absent from the cached
+                // snapshot) the syntactic form is authoritative, matching
+                // production's `resolve_numeric_literal` (expr.rs:337). An
+                // integer literal still defers to the recorded type so
+                // `let x: f64 = 1` takes the float path via `is_float_target`.
+                let is_float_target = base_target == TypeTable::F32
+                    || base_target == TypeTable::F64
+                    || (recorded_type == TypeTable::UNKNOWN
+                        && super::util::is_float_only_literal(repr));
                 if is_float_target {
                     let value: f64 = if super::util::is_float_only_literal(repr) {
                         super::util::parse_float_literal(repr).unwrap_or(0.0)
@@ -7646,10 +8495,27 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             .map(|v| v as f64)
                             .unwrap_or(0.0)
                     };
-                    TirExprKind::FloatLiteral {
-                        value,
-                        repr: repr.clone(),
-                    }
+                    // The literal's *type* must be a concrete float, not the
+                    // (possibly UNKNOWN) recorded type: a float-only literal
+                    // with no recorded type defaults to `f64` (matching
+                    // production's `resolve_numeric_literal`). Leaving it
+                    // UNKNOWN makes lowering pick an integer op for the
+                    // surrounding arithmetic (`f64.div` -> `i32.div_s`).
+                    // f32 target keeps f32; otherwise (f64 target, or no
+                    // recorded type) an untyped float literal defaults to f64.
+                    let float_type = if base_target == TypeTable::F32 {
+                        TypeTable::F32
+                    } else {
+                        TypeTable::F64
+                    };
+                    return TirExpr::new(
+                        TirExprKind::FloatLiteral {
+                            value,
+                            repr: repr.clone(),
+                        },
+                        float_type,
+                        lit.span,
+                    );
                 } else {
                     let value = super::util::parse_u128_literal(repr).unwrap_or(0) as u64;
                     TirExprKind::IntLiteral {
@@ -7789,10 +8655,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Some(_) => variant_name.to_string(),
         };
 
-        let (const_ty, const_expr) = self.sem.decls.associated_constants.get(&key).cloned()?;
+        let (const_module, const_ty, const_expr) =
+            self.sem.decls.associated_constants.get(&key).cloned()?;
 
         let type_id = self.resolve_type(&const_ty);
-        let resolved = self.reify_expr(&const_expr, ctx, Some(type_id));
+        // Reify the body under its defining module so colliding cross-module
+        // `AstId`s can't mis-type the inlined constant (see `reify_ident`).
+        let resolved = self.with_const_module_perspective(&const_module, |this| {
+            this.reify_expr(&const_expr, ctx, Some(type_id))
+        });
         match &resolved.kind {
             TirExprKind::IntLiteral { repr, .. } => {
                 let is_unsigned = matches!(
@@ -7862,11 +8733,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Some(ast::Type::NamespacedGeneric(t)) => format!("{}::{}", t.name, variant_name),
                 Some(_) => variant_name.clone(),
             };
-            if let Some((const_ty, const_expr)) =
+            if let Some((const_module, const_ty, const_expr)) =
                 self.sem.decls.associated_constants.get(&key).cloned()
             {
                 let type_id = self.resolve_type(&const_ty);
-                let resolved = self.reify_expr(&const_expr, ctx, Some(type_id));
+                let resolved = self.with_const_module_perspective(&const_module, |this| {
+                    this.reify_expr(&const_expr, ctx, Some(type_id))
+                });
                 if let TirExprKind::IntLiteral { repr, .. } = &resolved.kind {
                     return super::util::parse_i128_literal(repr)
                         .or_else(|_| super::util::parse_u128_literal(repr).map(|v| v as i128))
@@ -8621,6 +9494,49 @@ fn ast_type_name_static(ty: &ast::Type) -> String {
 /// instead of the effects inferred from its body.
 fn arg_is_unannotated_closure(arg: &ast::Expr) -> bool {
     matches!(arg, ast::Expr::Closure(c) if c.params.iter().any(|p| p.ty.is_none()))
+}
+
+/// Compile-time value and primitive `TypeId` for a primitive integer
+/// associated constant named `<prefix>::<suffix>` (e.g. `i32::MAX`).
+/// Returns `None` for non-primitive or unknown constants. Used by
+/// `reify_ident` to resolve such constants when they are not present in
+/// `associated_constants` — e.g. a default-argument expression reified
+/// under a stdlib-snapshot callee module whose `associated_constants` map
+/// was not rehydrated. The value table mirrors
+/// [`super::stmt::primitive_assoc_const_to_i128`].
+fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, crate::tir::TypeId)> {
+    use crate::tir::TypeTable;
+    let ty = match prefix {
+        "i8" => TypeTable::I8,
+        "i16" => TypeTable::I16,
+        "i32" => TypeTable::I32,
+        "i64" => TypeTable::I64,
+        "u8" => TypeTable::U8,
+        "u16" => TypeTable::U16,
+        "u32" => TypeTable::U32,
+        "u64" => TypeTable::U64,
+        _ => return None,
+    };
+    let value = match (prefix, suffix) {
+        ("i8", "MAX") => i128::from(i8::MAX),
+        ("i8", "MIN") => i128::from(i8::MIN),
+        ("i16", "MAX") => i128::from(i16::MAX),
+        ("i16", "MIN") => i128::from(i16::MIN),
+        ("i32", "MAX") => i128::from(i32::MAX),
+        ("i32", "MIN") => i128::from(i32::MIN),
+        ("i64", "MAX") => i128::from(i64::MAX),
+        ("i64", "MIN") => i128::from(i64::MIN),
+        ("u8", "MAX") => i128::from(u8::MAX),
+        ("u8", "MIN") => i128::from(u8::MIN),
+        ("u16", "MAX") => i128::from(u16::MAX),
+        ("u16", "MIN") => i128::from(u16::MIN),
+        ("u32", "MAX") => i128::from(u32::MAX),
+        ("u32", "MIN") => i128::from(u32::MIN),
+        ("u64", "MAX") => i128::from(u64::MAX),
+        ("u64", "MIN") => i128::from(u64::MIN),
+        _ => return None,
+    };
+    Some((value, ty))
 }
 
 fn ast_unary_op_to_tir(op: ast::UnaryOp) -> crate::tir::TirUnaryOp {

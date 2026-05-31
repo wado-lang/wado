@@ -1,14 +1,16 @@
-//! [`TypeAnnotations`] — per-[`crate::ast::AstId`] type annotations and
-//! dispatch decisions recorded during the body walk.
+//! [`TypeAnnotations`] — per-[`crate::symbol::SymbolKey`] type annotations
+//! and dispatch decisions recorded during the body walk.
 //!
 //! # Membership rule
 //!
-//! Add a field here when it stores a fact keyed by an [`crate::ast::AstId`]
-//! (or [`crate::symbol::SymbolKey`]) produced as a *decision* by the
-//! body-level elaborator: the resolved type of an expression, the chosen
-//! method dispatch target, the chosen coercion, the desugar kind of a
-//! TIR-direct rewrite. This is what [`super::super::reify`] (Stage 5) will
-//! read in lieu of re-running inference.
+//! Add a field here when it stores a fact keyed by a
+//! [`crate::symbol::SymbolKey`] (`(ModuleSource, AstId)`) produced as a
+//! *decision* by the body-level elaborator: the resolved type of an
+//! expression, the chosen method dispatch target, the chosen coercion, the
+//! desugar kind of a TIR-direct rewrite. `SymbolKey` rather than a bare
+//! `AstId` because reify inlines cross-module AST and `AstId`s are only
+//! unique within a module. This is what [`super::super::reify`] (Stage 5)
+//! reads in lieu of re-running inference.
 //!
 //! Facts that derive purely from the AST (spans, position lookup) belong
 //! on [`crate::ast_index::AstIndex`], not here. Decl-level facts (function
@@ -98,6 +100,14 @@ pub(crate) struct MethodDispatch {
     /// Per-parameter default expression ASTs (`None` for required).
     #[allow(dead_code)]
     pub(crate) param_defaults: Vec<Option<crate::ast::Expr>>,
+    /// The resolved method's return [`TypeId`] — the authoritative result
+    /// type of the call. Reify uses this for the `MethodCall`'s
+    /// `type_id` rather than the per-`AstId` `expression_types` entry,
+    /// which can carry a stale/wrong type for the call site (a unit
+    /// method whose `expression_types` slot was recorded as another
+    /// type makes reify emit a spurious `drop` of a value-less call →
+    /// Wasm stack underflow).
+    pub(crate) return_type: TypeId,
 }
 
 /// Which sub-coercion [`super::super::Elaborator::try_coerce`] applied at
@@ -133,7 +143,7 @@ pub(crate) struct CoercionChoice {
     pub(crate) target_type: TypeId,
 }
 
-/// Per-`AstId` type annotations recorded by the body walk.
+/// Per-`SymbolKey` type annotations recorded by the body walk.
 #[derive(Default, Clone)]
 pub(crate) struct TypeAnnotations {
     /// Resolved [`TypeId`] for each local binding, keyed by the binding's
@@ -151,23 +161,23 @@ pub(crate) struct TypeAnnotations {
     /// entry. The future `reify` pass (Stage 5) reads this map to set
     /// `TirExpr::type_id` without re-running type inference; LSP hover
     /// may also consult it directly.
-    pub(crate) expression_types: IndexMap<AstId, TypeId>,
+    pub(crate) expression_types: IndexMap<SymbolKey, TypeId>,
     /// Method-dispatch decisions recorded for each AST
     /// [`crate::ast::MethodCallExpr`] visited by the body walk, keyed by
     /// the call expression's [`AstId`]. See [`MethodDispatch`] for the
     /// data shape and the recording contract.
-    pub(crate) method_dispatch: IndexMap<AstId, MethodDispatch>,
+    pub(crate) method_dispatch: IndexMap<SymbolKey, MethodDispatch>,
     /// Coercion decisions recorded for each expression that
     /// [`super::super::Elaborator::try_coerce`] adapted into its expected
     /// type, keyed by the source-expression's [`AstId`]. Expressions that
     /// did not need coercion (the resolved type already matched the
     /// expected type, or no `expected_type` was supplied) leave no entry.
     /// See [`CoercionChoice`] / [`CoercionKind`] for the variants.
-    pub(crate) coercions: IndexMap<AstId, CoercionChoice>,
+    pub(crate) coercions: IndexMap<SymbolKey, CoercionChoice>,
     /// Desugar-kind tag for each TIR-direct rewrite site (assert,
     /// matches, comparison chain, for-of, while, compound assignment),
     /// keyed by the enclosing AST node's [`AstId`]. See [`DesugarKind`].
-    pub(crate) desugars: IndexMap<AstId, DesugarKind>,
+    pub(crate) desugars: IndexMap<SymbolKey, DesugarKind>,
     /// Generic instantiations decided by inference at call / construction
     /// sites (Gap 1 of Stage 5). Keyed by the call expression's, struct
     /// literal's, or variant-ctor's [`AstId`]. See [`GenericInstantiation`].
@@ -175,27 +185,27 @@ pub(crate) struct TypeAnnotations {
     /// `#[allow(dead_code)]` until the call.rs / expr.rs recording call
     /// sites are wired up in a follow-up of Stage 5.
     #[allow(dead_code)]
-    pub(crate) generic_instantiations: IndexMap<AstId, GenericInstantiation>,
+    pub(crate) generic_instantiations: IndexMap<SymbolKey, GenericInstantiation>,
     /// Capture analysis result for each closure expression (Gap 4 of
     /// Stage 5). Keyed by the [`crate::ast::ClosureExpr`]'s [`AstId`].
     /// See [`ClosureCaptureInfo`].
-    pub(crate) closure_captures: IndexMap<AstId, ClosureCaptureInfo>,
+    pub(crate) closure_captures: IndexMap<SymbolKey, ClosureCaptureInfo>,
     /// Resolved (type-arg-substituted) parameter types for a free /
     /// imported function call, keyed by the call expression's [`AstId`].
     /// Reify uses these to drive per-argument expected types — chiefly so
     /// a closure-literal argument coerced to a `fn`-typed (or `fn`-newtype)
     /// parameter sees the function signature, inferring unannotated closure
     /// params and producing the functor specialization the call site needs.
-    pub(crate) call_param_types: IndexMap<AstId, Vec<TypeId>>,
+    pub(crate) call_param_types: IndexMap<SymbolKey, Vec<TypeId>>,
     /// Power-assert capture-slot map for each assert statement (Gap 5
     /// of Stage 5). Keyed by the [`crate::ast::AssertStmt`]'s [`AstId`].
     /// See [`AssertCaptureInfo`].
-    pub(crate) assert_captures: IndexMap<AstId, AssertCaptureInfo>,
+    pub(crate) assert_captures: IndexMap<SymbolKey, AssertCaptureInfo>,
     /// For-of iterator dispatch decisions for the `IntoIterator` path
     /// (Gap 6 of Stage 5). Keyed by the [`crate::ast::ForOfStmt`]'s
     /// [`AstId`]. Tuple and variadic paths are tagged via [`DesugarKind`]
     /// alone and leave no entry here. See [`ForOfIteratorInfo`].
-    pub(crate) for_of_iterator: IndexMap<AstId, ForOfIteratorInfo>,
+    pub(crate) for_of_iterator: IndexMap<SymbolKey, ForOfIteratorInfo>,
     /// Operator-dispatch decisions for binary / index expressions that
     /// the elaborator lowered to a trait method call (Gap 11 of
     /// Stage 5). Keyed by the [`crate::ast::BinaryExpr`]'s or
@@ -204,7 +214,7 @@ pub(crate) struct TypeAnnotations {
     /// [`crate::tir::TirExprKind::Binary`] /
     /// [`crate::tir::TirExprKind::Index`] for this expression. See
     /// [`OperatorDispatch`].
-    pub(crate) operator_dispatch: IndexMap<AstId, OperatorDispatch>,
+    pub(crate) operator_dispatch: IndexMap<SymbolKey, OperatorDispatch>,
     /// Handler-binding resolution facts (Gap 13 of Stage 5).
     /// Keyed by the [`crate::ast::EffectHandlerBinding`]'s
     /// [`AstId`]. Carries the list of effects this binding
@@ -219,7 +229,7 @@ pub(crate) struct TypeAnnotations {
     /// and the recording sites in `resolve_with_handler` /
     /// `resolve_handler_binding` are wired through.
     #[allow(dead_code)]
-    pub(crate) handler_bindings: IndexMap<AstId, HandlerBindingFacts>,
+    pub(crate) handler_bindings: IndexMap<SymbolKey, HandlerBindingFacts>,
     /// Impl-block resolution facts (Gap 12 of Stage 5). Keyed by
     /// the [`crate::ast::ImplBlock`]'s [`AstId`]. Carries the
     /// resolved `Self` type, the trait reference's canonical and
@@ -235,7 +245,7 @@ pub(crate) struct TypeAnnotations {
     /// the Gap 12 design so the data shape is reviewable
     /// independently.
     #[allow(dead_code)]
-    pub(crate) impl_facts: IndexMap<AstId, ImplFacts>,
+    pub(crate) impl_facts: IndexMap<SymbolKey, ImplFacts>,
     /// Resolved `with` clause for each function / method declaration
     /// (Gap of Stage 5). Keyed by the [`crate::ast::Function`]'s or
     /// [`crate::ast::Method`]'s [`AstId`]. The body walk calls
@@ -247,7 +257,7 @@ pub(crate) struct TypeAnnotations {
     /// reify has the transient `current_effect_param_decls` scope to
     /// reproduce faithfully).
     #[allow(dead_code)]
-    pub(crate) function_effects: IndexMap<AstId, Vec<crate::tir::EffectRef>>,
+    pub(crate) function_effects: IndexMap<SymbolKey, Vec<crate::tir::EffectRef>>,
     /// Declared (pre-erasure) return [`TypeId`] for every `async`
     /// function / method, keyed by the function's [`AstId`]. An async
     /// function's wasm-level `return_type` is erased to `()` (the value
@@ -256,7 +266,7 @@ pub(crate) struct TypeAnnotations {
     /// reify reads this to set `TirFunction::task_return_type` — needed
     /// for resource-store inference over the return type (e.g. an async
     /// `handle` returning `Result<Response, _>` must surface `Response`).
-    pub(crate) function_task_returns: IndexMap<AstId, TypeId>,
+    pub(crate) function_task_returns: IndexMap<SymbolKey, TypeId>,
     /// Resolved static-method call dispatch
     /// (`Type::method(args)` / `builtin::fn(args)` shape) recorded by
     /// the body walk. Keyed by the [`crate::ast::CallExpr`]'s [`AstId`].
@@ -268,7 +278,7 @@ pub(crate) struct TypeAnnotations {
     /// `locate_static_method_impl` / `MethodName::format_local` and
     /// without consulting the trait-impl index.
     #[allow(dead_code)]
-    pub(crate) static_method_dispatch: IndexMap<AstId, StaticMethodDispatch>,
+    pub(crate) static_method_dispatch: IndexMap<SymbolKey, StaticMethodDispatch>,
     /// `SequenceLiteralBuilder` coercion data for a tuple literal
     /// coerced into an `Array<T>` / user-defined sequence type. Keyed
     /// by the `Expr::TupleLiteral`'s [`AstId`]. The
@@ -280,7 +290,7 @@ pub(crate) struct TypeAnnotations {
     /// — the `__b` local lands at the same `FunctionContext` index
     /// reify reserves for it (Gap 7 walk-order invariant).
     #[allow(dead_code)]
-    pub(crate) sequence_coercions: IndexMap<AstId, SequenceCoercionFacts>,
+    pub(crate) sequence_coercions: IndexMap<SymbolKey, SequenceCoercionFacts>,
     /// `KeyValueLiteralBuilder` coercion data for an anonymous
     /// struct literal coerced into a map-style type. Keyed by the
     /// `Expr::StructLiteral`'s [`AstId`]. Counterpart to
@@ -289,7 +299,7 @@ pub(crate) struct TypeAnnotations {
     /// info so reify rebuilds the `__kv_lit:` desugar block
     /// deterministically.
     #[allow(dead_code)]
-    pub(crate) key_value_coercions: IndexMap<AstId, KeyValueCoercionFacts>,
+    pub(crate) key_value_coercions: IndexMap<SymbolKey, KeyValueCoercionFacts>,
     /// `IndexAssign` trait dispatch decisions for `arr[i] = v` and
     /// `arr[i] OP= v` shapes whose target is an `Expr::Index`. Keyed
     /// by the **inner [`crate::ast::IndexExpr`]'s [`AstId`]** (the
@@ -303,7 +313,128 @@ pub(crate) struct TypeAnnotations {
     /// `let x = arr[i]` and written in `arr[i] = v`, and the
     /// elaborator dispatches each shape to a different trait.
     #[allow(dead_code)]
-    pub(crate) index_assign_dispatch: IndexMap<AstId, OperatorDispatch>,
+    pub(crate) index_assign_dispatch: IndexMap<SymbolKey, OperatorDispatch>,
+    /// Per-element annotation overlays for compile-time-unrolled tuple
+    /// `for-of` loops (Stage 5). Keyed by the [`crate::ast::ForOfStmt`]'s
+    /// [`SymbolKey`]; the outer `Vec` holds one entry per *instantiation* of
+    /// that for-of in deterministic walk order (a nested inner for-of is
+    /// instantiated once per outer element, hence multiple entries), and
+    /// the inner `Vec` holds one [`ElementOverlay`] per tuple element.
+    ///
+    /// A tuple for-of's body is a single source sub-tree (fixed `SymbolKey`s)
+    /// that annotate resolves once per element in a *different* type
+    /// context. Every per-element map below would otherwise be overwritten
+    /// so only the last element's facts survive. Annotate captures each
+    /// element's body facts here (only when reify is the consumer — see
+    /// `Elaborator::capture_tuple_overlays`) and reify replays them per
+    /// element. Empty in the production/LSP path.
+    pub(crate) tuple_overlays: IndexMap<SymbolKey, Vec<Vec<ElementOverlay>>>,
+}
+
+/// One tuple-`for-of` element's slice of the body-level annotation maps.
+///
+/// Holds exactly the `SymbolKey`-keyed maps that can appear inside a for-of
+/// body and vary per element. Decl-level maps (`impl_facts`,
+/// `function_effects`, `function_task_returns`, `handler_bindings`)
+/// cannot occur inside an expression body and are excluded. Captured by
+/// [`super::super::Elaborator::resolve_tuple_for_of`]; consumed by reify
+/// via its overlay-stack accessors.
+#[derive(Default, Clone)]
+#[allow(dead_code)]
+pub(crate) struct ElementOverlay {
+    pub(crate) expression_types: IndexMap<SymbolKey, TypeId>,
+    pub(crate) method_dispatch: IndexMap<SymbolKey, MethodDispatch>,
+    pub(crate) coercions: IndexMap<SymbolKey, CoercionChoice>,
+    pub(crate) desugars: IndexMap<SymbolKey, DesugarKind>,
+    pub(crate) generic_instantiations: IndexMap<SymbolKey, GenericInstantiation>,
+    pub(crate) closure_captures: IndexMap<SymbolKey, ClosureCaptureInfo>,
+    pub(crate) call_param_types: IndexMap<SymbolKey, Vec<TypeId>>,
+    pub(crate) assert_captures: IndexMap<SymbolKey, AssertCaptureInfo>,
+    pub(crate) for_of_iterator: IndexMap<SymbolKey, ForOfIteratorInfo>,
+    pub(crate) operator_dispatch: IndexMap<SymbolKey, OperatorDispatch>,
+    pub(crate) static_method_dispatch: IndexMap<SymbolKey, StaticMethodDispatch>,
+    pub(crate) sequence_coercions: IndexMap<SymbolKey, SequenceCoercionFacts>,
+    pub(crate) key_value_coercions: IndexMap<SymbolKey, KeyValueCoercionFacts>,
+    pub(crate) index_assign_dispatch: IndexMap<SymbolKey, OperatorDispatch>,
+}
+
+/// Pre-loop lengths of the per-element overlay maps, snapshotted before a
+/// tuple `for-of` unrolls its body. Used by
+/// [`TypeAnnotations::split_off_overlay`] to peel each element's freshly
+/// recorded entries off the tail.
+#[derive(Clone, Copy)]
+pub(crate) struct ElementOverlayLens {
+    expression_types: usize,
+    method_dispatch: usize,
+    coercions: usize,
+    desugars: usize,
+    generic_instantiations: usize,
+    closure_captures: usize,
+    call_param_types: usize,
+    assert_captures: usize,
+    for_of_iterator: usize,
+    operator_dispatch: usize,
+    static_method_dispatch: usize,
+    sequence_coercions: usize,
+    key_value_coercions: usize,
+    index_assign_dispatch: usize,
+}
+
+impl TypeAnnotations {
+    /// Snapshot the current lengths of the per-element overlay maps, taken
+    /// right before a tuple `for-of` resolves its first element's body.
+    pub(crate) fn overlay_base_lens(&self) -> ElementOverlayLens {
+        ElementOverlayLens {
+            expression_types: self.expression_types.len(),
+            method_dispatch: self.method_dispatch.len(),
+            coercions: self.coercions.len(),
+            desugars: self.desugars.len(),
+            generic_instantiations: self.generic_instantiations.len(),
+            closure_captures: self.closure_captures.len(),
+            call_param_types: self.call_param_types.len(),
+            assert_captures: self.assert_captures.len(),
+            for_of_iterator: self.for_of_iterator.len(),
+            operator_dispatch: self.operator_dispatch.len(),
+            static_method_dispatch: self.static_method_dispatch.len(),
+            sequence_coercions: self.sequence_coercions.len(),
+            key_value_coercions: self.key_value_coercions.len(),
+            index_assign_dispatch: self.index_assign_dispatch.len(),
+        }
+    }
+
+    /// Peel the entries recorded since `base` off the tail of each
+    /// per-element overlay map into an [`ElementOverlay`], truncating each
+    /// map back to `base` so the next unrolled element records from a
+    /// clean slate. `IndexMap::split_off` does both in one step: it
+    /// returns the `[base..]` tail and leaves `self` holding `[0..base)`.
+    ///
+    /// Truncation is what makes per-element capture correct for
+    /// conditionally-recorded maps: without it, an entry recorded for one
+    /// element but not the next would linger with a stale value.
+    pub(crate) fn split_off_overlay(&mut self, base: ElementOverlayLens) -> ElementOverlay {
+        ElementOverlay {
+            expression_types: self.expression_types.split_off(base.expression_types),
+            method_dispatch: self.method_dispatch.split_off(base.method_dispatch),
+            coercions: self.coercions.split_off(base.coercions),
+            desugars: self.desugars.split_off(base.desugars),
+            generic_instantiations: self
+                .generic_instantiations
+                .split_off(base.generic_instantiations),
+            closure_captures: self.closure_captures.split_off(base.closure_captures),
+            call_param_types: self.call_param_types.split_off(base.call_param_types),
+            assert_captures: self.assert_captures.split_off(base.assert_captures),
+            for_of_iterator: self.for_of_iterator.split_off(base.for_of_iterator),
+            operator_dispatch: self.operator_dispatch.split_off(base.operator_dispatch),
+            static_method_dispatch: self
+                .static_method_dispatch
+                .split_off(base.static_method_dispatch),
+            sequence_coercions: self.sequence_coercions.split_off(base.sequence_coercions),
+            key_value_coercions: self.key_value_coercions.split_off(base.key_value_coercions),
+            index_assign_dispatch: self
+                .index_assign_dispatch
+                .split_off(base.index_assign_dispatch),
+        }
+    }
 }
 
 /// Resolved `SequenceLiteralBuilder` impl data for a tuple-to-sequence
@@ -621,6 +752,16 @@ pub(crate) struct OperatorDispatch {
     /// Return type the elaborator resolved for the method call. Pinned
     /// here so reify reads it without re-running impl-table lookups.
     pub(crate) return_type: TypeId,
+    /// `true` when reify must wrap the method call in an outer
+    /// `Unary { Deref }` — the `Index` trait returns `&Output`, so
+    /// `expr[i]` lowers to `*expr.index(i)`. `IndexValue` and the
+    /// arithmetic/comparison operator dispatches return the value
+    /// directly and set this `false`. Recorded explicitly because the
+    /// return-type shape alone is ambiguous: an `IndexValue` whose
+    /// `Output` is itself a reference (`Array<&i32>::index_value` →
+    /// `&i32`) would otherwise be mistaken for the `Index` shape and
+    /// double-dereferenced.
+    pub(crate) needs_deref: bool,
 }
 
 /// `for x of expr` iterator dispatch result (Gap 6 of Stage 5).

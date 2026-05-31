@@ -35,10 +35,15 @@ pub(crate) struct ModuleDecls {
     /// `local_name → (source, original_name, TypeId, is_mut)` for globals
     /// brought in by `use`.
     pub(crate) imported_globals: IndexMap<String, (ModuleSource, String, TypeId, bool)>,
-    /// `"Type::CONST" → (type, expr)`. Inlined at every use site during
-    /// resolution. Built from impl blocks across all loaded modules plus
-    /// this module's own impls.
-    pub(crate) associated_constants: IndexMap<String, (ast::Type, ast::Expr)>,
+    /// `"Type::CONST" → (defining module, type, expr)`. Inlined at every
+    /// use site during resolution. Built from impl blocks across all loaded
+    /// modules plus this module's own impls. The `ModuleSource` records
+    /// which module the `expr` body's AST nodes belong to: `AstId`s are
+    /// only unique within a module, so reify must reify the body under that
+    /// module's perspective (its `ModuleSemantics`) rather than the use
+    /// site's, or a colliding `AstId` would mis-type the inlined constant.
+    pub(crate) associated_constants:
+        IndexMap<String, (crate::module_source::ModuleSource, ast::Type, ast::Expr)>,
 
     /// Names of generic structs declared in this module (used to decide
     /// whether a struct reference needs generic-instance handling).

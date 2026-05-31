@@ -3454,6 +3454,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self_kind: index_mut_info.self_kind,
                 arg_ref_wraps: vec![false],
                 return_type: mut_ref_output_type,
+                // IndexMut dispatch is consumed by the IndexMut-method-call
+                // path, which applies its own deref; the index-expr reify
+                // arm is not used for it.
+                needs_deref: false,
             },
         );
 
@@ -3530,6 +3534,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_param_is_mut.clone(),
             method_param_names,
             method_param_defaults,
+            return_type,
         );
         self.record_desugar(
             method_call.id,
