@@ -217,3 +217,94 @@ trait (impls for i32/String) + a "basic heterogeneous" body
 - `wado-compiler/src/lower/translate.rs:1135` — `TupleZip` unreachable! (the #49 trap site).
 - `docs/wep-2026-05-26-elaborator-rearchitecture.md` — WEP; landing log + status (line ~428 count, ~959 landings, ~998 remaining-clusters).
 - `wado-compiler/tests/fixtures/tuple_for_of.wado` — the remaining failing fixture.
+
+---
+
+## ⚠️ AUTHORITATIVE CORRECTION (2026-05-31 session 2 end) — supersedes all earlier tuple_for_of notes above
+
+Earlier byte-forensics paragraphs in this file (claims of "both 13834 bytes / 34
+differing bytes", "WAT byte-identical", "WIR identical", "codegen type-index
+ordering", "nondeterministic") were produced from a **corrupted shell channel
+AND the wrong CLI flag** (`-w` is invalid; the correct flag is `--world test`).
+They are WRONG. Ignore them. The facts below were re-established with the
+correct flag and verified.
+
+### Correct reproduction
+```
+cp wado-compiler/tests/fixtures/tuple_for_of.wado /tmp/tfo.wado
+./target/debug/wado          compile --world test --no-validate -O0 -o /tmp/p.wasm /tmp/tfo.wado
+WADO_REIFY=1 ./target/debug/wado compile --world test --no-validate -O0 -o /tmp/r.wasm /tmp/tfo.wado
+./target/debug/wado          compile --world test --no-validate -O0 --wat-to-stdout /tmp/tfo.wado > /tmp/p.wat
+WADO_REIFY=1 ./target/debug/wado compile --world test --no-validate -O0 --wat-to-stdout /tmp/tfo.wado > /tmp/r.wat
+```
+(`--world test` IS accepted by `compile`/`dump`; `dump` even auto-detects, but
+pass it explicitly. `wado test /tmp/tfo.wado` reproduces the validation panic.)
+
+### Verified facts
+- WAT sizes: prod 9149 lines, reify 9107 (−42). `.wasm`: prod 33268 B, reify
+  33128 B. These are LARGE structural differences, not subtle renumbering.
+- **Function-signature type pool differs by exactly one, order-independently.**
+  Compare with:
+  ```
+  grep -E "^\s+\(type \(;" /tmp/p.wat | sed -E 's/;[0-9]+;//' | sort > /tmp/pts.txt
+  grep -E "^\s+\(type \(;" /tmp/r.wat | sed -E 's/;[0-9]+;//' | sort > /tmp/rts.txt
+  comm -23 /tmp/pts.txt /tmp/rts.txt   # in prod, not reify
+  comm -13 /tmp/pts.txt /tmp/rts.txt   # in reify, not prod
+  ```
+  Result: prod has **178** signatures, reify **177**. The single signature
+  present in prod and ABSENT from reify is:
+  `(func (param (ref 2)) (result (ref 5)))`.
+  Nothing is present in reify but absent from prod. So reify is *missing* a
+  function whose signature is `(ref 2) -> (ref 5)` (a function taking struct
+  type #2 and returning struct type #5).
+- Consequently every func-type index ≥108 is shifted by one in reify, and the
+  data-segment (string-pool) order also differs (prod data[0]="int(" vs reify
+  data[0]="str(" — reify walks the `impl Describe` methods / string literals in
+  a different order), with one fewer data segment (88 vs 87). The index shift is
+  what surfaces as the validator error `expected (ref null $type), found (ref
+  null $type)` (same printed name, mismatched index).
+- Accumulation-dependent (re-confirmed): bodies 1–9 pass; the full 10-body
+  fixture fails; bodies 1–9 + a *different* 10th body pass; {traits, bodies 1–5,
+  body 10} pass; {traits, bodies 6–9, body 10} pass. The trigger needs bodies
+  from BOTH groups plus body 10 — i.e. enough accumulated functions that one
+  specific helper/instantiation reify fails to emit.
+
+### Correct diagnosis
+This is a **real semantic divergence in what TIR/functions reify generates**,
+not codegen nondeterminism or ref-exactness. With the full set of test bodies,
+reify fails to emit one function (signature `(ref 2) -> (ref 5)`) that
+production does. The most likely candidate is a **monomorphized method
+instantiation or a `$value_copy`/iterator helper** for one specific
+heterogeneous-tuple element type that reify either dedups away or never queues
+for instantiation, because reify's cross-function instantiation collection walks
+the bodies in a different order/shape than production's. (`(ref 2) -> (ref 5)`:
+takes struct #2, returns struct #5 — identify these two structs from the WAT rec
+group; #5 is very heavily used, likely `String` or the Array/box type.)
+
+### Designed next steps (need a STABLE channel — this session's was unusable for the loop)
+1. Identify the missing function: in production's WAT, find the `(func (;N;))`
+   whose declared type is the `(ref 2) -> (ref 5)` signature, and read its body
+   to learn what it is (name via the `name` custom section if present, else infer
+   from its body — `struct.new`, the method it calls). Identify structs #2 and
+   #5 from the leading `(rec ...)` type group.
+2. Find where production queues that function for codegen and reify does not.
+   Prime suspect: `monomorphize/func_inst.rs`
+   `collect_func_instantiation_sites` / the value-copy or iterator-helper
+   synthesis — whatever generates per-element-type helpers for tuple for-of.
+   Compare the set of instantiations collected under reify vs production for the
+   full fixture (instrument the collection to log each queued
+   `(name, signature)` and diff).
+3. The likely fix is in reify's TIR for `reify_tuple_for_of` (reify.rs:3016) or
+   in how reify drives instantiation collection — ensuring the same helper for
+   that one element type gets generated. It is feature-level, not a one-line
+   shape replay.
+4. Verify: `cmp /tmp/p.wasm /tmp/r.wasm` identical → `WADO_REIFY=1 cargo test -p
+   wado-compiler --test e2e -- tuple_for_of` green → full suite **2678/2678**.
+
+### Process note
+The remote shell channel in this session repeatedly cancelled multi-call turns
+and replayed stale/garbled output, which produced the wrong earlier diagnosis.
+Do the byte/WAT forensics loop ONE command per turn, write results to files,
+and re-verify any surprising number before building a theory on it. Confirm the
+exact CLI flags from `--help` first (the `-w` vs `--world test` mistake cost a
+whole investigation pass).
