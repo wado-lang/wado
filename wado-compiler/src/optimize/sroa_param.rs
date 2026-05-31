@@ -149,6 +149,14 @@ fn collect_and_validate(project: &NirPackage) -> IndexMap<(FnKey, usize), SroaIn
             let Some(info) = candidate_info_for(param.type_id, &type_table, &single_field) else {
                 continue;
             };
+            // Aliasing guard: skip a reference parameter that may be
+            // caller-aliased with another reference parameter of the same
+            // single-field struct (see `param_may_alias_sibling`). Snapshotting
+            // it to a by-value scalar at the call site would drop writes made
+            // through the aliasing parameter during the call.
+            if param_may_alias_sibling(&func, pi, &info.struct_key, &type_table) {
+                continue;
+            }
             candidates.insert((key.clone(), pi), info);
         }
     }
@@ -258,6 +266,53 @@ fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, Mod
         } => Some((name.clone(), module_source.clone())),
         _ => None,
     }
+}
+
+/// The struct identity a *reference* parameter points at, or `None` for a
+/// by-value struct param (a value-semantics copy that cannot alias the
+/// caller's object) or a non-struct type. Only reference parameters carry the
+/// caller's object identity and can therefore alias another reference.
+fn reference_param_struct_key(
+    type_id: TypeId,
+    type_table: &TypeTable,
+) -> Option<(String, ModuleSource)> {
+    match type_table.get(type_id) {
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+            struct_key_of(*inner, type_table)
+        }
+        _ => None,
+    }
+}
+
+/// True when SROA-ing reference parameter `pi` of `func` would be unsound
+/// because another reference parameter of the same function points at the same
+/// single-field struct and may be caller-aliased.
+///
+/// Wado has no borrow checker and references alias (spec: "references alias,
+/// every read and write lands on the same location"), so `f(&mut n, &mut n)`
+/// is legal and the two parameters must observe each other's writes. SROA
+/// rewrites a reference parameter to a by-value scalar read at the call site
+/// (`f(n.value)`), snapshotting it — a write to the shared object through the
+/// other parameter during the call would then be lost. By-value struct params
+/// are independent copies, so only reference params count as aliases.
+fn param_may_alias_sibling(
+    func: &NirFunction,
+    pi: usize,
+    struct_key: &(String, ModuleSource),
+    type_table: &TypeTable,
+) -> bool {
+    let pointee = func
+        .params
+        .get(pi)
+        .map(|p| reference_param_struct_key(p.type_id, type_table));
+    // The candidate itself must be a reference for the aliasing to matter.
+    if pointee != Some(Some(struct_key.clone())) {
+        return false;
+    }
+    func.params.iter().enumerate().any(|(pj, other)| {
+        pj != pi
+            && reference_param_struct_key(other.type_id, type_table).as_ref() == Some(struct_key)
+    })
 }
 
 /// Walk `body` once and confirm every use of `local_index` is either
