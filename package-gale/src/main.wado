@@ -90,9 +90,11 @@ fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr,
     }
 
     // Surface prediction-strategy diagnostics on stderr before
-    // generation. `generate` lowers internally; we lower once more here
-    // to read the diagnostics (cmd_gen is not a hot path). Warnings are
-    // advisory — generation still proceeds and must succeed.
+    // generation. `generate` lowers internally and already produces these
+    // on its `LoweredGrammar`, but does not hand them back, so we lower
+    // once more here to read them — a redundant pass that should be
+    // removed by having `generate` return its diagnostics (TODO.md).
+    // Warnings are advisory; generation still proceeds and must succeed.
     let lit_tokens = collect_literal_tokens(&merged.parser_rules);
     let diag_lowered = lower(&merged, &lit_tokens);
     for let d of &diag_lowered.diagnostics {

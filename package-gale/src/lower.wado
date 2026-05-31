@@ -1574,10 +1574,12 @@ fn build_overlap_dispatch(ctx_name: &String, alts: &Array<Alternative>, indices:
         assert ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting), `{*ctx_name}: alt {*idx} is not fully scannable; Tournament dispatch needs all alts scannable`;
     }
 
-    // Surface the overlap as an advisory diagnostic. The scan-side
-    // dispatch lowers the same alts through this function with a
-    // "(scan)" ctx label; warn only on the parse-side pass so each
-    // overlap is reported once.
+    // Surface the overlap as an advisory diagnostic. `GenContext::warn`
+    // dedupes on `(rule, message)`, so a rule re-lowered once per
+    // follow-variant reports each overlap once. The scan pass uses a
+    // distinct "(scan)" label that `warn` would NOT dedupe against the
+    // parse-side label, so skip it here — the parse-side pass is the one
+    // that carries the rule-facing label.
     if !ends_with_scan(ctx_name) {
         let shared = shared_overlap_tokens(first_sets);
         ctx.warn(
@@ -1596,9 +1598,9 @@ fn build_overlap_dispatch(ctx_name: &String, alts: &Array<Alternative>, indices:
 }
 
 /// True when a `build_overlap_dispatch` `ctx_name` marks a scan-side
-/// pass (suffix " (scan)"). Used to report each overlap once, on the
-/// parse-side pass only. `strip_suffix` returns the input unchanged
-/// when the suffix is absent, so a shortened result means it matched.
+/// pass (suffix " (scan)"), so the warn site can skip it and keep the
+/// parse-side label. `strip_suffix` returns the input unchanged when the
+/// suffix is absent, so a shortened result means it matched.
 fn ends_with_scan(label: &String) -> bool {
     return strip_suffix(label, &" (scan)") != *label;
 }
@@ -1991,8 +1993,7 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &A
             if let Group(g) = rep.element {
                 if g.alternatives.len() == 1
                     && has_nested_optional_in_alt(&g.alternatives[0])
-                    && !alt_has_variable_repeat(&g.alternatives[0])
-                {
+                    && !alt_has_variable_repeat(&g.alternatives[0]) {
                     return lower_scan_optional_lookahead_group(
                         &g.alternatives[0],
                         ctx,

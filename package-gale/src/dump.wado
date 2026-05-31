@@ -3,10 +3,13 @@
 //! parser emission consumes.
 //!
 //! The output is plain text and stable across runs: every collection
-//! is iterated in its stored (deterministic) order. The report is
-//! MECE per rule — each rule appears exactly once and the categories
-//! within a rule (shape, alts, repeats, follow-variants, diagnostics)
-//! do not overlap. The trailing summary lists every diagnostic.
+//! is iterated in its stored (deterministic) order. Each rule appears
+//! once, with non-overlapping sections (shape, alts, repeats,
+//! follow-variants, diagnostics). The trailing summary lists every
+//! diagnostic — including the group-scoped ones whose label carries no
+//! quoted rule name and so are not inlined under a rule (see
+//! `render_rule_diagnostics`; a structured owner id would let them
+//! inline, tracked in TODO.md).
 //!
 //! This module only reads `LoweredGrammar`; it never consults the
 //! surface `Grammar`. That keeps `gale dump` honest: what it prints
@@ -304,7 +307,10 @@ fn variant_of_matches(variant_of: &Option<FollowVariant>, rule_name: &String) ->
 
 /// Inline any diagnostics whose `rule` label refers to this rule. The
 /// diagnostic's `rule` is a human label like `rule 'r'` / `LR rule
-/// 'expr' atom`, so match by the quoted rule name.
+/// 'expr' atom`, so match by the quoted rule name. Group-scoped labels
+/// (`General group rGroup0`, `SimpleCst group`) carry no quoted name and
+/// so never match here — they surface in the summary only. A structured
+/// owner id on `Diagnostic` would let them inline (TODO.md).
 fn render_rule_diagnostics(out: &mut String, rule_name: &String, lowered: &LoweredGrammar) {
     let needle = `'{*rule_name}'`;
     for let d of &lowered.diagnostics {
@@ -320,10 +326,7 @@ fn render_rule_diagnostics(out: &mut String, rule_name: &String, lowered: &Lower
 }
 
 fn diagnostic_kind_label(kind: &DiagnosticKind) -> String {
-    return match *kind {
-        OverlapTournament => "overlap-tournament",
-        OptionalScanGuardFallback => "optional-scan-guard-fallback",
-    };
+    return match *kind { OverlapTournament => "overlap-tournament" };
 }
 
 fn render_summary(out: &mut String, lowered: &LoweredGrammar) {

@@ -132,15 +132,29 @@ impl GenContext {
         };
     }
 
-    /// Record a prediction-strategy diagnostic for `rule`. Called from
-    /// lowering's strategy-decision sites; idempotency is not required
-    /// (each decision site fires at most once per rule/position).
+    /// Record a prediction-strategy diagnostic for `rule`, deduped on
+    /// `(rule, message)`. A single decision site can be revisited: lower
+    /// re-lowers a rule once per registered follow-variant
+    /// (`lower_variant_rules`), and parse/scan passes lower the same
+    /// alts twice — both re-enter the same warn site with an identical
+    /// `(rule, message)`. Collapsing here keeps each prediction warning
+    /// reported once regardless of how many times lowering revisits the
+    /// decision, so the dedup does not depend on a display-string
+    /// heuristic. `message` already encodes everything `kind` does, so
+    /// the pair is a sufficient key without an `Eq` on `DiagnosticKind`.
     pub fn warn(&mut self, rule: &String, kind: DiagnosticKind, message: String) {
+        for let d of &self.diagnostics {
+            if d.rule == *rule && d.message == message {
+                return;
+            }
+        }
         self.diagnostics.push(Diagnostic { rule: *rule, kind, message });
     }
 
-    /// Hand off the collected diagnostics. Consumed once by
-    /// `lower_with_ctx` to populate `LoweredGrammar.diagnostics`.
+    /// Return the collected diagnostics (a value copy under Wado value
+    /// semantics; `self` keeps its own). `lower_with_ctx` reads them
+    /// exactly once into `LoweredGrammar.diagnostics`, so the copy is
+    /// harmless.
     pub fn take_diagnostics(&self) -> Array<Diagnostic> {
         return self.diagnostics;
     }

@@ -97,22 +97,24 @@ pub struct LoweredGrammar {
     /// helper-function emission.
     pub kind_sets: Array<KindSet>,
     /// Prediction-strategy diagnostics raised while lowering picked a
-    /// dispatch / repeat strategy for each rule. These are advisory
-    /// warnings, not errors: lowering always produces a usable grammar,
-    /// but a warning flags a spot where Gale could not decide an
-    /// alternative cleanly (overlap resolved by a scan tournament, an
-    /// `e?` that fell back to a scan-guard, …) so a grammar author can
-    /// question their own grammar before blaming Gale. Surfaced on
-    /// stderr by `gale gen` and inline by `gale dump`. In source order
-    /// by `rule`, then by registration order within a rule.
+    /// dispatch strategy. These are advisory warnings, not errors:
+    /// lowering always produces a usable grammar, but a warning flags a
+    /// spot where Gale could not decide an alternative cleanly (today:
+    /// overlapping alts resolved by a scan tournament) so a grammar
+    /// author can question their own grammar before blaming Gale.
+    /// Surfaced on stderr by `gale gen` and inline by `gale dump`. In
+    /// the order lowering raised them, deduped on `(rule, message)`.
     pub diagnostics: Array<Diagnostic>,
 }
 
-/// A prediction-strategy diagnostic attached to a single rule. See
-/// `LoweredGrammar.diagnostics`. `rule` is the .g4 rule name the
-/// decision belongs to; `kind` classifies the decision so tooling can
-/// group / filter; `message` is the human-readable one-liner shown to
-/// grammar authors.
+/// A prediction-strategy diagnostic attached to a single decision site.
+/// See `LoweredGrammar.diagnostics`. `rule` is the human-readable owner
+/// label the lowering site used (`rule 'r'`, `LR rule 'expr' atom`,
+/// `General group rGroup0`, `SimpleCst group`) — not a bare rule name,
+/// which is why `dump.wado` re-associates by substring rather than
+/// equality (a structured owner id is a tracked follow-up). `kind`
+/// classifies the decision for tooling; `message` is the one-liner shown
+/// to grammar authors.
 pub struct Diagnostic {
     pub rule: String,
     pub kind: DiagnosticKind,
@@ -123,17 +125,19 @@ pub struct Diagnostic {
 /// spot where static prediction could not decide an alternative by a
 /// disjoint first-set / fixed lookahead alone and fell back to a
 /// coarser strategy.
+///
+/// Only the strategy fallbacks Gale actually raises today are listed.
+/// New kinds land here together with the lowering site that raises them
+/// and a fixture — an `OptionalScanGuardFallback` (warn when an `e?`
+/// resolves to `OptionalScanGuard`) is the obvious next one, deferred
+/// until `pick_optional_specialised` threads the enclosing rule name
+/// (tracked in TODO.md).
 pub variant DiagnosticKind {
     /// Two or more alts share a leading token; the overlap is resolved
     /// by a scan-side longest-match tournament rather than a token-led
     /// `if/else` chain. Sound, but the author may have intended
     /// disjoint alts.
     OverlapTournament,
-    /// An optional `e?` whose inner could not be decided by a
-    /// fixed-token lookahead; lowering fell back to a scan-guard
-    /// (scan-the-inner-then-commit). Works, but signals the inner
-    /// shares a prefix with what follows the `?`.
-    OptionalScanGuardFallback,
 }
 
 // ==========================================================================
