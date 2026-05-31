@@ -961,7 +961,13 @@ pub fn collect_keyword_rules(lexer_rules: &Array<LexerRule>, grammar_opts: &Arra
     let mut result: Array<KeywordInfo> = [];
     for let mut c = 0; c < candidates.len(); c += 1 {
         let kw = &candidates[c];
-        if keyword_carrier_admits(kw, candidate_indices[c], &carrier_indices, &carrier_first_chars, &carrier_is_wildcard) {
+        if keyword_carrier_admits(
+            kw,
+            candidate_indices[c],
+            &carrier_indices,
+            &carrier_first_chars,
+            &carrier_is_wildcard,
+        ) {
             result.push(*kw);
         }
     }
@@ -986,13 +992,7 @@ pub fn collect_keyword_rules(lexer_rules: &Array<LexerRule>, grammar_opts: &Arra
 /// Using the first character as the collision proxy is conservative: a rejected
 /// candidate simply falls back to regular first-character dispatch, where the
 /// strict `>` longest-match comparison already honours declaration order.
-fn keyword_carrier_admits(
-    kw: &KeywordInfo,
-    kw_index: i32,
-    carrier_indices: &Array<i32>,
-    carrier_first_chars: &Array<Array<[char, char]>>,
-    carrier_is_wildcard: &Array<bool>,
-) -> bool {
+fn keyword_carrier_admits(kw: &KeywordInfo, kw_index: i32, carrier_indices: &Array<i32>, carrier_first_chars: &Array<Array<[char, char]>>, carrier_is_wildcard: &Array<bool>) -> bool {
     let first_char = kw.lowercase_text.chars().next().unwrap();
     let first_ci = kw.char_ci[0];
     let upper = if first_ci { first_char.to_ascii_uppercase() } else { first_char };
@@ -1000,7 +1000,7 @@ fn keyword_carrier_admits(
     for let mut i = 0; i < carrier_indices.len(); i += 1 {
         let covers = carrier_is_wildcard[i]
             || char_matches_ranges(first_char, &carrier_first_chars[i])
-            || (first_ci && upper != first_char && char_matches_ranges(upper, &carrier_first_chars[i]));
+            || first_ci && upper != first_char && char_matches_ranges(upper, &carrier_first_chars[i]);
         if !covers {
             continue;
         }
