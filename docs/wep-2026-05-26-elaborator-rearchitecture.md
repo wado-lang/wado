@@ -425,10 +425,10 @@ migration; see Trade-offs.
       substitution in impl methods). Stdlib bypass keeps
       `Core` / `Wasi` / `Wasm` modules and snapshot construction
       on the production path. Under these annotations the E2E
-      suite reaches **2666 / 2678 fixtures passing under
+      suite reaches **2676 / 2678 fixtures passing under
       `WADO_REIFY=1`** at `-O0` + `-O2` (production is 2678/2678,
-      so the 6 remaining unique failures are all reify-specific;
-      count as of the 2026-05-30 `origin/main` merge). The
+      so the 1 remaining unique failure is reify-specific;
+      count as of the 2026-05-31 session). The
       second-half session lifted the count from 1765 via the
       landings below — see `### Stage 5 second-half progress` for
       what changed and the re-triaged remaining clusters.
@@ -972,17 +972,53 @@ Landed:
     and call it in `reify_struct` for a bare imported `Named` field whose
     snapshot type is `UNKNOWN`. Clears effect_handler_with_do; production
     unaffected.
+49. **Transpose concrete tuple `.zip()` inline in reify (2666 → 2668).**
+    The reify tuple-receiver shortcut emitted `TupleZip` unconditionally,
+    deferring expansion to the monomorphizer. But non-generic bodies never
+    reach the monomorphizer, so a concrete `[a, b].zip()` reached
+    `lower::translate` as an un-expanded `TupleZip` and hit its `unreachable!`.
+    Mirror the elaborator (`method_call.rs:369`): defer to `TupleZip` only when
+    the receiver type contains a type pack; otherwise transpose the
+    tuple-of-tuples inline via nested `FieldAccess` into `TupleLiteral` columns.
+    Clears tuple_zip; byte-for-byte WIR parity at O0/O2.
+50. **Keep trailing if/match/labeled-block value-producing in reify
+    (2668 → 2669).** `reify_block` only special-cased a trailing `Stmt::Expr`
+    when an expected type flowed in; a block ending in an `if` / `match` /
+    labeled-block expression fell through to statement lowering, dropping the
+    branch values. Mirror `Elaborator::resolve_block` (stmt.rs:40–66): route a
+    trailing `If` through a new `reify_if_stmt_with_expected`, reify a trailing
+    `Match` at the expected type, and reify a trailing labeled block with the
+    expected type threaded in. Also make stmt-position `reify_if_stmt` emit a
+    value `If` expression (mirroring `resolve_if_stmt`) so a tail `if` in a
+    block produces its value even without an `expected_type`.
+51. **Lower naked `continue` to the for-body break label; use
+    `block_result_type` for let-chain arm types (2669 → 2675).** Two fixes:
+    (a) inside a C-style `for`, `continue` must break to the synthetic body
+    label so the `update` runs before the next iteration — `reify_stmt` emitted
+    a bare `Continue`, looping forever (epoch-interrupt trap). Mirror
+    `resolve_continue` (stmt.rs:2906) via `ctx.for_continue_labels`. Clears
+    for_merged, loop_nested. (b) `reify_let_chain_stmts` computed then/else arm
+    types with a hand-rolled "last stmt is Expr" check returning `Unit` for a
+    block ending in a value `If` / `Match` / nested chain, collapsing the
+    two-arm `Match`'s result type to `Unit` and dropping the branch values
+    (`unreachable` trap in `classify_opt`). Use the shared
+    `crate::tir::block_result_type`, as `resolve_let_chain_stmts` (stmt.rs:1140)
+    does. Clears if_merged.
+52. **(rolled into #50/#51).** `opt_sroa_variant_return_if_descent` clears as a
+    by-product of the trailing-value-block handling in #50: the SROA pass now
+    sees the same value-`If`-wrapped `Return` shape production emits.
 
 #### Re-triaged remaining clusters
 
-Largest first, grouped by cluster. **2666 / 2678** passing under
-`WADO_REIFY=1` (fresh full-suite scan on 2026-05-30, after merging
-`origin/main`; every fixture `main` added passes under reify). **6 unique
-fixtures fail**, all at `-O0` and `-O2`. The localized "missing annotation
+Largest first, grouped by cluster. **2676 / 2678** passing under
+`WADO_REIFY=1` (2026-05-31 session). **1 unique fixture fails**
+(`tuple_for_of`), at `-O0` and `-O2`. The localized "missing annotation
 channel" gaps are gone; the `-O2`-only `TypeId`-identity cluster (landings
 #41 / #42) and the entire variadic type-pack cluster (landings #43–#45) are
-cleared; each remaining cluster is feature-level work, not a one-line replay
-fix.
+cleared; the 2026-05-31 session cleared `tuple_zip`, `if_merged`,
+`for_merged`, `loop_nested`, and `opt_sroa_variant_return_if_descent`
+(landings #49–#52). The one remaining fixture is feature-level work, not a
+one-line replay fix.
 
 ##### Variadic type-pack machinery — CLEARED (landings #43–#45)
 
@@ -995,55 +1031,45 @@ alongside a `monomorphize.rs` change that keys `generic_functions` on
 `(module_source, name)` so same-named generic tuple methods from different
 modules no longer collide.
 
-##### Compile-time tuple enumeration (2, fail O0+O2)
+##### Compile-time tuple enumeration (1 remaining, fail O0+O2)
 
-- `tuple_zip` — reify emits `TupleZip` but monomorphize never expands it
-  (panic at `lower/translate.rs:1135`, "should be expanded by monomorphize");
-  the receiver tuple-of-tuples type is not in the shape the expansion keys
-  on.
+- `tuple_zip` — CLEARED (landing #49). Concrete tuple `.zip()` now
+  transposes inline in reify instead of emitting `TupleZip` (which only the
+  monomorphizer expands, never reached by non-generic bodies).
 - `tuple_for_of` — for-of over a heterogeneous tuple emits invalid Wasm in
-  the **test world** only (clean as a CLI program).
+  the **test world** only (clean as a CLI program, and clean as a test world
+  when a single tuple for-of body is present). The failure surfaces only when
+  several tuple for-of test bodies coexist: cross-function tuple-type
+  interning yields a `(ref $T)` vs `(ref (exact $T))` mismatch at codegen
+  (`expected (ref null $type), found (ref null $type)` — the two differ in
+  exactness). Each body compiles in isolation, so the divergence is in how
+  reify interns/reuses the tuple struct type across functions.
 
-##### Remaining singles (5, fail O0+O2)
+##### Remaining singles — CLEARED this session
 
-- `effect_handler_with_do` — a struct field typed by a **re-exported**
-  newtype reifies as `unknown` (root cause pinned by instrumenting the field
-  pass). `Mark = u64` is defined in `wasi:clocks/monotonic_clock.wado` and the
-  test `use`s it from `wasi:clocks` (one `pub use` re-export hop). The
-  decl-field pass (orchestration.rs:431) resolves field types through the
-  **static** resolver (`resolve_type_static[_with_params]` → `TypeLookup`),
-  whose newtype lookup keys on `imported_type_sources["Mark"] = Wasi("clocks")`
-  and finds nothing there — `Mark`'s newtype entry is absent from
-  `all_newtypes` entirely (`modules_with_Mark=[]`), so the field lands
-  `unknown` in `all_struct_fields`. Production has the _same_ `unknown` there
-  but masks it: `resolve_struct` (item.rs) re-resolves every field via the
-  **instance** resolver `resolve_named_type` (type_resolution.rs:254), which
-  follows the `pub use` chain through `find_decl_type_in_module` /
-  `loaded_modules` and yields `u64`. reify's `reify_struct` (reify.rs:723)
-  trusts `all_struct_fields` and has no re-export-following resolver, so it
-  keeps `unknown`, dispatches `unknown^Eq::eq` / `unknown^Ord::cmp`, and
-  codegen fails `expected i32, found i64`. Fix: give reify a
-  re-export-following type resolution for struct field types (port/share
-  `find_decl_type_in_module`) and re-resolve in `reify_struct` when the
-  snapshot type is `UNKNOWN` — mirroring production's emission-time override.
-  (A static-resolver-only fallback is insufficient: `TypeLookup` has no
-  `loaded_modules` to chase the re-export.)
-- `opt_sroa_variant_return_if_descent` — a `wir_expect:O2` test: the
-  `wir/sroa_variant_returns` pass must SROA `leaf`'s `Result` return through a
-  `Return(If(...))` wrapper. reify's pre-pass WIR diverges from production
-  (diff `WADO_DUMP_PASS_BEFORE=wir/sroa_variant_returns` with/without
-  `WADO_REIFY`); the candidate `Call(leaf)` inside the if-branch is shaped
-  differently, so the pass's validator over-invalidates it.
-- `if_merged` / `for_merged` / `loop_nested` — large multi-feature files;
-  `if_merged` traps at runtime, the other two fail test-world assertions.
+- `effect_handler_with_do` — CLEARED (landing #48).
+- `opt_sroa_variant_return_if_descent` — CLEARED (landing #52). A trailing
+  value-producing `if` / `match` / labeled-block in block-tail position now
+  reifies as a value expression, matching production's `resolve_block`
+  trailing-statement handling.
+- `if_merged` — CLEARED (landings #50, #51). Two bugs: a trailing
+  `if let … { … } else { … }` expression dropped its branch values
+  (`reify_let_chain_stmts` computed arm types with a hand-rolled "last stmt is
+  Expr" check instead of `block_result_type`), and trailing value-producing
+  blocks were lowered as statements.
+- `for_merged` / `loop_nested` — CLEARED (landing #51). Naked `continue`
+  inside a C-style `for` emitted a bare `Continue` instead of breaking to the
+  synthetic body label, so the loop `update` never ran (infinite loop /
+  epoch-interrupt trap).
 
 ##### Where to start next
 
-The remaining 11 are all feature-level, not `TypeId`-identity replay fixes.
-The two variadic fixtures and the `tuple_zip` / `tuple_for_of` pair all need
-monomorphizer-side expansion machinery reproduced in reify (variadic-tuple
-impl-method instantiation collection; `TupleZip` / heterogeneous-tuple for-of
-enumeration). The remaining singles are independent feature-level gaps. The
+`tuple_for_of` is the only remaining failure. It is a cross-function
+tuple-struct-type interning/exactness issue in the test world, not a
+single-body replay gap (every individual body compiles). Start by comparing
+how production and reify intern the heterogeneous tuple struct type across the
+multiple test functions (look for where exactness is set on the interned
+`(ref $T)`), since the validator error is purely about ref-exactness. The
 `#### Recipe for adding a new reify gap`, `#### Gotchas`, and `#### Endgame`
 below still apply unchanged.
 
