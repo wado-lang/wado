@@ -180,10 +180,10 @@ if let Some(m) = ROUTER.match_request(&request) {
 }
 ```
 
-The default camelCase wire-name convention applies here too. A pattern
-segment `:userId` matches a Wado-side field `user_id` because the
-synthesized lookup function maps `"userId"` → field index for `user_id`.
-Per-field `#[serde(rename = "...")]` overrides this.
+Path parameter names are matched against the struct field names as written
+(the serde identity default): a pattern segment `:user_id` binds to a field
+`user_id`. `#[serde(rename = "...")]` / `#[serde(rename_all = "...")]`
+override the matched name exactly as they do for any other serde format.
 
 Unsupported shapes (sequences, maps, variants, nested structs) return
 `DeserializeError::UnexpectedType`. Invalid scalar values (e.g. `:id` =
