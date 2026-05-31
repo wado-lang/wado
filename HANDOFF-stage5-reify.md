@@ -525,3 +525,75 @@ AND file reads, which makes the 45-site edit→build→byte-verify loop unsafe. 
 diagnosis and design above are complete and verified; implementation deferred to
 a stable channel so the result meets the "only correct code on a correct design"
 bar rather than a blind large refactor.
+
+## DESIGN CORRECTION — the by-`for_of.id` overlay is WRONG for nested tuple-for-of
+
+The fixture's "nested tuple for-of expansion" body is
+`for let v of t { for let w of v { results.push(`{w}`) } }`. The INNER for-of
+is a single source node (one `for_of.id`) but annotate resolves it **once per
+outer element** (with `v` bound to a different concrete tuple each time). So an
+overlay keyed only by `for_of.id` would be overwritten across outer elements —
+the same bug, one level down. The naive design above is therefore insufficient.
+
+### Correct, nesting-safe design: ordered instantiation log + reify visit counter
+
+Both passes walk the AST in the SAME deterministic order, so the k-th time
+annotate resolves a given `for_of.id` corresponds to the k-th time reify reifies
+it (this is the same "lockstep walk-order" invariant Gap 5 assert-slots and
+Gap 7 local-frames already rely on). Use that instead of keying facts by
+sub-structure:
+
+Data (`sem/types.rs`):
+- `struct ElementOverlay { /* only the body-expression-level AstId maps */ }`
+  containing the maps that can appear inside a for-of body and vary by element:
+  `expression_types, method_dispatch, coercions, operator_dispatch,
+  static_method_dispatch, generic_instantiations, call_param_types,
+  closure_captures, assert_captures, sequence_coercions, key_value_coercions,
+  index_assign_dispatch, desugars, for_of_iterator`. (Decl-level maps —
+  impl_facts, function_effects, function_task_returns, handler_bindings — cannot
+  occur inside an expression body; exclude them.)
+- `tuple_overlays: IndexMap<AstId /*for_of.id*/, Vec< Vec<ElementOverlay> >>`:
+  outer Vec = one entry per *instantiation* of this for-of in walk order; inner
+  Vec = per element. A nested inner for-of gets N_outer entries here (one per
+  outer element), naturally distinguished by walk order.
+
+Capture (`stmt.rs resolve_tuple_for_of`):
+- Before the element loop, snapshot `len[map]` for each captured map.
+- After resolving element i's body, `ElementOverlay` for element i =
+  `{ map: map.iter().skip(len[map]).cloned().collect() }` for each map. This is
+  correct because body AstIds are first inserted during element 0 and only
+  *overwritten in place* (IndexMap keeps index) for i>0 — so `skip(len)` after
+  element i always yields exactly the body's keys holding element i's values,
+  and a nested for-of inserts no NEW keys after element 0 (same source nodes).
+  Do NOT capture `tuple_overlays` itself in ElementOverlay — nesting is handled
+  by the visit counter, not by nesting overlays.
+- `tuple_overlays.entry(for_of.id).or_default().push(per_element_vec)`.
+
+Consume (`reify.rs`):
+- `tuple_visit: IndexMap<AstId, usize>` on Reify; `tuple_overlay_stack:
+  Vec<ElementOverlay>`.
+- In `reify_tuple_for_of`: `let k = tuple_visit[for_of.id]++;
+  let elems = &tuple_overlays[for_of.id][k];` then per element i push
+  `elems[i].clone()` before `reify_block`, pop after.
+- Reads of the captured maps go through accessors
+  `ann_<map>(id) = stack.iter().rev().find_map(|o| o.<map>.get(id)).or(base.get(id))`.
+  Top-of-stack wins, so when reify is inside a nested inner for-of element, the
+  inner overlay shadows the outer for the inner body nodes; outer body nodes
+  (not in the inner overlay) fall through to the outer overlay. Correct.
+
+Why this is the right architecture: it matches the existing Gap 5/7 "lockstep
+deterministic walk + per-node-class index" pattern rather than inventing
+sub-structure keys; it needs no fresh-AstId minting; it leaves production
+untouched (capture is additive); and it is provably correct for arbitrary
+nesting because instantiation order is identical in both passes.
+
+### Why implementation is deferred (not abandoned)
+The fix touches 3 files and ~45 reify read sites and REQUIRES the
+edit→`cargo build`→`--world test` byte-parity→e2e verify loop to be trustworthy.
+During this session the remote channel intermittently corrupted tool output
+INCLUDING file reads (e.g. a `Read` of sem/types.rs returned injected non-Rust
+lines `index_assign_dispatch_extra: unknown` that do not exist in the file).
+Writing a large refactor against corrupted reads cannot meet the "only correct
+code on a correct design" bar, so the implementation is staged for a stable
+channel. The design above is complete and verified-correct on paper, including
+the nested case; an implementer can execute the checklist directly.
