@@ -98,6 +98,14 @@ pub(crate) struct MethodDispatch {
     /// Per-parameter default expression ASTs (`None` for required).
     #[allow(dead_code)]
     pub(crate) param_defaults: Vec<Option<crate::ast::Expr>>,
+    /// The resolved method's return [`TypeId`] — the authoritative result
+    /// type of the call. Reify uses this for the `MethodCall`'s
+    /// `type_id` rather than the per-`AstId` `expression_types` entry,
+    /// which can carry a stale/wrong type for the call site (a unit
+    /// method whose `expression_types` slot was recorded as another
+    /// type makes reify emit a spurious `drop` of a value-less call →
+    /// Wasm stack underflow).
+    pub(crate) return_type: TypeId,
 }
 
 /// Which sub-coercion [`super::super::Elaborator::try_coerce`] applied at

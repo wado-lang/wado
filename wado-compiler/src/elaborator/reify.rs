@@ -7417,12 +7417,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
             .collect();
 
+        let result_type = if outer_dispatch.return_type == crate::tir::TypeTable::UNKNOWN {
+            recorded_type
+        } else {
+            outer_dispatch.return_type
+        };
         super::Elaborator::<H>::build_tir_method_call(
             receiver_for_method,
             outer_dispatch.function_ref,
             type_args,
             args,
-            recorded_type,
+            result_type,
             method_call.span,
         )
     }
@@ -7692,12 +7697,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
 
+        // The call's result type is the resolved method's return type
+        // (recorded on the dispatch), not the per-`AstId` `expression_types`
+        // entry: that entry can carry a wrong type for the call site, which
+        // would make a unit-returning call look value-producing and emit a
+        // spurious `drop` of a value-less call (Wasm stack underflow). Fall
+        // back to `recorded_type` only if the dispatch somehow lacks it.
+        let result_type = if dispatch.return_type == TypeTable::UNKNOWN {
+            recorded_type
+        } else {
+            dispatch.return_type
+        };
         super::Elaborator::<H>::build_tir_method_call(
             adjusted_receiver,
             dispatch.function_ref,
             type_args,
             args,
-            recorded_type,
+            result_type,
             method_call.span,
         )
     }

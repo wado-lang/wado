@@ -3534,6 +3534,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_param_is_mut.clone(),
             method_param_names,
             method_param_defaults,
+            return_type,
         );
         self.record_desugar(
             method_call.id,
