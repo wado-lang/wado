@@ -276,7 +276,9 @@ fn apply_rename_all(s: &str, strategy: &str) -> String {
         "SCREAMING_SNAKE_CASE" => s.to_uppercase(),
         "kebab-case" => s.replace('_', "-"),
         "SCREAMING-KEBAB-CASE" => s.replace('_', "-").to_uppercase(),
-        _ => snake_to_camel(s), // default to camelCase
+        // Unrecognized strategy string: fall back to identity (the name as
+        // written), matching the no-attribute default.
+        _ => s.to_string(),
     }
 }
 

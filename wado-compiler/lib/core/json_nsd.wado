@@ -384,7 +384,7 @@ impl DeserializeMap for NsdMapAccess {
 impl DeserializeStruct for NsdStructAccess {
     // NSD is positional: the field schema `S` is irrelevant here. It stays in
     // the signature to satisfy the `DeserializeStruct` trait; the same generated
-    // `next_field::<T>()` call site drives both SD and NSD formats.
+    // `next_field::<StructType>()` call site drives both SD and NSD formats.
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
         self.de.skip_whitespace();
         if self.de.pos >= self.de.input.len() {
