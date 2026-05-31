@@ -78,6 +78,7 @@ fn is_valid_referent(expr: &NirExpr) -> bool {
         | NirExprKind::GlobalVarSet { .. }
         | NirExprKind::StructLiteral { .. }
         | NirExprKind::TupleLiteral { .. }
+        | NirExprKind::ArrayLiteral { .. }
         | NirExprKind::Block(_)
         | NirExprKind::LabeledBlock { .. }
         | NirExprKind::If { .. }
@@ -265,6 +266,7 @@ impl NirRefVisitor for RefAnalyzer<'_> {
             | NirExprKind::Switch { .. }
             | NirExprKind::StructLiteral { .. }
             | NirExprKind::TupleLiteral { .. }
+            | NirExprKind::ArrayLiteral { .. }
             | NirExprKind::VariantConstruct { .. }
             | NirExprKind::VariantTag { .. }
             | NirExprKind::VariantTest { .. }
@@ -433,6 +435,7 @@ impl NirRefVisitor for DerefOnlyCollector<'_> {
             | NirExprKind::Switch { .. }
             | NirExprKind::StructLiteral { .. }
             | NirExprKind::TupleLiteral { .. }
+            | NirExprKind::ArrayLiteral { .. }
             | NirExprKind::VariantConstruct { .. }
             | NirExprKind::VariantTag { .. }
             | NirExprKind::VariantTest { .. }

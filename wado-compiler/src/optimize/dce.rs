@@ -614,7 +614,7 @@ fn collect_bytes_literals_expr(expr: &NirExpr, used: &mut IndexSet<Vec<u8>>) {
         NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             collect_bytes_literals_block(block, used);
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for e in elements {
                 collect_bytes_literals_expr(e, used);
             }

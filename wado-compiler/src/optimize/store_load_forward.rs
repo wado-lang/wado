@@ -577,7 +577,7 @@ fn collect_unsafe_in_expr(expr: &NirExpr, unsafe_locals: &mut IndexSet<u32>) {
                 collect_unsafe_in_expr(&field.value, unsafe_locals);
             }
         }
-        NirExprKind::TupleLiteral { elements, .. } => {
+        NirExprKind::TupleLiteral { elements, .. } | NirExprKind::ArrayLiteral { elements, .. } => {
             for elem in elements {
                 collect_unsafe_in_expr(elem, unsafe_locals);
             }
@@ -881,7 +881,7 @@ fn forward_in_expr(
                     forward_in_expr(&mut field.value, known, unsafe_locals, type_table, cache);
             }
         }
-        NirExprKind::TupleLiteral { elements, .. } => {
+        NirExprKind::TupleLiteral { elements, .. } | NirExprKind::ArrayLiteral { elements, .. } => {
             for elem in elements {
                 changed |= forward_in_expr(elem, known, unsafe_locals, type_table, cache);
             }

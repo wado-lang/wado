@@ -1808,7 +1808,7 @@ fn walk_expr_mut(expr: &mut NirExpr, ctx: &RewriteCtx) {
                 rewrite_expr_inplace(&mut f.value, ctx);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for e in elements {
                 rewrite_expr_inplace(e, ctx);
             }

@@ -796,7 +796,7 @@ fn collect_modified_vars_in_expr(
                 collect_modified_vars_in_expr(&field.value, modified, type_table);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 collect_modified_vars_in_expr(elem, modified, type_table);
             }
@@ -1042,7 +1042,7 @@ fn collect_licm_ref_bindings_in_expr(
                 collect_licm_ref_bindings_in_expr(&field.value, type_table, bindings);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 collect_licm_ref_bindings_in_expr(elem, type_table, bindings);
             }
@@ -1491,7 +1491,7 @@ fn find_hoist_candidates_in_expr(
                 );
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 find_hoist_candidates_in_expr(
                     elem,
@@ -1825,7 +1825,7 @@ fn replace_hoisted_in_expr(
                 replace_hoisted_in_expr(&mut field.value, candidates, ref_bindings);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 replace_hoisted_in_expr(elem, candidates, ref_bindings);
             }

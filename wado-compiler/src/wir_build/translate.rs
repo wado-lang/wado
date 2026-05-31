@@ -1026,6 +1026,50 @@ impl FunctionTranslator<'_, '_> {
         (type_id, fields)
     }
 
+    /// Lower a `NirExprKind::ArrayLiteral` to the `Array<T>` struct shape
+    /// `struct.new Array<T> { repr: array.new_fixed<T>(e0, …, eN-1), used: N }`.
+    ///
+    /// `Array<T>` is `{ repr: builtin::array<T>, used: i32 }` (see
+    /// `lib/core/prelude/array.wado`); this mirrors `translate_string_literal`,
+    /// which builds the structurally identical `String { repr, used }`. The
+    /// raw `builtin::array<T>` type is read from the struct's `repr` field, so
+    /// no element-type bookkeeping is duplicated on the NIR node. The resulting
+    /// `ArrayNewFixed` is what `wir_optimize::array::{promote_constant_arrays_to_data,
+    /// split_large_array_literals}` already consume.
+    fn build_array_literal(
+        &mut self,
+        array_type_id: crate::tir::TypeId,
+        elements: &[NirExpr],
+    ) -> WirInstr {
+        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, array_type_id);
+        let WirType::Ref { type_id, .. } = wir_type else {
+            panic!(
+                "[WIR] ArrayLiteral expected Ref WirType for Array<T> struct, got {wir_type:?} (type_id={array_type_id:?})"
+            );
+        };
+        // The `repr` field is a non-nullable ref to the raw `builtin::array<T>`.
+        let WirType::Ref {
+            type_id: raw_array_type_id,
+            ..
+        } = self.struct_field_wir_type(&type_id, "repr")
+        else {
+            panic!("[WIR] ArrayLiteral: Array<T> struct {type_id:?} has no `repr` array field");
+        };
+        let element_instrs: Vec<WirInstr> =
+            elements.iter().map(|e| self.translate_expr(e)).collect();
+        let used = i32::try_from(element_instrs.len()).unwrap_or(0);
+        self.struct_new(
+            type_id,
+            vec![
+                WirInstr::ArrayNewFixed {
+                    type_id: raw_array_type_id,
+                    elements: element_instrs,
+                },
+                WirInstr::I32Const(used),
+            ],
+        )
+    }
+
     /// Build a `StructSet` instruction, wrapping the value with `RefAsNonNull`
     /// if the target field is a non-nullable reference.
     fn struct_set(
@@ -2016,6 +2060,10 @@ impl FunctionTranslator<'_, '_> {
                 // `wir_optimize::elide_struct::elide_multi_field_struct_locals`.
                 let (type_id, fields) = self.tuple_constructor_args(expr.type_id, elements);
                 WirInstr::StructNew { type_id, fields }
+            }
+
+            NirExprKind::ArrayLiteral { elements } => {
+                self.build_array_literal(expr.type_id, elements)
             }
 
             NirExprKind::Switch {

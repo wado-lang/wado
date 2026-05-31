@@ -337,7 +337,7 @@ fn collect_escaping_in_expr(expr: &NirExpr, escaping: &mut IndexSet<u32>) {
                 collect_escaping_in_expr(arg, escaping);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 collect_local_refs(elem, escaping);
                 collect_escaping_in_expr(elem, escaping);

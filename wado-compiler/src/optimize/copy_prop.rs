@@ -378,7 +378,7 @@ fn analyze_expr(
                 analyze_expr(&field.value, result, type_table, first_param_types);
             }
         }
-        NirExprKind::TupleLiteral { elements, .. } => {
+        NirExprKind::TupleLiteral { elements, .. } | NirExprKind::ArrayLiteral { elements, .. } => {
             for elem in elements {
                 analyze_expr(elem, result, type_table, first_param_types);
             }
@@ -763,7 +763,7 @@ fn apply_in_expr(
                 apply_in_expr(&mut field.value, substitutions, dead_locals);
             }
         }
-        NirExprKind::TupleLiteral { elements, .. } => {
+        NirExprKind::TupleLiteral { elements, .. } | NirExprKind::ArrayLiteral { elements, .. } => {
             for elem in elements {
                 apply_in_expr(elem, substitutions, dead_locals);
             }

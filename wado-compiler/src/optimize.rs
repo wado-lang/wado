@@ -43,6 +43,7 @@
 //! `value_copy_elide` (full strip) and `value_copy_demote` (deep → shallow).
 
 mod alias;
+mod array_literal;
 mod condition_implication;
 mod const_branch_prune;
 mod const_folding;
@@ -72,6 +73,7 @@ mod tmpl_hoist;
 mod value_copy_demote;
 mod value_copy_elide;
 
+use array_literal::collapse_array_literals;
 use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::fold_constants;
@@ -518,6 +520,12 @@ fn run_optimization_passes(
             demote_value_copies(p);
             false
         });
+        // Materialize `ArrayLiteral` from the `__seq_lit:` builder block
+        // *before* inline, for the same reason as `string_push`: once the
+        // inliner expands `new_literal` / `push_literal` / `build`, the
+        // trait-method-keyed rewrite can no longer match. Running early also
+        // lets `cse` / `const_fold` in this loop see the normalized literal.
+        step!("nir/array_literal", collapse_array_literals);
         // Run short-`push_str` simplification *before* inline. Once the
         // inliner expands `String::push_str`'s body the `MethodCall` node is
         // gone and the literal-recognising rewrite can no longer match,

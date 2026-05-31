@@ -35,7 +35,9 @@ fn count_expr(expr: &NirExpr) -> usize {
         }
         NirExprKind::FieldAccess { expr, .. } => count_expr(expr),
         NirExprKind::Index { expr, index, .. } => count_expr(expr) + count_expr(index),
-        NirExprKind::TupleLiteral { elements } => elements.iter().map(count_expr).sum(),
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
+            elements.iter().map(count_expr).sum()
+        }
         NirExprKind::StructLiteral { fields, .. } => {
             fields.iter().map(|f| count_expr(&f.value)).sum()
         }
@@ -284,7 +286,7 @@ fn collect_inner_labels_from_expr(expr: &NirExpr, labels: &mut IndexSet<String>)
                 collect_inner_labels_from_expr(&field.value, labels);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 collect_inner_labels_from_expr(elem, labels);
             }
@@ -558,7 +560,7 @@ fn collect_callees_from_expr(expr: &NirExpr, callees: &mut IndexSet<String>) {
                 collect_callees_from_expr(&field.value, callees);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 collect_callees_from_expr(elem, callees);
             }
@@ -1754,6 +1756,9 @@ fn remap_expr_inner(
         NirExprKind::TupleLiteral { elements } => NirExprKind::TupleLiteral {
             elements: elements.iter().map(&re).collect(),
         },
+        NirExprKind::ArrayLiteral { elements } => NirExprKind::ArrayLiteral {
+            elements: elements.iter().map(&re).collect(),
+        },
         NirExprKind::IndirectCall { callee, args } => NirExprKind::IndirectCall {
             callee: re_box(callee),
             args: args.iter().map(&re).collect(),
@@ -2229,7 +2234,7 @@ fn inline_calls_in_expr(
                 );
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 inline_calls_in_expr(
                     elem,

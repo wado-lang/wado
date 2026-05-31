@@ -405,7 +405,7 @@ impl NirRefVisitor for AliasCollector<'_> {
                     }
                 }
             }
-            NirExprKind::TupleLiteral { elements } => {
+            NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
                 for elem in elements {
                     if let NirExprKind::Local { index, .. } = &elem.kind {
                         self.out.insert(*index);

@@ -557,7 +557,7 @@ fn collect_param_field_usage_in_expr(
                 );
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 collect_param_field_usage_in_expr(
                     elem,
@@ -1264,7 +1264,7 @@ fn visit_expr_for_alias(
                 visit_expr_for_alias(&field.value, false, type_table, out);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 visit_expr_for_alias(elem, false, type_table, out);
             }
@@ -1591,7 +1591,7 @@ fn count_field_accesses_in_expr(
                 count_field_accesses_in_expr(&field.value, counts, false, false, type_table);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 count_field_accesses_in_expr(elem, counts, false, false, type_table);
             }
@@ -2649,7 +2649,7 @@ fn walk_other_expr_kinds(
                 walk_expr(&mut field.value, states, true, out, ctx);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 walk_expr(elem, states, true, out, ctx);
             }

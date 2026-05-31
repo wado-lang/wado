@@ -269,7 +269,7 @@ fn fuse_in_expr(expr: &mut NirExpr, local_count: &mut u32, locals: &mut Vec<NirL
             }
             changed
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             let mut changed = false;
             for e in elements {
                 changed |= fuse_in_expr(e, local_count, locals);
@@ -1043,7 +1043,7 @@ fn count_local_uses_in_expr(expr: &NirExpr, local_idx: u32) -> usize {
             .iter()
             .map(|f| count_local_uses_in_expr(&f.value, local_idx))
             .sum(),
-        NirExprKind::TupleLiteral { elements } => elements
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => elements
             .iter()
             .map(|e| count_local_uses_in_expr(e, local_idx))
             .sum(),
@@ -1204,7 +1204,7 @@ fn count_variant_payload_uses_in_expr(expr: &NirExpr, local_idx: u32, case_index
             .iter()
             .map(|f| count_variant_payload_uses_in_expr(&f.value, local_idx, case_index))
             .sum(),
-        NirExprKind::TupleLiteral { elements } => elements
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => elements
             .iter()
             .map(|e| count_variant_payload_uses_in_expr(e, local_idx, case_index))
             .sum(),
@@ -1863,6 +1863,7 @@ fn transform_lb_in_expr(
         | NirExprKind::IndirectCall { .. }
         | NirExprKind::StructLiteral { .. }
         | NirExprKind::TupleLiteral { .. }
+        | NirExprKind::ArrayLiteral { .. }
         | NirExprKind::VariantConstruct { .. }
         | NirExprKind::VariantTag { .. }
         | NirExprKind::VariantTest { .. }
@@ -2040,7 +2041,7 @@ fn subst_variant_payload_in_expr(
                 subst_variant_payload_in_expr(&mut f.value, temp_local, case_index, payload_local);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for e in elements {
                 subst_variant_payload_in_expr(e, temp_local, case_index, payload_local);
             }

@@ -510,7 +510,7 @@ fn record_defs_from_expr(expr: &NirExpr, defs: &mut DefMap) {
                 record_defs_from_expr(&f.value, defs);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for e in elements {
                 record_defs_from_expr(e, defs);
             }
