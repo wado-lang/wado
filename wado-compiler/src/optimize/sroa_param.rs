@@ -149,11 +149,8 @@ fn collect_and_validate(project: &NirPackage) -> IndexMap<(FnKey, usize), SroaIn
             let Some(info) = candidate_info_for(param.type_id, &type_table, &single_field) else {
                 continue;
             };
-            // Aliasing guard: skip a reference parameter that may be
-            // caller-aliased with another reference parameter of the same
-            // single-field struct (see `param_may_alias_sibling`). Snapshotting
-            // it to a by-value scalar at the call site would drop writes made
-            // through the aliasing parameter during the call.
+            // Skip a param that may be caller-aliased with a `&mut` sibling of
+            // the same struct (see `param_may_alias_sibling`).
             if param_may_alias_sibling(&func, pi, &info.struct_key, &type_table) {
                 continue;
             }
@@ -268,10 +265,9 @@ fn struct_key_of(type_id: TypeId, type_table: &TypeTable) -> Option<(String, Mod
     }
 }
 
-/// The struct identity a *reference* parameter points at, or `None` for a
-/// by-value struct param (a value-semantics copy that cannot alias the
-/// caller's object) or a non-struct type. Only reference parameters carry the
-/// caller's object identity and can therefore alias another reference.
+/// The struct a *reference* parameter points at, or `None` for a by-value
+/// struct param (an independent copy) or non-struct. Only reference params can
+/// alias another reference.
 fn reference_param_struct_key(
     type_id: TypeId,
     type_table: &TypeTable,
@@ -282,21 +278,14 @@ fn reference_param_struct_key(
     }
 }
 
-/// True when SROA-ing reference parameter `pi` of `func` would be unsound
-/// because another `&mut` parameter of the same function points at the same
-/// single-field struct and may be caller-aliased.
+/// True when SROA-ing reference parameter `pi` is unsound because a `&mut`
+/// sibling points at the same single-field struct and may be caller-aliased.
 ///
-/// Wado has no borrow checker and references alias (spec: "references alias,
-/// every read and write lands on the same location"), so `f(&mut n, &mut n)`
-/// is legal and the two parameters must observe each other's writes. SROA
-/// rewrites the read-only parameter to a by-value scalar read at the call site
-/// (`f(n.value)`), snapshotting it — a write to the shared object through the
-/// aliasing parameter during the call would then be lost.
-///
-/// The hazard requires a sibling that can *mutate* the shared object, i.e. a
-/// `&mut` (`MutRef`) parameter: an immutable `&S` sibling cannot write the field,
-/// so two `&S` parameters (e.g. `add_amounts(a: &Amount, b: &Amount)`) stay
-/// SROA-able even when aliased. By-value struct params are independent copies.
+/// Wado references alias, so `f(&mut n, &mut n)` is legal. SROA snapshots the
+/// read-only param to a by-value scalar at the call site (`f(n.value)`), losing
+/// writes made through the aliasing param. The hazard needs a sibling that can
+/// *mutate* — a `&mut`; two `&S` params (`add_amounts(a: &Amount, b: &Amount)`)
+/// stay SROA-able even aliased.
 fn param_may_alias_sibling(
     func: &NirFunction,
     pi: usize,

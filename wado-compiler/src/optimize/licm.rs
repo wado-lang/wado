@@ -30,17 +30,10 @@ struct ModifiedVars {
     fields: IndexSet<(u32, u32)>,
     /// GC alias pairs: if `(a, b)` is present, `a` and `b` may point to the same object.
     aliases: Vec<(u32, u32)>,
-    /// `(pointee_type, field_index)` for every field written in the loop,
-    /// regardless of which handle performed the write.
-    ///
-    /// Wado has no borrow checker and references explicitly alias (a write
-    /// through one `&mut T` is observable through any other `&T`/`&mut T` to the
-    /// same object — spec: "references alias, every read and write lands on the
-    /// same location"). The `(local, field)` and alias tracking above only sees
-    /// writes through `x` itself or its `let a = b` copies, so it cannot prove a
-    /// reference-typed `x.f` invariant: another reference of the same type may
-    /// write `f`. This type-keyed set lets `is_reference_field_aliasing_written`
-    /// block such hoists without a full heap alias analysis.
+    /// `(pointee_type, field_index)` for every field written in the loop. Wado
+    /// references alias, so a write through one `&T` is seen through any other;
+    /// the `(local, field)` tracking above misses writes via a different alias.
+    /// Used by `is_reference_field_aliasing_written`.
     written_field_types: IndexSet<(TypeId, u32)>,
 }
 
@@ -53,18 +46,13 @@ impl ModifiedVars {
         self.fields.insert((local_idx, field_idx));
     }
 
-    /// Record that `field_idx` of an object of type `pointee` is written in the
-    /// loop (through some handle). `pointee` is the type the written-through
-    /// reference points at, with `Ref`/`MutRef` wrappers stripped.
     fn insert_written_field_type(&mut self, pointee: TypeId, field_idx: u32) {
         self.written_field_types.insert((pointee, field_idx));
     }
 
-    /// True when hoisting `x.field_idx` is unsound because `x` is a reference
-    /// whose pointee's `field_idx` is written elsewhere in the loop (possibly
-    /// through an aliasing reference). Non-reference roots are unaffected: a
-    /// by-value struct can only be aliased via a tracked `let`/`&`, which the
-    /// `fully`/`fields`/alias machinery already covers.
+    /// True when hoisting `x.field_idx` is unsound: `x` is a reference whose
+    /// pointee's `field_idx` is written in the loop, possibly via an alias.
+    /// By-value roots are covered by the `fully`/`fields`/alias machinery.
     fn is_reference_field_aliasing_written(
         &self,
         root_type: TypeId,
@@ -284,13 +272,10 @@ fn licm_loop(
             &mut next_local,
         );
 
-        // Step 3.5: Drop candidates whose root is a reference whose pointee's
-        // field is written elsewhere in the loop. Such a `x.f` is not provably
-        // loop-invariant: another reference of the same type may alias `*x` and
-        // write `f` (Wado references alias; LICM has no heap alias analysis).
-        // This is what makes the nested-chain relaxation sound and also fixes
-        // the pre-existing single-level case of two `&mut` aliasing the same
-        // object. `seen` already recorded these, but each iteration rebuilds it.
+        // Step 3.5: Drop `x.f` candidates where `x` is a reference and that
+        // pointee field is written elsewhere in the loop — an aliasing reference
+        // may write it. Makes the nested-chain relaxation sound and fixes the
+        // pre-existing two-aliased-`&mut` case.
         candidates.retain(|c| {
             let root_ty = if (c.local_index as usize) < locals.len() {
                 locals[c.local_index as usize].type_id
@@ -513,11 +498,9 @@ fn mark_local_as_fully_modified(expr: &NirExpr, modified: &mut ModifiedVars) {
     }
 }
 
-/// Returns true if `expr` is a chain of field accesses bottoming out at a
-/// `Local` (e.g. `a`, `a.b`, `a.b.c`), with no `Index`, deref, or call in the
-/// chain. Such a chain only dereferences GC struct/reference fields, so a write
-/// *through* it mutates an inner object rather than reassigning a field of the
-/// root local.
+/// A chain of field accesses bottoming out at a `Local` (`a`, `a.b`, `a.b.c`),
+/// with no `Index`, deref, or call. A write through such a chain mutates an
+/// inner object rather than reassigning a field of the root local.
 fn is_pure_field_chain(expr: &NirExpr) -> bool {
     match &expr.kind {
         NirExprKind::Local { .. } => true,
@@ -526,9 +509,8 @@ fn is_pure_field_chain(expr: &NirExpr) -> bool {
     }
 }
 
-/// Strip any number of `Ref`/`MutRef` wrappers, returning the underlying
-/// pointee type. References to the same pointee alias each other, so the
-/// pointee type is the key for type-based aliasing-write tracking.
+/// Strip all `Ref`/`MutRef` wrappers, returning the pointee type — the key for
+/// type-based aliasing-write tracking (references to one pointee alias).
 fn strip_references(type_id: TypeId, type_table: &TypeTable) -> TypeId {
     match type_table.get(type_id) {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
@@ -538,10 +520,8 @@ fn strip_references(type_id: TypeId, type_table: &TypeTable) -> TypeId {
     }
 }
 
-/// Record into `written_field_types` that `target` writes a field, keyed by the
-/// pointee type of the object whose field is assigned. Handles the field-access
-/// assignment shapes (`a.f`, `a.b.c`, `arr[i].c`, `(*p).c`); the inner object's
-/// static type carries the type identity that an aliasing reference would share.
+/// Record a field-access write into `written_field_types`, keyed by the pointee
+/// type of the assigned object (`a.f`, `a.b.c`, `arr[i].c`, `(*p).c`).
 fn record_written_field_type(
     target: &NirExpr,
     modified: &mut ModifiedVars,
@@ -558,16 +538,11 @@ fn record_written_field_type(
     }
 }
 
-/// Mark what is modified by an assignment target expression.
-///
-/// Distinguishes between field assignments (`buf.len = x` marks only the `len` field
-/// of `buf` as modified) and direct/deeper assignments (marks the root local as fully
-/// modified). This enables LICM to hoist `buf.repr` even when `buf.len` is assigned.
-///
-/// Every field-access write also records its pointee-type key via
-/// `record_written_field_type`, so a reference-typed hoist candidate that may
-/// alias the written object is blocked even when the write goes through a
-/// different handle (see `is_reference_field_aliasing_written`).
+/// Mark what is modified by an assignment target. Field assignments (`buf.len =
+/// x`) mark only that `(local, field)`, so LICM can still hoist `buf.repr`;
+/// deeper/direct assignments mark the root fully. Every field-access write also
+/// records its pointee-type key (`record_written_field_type`) so an aliasing
+/// reference hoist is blocked (see `is_reference_field_aliasing_written`).
 fn mark_assignment_target_as_modified(
     expr: &NirExpr,
     modified: &mut ModifiedVars,
@@ -583,28 +558,19 @@ fn mark_assignment_target_as_modified(
             field_index,
             ..
         } => {
-            // Record the type-keyed write regardless of chain shape, so any
-            // reference of the same pointee type is blocked from hoisting this
-            // field (Wado references alias and LICM has no heap alias analysis).
+            // Type-keyed write for aliasing reference hoists, any chain shape.
             record_written_field_type(expr, modified, type_table);
             if let NirExprKind::Local { index, .. } = &inner.kind {
-                // Single-level field assignment: `buf.field = x` — only that field is modified
+                // `buf.field = x` — only that field is modified.
                 modified.insert_field(*index, *field_index);
             } else if is_pure_field_chain(inner) {
-                // Mutate-through-reference: `a.b.c = x` over a pure field chain.
-                //
-                // This assigns field `c` of the inner object `*a.b`. It does NOT
-                // reassign the `b` reference held in the root local `a`, nor any
-                // other field of `*a`, so the root must not be marked fully
-                // modified — that would defeat hoisting of sibling chains such as
-                // `a.b.d`. LICM peels one reference level per fixpoint iteration;
-                // once `a.b` is hoisted into a local the write becomes
-                // single-level (`_h.c = x`) and is recorded precisely on the next
-                // pass. Aliasing through a *different* reference to `*a.b` is
-                // handled by the type-keyed write recorded above, not here.
+                // `a.b.c = x` mutates `*a.b`, not any field of the root `a`, so
+                // don't mark `a` fully (keeps sibling chains `a.b.d` hoistable).
+                // LICM peels one level per iteration; once `a.b` is a local the
+                // write becomes single-level. Cross-reference aliasing of `*a.b`
+                // is handled by the type-keyed write recorded above.
             } else {
-                // Non-field-chain nesting (`a[i].c = x`, `(*p).c = x`):
-                // conservatively mark the root local as fully modified.
+                // `a[i].c = x`, `(*p).c = x`: conservatively mark root fully.
                 mark_local_as_fully_modified(inner, modified);
             }
         }
