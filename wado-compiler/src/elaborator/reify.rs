@@ -7728,6 +7728,47 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         (idx, canonical, Some(field_type))
     }
 
+    /// Run `body` with reify's module perspective (`current_module_source`
+    /// / `current_module_items` / `sem`) swapped to `module` when it is a
+    /// different, loaded module, restoring the originals afterward. Used to
+    /// reify an AST fragment that belongs to another module (e.g. an
+    /// associated constant's body) so its `AstId`-keyed annotation lookups
+    /// hit that module's `ModuleSemantics` rather than the use site's.
+    /// Same mechanism the default-argument path uses inline (Gap: cross-
+    /// module AST reify). A no-op when `module` is the current module or is
+    /// not loaded.
+    fn with_const_module_perspective<R>(
+        &mut self,
+        module: &ModuleSource,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let swap = if module == &self.current_module_source {
+            None
+        } else {
+            match (
+                self.loaded_modules.get(module),
+                self.all_module_semantics.get(module),
+            ) {
+                (Some(m), Some(sem)) => Some((m.items.as_slice(), sem)),
+                _ => None,
+            }
+        };
+        let saved = swap.map(|(items, sem)| {
+            (
+                std::mem::replace(&mut self.current_module_source, module.clone()),
+                std::mem::replace(&mut self.current_module_items, items),
+                std::mem::replace(&mut self.sem, sem),
+            )
+        });
+        let result = body(self);
+        if let Some((src, items, sem)) = saved {
+            self.current_module_source = src;
+            self.current_module_items = items;
+            self.sem = sem;
+        }
+        result
+    }
+
     /// Reify a bare identifier reference. Local lookup goes through
     /// the per-function context (`FunctionContext::lookup`, walk-order
     /// invariant — Gap 7). Non-local idents (globals, function refs,
@@ -7835,7 +7876,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    static expression in practice), so reify uses the
         //    surrounding `ctx` directly — matches the elaborator's
         //    `resolve_expr(&const_expr, ctx, …)` (expr.rs:594–605).
-        if let Some((const_ty, const_expr)) = self
+        if let Some((const_module, const_ty, const_expr)) = self
             .sem
             .decls
             .associated_constants
@@ -7843,7 +7884,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .cloned()
         {
             let type_id = self.resolve_type(&const_ty);
-            let resolved = self.reify_expr(&const_expr, ctx, Some(type_id));
+            // The constant's body lives in its *defining* module (e.g.
+            // `pub const MAX: i32 = 2147483647;` in primitive.wado). Its
+            // `AstId`s index that module's `ModuleSemantics`, not the use
+            // site's, and `AstId`s are only unique within a module — so
+            // reifying the body under `self.sem` (the current module) can
+            // pick up a colliding `AstId`'s recorded type and mis-type the
+            // literal (e.g. `i32::MAX`'s `2147483647` as an f64). Reify the
+            // body under the defining module's perspective so every
+            // annotation lookup hits the right module's records.
+            let resolved = self.with_const_module_perspective(&const_module, |this| {
+                this.reify_expr(&const_expr, ctx, Some(type_id))
+            });
             return TirExpr::new(resolved.kind, type_id, ident.span);
         }
 
@@ -8271,8 +8323,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .type_table
                     .borrow()
                     .get_ultimate_base_type(recorded_type);
-                let is_float_target =
-                    base_target == TypeTable::F32 || base_target == TypeTable::F64;
+                // A float-only literal (`1.0`, `0.0`, `1e2`) is a float
+                // regardless of the recorded type: when the recorded type is
+                // missing/UNKNOWN (e.g. a stdlib const body whose
+                // `expression_types` entry is absent from the cached
+                // snapshot) the syntactic form is authoritative, matching
+                // production's `resolve_numeric_literal` (expr.rs:337). An
+                // integer literal still defers to the recorded type so
+                // `let x: f64 = 1` takes the float path via `is_float_target`.
+                let is_float_target = base_target == TypeTable::F32
+                    || base_target == TypeTable::F64
+                    || (recorded_type == TypeTable::UNKNOWN
+                        && super::util::is_float_only_literal(repr));
                 if is_float_target {
                     let value: f64 = if super::util::is_float_only_literal(repr) {
                         super::util::parse_float_literal(repr).unwrap_or(0.0)
@@ -8424,10 +8486,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Some(_) => variant_name.to_string(),
         };
 
-        let (const_ty, const_expr) = self.sem.decls.associated_constants.get(&key).cloned()?;
+        let (const_module, const_ty, const_expr) =
+            self.sem.decls.associated_constants.get(&key).cloned()?;
 
         let type_id = self.resolve_type(&const_ty);
-        let resolved = self.reify_expr(&const_expr, ctx, Some(type_id));
+        // Reify the body under its defining module so colliding cross-module
+        // `AstId`s can't mis-type the inlined constant (see `reify_ident`).
+        let resolved = self
+            .with_const_module_perspective(&const_module, |this| {
+                this.reify_expr(&const_expr, ctx, Some(type_id))
+            });
         match &resolved.kind {
             TirExprKind::IntLiteral { repr, .. } => {
                 let is_unsigned = matches!(
@@ -8497,11 +8565,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Some(ast::Type::NamespacedGeneric(t)) => format!("{}::{}", t.name, variant_name),
                 Some(_) => variant_name.clone(),
             };
-            if let Some((const_ty, const_expr)) =
+            if let Some((const_module, const_ty, const_expr)) =
                 self.sem.decls.associated_constants.get(&key).cloned()
             {
                 let type_id = self.resolve_type(&const_ty);
-                let resolved = self.reify_expr(&const_expr, ctx, Some(type_id));
+                let resolved = self.with_const_module_perspective(&const_module, |this| {
+                    this.reify_expr(&const_expr, ctx, Some(type_id))
+                });
                 if let TirExprKind::IntLiteral { repr, .. } = &resolved.kind {
                     return super::util::parse_i128_literal(repr)
                         .or_else(|_| super::util::parse_u128_literal(repr).map(|v| v as i128))

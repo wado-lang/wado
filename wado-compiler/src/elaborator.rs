@@ -1194,23 +1194,30 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // Collect associated constants from loaded modules and current module
+        // Collect associated constants from loaded modules and current
+        // module, tagging each with its defining `ModuleSource` so reify can
+        // reify the body under the right module perspective (the body's
+        // `AstId`s are only unique within that module).
         self.sem.decls.associated_constants.clear();
-        for module_items in self
+        let const_sources = self
             .loaded_modules
-            .values()
-            .map(|m| &m.items)
-            .chain(std::iter::once(&module.items))
-        {
+            .iter()
+            .map(|(src, m)| (src.clone(), &m.items))
+            .chain(std::iter::once((module_source.clone(), &module.items)));
+        for (src, module_items) in const_sources {
             for item in module_items {
                 if let Item::Impl(impl_block) = item {
                     let type_name = self.get_type_name(&impl_block.ty);
                     for assoc_const in &impl_block.constants {
                         let key = MethodName::format_local(&type_name, None, &assoc_const.name);
-                        self.sem
-                            .decls
-                            .associated_constants
-                            .insert(key, (assoc_const.ty.clone(), assoc_const.value.clone()));
+                        self.sem.decls.associated_constants.insert(
+                            key,
+                            (
+                                src.clone(),
+                                assoc_const.ty.clone(),
+                                assoc_const.value.clone(),
+                            ),
+                        );
                     }
                 }
             }

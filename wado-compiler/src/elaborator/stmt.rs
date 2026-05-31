@@ -1459,7 +1459,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let assoc_const_key =
                         Self::format_assoc_const_key(variant_name, variant_qualifier.as_ref());
                     // Resolve to literal patterns when possible for switch optimization.
-                    if let Some((const_ty, const_expr)) = self
+                    if let Some((_const_module, const_ty, const_expr)) = self
                         .sem
                         .decls
                         .associated_constants

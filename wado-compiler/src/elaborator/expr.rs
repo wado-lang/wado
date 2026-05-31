@@ -591,8 +591,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Check for associated constants (e.g., f64::PI, i32::MAX)
-        if let Some((const_ty, const_expr)) = self
+        // Check for associated constants (e.g., f64::PI, i32::MAX). The
+        // body re-runs inference here, so the defining module is not needed
+        // on this path (reify does need it — see `reify_ident`).
+        if let Some((_const_module, const_ty, const_expr)) = self
             .sem
             .decls
             .associated_constants
