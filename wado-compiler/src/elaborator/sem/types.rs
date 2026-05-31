@@ -304,6 +304,127 @@ pub(crate) struct TypeAnnotations {
     /// elaborator dispatches each shape to a different trait.
     #[allow(dead_code)]
     pub(crate) index_assign_dispatch: IndexMap<AstId, OperatorDispatch>,
+    /// Per-element annotation overlays for compile-time-unrolled tuple
+    /// `for-of` loops (Stage 5). Keyed by the [`crate::ast::ForOfStmt`]'s
+    /// [`AstId`]; the outer `Vec` holds one entry per *instantiation* of
+    /// that for-of in deterministic walk order (a nested inner for-of is
+    /// instantiated once per outer element, hence multiple entries), and
+    /// the inner `Vec` holds one [`ElementOverlay`] per tuple element.
+    ///
+    /// A tuple for-of's body is a single source sub-tree (fixed `AstId`s)
+    /// that annotate resolves once per element in a *different* type
+    /// context. Every `AstId`-keyed map below would otherwise be
+    /// overwritten so only the last element's facts survive. Annotate
+    /// captures each element's body facts here (only when reify is the
+    /// consumer — see `Elaborator::capture_tuple_overlays`) and reify
+    /// replays them per element. Empty in the production/LSP path.
+    pub(crate) tuple_overlays: IndexMap<AstId, Vec<Vec<ElementOverlay>>>,
+}
+
+/// One tuple-`for-of` element's slice of the body-level annotation maps.
+///
+/// Holds exactly the `AstId`-keyed maps that can appear inside a for-of
+/// body and vary per element. Decl-level maps (`impl_facts`,
+/// `function_effects`, `function_task_returns`, `handler_bindings`)
+/// cannot occur inside an expression body and are excluded. Captured by
+/// [`super::super::Elaborator::resolve_tuple_for_of`]; consumed by reify
+/// via its overlay-stack accessors.
+#[derive(Default, Clone)]
+#[allow(dead_code)]
+pub(crate) struct ElementOverlay {
+    pub(crate) expression_types: IndexMap<AstId, TypeId>,
+    pub(crate) method_dispatch: IndexMap<AstId, MethodDispatch>,
+    pub(crate) coercions: IndexMap<AstId, CoercionChoice>,
+    pub(crate) desugars: IndexMap<AstId, DesugarKind>,
+    pub(crate) generic_instantiations: IndexMap<AstId, GenericInstantiation>,
+    pub(crate) closure_captures: IndexMap<AstId, ClosureCaptureInfo>,
+    pub(crate) call_param_types: IndexMap<AstId, Vec<TypeId>>,
+    pub(crate) assert_captures: IndexMap<AstId, AssertCaptureInfo>,
+    pub(crate) for_of_iterator: IndexMap<AstId, ForOfIteratorInfo>,
+    pub(crate) operator_dispatch: IndexMap<AstId, OperatorDispatch>,
+    pub(crate) static_method_dispatch: IndexMap<AstId, StaticMethodDispatch>,
+    pub(crate) sequence_coercions: IndexMap<AstId, SequenceCoercionFacts>,
+    pub(crate) key_value_coercions: IndexMap<AstId, KeyValueCoercionFacts>,
+    pub(crate) index_assign_dispatch: IndexMap<AstId, OperatorDispatch>,
+}
+
+/// Pre-loop lengths of the per-element overlay maps, snapshotted before a
+/// tuple `for-of` unrolls its body. Used by
+/// [`TypeAnnotations::split_off_overlay`] to peel each element's freshly
+/// recorded entries off the tail.
+#[derive(Clone, Copy)]
+pub(crate) struct ElementOverlayLens {
+    expression_types: usize,
+    method_dispatch: usize,
+    coercions: usize,
+    desugars: usize,
+    generic_instantiations: usize,
+    closure_captures: usize,
+    call_param_types: usize,
+    assert_captures: usize,
+    for_of_iterator: usize,
+    operator_dispatch: usize,
+    static_method_dispatch: usize,
+    sequence_coercions: usize,
+    key_value_coercions: usize,
+    index_assign_dispatch: usize,
+}
+
+impl TypeAnnotations {
+    /// Snapshot the current lengths of the per-element overlay maps, taken
+    /// right before a tuple `for-of` resolves its first element's body.
+    pub(crate) fn overlay_base_lens(&self) -> ElementOverlayLens {
+        ElementOverlayLens {
+            expression_types: self.expression_types.len(),
+            method_dispatch: self.method_dispatch.len(),
+            coercions: self.coercions.len(),
+            desugars: self.desugars.len(),
+            generic_instantiations: self.generic_instantiations.len(),
+            closure_captures: self.closure_captures.len(),
+            call_param_types: self.call_param_types.len(),
+            assert_captures: self.assert_captures.len(),
+            for_of_iterator: self.for_of_iterator.len(),
+            operator_dispatch: self.operator_dispatch.len(),
+            static_method_dispatch: self.static_method_dispatch.len(),
+            sequence_coercions: self.sequence_coercions.len(),
+            key_value_coercions: self.key_value_coercions.len(),
+            index_assign_dispatch: self.index_assign_dispatch.len(),
+        }
+    }
+
+    /// Peel the entries recorded since `base` off the tail of each
+    /// per-element overlay map into an [`ElementOverlay`], truncating each
+    /// map back to `base` so the next unrolled element records from a
+    /// clean slate. `IndexMap::split_off` does both in one step: it
+    /// returns the `[base..]` tail and leaves `self` holding `[0..base)`.
+    ///
+    /// Truncation is what makes per-element capture correct for
+    /// conditionally-recorded maps: without it, an entry recorded for one
+    /// element but not the next would linger with a stale value.
+    pub(crate) fn split_off_overlay(&mut self, base: ElementOverlayLens) -> ElementOverlay {
+        ElementOverlay {
+            expression_types: self.expression_types.split_off(base.expression_types),
+            method_dispatch: self.method_dispatch.split_off(base.method_dispatch),
+            coercions: self.coercions.split_off(base.coercions),
+            desugars: self.desugars.split_off(base.desugars),
+            generic_instantiations: self
+                .generic_instantiations
+                .split_off(base.generic_instantiations),
+            closure_captures: self.closure_captures.split_off(base.closure_captures),
+            call_param_types: self.call_param_types.split_off(base.call_param_types),
+            assert_captures: self.assert_captures.split_off(base.assert_captures),
+            for_of_iterator: self.for_of_iterator.split_off(base.for_of_iterator),
+            operator_dispatch: self.operator_dispatch.split_off(base.operator_dispatch),
+            static_method_dispatch: self
+                .static_method_dispatch
+                .split_off(base.static_method_dispatch),
+            sequence_coercions: self.sequence_coercions.split_off(base.sequence_coercions),
+            key_value_coercions: self.key_value_coercions.split_off(base.key_value_coercions),
+            index_assign_dispatch: self
+                .index_assign_dispatch
+                .split_off(base.index_assign_dispatch),
+        }
+    }
 }
 
 /// Resolved `SequenceLiteralBuilder` impl data for a tuple-to-sequence

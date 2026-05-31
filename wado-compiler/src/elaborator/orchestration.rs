@@ -110,6 +110,24 @@ pub(crate) struct AnnotateState {
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
 }
 
+/// Whether reify (Stage 5) produces the final TIR for `module_source`.
+/// True only when `WADO_REIFY` is set, we are not building the stdlib
+/// snapshot, and the module is a user module (stdlib modules stay on the
+/// production path until reify reaches parity). Drives both the
+/// orchestration switch and the annotate-time `capture_tuple_overlays`
+/// flag so the two never disagree.
+fn module_uses_reify(module_source: &ModuleSource) -> bool {
+    let is_stdlib = matches!(
+        module_source,
+        ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
+    );
+    !crate::stdlib_snapshot::is_building()
+        && !is_stdlib
+        && std::env::var("WADO_REIFY")
+            .map(|v| v == "1" || v == "true")
+            .unwrap_or(false)
+}
+
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Run the full resolve pipeline: annotate, then lower to TIR.
     ///
@@ -1092,6 +1110,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 interner: Rc::clone(&state.interner),
                 pending_method_dispatch: None,
                 pending_operator_ast_id: None,
+                // Capture per-element tuple-for-of overlays only when reify
+                // will consume them. The production / LSP path leaves this
+                // `false` so its annotation maps are untouched.
+                capture_tuple_overlays: module_uses_reify(module_source),
             };
 
             // Set file context so diagnostics emitted during resolution
@@ -1129,15 +1151,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // The snapshot bypass also applies during snapshot
             // construction (`is_building == true`) so the snapshot's
             // foundation TIR never depends on reify.
-            let is_stdlib = matches!(
-                module_source,
-                ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
-            );
-            let use_reify = !crate::stdlib_snapshot::is_building()
-                && !is_stdlib
-                && std::env::var("WADO_REIFY")
-                    .map(|v| v == "1" || v == "true")
-                    .unwrap_or(false);
+            let use_reify = module_uses_reify(module_source);
 
             if let Ok(tir_module) = resolve_result {
                 if use_reify {

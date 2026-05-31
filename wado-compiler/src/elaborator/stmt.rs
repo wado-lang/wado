@@ -2372,6 +2372,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut outer_stmts = vec![temp_let];
 
+        // Stage 5: when reify will consume the annotations, capture each
+        // unrolled element's body facts separately. The body is a single
+        // source sub-tree resolved once per element here; without
+        // per-element capture every `AstId`-keyed map would be overwritten
+        // so only the last element's facts survive (reify would then
+        // dispatch every element to the last element's methods). Snapshot
+        // the maps' pre-loop lengths; after each element, peel off and
+        // truncate the freshly recorded tail. See `ElementOverlay`.
+        let overlay_base = self
+            .capture_tuple_overlays
+            .then(|| self.sem.types.overlay_base_lens());
+        let mut element_overlays: Vec<super::sem::types::ElementOverlay> = Vec::new();
+
         for (i, &elem_type) in elems.iter().enumerate() {
             ctx.enter_scope();
 
@@ -2501,6 +2514,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let body = self.resolve_block(&for_of.body, ctx, None);
             block_stmts.extend(body.stmts);
 
+            // Capture this element's body annotations and reset the maps
+            // back to their pre-loop state so the next element records from
+            // a clean slate (Stage 5; reify-only).
+            if let Some(base) = overlay_base {
+                element_overlays.push(self.sem.types.split_off_overlay(base));
+            }
+
             ctx.exit_scope();
 
             outer_stmts.push(TirStmt::new(
@@ -2510,6 +2530,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
                 span,
             ));
+        }
+
+        // Record this for-of's per-element overlays as one instantiation
+        // (in deterministic walk order). A nested inner for-of resolves
+        // once per outer element, appending one entry per outer element;
+        // reify's visit counter pairs them up in the same order.
+        if overlay_base.is_some() {
+            self.sem
+                .types
+                .tuple_overlays
+                .entry(for_of.id)
+                .or_default()
+                .push(element_overlays);
         }
 
         // Wrap everything in a labeled block for break support

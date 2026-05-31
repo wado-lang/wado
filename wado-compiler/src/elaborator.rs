@@ -213,6 +213,14 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// channel `None`, and the recording is skipped — those calls have
     /// no source AST id reify could key on.
     pub(super) pending_operator_ast_id: Option<crate::ast::AstId>,
+    /// When `true`, [`Self::resolve_tuple_for_of`] captures each unrolled
+    /// element's body annotations into
+    /// [`super::sem::types::TypeAnnotations::tuple_overlays`] and
+    /// truncates the per-element maps back to their pre-loop length so
+    /// each element starts from a clean slate. Set only when reify will
+    /// consume the result (Stage 5); `false` for the production / LSP
+    /// path so their annotation maps are left exactly as before.
+    pub(super) capture_tuple_overlays: bool,
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {

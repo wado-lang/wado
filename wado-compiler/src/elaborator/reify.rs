@@ -78,6 +78,26 @@ use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
 
+/// Generate the `ann_*` annotation accessors on [`Reify`]. Each expands to
+/// a method that walks `self.tuple_overlay_stack` innermost-first looking
+/// for `<map>[id]`, then falls back to `self.sem.types.<map>[id]`,
+/// returning a clone. See the accessor doc comment on the `impl` block for
+/// why this exists.
+macro_rules! reify_annotation_accessors {
+    ($($name:ident => $map:ident : $val:ty),+ $(,)?) => {
+        $(
+            fn $name(&self, id: crate::ast::AstId) -> Option<$val> {
+                for overlay in self.tuple_overlay_stack.iter().rev() {
+                    if let Some(v) = overlay.$map.get(&id) {
+                        return Some(v.clone());
+                    }
+                }
+                self.sem.types.$map.get(&id).cloned()
+            }
+        )+
+    };
+}
+
 /// Per-module reify pass. One instance per loaded module the batch driver
 /// emits TIR for.
 ///
@@ -168,6 +188,21 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// which fails to unify with the enclosing function's recorded
     /// `Param { E }` declared effect at indirect-call effect checks.
     pub(crate) current_effect_param_names: Vec<String>,
+    /// Active per-element annotation overlays for the tuple `for-of`(s)
+    /// currently being unrolled, innermost last. While reifying element
+    /// `i` of a tuple for-of, that element's [`ElementOverlay`] sits on
+    /// top; the annotation accessors (`ann_*`) consult the stack from the
+    /// top down before falling back to `sem.types`. A nested inner for-of
+    /// pushes its own overlay above the outer one, so inner-body nodes
+    /// shadow correctly while outer-body nodes fall through to the outer
+    /// overlay. See [`Self::reify_tuple_for_of`].
+    pub(crate) tuple_overlay_stack: Vec<super::sem::types::ElementOverlay>,
+    /// Per-`ForOfStmt` visit counter. Annotate records one overlay set per
+    /// *instantiation* of a tuple for-of in walk order; reify increments
+    /// this each time it reifies the same `for_of.id` so it consumes the
+    /// matching instantiation (a nested inner for-of is instantiated once
+    /// per outer element). See [`Self::reify_tuple_for_of`].
+    pub(crate) tuple_overlay_visits: IndexMap<crate::ast::AstId, usize>,
 }
 
 #[allow(dead_code)]
@@ -210,7 +245,39 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             entry_module_source,
             current_type_param_names: Vec::new(),
             current_effect_param_names: Vec::new(),
+            tuple_overlay_stack: Vec::new(),
+            tuple_overlay_visits: IndexMap::default(),
         }
+    }
+
+    // Per-element annotation accessors (`ann_*`) that honour active tuple
+    // `for-of` overlays.
+    //
+    // A tuple for-of's body is a single source sub-tree resolved once per
+    // element by annotate; to keep each element's distinct facts, annotate
+    // moved them out of the base `sem.types` maps into per-element
+    // `ElementOverlay`s (and *truncated* the base maps — so for body
+    // `AstId`s the fact lives ONLY in the overlay). Every reify read of one
+    // of those maps must therefore go through the matching `ann_*`
+    // accessor, which walks `tuple_overlay_stack` innermost-first and falls
+    // back to `sem.types`. Outside a tuple for-of the stack is empty and
+    // the accessor is just the base-map lookup. The macro keeps the 14-map
+    // list in one place, mirroring `TypeAnnotations::split_off_overlay`.
+    reify_annotation_accessors! {
+        ann_expression_types => expression_types: crate::tir::TypeId,
+        ann_method_dispatch => method_dispatch: super::sem::types::MethodDispatch,
+        ann_coercions => coercions: super::sem::types::CoercionChoice,
+        ann_desugars => desugars: super::sem::types::DesugarKind,
+        ann_generic_instantiations => generic_instantiations: super::sem::types::GenericInstantiation,
+        ann_closure_captures => closure_captures: super::sem::types::ClosureCaptureInfo,
+        ann_call_param_types => call_param_types: Vec<crate::tir::TypeId>,
+        ann_assert_captures => assert_captures: super::sem::types::AssertCaptureInfo,
+        ann_for_of_iterator => for_of_iterator: super::sem::types::ForOfIteratorInfo,
+        ann_operator_dispatch => operator_dispatch: super::sem::types::OperatorDispatch,
+        ann_static_method_dispatch => static_method_dispatch: super::sem::types::StaticMethodDispatch,
+        ann_sequence_coercions => sequence_coercions: super::sem::types::SequenceCoercionFacts,
+        ann_key_value_coercions => key_value_coercions: super::sem::types::KeyValueCoercionFacts,
+        ann_index_assign_dispatch => index_assign_dispatch: super::sem::types::OperatorDispatch,
     }
 
     /// Build a [`TypeLookup`] view over the current module's import
@@ -1758,11 +1825,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
                 if let ast::Stmt::Match(match_expr) = s {
                     let recorded = self
-                        .sem
-                        .types
-                        .expression_types
-                        .get(&match_expr.id)
-                        .copied()
+                        .ann_expression_types(match_expr.id)
                         .or(expected_type)
                         .unwrap_or(crate::tir::TypeTable::UNKNOWN);
                     let tir = self.reify_match_expr(match_expr, ctx, expected_type, recorded);
@@ -2072,11 +2135,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // evaporated during annotate (e.g. a stmt-position match
         // whose recorder fires only at the stmt level).
         let recorded_type = self
-            .sem
-            .types
-            .expression_types
-            .get(&expr.id())
-            .copied()
+            .ann_expression_types(expr.id())
             .or(expected_type)
             .unwrap_or(TypeTable::UNKNOWN);
         let span = expr.span();
@@ -2104,13 +2163,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // replays the same desugar deterministically — the
                 // `__b` local lands at the same `FunctionContext`
                 // index reify reserves for it.
-                if let Some(facts) = self
-                    .sem
-                    .types
-                    .sequence_coercions
-                    .get(&tuple_lit.id)
-                    .cloned()
-                {
+                if let Some(facts) = self.ann_sequence_coercions(tuple_lit.id) {
                     return self.reify_sequence_coercion(tuple_lit, facts, ctx, span);
                 }
                 self.reify_tuple_literal(tuple_lit, ctx, span)
@@ -2176,7 +2229,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::Unary(unary) => {
                 let op = ast_unary_op_to_tir(unary.op);
                 let inner = self.reify_expr(&unary.expr, ctx, None);
-                if let Some(dispatch) = self.sem.types.operator_dispatch.get(&unary.id).cloned() {
+                if let Some(dispatch) = self.ann_operator_dispatch(unary.id) {
                     // Operator-trait dispatch path for `-x` / `~x` on a
                     // user type (`Neg::neg` / `BitNot::bitnot`). Mirrors the
                     // binary path: a bare `Unary` on a struct operand would
@@ -2319,12 +2372,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // `FunctionRef` on `index_assign_dispatch[index.id]`;
                 // reify replays the same `MethodCall` shape.
                 if let ast::Expr::Index(index_expr) = &assign.target
-                    && let Some(dispatch) = self
-                        .sem
-                        .types
-                        .index_assign_dispatch
-                        .get(&index_expr.id)
-                        .cloned()
+                    && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
                 {
                     let receiver = self.reify_expr(&index_expr.expr, ctx, None);
                     let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
@@ -2581,9 +2629,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Always install the context: an empty `ast_id_to_slot` map
         // intercepts nothing, and the hook is a single Option check.
-        let info = self.sem.types.assert_captures.get(&assert_stmt.id);
+        let info = self.ann_assert_captures(assert_stmt.id);
         let (slot_meta, ast_id_to_slot): (Vec<(AstId, String)>, IndexMap<AstId, usize>) =
-            if let Some(info) = info {
+            if let Some(info) = info.as_ref() {
                 let mut meta: Vec<(AstId, String)> = Vec::with_capacity(info.slots.len());
                 let mut map: IndexMap<AstId, usize> = IndexMap::default();
                 for (i, s) in info.slots.iter().enumerate() {
@@ -2812,7 +2860,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_for_of(&mut self, for_of: &ast::ForOfStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
 
-        match self.sem.types.desugars.get(&for_of.id).copied() {
+        match self.ann_desugars(for_of.id) {
             Some(super::sem::types::DesugarKind::ForOfTuple) => {
                 self.reify_tuple_for_of(for_of, ctx)
             }
@@ -2820,7 +2868,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_variadic_for_of(for_of, ctx)
             }
             Some(super::sem::types::DesugarKind::ForOfIterator) | None => {
-                let Some(info) = self.sem.types.for_of_iterator.get(&for_of.id).cloned() else {
+                let Some(info) = self.ann_for_of_iterator(for_of.id) else {
                     return vec![TirStmt::new(
                         TirStmtKind::Expr(TirExpr::new(
                             TirExprKind::Unit,
@@ -3055,8 +3103,31 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let mut outer_stmts = vec![temp_let];
 
+        // Consume this for-of's overlays for the current instantiation.
+        // Annotate pushed one per-element overlay set per instantiation in
+        // walk order; the visit counter selects the matching one (a nested
+        // inner for-of is instantiated once per outer element). Each
+        // element's overlay is pushed onto `tuple_overlay_stack` while its
+        // binding and body are reified so the `ann_*` accessors see the
+        // right per-element facts instead of the truncated base maps.
+        let instantiation: Vec<super::sem::types::ElementOverlay> = {
+            let visit = self.tuple_overlay_visits.entry(for_of.id).or_insert(0);
+            let k = *visit;
+            *visit += 1;
+            self.sem
+                .types
+                .tuple_overlays
+                .get(&for_of.id)
+                .and_then(|insts| insts.get(k))
+                .cloned()
+                .unwrap_or_default()
+        };
+
         for (i, &elem_type) in elems.iter().enumerate() {
             ctx.enter_scope();
+            if let Some(overlay) = instantiation.get(i) {
+                self.tuple_overlay_stack.push(overlay.clone());
+            }
 
             let temp_ref = TirExpr::new(
                 TirExprKind::Local {
@@ -3152,6 +3223,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let body = self.reify_block(&for_of.body, ctx, None);
             block_stmts.extend(body.stmts);
 
+            if instantiation.get(i).is_some() {
+                self.tuple_overlay_stack.pop();
+            }
             ctx.exit_scope();
 
             outer_stmts.push(TirStmt::new(
@@ -3781,7 +3855,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
 
-        if let Some(dispatch) = self.sem.types.operator_dispatch.get(&binary.id).cloned() {
+        if let Some(dispatch) = self.ann_operator_dispatch(binary.id) {
             // Operator-trait dispatch path. Reuse the shared receiver
             // adjuster (statically; no Elaborator needed) and the
             // shared arg-wrap helper to produce TIR identical to what
@@ -4069,13 +4143,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // was lowered through `Builder::new_literal` /
         // `Builder::insert_literal` / `Builder::build`. Reify replays
         // the same `__kv_lit:` desugar block deterministically.
-        if let Some(facts) = self
-            .sem
-            .types
-            .key_value_coercions
-            .get(&struct_lit.id)
-            .cloned()
-        {
+        if let Some(facts) = self.ann_key_value_coercions(struct_lit.id) {
             return self.reify_key_value_coercion(struct_lit, facts, ctx, struct_lit.span);
         }
 
@@ -4117,11 +4185,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // non-generic structs Gap 1's recording is skipped and we use
         // the bare struct type from `recorded_type`.
         let (struct_type, generic_args): (TypeId, Vec<TypeId>) = self
-            .sem
-            .types
-            .generic_instantiations
-            .get(&struct_lit.id)
-            .map(|gi| (gi.instance_type, gi.type_args.clone()))
+            .ann_generic_instantiations(struct_lit.id)
+            .map(|gi| (gi.instance_type, gi.type_args))
             .unwrap_or((recorded_type, Vec::new()));
 
         let mangled_struct_name = if generic_args.is_empty() {
@@ -4256,12 +4321,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // production's `assign_to_target` builds), not a plain
         // `Assign` whose target is an `Index` expression.
         if let ast::Expr::Index(index_expr) = &compound.target
-            && let Some(dispatch) = self
-                .sem
-                .types
-                .index_assign_dispatch
-                .get(&index_expr.id)
-                .cloned()
+            && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
         {
             let receiver = self.reify_expr(&index_expr.expr, ctx, None);
             let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
@@ -4631,7 +4691,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Non-primitive comparison dispatches through `Eq::eq` /
             // `Ord::cmp`; the recording fires on `chain.id` at
             // operators.rs:1346.
-            if let Some(dispatch) = self.sem.types.operator_dispatch.get(&chain.id).cloned() {
+            if let Some(dispatch) = self.ann_operator_dispatch(chain.id) {
                 let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
                     left,
                     dispatch.self_kind,
@@ -4696,11 +4756,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
 
             let recorded_type = self
-                .sem
-                .types
-                .expression_types
-                .get(&chain.id)
-                .copied()
+                .ann_expression_types(chain.id)
                 .unwrap_or(TypeTable::BOOL);
             return TirExpr::new(
                 TirExprKind::Binary {
@@ -4876,7 +4932,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `return_type` on the record signals whether the outer
         // `Deref` wrap applies (Index returns `&Output`; IndexValue
         // returns `Output`).
-        if let Some(dispatch) = self.sem.types.operator_dispatch.get(&index.id).cloned() {
+        if let Some(dispatch) = self.ann_operator_dispatch(index.id) {
             let adjusted_receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
                 receiver,
                 dispatch.self_kind,
@@ -4946,17 +5002,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let span = closure.span;
 
-        let cap_info = self
-            .sem
-            .types
-            .closure_captures
-            .get(&closure.id)
-            .cloned()
-            .unwrap_or_else(|| super::sem::types::ClosureCaptureInfo {
+        let cap_info = self.ann_closure_captures(closure.id).unwrap_or_else(|| {
+            super::sem::types::ClosureCaptureInfo {
                 mut_captures: Vec::new(),
                 captures: Vec::new(),
                 is_mutating: false,
-            });
+            }
+        });
 
         // Step 1 (replay): materialise outer-scope `__ref_v` locals
         // for each mut-capture in the recorded order; emit the
@@ -6085,13 +6137,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // unresolvable `::new` call. Variant-constructor turbofish shapes
         // are not recorded here (annotate returns before the static-call
         // path), so they fall through to the variant detection below.
-        if let Some(dispatch) = self
-            .sem
-            .types
-            .static_method_dispatch
-            .get(&static_call.id)
-            .cloned()
-        {
+        if let Some(dispatch) = self.ann_static_method_dispatch(static_call.id) {
             let args: Vec<CallArg> = static_call
                 .args
                 .iter()
@@ -6227,11 +6273,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|ty| self.resolve_type(ty))
             .collect();
         let type_args: Vec<TypeId> = if explicit_method_type_args.is_empty() {
-            self.sem
-                .types
-                .generic_instantiations
-                .get(&static_call.id)
-                .map(|gi| gi.type_args.clone())
+            self.ann_generic_instantiations(static_call.id)
+                .map(|gi| gi.type_args)
                 .unwrap_or_default()
         } else {
             explicit_method_type_args
@@ -6464,10 +6507,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .map(|(i, c)| (i, c.clone()))
                 {
                     let variant_type = self
-                        .sem
-                        .types
-                        .generic_instantiations
-                        .get(&call.id)
+                        .ann_generic_instantiations(call.id)
                         .map(|gi| gi.instance_type)
                         .unwrap_or(recorded_type);
                     let payload = call.args.first().map(|arg_expr| {
@@ -6509,10 +6549,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .map(|(i, c)| (i, c.clone()))
                 {
                     let variant_type = self
-                        .sem
-                        .types
-                        .generic_instantiations
-                        .get(&call.id)
+                        .ann_generic_instantiations(call.id)
                         .map(|gi| gi.instance_type)
                         .unwrap_or(recorded_type);
                     let payload = call.args.first().map(|arg_expr| {
@@ -6545,11 +6582,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 {
                     let mangled = crate::name::MethodName::format_local(type_name, None, case_name);
                     let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                        self.sem
-                            .types
-                            .generic_instantiations
-                            .get(&call.id)
-                            .map(|gi| gi.type_args.clone())
+                        self.ann_generic_instantiations(call.id)
+                            .map(|gi| gi.type_args)
                             .unwrap_or_default()
                     } else {
                         call.type_args
@@ -6591,7 +6625,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // can reproduce the same TIR `Call` shape without re-running
         // impl lookup, mangled-name construction, or monomorph-info
         // shaping (none of which are tractable from the AST alone).
-        if let Some(dispatch) = self.sem.types.static_method_dispatch.get(&call.id).cloned() {
+        if let Some(dispatch) = self.ann_static_method_dispatch(call.id) {
             // Forward per-argument expected types for closure args that have
             // an unannotated param, so `|a, b| ...` coerced to a `fn`-typed
             // (or `fn`-newtype) param infers its params; otherwise the
@@ -6602,7 +6636,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // expected `fn() with E` whose `E` is a generic effect param would
             // otherwise pin `declared_effects` to the param instead of the
             // closure's actual effects).
-            let call_param_types = self.sem.types.call_param_types.get(&call.id).cloned();
+            let call_param_types = self.ann_call_param_types(call.id);
             let mut arg_exprs: Vec<CallArg> = call
                 .args
                 .iter()
@@ -6788,11 +6822,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         && !rest.contains("::")
                     {
                         let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                            self.sem
-                                .types
-                                .generic_instantiations
-                                .get(&call.id)
-                                .map(|gi| gi.type_args.clone())
+                            self.ann_generic_instantiations(call.id)
+                                .map(|gi| gi.type_args)
                                 .unwrap_or_default()
                         } else {
                             call.type_args
@@ -6829,11 +6860,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Type args: explicit turbofish on the call expression,
             // else the inference recorded by Gap 1.
             let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                self.sem
-                    .types
-                    .generic_instantiations
-                    .get(&call.id)
-                    .map(|gi| gi.type_args.clone())
+                self.ann_generic_instantiations(call.id)
+                    .map(|gi| gi.type_args)
                     .unwrap_or_default()
             } else {
                 call.type_args
@@ -6849,14 +6877,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // specialization the call site needs. Literal re-coercion and
             // `is_mut` per-arg are still handled elsewhere (`coercions`); see
             // `arg_is_unannotated_closure` for why the forward is restricted.
-            let call_param_types = self.sem.types.call_param_types.get(&call.id);
+            let call_param_types = self.ann_call_param_types(call.id);
             let args: Vec<CallArg> = call
                 .args
                 .iter()
                 .enumerate()
                 .map(|(i, a)| {
                     let expected = if arg_is_unannotated_closure(a) {
-                        call_param_types.and_then(|pts| pts.get(i).copied())
+                        call_param_types
+                            .as_ref()
+                            .and_then(|pts| pts.get(i).copied())
                     } else {
                         None
                     };
@@ -6944,11 +6974,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let mangled_method_name = crate::name::MethodName::format_local(prefix, None, suffix);
 
             let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                self.sem
-                    .types
-                    .generic_instantiations
-                    .get(&call.id)
-                    .map(|gi| gi.type_args.clone())
+                self.ann_generic_instantiations(call.id)
+                    .map(|gi| gi.type_args)
                     .unwrap_or_default()
             } else {
                 call.type_args
@@ -7022,21 +7049,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         let inner_dispatch = self
-            .sem
-            .types
-            .operator_dispatch
-            .get(&index_expr.id)
-            .cloned()
+            .ann_operator_dispatch(index_expr.id)
             .expect(
                 "reify_index_mut_method_call: inner IndexMut dispatch missing — annotate should have recorded it alongside the IndexMutMethodCall desugar tag",
             );
 
         let outer_dispatch = self
-            .sem
-            .types
-            .method_dispatch
-            .get(&method_call.id)
-            .cloned()
+            .ann_method_dispatch(method_call.id)
             .expect(
                 "reify_index_mut_method_call: outer method dispatch missing — annotate should have recorded it via record_method_dispatch",
             );
@@ -7118,7 +7137,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // tagged this call as `IndexMutMethodCall`, the receiver is an
         // index expression that needs `__index_mut_val` synthesis.
         if matches!(
-            self.sem.types.desugars.get(&method_call.id),
+            self.ann_desugars(method_call.id),
             Some(super::sem::types::DesugarKind::IndexMutMethodCall)
         ) {
             return self.reify_index_mut_method_call(method_call, ctx, recorded_type);
@@ -7240,24 +7259,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         // Dispatch decision (Stage 4 + Gap 2 record).
-        let dispatch = self
-            .sem
-            .types
-            .method_dispatch
-            .get(&method_call.id)
-            .cloned()
-            .unwrap_or_else(|| {
-                // Method lookup failed during annotate (error-recovery
-                // path). Reify produces a placeholder `Unit` of `ERROR`
-                // type so downstream phases see the same shape annotate
-                // would have built; the actual diagnostic was already
-                // emitted by the elaborator.
-                panic!(
-                    "reify_method_call: dispatch annotation missing for `{}` — \
+        let dispatch = self.ann_method_dispatch(method_call.id).unwrap_or_else(|| {
+            // Method lookup failed during annotate (error-recovery
+            // path). Reify produces a placeholder `Unit` of `ERROR`
+            // type so downstream phases see the same shape annotate
+            // would have built; the actual diagnostic was already
+            // emitted by the elaborator.
+            panic!(
+                "reify_method_call: dispatch annotation missing for `{}` — \
                      annotate should have recorded or short-circuited via desugar",
-                    method_call.method
-                )
-            });
+                method_call.method
+            )
+        });
 
         // Reify receiver and adjust per the dispatch contract. Stage 5
         // shares the adjuster with the elaborator so the same TIR shape
@@ -7608,11 +7621,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .contains_key(&ident.name)
         {
             let type_args = self
-                .sem
-                .types
-                .generic_instantiations
-                .get(&ident.id)
-                .map(|gi| gi.type_args.clone())
+                .ann_generic_instantiations(ident.id)
+                .map(|gi| gi.type_args)
                 .unwrap_or_default();
             return TirExpr::new(
                 TirExprKind::FuncRef {
@@ -7644,11 +7654,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // above and would have returned. Anything left here is a
             // function import.
             let type_args = self
-                .sem
-                .types
-                .generic_instantiations
-                .get(&ident.id)
-                .map(|gi| gi.type_args.clone())
+                .ann_generic_instantiations(ident.id)
+                .map(|gi| gi.type_args)
                 .unwrap_or_default();
             return TirExpr::new(
                 TirExprKind::FuncRef {
@@ -7693,10 +7700,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // `recorded_type` already names the right
                     // `Variant` TypeId.
                     let variant_type = self
-                        .sem
-                        .types
-                        .generic_instantiations
-                        .get(&ident.id)
+                        .ann_generic_instantiations(ident.id)
                         .map(|gi| gi.instance_type)
                         .unwrap_or(recorded_type);
                     return TirExpr::new(
@@ -7781,10 +7785,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .map(|(i, c)| (i, c.clone()))
                 {
                     let variant_type = self
-                        .sem
-                        .types
-                        .generic_instantiations
-                        .get(&ident.id)
+                        .ann_generic_instantiations(ident.id)
                         .map(|gi| gi.instance_type)
                         .unwrap_or_else(|| {
                             self.tysys.type_table.borrow_mut().make_variant(
@@ -7851,7 +7852,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// rather than a bare literal; all other `NumericLiteral` coercions
     /// are free (the literal already carries the coerced type).
     fn try_reify_int128_coercion(&self, expr: &ast::Expr) -> Option<TirExpr> {
-        let choice = self.sem.types.coercions.get(&expr.id())?;
+        let choice = self.ann_coercions(expr.id())?;
         if choice.kind != super::sem::types::CoercionKind::NumericLiteral {
             return None;
         }
