@@ -486,7 +486,7 @@ async fn render_phases(
     let needs_dump = phases
         .iter()
         .any(|p| matches!(p, Phase::Wir | Phase::Nir | Phase::NirLowered));
-    let needs_wat = phases.iter().any(|p| *p == Phase::Wat);
+    let needs_wat = phases.contains(&Phase::Wat);
 
     let path = Path::new(input_path);
     let base_path = path
@@ -585,20 +585,21 @@ async fn render_phases(
             log_level: Some(wado_compiler::LogLevel::Off),
             ..wado_compiler::CompilerOptions::default()
         };
-        let res = match wado_compiler::compile_with_options(source, &host, Some(input_path), options)
-            .await
-        {
-            Err(_) => Err(diagnostics_summary(&host, "compilation failed")),
-            Ok(result) => {
-                let mut config = wasmprinter::Config::new();
-                config.fold_instructions(true);
-                let mut wat = String::new();
-                config
-                    .print(&result.wasm, &mut wasmprinter::PrintFmtWrite(&mut wat))
-                    .map(|()| wat)
-                    .map_err(|e| format!("WAT generation failed: {e}"))
-            }
-        };
+        let res =
+            match wado_compiler::compile_with_options(source, &host, Some(input_path), options)
+                .await
+            {
+                Err(_) => Err(diagnostics_summary(&host, "compilation failed")),
+                Ok(result) => {
+                    let mut config = wasmprinter::Config::new();
+                    config.fold_instructions(true);
+                    let mut wat = String::new();
+                    config
+                        .print(&result.wasm, &mut wasmprinter::PrintFmtWrite(&mut wat))
+                        .map(|()| wat)
+                        .map_err(|e| format!("WAT generation failed: {e}"))
+                }
+            };
         out.insert(Phase::Wat, res);
     }
 
