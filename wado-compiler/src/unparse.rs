@@ -623,13 +623,17 @@ impl<'a> Unparser<'a> {
         self.output.push(']');
     }
 
-    /// Emit `(params)`, breaking the list one parameter per line when the
-    /// inline form would overflow the line-width budget — the same width-aware
-    /// rollback the import list uses. Without this, a signature wider than the
-    /// budget was emitted as a single over-width line.
-    fn delimited_params(&mut self, params: &[Param]) {
+    /// Emit `(params)` followed by `emit_after` (the rest of the signature line
+    /// — return type, `with` clause, etc.), breaking the parameters one-per-line
+    /// when the whole signature line would overflow the width budget. The width
+    /// check spans `emit_after` too, since a short parameter list can still push
+    /// the line over once the return type is appended. On overflow the inline
+    /// attempt is rolled back and re-emitted wrapped, the same width-aware
+    /// rollback the import list uses.
+    fn delimited_params<F: Fn(&mut Self)>(&mut self, params: &[Param], emit_after: F) {
         let snap = self.snapshot();
         self.delimited("(", ")", params, Unparser::unparse_param);
+        emit_after(self);
         if params.is_empty() || !self.exceeds_width_since(snap) {
             return;
         }
@@ -644,6 +648,7 @@ impl<'a> Unparser<'a> {
         self.indent_level -= 1;
         self.write_indent();
         self.output.push(')');
+        emit_after(self);
     }
 
     fn unparse_function(&mut self, f: &Function) {
@@ -655,16 +660,15 @@ impl<'a> Unparser<'a> {
         self.output.push_str("fn ");
         self.output.push_str(&f.name);
         self.unparse_generic_params(&f.type_params);
-        self.delimited_params(&f.params);
-
-        if let Some(ret) = &f.return_type
-            && !is_unit_type(ret)
-        {
-            self.output.push_str(" -> ");
-            self.unparse_type(ret);
-        }
-
-        self.unparse_with_clause(&f.effects, &f.stores);
+        self.delimited_params(&f.params, |s| {
+            if let Some(ret) = &f.return_type
+                && !is_unit_type(ret)
+            {
+                s.output.push_str(" -> ");
+                s.unparse_type(ret);
+            }
+            s.unparse_with_clause(&f.effects, &f.stores);
+        });
 
         if let Some(body) = &f.body {
             self.output.push_str(" {\n");
@@ -1053,14 +1057,14 @@ impl<'a> Unparser<'a> {
 
         self.output.push_str("fn ");
         self.output.push_str(&m.name);
-        self.delimited("(", ")", &m.params, Unparser::unparse_param);
-
-        if let Some(ret) = &m.return_type
-            && !is_unit_type(ret)
-        {
-            self.output.push_str(" -> ");
-            self.unparse_type(ret);
-        }
+        self.delimited_params(&m.params, |s| {
+            if let Some(ret) = &m.return_type
+                && !is_unit_type(ret)
+            {
+                s.output.push_str(" -> ");
+                s.unparse_type(ret);
+            }
+        });
 
         self.output.push_str(";\n");
     }
@@ -1121,17 +1125,14 @@ impl<'a> Unparser<'a> {
                         this.emit_kw_if(func.is_async, "async ");
                         this.output.push_str("fn ");
                         this.output.push_str(&func.name);
-                        this.delimited("(", ")", &func.params, |this, param| {
-                            this.output.push_str(&param.name);
-                            this.output.push_str(": ");
-                            this.unparse_type(&param.ty);
+                        this.delimited_params(&func.params, |s| {
+                            if let Some(ret) = &func.return_type
+                                && !is_unit_type(ret)
+                            {
+                                s.output.push_str(" -> ");
+                                s.unparse_type(ret);
+                            }
                         });
-                        if let Some(ret) = &func.return_type
-                            && !is_unit_type(ret)
-                        {
-                            this.output.push_str(" -> ");
-                            this.unparse_type(ret);
-                        }
                         this.output.push_str(";\n");
                     }
                 }

@@ -1299,6 +1299,48 @@ fn test_format_long_signature_wraps_params() {
 }
 
 #[test]
+fn test_format_long_interface_method_wraps_params() {
+    // An interface method whose inline signature overflows must wrap its
+    // parameters one-per-line, like a free function.
+    let source = "interface Service {\n    fn handle_request(alpha: i32, beta: i32, gamma: i32, delta: i32, epsilon: i32, zeta: i32, eta: i32, theta: i32) -> bool;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    for line in formatted.lines() {
+        assert!(
+            line.chars().count() <= 120,
+            "line exceeds 120 cols: {line:?}\n\nformatted:\n{formatted}"
+        );
+    }
+    assert!(
+        formatted.contains("fn handle_request(\n"),
+        "long interface method params should wrap one-per-line: {formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_long_world_export_fn_wraps_params() {
+    // A world's `export fn` whose inline signature overflows must wrap its
+    // parameters one-per-line too.
+    let source = "world app {\n    export fn run(alpha: i32, beta: i32, gamma: i32, delta: i32, epsilon: i32, zeta: i32, eta: i32, theta: i32, iota: i32) -> bool;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    for line in formatted.lines() {
+        assert!(
+            line.chars().count() <= 120,
+            "line exceeds 120 cols: {line:?}\n\nformatted:\n{formatted}"
+        );
+    }
+    assert!(
+        formatted.contains("fn run(\n"),
+        "long world export fn params should wrap one-per-line: {formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
 fn test_format_deref_index_preserves_parens() {
     // (*p)[i] must keep parens — *p[i] means *(p[i])
     let source = r"fn foo(data: &Array<i32>) -> i32 {
