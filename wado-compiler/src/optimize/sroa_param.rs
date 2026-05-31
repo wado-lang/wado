@@ -294,7 +294,7 @@ fn reference_param_struct_key(
 /// aliasing parameter during the call would then be lost.
 ///
 /// The hazard requires a sibling that can *mutate* the shared object, i.e. a
-/// `&mut` (MutRef) parameter: an immutable `&S` sibling cannot write the field,
+/// `&mut` (`MutRef`) parameter: an immutable `&S` sibling cannot write the field,
 /// so two `&S` parameters (e.g. `add_amounts(a: &Amount, b: &Amount)`) stay
 /// SROA-able even when aliased. By-value struct params are independent copies.
 fn param_may_alias_sibling(
