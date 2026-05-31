@@ -7947,6 +7947,32 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
+        // 3b. Current-module global declared in the module AST but absent
+        //     from `current_module_globals`. This happens when reify is
+        //     walking a *swapped-in* callee module (a default-argument
+        //     expression resolved in the callee's scope) whose
+        //     `ModuleSemantics` came from the stdlib snapshot, which does
+        //     not rehydrate `current_module_globals`. The module's AST
+        //     items are available (the swap sets `current_module_items`),
+        //     so resolve the global from there — mirroring production's
+        //     `resolve_ident_in_fallback_module` (expr.rs:936). Without this
+        //     a callee-module global default (e.g. `Z_DEFAULT_COMPRESSION`)
+        //     resolves to `()` and the call lowers to an invalid module.
+        if let Some(global_decl) = self.current_module_items.iter().find_map(|item| match item {
+            ast::Item::Global(g) if g.name == ident.name => Some(g),
+            _ => None,
+        }) {
+            let ty = self.resolve_type(&global_decl.ty);
+            return TirExpr::new(
+                TirExprKind::GlobalVarGet {
+                    module_source: self.current_module_source.clone(),
+                    name: ident.name.clone(),
+                },
+                ty,
+                ident.span,
+            );
+        }
+
         // 4. Associated constant (e.g. `f64::PI`, `i32::MAX`). The
         //    elaborator inlines these to the resolved expression at
         //    every use site; reify reproduces the same inlining by
@@ -7977,6 +8003,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 this.reify_expr(&const_expr, ctx, Some(type_id))
             });
             return TirExpr::new(resolved.kind, type_id, ident.span);
+        }
+
+        // 4b. Primitive associated constant (`i32::MAX`, `u8::MIN`, …) that
+        //     is not in `associated_constants`. This happens when reify is
+        //     walking a swapped-in callee module (a default-argument
+        //     expression — e.g. `max_output: i32 = i32::MAX`) whose
+        //     `ModuleSemantics` came from the stdlib snapshot, which does
+        //     not rehydrate `associated_constants`. The value is a compile
+        //     -time constant of the named primitive type, so emit it as a
+        //     typed integer literal directly.
+        if let Some((prefix, suffix)) = ident.name.split_once("::")
+            && !suffix.contains("::")
+            && let Some((value, prim_type)) = primitive_int_assoc_const(prefix, suffix)
+        {
+            return TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: value as u64,
+                    repr: value.to_string(),
+                },
+                prim_type,
+                ident.span,
+            );
         }
 
         // 5. Free function reference — the ident names a function in
@@ -9423,6 +9471,49 @@ fn ast_type_name_static(ty: &ast::Type) -> String {
 /// instead of the effects inferred from its body.
 fn arg_is_unannotated_closure(arg: &ast::Expr) -> bool {
     matches!(arg, ast::Expr::Closure(c) if c.params.iter().any(|p| p.ty.is_none()))
+}
+
+/// Compile-time value and primitive `TypeId` for a primitive integer
+/// associated constant named `<prefix>::<suffix>` (e.g. `i32::MAX`).
+/// Returns `None` for non-primitive or unknown constants. Used by
+/// `reify_ident` to resolve such constants when they are not present in
+/// `associated_constants` — e.g. a default-argument expression reified
+/// under a stdlib-snapshot callee module whose `associated_constants` map
+/// was not rehydrated. The value table mirrors
+/// [`super::stmt::primitive_assoc_const_to_i128`].
+fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, crate::tir::TypeId)> {
+    use crate::tir::TypeTable;
+    let ty = match prefix {
+        "i8" => TypeTable::I8,
+        "i16" => TypeTable::I16,
+        "i32" => TypeTable::I32,
+        "i64" => TypeTable::I64,
+        "u8" => TypeTable::U8,
+        "u16" => TypeTable::U16,
+        "u32" => TypeTable::U32,
+        "u64" => TypeTable::U64,
+        _ => return None,
+    };
+    let value = match (prefix, suffix) {
+        ("i8", "MAX") => i128::from(i8::MAX),
+        ("i8", "MIN") => i128::from(i8::MIN),
+        ("i16", "MAX") => i128::from(i16::MAX),
+        ("i16", "MIN") => i128::from(i16::MIN),
+        ("i32", "MAX") => i128::from(i32::MAX),
+        ("i32", "MIN") => i128::from(i32::MIN),
+        ("i64", "MAX") => i128::from(i64::MAX),
+        ("i64", "MIN") => i128::from(i64::MIN),
+        ("u8", "MAX") => i128::from(u8::MAX),
+        ("u8", "MIN") => i128::from(u8::MIN),
+        ("u16", "MAX") => i128::from(u16::MAX),
+        ("u16", "MIN") => i128::from(u16::MIN),
+        ("u32", "MAX") => i128::from(u32::MAX),
+        ("u32", "MIN") => i128::from(u32::MIN),
+        ("u64", "MAX") => i128::from(u64::MAX),
+        ("u64", "MIN") => i128::from(u64::MIN),
+        _ => return None,
+    };
+    Some((value, ty))
 }
 
 fn ast_unary_op_to_tir(op: ast::UnaryOp) -> crate::tir::TirUnaryOp {
