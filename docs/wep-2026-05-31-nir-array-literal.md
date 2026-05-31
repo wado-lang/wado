@@ -159,24 +159,44 @@ WIR node is introduced.
 
 ### Migration of the WIR collapse
 
-`wir_optimize::array::collapse_array_push_sequences` exists because the
-fixed-array shape previously had nowhere to live before WIR. Once
-`ArrayLiteral` lands and `wir_build` lowers it to `ArrayNewFixed`, the
-common case arrives at WIR already collapsed. Two options, decided by
-measurement at landing time:
+`wir_optimize::array::collapse_array_push_sequences` exists only because
+the fixed-array shape previously had nowhere to live before WIR. Once
+`ArrayLiteral` is materialized at NIR and `wir_build` lowers it to
+`ArrayNewFixed`, that reason is gone: the array arrives at WIR already
+collapsed, and the WIR matcher has nothing left to match. **The end state
+is retirement, not coexistence** — `collapse_array_push_sequences` is
+deleted once `ArrayLiteral` is in place.
 
-- [ ] Retire `collapse_array_push_sequences` if `ArrayLiteral` provably
-      subsumes every window it caught (i.e. no builder sequence first
-      appears post-`wir_build`).
-- [ ] Otherwise, keep it as a safety net for windows that only become
-      contiguous after WIR-level lowering, and share the
-      element-matching predicate with the NIR pass so the two cannot
-      drift.
+This is not speculative. The string analog already made exactly this
+move: there was once a WIR-level string-push collapse, and it was retired
+when `optimize::string_push` took over at NIR — `string_push`'s own doc
+calls it "the _former_ WIR pass". Arrays follow the same path. Keeping a
+permanent WIR safety net would be the kind of duplicated, drift-prone
+workaround the project's design rules reject; a "two options, decide by
+measurement" hedge here is the same overcaution the parent NIR WEP flagged
+and corrected in its own migration plan.
 
-The downstream WIR passes that consume `ArrayNewFixed`
-(`promote_constant_arrays_to_data` → `ArrayNewData`,
-`split_large_array_literals`) are unaffected: they key on
-`ArrayNewFixed`, which is produced either way.
+Sequencing (each step with a green checkpoint):
+
+- [ ] Land the NIR `ArrayLiteral` pass (before `inline`, mirroring
+      `string_push`) and the `wir_build` → `ArrayNewFixed` lowering.
+- [ ] Verify WIR output is bit-identical to today across the e2e suite at
+      every `-Ox` (the `wir_expect`/`wir_not_expect` fixtures already
+      assert `array.new_fixed<...>` shapes, so the equivalence is testable).
+- [ ] Delete `collapse_array_push_sequences`.
+
+Coexistence, if it exists at all, is strictly transitional — the window
+between step 1 and step 3, not a maintained fallback. If a builder
+sequence is found that only becomes a literal after `wir_build` and the
+NIR pass therefore misses it, that is a gap in the NIR matcher to fix at
+NIR (a P0 correctness concern: fix the root, do not preserve the WIR
+duplicate), not a reason to keep the WIR pass alive.
+
+What is **not** retired: the downstream WIR passes that consume
+`ArrayNewFixed` — `promote_constant_arrays_to_data` (→ `ArrayNewData`),
+`split_large_array_literals`, and `rewrite_constant_array_indexing`. They
+key on `ArrayNewFixed`, which `wir_build` keeps emitting from
+`ArrayLiteral`, so they are unaffected by the matcher's removal.
 
 ## Consumers
 
