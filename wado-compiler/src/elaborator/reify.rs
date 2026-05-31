@@ -7218,13 +7218,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 let col_tuple_type =
                                     self.tysys.type_table.borrow_mut().make_tuple(col_types);
                                 col_exprs.push(TirExpr::new(
-                                    TirExprKind::TupleLiteral { elements: row_exprs },
+                                    TirExprKind::TupleLiteral {
+                                        elements: row_exprs,
+                                    },
                                     col_tuple_type,
                                     method_call.span,
                                 ));
                             }
                             TirExpr::new(
-                                TirExprKind::TupleLiteral { elements: col_exprs },
+                                TirExprKind::TupleLiteral {
+                                    elements: col_exprs,
+                                },
                                 recorded_type,
                                 method_call.span,
                             )
