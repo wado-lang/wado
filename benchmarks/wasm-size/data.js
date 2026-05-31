@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780181837615,
+  "lastUpdate": 1780189334900,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -28129,6 +28129,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/33dda14b3ad5cf4109050078b3802f0a6094e58c"
         },
         "date": 1780181837113,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16997,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e73402c00cefbccd71a9766398e9e85b439691cc",
+          "message": "Merge pull request #1252 from wado-lang/claude/golden-fixtures-deletion-VC6Hx\n\nRegenerate golden fixtures without wiping them mid-run",
+          "timestamp": "2026-05-31T09:53:22+09:00",
+          "tree_id": "3cc4505de3e02b8e91a2b9b4d26fb67d0fd19635",
+          "url": "https://github.com/wado-lang/wado/commit/e73402c00cefbccd71a9766398e9e85b439691cc"
+        },
+        "date": 1780189334715,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
