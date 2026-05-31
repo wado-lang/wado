@@ -1277,6 +1277,28 @@ fn test_format_nested_comparison_preserves_parens() {
 }
 
 #[test]
+fn test_format_long_signature_wraps_params() {
+    // A function signature whose inline form exceeds the 120-col width must
+    // wrap its parameters one-per-line, like every other comma list, instead
+    // of emitting a single over-width line.
+    let source = "fn keyword_carrier_admits(kw: KeywordInfo, kw_index: i32, carrier_indices: Array<i32>, carrier_first_chars: Array<Array<char>>, carrier_is_wildcard: Array<bool>) -> bool {\n    return true;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    for line in formatted.lines() {
+        assert!(
+            line.chars().count() <= 120,
+            "line exceeds 120 cols: {line:?}\n\nformatted:\n{formatted}"
+        );
+    }
+    assert!(
+        formatted.contains("fn keyword_carrier_admits(\n"),
+        "long signature params should wrap one-per-line: {formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
 fn test_format_deref_index_preserves_parens() {
     // (*p)[i] must keep parens — *p[i] means *(p[i])
     let source = r"fn foo(data: &Array<i32>) -> i32 {

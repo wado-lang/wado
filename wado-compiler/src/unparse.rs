@@ -623,6 +623,29 @@ impl<'a> Unparser<'a> {
         self.output.push(']');
     }
 
+    /// Emit `(params)`, breaking the list one parameter per line when the
+    /// inline form would overflow the line-width budget — the same width-aware
+    /// rollback the import list uses. Without this, a signature wider than the
+    /// budget was emitted as a single over-width line.
+    fn delimited_params(&mut self, params: &[Param]) {
+        let snap = self.snapshot();
+        self.delimited("(", ")", params, Unparser::unparse_param);
+        if params.is_empty() || !self.exceeds_width_since(snap) {
+            return;
+        }
+        self.rollback(snap);
+        self.output.push_str("(\n");
+        self.indent_level += 1;
+        for param in params {
+            self.write_indent();
+            self.unparse_param(param);
+            self.output.push_str(",\n");
+        }
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push(')');
+    }
+
     fn unparse_function(&mut self, f: &Function) {
         self.emit_outer_attrs(&f.attrs);
         self.emit_kw_if(f.is_pub, "pub ");
@@ -632,7 +655,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str("fn ");
         self.output.push_str(&f.name);
         self.unparse_generic_params(&f.type_params);
-        self.delimited("(", ")", &f.params, Unparser::unparse_param);
+        self.delimited_params(&f.params);
 
         if let Some(ret) = &f.return_type
             && !is_unit_type(ret)
