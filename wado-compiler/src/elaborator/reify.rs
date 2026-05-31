@@ -2250,7 +2250,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Unary(unary) => {
                 let op = ast_unary_op_to_tir(unary.op);
-                let inner = self.reify_expr(&unary.expr, ctx, None);
+                // A `-<numeric literal>` operand shares the unary's type:
+                // propagate the expected/recorded type so the inner literal
+                // takes the right width (e.g. `-1.0` in an `f32` const body
+                // must be `f32`, not the default `f64`). Other unary operands
+                // are typed on their own.
+                let inner_expected = if unary.op == ast::UnaryOp::Neg
+                    && self.tysys.is_numeric_literal(&unary.expr)
+                    && recorded_type != crate::tir::TypeTable::UNKNOWN
+                {
+                    Some(recorded_type)
+                } else {
+                    None
+                };
+                let inner = self.reify_expr(&unary.expr, ctx, inner_expected);
                 if let Some(dispatch) = self.ann_operator_dispatch(unary.id) {
                     // Operator-trait dispatch path for `-x` / `~x` on a
                     // user type (`Neg::neg` / `BitNot::bitnot`). Mirrors the
@@ -3900,8 +3913,49 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::{CallArg, ResolvedType, TirBinaryOp, TirExprKind, TirUnaryOp, TypeTable};
 
-        let left = self.reify_expr(&binary.left, ctx, None);
-        let right = self.reify_expr(&binary.right, ctx, None);
+        // Mirror `resolve_binary_operands_with_coercion` (operators.rs:80):
+        // a numeric-literal operand is typed from the *other* operand (or,
+        // when both are literals, from the expression's recorded type). This
+        // matters for inlined associated-const bodies like
+        // `f32::INFINITY = 1.0 / 0.0`, whose literals carry no recorded type
+        // of their own — without the hint they default to `f64` and the
+        // surrounding arithmetic lowers to the wrong width / an integer op.
+        let left_is_lit = self.tysys.is_numeric_literal(&binary.left);
+        let right_is_lit = self.tysys.is_numeric_literal(&binary.right);
+        let (left, right) = if left_is_lit && !right_is_lit {
+            let right = self.reify_expr(&binary.right, ctx, None);
+            let coerce = if self.tysys.type_table.borrow().is_numeric(right.type_id) {
+                Some(right.type_id)
+            } else {
+                None
+            };
+            let left = self.reify_expr(&binary.left, ctx, coerce);
+            (left, right)
+        } else if right_is_lit && !left_is_lit {
+            let left = self.reify_expr(&binary.left, ctx, None);
+            let coerce = if self.tysys.type_table.borrow().is_numeric(left.type_id) {
+                Some(left.type_id)
+            } else {
+                None
+            };
+            let right = self.reify_expr(&binary.right, ctx, coerce);
+            (left, right)
+        } else if left_is_lit && right_is_lit {
+            // Both literals: use the expression's recorded type as the hint
+            // (e.g. the `const_ty` flowing in from a reified const body).
+            let hint = if recorded_type == TypeTable::UNKNOWN {
+                None
+            } else {
+                Some(recorded_type)
+            };
+            let left = self.reify_expr(&binary.left, ctx, hint);
+            let right = self.reify_expr(&binary.right, ctx, hint);
+            (left, right)
+        } else {
+            let left = self.reify_expr(&binary.left, ctx, None);
+            let right = self.reify_expr(&binary.right, ctx, None);
+            (left, right)
+        };
 
         // Reference equality: when both operands are references, the
         // elaborator emits `RefEq` / `RefNotEq` (identity comparison)
@@ -8369,10 +8423,27 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             .map(|v| v as f64)
                             .unwrap_or(0.0)
                     };
-                    TirExprKind::FloatLiteral {
-                        value,
-                        repr: repr.clone(),
-                    }
+                    // The literal's *type* must be a concrete float, not the
+                    // (possibly UNKNOWN) recorded type: a float-only literal
+                    // with no recorded type defaults to `f64` (matching
+                    // production's `resolve_numeric_literal`). Leaving it
+                    // UNKNOWN makes lowering pick an integer op for the
+                    // surrounding arithmetic (`f64.div` -> `i32.div_s`).
+                    // f32 target keeps f32; otherwise (f64 target, or no
+                    // recorded type) an untyped float literal defaults to f64.
+                    let float_type = if base_target == TypeTable::F32 {
+                        TypeTable::F32
+                    } else {
+                        TypeTable::F64
+                    };
+                    return TirExpr::new(
+                        TirExprKind::FloatLiteral {
+                            value,
+                            repr: repr.clone(),
+                        },
+                        float_type,
+                        lit.span,
+                    );
                 } else {
                     let value = super::util::parse_u128_literal(repr).unwrap_or(0) as u64;
                     TirExprKind::IntLiteral {
