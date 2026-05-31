@@ -1,0 +1,39 @@
+// Struct deserialization must not allocate a closure for field-name lookup.
+// Field-name -> index resolution is a static, per-type, format-agnostic
+// operation, threaded through `next_field::<S: FieldSchema>` and resolved at
+// monomorphization to a direct call to the synthesized `FieldSchema::lookup`.
+// No `CanonicalClosure` / functor-env allocation should appear in the decode
+// path (see WEP 2026-02-28 serde, "Static field-lookup dispatch").
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Serialize for Point;
+impl Deserialize for Point;
+
+test "struct roundtrip without closure" {
+    let json_r = to_string::<Point>(&Point { x: 10, y: 20 });
+    if let Ok(json) = json_r {
+        assert json == `\{"x":10,"y":20\}`;
+        let parsed_r = from_string::<Point>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed.x == 10;
+            assert parsed.y == 20;
+        } else {
+            panic("from_string failed");
+        }
+    } else {
+        panic("to_string failed");
+    }
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_not_expect:O0": ["CanonicalClosure"],
+    "wir_not_expect:O2": ["CanonicalClosure"]
+}

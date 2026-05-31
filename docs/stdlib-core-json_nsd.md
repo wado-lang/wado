@@ -105,7 +105,7 @@ _Fields are private._
 
 ##### `fn begin_map(&mut self) -> Result<NsdMapAccess, DeserializeError>`
 
-##### `fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn(&String, i32, i32) -> Option<i32>) -> Result<NsdStructAccess, DeserializeError>`
+##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<NsdStructAccess, DeserializeError>`
 
 ##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<NsdVariantAccess, DeserializeError>`
 

@@ -15,26 +15,27 @@ use { Serialize, Deserialize, SerializeError, DeserializeError } from "core:serd
 
 ## Field naming on the wire
 
-Wado fields are `snake_case` by convention, but the default wire-form key
-is `camelCase`. Override per struct with `#[serde(rename_all = "...")]`,
-or per field with `#[serde(rename = "...")]` (which takes precedence).
+By default the wire-form key is the Wado source field name verbatim
+(identity): `user_name` stays `"user_name"`, `userId` stays `"userId"`.
+The field name as written is the single source of truth. Override per
+struct with `#[serde(rename_all = "...")]`, or per field with
+`#[serde(rename = "...")]` (which takes precedence).
 
-`rename_all` strategies: `"camelCase"` (default), `"snake_case"`,
-`"PascalCase"`, `"SCREAMING_SNAKE_CASE"`, `"kebab-case"`,
-`"SCREAMING-KEBAB-CASE"`.
+`rename_all` strategies: `"camelCase"`, `"snake_case"`, `"PascalCase"`,
+`"SCREAMING_SNAKE_CASE"`, `"kebab-case"`, `"SCREAMING-KEBAB-CASE"`.
 
 ```wado
-// Default — wire keys are camelCase
+// Default — wire keys are the field names as written
 struct User {
-    user_name: String,        // wire key: "userName"
-    account_id: i64,          // wire key: "accountId"
+    user_name: String,        // wire key: "user_name"
+    account_id: i64,          // wire key: "account_id"
 }
 
-// Per-struct convention
-#[serde(rename_all = "snake_case")]
+// Per-struct convention (e.g. camelCase for a JS-facing API)
+#[serde(rename_all = "camelCase")]
 struct Event {
-    created_at: String,       // wire key: "created_at"
-    event_type: String,       // wire key: "event_type"
+    created_at: String,       // wire key: "createdAt"
+    event_type: String,       // wire key: "eventType"
 }
 
 // Per-field override (wins over rename_all)
@@ -151,9 +152,24 @@ impl Deserialize for Config;
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
+### `pub trait FieldSchema`
+
+Static, per-type, format-agnostic field-name → index mapping.
+
+The struct-deserialize synthesiser implements `FieldSchema` for every
+deserializable struct, generating a `lookup` that byte-compares
+`input[start..end]` against the wire-form field names. Self-describing
+formats invoke it from `DeserializeStruct::next_field`; non-self-describing
+formats ignore the schema and stay positional.
+
+`lookup` is a static method resolved at monomorphization, so the call is
+direct and inlinable — no closure value, no per-decode allocation.
+
+#### `fn lookup(input: &String, start: i32, end: i32) -> Option<i32>`
+
 ### `pub trait DeserializeStruct`
 
-#### `fn next_field(&mut self) -> Result<Option<i32>, DeserializeError>`
+#### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
 
 #### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
 
@@ -217,7 +233,7 @@ impl Deserialize for Config;
 
 #### `fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError>`
 
-#### `fn begin_struct(&mut self, name: &String, num_fields: i32, lookup: fn mut(&String, i32, i32) -> Option<i32>) -> Result<Self::StructAccess, DeserializeError>`
+#### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<Self::StructAccess, DeserializeError>`
 
 #### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>`
 
