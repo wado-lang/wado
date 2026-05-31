@@ -60,7 +60,7 @@ sequences, so they carry no const-recognizable shape until WIR. Recognizing
 them needs a first-class `NirExprKind::ArrayLiteral` and a collapse of the const
 push-sequence into it, early in the loop. That addition is shared
 infrastructure, not specific to this feature, and is specified in the
-[NIR Layer WEP](./wep-2026-05-11-nir.md) (Normalization Additions). This pass
+[NIR Layer WEP](./wep-2026-05-11-nir.md) (Additions). This pass
 depends on it for the array/string cases; struct/tuple/variant/enum constants
 need no enabler (they are already first-class in NIR).
 
@@ -190,6 +190,6 @@ Cross-cutting infrastructure (owned by other WEPs, blocking the array/string and
 cascade cases here):
 
 - [ ] `NirExprKind::ArrayLiteral` + NIR push-sequence collapse — see
-      [NIR Layer WEP](./wep-2026-05-11-nir.md) (Normalization Additions).
+      [NIR Layer WEP](./wep-2026-05-11-nir.md) (Additions).
 - [ ] `niri` aggregate `GlobalEnv` + `G.field` / `G[const]` projection — see
       [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) (Stage 6).
