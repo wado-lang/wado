@@ -449,6 +449,19 @@ fn mark_local_as_fully_modified(expr: &NirExpr, modified: &mut ModifiedVars) {
     }
 }
 
+/// Returns true if `expr` is a chain of field accesses bottoming out at a
+/// `Local` (e.g. `a`, `a.b`, `a.b.c`), with no `Index`, deref, or call in the
+/// chain. Such a chain only dereferences GC struct/reference fields, so a write
+/// *through* it mutates an inner object rather than reassigning a field of the
+/// root local.
+fn is_pure_field_chain(expr: &NirExpr) -> bool {
+    match &expr.kind {
+        NirExprKind::Local { .. } => true,
+        NirExprKind::FieldAccess { expr: inner, .. } => is_pure_field_chain(inner),
+        _ => false,
+    }
+}
+
 /// Mark what is modified by an assignment target expression.
 ///
 /// Distinguishes between field assignments (`buf.len = x` marks only the `len` field
@@ -468,13 +481,22 @@ fn mark_assignment_target_as_modified(expr: &NirExpr, modified: &mut ModifiedVar
             if let NirExprKind::Local { index, .. } = &inner.kind {
                 // Single-level field assignment: `buf.field = x` — only that field is modified
                 modified.insert_field(*index, *field_index);
-            } else {
-                // Deeper nesting: `a.b.c = x` — conservatively mark root as fully modified.
+            } else if is_pure_field_chain(inner) {
+                // Mutate-through-reference: `a.b.c = x` over a pure field chain.
                 //
-                // TODO(optimizer): track field paths (e.g. `(b, c)`)
-                // rather than collapsing to "fully modified" so that a
-                // hoist of `self.repr.len` survives a sibling write
-                // like `self.other.flag = true`.
+                // This assigns field `c` of the inner object `*a.b`. It does NOT
+                // reassign the `b` reference held in the root local `a`, nor any
+                // other field of `*a`, so the root must not be marked fully
+                // modified — that would defeat hoisting of sibling chains such as
+                // `a.b.d`. Marking nothing here is sound for the single-level hoist
+                // candidates LICM considers: a write to `*a.b.c` cannot change any
+                // field of any local in scope. LICM peels one reference level per
+                // fixpoint iteration, so once `a.b` is hoisted into a local the
+                // write becomes single-level (`_h.c = x`) and is recorded precisely
+                // on the next pass (the aliasing of `_h` is then tracked too).
+            } else {
+                // Non-field-chain nesting (`a[i].c = x`, `(*p).c = x`):
+                // conservatively mark the root local as fully modified.
                 mark_local_as_fully_modified(inner, modified);
             }
         }

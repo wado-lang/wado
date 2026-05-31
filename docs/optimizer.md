@@ -233,7 +233,9 @@ E2E: [opt_wir_dead_if_zero.wado](../wado-compiler/tests/fixtures/opt_wir_dead_if
 
 Hoists loop-invariant field accesses out of loops when the target variable is not modified within the loop body.
 
-E2E: [opt_licm_immut_ref.wado](../wado-compiler/tests/fixtures/opt_licm_immut_ref.wado), [opt_licm_immut_ref_method.wado](../wado-compiler/tests/fixtures/opt_licm_immut_ref_method.wado), [opt_licm_mut_ref_no_hoist.wado](../wado-compiler/tests/fixtures/opt_licm_mut_ref_no_hoist.wado).
+Nested reference-field chains (`a.b.c`) are hoisted one level per fixpoint iteration: a mutate-through-reference write (`a.b.pos = x`, a pure field chain) assigns a field of the inner object `*a.b` and so is no longer treated as a full clobber of the root local `a`. This lets LICM hoist `a.b` into a local, then `a.b.input`, then `a.b.input.repr`, sharing the loads across the loop. It is the engine behind the JSON deserializer's `JsonStructAccess { de: &mut JsonDeserializer }` key-scan loop, whose reads go through `self.de.input.repr` while `self.de.pos` is bumped in place. Writes that are not pure field chains (`a[i].c = x`, `(*p).c = x`) still mark the root fully modified.
+
+E2E: [opt_licm_immut_ref.wado](../wado-compiler/tests/fixtures/opt_licm_immut_ref.wado), [opt_licm_immut_ref_method.wado](../wado-compiler/tests/fixtures/opt_licm_immut_ref_method.wado), [opt_licm_mut_ref_no_hoist.wado](../wado-compiler/tests/fixtures/opt_licm_mut_ref_no_hoist.wado), [opt_licm_nested_ref_chain.wado](../wado-compiler/tests/fixtures/opt_licm_nested_ref_chain.wado).
 
 ### Condition Implication (`condition_implication.rs`)
 

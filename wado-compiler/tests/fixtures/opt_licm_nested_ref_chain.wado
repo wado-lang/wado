@@ -1,0 +1,52 @@
+// Optimization: LICM should hoist nested reference-field chains.
+//
+// `cur.inner.limit` is loop-invariant even though a *different* field is
+// mutated through the same chain (`cur.inner.pos += 1`, `cur.inner.acc += ...`).
+// A mutate-through-reference write (`a.b.c = x`) changes a field of the inner
+// object `*a.b`; it neither reassigns the `b` reference of the root local `a`
+// nor any field of `*a`, so it must not be treated as a full clobber of `a`.
+//
+// LICM peels one reference level per fixpoint iteration: it hoists `cur.inner`
+// into a local, then `_licm_inner.limit`. Mirrors the JSON deserializer's
+// `JsonStructAccess { de: &mut JsonDeserializer }` key-scan loop, whose reads
+// go through `self.de.input.repr` while `self.de.pos` is mutated in place.
+
+use { println } from "core:cli";
+
+struct Inner {
+    limit: i32,
+    pos: i32,
+    acc: i32,
+}
+
+// Two fields so single-field-parameter SROA does not flatten the wrapper,
+// keeping the `cur.inner.*` accesses a genuine two-level reference chain
+// (mirrors `JsonStructAccess { de: &mut JsonDeserializer, first: bool }`).
+struct Cursor {
+    inner: &mut Inner,
+    started: bool,
+}
+
+#[inline("never")]
+fn drain(cur: &mut Cursor) -> i32 {
+    while cur.inner.pos < cur.inner.limit {
+        cur.inner.acc += cur.inner.pos;
+        cur.inner.pos += 1;
+        cur.started = true;
+    }
+    return cur.inner.acc;
+}
+
+export fn run() with Stdout {
+    let mut data = Inner { limit: 5, pos: 0, acc: 0 };
+    let mut cur = Cursor { inner: &mut data, started: false };
+    let result = drain(&mut cur);
+    // pos walks 0,1,2,3,4 -> acc = 0+1+2+3+4 = 10
+    println(`{result}`);
+}
+
+__DATA__
+{
+    "stdout": "10\n",
+    "wir_expect:O2": ["_licm_inner", "_licm_limit"]
+}
