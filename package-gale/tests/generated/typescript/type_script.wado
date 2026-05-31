@@ -4450,9 +4450,9 @@ global TK_HtmlComment: i32 = 142;
 global TK_CDataComment: i32 = 143;
 global TK_UnexpectedCharacter: i32 = 144;
 global TK_TemplateStringEscapeAtom: i32 = 145;
-global TK_BackTickInside: i32 = 146;
-global TK_TemplateStringStartExpression: i32 = 147;
-global TK_TemplateStringAtom: i32 = 148;
+global TK_TemplateStringStartExpression: i32 = 146;
+global TK_TemplateStringAtom: i32 = 147;
+global TK_BackTickInside: i32 = 148;
 global TK_EOF: i32 = 149;
 global TK_ERROR: i32 = 150;
 global TK_LIT_EQ: i32 = 151;
@@ -7866,7 +7866,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_templatestringatom(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_TemplateStringAtom; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
         }
-        if best_end <= start {
+        if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode) {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
             tokens.push(tok);
             trivia = [];

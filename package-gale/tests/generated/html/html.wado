@@ -2123,7 +2123,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_attribute(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ATTRIBUTE; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
         }
-        if best_end <= start {
+        if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode) {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
             tokens.push(tok);
             trivia = [];
